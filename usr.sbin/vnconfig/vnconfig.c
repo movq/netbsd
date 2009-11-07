@@ -1,4 +1,4 @@
-/*	$NetBSD: vnconfig.c,v 1.37 2009/04/19 00:56:32 lukem Exp $	*/
+/*	$NetBSD: vnconfig.c,v 1.40 2011/08/30 20:54:18 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1993 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -66,46 +67,6 @@
  *	@(#)vnconfig.c	8.1 (Berkeley) 12/15/93
  */
 
-/*
- * Copyright (c) 1993 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: vnconfig.c 1.1 93/12/15$
- *
- *	@(#)vnconfig.c	8.1 (Berkeley) 12/15/93
- */
-
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/mount.h>
@@ -119,6 +80,7 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -129,22 +91,18 @@
 #define VND_UNCONFIG	2
 #define VND_GET		3
 
-int	verbose = 0;
-int	readonly = 0;
-int	force = 0;
-int	compressed = 0;
-char	*tabname;
+static int	verbose = 0;
+static int	readonly = 0;
+static int	force = 0;
+static int	compressed = 0;
+static char	*tabname;
 
-int	config __P((char *, char *, char *, int));
-int	getgeom __P((struct vndgeom *, char *));
-int	main __P((int, char **));
-char   *rawdevice __P((char *));
-void	usage __P((void));
+static int	config(char *, char *, char *, int);
+static int	getgeom(struct vndgeom *, char *);
+__dead static void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, rv, action = VND_CONFIG;
 
@@ -275,10 +233,8 @@ main(argc, argv)
 	exit(rv);
 }
 
-int
-config(dev, file, geom, action)
-	char *dev, *file, *geom;
-	int action;
+static int
+config(char *dev, char *file, char *geom, int action)
 {
 	struct vnd_ioctl vndio;
 	struct disklabel *lp;
@@ -326,6 +282,10 @@ config(dev, file, geom, action)
 		if (force)
 			vndio.vnd_flags |= VNDIOF_FORCE;
 		rv = ioctl(fd, VNDIOCCLR, &vndio);
+#ifdef VNDIOOCCLR
+		if (rv && errno == ENOTTY)
+			rv = ioctl(fd, VNDIOOCCLR, &vndio);
+#endif
 		if (rv)
 			warn("%s: VNDIOCCLR", rdev);
 		else if (verbose)
@@ -344,10 +304,16 @@ config(dev, file, geom, action)
 			(void) close(ffd);
 
 			rv = ioctl(fd, VNDIOCSET, &vndio);
+#ifdef VNDIOOCSET
+			if (rv && errno == ENOTTY) {
+				rv = ioctl(fd, VNDIOOCSET, &vndio);
+				vndio.vnd_size = vndio.vnd_osize;
+			}
+#endif
 			if (rv)
 				warn("%s: VNDIOCSET", rdev);
 			else if (verbose) {
-				printf("%s: %d bytes on %s", rdev,
+				printf("%s: %" PRIu64 " bytes on %s", rdev,
 				    vndio.vnd_size, file);
 				if (vndio.vnd_flags & VNDIOF_HASGEOM)
 					printf(" using geometry %d/%d/%d/%d",
@@ -365,10 +331,8 @@ config(dev, file, geom, action)
 	return (rv < 0);
 }
 
-int
-getgeom(vng, cp)
-	struct vndgeom *vng;
-	char *cp;
+static int
+getgeom(struct vndgeom *vng, char *cp)
 {
 	char *secsize, *nsectors, *ntracks, *ncylinders;
 
@@ -409,8 +373,8 @@ getgeom(vng, cp)
 	return (0);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
 	(void)fprintf(stderr, "%s%s",

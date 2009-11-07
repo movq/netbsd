@@ -1,4 +1,4 @@
-.\" $NetBSD: gpt.8,v 1.5 2009/03/11 18:02:00 joerg Exp $
+.\" $NetBSD: gpt.8,v 1.9.2.1 2012/05/07 03:15:12 riz Exp $
 .\"
 .\" Copyright (c) 2002 Marcel Moolenaar
 .\" All rights reserved.
@@ -26,7 +26,7 @@
 .\"
 .\" $FreeBSD: src/sbin/gpt/gpt.8,v 1.17 2006/06/22 22:22:32 marcel Exp $
 .\"
-.Dd June 22, 2006
+.Dd March 9, 2012
 .Dt GPT 8
 .Os
 .Sh NAME
@@ -126,9 +126,32 @@ The type is given as an UUID, but
 .Nm
 accepts
 .Cm efi , swap , ufs , hfs , linux ,
+.Cm raid , lfs , ccd , cgd , bios ,
+.Cm ffs ,
 and
 .Cm windows
 as aliases for the most commonly used partition types.
+.\" ==== biosboot ====
+.It Nm Ic biosboot Oo Fl c Ar bootcode Oc Oo Fl i Ar index Oc Ar device ...
+The
+.Ic biosboot
+command allows the user to configure the partition that contains the
+primary bootstrap program, used during
+.Xr boot 8 .
+.Pp
+The
+.Fl c
+option allows the user to specify the filename that
+.Nm
+should read the bootcode from.
+The default is to read from
+.Pa /usr/mdec/gptmbr.bin .
+.Pp
+The
+.Fl i
+option selects the partition that should contain the primary
+bootstrap code, as installed via
+.Xr installboot 8 .
 .\" ==== create ====
 .It Nm Ic create Oo Fl fp Oc Ar device ...
 The
@@ -236,6 +259,13 @@ option prevents migrating
 .Bx
 disk labels into GPT partitions by creating
 the GPT equivalent of a slice.
+.\" ==== recover ====
+.It Nm Ic recover Ar device ...
+The
+.Ic recover
+command tries to restore the GPT partition label from the backup
+near the end of the disk.
+It is very useful in case the primary label was deleted.
 .\" ==== remove ====
 .It Nm Ic remove Oo Fl a Oc Ar device ...
 .It Nm Ic remove Oo Fl b Ar number Oc Oo Fl i Ar index Oc \
@@ -271,8 +301,42 @@ option takes precedence over the
 .Fl u
 option.
 .El
+.Sh EXAMPLES
+.Bd -literal
+nas# gpt show wd3
+       start        size  index  contents
+           0           1         PMBR
+           1  3907029167
+nas# gpt create wd3
+nas# gpt show wd3
+       start        size  index  contents
+           0           1         PMBR
+           1           1         Pri GPT header
+           2          32         Pri GPT table
+          34  3907029101
+  3907029135          32         Sec GPT table
+  3907029167           1         Sec GPT header
+nas# gpt add -s 10486224 -t swap -i 1 wd3
+Partition added, use:
+        dkctl rwd3d addwedge dk<N> 34 10486224 <type>
+to create a wedge for it
+nas# gpt label -i 1 -l swap_1 wd3
+parition 1 on rwd3d labeled swap_1
+nas# gpt show wd3
+       start        size  index  contents
+           0           1         PMBR
+           1           1         Pri GPT header
+           2          32         Pri GPT table
+          34    10486224      1  GPT part - NetBSD swap
+    10486258  3896542877
+  3907029135          32         Sec GPT table
+  3907029167           1         Sec GPT header
+nas#
+.Ed
 .Sh SEE ALSO
+.Xr boot 8 ,
 .Xr fdisk 8 ,
+.Xr installboot 8 ,
 .Xr mount 8 ,
 .Xr newfs 8 ,
 .Xr swapon 8

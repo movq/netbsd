@@ -1,7 +1,7 @@
-/*	$NetBSD: mem_api.c,v 1.1.1.1 2009/10/25 00:02:43 christos Exp $	*/
+/*	$NetBSD: mem_api.c,v 1.2.6.1 2012/06/05 21:15:08 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009, 2010  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: mem_api.c,v 1.5 2009/09/02 23:48:02 tbox Exp */
+/* Id: mem_api.c,v 1.8 2010/08/12 21:30:26 jinmei Exp  */
 
 #include <config.h>
 
@@ -27,7 +27,7 @@
 
 #if ISC_MEM_TRACKLINES
 #define FLARG_PASS	, file, line
-#define FLARG		, const char *file, int line
+#define FLARG		, const char *file, unsigned int line
 #else
 #define FLARG_PASS
 #define FLARG
@@ -199,6 +199,13 @@ isc_mem_inuse(isc_mem_t *mctx) {
 	REQUIRE(ISCAPI_MCTX_VALID(mctx));
 
 	return (mctx->methods->inuse(mctx));
+}
+
+isc_boolean_t
+isc_mem_isovermem(isc_mem_t *mctx) {
+	REQUIRE(ISCAPI_MCTX_VALID(mctx));
+
+	return (mctx->methods->isovermem(mctx));
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qn.c,v 1.35 2009/10/26 19:16:54 cegger Exp $ */
+/*	$NetBSD: if_qn.c,v 1.38 2010/04/05 07:19:29 joerg Exp $ */
 
 /*
  * Copyright (c) 1995 Mika Kortelainen
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.35 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.38 2010/04/05 07:19:29 joerg Exp $");
 
 #include "qn.h"
 #if NQN > 0
@@ -75,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.35 2009/10/26 19:16:54 cegger Exp $");
 #define QN_DEBUG1_no /* hides some old tests */
 #define QN_CHECKS_no /* adds some checks (not needed in normal situations) */
 
-#include "bpfilter.h"
 
 /*
  * Fujitsu MB86950 Ethernet Controller (as used in the QuickNet QN2000
@@ -147,15 +146,10 @@ struct	qn_softc {
 	u_short	volatile *nic_reset;
 	u_short	volatile *nic_len;
 	u_char	transmit_pending;
-#if NBPFILTER > 0
-	void *	sc_bpf;
-#endif
 } qn_softc[NQN];
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 
 int	qnmatch(struct device *, struct cfdata *, void *);
@@ -405,18 +399,14 @@ qnstart(struct ifnet *ifp)
 	if (m == 0)
 		return;
 
-#if NBPFILTER > 0
 	/*
 	 * If bpf is listening on this interface, let it
 	 * see the packet before we commit it to the wire
 	 *
 	 * (can't give the copy in QuickNet card RAM to bpf, because
 	 * that RAM is not visible to the host but is read from FIFO)
-	 *
 	 */
-	if (sc->sc_bpf)
-		bpf_mtap(sc->sc_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 	len = qn_put(sc->nic_fifo, m);
 	m_freem(m);
 
@@ -597,10 +587,8 @@ qn_get_packet(struct qn_softc *sc, u_short len)
 		len -= len1;
 	}
 
-#if NBPFILTER > 0
-	if (sc->sc_bpf)
-		bpf_mtap(sc->sc_bpf, head);
-#endif
+	/* Tap off BPF listeners */
+	bpf_mtap(ifp, head);
 
 	(*ifp->if_input)(ifp, head);
 	return;

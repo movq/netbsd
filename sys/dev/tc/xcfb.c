@@ -1,4 +1,4 @@
-/* $NetBSD: xcfb.c,v 1.51 2009/08/22 17:38:06 tsutsui Exp $ */
+/* $NetBSD: xcfb.c,v 1.55 2012/01/11 21:12:37 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.51 2009/08/22 17:38:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.55 2012/01/11 21:12:37 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,8 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.51 2009/08/22 17:38:06 tsutsui Exp $");
 #include <dev/tc/ioasicreg.h>
 #include <dev/ic/ims332reg.h>
 #include <pmax/pmax/maxine.h>
-
-#include <uvm/uvm_extern.h>
 
 struct hwcmap256 {
 #define	CMAP_SIZE	256	/* 256 R/G/B entries */
@@ -223,6 +221,7 @@ xcfbattach(device_t parent, device_t self, void *aux)
 	console = (ta->ta_addr == xcfb_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &xcfb_console_ri;
+		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
@@ -280,6 +279,8 @@ xcfb_common_init(struct rasops_info *ri)
 	xcfbhwinit((void *)ri->ri_hw);
 
 	ri->ri_flg = RI_CENTER;
+	if (ri == &xcfb_console_ri)
+		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = 8;
 	ri->ri_width = 1024;
 	ri->ri_height = 768;
@@ -292,10 +293,10 @@ xcfb_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_L2R,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("xcfb: font table is empty\n");
 		return;

@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.15 2008/01/19 13:11:15 chris Exp $
+#	$NetBSD: Makefile,v 1.17 2011/07/17 23:46:49 dyoung Exp $
 
 INCSDIR= /usr/include/evbarm
 
 INCS=	ansi.h aout_machdep.h asm.h \
-	bswap.h bus.h \
+	bswap.h \
 	cdefs.h cpu.h \
 	disklabel.h \
 	elf_machdep.h endian.h endian_machdep.h \
@@ -15,9 +15,9 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	math.h mcontext.h mutex.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h ptrace.h \
 	reg.h rwlock.h \
-	setjmp.h signal.h stdarg.h sysarch.h \
+	setjmp.h signal.h sysarch.h \
 	trap.h types.h \
-	varargs.h vmparam.h \
+	vmparam.h \
 	wchar_limits.h
 
 INCS+=	joystick.h

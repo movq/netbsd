@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_subr.c,v 1.43 2009/09/01 15:16:41 pooka Exp $	*/
+/*	$NetBSD: ntfs_subr.c,v 1.46 2011/08/31 18:31:02 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko (semenu@FreeBSD.org)
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_subr.c,v 1.43 2009/09/01 15:16:41 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_subr.c,v 1.46 2011/08/31 18:31:02 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -989,7 +989,7 @@ ntfs_ntlookupfile(
 			     (attrname && fp->f_attrname &&
 			      !strcmp(attrname, fp->f_attrname))))
 			{
-				VREF(vp);
+				vref(vp);
 				*vpp = vp;
 				error = 0;
 				goto fail;
@@ -2009,13 +2009,13 @@ ntfs_runtocn(
 #endif
 
 /*
- * this initializes toupper table & dependant variables to be ready for
+ * this initializes toupper table & dependent variables to be ready for
  * later work
  */
 void
 ntfs_toupper_init(void)
 {
-	ntfs_toupper_tab = (wchar *) NULL;
+	ntfs_toupper_tab = NULL;
 	mutex_init(&ntfs_toupper_lock, MUTEX_DEFAULT, IPL_NONE);
 	ntfs_toupper_usecount = 0;
 }

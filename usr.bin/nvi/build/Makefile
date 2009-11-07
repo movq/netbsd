@@ -1,20 +1,22 @@
-#	$NetBSD: Makefile,v 1.12 2009/04/14 22:15:24 lukem Exp $
+#	$NetBSD: Makefile,v 1.16 2011/08/17 12:57:19 christos Exp $
 
 .include <bsd.own.mk>
 
 USE_WIDECHAR?=yes
 
+CWARNFLAGS.clang+=	-Wno-uninitialized -Wno-format-security
+
 CPPFLAGS+=-I${DIST}/include -I${.CURDIR} -I. -DGTAGS
 #DBG=-g
 
 #CWARNFLAGS+=-Wno-parentheses -Wno-unused -Wno-missing-prototypes
-#.if defined(HAVE_GCC) && ${HAVE_GCC} == 4
+#.if defined(HAVE_GCC)
 #CWARNFLAGS+=-Wno-pointer-sign
 #COPTS+=-fno-strict-aliasing
 #.endif
 
-LDADD+=	-lcurses
-DPADD+=	${LIBCURSES}
+LDADD+=	-lcurses -lterminfo
+DPADD+=	${LIBCURSES} ${LIBTERMINFO}
 PROG=	vi
 SRCS=	api.c cl_bsd.c cl_funcs.c cl_main.c cl_read.c cl_screen.c cl_term.c \
 	conv.c cut.c db.c db1.c delete.c ex.c ex_abbrev.c ex_append.c \
@@ -58,5 +60,8 @@ options_def.h: options.awk options.c
 .PATH: ${DIST}/common
 .PATH: ${DIST}/regex
 .PATH: ${DIST}/docs/vi.man
+
+COPTS.exf.c += -Wno-format-nonliteral
+COPTS.msg.c += -Wno-format-nonliteral
 
 .include <bsd.prog.mk>

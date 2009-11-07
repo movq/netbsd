@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_machdep.c,v 1.60 2009/09/20 16:18:21 tsutsui Exp $	*/
+/*	$NetBSD: vme_machdep.c,v 1.66 2012/01/27 18:53:01 para Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.60 2009/09/20 16:18:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.66 2012/01/27 18:53:01 para Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -40,18 +40,18 @@ __KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.60 2009/09/20 16:18:21 tsutsui Exp
 #include <sys/errno.h>
 
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/syslog.h>
 
 #include <uvm/uvm_extern.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sparc/sparc/iommuvar.h>
 #include <machine/autoconf.h>
 #include <machine/oldmon.h>
 #include <machine/cpu.h>
 #include <machine/ctlreg.h>
+#include <machine/pcb.h>
 
 #include <dev/vme/vmereg.h>
 #include <dev/vme/vmevar.h>
@@ -62,7 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.60 2009/09/20 16:18:21 tsutsui Exp
 #include <sparc/dev/vmereg.h>
 
 struct sparcvme_softc {
-	struct device	 sc_dev;	/* base device */
 	bus_space_tag_t	 sc_bustag;
 	bus_dma_tag_t	 sc_dmatag;
 	struct vmebusreg *sc_reg; 	/* VME control registers */
@@ -161,10 +160,10 @@ static paddr_t	sparc_vme_dmamem_mmap(bus_dma_tag_t,
 
 int sparc_vme_mmap_cookie(vme_addr_t, vme_am_t, bus_space_handle_t *);
 
-CFATTACH_DECL(vme_mainbus, sizeof(struct sparcvme_softc),
+CFATTACH_DECL_NEW(vme_mainbus, sizeof(struct sparcvme_softc),
     vmematch_mainbus, vmeattach_mainbus, NULL, NULL);
 
-CFATTACH_DECL(vme_iommu, sizeof(struct sparcvme_softc),
+CFATTACH_DECL_NEW(vme_iommu, sizeof(struct sparcvme_softc),
     vmematch_iommu, vmeattach_iommu, NULL, NULL);
 
 static int vme_attached;
@@ -316,7 +315,7 @@ vmeattach_mainbus(device_t parent, device_t self, void *aux)
 		sizeof(vmebus_translations)/sizeof(vmebus_translations[0]);
 
 	vme_dvmamap = extent_create("vmedvma", VME4_DVMA_BASE, VME4_DVMA_END,
-				    M_DEVBUF, 0, 0, EX_NOWAIT);
+				    0, 0, EX_NOWAIT);
 	if (vme_dvmamap == NULL)
 		panic("vme: unable to allocate DVMA map");
 
@@ -675,15 +674,15 @@ vmeintr4m(void *arg)
 	extern int fkbyte(volatile char *, struct pcb *);
 	volatile char *addr = &ihp->sc->sc_vec->vmebusvec[level];
 	struct pcb *xpcb;
-	u_long saveonfault;
+	void *saveonfault;
 	int s;
 
 	s = splhigh();
 
-	xpcb = &curlwp->l_addr->u_pcb;
-	saveonfault = (u_long)xpcb->pcb_onfault;
+	xpcb = lwp_getpcb(curlwp);
+	saveonfault = xpcb->pcb_onfault;
 	vec = fkbyte(addr, xpcb);
-	xpcb->pcb_onfault = (void *)saveonfault;
+	xpcb->pcb_onfault = saveonfault;
 
 	splx(s);
 	}
@@ -771,7 +770,7 @@ sparc_vme_intr_establish(void *cookie, vme_intr_handle_t vih, int level,
 			panic("vme_addirq");
 		ih->ih_fun = sc->sc_vmeintr;
 		ih->ih_arg = vih;
-		intr_establish(pil, 0, ih, NULL);
+		intr_establish(pil, 0, ih, NULL, false);
 	} else {
 		svih->next = (vme_intr_handle_t)ih->ih_arg;
 		ih->ih_arg = vih;

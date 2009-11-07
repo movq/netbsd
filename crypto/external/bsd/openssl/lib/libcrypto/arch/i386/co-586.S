@@ -1,4 +1,4 @@
-.file	"/net/shiny/src-6/NetBSD/cvsroot/src/crypto/dist/openssl/crypto/bn/asm/co-586.s"
+#include <machine/asm.h>
 .text
 .globl	bn_mul_comba8
 .type	bn_mul_comba8,@function

@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk.c,v 1.97 2009/05/20 03:26:21 dyoung Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.97 2009/05/20 03:26:21 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -85,20 +85,21 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.97 2009/05/20 03:26:21 dyoung Exp $"
 u_int
 dkcksum(struct disklabel *lp)
 {
+
 	return dkcksum_sized(lp, lp->d_npartitions);
 }
 
 u_int
 dkcksum_sized(struct disklabel *lp, size_t npartitions)
 {
-	u_short *start, *end;
-	u_short sum = 0;
+	uint16_t *start, *end;
+	uint16_t sum = 0;
 
-	start = (u_short *)lp;
-	end = (u_short *)&lp->d_partitions[npartitions];
+	start = (uint16_t *)lp;
+	end = (uint16_t *)&lp->d_partitions[npartitions];
 	while (start < end)
 		sum ^= *start++;
-	return (sum);
+	return sum;
 }
 
 /*
@@ -314,8 +315,8 @@ disk_blocksize(struct disk *diskp, int blocksize)
 
 /*
  * Bounds checking against the media size, used for the raw partition.
- * The sector size passed in should currently always be DEV_BSIZE,
- * and the media size the size of the device in DEV_BSIZE sectors.
+ * secsize, mediasize and b_blkno must all be the same units.
+ * Possibly this has to be DEV_BSIZE (512).
  */
 int
 bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
@@ -337,7 +338,7 @@ bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
 			return 0;
 		}
 		/* Otherwise, truncate request. */
-		bp->b_bcount = sz << DEV_BSHIFT;
+		bp->b_bcount = sz * secsize;
 	}
 
 	return 1;
@@ -362,8 +363,8 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 		return -1;
 	}
 
-	p_size = p->p_size << dk->dk_blkshift;
-	p_offset = p->p_offset << dk->dk_blkshift;
+	p_size = (uint64_t)p->p_size << dk->dk_blkshift;
+	p_offset = (uint64_t)p->p_offset << dk->dk_blkshift;
 #if RAW_PART == 3
 	labelsector = lp->d_partitions[2].p_offset;
 #else

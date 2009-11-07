@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.10 2008/04/27 18:58:44 matt Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.14 2011/11/17 15:02:22 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995-1997 Mark Brinicombe.
@@ -35,19 +35,20 @@
  *
  * sys_machdep.c
  *
- * Machine dependant syscalls
+ * Machine dependent syscalls
  *
  * Created      : 10/01/96
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.10 2008/04/27 18:58:44 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.14 2011/11/17 15:02:22 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
+#include <sys/cpu.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 #include <sys/syscallargs.h>
@@ -110,4 +111,17 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	return (error);
 }
   
-/* End of sys_machdep.c */
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+#ifdef _ARM_ARCH_6
+	if (l == curlwp) {
+		kpreempt_disable();
+		__asm("mcr p15, 0, %0, c13, c0, 3" : : "r" (addr));
+		kpreempt_enable();
+	}
+	return 0;
+#else
+	return 0;
+#endif
+}

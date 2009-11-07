@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $	*/
+/*	$NetBSD: init_main.c,v 1.441.2.2 2012/08/08 15:51:06 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.441.2.2 2012/08/08 15:51:06 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipsec.h"
@@ -116,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 
 #include "drvctl.h"
 #include "ksyms.h"
-#include "rnd.h"
+
 #include "sysmon_envsys.h"
 #include "sysmon_power.h"
 #include "sysmon_taskq.h"
@@ -130,6 +130,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #include <sys/errno.h>
 #include <sys/callout.h>
 #include <sys/cpu.h>
+#include <sys/cpufreq.h>
 #include <sys/spldebug.h>
 #include <sys/kernel.h>
 #include <sys/mount.h>
@@ -149,11 +150,10 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
 #include <sys/percpu.h>
+#include <sys/pserialize.h>
 #include <sys/pset.h>
 #include <sys/sysctl.h>
 #include <sys/reboot.h>
-#include <sys/user.h>
-#include <sys/sysctl.h>
 #include <sys/event.h>
 #include <sys/mbuf.h>
 #include <sys/sched.h>
@@ -168,6 +168,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #include <sys/event.h>
 #include <sys/lockf.h>
 #include <sys/once.h>
+#include <sys/kcpuset.h>
 #include <sys/ksyms.h>
 #include <sys/uidinfo.h>
 #include <sys/kprintf.h>
@@ -185,9 +186,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #endif
 #include <sys/domain.h>
 #include <sys/namei.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 #include <sys/pipe.h>
 #if NVERIEXEC > 0
 #include <sys/verified_exec.h>
@@ -196,9 +195,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #include <sys/ktrace.h>
 #endif
 #include <sys/kauth.h>
-#ifdef WAPBL
-#include <sys/wapbl.h>
-#endif
 #ifdef KERN_SA
 #include <sys/savar.h>
 #endif
@@ -206,6 +202,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #ifdef PTRACE
 #include <sys/ptrace.h>
 #endif /* PTRACE */
+#include <sys/cprng.h>
 
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
@@ -214,14 +211,17 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #include <sys/pax.h>
 #endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
+#include <secmodel/secmodel.h>
+
 #include <ufs/ufs/quota.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/syncfs/syncfs.h>
+#include <miscfs/specfs/specdev.h>
 
 #include <sys/cpu.h>
 
-#include <uvm/uvm.h>
+#include <uvm/uvm.h>	/* extern struct uvm uvm */
 
 #if NSYSMON_TASKQ > 0
 #include <dev/sysmon/sysmon_taskq.h>
@@ -233,6 +233,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 #include <dev/sysmon/sysmonvar.h>
 #endif
 
+#include <net/bpf.h>
 #include <net/if.h>
 #include <net/raw_cb.h>
 
@@ -243,16 +244,9 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.408 2009/11/03 05:23:28 dyoung Exp $
 struct timeval50 boottime50;
 #endif
 
-#ifdef _KERNEL_OPT
-#include "opt_userconf.h"
-#endif
-#ifdef USERCONF
 #include <sys/userconf.h>
-#endif
 
-extern struct proc proc0;
 extern struct lwp lwp0;
-extern struct cwdinfo cwdi0;
 extern time_t rootfstime;
 
 #ifndef curlwp
@@ -267,10 +261,13 @@ struct timespec boottime;	        /* time at system startup - will only follow s
 
 int	start_init_exec;		/* semaphore for start_init() */
 
+cprng_strong_t	*kern_cprng;
+
 static void check_console(struct lwp *l);
 static void start_init(void *);
 static void configure(void);
 static void configure2(void);
+static void configure3(void);
 void main(void);
 
 /*
@@ -306,12 +303,19 @@ main(void)
 
 	kernel_lock_init();
 	once_init();
-	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
+
+	mi_cpu_init();
+	kernconfig_lock_init();
+	kthread_sysinit();
 
 	/* Initialize the device switch tables. */
 	devsw_init();
 
+	/* Initialize event counters. */
+	evcnt_init();
+
 	uvm_init();
+	kcpuset_sysinit();
 
 	prop_kern_init();
 
@@ -326,6 +330,9 @@ main(void)
 	mutex_obj_init();
 	rw_obj_init();
 
+	/* Passive serialization. */
+	pserialize_init();
+
 	/* Initialize the extent manager. */
 	extent_init();
 
@@ -338,6 +345,19 @@ main(void)
 	/* Initialize callouts, part 1. */
 	callout_startup();
 
+	/* Initialize the kernel authorization subsystem. */
+	kauth_init();
+
+	secmodel_init();
+
+	spec_init();
+
+	/*
+	 * Set BPF op vector.  Can't do this in bpf attach, since
+	 * network drivers attach before bpf.
+	 */
+	bpf_setops();
+
 	/* Start module system. */
 	module_init();
 
@@ -349,7 +369,6 @@ main(void)
 	 * credential inheritance policy, it is needed at least before
 	 * any process is created, specifically proc0.
 	 */
-	kauth_init();
 	module_init_class(MODULE_CLASS_SECMODEL);
 
 	/* Initialize the buffer cache */
@@ -361,10 +380,9 @@ main(void)
 	/*
 	 * The following things must be done before autoconfiguration.
 	 */
-	evcnt_init();		/* initialize event counters */
-#if NRND > 0
-	rnd_init();		/* initialize random number generator */
-#endif
+	rnd_init();		/* initialize entropy pool */
+
+	cprng_init();		/* initialize cryptographic PRNG */
 
 	/* Initialize process and pgrp structures. */
 #ifdef KERN_SA
@@ -381,6 +399,7 @@ main(void)
 
 	/* Create process 0. */
 	proc0_init();
+	lwp0_init();
 
 	/* Disable preemption during boot. */
 	kpreempt_disable();
@@ -404,6 +423,9 @@ main(void)
 	/* Initialize processor-sets */
 	psets_init();
 
+	/* Initialize cpufreq(9) */
+	cpufreq_init();
+
 	/* MI initialization of the boot cpu */
 	error = mi_cpu_attach(curcpu());
 	KASSERT(error == 0);
@@ -424,7 +446,7 @@ main(void)
 	loginit();
 
 	/* Second part of module system initialization. */
-	module_init2();
+	module_start_unload_thread();
 
 	/* Initialize the file systems. */
 #ifdef NVNODE_IMPLICIT
@@ -484,26 +506,40 @@ main(void)
 	/* Initialize the disk wedge subsystem. */
 	dkwedge_init();
 
+	/* Initialize the kernel strong PRNG. */
+	kern_cprng = cprng_strong_create("kernel", IPL_VM,
+					 CPRNG_INIT_ANY|CPRNG_REKEY_ANY);
+					 
 	/* Initialize interfaces. */
 	ifinit1();
 
 	spldebug_start();
+
+	/* Initialize sockets thread(s) */
+	soinit1();
 
 	/* Configure the system hardware.  This will enable interrupts. */
 	configure();
 
 	ssp_init();
 
+	ubc_init();		/* must be after autoconfig */
+
+	mm_init();
+
 	configure2();
 	/* Now timer is working.  Enable preemption. */
 	kpreempt_enable();
-
-	ubc_init();		/* must be after autoconfig */
 
 #ifdef SYSVSHM
 	/* Initialize System V style shared memory. */
 	shminit();
 #endif
+
+	vmem_rehash_start();	/* must be before exec_init */
+
+	/* Initialize exec structures */
+	exec_init(1);		/* seminit calls exithook_establish() */
 
 #ifdef SYSVSEM
 	/* Initialize System V style semaphores. */
@@ -567,12 +603,9 @@ main(void)
 	/* Initialize the UUID system calls. */
 	uuid_init();
 
-#ifdef WAPBL
-	/* Initialize write-ahead physical block logging. */
-	wapbl_init();
-#endif
-
 	machdep_init();
+
+	procinit_sysctl();
 
 	/*
 	 * Create process 1 (init(8)).  We do this now, as Unix has
@@ -588,9 +621,11 @@ main(void)
 
 	/*
 	 * Load any remaining builtin modules, and hand back temporary
-	 * storage to the VM system.
+	 * storage to the VM system.  Then require force when loading any
+	 * remaining un-init'ed built-in modules to avoid later surprises.
 	 */
 	module_init_class(MODULE_CLASS_ANY);
+	module_builtin_require_force();
 
 	/*
 	 * Finalize configuration now that all real devices have been
@@ -610,7 +645,7 @@ main(void)
 
 	/* Mount the root file system. */
 	do {
-		domountroothook();
+		domountroothook(root_device);
 		if ((error = vfs_mountroot())) {
 			printf("cannot mount root, error = %d\n", error);
 			boothowto |= RB_ASKNAME;
@@ -620,36 +655,14 @@ main(void)
 	} while (error != 0);
 	mountroothook_destroy();
 
+	configure3();
+
 	/*
 	 * Initialise the time-of-day clock, passing the time recorded
 	 * in the root filesystem (if any) for use by systems that
 	 * don't have a non-volatile time-of-day device.
 	 */
 	inittodr(rootfstime);
-
-	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_ROOTFS;
-	CIRCLEQ_FIRST(&mountlist)->mnt_op->vfs_refcount++;
-
-	/*
-	 * Get the vnode for '/'.  Set filedesc0.fd_fd.fd_cdir to
-	 * reference it.
-	 */
-	error = VFS_ROOT(CIRCLEQ_FIRST(&mountlist), &rootvnode);
-	if (error)
-		panic("cannot find root vnode, error=%d", error);
-	cwdi0.cwdi_cdir = rootvnode;
-	VREF(cwdi0.cwdi_cdir);
-	VOP_UNLOCK(rootvnode, 0);
-	cwdi0.cwdi_rdir = NULL;
-
-	/*
-	 * Now that root is mounted, we can fixup initproc's CWD
-	 * info.  All other processes are kthreads, which merely
-	 * share proc0's CWD info.
-	 */
-	initproc->p_cwdi->cwdi_cdir = rootvnode;
-	VREF(initproc->p_cwdi->cwdi_cdir);
-	initproc->p_cwdi->cwdi_rdir = NULL;
 
 	/*
 	 * Now can look at time, having had a chance to verify the time
@@ -700,11 +713,6 @@ main(void)
 	    uvm_aiodone_worker, NULL, PRI_VM, IPL_NONE, WQ_MPSAFE))
 		panic("fork aiodoned");
 
-	vmem_rehash_start();
-
-	/* Initialize exec structures */
-	exec_init(1);
-
 	/*
 	 * Okay, now we can let init(8) exec!  It's off to userland!
 	 */
@@ -740,10 +748,9 @@ configure(void)
 	drvctl_init();
 #endif
 
-#ifdef USERCONF
+	userconf_init();
 	if (boothowto & RB_USERCONF)
-		user_config();
-#endif
+		userconf_prompt();
 
 	if ((boothowto & (AB_SILENT|AB_VERBOSE)) == AB_SILENT) {
 		printf_nolog("Detecting hardware...");
@@ -803,6 +810,88 @@ configure2(void)
 
 	/* Get the threads going and into any sleeps before continuing. */
 	yield();
+}
+
+static void
+configure3(void)
+{
+
+	/*
+	 * Create threads to call back and finish configuration for
+	 * devices that want the mounted root file system.
+	 */
+	config_create_mountrootthreads();
+
+	/* Get the threads going and into any sleeps before continuing. */
+	yield();
+}
+
+static void
+rootconf_handle_wedges(void)
+{
+	struct partinfo dpart;
+	struct partition *p;
+	struct vnode *vp;
+	daddr_t startblk;
+	uint64_t nblks;
+	device_t dev; 
+	int error;
+
+	if (booted_nblks) {
+		/*
+		 * bootloader passed geometry
+		 */
+		dev      = booted_device;
+		startblk = booted_startblk;
+		nblks    = booted_nblks;
+
+		/*
+		 * keep booted_device and booted_partition
+		 * in case the kernel doesn't identify a wedge
+		 */
+	} else {
+		/*
+		 * bootloader passed partition number
+		 *
+		 * We cannot ask the partition device directly when it is
+		 * covered by a wedge. Instead we look up the geometry in
+		 * the disklabel.
+		 */
+		vp = opendisk(booted_device);
+
+		if (vp == NULL)
+			return;
+
+		error = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, NOCRED);
+		VOP_CLOSE(vp, FREAD, NOCRED);
+		vput(vp);
+		if (error)
+			return;
+
+		KASSERT(booted_partition >= 0
+			&& booted_partition < MAXPARTITIONS);
+
+		p = &dpart.disklab->d_partitions[booted_partition];
+
+		dev      = booted_device;
+		startblk = p->p_offset;
+		nblks    = p->p_size;
+	}
+
+	dev = dkwedge_find_partition(dev, startblk, nblks);
+	if (dev != NULL) {
+		booted_device = dev;
+		booted_partition = 0;
+	}
+}
+
+void
+rootconf(void)
+{
+	if (booted_device != NULL)
+		rootconf_handle_wedges();
+
+	setroot(booted_device, booted_partition);
 }
 
 static void
@@ -952,7 +1041,7 @@ start_init(void *arg)
 			*flagsp++ = '\0';
 			i = flagsp - flags;
 #ifdef DEBUG
-			printf("init: copying out flags `%s' %d\n", flags, i);
+			aprint_normal("init: copying out flags `%s' %d\n", flags, i);
 #endif
 			arg1 = STACK_ALLOC(ucp, i);
 			ucp = STACK_MAX(arg1, i);
@@ -964,7 +1053,7 @@ start_init(void *arg)
 		 */
 		i = strlen(path) + 1;
 #ifdef DEBUG
-		printf("init: copying out path `%s' %d\n", path, i);
+		aprint_normal("init: copying out path `%s' %d\n", path, i);
 #else
 		if (boothowto & RB_ASKNAME || path != initpaths[0])
 			printf("init: trying %s\n", path);
@@ -976,7 +1065,7 @@ start_init(void *arg)
 		/*
 		 * Move out the arg pointers.
 		 */
-		ucp = (void *)STACK_ALIGN(ucp, ALIGNBYTES);
+		ucp = (void *)STACK_ALIGN(ucp, STACK_ALIGNBYTES);
 		uap = (char **)STACK_ALLOC(ucp, sizeof(char *) * 3);
 		SCARG(&args, path) = arg0;
 		SCARG(&args, argp) = uap;
@@ -1007,7 +1096,7 @@ start_init(void *arg)
 }
 
 /*
- * calculate cache size from physmem and vm_map size.
+ * calculate cache size (in bytes) from physmem and vm_map size.
  */
 vaddr_t
 calc_cache_size(struct vm_map *map, int pct, int va_pct)

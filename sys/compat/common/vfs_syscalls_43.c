@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_43.c,v 1.50 2009/03/17 00:01:54 dyoung Exp $	*/
+/*	$NetBSD: vfs_syscalls_43.c,v 1.54 2010/11/19 06:44:36 dholland Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,11 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.50 2009/03/17 00:01:54 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.54 2010/11/19 06:44:36 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
-#include "fs_union.h"
 #endif
 
 #include <sys/param.h>
@@ -140,12 +139,18 @@ compat_43_sys_lstat(struct lwp *l, const struct compat_43_sys_lstat_args *uap, r
 	struct stat sb, sb1;
 	struct stat43 osb;
 	int error;
+	struct pathbuf *pb;
 	struct nameidata nd;
 	int ndflags;
 
+	error = pathbuf_copyin(SCARG(uap, path), &pb);
+	if (error) {
+		return error;
+	}
+
 	ndflags = NOFOLLOW | LOCKLEAF | LOCKPARENT | TRYEMULROOT;
 again:
-	NDINIT(&nd, LOOKUP, ndflags, UIO_USERSPACE, SCARG(uap, path));
+	NDINIT(&nd, LOOKUP, ndflags, pb);
 	if ((error = namei(&nd))) {
 		if (error == EISDIR && (ndflags & LOCKPARENT) != 0) {
 			/*
@@ -155,6 +160,7 @@ again:
 			ndflags &= ~LOCKPARENT;
 			goto again;
 		}
+		pathbuf_destroy(pb);
 		return (error);
 	}
 	/*
@@ -163,6 +169,7 @@ again:
 	 */
 	vp = nd.ni_vp;
 	dvp = nd.ni_dvp;
+	pathbuf_destroy(pb);
 	if (vp->v_type != VLNK) {
 		if ((ndflags & LOCKPARENT) != 0) {
 			if (dvp == vp)
@@ -424,7 +431,7 @@ unionread:
 		}
 		free(dirbuf, M_TEMP);
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (error)
 		goto out;
 
@@ -433,7 +440,7 @@ unionread:
 	    (vp->v_mount->mnt_flag & MNT_UNION)) {
 		struct vnode *tvp = vp;
 		vp = vp->v_mount->mnt_vnodecovered;
-		VREF(vp);
+		vref(vp);
 		fp->f_data = (void *) vp;
 		fp->f_offset = 0;
 		vrele(tvp);

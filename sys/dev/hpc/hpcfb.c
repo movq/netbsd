@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcfb.c,v 1.50 2009/04/05 02:14:41 uwe Exp $	*/
+/*	$NetBSD: hpcfb.c,v 1.58 2010/11/13 13:51:59 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.50 2009/04/05 02:14:41 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.58 2010/11/13 13:51:59 uebayasi Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcfb.h"
@@ -55,14 +55,11 @@ __KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.50 2009/04/05 02:14:41 uwe Exp $");
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/user.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/ioctl.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 
@@ -157,7 +154,6 @@ struct hpcfb_softc {
 	struct	hpcfb_devconfig *sc_dc;	/* device configuration */
 	const struct hpcfb_accessops	*sc_accessops;
 	void *sc_accessctx;
-	void *sc_powerhook;	/* power management hook */
 	device_t sc_wsdisplay;
 	int sc_screen_resumed;
 	int sc_polling;
@@ -199,8 +195,8 @@ static void	hpcfb_cmap_reorder(struct hpcfb_fbconf *,
 		    struct hpcfb_devconfig *);
 
 static void	hpcfb_power(int, void *);
-static bool	hpcfb_suspend(device_t PMF_FN_PROTO);
-static bool	hpcfb_resume(device_t PMF_FN_PROTO);
+static bool	hpcfb_suspend(device_t, const pmf_qual_t *);
+static bool	hpcfb_resume(device_t, const pmf_qual_t *);
 
 
 void    hpcfb_cursor(void *, int, int, int);
@@ -306,6 +302,7 @@ hpcfbattach(device_t parent, device_t self, void *aux)
 
 	if (hpcfbconsole) {
 		sc->sc_dc = &hpcfb_console_dc;
+		sc->sc_dc->dc_rinfo.ri_flg &= ~RI_NO_AUTO;
 		hpcfb_console_dc.dc_sc = sc;
 		printf(": %dx%d pixels, %d colors, %dx%d chars",
 		    sc->sc_dc->dc_rinfo.ri_width,sc->sc_dc->dc_rinfo.ri_height,
@@ -343,17 +340,6 @@ hpcfbattach(device_t parent, device_t self, void *aux)
 		    "hpcfb scroll support disabled\n");
 	}
 #endif /* HPCFB_JUMP */
-
-	/*
-	 * apmdev(4) uses dopowerhooks(9), apm(4) uses pmf(9), and the
-	 * two apm drivers are mutually exclusive.  Register power
-	 * hooks with both.
-	 */
-	sc->sc_powerhook = powerhook_establish(device_xname(sc->sc_dev),
-	    hpcfb_power, sc);
-	if (sc->sc_powerhook == NULL)
-		aprint_error_dev(self,
-				 "WARNING: unable to establish power hook\n");
 
 	if (!pmf_device_register(self, hpcfb_suspend, hpcfb_resume))
 		aprint_error_dev(self, "unable to establish power handler\n");
@@ -452,6 +438,9 @@ hpcfb_init(struct hpcfb_fbconf *fbconf,	struct hpcfb_devconfig *dc)
 #else
 	ri->ri_flg = RI_CURSOR;
 #endif
+	if (dc == &hpcfb_console_dc)
+		ri->ri_flg |= RI_NO_AUTO;
+
 	switch (ri->ri_depth) {
 	case 8:
 		if (32 <= fbconf->hf_pack_width &&
@@ -579,6 +568,10 @@ hpcfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 		wdf->cmsize = 256;	/* XXXX */
 		return (0);
 
+	case WSDISPLAYIO_LINEBYTES:
+		*(u_int *)data = dc->dc_rinfo.ri_stride;
+		return 0;
+
 	case WSDISPLAYIO_SMODE:
 		if (*(int *)data == WSDISPLAYIO_MODE_EMUL){
 			if (sc->sc_mapping){
@@ -672,7 +665,7 @@ hpcfb_power(int why, void *arg)
 }
 
 static bool
-hpcfb_suspend(device_t self PMF_FN_ARGS)
+hpcfb_suspend(device_t self, const pmf_qual_t *qual)
 {
 	struct hpcfb_softc *sc = device_private(self);
 
@@ -681,7 +674,7 @@ hpcfb_suspend(device_t self PMF_FN_ARGS)
 }
 
 static bool
-hpcfb_resume(device_t self PMF_FN_ARGS)
+hpcfb_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct hpcfb_softc *sc = device_private(self);
 

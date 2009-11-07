@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.x11.mk,v 1.78 2009/08/22 01:41:03 mrg Exp $
+#	$NetBSD: bsd.x11.mk,v 1.105 2012/01/17 19:40:08 njoly Exp $
 
 .include <bsd.init.mk>
 
@@ -8,11 +8,13 @@ MANDIR=			${X11MANDIR}
 
 COPTS+=			-fno-strict-aliasing
 
+.include <bsd.sys.mk>
+
 .if defined(USE_SSP) && (${USE_SSP} != "no")
 CPPFLAGS+=		-DNO_ALLOCA
 .endif
 
-X11FLAGS.VERSION=	-DOSMAJORVERSION=1 -DOSMINORVERSION=6		# XXX
+X11FLAGS.VERSION=	-DOSMAJORVERSION=5 -DOSMINORVERSION=99		# XXX
 
 #	 THREADS_DEFINES
 X11FLAGS.THREADS=	-DXTHREADS -D_REENTRANT -DXUSE_MTSAFE_API \
@@ -43,7 +45,8 @@ X11FLAGS.EXTENSION=	${X11FLAGS.BASE_EXTENSION} \
 			${X11FLAGS.PERVASIVE_EXTENSION}
 
 X11FLAGS.DIX=		-DHAVE_DIX_CONFIG_H -D_BSD_SOURCE -DHAS_FCHOWN \
-			-DHAS_STICKY_DIR_BIT -D_POSIX_THREAD_SAFE_FUNCTIONS
+			-DHAS_STICKY_DIR_BIT -D_POSIX_THREAD_SAFE_FUNCTIONS \
+			-DHAVE_XORG_CONFIG_H
 X11INCS.DIX=		-I${X11INCSDIR}/freetype2  \
 			-I${X11INCSDIR}/pixman-1 \
 			-I$(X11SRCDIR.xorg-server)/include \
@@ -57,7 +60,8 @@ X11INCS.DIX=		-I${X11INCSDIR}/freetype2  \
 			-I$(X11SRCDIR.xorg-server)/miext/damage \
 			-I$(X11SRCDIR.xorg-server)/render \
 			-I$(X11SRCDIR.xorg-server)/randr \
-			-I$(X11SRCDIR.xorg-server)/fb
+			-I$(X11SRCDIR.xorg-server)/fb \
+			-I$(X11SRCDIR.xorg-server)/../include
 .else
 X11FLAGS.EXTENSION=	-DMITMISC -DXTEST -DXTRAP -DXSYNC -DXCMISC -DXRECORD \
 			-DMITSHM -DBIGREQS -DXF86MISC -DDBE -DDPMSExtension \
@@ -111,10 +115,12 @@ X11FLAGS.EXTENSION+=	-D__GLX_ALIGN64
     ${MACHINE} == "macppc"	|| \
     ${MACHINE} == "netwinder"	|| \
     ${MACHINE} == "ofppc"	|| \
+    ${MACHINE} == "prep"	|| \
     ${MACHINE} == "sgimips"	|| \
     ${MACHINE} == "sparc64"	|| \
     ${MACHINE} == "sparc"	|| \
-    ${MACHINE} == "shark"
+    ${MACHINE} == "shark"	|| \
+    ${MACHINE} == "zaurus"
 #	LOADABLE
 X11FLAGS.LOADABLE=	-DXFree86LOADER -DIN_MODULE -DXFree86Module \
 			-fno-merge-constants
@@ -124,13 +130,13 @@ X11FLAGS.LOADABLE=	-DXFree86LOADER -DIN_MODULE -DXFree86Module \
 .if ${X11FLAVOUR} == "Xorg"
 XVENDORNAMESHORT=	'"X.Org"'
 XVENDORNAME=		'"The X.Org Foundation"'
-XORG_RELEASE=		'"Release 1.6.3"'
+XORG_RELEASE=		'"Release 1.10.3"'
 __XKBDEFRULES__=	'"xorg"'
 XLOCALE.DEFINES=	-DXLOCALEDIR=\"${X11LIBDIR}/locale\" \
 			-DXLOCALELIBDIR=\"${X11LIBDIR}/locale\"
 
 # XXX oh yeah, fix me later
-XORG_VERSION_CURRENT="(((1) * 10000000) + ((6) * 100000) + ((3) * 1000) + 0)"
+XORG_VERSION_CURRENT="(((1) * 10000000) + ((10) * 100000) + ((3) * 1000) + 0)"
 .endif
 
 PRINT_PACKAGE_VERSION=	awk '/^PACKAGE_VERSION=/ {			\
@@ -166,9 +172,7 @@ CPPFLAGS+=		-I${DESTDIR}${X11INCDIR}
 CPPFLAGS+=		-D__AMD64__
 .endif
 
-LDFLAGS+=		-Wl,-rpath-link,${DESTDIR}${X11USRLIBDIR} \
-			-R${X11USRLIBDIR} \
-			-L${DESTDIR}${X11USRLIBDIR}
+LDFLAGS+=		-Wl,-rpath,${X11USRLIBDIR} -L=${X11USRLIBDIR}
 
 
 #
@@ -183,15 +187,13 @@ LDFLAGS+=		-Wl,-rpath-link,${DESTDIR}${X11USRLIBDIR} \
 .cpp:
 	${_MKTARGET_CREATE}
 	rm -f ${.TARGET}
-	${CPP} -undef -traditional \
+	${CC} -E -undef -traditional - \
 	    ${CPPSCRIPTFLAGS_${.TARGET}:U${CPPSCRIPTFLAGS}} \
 	    < ${.IMPSRC} | ${X11TOOL_UNXCOMM} > ${.TARGET}
 
 realall: ${CPPSCRIPTS}
 
-clean: cleancppscripts
-cleancppscripts: .PHONY
-	rm -f ${CPPSCRIPTS}
+CLEANFILES+= ${CPPSCRIPTS}
 .endif								# }
 
 #
@@ -229,7 +231,7 @@ realinstall:	pkgconfig-install
 
 .for _pkg in ${PKGCONFIG:O:u}
 PKGDIST.${_pkg}?=	${X11SRCDIR.${PKGDIST:U${_pkg}}}
-_PKGDEST.${_pkg}=	${DESTDIR}/${X11USRLIBDIR}/pkgconfig/${_pkg}.pc
+_PKGDEST.${_pkg}=	${DESTDIR}${X11USRLIBDIR}/pkgconfig/${_pkg}.pc
 
 .PATH:	${PKGDIST.${_pkg}}
 
@@ -248,6 +250,9 @@ pkgconfig-install: ${_PKGDEST.${_pkg}}
 # And yes, it has to be splitted in two otherwise it's too long
 # for sed to handle.
 
+# hacky transforms:
+#   @XCBPROTO_VERSION@
+
 .SUFFIXES:	.pc.in .pc
 .pc.in.pc:
 	${_MKTARGET_CREATE}
@@ -265,7 +270,8 @@ pkgconfig-install: ${_PKGDEST.${_pkg}}
 		s,@libdir@,\\$$\{prefix\}/lib,; \
 		s,@includedir@,\\$$\{prefix\}/include,; \
 		s,@datarootdir@,\\$$\{prefix\}/share,; \
-		s,@appdefaultdir@,\\$$\{libdir}/X11/app-default,; \
+		s,@datadir@,\\$$\{datarootdir\},; \
+		s,@appdefaultdir@,\\$$\{libdir}/X11/app-defaults,; \
 		s,@MAPDIR@,\\$$\{libdir\}/X11/fonts/util,; \
 		s,@ICONDIR@,\\$$\{datarootdir\}/icons,; \
 		s,@PACKAGE_VERSION@,$${_pkg_version},; \
@@ -275,6 +281,17 @@ pkgconfig-install: ${_PKGDEST.${_pkg}}
 		s,@FIXESEXT_VERSION@,$${_pkg_version%.*},; \
 		s,@RANDR_VERSION@,$${_pkg_version%.*},; \
 		s,@RENDER_VERSION@,$${_pkg_version%.*}," \
+		-e "s,@LIBS@,,; \
+		s,@Z_LIBS@,-lz,; \
+		s,@LIBZ@,-lz,; \
+		s,@LIBBZ2@,-lbz2,; \
+		s,@xkb_base@,\\$$\{prefix\}/lib/X11/xkb,; \
+		s,@xcbincludedir@,\\$$\{prefix\}/share/xcb,; \
+		s,@fontrootdir@,\\$$\{libdir\}/X11/fonts,; \
+		s,@LIBXML2_LIBS@,,; \
+		s,@ICONV_LIBS@,,; \
+		s,@NEEDED@,,; \
+		s,@FT2_EXTRA_LIBS@,," \
 		-e "s,@moduledir@,\\$$\{libdir\}/modules,; \
 		s,@sdkdir@,\\$$\{includedir\}/xorg,; \
 		s,@PIXMAN_CFLAGS@,,; \
@@ -282,6 +299,7 @@ pkgconfig-install: ${_PKGDEST.${_pkg}}
 		s,@INSTALL_LIB_DIR@,\\$$\{prefix\}/lib,; \
 		s,@INSTALL_INC_DIR@,\\$$\{prefix\}/include,; \
 		s,@XKBPROTO_REQUIRES@,kbproto,; \
+		s,@XCBPROTO_VERSION@,1.7,; \
 		s,@FREETYPE_REQUIRES@,freetype2,; \
 		s,@EXPAT_LIBS@,-lexpat,; \
 		s,@FREETYPE_LIBS@,-lfreetype,; \
@@ -290,15 +308,25 @@ pkgconfig-install: ${_PKGDEST.${_pkg}}
 		s,@X11_EXTRA_DEPS@,,; \
 		s,@XTHREAD_CFLAGS@,-D_REENTRANT,; \
 		s,@XTHREADLIB@,-lpthread,; \
+		s,@GL_LIB@,GL,; \
 		s,@GL_PC_REQ_PRIV@,x11 xext,; \
 		s,@GL_PC_LIB_PRIV@,-lm -lpthread,; \
-		s,@GL_PC_CFLAGS@,,; \
+		s,@GL_PC_CFLAGS@,," \
+		-e "s,@GLU_LIB@,GLU,; \
+		s,@GLU_PC_REQ@,gl,; \
 		s,@GLU_PC_REQ_PRIV@,,; \
 		s,@GLU_PC_LIB_PRIV@,-lGLU,; \
 		s,@GLU_PC_CFLAGS@,,; \
+		s,@GLUT_LIB@,glut,; \
 		s,@GLUT_PC_REQ_PRIV@,gl glu,; \
 		s,@GLUT_PC_LIB_PRIV@,-lglut,; \
 		s,@GLUT_PC_CFLAGS@,,; \
+		s,@GLW_PC_CFLAGS@,,; \
+		s,@GLW_PC_REQ_PRIV@,x11 xt,; \
+		s,@GLW_PC_LIB_PRIV@,,; \
+		s,@DRI_DRIVER_DIR@,\\$$\{libdir\}/modules/dri,; \
+		s,@DRI_PC_REQ_PRIV@,,; \
+		s,@GLW_LIB@,GLw,; \
 		s,@abi_ansic@,0.4,; \
 		s,@abi_videodrv@,5.0,; \
 		s,@abi_xinput@,4.0,; \
@@ -306,11 +334,11 @@ pkgconfig-install: ${_PKGDEST.${_pkg}}
 		s,@abi_font@,0.6,; \
 		s,@fchown_define@,-DHAS_FCHOWN,; \
 		s,@sticky_bit_define@,-DHAS_STICKY_DIR_BIT," \
-		-e '/^Libs:/ s%-L\([^ 	]*\)%-Wl,-R\1 &%g' \
+		-e '/^Libs:/ s%-L\([^ 	]*\)%-Wl,-rpath,\1 &%g' \
 		< ${.IMPSRC} > ${.TARGET}.tmp && \
 	mv -f ${.TARGET}.tmp ${.TARGET}
 
-CLEANFILES+=	${_PKGCONFIG_FILES} ${_PKGCONFIG_FILES:C/$/.tmp/}
+CLEANDIRFILES+= ${_PKGCONFIG_FILES} ${_PKGCONFIG_FILES:C/$/.tmp/}
 .endif
 
 #
@@ -337,9 +365,7 @@ realinstall: appdefsinstall
 # .man page handling
 #
 .if (${MKMAN} != "no" && (${MAN:U} != "" || ${PROG:U} != ""))	# {
-cleandir: cleanx11man
-cleanx11man: .PHONY
-	rm -f ${MAN:U${PROG:D${PROG.1}}}
+CLEANDIRFILES+= ${MAN:U${PROG:D${PROG.1}}}
 .endif								# }
 
 .SUFFIXES:	.man .man.pre .1 .3 .4 .5 .7
@@ -367,12 +393,13 @@ X11MANCPP?=	yes
 _X11MANTRANSFORM+= \
 	__vendorversion__	${X11VERSION:C/ /%/gW}
 .else
-XORGVERSION=	'"X.Org 7.3nb20081014" "X Version 11"'
+XORGVERSION=	'"X Version 11"'
 X11MANCPP?=	no
 _X11MANTRANSFORM+= \
 	__vendorversion__	${XORGVERSION:C/ /%/gW} \
 	__XCONFIGFILE__		xorg.conf \
 	__xconfigfile__		xorg.conf \
+	__XCONFIGFILEMAN__	'__XCONFIGFILE__%(__filemansuffix__)' \
 	__xorgversion__		${XORGVERSION:C/ /%/gW} \
 	__XSERVERNAME__		Xorg \
 	__xservername__		Xorg
@@ -381,7 +408,7 @@ _X11MANTRANSFORM+= \
 _X11MANTRANSFORMCMD=	${TOOL_SED} -e 's/\\$$/\\ /' ${.IMPSRC}
 
 .if ${X11MANCPP} != "no"
-_X11MANTRANSFORMCMD+=	| ${CPP} -undef -traditional
+_X11MANTRANSFORMCMD+=	| ${CC} -E -undef -traditional -
 . for __def__ __value__ in ${_X11MANTRANSFORM}
 _X11MANTRANSFORMCMD+=	-D${__def__}=${__value__:C/%/ /gW}
 . endfor
@@ -397,3 +424,6 @@ _X11MANTRANSFORMCMD+=	${X11EXTRAMANDEFS}
 	${_MKTARGET_CREATE}
 	rm -f ${.TARGET}
 	${_X11MANTRANSFORMCMD} | ${X11TOOL_UNXCOMM} > ${.TARGET}
+
+##### Pull in related .mk logic
+.include <bsd.clean.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: mi_vector_hash.c,v 1.1 2009/07/20 17:03:37 joerg Exp $	*/
+/*	$NetBSD: mi_vector_hash.c,v 1.4 2011/10/21 23:45:56 joerg Exp $	*/
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,10 +38,18 @@
  * if the key is aligned correctly.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: mi_vector_hash.c,v 1.1 2009/07/20 17:03:37 joerg Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: mi_vector_hash.c,v 1.4 2011/10/21 23:45:56 joerg Exp $");
+
+#include "namespace.h"
+
+#if !HAVE_NBTOOL_CONFIG_H || HAVE_SYS_ENDIAN_H
 #include <sys/endian.h>
+#endif
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -58,6 +66,10 @@ __RCSID("$NetBSD: mi_vector_hash.c,v 1.1 2009/07/20 17:03:37 joerg Exp $");
 } while (/* CONSTCOND */0)
 
 #define FIXED_SEED	0x9e3779b9	/* Golden ratio, arbitrary constant */
+
+#ifdef __weak_alias
+__weak_alias(mi_vector_hash, _mi_vector_hash)
+#endif
 
 void
 mi_vector_hash(const void * __restrict key, size_t len, uint32_t seed,

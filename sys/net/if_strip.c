@@ -1,4 +1,4 @@
-/*	$NetBSD: if_strip.c,v 1.93 2009/05/07 18:01:57 elad Exp $	*/
+/*	$NetBSD: if_strip.c,v 1.96 2011/09/23 15:29:09 christos Exp $	*/
 /*	from: NetBSD: if_sl.c,v 1.38 1996/02/13 22:00:23 christos Exp $	*/
 
 /*
@@ -87,10 +87,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.93 2009/05/07 18:01:57 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.96 2011/09/23 15:29:09 christos Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -136,10 +135,8 @@ typedef u_char ttychar_t;
 typedef char ttychar_t;
 #endif
 
-#if NBPFILTER > 0
 #include <sys/time.h>
 #include <net/bpf.h>
-#endif
 
 /*
  * SLMAX is a hard limit on input packet size.  To simplify the code
@@ -189,7 +186,7 @@ typedef char ttychar_t;
 #define STRIP_MTU_ONWIRE (SLMTU + 20 + STRIP_HDRLEN) /* (2*SLMTU+2 in sl.c */
 
 
-#define	SLIP_HIWAT	roundup(50,CBSIZE)
+#define	SLIP_HIWAT	roundup(50, TTROUND)
 
 /* This is a NetBSD-1.0 or later kernel. */
 #define CCOUNT(q)	((q)->c_cc)
@@ -385,9 +382,7 @@ strip_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_watchdog = strip_watchdog;
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
-#endif
+	bpf_attach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
 	LIST_INSERT_HEAD(&strip_softc_list, sc, sc_iflist);
 	return 0;
 }
@@ -402,9 +397,7 @@ strip_clone_destroy(struct ifnet *ifp)
 
 	LIST_REMOVE(sc, sc_iflist);
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 
 	free(sc, M_DEVBUF);
@@ -1061,9 +1054,7 @@ stripintr(void *arg)
 #ifdef INET
 	u_char c;
 #endif
-#if NBPFILTER > 0
 	u_char chdr[CHDR_LEN];
-#endif
 
 	KASSERT(tp != NULL);
 
@@ -1075,9 +1066,7 @@ stripintr(void *arg)
 #ifdef INET
 		struct ip *ip;
 #endif
-#if NBPFILTER > 0
 		struct mbuf *bpf_m;
-#endif
 
 		/*
 		 * Do not remove the packet from the queue if it
@@ -1115,7 +1104,6 @@ stripintr(void *arg)
 		 * connection ID compression will get munged when
 		 * this happens.
 		 */
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			/*
 			 * We need to save the TCP/IP header before
@@ -1129,7 +1117,6 @@ stripintr(void *arg)
 			bpf_m = m_dup(m, 0, M_COPYALL, M_DONTWAIT);
 		} else
 			bpf_m = NULL;
-#endif
 #ifdef INET
 		if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
 			if (sc->sc_if.if_flags & SC_COMPRESS)
@@ -1138,11 +1125,8 @@ stripintr(void *arg)
 				    &sc->sc_comp, 1);
 		}
 #endif
-#if NBPFILTER > 0
-		if (sc->sc_if.if_bpf && bpf_m != NULL)
-			bpf_mtap_sl_out(sc->sc_if.if_bpf, mtod(m, u_char *),
-			    bpf_m);
-#endif
+		if (bpf_m != NULL)
+			bpf_mtap_sl_out(&sc->sc_if, mtod(m, u_char *), bpf_m);
 		getbinuptime(&sc->sc_lastpacket);
 
 		s = spltty();
@@ -1168,7 +1152,6 @@ stripintr(void *arg)
 			break;
 		pktstart = mtod(m, u_char *);
 		len = m->m_pkthdr.len;
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			/*
 			 * Save the compressed header, so we
@@ -1180,7 +1163,6 @@ stripintr(void *arg)
 			 */
 			memcpy(chdr, pktstart, CHDR_LEN);
 		}
-#endif /* NBPFILTER > 0 */
 #ifdef INET
 		if ((c = (*pktstart & 0xf0)) != (IPVERSION << 4)) {
 			if (c & 0x80)
@@ -1220,13 +1202,11 @@ stripintr(void *arg)
 #endif
 		m->m_data = (void *) pktstart;
 		m->m_pkthdr.len = m->m_len = len;
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
-			bpf_mtap_sl_in(sc->sc_if.if_bpf, chdr, &m);
+			bpf_mtap_sl_in(&sc->sc_if, chdr, &m);
 			if (m == NULL)
 				continue;
 		}
-#endif
 		/*
 		 * If the packet will fit into a single
 		 * header mbuf, copy it into one, to save

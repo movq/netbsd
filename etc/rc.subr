@@ -1,6 +1,6 @@
-# $NetBSD: rc.subr,v 1.80 2009/09/14 22:30:30 apb Exp $
+# $NetBSD: rc.subr,v 1.88.4.1 2012/04/09 18:05:28 riz Exp $
 #
-# Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
+# Copyright (c) 1997-2011 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -152,7 +152,7 @@ mount_critical_filesystems()
 				# multiple lines can't be good,
 				# not even if $_optional is true
 				;;
-			*'unknown special file or file system'*)
+			*[uU]'nknown special file or file system'*)
 				if $_optional; then
 					# ignore this error
 					print_rc_metadata \
@@ -248,10 +248,17 @@ _find_processes()
 		read _interp < ${_chroot:-}/$_procname	# read interpreter name
 		_interp=${_interp#\#!}		# strip #!
 		set -- $_interp
+		if [ $1 = "/usr/bin/env" ]; then
+			shift
+			set -- $(type $1)
+			shift $(($# - 1))
+			_interp="${1##*/} $_procname"
+		else
+			_interp="$* $_procname"
+		fi
 		if [ $_interpreter != $1 ]; then
 			warn "\$command_interpreter $_interpreter != $1"
 		fi
-		_interp="$* $_procname"		# cleanup spaces, add _procname
 		_interpbn=${1##*/}
 		_fp_args='_argv'
 		_fp_match='case "$_argv" in
@@ -311,11 +318,11 @@ wait_for_pids()
 }
 
 #
-# run_rc_command argument
+# run_rc_command argument [parameters]
 #	Search for argument in the list of supported commands, which is:
 #		"start stop restart rcvar status poll ${extra_commands}"
 #	If there's a match, run ${argument}_cmd or the default method
-#	(see below).
+#	(see below), and pass the optional list of parameters to it.
 #
 #	If argument has a given prefix, then change the operation as follows:
 #		Prefix	Operation
@@ -503,6 +510,7 @@ run_rc_command()
 	if [ -z "$rc_arg" ]; then
 		rc_usage "$_keywords"
 	fi
+	shift	# remove $rc_arg from the positional parameters
 
 	if [ -n "$flags" ]; then	# allow override from environment
 		rc_flags=$flags
@@ -534,9 +542,11 @@ run_rc_command()
 			fi
 			for _elem in $_keywords; do
 				if [ "$_elem" = "$rc_arg" ]; then
-					echo 1>&2 "\$${rcvar} is not enabled - see ${rcvar_manpage}."
-					echo 1>&2 "Use the following if you wish to perform the operation:"
-					echo 1>&2 "  $0 one${rc_arg}"
+					cat 1>&2 <<EOF
+\$${rcvar} is not enabled - see ${rcvar_manpage}.
+Use the following if you wish to perform the operation:
+  $0 one${rc_arg}
+EOF
 					exit 1
 				fi
 			done
@@ -565,11 +575,15 @@ run_rc_command()
 				return 1
 			fi
 
-			if ! eval $_cmd && [ -z "$rc_force" ]; then
+			if ! eval $_cmd \"\${@}\" && [ -z "$rc_force" ]; then
 				return 1
 			fi
 			eval $_postcmd
 			return 0
+		fi
+
+		if [ ${#} -gt 0 ]; then
+			err 1 "the $rc_arg command does not take any parameters"
 		fi
 
 		case "$rc_arg" in	# default operations...
@@ -1101,28 +1115,58 @@ print_rc_metadata()
 	# print, prefixing the output with $_rc_metadata_prefix.
 	#
 	if [ -n "$_rc_postprocessor_fd" ]; then
-		printf "%s%s\n" "$rc_metadata_prefix" "$1" \
+		command printf "%s%s\n" "$rc_metadata_prefix" "$1" \
 			>&${_rc_postprocessor_fd}
 	fi
 }
 
 #
-# print_rc_normal string
+# _flush_rc_output
+#	Arrange for output to be flushed, if we are running
+#	inside /etc/rc with postprocessing.
+#
+_flush_rc_output()
+{
+	print_rc_metadata "nop"
+}
+
+#
+# print_rc_normal [-n] string
 #	Print the specified string in such way that it is treated as
 #	normal output, regardless of whether or not we are running
 #	inside /etc/rc with post-processing.
 #
-#	Ths intent is that a script that is run via the
-#	no_rc_postprocess() function (so its output would ordinarily be
-#	invisible to the post-processor) can nevertheless arrange for
-#	the post-processor to see things printed with print_rc_normal().
+#	If "-n" is specified in $1, then the string in $2 is printed
+#	without a newline; otherwise, the string in $1 is printed
+#	with a newline.
+#
+#	Intended use cases include:
+#
+#	o   An rc.d script can use ``print_rc_normal -n'' to print a
+#	    partial line in such a way that it appears immediately
+#	    instead of being buffered by rc(8)'s post-processor.
+#
+#	o   An rc.d script that is run via the no_rc_postprocess
+#	    function (so most of its output is invisible to rc(8)'s
+#	    post-processor) can use print_rc_normal to force some of its
+#	    output to be seen by the post-processor.
+#
 #
 print_rc_normal()
 {
 	# If _rc_postprocessor_fd is defined, then it is the fd
-	# to shich we must print; otherwise print to stdout.
+	# to which we must print; otherwise print to stdout.
 	#
-	printf "%s\n" "$1" >&${_rc_postprocessor_fd:-1}
+	local fd="${_rc_postprocessor_fd:-1}"
+	case "$1" in
+	"-n")
+		command printf "%s" "$2" >&${fd}
+		_flush_rc_output
+		;;
+	*)
+		command printf "%s\n" "$1" >&${fd}
+		;;
+	esac
 }
 
 #
@@ -1166,8 +1210,75 @@ twiddle()
 	'\')	_next='|' ;;
 	*)	_next='/' ;;
 	esac
-	printf "%s\b" "$_next" >/dev/tty
+	command printf "%s\b" "$_next" >/dev/tty
 	_twiddle_state="$_next"
+}
+
+#
+# human_exit_code
+#	Print the a human version of the exit code.
+#
+human_exit_code()
+{
+	if [ "$1" -lt 127 ]
+	then
+		echo "exited with code $1"
+	elif [ "$(expr $1 % 256)" -eq 127 ]
+	then
+		# This cannot really happen because the shell will not
+		# pass stopped job status out and the exit code is limited
+		# to 8 bits. This code is here just for completeness.
+		echo "stopped with signal $(expr $1 / 256)"
+	else
+		echo "terminated with signal $(expr $1 - 128)"
+	fi
+}
+
+#
+# collapse_backslash_newline
+#	Copy input to output, collapsing <backslash><newline>
+#	to nothing, but leaving other backslashes alone.
+#
+collapse_backslash_newline()
+{
+	local line
+	while read -r line ; do
+		case "$line" in
+		*\\)
+			# print it, without the backslash or newline
+			command printf "%s" "${line%?}"
+			;;
+		*)
+			# print it, with a newline
+			command printf "%s\n" "${line}"
+			;;
+		esac
+	done
+}
+
+# Override the normal "echo" and "printf" commands, so that
+# partial lines printed by rc.d scripts appear immediately,
+# instead of being buffered by rc(8)'s post-processor.
+#
+# Naive use of the echo or printf commands from rc.d scripts,
+# elsewhere in rc.subr, or anything else that sources rc.subr,
+# will call these functions.  To call the real echo and printf
+# commands, use "command echo" or "command printf".
+#
+echo()
+{
+	command echo "$@"
+	case "$1" in
+	'-n')	_flush_rc_output ;;
+	esac
+}
+printf()
+{
+	command printf "$@"
+	case "$1" in
+	*'\n')	: ;;
+	*)	_flush_rc_output ;;
+	esac
 }
 
 _rc_subr_loaded=:

@@ -1,21 +1,21 @@
-/* $NetBSD: cia_pci.c,v 1.29 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: cia_pci.c,v 1.32 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,26 +29,23 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cia_pci.c,v 1.29 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia_pci.c,v 1.32 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/ciareg.h>
 #include <alpha/pci/ciavar.h>
 
-void		cia_attach_hook(struct device *, struct device *,
+void		cia_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		cia_bus_maxdevs(void *, int);
 pcitag_t	cia_make_tag(void *, int, int, int);
-void		cia_decompose_tag(void *, pcitag_t, int *, int *,
-		    int *);
+void		cia_decompose_tag(void *, pcitag_t, int *, int *, int *);
 pcireg_t	cia_conf_read(void *, pcitag_t, int);
 void		cia_conf_write(void *, pcitag_t, int, pcireg_t);
 
@@ -66,7 +63,7 @@ cia_pci_init(pci_chipset_tag_t pc, void *v)
 }
 
 void
-cia_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
+cia_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 }
 
@@ -102,7 +99,7 @@ cia_conf_read(void *cpv, pcitag_t tag, int offset)
 	struct cia_config *ccp = cpv;
 	pcireg_t *datap, data;
 	int s, secondary, ba;
-	u_int32_t old_cfg, errbits;
+	uint32_t old_cfg, errbits;
 
 #ifdef __GNUC__
 	s = 0;					/* XXX gcc -Wuninitialized */
@@ -197,7 +194,7 @@ cia_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 	struct cia_config *ccp = cpv;
 	pcireg_t *datap;
 	int s, secondary;
-	u_int32_t old_cfg;
+	uint32_t old_cfg;
 
 #ifdef __GNUC__
 	s = 0;					/* XXX gcc -Wuninitialized */

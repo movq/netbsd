@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ale.c,v 1.9 2009/10/08 08:57:19 cegger Exp $	*/
+/*	$NetBSD: if_ale.c,v 1.13 2011/01/22 08:13:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2008, Pyun YongHyeon <yongari@FreeBSD.org>
@@ -32,9 +32,8 @@
 /* Driver for Atheros AR8121/AR8113/AR8114 PCIe Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.9 2009/10/08 08:57:19 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.13 2011/01/22 08:13:47 cegger Exp $");
 
-#include "bpfilter.h"
 #include "vlan.h"
 
 #include <sys/param.h>
@@ -68,9 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.9 2009/10/08 08:57:19 cegger Exp $");
 #include <net/if_types.h>
 #include <net/if_vlanvar.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/rnd.h>
 
@@ -370,12 +367,12 @@ ale_phy_reset(struct ale_softc *sc)
 	ale_miibus_writereg(sc->sc_dev, sc->ale_phyaddr,
 	    ATPHY_DBG_ADDR, 0x04);
 	ale_miibus_writereg(sc->sc_dev, sc->ale_phyaddr,
-	    ATPHY_DBG_ADDR, 0x8BBB);
+	    ATPHY_DBG_DATA, 0x8BBB);
 	/* 10BT center tap voltage. */
 	ale_miibus_writereg(sc->sc_dev, sc->ale_phyaddr,
 	    ATPHY_DBG_ADDR, 0x05);
 	ale_miibus_writereg(sc->sc_dev, sc->ale_phyaddr,
-	    ATPHY_DBG_ADDR, 0x2C46);
+	    ATPHY_DBG_DATA, 0x2C46);
 
 #undef	ATPHY_DBG_ADDR
 #undef	ATPHY_DBG_DATA
@@ -1076,14 +1073,11 @@ ale_start(struct ifnet *ifp)
 		}
 		enq = 1;
 
-#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		if (ifp->if_bpf != NULL)
-			bpf_mtap(ifp->if_bpf, m_head);
-#endif
+		bpf_mtap(ifp, m_head);
 	}
 
 	if (enq) {
@@ -1555,10 +1549,7 @@ ale_rxeof(struct ale_softc *sc)
 #endif
 
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/* Pass it to upper layer. */
 		ether_input(ifp, m);
@@ -1919,7 +1910,7 @@ ale_stop_mac(struct ale_softc *sc)
 
 	reg = CSR_READ_4(sc, ALE_MAC_CFG);
 	if ((reg & (MAC_CFG_TX_ENB | MAC_CFG_RX_ENB)) != 0) {
-		reg &= ~MAC_CFG_TX_ENB | MAC_CFG_RX_ENB;
+		reg &= ~(MAC_CFG_TX_ENB | MAC_CFG_RX_ENB);
 		CSR_WRITE_4(sc, ALE_MAC_CFG, reg);
 	}
 
@@ -1982,12 +1973,11 @@ ale_init_rx_pages(struct ale_softc *sc)
 static void
 ale_rxvlan(struct ale_softc *sc)
 {
-	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	uint32_t reg;
 
 	reg = CSR_READ_4(sc, ALE_MAC_CFG);
 	reg &= ~MAC_CFG_VLAN_TAG_STRIP;
-	if (ifp->if_capabilities & ETHERCAP_VLAN_HWTAGGING)
+	if (sc->sc_ec.ec_capenable & ETHERCAP_VLAN_HWTAGGING)
 		reg |= MAC_CFG_VLAN_TAG_STRIP;
 	CSR_WRITE_4(sc, ALE_MAC_CFG, reg);
 }
@@ -2025,7 +2015,7 @@ ale_rxfilter(struct ale_softc *sc)
 
 		ETHER_FIRST_MULTI(step, ec, enm);
 		while (enm != NULL) {
-			crc = ether_crc32_le(enm->enm_addrlo, ETHER_ADDR_LEN);
+			crc = ether_crc32_be(enm->enm_addrlo, ETHER_ADDR_LEN);
 			mchash[crc >> 31] |= 1 << ((crc >> 26) & 0x1f);
 			ETHER_NEXT_MULTI(step, enm);
 		}

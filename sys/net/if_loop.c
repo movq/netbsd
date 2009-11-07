@@ -1,4 +1,4 @@
-/*	$NetBSD: if_loop.c,v 1.70 2008/11/07 00:20:13 dyoung Exp $	*/
+/*	$NetBSD: if_loop.c,v 1.75 2011/06/20 09:43:27 kefren Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -65,15 +65,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.70 2008/11/07 00:20:13 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.75 2011/06/20 09:43:27 kefren Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
 #include "opt_ipx.h"
 #include "opt_mbuftrace.h"
+#include "opt_mpls.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,6 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.70 2008/11/07 00:20:13 dyoung Exp $");
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
+#include <netinet/in_offload.h>
 #include <netinet/ip.h>
 #endif
 
@@ -103,9 +104,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.70 2008/11/07 00:20:13 dyoung Exp $");
 #include <netinet/in.h>
 #endif
 #include <netinet6/in6_var.h>
+#include <netinet6/in6_offload.h>
 #include <netinet/ip6.h>
 #endif
-
 
 #ifdef IPX
 #include <netipx/ipx.h>
@@ -117,14 +118,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.70 2008/11/07 00:20:13 dyoung Exp $");
 #include <netiso/iso_var.h>
 #endif
 
+#ifdef MPLS
+#include <netmpls/mpls.h>
+#include <netmpls/mpls_var.h>
+#endif
+
 #ifdef NETATALK
 #include <netatalk/at.h>
 #include <netatalk/at_var.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #if defined(LARGE_LOMTU)
 #define LOMTU	(131072 +  MHLEN + MLEN)
@@ -177,9 +181,7 @@ loop_clone_create(struct if_clone *ifc, int unit)
 		lo0ifp = ifp;
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(ifp, DLT_NULL, sizeof(u_int));
 #ifdef MBUFTRACE
 	ifp->if_mowner = malloc(sizeof(struct mowner), M_DEVBUF,
 	    M_WAITOK | M_ZERO);
@@ -203,9 +205,7 @@ loop_clone_destroy(struct ifnet *ifp)
 	free(ifp->if_mowner, M_DEVBUF);
 #endif
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 
 	free(ifp, M_DEVBUF);
@@ -217,16 +217,15 @@ int
 looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
     struct rtentry *rt)
 {
-	int s, isr;
+	int s, isr = -1;
 	struct ifqueue *ifq = NULL;
+	int csum_flags;
 
 	MCLAIM(m, ifp->if_mowner);
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("looutput: no header mbuf");
-#if NBPFILTER > 0
-	if (ifp->if_bpf && (ifp->if_flags & IFF_LOOPBACK))
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m);
-#endif
+	if (ifp->if_flags & IFF_LOOPBACK)
+		bpf_mtap_af(ifp, dst->sa_family, m);
 	m->m_pkthdr.rcvif = ifp;
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {
@@ -269,16 +268,42 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 
 	m_tag_delete_nonpersistent(m);
 
+#ifdef MPLS
+	if (rt != NULL && rt_gettag(rt) != NULL &&
+	    rt_gettag(rt)->sa_family == AF_MPLS &&
+	    (m->m_flags & (M_MCAST | M_BCAST)) == 0) {
+		union mpls_shim msh;
+		msh.s_addr = MPLS_GETSADDR(rt);
+		if (msh.shim.label != MPLS_LABEL_IMPLNULL) {
+			ifq = &mplsintrq;
+			isr = NETISR_MPLS;
+		}
+	}
+	if (isr != NETISR_MPLS)
+#endif
 	switch (dst->sa_family) {
 
 #ifdef INET
 	case AF_INET:
+		csum_flags = m->m_pkthdr.csum_flags;
+		KASSERT((csum_flags & ~(M_CSUM_IPv4|M_CSUM_UDPv4)) == 0);
+		if (csum_flags != 0 && IN_LOOPBACK_NEED_CHECKSUM(csum_flags)) {
+			ip_undefer_csum(m, 0, csum_flags);
+		}
+		m->m_pkthdr.csum_flags = 0;
 		ifq = &ipintrq;
 		isr = NETISR_IP;
 		break;
 #endif
 #ifdef INET6
 	case AF_INET6:
+		csum_flags = m->m_pkthdr.csum_flags;
+		KASSERT((csum_flags & ~M_CSUM_UDPv6) == 0);
+		if (csum_flags != 0 &&
+		    IN6_LOOPBACK_NEED_CHECKSUM(csum_flags)) {
+			ip6_undefer_csum(m, 0, csum_flags);
+		}
+		m->m_pkthdr.csum_flags = 0;
 		m->m_flags |= M_LOOP;
 		ifq = &ip6intrq;
 		isr = NETISR_IPV6;

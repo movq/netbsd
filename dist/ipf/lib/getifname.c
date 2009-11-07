@@ -1,12 +1,12 @@
-/*	$NetBSD: getifname.c,v 1.1.1.2 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: getifname.c,v 1.2 2012/02/15 17:55:06 riz Exp $	*/
 
 /*
  * Copyright (C) 2002-2004 by Darren Reed.
- * 
- * See the IPFILTER.LICENCE file for details on licencing.  
- *   
- * Id: getifname.c,v 1.5.2.3 2006/07/14 06:12:24 darrenr Exp 
- */     
+ *
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
+ * Id: getifname.c,v 1.5.2.4 2009/12/27 06:58:06 darrenr Exp
+ */
 
 #include "ipf.h"
 

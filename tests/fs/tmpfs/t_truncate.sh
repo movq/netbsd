@@ -1,4 +1,4 @@
-# $NetBSD: t_truncate.sh,v 1.2 2008/04/30 13:11:00 martin Exp $
+# $NetBSD: t_truncate.sh,v 1.4 2010/11/07 17:51:18 jmmv Exp $
 #
 # Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
 # All rights reserved.

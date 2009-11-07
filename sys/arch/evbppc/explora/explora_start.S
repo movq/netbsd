@@ -1,4 +1,4 @@
-/*	$NetBSD: explora_start.S,v 1.5 2008/04/28 20:23:17 martin Exp $	*/
+/*	$NetBSD: explora_start.S,v 1.10 2011/06/20 19:56:11 matt Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -41,22 +41,17 @@
 
 #include "assym.h"
 
-#define _NOREGNAMES
-
 #include <machine/param.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
 #include <powerpc/ibm4xx/dcr403cgx.h>
-#include <powerpc/ibm4xx/pmap.h>
 
 #include "opt_ddb.h"
 #include "opt_ppcparam.h"
-
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 
 /*
  * Initially the dram starts at 0x01000000. This is way too high.
@@ -192,7 +187,7 @@ stage2:
 	ori	3,3,__start@l
 
 /* Run the remaining setup in C. */
-	bl	_C_LABEL(bootstrap)
+	bl	_C_LABEL(initppc)
 
 	bl	_C_LABEL(main)
 

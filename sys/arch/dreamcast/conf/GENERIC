@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.91 2009/08/23 14:38:43 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.105.2.1 2012/07/20 23:07:58 riz Exp $
 #
 # GENERIC machine description file
 # 
@@ -42,6 +42,8 @@ options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
 options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
+#options 	MODULAR		# new style module(7) framework
+
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# cheap kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
@@ -50,7 +52,7 @@ options 	DDB		# in-kernel debugger
 #options 	KGDB			# remote debugger
 #options 	"KGDB_DEVNAME=\"scif\"",KGDB_DEVRATE=57600
 #makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=300000
+options 	SYMTAB_SPACE=330000
 #options 	SYSCALL_DEBUG
 #options 	UVMHIST
 #options 	UVMHIST_PRINT
@@ -67,7 +69,6 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Executable format options
 options 	EXEC_COFF	# COFF executables
-options 	EXEC_ELF32	# 32-bit ELF executables
 
 # File systems
 file-system 	FFS		# UFS
@@ -82,17 +83,17 @@ file-system 	KERNFS		# /kern
 file-system 	PROCFS		# /proc
 #file-system 	NULLFS		# loopback file system
 #file-system	OVERLAY		# overlay file system
-#file-system	PORTAL		# portal file system (still experimental)
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
-#file-system	UNION		# union file system
-#file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	UNION		# union file system
+file-system	PTYFS		# /dev/pts/N support
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independent supoprt
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	NFSSERVER	# Network File System server
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -195,7 +196,7 @@ aica*		at g2bus?			# AICA Sound Processing Unit
 audio*		at aica?
 
 #pseudo-device	cgd		2	# cryptographic disk devices
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -225,7 +226,6 @@ pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	wsmux			# mouse & keyboard multiplexor
 pseudo-device	ksyms			# /dev/ksyms

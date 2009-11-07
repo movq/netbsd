@@ -1,4 +1,4 @@
-/*	$NetBSD: w.c,v 1.74 2009/04/14 07:37:31 lukem Exp $	*/
+/*	$NetBSD: w.c,v 1.76 2011/10/21 02:26:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)w.c	8.6 (Berkeley) 6/30/94";
 #else
-__RCSID("$NetBSD: w.c,v 1.74 2009/04/14 07:37:31 lukem Exp $");
+__RCSID("$NetBSD: w.c,v 1.76 2011/10/21 02:26:09 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -120,13 +120,13 @@ struct	entry {
 
 static void	pr_args(struct kinfo_proc2 *);
 static void	pr_header(time_t *, int);
+static int	proc_compare_wrapper(const struct kinfo_proc2 *,
+    const struct kinfo_proc2 *);
 #if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
 static int	ttystat(const char *, struct stat *);
 static void	process(struct entry *);
 #endif
-static void	usage(int);
-
-int	main(int, char **);
+__dead static void	usage(int);
 
 int
 main(int argc, char **argv)
@@ -304,9 +304,6 @@ main(int argc, char **argv)
 	/* Include trailing space because TTY header starts one column early. */
 	for (i = 0; i < nentries; i++, kp++) {
 
-		if (kp->p_stat == SIDL || kp->p_stat == SZOMB)
-			continue;
-
 		for (ep = ehead; ep != NULL; ep = ep->next) {
 			if (ep->tdev != 0 && ep->tdev == kp->p_tdev &&
 			    kp->p__pgid == kp->p_tpgid) {
@@ -314,7 +311,7 @@ main(int argc, char **argv)
 				 * Proc is in foreground of this
 				 * terminal
 				 */
-				if (proc_compare(ep->tp, kp))
+				if (proc_compare_wrapper(ep->tp, kp))
 					ep->tp = kp;
 				break;
 			} 
@@ -619,6 +616,27 @@ process(struct entry *ep)
 		ep->idle = 0;
 }
 #endif
+
+static int
+proc_compare_wrapper(const struct kinfo_proc2 *p1,
+    const struct kinfo_proc2 *p2)
+{
+	struct kinfo_lwp *l1, *l2;
+	int cnt;
+
+	if (p1 == NULL)
+		return 1;
+
+	l1 = kvm_getlwps(kd, p1->p_pid, 0, sizeof(*l1), &cnt);
+	if (l1 == NULL || cnt == 0)
+		return 1;
+
+	l2 = kvm_getlwps(kd, p2->p_pid, 0, sizeof(*l1), &cnt);
+	if (l2 == NULL || cnt == 0)
+		return 0;
+
+	return proc_compare(p1, l1, p2, l2);
+}
 
 static void
 usage(int wcmd)

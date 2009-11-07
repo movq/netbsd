@@ -1,5 +1,5 @@
-/*	$NetBSD: jpake.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: jpake.c,v 1.1 2008/11/04 08:22:12 djm Exp $ */
+/*	$NetBSD: jpake.c,v 1.6 2011/07/25 03:03:10 christos Exp $	*/
+/* $OpenBSD: jpake.c,v 1.6 2010/09/20 04:54:07 djm Exp $ */
 /*
  * Copyright (c) 2008 Damien Miller.  All rights reserved.
  *
@@ -25,6 +25,8 @@
  *
  * http://grouper.ieee.org/groups/1363/Research/contributions/hao-ryan-2008.pdf
  */
+#include "includes.h"
+__RCSID("$NetBSD: jpake.c,v 1.6 2011/07/25 03:03:10 christos Exp $");
 
 #include <sys/types.h>
 
@@ -44,8 +46,10 @@
 #include "packet.h"
 #include "dispatch.h"
 #include "log.h"
+#include "misc.h"
 
 #include "jpake.h"
+#include "schnorr.h"
 
 #ifdef JPAKE
 
@@ -59,165 +63,10 @@
 	"98DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB" \
 	"9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF"
 
-struct jpake_group *
+struct modp_group *
 jpake_default_group(void)
 {
-	struct jpake_group *ret;
-
-	ret = xmalloc(sizeof(*ret));
-	ret->p = ret->q = ret->g = NULL;
-	if (BN_hex2bn(&ret->p, JPAKE_GROUP_P) == 0 ||
-	    BN_hex2bn(&ret->g, JPAKE_GROUP_G) == 0)
-		fatal("%s: BN_hex2bn", __func__);
-	/* Subgroup order is p/2 (p is a safe prime) */
-	if ((ret->q = BN_new()) == NULL)
-		fatal("%s: BN_new", __func__);
-	if (BN_rshift1(ret->q, ret->p) != 1)
-		fatal("%s: BN_rshift1", __func__);
-
-	return ret;
-}
-
-/*
- * Generate uniformly distributed random number in range (1, high).
- * Return number on success, NULL on failure.
- */
-BIGNUM *
-bn_rand_range_gt_one(const BIGNUM *high)
-{
-	BIGNUM *r, *tmp;
-	int success = -1;
-
-	if ((tmp = BN_new()) == NULL) {
-		error("%s: BN_new", __func__);
-		return NULL;
-	}
-	if ((r = BN_new()) == NULL) {
-		error("%s: BN_new failed", __func__);
-		goto out;
-	}
-	if (BN_set_word(tmp, 2) != 1) {
-		error("%s: BN_set_word(tmp, 2)", __func__);
-		goto out;
-	}
-	if (BN_sub(tmp, high, tmp) == -1) {
-		error("%s: BN_sub failed (tmp = high - 2)", __func__);
-		goto out;
-	}
-	if (BN_rand_range(r, tmp) == -1) {
-		error("%s: BN_rand_range failed", __func__);
-		goto out;
-	}
-	if (BN_set_word(tmp, 2) != 1) {
-		error("%s: BN_set_word(tmp, 2)", __func__);
-		goto out;
-	}
-	if (BN_add(r, r, tmp) == -1) {
-		error("%s: BN_add failed (r = r + 2)", __func__);
-		goto out;
-	}
-	success = 0;
- out:
-	BN_clear_free(tmp);
-	if (success == 0)
-		return r;
-	BN_clear_free(r);
-	return NULL;
-}
-
-/*
- * Hash contents of buffer 'b' with hash 'md'. Returns 0 on success,
- * with digest via 'digestp' (caller to free) and length via 'lenp'.
- * Returns -1 on failure.
- */
-int
-hash_buffer(const u_char *buf, u_int len, const EVP_MD *md,
-    u_char **digestp, u_int *lenp)
-{
-	u_char digest[EVP_MAX_MD_SIZE];
-	u_int digest_len;
-	EVP_MD_CTX evp_md_ctx;
-	int success = -1;
-
-	EVP_MD_CTX_init(&evp_md_ctx);
-
-	if (EVP_DigestInit_ex(&evp_md_ctx, md, NULL) != 1) {
-		error("%s: EVP_DigestInit_ex", __func__);
-		goto out;
-	}
-	if (EVP_DigestUpdate(&evp_md_ctx, buf, len) != 1) {
-		error("%s: EVP_DigestUpdate", __func__);
-		goto out;
-	}
-	if (EVP_DigestFinal_ex(&evp_md_ctx, digest, &digest_len) != 1) {
-		error("%s: EVP_DigestFinal_ex", __func__);
-		goto out;
-	}
-	*digestp = xmalloc(digest_len);
-	*lenp = digest_len;
-	memcpy(*digestp, digest, *lenp);
-	success = 0;
- out:
-	EVP_MD_CTX_cleanup(&evp_md_ctx);
-	bzero(digest, sizeof(digest));
-	digest_len = 0;
-	return success;
-}
-
-/* print formatted string followed by bignum */
-void
-jpake_debug3_bn(const BIGNUM *n, const char *fmt, ...)
-{
-	char *out, *h;
-	va_list args;
-
-	out = NULL;
-	va_start(args, fmt);
-	vasprintf(&out, fmt, args);
-	va_end(args);
-	if (out == NULL)
-		fatal("%s: vasprintf failed", __func__);
-
-	if (n == NULL)
-		debug3("%s(null)", out);
-	else {
-		h = BN_bn2hex(n);
-		debug3("%s0x%s", out, h);
-		free(h);
-	}
-	free(out);
-}
-
-/* print formatted string followed by buffer contents in hex */
-void
-jpake_debug3_buf(const u_char *buf, u_int len, const char *fmt, ...)
-{
-	char *out, h[65];
-	u_int i, j;
-	va_list args;
-
-	out = NULL;
-	va_start(args, fmt);
-	vasprintf(&out, fmt, args);
-	va_end(args);
-	if (out == NULL)
-		fatal("%s: vasprintf failed", __func__);
-
-	debug3("%s length %u%s", out, len, buf == NULL ? " (null)" : "");
-	free(out);
-	if (buf == NULL)
-		return;
-
-	*h = '\0';
-	for (i = j = 0; i < len; i++) {
-		snprintf(h + j, sizeof(h) - j, "%02x", buf[i]);
-		j += 2;
-		if (j >= sizeof(h) - 1 || i == len - 1) {
-			debug3("    %s", h);
-			*h = '\0';
-			j = 0;
-		}
-	}
+	return modp_group_from_g_and_safe_p(JPAKE_GROUP_G, JPAKE_GROUP_P);
 }
 
 struct jpake_ctx *
@@ -241,7 +90,6 @@ jpake_new(void)
 
 	return ret;
 }
-
 
 void
 jpake_free(struct jpake_ctx *pctx)
@@ -343,7 +191,7 @@ jpake_dump(struct jpake_ctx *pctx, const char *fmt, ...)
 
 /* Shared parts of step 1 exchange calculation */
 void
-jpake_step1(struct jpake_group *grp,
+jpake_step1(struct modp_group *grp,
     u_char **id, u_int *id_len,
     BIGNUM **priv1, BIGNUM **priv2, BIGNUM **g_priv1, BIGNUM **g_priv2,
     u_char **priv1_proof, u_int *priv1_proof_len,
@@ -382,11 +230,11 @@ jpake_step1(struct jpake_group *grp,
 		fatal("%s: BN_mod_exp", __func__);
 
 	/* Generate proofs for holding x1/x3 and x2/x4 */
-	if (schnorr_sign(grp->p, grp->q, grp->g,
+	if (schnorr_sign_buf(grp->p, grp->q, grp->g,
 	    *priv1, *g_priv1, *id, *id_len,
 	    priv1_proof, priv1_proof_len) != 0)
 		fatal("%s: schnorr_sign", __func__);
-	if (schnorr_sign(grp->p, grp->q, grp->g,
+	if (schnorr_sign_buf(grp->p, grp->q, grp->g,
 	    *priv2, *g_priv2, *id, *id_len,
 	    priv2_proof, priv2_proof_len) != 0)
 		fatal("%s: schnorr_sign", __func__);
@@ -396,7 +244,7 @@ jpake_step1(struct jpake_group *grp,
 
 /* Shared parts of step 2 exchange calculation */
 void
-jpake_step2(struct jpake_group *grp, BIGNUM *s,
+jpake_step2(struct modp_group *grp, BIGNUM *s,
     BIGNUM *mypub1, BIGNUM *theirpub1, BIGNUM *theirpub2, BIGNUM *mypriv2,
     const u_char *theirid, u_int theirid_len,
     const u_char *myid, u_int myid_len,
@@ -411,13 +259,17 @@ jpake_step2(struct jpake_group *grp, BIGNUM *s,
 	/* Validate peer's step 1 values */
 	if (BN_cmp(theirpub1, BN_value_one()) <= 0)
 		fatal("%s: theirpub1 <= 1", __func__);
+	if (BN_cmp(theirpub1, grp->p) >= 0)
+		fatal("%s: theirpub1 >= p", __func__);
 	if (BN_cmp(theirpub2, BN_value_one()) <= 0)
 		fatal("%s: theirpub2 <= 1", __func__);
+	if (BN_cmp(theirpub2, grp->p) >= 0)
+		fatal("%s: theirpub2 >= p", __func__);
 
-	if (schnorr_verify(grp->p, grp->q, grp->g, theirpub1,
+	if (schnorr_verify_buf(grp->p, grp->q, grp->g, theirpub1,
 	    theirid, theirid_len, theirpub1_proof, theirpub1_proof_len) != 1)
 		fatal("%s: schnorr_verify theirpub1 failed", __func__);
-	if (schnorr_verify(grp->p, grp->q, grp->g, theirpub2,
+	if (schnorr_verify_buf(grp->p, grp->q, grp->g, theirpub2,
 	    theirid, theirid_len, theirpub2_proof, theirpub2_proof_len) != 1)
 		fatal("%s: schnorr_verify theirpub2 failed", __func__);
 
@@ -458,7 +310,7 @@ jpake_step2(struct jpake_group *grp, BIGNUM *s,
 	JPAKE_DEBUG_BN((exponent, "%s: exponent = ", __func__));
 
 	/* Note the generator here is 'tmp', not g */
-	if (schnorr_sign(grp->p, grp->q, tmp, exponent, *newpub,
+	if (schnorr_sign_buf(grp->p, grp->q, tmp, exponent, *newpub,
 	    myid, myid_len,
 	    newpub_exponent_proof, newpub_exponent_proof_len) != 0)
 		fatal("%s: schnorr_sign newpub", __func__);
@@ -495,7 +347,7 @@ jpake_confirm_hash(const BIGNUM *k,
 
 /* Shared parts of key derivation and confirmation calculation */
 void
-jpake_key_confirm(struct jpake_group *grp, BIGNUM *s, BIGNUM *step2_val,
+jpake_key_confirm(struct modp_group *grp, BIGNUM *s, BIGNUM *step2_val,
     BIGNUM *mypriv2, BIGNUM *mypub1, BIGNUM *mypub2,
     BIGNUM *theirpub1, BIGNUM *theirpub2,
     const u_char *my_id, u_int my_id_len,
@@ -517,6 +369,8 @@ jpake_key_confirm(struct jpake_group *grp, BIGNUM *s, BIGNUM *step2_val,
 	/* Validate step 2 values */
 	if (BN_cmp(step2_val, BN_value_one()) <= 0)
 		fatal("%s: step2_val <= 1", __func__);
+	if (BN_cmp(step2_val, grp->p) >= 0)
+		fatal("%s: step2_val >= p", __func__);
 
 	/*
 	 * theirpriv2_s_proof is calculated with a different generator:
@@ -530,7 +384,7 @@ jpake_key_confirm(struct jpake_group *grp, BIGNUM *s, BIGNUM *step2_val,
 
 	JPAKE_DEBUG_BN((tmp, "%s: tmp = ", __func__));
 
-	if (schnorr_verify(grp->p, grp->q, tmp, step2_val, 
+	if (schnorr_verify_buf(grp->p, grp->q, tmp, step2_val, 
 	    their_id, their_id_len,
 	    theirpriv2_s_proof, theirpriv2_s_proof_len) != 1)
 		fatal("%s: schnorr_verify theirpriv2_s_proof failed", __func__);
@@ -588,7 +442,7 @@ jpake_check_confirm(const BIGNUM *k,
 	if (peer_confirm_hash_len != expected_confirm_hash_len)
 		error("%s: confirmation length mismatch (my %u them %u)",
 		    __func__, expected_confirm_hash_len, peer_confirm_hash_len);
-	else if (memcmp(peer_confirm_hash, expected_confirm_hash,
+	else if (timingsafe_bcmp(peer_confirm_hash, expected_confirm_hash,
 	    expected_confirm_hash_len) == 0)
 		success = 1;
 	bzero(expected_confirm_hash, expected_confirm_hash_len);

@@ -1,4 +1,4 @@
-/*	$NetBSD: passwd.c,v 1.48 2009/01/18 12:13:04 lukem Exp $	*/
+/*	$NetBSD: passwd.c,v 1.51 2011/04/24 01:56:44 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: passwd.c,v 1.48 2009/01/18 12:13:04 lukem Exp $");
+__RCSID("$NetBSD: passwd.c,v 1.51 2011/04/24 01:56:44 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -144,13 +144,13 @@ pw_mkdb(username, secureonly)
 
 	pid = vfork();
 	if (pid == -1)
-		return (-1);
+		return -1;
 
 	if (pid == 0) {
 		args[0] = "pwd_mkdb";
 		args[1] = "-d";
 		args[2] = pw_prefix;
-		args[3] = "-p";
+		args[3] = "-pl";
 		i = 4;
 
 		if (secureonly)
@@ -166,9 +166,21 @@ pw_mkdb(username, secureonly)
 		_exit(1);
 	}
 	pid = waitpid(pid, &pstat, 0);
-	if (pid == -1 || !WIFEXITED(pstat) || WEXITSTATUS(pstat) != 0)
-		return(-1);
-	return(0);
+	if (pid == -1) {
+		warn("error waiting for pid %lu", (unsigned long)pid);
+		return -1;
+	}
+	if (WIFEXITED(pstat)) {
+		if (WEXITSTATUS(pstat) != 0) {
+			warnx("pwd_mkdb exited with status %d",
+			    WEXITSTATUS(pstat));
+			return -1;
+		}
+	} else if (WIFSIGNALED(pstat)) {
+		warnx("pwd_mkdb exited with signal %d", WTERMSIG(pstat));
+		return -1;
+	}
+	return 0;
 }
 
 int

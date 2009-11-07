@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pci.c,v 1.34 2009/05/06 10:34:32 cegger Exp $	*/
+/*	$NetBSD: if_ne_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_pci.c,v 1.34 2009/05/06 10:34:32 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_pci.c,v 1.36 2011/07/26 20:51:24 dyoung Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -169,7 +169,7 @@ ne_pci_lookup(const struct pci_attach_args *pa)
  * PCI constants.
  * XXX These should be in a common file!
  */
-#define PCI_CBIO	0x10		/* Configuration Base IO Address */
+#define PCI_CBIO PCI_BAR(0)		/* Configuration Base IO Address */
 
 static int
 ne_pci_match(device_t parent, cfdata_t match, void *aux)
@@ -293,7 +293,7 @@ ne_pci_ipkdb_attach(struct ipkdb_if *kip, bus_space_tag_t iot,
 	pa.pa_pc = pc;
 	pa.pa_device = dev;
 	pa.pa_function = 0;
-	pa.pa_flags = PCI_FLAGS_IO_ENABLED;
+	pa.pa_flags = PCI_FLAGS_IO_OKAY;
 	pa.pa_tag = pci_make_tag(pc, bus, dev, /*func*/0);
 	pa.pa_id = pci_conf_read(pc, pa.pa_tag, PCI_ID_REG);
 	pa.pa_class = pci_conf_read(pc, pa.pa_tag, PCI_CLASS_REG);

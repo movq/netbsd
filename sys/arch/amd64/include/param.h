@@ -1,6 +1,11 @@
-/*	$NetBSD: param.h,v 1.10 2008/12/20 12:42:36 ad Exp $	*/
+/*	$NetBSD: param.h,v 1.17.2.1 2012/05/09 03:22:54 riz Exp $	*/
 
 #ifdef __x86_64__
+
+#ifndef XEN
+/* Must be defined before cpu.h */
+#define	MAXCPUS		256
+#endif
 
 #ifdef _KERNEL
 #include <machine/cpu.h>
@@ -12,19 +17,6 @@
 #define	MACHINE_ARCH	"x86_64"
 #define MID_MACHINE	MID_X86_64
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value
- * for all data types (int, long, ...).   The result is u_int and
- * must be cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-#define ALIGNBYTES		(sizeof(long) - 1)
-#define ALIGN(p)		(((u_long)(p) + ALIGNBYTES) &~ALIGNBYTES)
 #define ALIGNED_POINTER(p,t)	1
 
 #define ALIGNBYTES32		(sizeof(int) - 1)
@@ -86,18 +78,6 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	4096		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#endif
-#endif
-
 #ifndef NFS_RSIZE
 #define NFS_RSIZE       32768
 #endif
@@ -106,11 +86,12 @@
 #endif
 
 /*
- * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
+ * Minimum size of the kernel kmem_arena in PAGE_SIZE-sized
  * logical pages.
+ * No enforced maximum on amd64.
  */
 #define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((1 *1024 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_UNLIMITED 1
 
 /*
  * XXXfvdl the PD* stuff is different from i386.
@@ -130,7 +111,6 @@
 
 #define btop(x)				x86_btop(x)
 #define ptob(x)				x86_ptob(x)
-#define round_pdr(x)			x86_round_pdr(x)
 
 #define mstohz(ms) ((ms + 0UL) * hz / 1000)
 

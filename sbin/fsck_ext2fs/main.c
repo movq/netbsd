@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.34 2009/10/19 18:41:08 bouyer Exp $	*/
+/*	$NetBSD: main.c,v 1.37 2011/06/09 19:57:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -63,7 +63,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/23/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.34 2009/10/19 18:41:08 bouyer Exp $");
+__RCSID("$NetBSD: main.c,v 1.37 2011/06/09 19:57:51 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,7 +87,7 @@ __RCSID("$NetBSD: main.c,v 1.34 2009/10/19 18:41:08 bouyer Exp $");
 #include "fsutil.h"
 #include "exitvalues.h"
 
-int	returntosingle = 0;
+volatile sig_atomic_t	returntosingle = 0;
 
 
 static int	argtoi(int, const char *, const char *, int);
@@ -100,6 +100,7 @@ main(int argc, char *argv[])
 	int ch;
 	int ret = FSCK_EXIT_OK;
 
+	ckfinish = ckfini;
 	sync();
 	skipclean = 1;
 	while ((ch = getopt(argc, argv, "b:dfm:npPqUy")) != -1) {

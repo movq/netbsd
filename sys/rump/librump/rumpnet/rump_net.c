@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_net.c,v 1.10 2009/10/04 13:24:58 pooka Exp $	*/
+/*	$NetBSD: rump_net.c,v 1.13 2011/01/11 09:22:33 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_net.c,v 1.10 2009/10/04 13:24:58 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_net.c,v 1.13 2011/01/11 09:22:33 pooka Exp $");
 
 #include <sys/param.h>
 
@@ -34,38 +34,33 @@ __KERNEL_RCSID(0, "$NetBSD: rump_net.c,v 1.10 2009/10/04 13:24:58 pooka Exp $");
 #include <sys/mbuf.h>
 #include <sys/socketvar.h>
 
+#include <net/bpf.h>
 #include <net/radix.h>
 #include <net/route.h>
 
+#include "rump_private.h"
 #include "rump_net_private.h"
 
 void nocomponent(void);
 void nocomponent() {}
-__weak_alias(rump_net_net_init,nocomponent);
-__weak_alias(rump_net_inet_init,nocomponent);
-__weak_alias(rump_net_local_init,nocomponent);
-__weak_alias(rump_net_sockin_init,nocomponent);
-__weak_alias(rump_net_virtif_init,nocomponent);
+__weak_alias(rump_net_components,nocomponent);
 
 void
 rump_net_init(void)
 {
 
+	bpf_setops();
+
 	mbinit();
 	soinit();
 
 	domaininit(false);
-	/*
-	 * Add rest of the domains we failed to add in domaininit()
-	 * due to linkset lossage.
-	 */
-	rump_net_inet_init();
-	rump_net_local_init();
-	rump_net_sockin_init();
-	/* Note: should be last _domain_ due to calling of rn_init() */
-	rump_net_net_init();
 
-	rump_net_virtif_init();
+	rump_component_init(RUMP_COMPONENT_NET);
+	rump_component_init(RUMP_COMPONENT_NET_ROUTE);
+	rump_component_init(RUMP_COMPONENT_NET_IF);
+	rump_component_init(RUMP_COMPONENT_NET_IFCFG);
+	rump_net_components();
 
 	rump_netisr_init();
 }

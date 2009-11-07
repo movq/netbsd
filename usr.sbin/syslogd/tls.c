@@ -1,4 +1,4 @@
-/*	$NetBSD: tls.c,v 1.4 2009/01/18 10:35:26 lukem Exp $	*/
+/*	$NetBSD: tls.c,v 1.9 2012/02/13 07:40:24 spz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tls.c,v 1.4 2009/01/18 10:35:26 lukem Exp $");
+__RCSID("$NetBSD: tls.c,v 1.9 2012/02/13 07:40:24 spz Exp $");
 
 #ifndef DISABLE_TLS
 #include "syslogd.h"
@@ -665,7 +665,7 @@ deny_cert(struct tls_conn_settings *conn_info,
  * Callback after OpenSSL has verified a peer certificate,
  * gets called for every certificate in a chain (starting with root CA).
  * preverify_ok indicates a valid trust path (necessary),
- * then we check wether the hostname or configured subject matches the cert.
+ * then we check whether the hostname or configured subject matches the cert.
  */
 int
 check_peer_cert(int preverify_ok, X509_STORE_CTX *ctx)
@@ -829,7 +829,7 @@ socksetup_tls(const int af, const char *bindhostname, const char *port)
 	error = getaddrinfo(bindhostname, (port ? port : "syslog-tls"),
 	    &hints, &res);
 	if (error) {
-		logerror(gai_strerror(error));
+		logerror("%s", gai_strerror(error));
 		errno = 0;
 		die(0, 0, NULL);
 	}
@@ -989,7 +989,7 @@ tls_connect(struct tls_conn_settings *conn_info)
 	error = getaddrinfo(conn_info->hostname,
 	    (conn_info->port ? conn_info->port : "syslog-tls"), &hints, &res);
 	if (error) {
-		logerror(gai_strerror(error));
+		logerror("%s", gai_strerror(error));
 		return false;
 	}
 
@@ -1139,7 +1139,8 @@ parse_tls_destination(const char *p, struct filed *f, size_t linenum)
 		calloc(1, sizeof(*f->f_un.f_tls.tls_conn)))
 	 || !(f->f_un.f_tls.tls_conn->event = allocev())
 	 || !(f->f_un.f_tls.tls_conn->retryevent = allocev())) {
-		free(f->f_un.f_tls.tls_conn->event);
+		if (f->f_un.f_tls.tls_conn)
+			free(f->f_un.f_tls.tls_conn->event);
 		free(f->f_un.f_tls.tls_conn);
 		logerror("Couldn't allocate memory for TLS config");
 		return false;
@@ -1194,7 +1195,7 @@ parse_tls_destination(const char *p, struct filed *f, size_t linenum)
 				logerror("unknown keyword %s "
 				    "in config line %zu", p, linenum);
 			}
-			while (*p == ',' || isblank(*p))
+			while (*p == ',' || isblank((unsigned char)*p))
 				p++;
 			if (*p == '\0') {
 				logerror("unterminated ("
@@ -1368,8 +1369,9 @@ dispatch_socket_accept(int fd, short event, void *ev)
 		peername = NULL;
 	}
 	else {
-		MALLOC(peername, strlen(hbuf)+1);
-		(void)strlcpy(peername, hbuf, strlen(hbuf)+1);
+		size_t len = strlen(hbuf) + 1;
+		MALLOC(peername, len);
+		(void)memcpy(peername, hbuf, len);
 	}
 
 #ifdef LIBWRAP
@@ -1408,7 +1410,8 @@ dispatch_socket_accept(int fd, short event, void *ev)
 	if (!(conn_info = calloc(1, sizeof(*conn_info)))
 	    || !(conn_info->event = allocev())
 	    || !(conn_info->retryevent = allocev())) {
-		free(conn_info->event);
+		if (conn_info)
+			free(conn_info->event);
 		free(conn_info);
 		SSL_free(ssl);
 		close(newsock);
@@ -1967,10 +1970,13 @@ write_x509files(EVP_PKEY *pkey, X509 *cert,
 {
 	FILE *certfile, *keyfile;
 
-	if (!(umask(0177),(keyfile  = fopen(keyfilename,  "a")))
-	    || !(umask(0122),(certfile = fopen(certfilename, "a")))) {
-		logerror("Unable to write to files \"%s\" and \"%s\"",
-		    keyfilename, certfilename);
+	if (!(umask(0177),(keyfile  = fopen(keyfilename,  "a")))) {
+		logerror("Unable to write to file \"%s\"", keyfilename);
+		return false;
+	}
+	if (!(umask(0122),(certfile = fopen(certfilename, "a")))) {
+		logerror("Unable to write to file \"%s\"", certfilename);
+		(void)fclose(keyfile);
 		return false;
 	}
 	if (!PEM_write_PrivateKey(keyfile, pkey, NULL, NULL, 0, NULL, NULL))

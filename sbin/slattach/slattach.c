@@ -1,4 +1,4 @@
-/*	$NetBSD: slattach.c,v 1.30 2008/07/20 01:20:23 lukem Exp $	*/
+/*	$NetBSD: slattach.c,v 1.32 2011/12/30 03:19:36 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)slattach.c	8.2 (Berkeley) 1/7/94";
 #else
-__RCSID("$NetBSD: slattach.c,v 1.30 2008/07/20 01:20:23 lukem Exp $");
+__RCSID("$NetBSD: slattach.c,v 1.32 2011/12/30 03:19:36 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,6 +55,7 @@ __RCSID("$NetBSD: slattach.c,v 1.30 2008/07/20 01:20:23 lukem Exp $");
 #include <netinet/in.h>
 
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <paths.h>
@@ -65,13 +66,13 @@ __RCSID("$NetBSD: slattach.c,v 1.30 2008/07/20 01:20:23 lukem Exp $");
 #include <termios.h>
 #include <unistd.h>
 
-int	speed = 9600;
-int	slipdisc = SLIPDISC;
+static int	speed = 9600;
+static int	slipdisc = SLIPDISC;
 
-char	devicename[32];
+static char	devicename[32];
 
-int	ttydisc(char *);
-void	usage(void);
+static int	ttydisc(char *);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -135,7 +136,7 @@ main(int argc, char *argv[])
 	cfsetspeed(&tty, speed);
 	if (tcsetattr(fd, TCSADRAIN, &tty) < 0)
 		err(1, "tcsetattr");
-	if (ioctl(fd, TIOCSDTR, 0) < 0)
+	if (ioctl(fd, TIOCSDTR, 0) < 0 && errno != ENOTTY)
 		err(1, "TIOCSDTR");
 	if (ioctl(fd, TIOCSETD, &slipdisc) < 0)
 		err(1, "TIOCSETD");
@@ -146,7 +147,7 @@ main(int argc, char *argv[])
 		sigsuspend(&nsigset);
 }
 
-int
+static int
 ttydisc(char *name)
 {
 	if (strcmp(name, "slip") == 0)
@@ -161,7 +162,7 @@ ttydisc(char *name)
 	return -1;
 }
 
-void
+static void
 usage(void)
 {
 

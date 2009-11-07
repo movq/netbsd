@@ -1,4 +1,4 @@
-/*	$NetBSD: fts.c,v 1.40 2009/11/02 17:17:34 stacktic Exp $	*/
+/*	$NetBSD: fts.c,v 1.42 2011/10/16 05:05:38 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #else
-__RCSID("$NetBSD: fts.c,v 1.40 2009/11/02 17:17:34 stacktic Exp $");
+__RCSID("$NetBSD: fts.c,v 1.42 2011/10/16 05:05:38 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -194,13 +194,12 @@ fts_open(char * const *argv, int options,
 	 * and ".." are all fairly nasty problems.  Note, if we can't get the
 	 * descriptor we run anyway, just more slowly.
 	 */
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
 	if (!ISSET(FTS_NOCHDIR)) {
-		if ((sp->fts_rfd = open(".", O_RDONLY, 0)) == -1)
+		if ((sp->fts_rfd = open(".", O_RDONLY | O_CLOEXEC, 0)) == -1)
 			SET(FTS_NOCHDIR);
-		else if (fcntl(sp->fts_rfd, F_SETFD, FD_CLOEXEC) == -1) {
-			close(sp->fts_rfd);
-			SET(FTS_NOCHDIR);
-		}
 	}
 
 	if (nitems == 0)
@@ -352,13 +351,10 @@ fts_read(FTS *sp)
 	    (p->fts_info == FTS_SL || p->fts_info == FTS_SLNONE)) {
 		p->fts_info = fts_stat(sp, p, 1);
 		if (p->fts_info == FTS_D && !ISSET(FTS_NOCHDIR)) {
-			if ((p->fts_symfd = open(".", O_RDONLY, 0)) == -1) {
+			if ((p->fts_symfd = open(".", O_RDONLY | O_CLOEXEC, 0))
+			    == -1) {
 				p->fts_errno = errno;
 				p->fts_info = FTS_ERR;
-			} else if (fcntl(p->fts_symfd, F_SETFD, FD_CLOEXEC) == -1) {
-				p->fts_errno = errno;
-				p->fts_info = FTS_ERR;
-				close(p->fts_symfd);
 			} else
 				p->fts_flags |= FTS_SYMFOLLOW;
 		}
@@ -446,13 +442,9 @@ next:	tmp = p;
 			p->fts_info = fts_stat(sp, p, 1);
 			if (p->fts_info == FTS_D && !ISSET(FTS_NOCHDIR)) {
 				if ((p->fts_symfd =
-				    open(".", O_RDONLY, 0)) == -1) {
+				    open(".", O_RDONLY | O_CLOEXEC, 0)) == -1) {
 					p->fts_errno = errno;
 					p->fts_info = FTS_ERR;
-				} else if (fcntl(p->fts_symfd, F_SETFD, FD_CLOEXEC) == -1) {
-					p->fts_errno = errno;
-					p->fts_info = FTS_ERR;
-					close(p->fts_symfd);
 				} else
 					p->fts_flags |= FTS_SYMFOLLOW;
 			}

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_output.c,v 1.168 2009/03/18 16:00:22 cegger Exp $	*/
+/*	$NetBSD: tcp_output.c,v 1.173 2011/12/31 20:41:59 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -135,7 +135,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.168 2009/03/18 16:00:22 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.173 2011/12/31 20:41:59 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -182,7 +182,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.168 2009/03/18 16:00:22 cegger Exp 
 #include <netipsec/ipsec6.h>
 #endif
 #endif	/* FAST_IPSEC*/
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #endif
 
@@ -199,7 +199,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.168 2009/03/18 16:00:22 cegger Exp 
 #include <netinet/in_offload.h>
 #include <netinet6/in6_offload.h>
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netkey/key.h>
 #endif
 
@@ -215,7 +215,7 @@ extern struct mbuf *m_copypack();
 int	tcp_cwm = 0;
 int	tcp_cwm_burstsize = 4;
 
-int	tcp_do_autosndbuf = 0;
+int	tcp_do_autosndbuf = 1;
 int	tcp_autosndbuf_inc = 8 * 1024;
 int	tcp_autosndbuf_max = 256 * 1024;
 
@@ -357,7 +357,7 @@ tcp_segsize(struct tcpcb *tp, int *txsegsizep, int *rxsegsizep,
 	 */
 #ifdef INET
 	if (inp) {
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		if (! IPSEC_PCB_SKIP_IPSEC(inp->inp_sp, IPSEC_DIR_OUTBOUND))
 			optlen += ipsec4_hdrsiz_tcp(tp);
 #endif
@@ -367,7 +367,7 @@ tcp_segsize(struct tcpcb *tp, int *txsegsizep, int *rxsegsizep,
 #ifdef INET6
 #ifdef INET
 	if (in6p && tp->t_family == AF_INET) {
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		if (! IPSEC_PCB_SKIP_IPSEC(in6p->in6p_sp, IPSEC_DIR_OUTBOUND))
 			optlen += ipsec4_hdrsiz_tcp(tp);
 #endif
@@ -375,7 +375,7 @@ tcp_segsize(struct tcpcb *tp, int *txsegsizep, int *rxsegsizep,
 	} else
 #endif
 	if (in6p && tp->t_family == AF_INET6) {
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		if (! IPSEC_PCB_SKIP_IPSEC(in6p->in6p_sp, IPSEC_DIR_OUTBOUND))
 			optlen += ipsec6_hdrsiz_tcp(tp);
 #endif
@@ -573,6 +573,7 @@ tcp_output(struct tcpcb *tp)
 	bool alwaysfrag;
 	int sack_rxmit;
 	int sack_bytes_rxmt;
+	int ecn_tos;
 	struct sackhole *p;
 #ifdef TCP_SIGNATURE
 	int sigoff = 0;
@@ -632,7 +633,7 @@ tcp_output(struct tcpcb *tp)
 	has_tso4 = has_tso6 = false;
 #if defined(INET)
 	has_tso4 = tp->t_inpcb != NULL &&
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		  IPSEC_PCB_SKIP_IPSEC(tp->t_inpcb->inp_sp,
 		  		       IPSEC_DIR_OUTBOUND) &&
 #endif
@@ -641,7 +642,7 @@ tcp_output(struct tcpcb *tp)
 #endif /* defined(INET) */
 #if defined(INET6)
 	has_tso6 = tp->t_in6pcb != NULL &&
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		  IPSEC_PCB_SKIP_IPSEC(tp->t_in6pcb->in6p_sp,
 		  		       IPSEC_DIR_OUTBOUND) &&
 #endif
@@ -698,6 +699,7 @@ tcp_output(struct tcpcb *tp)
 
 	txsegsize_nosack = txsegsize;
 again:
+	ecn_tos = 0;
 	use_tso = has_tso;
 	if ((tp->t_flags & (TF_ECN_SND_CWR|TF_ECN_SND_ECE)) != 0) {
 		/* don't duplicate CWR/ECE. */
@@ -958,9 +960,7 @@ again:
 			 * stack (rather than big-small-big-small-...).
 			 */
 #ifdef INET6
-#if IPV6_MAXPACKET != IP_MAXPACKET
-#error IPV6_MAXPACKET != IP_MAXPACKET
-#endif
+			CTASSERT(IPV6_MAXPACKET == IP_MAXPACKET);
 #endif
 			len = (min(len, IP_MAXPACKET) / txsegsize) * txsegsize;
 			if (len <= txsegsize) {
@@ -1288,7 +1288,7 @@ send:
 		m->m_data += max_linkhdr;
 		m->m_len = hdrlen;
 	}
-	m->m_pkthdr.rcvif = (struct ifnet *)0;
+	m->m_pkthdr.rcvif = NULL;
 	switch (af) {
 #ifdef INET
 	case AF_INET:
@@ -1344,18 +1344,7 @@ send:
 		 */
 		if (len > 0 && SEQ_GEQ(tp->snd_nxt, tp->snd_max) &&
 		    !(tp->t_force && len == 1)) {
-			switch (af) {
-#ifdef INET
-			case AF_INET:
-				tp->t_inpcb->inp_ip.ip_tos |= IPTOS_ECN_ECT0;
-				break;
-#endif
-#ifdef INET6
-			case AF_INET6:
-				ip6->ip6_flow |= htonl(IPTOS_ECN_ECT0 << 20);
-				break;
-#endif
-			}
+			ecn_tos = IPTOS_ECN_ECT0;
 			TCP_STATINC(TCP_STAT_ECN_ECT);
 		}
 
@@ -1569,12 +1558,12 @@ timer:
 		packetlen = m->m_pkthdr.len;
 		if (tp->t_inpcb) {
 			ip->ip_ttl = tp->t_inpcb->inp_ip.ip_ttl;
-			ip->ip_tos = tp->t_inpcb->inp_ip.ip_tos;
+			ip->ip_tos = tp->t_inpcb->inp_ip.ip_tos | ecn_tos;
 		}
 #ifdef INET6
 		else if (tp->t_in6pcb) {
 			ip->ip_ttl = in6_selecthlim(tp->t_in6pcb, NULL); /*XXX*/
-			ip->ip_tos = 0;	/*XXX*/
+			ip->ip_tos = ecn_tos;	/*XXX*/
 		}
 #endif
 		break;
@@ -1594,7 +1583,8 @@ timer:
 				(rt = rtcache_validate(ro)) != NULL ? rt->rt_ifp
 				                                    : NULL);
 		}
-		/* ip6->ip6_flow = ??? */
+		ip6->ip6_flow |= htonl(ecn_tos << 20);
+		/* ip6->ip6_flow = ??? (from template) */
 		/* ip6_plen will be filled in ip6_output(). */
 		break;
 #endif
@@ -1615,8 +1605,7 @@ timer:
 			opts = NULL;
 		error = ip_output(m, opts, ro,
 			(tp->t_mtudisc ? IP_MTUDISC : 0) |
-			(so->so_options & SO_DONTROUTE),
-			(struct ip_moptions *)0, so);
+			(so->so_options & SO_DONTROUTE), NULL, so);
 		break;
 	    }
 #endif

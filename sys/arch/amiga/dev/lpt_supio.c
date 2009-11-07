@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_supio.c,v 1.12 2008/04/28 20:23:12 martin Exp $ */
+/*	$NetBSD: lpt_supio.c,v 1.14 2011/07/19 15:55:27 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_supio.c,v 1.12 2008/04/28 20:23:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_supio.c,v 1.14 2011/07/19 15:55:27 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: lpt_supio.c,v 1.12 2008/04/28 20:23:12 martin Exp $"
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -46,9 +45,9 @@ __KERNEL_RCSID(0, "$NetBSD: lpt_supio.c,v 1.12 2008/04/28 20:23:12 martin Exp $"
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
 
 #include <dev/ic/lptreg.h>
 #include <dev/ic/lptvar.h>

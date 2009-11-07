@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_autoconf.c,v 1.46 2009/11/06 23:10:22 dyoung Exp $	*/
+/*	$NetBSD: x86_autoconf.c,v 1.62.8.3 2012/08/08 15:51:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.46 2009/11/06 23:10:22 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.62.8.3 2012/08/08 15:51:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,83 +50,19 @@ __KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.46 2009/11/06 23:10:22 dyoung Exp
 #include <sys/md5.h>
 #include <sys/kauth.h>
 
+#include <machine/autoconf.h>
 #include <machine/bootinfo.h>
 #include <machine/pio.h>
 
 #include "acpica.h"
-#include "pci.h"
-#include "genfb.h"
 #include "wsdisplay.h"
-#include "opt_vga.h"
 
-#ifdef VGA_POST
-#include <x86/vga_post.h>
-#endif
-#include <dev/isa/isavar.h>
-#if NPCI > 0
-#include <dev/pci/pcivar.h>
-#endif
-#include <dev/wsfb/genfbvar.h>
-#include <dev/pci/genfb_pcivar.h>
-#include <dev/ic/vgareg.h>
-
-static struct genfb_colormap_callback gfb_cb;
-static struct genfb_pmf_callback pmf_cb;
-#ifdef VGA_POST
-static struct vga_post *vga_posth = NULL;
+#if NACPICA > 0
+#include <dev/acpi/acpivar.h>
 #endif
 
 struct disklist *x86_alldisks;
 int x86_ndisks;
-
-#if NPCI > 0
-static void
-x86_genfb_set_mapreg(void *opaque, int index, int r, int g, int b)
-{
-	outb(0x3c0 + VGA_DAC_ADDRW, index);
-	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)r >> 2);
-	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)g >> 2);
-	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)b >> 2);
-}
-
-static bool
-x86_genfb_suspend(device_t dev PMF_FN_ARGS)
-{
-	return true;
-}
-
-static bool
-x86_genfb_resume(device_t dev PMF_FN_ARGS)
-{
-#if NGENFB > 0
-	struct pci_genfb_softc *psc = device_private(dev);
-#if NACPICA > 0 && defined(VGA_POST)
-	extern int acpi_md_vbios_reset;
-	extern int acpi_md_vesa_modenum;
-#endif
-
-#if NACPICA > 0 && defined(VGA_POST)
-	if (vga_posth != NULL && acpi_md_vbios_reset == 2) {
-		vga_post_call(vga_posth);
-		if (acpi_md_vesa_modenum != 0)
-			vga_post_set_vbe(vga_posth, acpi_md_vesa_modenum);
-	}
-#endif
-	genfb_restore_palette(&psc->sc_gen);
-#endif
-
-	return true;
-}
-#endif
-
-static void
-handle_wedges(device_t dv, int par)
-{
-	if (config_handle_wedges(dv, par) == 0)
-		return;
-	booted_device = dv;
-	booted_partition = par;
-}
 
 static int
 is_valid_disk(device_t dv)
@@ -209,7 +145,6 @@ matchbiosdisks(void)
 #endif
 		if (is_valid_disk(dv)) {
 			n++;
-			/* XXXJRT why not just dv_xname?? */
 			snprintf(x86_alldisks->dl_nativedisks[n].ni_devname,
 			    sizeof(x86_alldisks->dl_nativedisks[n].ni_devname),
 			    "%s", device_xname(dv));
@@ -290,8 +225,8 @@ match_bootwedge(device_t dv, struct btinfo_bootwedge *biw)
 		    sizeof(bf), blk * DEV_BSIZE, UIO_SYSSPACE,
 		    0, NOCRED, NULL, NULL);
 		if (error) {
-			printf("findroot: unable to read block %" PRIu64 "\n",
-			    blk);
+			printf("findroot: unable to read block %" PRId64 " "
+			    "of dev %s (%d)\n", blk, device_xname(dv), error);
 			goto closeout;
 		}
 		MD5Update(&ctx, bf, sizeof(bf));
@@ -399,8 +334,10 @@ findroot(void)
 			len = strlen(cd->cf_name);
 
 			if (strncmp(cd->cf_name, biv->devname, len) == 0 &&
-			    biv->devname[len] - '0' == cd->cf_unit) {
-				handle_wedges(dv, biv->devname[len + 1] - 'a');
+			    biv->devname[len] - '0' == device_unit(dv)) {
+				booted_device = dv;
+				booted_partition = biv->devname[len + 1] - 'a';
+				booted_nblks = 0;
 				break;
 			}
 		}
@@ -444,11 +381,14 @@ findroot(void)
 				    device_xname(dv));
 				continue;
 			}
-			dkwedge_set_bootwedge(dv, biw->startblk, biw->nblks);
+			booted_device = dv;
+			booted_partition = 0;
+			booted_nblks = biw->nblks;
+			booted_startblk = biw->startblk;
 		}
 		deviter_release(&di);
 
-		if (booted_wedge)
+		if (booted_nblks)
 			return;
 	}
 
@@ -501,7 +441,9 @@ findroot(void)
 				    device_xname(dv));
 				continue;
 			}
-			handle_wedges(dv, bid->partition);
+			booted_device = dv;
+			booted_partition = bid->partition;
+			booted_nblks = 0;
 		}
 		deviter_release(&di);
 
@@ -512,14 +454,20 @@ findroot(void)
 		 * No booted device found; check CD-ROM boot at last.
 		 *
 		 * Our bootloader assumes CD-ROM boot if biosdev is larger
-		 * than the number of hard drives recognized by the BIOS.
-		 * The number of drives can be found in BTINFO_BIOSGEOM here.
+		 * or equal than the number of hard drives recognized by the
+		 * BIOS. The number of drives can be found in BTINFO_BIOSGEOM
+		 * here. For example, if we have wd0, wd1, and cd0:
+		 *
+		 *	big->num = 2 (for wd0 and wd1)
+		 *	bid->biosdev = 0x80 (wd0)
+		 *	bid->biosdev = 0x81 (wd1)
+		 *	bid->biosdev = 0x82 (cd0)
 		 *
 		 * See src/sys/arch/i386/stand/boot/devopen.c and
 		 * src/sys/arch/i386/stand/lib/bootinfo_biosgeom.c .
 		 */
 		if ((big = lookup_bootinfo(BTINFO_BIOSGEOM)) != NULL &&
-		    bid->biosdev > 0x80 + big->num) {
+		    bid->biosdev >= 0x80 + big->num) {
 			/*
 			 * XXX
 			 * There is no proper way to detect which unit is
@@ -533,6 +481,7 @@ findroot(void)
 				    device_is_a(dv, "cd")) {
 					booted_device = dv;
 					booted_partition = 0;
+					booted_nblks = 0;
 					break;
 				}
 			}
@@ -548,148 +497,26 @@ cpu_rootconf(void)
 	findroot();
 	matchbiosdisks();
 
-	if (booted_wedge) {
-		KASSERT(booted_device != NULL);
-		printf("boot device: %s (%s)\n",
-		    device_xname(booted_wedge), device_xname(booted_device));
-		setroot(booted_wedge, 0);
-	} else {
-		printf("boot device: %s\n",
-		    booted_device ? device_xname(booted_device) : "<unknown>");
-		setroot(booted_device, booted_partition);
-	}
+	aprint_normal("boot device: %s\n",
+	    booted_device ? device_xname(booted_device) : "<unknown>");
+	rootconf();
 }
 
 void
 device_register(device_t dev, void *aux)
 {
-#if NPCI > 0
-	static bool found_console = false;
-#endif
+	device_t isaboot, pciboot;
 
-	/*
-	 * Handle network interfaces here, the attachment information is
-	 * not available driver-independently later.
-	 *
-	 * For disks, there is nothing useful available at attach time.
-	 */
-	if (device_class(dev) == DV_IFNET) {
-		struct btinfo_netif *bin = lookup_bootinfo(BTINFO_NETIF);
-		if (bin == NULL)
-			return;
+	isaboot = device_isa_register(dev, aux);
+	pciboot = device_pci_register(dev, aux);
 
-		/*
-		 * We don't check the driver name against the device name
-		 * passed by the boot ROM.  The ROM should stay usable if
-		 * the driver becomes obsolete.  The physical attachment
-		 * information (checked below) must be sufficient to
-		 * idenfity the device.
-		 */
-		if (bin->bus == BI_BUS_ISA &&
-		    device_is_a(device_parent(dev), "isa")) {
-			struct isa_attach_args *iaa = aux;
+	if (isaboot == NULL && pciboot == NULL)
+		return;
 
-			/* Compare IO base address */
-			/* XXXJRT What about multiple IO addrs? */
-			if (iaa->ia_nio > 0 &&
-			    bin->addr.iobase == iaa->ia_io[0].ir_addr)
-			    	goto found;
-		}
-#if NPCI > 0
-		if (bin->bus == BI_BUS_PCI &&
-		    device_is_a(device_parent(dev), "pci")) {
-			struct pci_attach_args *paa = aux;
-			int b, d, f;
-
-			/*
-			 * Calculate BIOS representation of:
-			 *
-			 *	<bus,device,function>
-			 *
-			 * and compare.
-			 */
-			pci_decompose_tag(paa->pa_pc, paa->pa_tag, &b, &d, &f);
-			if (bin->addr.tag == ((b << 8) | (d << 3) | f))
-				goto found;
-		}
-#endif /* NPCI > 0 */
-	}
-#if NPCI > 0
-	if (device_parent(dev) && device_is_a(device_parent(dev), "pci") &&
-	    found_console == false) {
-		struct btinfo_framebuffer *fbinfo;
-		struct pci_attach_args *pa = aux;
-		prop_dictionary_t dict;
-
-		if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY) {
-#if NWSDISPLAY > 0 && NGENFB > 0
-			extern struct vcons_screen x86_genfb_console_screen;
-#endif
-
-			fbinfo = lookup_bootinfo(BTINFO_FRAMEBUFFER);
-			dict = device_properties(dev);
-			/*
-			 * framebuffer drivers other than genfb can work
-			 * without the address property
-			 */
-			if (fbinfo != NULL) {
-				if (fbinfo->physaddr != 0) {
-				prop_dictionary_set_uint32(dict, "width",
-				    fbinfo->width);
-				prop_dictionary_set_uint32(dict, "height",
-				    fbinfo->height);
-				prop_dictionary_set_uint8(dict, "depth",
-				    fbinfo->depth);
-				prop_dictionary_set_uint16(dict, "linebytes",
-				    fbinfo->stride);
-
-					prop_dictionary_set_uint64(dict,
-					    "address", fbinfo->physaddr);
-				}
-#if notyet
-				prop_dictionary_set_bool(dict, "splash",
-				    fbinfo->flags & BI_FB_SPLASH ?
-				     true : false);
-#endif
-				if (fbinfo->depth == 8) {
-					gfb_cb.gcc_cookie = NULL;
-					gfb_cb.gcc_set_mapreg = 
-					    x86_genfb_set_mapreg;
-					prop_dictionary_set_uint64(dict,
-					    "cmap_callback", (uint64_t)&gfb_cb);
-				}
-			}
-			prop_dictionary_set_bool(dict, "is_console", true);
-			prop_dictionary_set_bool(dict, "clear-screen", false);
-#if NWSDISPLAY > 0 && NGENFB > 0
-			prop_dictionary_set_uint16(dict, "cursor-row",
-			    x86_genfb_console_screen.scr_ri.ri_crow);
-#endif
-#if notyet
-			prop_dictionary_set_bool(dict, "splash",
-			    fbinfo->flags & BI_FB_SPLASH ? true : false);
-#endif
-			pmf_cb.gpc_suspend = x86_genfb_suspend;
-			pmf_cb.gpc_resume = x86_genfb_resume;
-			prop_dictionary_set_uint64(dict,
-			    "pmf_callback", (uint64_t)&pmf_cb);
-#ifdef VGA_POST
-			vga_posth = vga_post_init(pa->pa_bus, pa->pa_device,
-			    pa->pa_function);
-#endif
-			found_console = true;
-			return;
-		}
-	}
-#endif
-	return;
-
- found:
-	if (booted_device) {
+	if (booted_device != NULL) {
 		/* XXX should be a panic() */
 		printf("WARNING: double match for boot device (%s, %s)\n",
 		    device_xname(booted_device), device_xname(dev));
-		return;
-	}
-	booted_device = dev;
+	} else
+		booted_device = (isaboot != NULL) ? isaboot : pciboot;
 }

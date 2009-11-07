@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor_wrap.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: monitor_wrap.c,v 1.64 2008/11/04 08:22:13 djm Exp $ */
+/*	$NetBSD: monitor_wrap.c,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: monitor_wrap.c,v 1.73 2011/06/17 21:44:31 djm Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * Copyright 2002 Markus Friedl <markus@openbsd.org>
@@ -27,14 +27,10 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: monitor_wrap.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
+__RCSID("$NetBSD: monitor_wrap.c,v 1.6 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/queue.h>
-
-#include <openssl/bn.h>
-#include <openssl/dh.h>
-#include <openssl/evp.h>
 
 #include <errno.h>
 #include <pwd.h>
@@ -42,6 +38,10 @@ __RCSID("$NetBSD: monitor_wrap.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <openssl/bn.h>
+#include <openssl/dh.h>
+#include <openssl/evp.h>
 
 #include "xmalloc.h"
 #include "ssh.h"
@@ -69,21 +69,48 @@ __RCSID("$NetBSD: monitor_wrap.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
 #include <security/pam_appl.h>
 #endif
 #include "misc.h"
+#include "schnorr.h"
 #include "jpake.h"
+#include "uuencode.h"
 
 #include "channels.h"
 #include "session.h"
 #include "servconf.h"
+#include "roaming.h"
 
 /* Imports */
 extern int compat20;
-extern Newkeys *newkeys[];
 extern z_stream incoming_stream;
 extern z_stream outgoing_stream;
 extern struct monitor *pmonitor;
-extern Buffer input, output;
 extern Buffer loginmsg;
 extern ServerOptions options;
+
+void
+mm_log_handler(LogLevel level, const char *msg, void *ctx)
+{
+	Buffer log_msg;
+	struct monitor *mon = (struct monitor *)ctx;
+
+	if (mon->m_log_sendfd == -1)
+		fatal("%s: no log channel", __func__);
+
+	buffer_init(&log_msg);
+	/*
+	 * Placeholder for packet length. Will be filled in with the actual
+	 * packet length once the packet has been constucted. This saves
+	 * fragile math.
+	 */
+	buffer_put_int(&log_msg, 0);
+
+	buffer_put_int(&log_msg, level);
+	buffer_put_cstring(&log_msg, msg);
+	put_u32(buffer_ptr(&log_msg), buffer_len(&log_msg) - 4);
+	if (atomicio(vwrite, mon->m_log_sendfd, buffer_ptr(&log_msg),
+	    buffer_len(&log_msg)) != buffer_len(&log_msg))
+		fatal("%s: write: %s", __func__, strerror(errno));
+	buffer_free(&log_msg);
+}
 
 int
 mm_is_monitor(void)
@@ -208,7 +235,7 @@ mm_getpwnamallow(const char *username)
 {
 	Buffer m;
 	struct passwd *pw;
-	u_int len;
+	u_int len, i;
 	ServerOptions *newopts;
 
 	debug3("%s entering", __func__);
@@ -240,8 +267,20 @@ out:
 	newopts = buffer_get_string(&m, &len);
 	if (len != sizeof(*newopts))
 		fatal("%s: option block size mismatch", __func__);
-	if (newopts->banner != NULL)
-		newopts->banner = buffer_get_string(&m, NULL);
+
+#define M_CP_STROPT(x) do { \
+		if (newopts->x != NULL) \
+			newopts->x = buffer_get_string(&m, NULL); \
+	} while (0)
+#define M_CP_STRARRAYOPT(x, nx) do { \
+		for (i = 0; i < newopts->nx; i++) \
+			newopts->x[i] = buffer_get_string(&m, NULL); \
+	} while (0)
+	/* See comment in servconf.h */
+	COPY_MATCH_STRING_OPTS();
+#undef M_CP_STROPT
+#undef M_CP_STRARRAYOPT
+
 	copy_set_server_options(&options, newopts, 1);
 	xfree(newopts);
 
@@ -295,7 +334,7 @@ mm_inform_authserv(char *service, char *style)
 
 /* Do the password authentication */
 int
-mm_auth_password(Authctxt *authctxt, char *password)
+mm_auth_password(Authctxt *authctxt, const char *password)
 {
 	Buffer m;
 	int authenticated = 0;
@@ -343,19 +382,6 @@ mm_auth_rhosts_rsa_key_allowed(struct passwd *pw, char *user,
 	return (ret);
 }
 
-static void
-mm_send_debug(Buffer *m)
-{
-	char *msg;
-
-	while (buffer_len(m)) {
-		msg = buffer_get_string(m, NULL);
-		debug3("%s: Sending debug: %s", __func__, msg);
-		packet_send_debug("%s", msg);
-		xfree(msg);
-	}
-}
-
 int
 mm_key_allowed(enum mm_keytype type, char *user, char *host, Key *key)
 {
@@ -388,9 +414,6 @@ mm_key_allowed(enum mm_keytype type, char *user, char *host, Key *key)
 	auth_clear_options();
 	have_forced = buffer_get_int(&m);
 	forced_command = have_forced ? xstrdup("true") : NULL;
-
-	/* Send potential debug messages */
-	mm_send_debug(&m);
 
 	buffer_free(&m);
 
@@ -504,7 +527,7 @@ mm_newkeys_to_blob(int mode, u_char **blobp, u_int *lenp)
 	Enc *enc;
 	Mac *mac;
 	Comp *comp;
-	Newkeys *newkey = newkeys[mode];
+	Newkeys *newkey = (Newkeys *)packet_get_newkeys(mode);
 
 	debug3("%s: converting %p", __func__, newkey);
 
@@ -566,7 +589,7 @@ mm_send_kex(Buffer *m, Kex *kex)
 void
 mm_send_keystate(struct monitor *monitor)
 {
-	Buffer m;
+	Buffer m, *input, *output;
 	u_char *blob, *p;
 	u_int bloblen, plen;
 	u_int32_t seqnr, packets;
@@ -604,7 +627,8 @@ mm_send_keystate(struct monitor *monitor)
 	}
 
 	debug3("%s: Sending new keys: %p %p",
-	    __func__, newkeys[MODE_OUT], newkeys[MODE_IN]);
+	    __func__, packet_get_newkeys(MODE_OUT),
+	    packet_get_newkeys(MODE_IN));
 
 	/* Keys from Kex */
 	if (!mm_newkeys_to_blob(MODE_OUT, &blob, &bloblen))
@@ -651,8 +675,16 @@ mm_send_keystate(struct monitor *monitor)
 	buffer_put_string(&m, &incoming_stream, sizeof(incoming_stream));
 
 	/* Network I/O buffers */
-	buffer_put_string(&m, buffer_ptr(&input), buffer_len(&input));
-	buffer_put_string(&m, buffer_ptr(&output), buffer_len(&output));
+	input = (Buffer *)packet_get_input();
+	output = (Buffer *)packet_get_output();
+	buffer_put_string(&m, buffer_ptr(input), buffer_len(input));
+	buffer_put_string(&m, buffer_ptr(output), buffer_len(output));
+
+	/* Roaming */
+	if (compat20) {
+		buffer_put_int64(&m, get_sent_bytes());
+		buffer_put_int64(&m, get_recv_bytes());
+	}
 
 	mm_request_send(monitor->m_recvfd, MONITOR_REQ_KEYEXPORT, &m);
 	debug3("%s: Finished sending state", __func__);
@@ -1076,7 +1108,6 @@ mm_auth_rsa_key_allowed(struct passwd *pw, BIGNUM *client_n, Key **rkey)
 		*rkey = key;
 		xfree(blob);
 	}
-	mm_send_debug(&m);
 	buffer_free(&m);
 
 	return (allowed);
@@ -1252,7 +1283,7 @@ mm_auth2_jpake_get_pwdata(Authctxt *authctxt, BIGNUM **s,
 }
 
 void
-mm_jpake_step1(struct jpake_group *grp,
+mm_jpake_step1(struct modp_group *grp,
     u_char **id, u_int *id_len,
     BIGNUM **priv1, BIGNUM **priv2, BIGNUM **g_priv1, BIGNUM **g_priv2,
     u_char **priv1_proof, u_int *priv1_proof_len,
@@ -1287,7 +1318,7 @@ mm_jpake_step1(struct jpake_group *grp,
 }
 
 void
-mm_jpake_step2(struct jpake_group *grp, BIGNUM *s,
+mm_jpake_step2(struct modp_group *grp, BIGNUM *s,
     BIGNUM *mypub1, BIGNUM *theirpub1, BIGNUM *theirpub2, BIGNUM *mypriv2,
     const u_char *theirid, u_int theirid_len,
     const u_char *myid, u_int myid_len,
@@ -1327,7 +1358,7 @@ mm_jpake_step2(struct jpake_group *grp, BIGNUM *s,
 }
 
 void
-mm_jpake_key_confirm(struct jpake_group *grp, BIGNUM *s, BIGNUM *step2_val,
+mm_jpake_key_confirm(struct modp_group *grp, BIGNUM *s, BIGNUM *step2_val,
     BIGNUM *mypriv2, BIGNUM *mypub1, BIGNUM *mypub2,
     BIGNUM *theirpub1, BIGNUM *theirpub2,
     const u_char *my_id, u_int my_id_len,

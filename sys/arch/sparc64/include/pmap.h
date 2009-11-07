@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.44 2008/12/12 18:16:58 pooka Exp $	*/
+/*	$NetBSD: pmap.h,v 1.55 2011/10/06 06:55:34 mrg Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -97,7 +97,7 @@
 struct page_size_map {
 	uint64_t mask;
 	uint64_t code;
-#ifdef DEBUG
+#if defined(DEBUG) || 1
 	uint64_t use;
 #endif
 };
@@ -111,19 +111,21 @@ extern struct page_size_map page_size_map[];
 #define va_to_dir(v)	(int)((((paddr_t)(v))>>PDSHIFT)&PDMASK)
 #define va_to_pte(v)	(int)((((paddr_t)(v))>>PTSHIFT)&PTMASK)
 
+#ifdef MULTIPROCESSOR
+#define PMAP_LIST_MAXNUMCPU	CPUSET_MAXNUMCPU
+#else
+#define PMAP_LIST_MAXNUMCPU	1
+#endif
+
 struct pmap {
 	struct uvm_object pm_obj;
+	kmutex_t pm_obj_lock;
 #define pm_lock pm_obj.vmobjlock
 #define pm_refs pm_obj.uo_refs
-#ifdef MULTIPROCESSOR
-	LIST_ENTRY(pmap) pm_list[CPUSET_MAXNUMCPU];	/* per cpu ctx used list */
-#else
-	LIST_ENTRY(pmap) pm_list;	/* single ctx used list */
-#endif
+	LIST_ENTRY(pmap) pm_list[PMAP_LIST_MAXNUMCPU];	/* per cpu ctx used list */
 
 	struct pmap_statistics pm_stats;
 
-#ifdef MULTIPROCESSOR
 	/*
 	 * We record the context used on any cpu here. If the context
 	 * is actually present in the TLB, it will be the plain context
@@ -132,10 +134,7 @@ struct pmap {
 	 * If this pmap has no context allocated on that cpu, the entry
 	 * will be 0.
 	 */
-	int pm_ctx[CPUSET_MAXNUMCPU];	/* Current context per cpu */
-#else
-	int pm_ctx;			/* Current context */
-#endif
+	int pm_ctx[PMAP_LIST_MAXNUMCPU];	/* Current context per cpu */
 
 	/*
 	 * This contains 64-bit pointers to pages that contain
@@ -205,27 +204,36 @@ void		switchexit(struct lwp *, int);
 void		pmap_kprotect(vaddr_t, vm_prot_t);
 
 /* SPARC64 specific */
-/* Assembly routines to flush TLB mappings */
-void sp_tlb_flush_pte(vaddr_t, int);
-void sp_tlb_flush_ctx(int);
-void sp_tlb_flush_all(void);
-
-#ifdef MULTIPROCESSOR
-void smp_tlb_flush_pte(vaddr_t, pmap_t);
-void smp_tlb_flush_ctx(pmap_t);
-void smp_tlb_flush_all(void);
-#define	tlb_flush_pte(va,pm)	smp_tlb_flush_pte(va, pm)
-#define	tlb_flush_ctx(pm)	smp_tlb_flush_ctx(pm)
-#define	tlb_flush_all()		smp_tlb_flush_all()
-#else
-#define	tlb_flush_pte(va,pm)	sp_tlb_flush_pte(va, (pm)->pm_ctx)
-#define	tlb_flush_ctx(pm)	sp_tlb_flush_ctx((pm)->pm_ctx)
-#define	tlb_flush_all()		sp_tlb_flush_all()
-#endif
+void		pmap_copy_page_phys(paddr_t, paddr_t);
+void		pmap_zero_page_phys(paddr_t);
 
 /* Installed physical memory, as discovered during bootstrap. */
 extern int phys_installed_size;
 extern struct mem_region *phys_installed;
+
+#define	__HAVE_VM_PAGE_MD
+
+/*
+ * For each struct vm_page, there is a list of all currently valid virtual
+ * mappings of that page.  An entry is a pv_entry_t.
+ */
+struct pmap;
+typedef struct pv_entry {
+	struct pv_entry	*pv_next;	/* next pv_entry */
+	struct pmap	*pv_pmap;	/* pmap where mapping lies */
+	vaddr_t		pv_va;		/* virtual address for mapping */
+} *pv_entry_t;
+/* PV flags encoded in the low bits of the VA of the first pv_entry */
+
+struct vm_page_md {
+	struct pv_entry mdpg_pvh;
+};
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	(pg)->mdpage.mdpg_pvh.pv_next = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_pmap = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_va = 0;				\
+} while (/*CONSTCOND*/0)
 
 #endif	/* _KERNEL */
 

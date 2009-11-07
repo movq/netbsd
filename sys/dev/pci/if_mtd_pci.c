@@ -1,4 +1,4 @@
-/* $NetBSD: if_mtd_pci.c,v 1.14 2009/05/06 09:25:15 cegger Exp $ */
+/* $NetBSD: if_mtd_pci.c,v 1.17 2012/01/30 19:41:20 drochner Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 /* TODO: Check why in IO space, the MII won't work. Memory mapped works */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.14 2009/05/06 09:25:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.17 2012/01/30 19:41:20 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -54,8 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.14 2009/05/06 09:25:15 cegger Exp $
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#define PCI_IO_MAP_REG		0x10
-#define PCI_MEM_MAP_REG		0x14
+#define PCI_IO_MAP_REG PCI_BAR(0)
+#define PCI_MEM_MAP_REG PCI_BAR(1)
 
 struct mtd_pci_device_id {
 	pci_vendor_id_t		vendor;		/* PCI vendor ID */
@@ -97,10 +97,8 @@ mtd_pci_attach(device_t parent, device_t self, void *aux)
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
 	int io_valid, mem_valid;
-	char devinfo[256];
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	io_valid = (pci_mapreg_map(pa, PCI_IO_MAP_REG, PCI_MAPREG_TYPE_IO,
 			0, &iot, &ioh, NULL, NULL) == 0);
@@ -132,12 +130,11 @@ mtd_pci_attach(device_t parent, device_t self, void *aux)
 	if (pci_intr_establish(pa->pa_pc, ih, IPL_NET, mtd_irq_h, sc) == NULL) {
 		aprint_error_dev(&sc->dev, "could not establish interrupt");
 		if (intrstring != NULL)
-			printf(" at %s", intrstring);
-		printf("\n");
+			aprint_error(" at %s", intrstring);
+		aprint_error("\n");
 		return;
 	} else {
-		printf("%s: using %s for interrupt\n",
-			device_xname(&sc->dev),
+		aprint_normal_dev(&sc->dev, "using %s for interrupt\n",
 			intrstring ? intrstring : "unknown interrupt");
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pf.c,v 1.57 2009/09/14 10:36:49 degroote Exp $	*/
+/*	$NetBSD: pf.c,v 1.68 2011/12/19 16:10:07 drochner Exp $	*/
 /*	$OpenBSD: pf.c,v 1.552.2.1 2007/11/27 16:37:57 henning Exp $ */
 
 /*
@@ -37,9 +37,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pf.c,v 1.57 2009/09/14 10:36:49 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pf.c,v 1.68 2011/12/19 16:10:07 drochner Exp $");
 
-#include "bpfilter.h"
 #include "pflog.h"
 
 #include "pfsync.h"
@@ -57,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: pf.c,v 1.57 2009/09/14 10:36:49 degroote Exp $");
 #include <sys/rwlock.h>
 #ifdef __NetBSD__
 #include <sys/kthread.h>
-#include <sys/uidinfo.h>
+#include <sys/kauth.h>
 #endif /* __NetBSD__ */
 
 #include <net/if.h>
@@ -94,7 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: pf.c,v 1.57 2009/09/14 10:36:49 degroote Exp $");
 #ifndef __NetBSD__
 #include <dev/rndvar.h>
 #else
-#include <sys/rnd.h>
+#include <sys/cprng.h>
 #endif /* __NetBSD__ */
 
 #include <net/pfvar.h>
@@ -258,6 +257,8 @@ int			 pf_check_congestion(struct ifqueue *);
 extern struct pool pfr_ktable_pl;
 extern struct pool pfr_kentry_pl;
 
+extern int pf_state_lock;
+
 struct pf_pool_limit pf_pool_limits[PF_LIMIT_MAX] = {
 	{ &pf_state_pl, PFSTATE_HIWAT },
 	{ &pf_src_tree_pl, PFSNODE_HIWAT },
@@ -268,6 +269,10 @@ struct pf_pool_limit pf_pool_limits[PF_LIMIT_MAX] = {
 
 #define STATE_LOOKUP()							\
 	do {								\
+		if (pf_state_lock) {		    \
+			*state = NULL;				\
+			return (PF_DROP);			\
+		}								\
 		if (direction == PF_IN)					\
 			*state = pf_find_state(kif, &key, PF_EXT_GWY);	\
 		else							\
@@ -918,19 +923,32 @@ pf_insert_state(struct pfi_kif *kif, struct pf_state *s)
 	return (0);
 }
 
+#ifdef _LKM
+volatile int pf_purge_thread_stop;
+volatile int pf_purge_thread_running;
+#endif
+
 void
 pf_purge_thread(void *v)
 {
 	int nloops = 0, s;
 
+#ifdef _LKM
+	pf_purge_thread_running = 1;
+	pf_purge_thread_stop = 0;
+
+	while (!pf_purge_thread_stop) {
+#else
 	for (;;) {
+#endif /* !_LKM */
 		tsleep(pf_purge_thread, PWAIT, "pftm", 1 * hz);
 
 		s = splsoftnet();
 
 		/* process a fraction of the state table every second */
-		pf_purge_expired_states(1 + (pf_status.states
-		    / pf_default_rule.timeout[PFTM_INTERVAL]));
+		if (! pf_state_lock)
+			pf_purge_expired_states(1 + (pf_status.states
+						/ pf_default_rule.timeout[PFTM_INTERVAL]));
 
 		/* purge other expired types every PFTM_INTERVAL seconds */
 		if (++nloops >= pf_default_rule.timeout[PFTM_INTERVAL]) {
@@ -941,6 +959,12 @@ pf_purge_thread(void *v)
 
 		splx(s);
 	}
+
+#ifdef _LKM
+	pf_purge_thread_running = 0;
+	wakeup(&pf_purge_thread_running);
+	kthread_exit(0);
+#endif /* _LKM */
 }
 
 u_int32_t
@@ -2297,29 +2321,30 @@ pf_map_addr(sa_family_t af, struct pf_rule *r, const struct pf_addr *saddr,
 			switch (af) {
 #ifdef INET
 			case AF_INET:
-				rpool->counter.addr32[0] = htonl(arc4random());
+				rpool->counter.addr32[0] =
+				    htonl(cprng_fast32());
 				break;
 #endif /* INET */
 #ifdef INET6
 			case AF_INET6:
 				if (rmask->addr32[3] != 0xffffffff)
 					rpool->counter.addr32[3] =
-					    htonl(arc4random());
+					    htonl(cprng_fast32());
 				else
 					break;
 				if (rmask->addr32[2] != 0xffffffff)
 					rpool->counter.addr32[2] =
-					    htonl(arc4random());
+					    htonl(cprng_fast32());
 				else
 					break;
 				if (rmask->addr32[1] != 0xffffffff)
 					rpool->counter.addr32[1] =
-					    htonl(arc4random());
+					    htonl(cprng_fast32());
 				else
 					break;
 				if (rmask->addr32[0] != 0xffffffff)
 					rpool->counter.addr32[0] =
-					    htonl(arc4random());
+					    htonl(cprng_fast32());
 				break;
 #endif /* INET6 */
 			}
@@ -2452,7 +2477,7 @@ pf_get_sport(sa_family_t af, u_int8_t proto, struct pf_rule *r,
 				high = tmp;
 			}
 			/* low < high */
-			cut = htonl(arc4random()) % (1 + high - low) + low;
+			cut = htonl(cprng_fast32()) % (1 + high - low) + low;
 			/* low <= cut <= high */
 			for (tmp = cut; tmp <= high; ++(tmp)) {
 				key.gwy.port = htons(tmp);
@@ -2774,9 +2799,9 @@ pf_socket_lookup(int direction, struct pf_pdesc *pd)
 
 #ifdef __NetBSD__
 #define in_pcbhashlookup(tbl, saddr, sport, daddr, dport) \
-    in_pcblookup_connect(tbl, saddr, sport, daddr, dport)
+    in_pcblookup_connect(tbl, saddr, sport, daddr, dport, NULL)
 #define in6_pcbhashlookup(tbl, saddr, sport, daddr, dport) \
-    in6_pcblookup_connect(tbl, saddr, sport, daddr, dport, 0)
+    in6_pcblookup_connect(tbl, saddr, sport, daddr, dport, 0, NULL)
 #define in_pcblookup_listen(tbl, addr, port, zero) \
     in_pcblookup_bind(tbl, addr, port)
 #define in6_pcblookup_listen(tbl, addr, port, zero) \
@@ -2824,12 +2849,13 @@ pf_socket_lookup(int direction, struct pf_pdesc *pd)
 		break;
 #endif /* INET6 */
 	}
-	pd->lookup.uid = so->so_uidinfo->ui_uid;
+	pd->lookup.uid = kauth_cred_geteuid(so->so_cred);
+	pd->lookup.gid = kauth_cred_getegid(so->so_cred);
 #else
 	so = inp->inp_socket;
 	pd->lookup.uid = so->so_euid;
-#endif /* !__NetBSD__ */
 	pd->lookup.gid = so->so_egid;
+#endif /* !__NetBSD__ */
 	pd->lookup.pid = so->so_cpid;
 	return (1);
 }
@@ -2926,7 +2952,7 @@ pf_calc_mss(struct pf_addr *addr, sa_family_t af, u_int16_t offer)
 	int			 hlen;
 	u_int16_t		 mss = tcp_mssdflt;
 
-	hlen = 0;	/* XXXGCC -Wunitialized m68k */
+	hlen = 0;	/* XXXGCC -Wuninitialized m68k */
 
 	memset(&ro, 0, sizeof(ro));
 	switch (af) {
@@ -3280,7 +3306,7 @@ pf_test_rule(struct pf_rule **rm, struct pf_state **sm, int direction,
 		    !pf_match_gid(r->gid.op, r->gid.gid[0], r->gid.gid[1],
 		    pd->lookup.gid))
 			r = TAILQ_NEXT(r, entries);
-		else if (r->prob && r->prob <= arc4random())
+		else if (r->prob && r->prob <= cprng_fast32())
 			r = TAILQ_NEXT(r, entries);
 		else if (r->match_tag && !pf_match_tag(m, r, &tag))
 			r = TAILQ_NEXT(r, entries);
@@ -3321,6 +3347,11 @@ pf_test_rule(struct pf_rule **rm, struct pf_state **sm, int direction,
 			m_copyback(m, off, hdrlen, pd->hdr.any);
 		PFLOG_PACKET(kif, h, m, af, direction, reason, r->log ? r : nr,
 		    a, ruleset, pd);
+	}
+
+	if (r->keep_state && pf_state_lock) {
+		REASON_SET(&reason, PFRES_STATELOCKED);
+		return PF_DROP;
 	}
 
 	if ((r->action == PF_DROP) &&
@@ -3406,14 +3437,14 @@ pf_test_rule(struct pf_rule **rm, struct pf_state **sm, int direction,
 		    (r->rule_flag & PFRULE_RETURN)) &&
 		    !(th->th_flags & TH_RST)) {
 			u_int32_t	 ack = ntohl(th->th_seq) + pd->p_len;
-			struct ip	*h = mtod(m, struct ip *);
+			struct ip	*hip = mtod(m, struct ip *);
 
 #ifdef __NetBSD__
 			if (pf_check_proto_cksum(m, direction, off,
-			    ntohs(h->ip_len) - off, IPPROTO_TCP, AF_INET))
+			    ntohs(hip->ip_len) - off, IPPROTO_TCP, AF_INET))
 #else
 			if (pf_check_proto_cksum(m, off,
-			    ntohs(h->ip_len) - off, IPPROTO_TCP, AF_INET))
+			    ntohs(hip->ip_len) - off, IPPROTO_TCP, AF_INET))
 #endif /* !__NetBSD__ */
 				REASON_SET(&reason, PFRES_PROTCKSUM);
 			else {
@@ -3680,7 +3711,7 @@ cleanup:
 					sport = th->th_dport;
 				}
 			}
-			s->src.seqhi = htonl(arc4random());
+			s->src.seqhi = htonl(cprng_fast32());
 			/* Find mss option */
 			mss = pf_get_mss(m, off, th->th_off, af);
 			mss = pf_calc_mss(saddr, af, mss);
@@ -3737,7 +3768,7 @@ pf_test_fragment(struct pf_rule **rm, int direction, struct pfi_kif *kif,
 		    r->flagset || r->type || r->code ||
 		    r->os_fingerprint != PF_OSFP_ANY)
 			r = TAILQ_NEXT(r, entries);
-		else if (r->prob && r->prob <= arc4random())
+		else if (r->prob && r->prob <= cprng_fast32())
 			r = TAILQ_NEXT(r, entries);
 		else if (r->match_tag && !pf_match_tag(m, r, &tag))
 			r = TAILQ_NEXT(r, entries);
@@ -3847,14 +3878,14 @@ pf_test_state_tcp(struct pf_state **state, int direction, struct pfi_kif *kif,
 			(*state)->src.state = PF_TCPS_PROXY_DST;
 	}
 	if ((*state)->src.state == PF_TCPS_PROXY_DST) {
-		struct pf_state_host *src, *dst;
+		struct pf_state_host *psrc, *pdst;
 
 		if (direction == PF_OUT) {
-			src = &(*state)->state_key->gwy;
-			dst = &(*state)->state_key->ext;
+			psrc = &(*state)->state_key->gwy;
+			pdst = &(*state)->state_key->ext;
 		} else {
-			src = &(*state)->state_key->ext;
-			dst = &(*state)->state_key->lan;
+			psrc = &(*state)->state_key->ext;
+			pdst = &(*state)->state_key->lan;
 		}
 		if (direction == (*state)->state_key->direction) {
 			if (((th->th_flags & (TH_SYN|TH_ACK)) != TH_ACK) ||
@@ -3865,9 +3896,9 @@ pf_test_state_tcp(struct pf_state **state, int direction, struct pfi_kif *kif,
 			}
 			(*state)->src.max_win = MAX(ntohs(th->th_win), 1);
 			if ((*state)->dst.seqhi == 1)
-				(*state)->dst.seqhi = htonl(arc4random());
-			pf_send_tcp((*state)->rule.ptr, pd->af, &src->addr,
-			    &dst->addr, src->port, dst->port,
+				(*state)->dst.seqhi = htonl(cprng_fast32());
+			pf_send_tcp((*state)->rule.ptr, pd->af, &psrc->addr,
+			    &pdst->addr, psrc->port, pdst->port,
 			    (*state)->dst.seqhi, 0, TH_SYN, 0,
 			    (*state)->src.mss, 0, 0, (*state)->tag, NULL, NULL);
 			REASON_SET(reason, PFRES_SYNPROXY);
@@ -3885,8 +3916,8 @@ pf_test_state_tcp(struct pf_state **state, int direction, struct pfi_kif *kif,
 			    ntohl(th->th_ack), ntohl(th->th_seq) + 1,
 			    TH_ACK, (*state)->src.max_win, 0, 0, 0,
 			    (*state)->tag, NULL, NULL);
-			pf_send_tcp((*state)->rule.ptr, pd->af, &src->addr,
-			    &dst->addr, src->port, dst->port,
+			pf_send_tcp((*state)->rule.ptr, pd->af, &psrc->addr,
+			    &pdst->addr, psrc->port, pdst->port,
 			    (*state)->src.seqhi + 1, (*state)->src.seqlo + 1,
 			    TH_ACK, (*state)->dst.max_win, 0, 0, 1,
 			    0, NULL, NULL);
@@ -4312,8 +4343,8 @@ pf_test_state_icmp(struct pf_state **state, int direction, struct pfi_kif *kif,
 	int		 state_icmp = 0;
 	struct pf_state_key_cmp key;
 
-	icmpsum = NULL;	/* XXXGCC -Wunitialized m68k */
-	icmptype = 0;	/* XXXGCC -Wunitialized m68k */
+	icmpsum = NULL;	/* XXXGCC -Wuninitialized m68k */
+	icmptype = 0;	/* XXXGCC -Wuninitialized m68k */
 
 	switch (pd->proto) {
 #ifdef INET
@@ -5206,9 +5237,9 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	struct pf_addr		 naddr;
 	struct pf_src_node	*sn = NULL;
 	int			 error = 0;
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	struct m_tag		*mtag;
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 #ifdef __NetBSD__
 	struct pf_mtag		*pf_mtag;
 #endif /* __NetBSD__ */
@@ -5311,7 +5342,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 	}
 
 	/* Copied from ip_output. */
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	/*
 	 * If deferred crypto processing is needed, check that the
 	 * interface supports it.
@@ -5322,7 +5353,7 @@ pf_route(struct mbuf **m, struct pf_rule *r, int dir, struct ifnet *oifp,
 		ipsp_skipcrypto_unmark((struct tdb_ident *)(mtag + 1));
 		goto bad;
 	}
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 
 	/* Catch routing changes wrt. hardware checksumming for TCP or UDP. */
 #ifdef __NetBSD__

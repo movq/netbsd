@@ -1,7 +1,7 @@
-/*	$NetBSD: globals.h,v 1.1.1.2 2009/10/25 00:01:33 christos Exp $	*/
+/*	$NetBSD: globals.h,v 1.3.4.1 2012/06/05 21:15:09 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: globals.h,v 1.86 2009/10/05 17:30:49 fdupont Exp */
+/* Id: globals.h,v 1.92 2011/11/09 18:44:04 each Exp  */
 
 #ifndef NAMED_GLOBALS_H
 #define NAMED_GLOBALS_H 1
@@ -28,6 +28,7 @@
 #include <isc/log.h>
 #include <isc/net.h>
 
+#include <isccfg/aclconf.h>
 #include <isccfg/cfg.h>
 
 #include <dns/zone.h>
@@ -52,6 +53,7 @@
 
 EXTERN isc_mem_t *		ns_g_mctx		INIT(NULL);
 EXTERN unsigned int		ns_g_cpus		INIT(0);
+EXTERN unsigned int		ns_g_udpdisp		INIT(0);
 EXTERN isc_taskmgr_t *		ns_g_taskmgr		INIT(NULL);
 EXTERN dns_dispatchmgr_t *	ns_g_dispatchmgr	INIT(NULL);
 EXTERN isc_entropy_t *		ns_g_entropy		INIT(NULL);
@@ -104,6 +106,7 @@ EXTERN const char *		lwresd_g_resolvconffile	INIT("/etc"
 EXTERN isc_boolean_t		ns_g_conffileset	INIT(ISC_FALSE);
 EXTERN isc_boolean_t		lwresd_g_useresolvconf	INIT(ISC_FALSE);
 EXTERN isc_uint16_t		ns_g_udpsize		INIT(4096);
+EXTERN cfg_aclconfctx_t *	ns_g_aclconfctx		INIT(NULL);
 
 /*
  * Initial resource limits.
@@ -151,6 +154,8 @@ EXTERN int			ns_g_listen		INIT(3);
 EXTERN isc_time_t		ns_g_boottime;
 EXTERN isc_boolean_t		ns_g_memstatistics	INIT(ISC_FALSE);
 EXTERN isc_boolean_t		ns_g_clienttest		INIT(ISC_FALSE);
+EXTERN isc_boolean_t		ns_g_nosoa		INIT(ISC_FALSE);
+EXTERN isc_boolean_t		ns_g_noaa		INIT(ISC_FALSE);
 
 #undef EXTERN
 #undef INIT

@@ -1,4 +1,5 @@
-/*	$OpenBSD$	*/
+/*	Id: macdefs.h,v 1.18 2011/06/05 10:19:24 ragge Exp 	*/	
+/*	$NetBSD: macdefs.h,v 1.1.1.4 2011/09/01 12:46:33 plunky Exp $	*/
 
 /*
  * Copyright (c) 2007 Michael Shalayeff
@@ -87,7 +88,6 @@
 
 #undef	CHAR_UNSIGNED
 #define	BOOL_TYPE	CHAR
-#define	ENUMSIZE(high,low)	INT
 
 typedef long long CONSZ;
 typedef unsigned long long U_CONSZ;
@@ -101,7 +101,7 @@ typedef long long OFFSZ;
 #undef	BACKTEMP	/* stack grows upwards */
 
 #define	FIELDOPS	/* have bit field ops */
-#define	LTORBYTES	/* big endian */
+#define TARGET_ENDIAN TARGET_BE
 
 #define	BYTEOFF(x)	((x)&03)
 #define	wdal(k)		(BYTEOFF(k)==0)
@@ -471,5 +471,3 @@ int COLORMAP(int c, int *r);
 #define	SPCNLW		(MAXSPECIAL+6)	/* LL const w/ 0 in high word */
 #define	SPIMM		(MAXSPECIAL+7)	/* immidiate const for depi/comib */
 #define	SPNAME		(MAXSPECIAL+8)	/* ext symbol reference load/store */
-#define	SPIMM		(MAXSPECIAL+6)	/* immidiate const for depi/comib */
-#define	SPNAME		(MAXSPECIAL+7)	/* ext symbol reference load/store */

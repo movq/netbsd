@@ -1,4 +1,4 @@
-$NetBSD: UPDATING,v 1.204 2009/11/02 01:11:31 dyoung Exp $
+$NetBSD: UPDATING,v 1.234.2.1 2012/02/16 19:56:43 riz Exp $
 
 This file (UPDATING) is intended to be a brief reference to recent
 changes that might cause problems in the build process, and a guide for
@@ -16,11 +16,138 @@ See also: BUILDING, build.sh, Makefile.
 Recent changes:
 ^^^^^^^^^^^^^^^
 
+20120216:
+	Default for MKCATPAGES changed to NO. Update builds will fail
+	unless DESTDIR is cleaned manually. If you built between 20120207
+	and 20120216, daily and weekly could have created an unreable
+	/var/db/man.db index for apropos. Running makemandb -f or
+	the next run of weekly will fix it.
+
+20111227:
+	If you built between 20111225 and 20111227 you need to remove
+	/usr/lib/libpam.so.4* and /usr/lib/security/*.so.4, since the
+	bump has been reverted.
+
+20111125:
+	The "rnd" pseudodevice has been added to sys/conf/std, which
+	means it should no longer be explicitly listed in kernel
+	configuration files.  The line "pseudo-device rnd" should be
+	removed from any custom kernel config files users may have.
+
+20111119:
+	A problem with the datastructures used by the rndctl(8)
+	utility (pointers in datastructures in an array, making 32->64
+	bit compatibility very painful) has been fixed in a
+	non-backwards-compatible way.  If you replace your kernel,
+	replace your rndctl executable too.
+	
+20111001:
+	the prop_*_send_syscall() functions from proplib(3) have been
+	changed and their new version is not backward compatible with the old
+	one. So ensure that all consumers of these functions (currently:
+	quota2 code and its tests) are updated together with the new lib.
+
+20110817:
+	sparc has been changed to use GCC 4.5.3, so any objdir or
+	DESTDIR for them should be deleted before updating.
+
+20110806:
+	i386 and amd64 have been changed to use GCC 4.5.3, so any
+	objdir or DESTDIR for them should be deleted before updating.
+
+20110805:
+	The update to GCC 4.5.3 requires a non-trivial portion of
+	the tree to be cleaned.  Best to delete both objdir and
+	DESTDIR before running this update.  So far, only the
+	sparc64, mips and powerpc platforms have changed.
+
+20110803:
+	The layout of external/public-domain/xz has changed. To do an
+	update build you will have to remove the contents of the OBJDIR
+	for external/public-domain/xz/bin by hand as the xz entry there
+	is now a directory.
+
+20110410:
+	The configuration of src/tools/gcc has changed. To do an
+	update build you have to clean both tools/binutils and
+	tools/gcc by hand.
+
+20110328:
+	Building the Xorg binary was moved into a subdirectory to fix
+	ordering issues with "make all". It may be necessary to remove
+	the OBJDIR for external/mit/xorg/server/xorg-server/hw/xfree86
+	if your update build fails, as the "Xorg" entry there is now a
+	directory.
+
+20110121:
+	Assembler files no longer use -traditional-cpp.  This can break
+	the build of individual parts of the tree.  This is handled
+	correctly by build.sh.  Manual builds have to update /usr/share/mk
+	and re-run config(1) for any kernel configurations as needed.
+
+20101217:
+	The tcpdump(8) program was changed to drop privileges and chroot(2)
+	by default. It may be necessary to manually update passwd(5) and
+	group(5) in order to make the program work with existing setups.
+
+20101125:
+	The latest changes to setenv(3) dissallow setting environment
+	variables with names that contain '='. Revision 1.18 of env.c
+	assumed that this was allowed. Installing a new libc with an
+	old copy of /usr/bin/env causes env x=1 printenv | grep x= to
+	break which affects the autoconf tests for dependency finding,
+	so building gcc will end up printing:
+	    checking dependency style of gcc... none
+	    configure: error: no usable dependency style found
+	Fix it by rebuilding and re-installing env.
+
+20101119:
+	Recent Xorg updates in xsrc/external/mit/ may cause various build
+	or run-time problems.  Delete your entire DESTDIR and OBJDIR if you
+	have any build problems with xsrc, or problems with mismatched
+	versions between xorg-server and drivers.
+
+20100604:
+	The update of ATF to 0.9 causes old tests written in shell to fail
+	unless they are rebuilt.  If you are building with MKUPDATE=yes,
+	you need to clean the src/external/bsd/atf/tests/ and the src/tests/
+	trees by hand.
+
+20100522:
+	Recent Xorg updates in xsrc/external/mit/ will cause various build
+	problems.  Delete your entire DESTDIR and OBJDIR if you have any
+	build problems with xsrc.
+
+20100522:
+	private section of <ctype.h> was splitted, and now mklocale(1)
+	include ctype_local.h, so you have to make cleandir in tools/mklocale.
+
+20100520:
+	The location of the xkb compiled descriptions has changed. Please
+	remove usr/X11R7/lib/X11/xkb/compiled from your $DESTDIR.
+
+20100222:
+	The shared objects file extension has been changed from .so to
+	.pico, in order to avoid conflicts with shared libraries names
+	libXX.so.  All now stale regular .so files can be removed from
+	your object directories.
+
+20100204:
+	The termcap database has been removed from the sources,
+	but has not been marked obsolete so it is not removed
+	from the system when upgrading.
+	As such, you will need to remove them from your object
+	and destination directories.
+
 20091101:
-        After updating, it may be make the 'cleandir' target in
-        src/tools/yacc/ and in src/usr.bin/yacc/ before a 'build.sh
-        -u tools' or 'build.sh -u distribution'.  Ditto src/tools/lex/
-        and src/usr.bin/lex/.
+        After updating, it may be necessary to make the 'cleandir'
+        target in src/tools/yacc/ and in src/usr.bin/yacc/ before a
+        'build.sh -u tools' or 'build.sh -u distribution'.  Ditto
+        src/tools/lex/ and src/usr.bin/lex/.
+
+20091001:
+	On amd64 you must rebuild tools (to get the new binutils)
+	before building a kernel, or the build fails on cpufunc.S.
 
 20091001:
 	An error will create a ./usr/X11R7/lib/X11/xkb/compiled/xkb
@@ -57,9 +184,9 @@ Recent changes:
 	cleaning your src/tools directory and $TOOLDIR and rebuilding them.
 
 20090126:
-	The __posix_fadvise50 system call changed assembly stub type. You need to
-	'rm -f __posix_fadvise50.*' in the libc build directory to avoid using
-	the old assembly stub.
+	The __posix_fadvise50 system call changed assembly stub type. You
+	need to 'rm -f __posix_fadvise50.*' in the libc build directory
+	to avoid using the old assembly stub.
 
 20090202:
 	pkg_install now depends on the pkgdb cache for automatic conflict
@@ -362,7 +489,7 @@ Hints for a more successful build:
  
 What to do if things don't work:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-When things don't work there is usually a few things that commonly
+When things don't work there are usually a few things that commonly
 should be done.
     1)	make includes
 	This should be done automatically by make build.
@@ -452,7 +579,8 @@ Fix:	Try the following sequence of commands in the directory in question.
 	(If you built the tree without "make obj" in the past, obsolete files
 	may remain.  The command tries to clean everything up)
 
-Symptom:.../sysinst/run.c:xx: warning: initialization from incompatible pointer type
+Symptom:.../sysinst/run.c:xx: warning: initialization from incompatible
+	pointer type
 Fix:	Rebuild and install usr.bin/menuc
 
 Symptom:mklocale not found during build in share/locale/ctype
@@ -469,3 +597,7 @@ Fix:    Rebuild and install lib/libc
 
 Symptom:lint does not understand the '-X' option
 Fix:    May need to build & install libs with NOLINT=1 before rebuilding lint
+
+Symptom:Update build fails in src/tools/gcc complaining that a variable
+	(e.g. CPPFLAGS) has changed since the previous run.
+Fix:    Run "nbmake-${ARCH} clean" in src/tools/gcc or do a clean build.

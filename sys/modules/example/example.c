@@ -1,4 +1,4 @@
-/*	$NetBSD: example.c,v 1.5 2009/10/20 05:33:30 jnemeth Exp $	*/
+/*	$NetBSD: example.c,v 1.7 2010/10/25 22:41:42 jnemeth Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,15 +27,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: example.c,v 1.5 2009/10/20 05:33:30 jnemeth Exp $");
+__KERNEL_RCSID(0, "$NetBSD: example.c,v 1.7 2010/10/25 22:41:42 jnemeth Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/module.h>
 
 /*
- * Last parameter of MODULE macro is name of modules on
- * which defined module depends.
+ * Last parameter of MODULE macro is a list of names (as string; names are
+ * separated by commas) of dependencies.  If module has no dependencies,
+ * then NULL should be passed.
  */
 
 MODULE(MODULE_CLASS_MISC, example, NULL);
@@ -44,11 +45,13 @@ static
 void
 handle_props(prop_dictionary_t props)
 {
+	const char *msg;
 	prop_string_t str;
 
 	if (props != NULL) {
 		str = prop_dictionary_get(props, "msg");
 	} else {
+		printf("No property dictionary was provided.\n");
 		str = NULL;
 	}
 	if (str == NULL)
@@ -56,7 +59,7 @@ handle_props(prop_dictionary_t props)
 	else if (prop_object_type(str) != PROP_TYPE_STRING)
 		printf("The 'msg' property is not a string.\n");
 	else {
-		const char *msg = prop_string_cstring_nocopy(str);
+		msg = prop_string_cstring_nocopy(str);
 		if (msg == NULL)
 			printf("Failed to process the 'msg' property.\n");
 		else

@@ -1,4 +1,4 @@
-/*	$NetBSD: isadma_machdep.c,v 1.5 2008/04/28 20:23:32 martin Exp $	*/
+/*	$NetBSD: isadma_machdep.c,v 1.8 2012/02/01 09:54:02 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.5 2008/04/28 20:23:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.8 2012/02/01 09:54:02 matt Exp $");
 
 #define ISA_DMA_STATS
 
@@ -39,12 +39,12 @@ __KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.5 2008/04/28 20:23:32 martin Ex
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/pio.h>
 
@@ -169,8 +169,8 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	paddr_t avail_end = 0;
 
 	for (bank = 0; bank < vm_nphysseg; bank++) {
-		if (avail_end < vm_physmem[bank].avail_end << PGSHIFT)
-			avail_end = vm_physmem[bank].avail_end << PGSHIFT;
+		if (avail_end < VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT)
+			avail_end = VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT;
 	}
 
 	/* Call common function to create the basic map. */
@@ -182,7 +182,7 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	map = *dmamp;
 	map->_dm_cookie = NULL;
 
-	cookiesize = sizeof(struct powerpc_isa_dma_cookie);
+	cookiesize = sizeof(*cookie);
 
 	/*
 	 * ISA only has 24-bits of address space.  This means
@@ -221,8 +221,8 @@ _isa_bus_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	/*
 	 * Allocate our cookie.
 	 */
-	if ((cookiestore = malloc(cookiesize, M_DMAMAP,
-	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL) {
+	if ((cookiestore = kmem_intr_alloc(cookiesize,
+	    (flags & BUS_DMA_NOWAIT) ? KM_NOSLEEP : KM_SLEEP)) == NULL) {
 		error = ENOMEM;
 		goto out;
 	}
@@ -265,7 +265,11 @@ _isa_bus_dmamap_destroy(bus_dma_tag_t t, bus_dmamap_t map)
 	if (cookie->id_flags & ID_HAS_BOUNCE)
 		_isa_dma_free_bouncebuf(t, map);
 
-	free(cookie, M_DMAMAP);
+	size_t cookiesize = sizeof(*cookie);
+	if (cookie->id_flags & ID_MIGHT_NEED_BOUNCE)
+		cookiesize += (sizeof(bus_dma_segment_t) * map->_dm_segcnt);
+
+	kmem_intr_free(cookie, cookiesize);
 	_bus_dmamap_destroy(t, map);
 }
 
@@ -597,8 +601,8 @@ _isa_bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 	int bank;
 
 	for (bank = 0; bank < vm_nphysseg; bank++) {
-		if (avail_end < vm_physmem[bank].avail_end << PGSHIFT)
-			avail_end = vm_physmem[bank].avail_end << PGSHIFT;
+		if (avail_end < VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT)
+			avail_end = VM_PHYSMEM_PTR(bank)->avail_end << PGSHIFT;
 	}
 
 	if (avail_end > ISA_DMA_BOUNCE_THRESHOLD)

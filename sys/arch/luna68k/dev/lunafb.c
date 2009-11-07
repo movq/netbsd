@@ -1,4 +1,4 @@
-/* $NetBSD: lunafb.c,v 1.21 2009/03/18 10:22:31 cegger Exp $ */
+/* $NetBSD: lunafb.c,v 1.25.8.1 2012/07/25 21:30:35 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lunafb.c,v 1.21 2009/03/18 10:22:31 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lunafb.c,v 1.25.8.1 2012/07/25 21:30:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,28 +47,31 @@ __KERNEL_RCSID(0, "$NetBSD: lunafb.c,v 1.21 2009/03/18 10:22:31 cegger Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <dev/rcons/raster.h>
 #include <dev/wscons/wsconsio.h>
-#include <dev/wscons/wscons_raster.h>
 #include <dev/wscons/wsdisplayvar.h>
+#include <dev/rasops/rasops.h>
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 
+#include <arch/luna68k/dev/omrasopsvar.h>
+
+#include "ioconf.h"
+
 struct bt454 {
-	u_int8_t bt_addr;		/* map address register */
-	u_int8_t bt_cmap;		/* colormap data register */
+	volatile uint8_t bt_addr;	/* map address register */
+	volatile uint8_t bt_cmap;	/* colormap data register */
 };
 
 struct bt458 {
-	u_int8_t bt_addr;		/* map address register */
-		unsigned :24;
-	u_int8_t bt_cmap;		/* colormap data register */
-		unsigned :24;
-	u_int8_t bt_ctrl;		/* control register */
-		unsigned :24;
-	u_int8_t bt_omap;		/* overlay (cursor) map register */
-		unsigned :24;
+	volatile uint8_t bt_addr;	/* map address register */
+	uint8_t          pad0[3];
+	volatile uint8_t bt_cmap;	/* colormap data register */
+	uint8_t          pad1[3];
+	volatile uint8_t bt_ctrl;	/* control register */
+	uint8_t          pad2[3];
+	volatile uint8_t bt_omap;	/* overlay (cursor) map register */
+	uint8_t          pad3[3];
 };
 
 #define	OMFB_RFCNT	0xB1000000	/* video h-origin/v-origin */
@@ -86,19 +89,18 @@ struct om_hwdevconfig {
 	int	dc_rowbytes;		/* bytes in a FB scan line */
 	int	dc_cmsize;		/* colormap size */
 	vaddr_t	dc_videobase;		/* base of flat frame buffer */
-	struct raster	dc_raster;	/* raster description */
-	struct rcons	dc_rcons;	/* raster blitter control info */
+	struct rasops_info dc_ri;	/* raster blitter variables */
 };
 
 struct hwcmap {
 #define CMAP_SIZE 256
-	u_int8_t r[CMAP_SIZE];
-	u_int8_t g[CMAP_SIZE];
-	u_int8_t b[CMAP_SIZE];
+	uint8_t r[CMAP_SIZE];
+	uint8_t g[CMAP_SIZE];
+	uint8_t b[CMAP_SIZE];
 };
 
 struct omfb_softc {
-	struct device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	struct om_hwdevconfig *sc_dc;	/* device configuration */
 	struct hwcmap sc_cmap;		/* software copy of colormap */
 	int nscreens;
@@ -110,13 +112,8 @@ static int  omsetcmap(struct omfb_softc *, struct wsdisplay_cmap *);
 static struct om_hwdevconfig omfb_console_dc;
 static void omfb_getdevconfig(paddr_t, struct om_hwdevconfig *);
 
-extern struct wsdisplay_emulops omfb_emulops;
-
 static struct wsscreen_descr omfb_stdscreen = {
-	"std", 0, 0,
-	&omfb_emulops,
-	0, 0,
-	0
+	.name = "std"
 };
 
 static const struct wsscreen_descr *_omfb_scrlist[] = {
@@ -127,14 +124,13 @@ static const struct wsscreen_list omfb_screenlist = {
 	sizeof(_omfb_scrlist) / sizeof(struct wsscreen_descr *), _omfb_scrlist
 };
 
-static int   omfbioctl(void *, void *, u_long, void *, int,
-		            struct lwp *);
+static int   omfbioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t omfbmmap(void *, void *, off_t, int);
 static int   omfb_alloc_screen(void *, const struct wsscreen_descr *,
-				      void **, int *, int *, long *);
+			       void **, int *, int *, long *);
 static void  omfb_free_screen(void *, void *);
 static int   omfb_show_screen(void *, void *, int,
-				void (*) (void *, int, int), void *);
+			      void (*) (void *, int, int), void *);
 
 static const struct wsdisplay_accessops omfb_accessops = {
 	omfbioctl,
@@ -145,12 +141,11 @@ static const struct wsdisplay_accessops omfb_accessops = {
 	0 /* load_font */
 };
 
-static int  omfbmatch(struct device *, struct cfdata *, void *);
-static void omfbattach(struct device *, struct device *, void *);
+static int  omfbmatch(device_t, cfdata_t, void *);
+static void omfbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(fb, sizeof(struct omfb_softc),
+CFATTACH_DECL_NEW(fb, sizeof(struct omfb_softc),
     omfbmatch, omfbattach, NULL, NULL);
-extern struct cfdriver fb_cd;
 
 extern int hwplanemask;	/* hardware planemask; retrieved at boot */
 
@@ -158,45 +153,45 @@ static int omfb_console;
 int  omfb_cnattach(void);
 
 static int
-omfbmatch(struct device *parent, struct cfdata *cf, void *aux)
+omfbmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
 	if (strcmp(ma->ma_name, fb_cd.cd_name))
-		return (0);
+		return 0;
 #if 0	/* XXX badaddr() bombs if no framebuffer is installed */
 	if (badaddr((void *)ma->ma_addr, 4))
-		return (0);
+		return 0;
 #else
 	if (hwplanemask == 0)
-		return (0);
+		return 0;
 #endif
-	return (1);
+	return 1;
 }
 
 static void
-omfbattach(struct device *parent, struct device *self, void *args)
+omfbattach(device_t parent, device_t self, void *args)
 {
-	struct omfb_softc *sc = (struct omfb_softc *)self;
+	struct omfb_softc *sc = device_private(self);
 	struct wsemuldisplaydev_attach_args waa;
+
+	sc->sc_dev = self;
 
 	if (omfb_console) {
 		sc->sc_dc = &omfb_console_dc;
 		sc->nscreens = 1;
-	}
-	else {
-		sc->sc_dc = (struct om_hwdevconfig *)
-		    malloc(sizeof(struct om_hwdevconfig), M_DEVBUF, M_WAITOK);
+	} else {
+		sc->sc_dc = malloc(sizeof(struct om_hwdevconfig),
+		    M_DEVBUF, M_WAITOK | M_ZERO);
 		omfb_getdevconfig(OMFB_FB_WADDR, sc->sc_dc);
 	}
-	printf(": %d x %d, %dbpp\n", sc->sc_dc->dc_wid, sc->sc_dc->dc_ht,
+	aprint_normal(": %d x %d, %dbpp\n", sc->sc_dc->dc_wid, sc->sc_dc->dc_ht,
 	    sc->sc_dc->dc_depth);
 
-#if 0	/* WHITE on BLACK */
-	cm = &sc->sc_cmap;
-	memset(cm, 255, sizeof(struct hwcmap));
-	cm->r[0] = cm->g[0] = cm->b[0] = 0;
-#endif
+	/* WHITE on BLACK */
+	memset(&sc->sc_cmap, 255, sizeof(struct hwcmap));
+	sc->sc_cmap.r[0] = sc->sc_cmap.g[0] = sc->sc_cmap.b[0] = 0;
+
 	waa.console = omfb_console;
 	waa.scrdata = &omfb_screenlist;
 	waa.accessops = &omfb_accessops;
@@ -209,13 +204,14 @@ omfbattach(struct device *parent, struct device *self, void *args)
 omfb_cnattach(void)
 {
 	struct om_hwdevconfig *dc = &omfb_console_dc;
+	struct rasops_info *ri = &dc->dc_ri;
 	long defattr;
 
 	omfb_getdevconfig(OMFB_FB_WADDR, dc);
-	(*omfb_emulops.allocattr)(&dc->dc_rcons, 0, 0, 0, &defattr);
-	wsdisplay_cnattach(&omfb_stdscreen, &dc->dc_rcons, 0, 0, defattr);
+	(*ri->ri_ops.allocattr)(ri, 0, 0, 0, &defattr);
+	wsdisplay_cnattach(&omfb_stdscreen, ri, 0, 0, defattr);
 	omfb_console = 1;
-	return (0);
+	return 0;
 }
 
 static int
@@ -226,8 +222,8 @@ omfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 
 	switch (cmd) {
 	case WSDISPLAYIO_GTYPE:
-		*(u_int *)data = 0x19990927;
-		return (0);
+		*(u_int *)data = WSDISPLAY_TYPE_LUNA;
+		return 0;
 
 	case WSDISPLAYIO_GINFO:
 #define	wsd_fbip ((struct wsdisplay_fbinfo *)data)
@@ -236,7 +232,11 @@ omfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 		wsd_fbip->depth = dc->dc_depth;
 		wsd_fbip->cmsize = dc->dc_cmsize;
 #undef fbt
-		return (0);
+		return 0;
+
+	case WSDISPLAYIO_LINEBYTES:
+		*(u_int *)data = dc->dc_rowbytes;
+		return 0;
 
 	case WSDISPLAYIO_GETCMAP:
 		return omgetcmap(sc, (struct wsdisplay_cmap *)data);
@@ -253,7 +253,7 @@ omfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 	case WSDISPLAYIO_SCURSOR:
 		break;
 	}
-	return (EPASSTHROUGH);
+	return EPASSTHROUGH;
 }
 
 /*
@@ -264,10 +264,18 @@ static paddr_t
 omfbmmap(void *v, void *vs, off_t offset, int prot)
 {
 	struct omfb_softc *sc = v;
+	struct om_hwdevconfig *dc = sc->sc_dc;
+	paddr_t cookie = -1;
 
-	if (offset >= OMFB_SIZE || offset < 0)
-		return (-1);
-	return m68k_btop(m68k_trunc_page(sc->sc_dc->dc_videobase) + offset);
+#if 0	/* XXX: quick workaround to make X.Org mono server work */
+	if (offset >= 0 && offset < OMFB_SIZE)
+		cookie = m68k_btop(m68k_trunc_page(dc->dc_videobase) + offset);
+#else
+	if (offset >= 0 && offset < dc->dc_rowbytes * dc->dc_ht)
+		cookie = m68k_btop(m68k_trunc_page(OMFB_FB_RADDR) + offset);
+#endif
+
+	return cookie;
 }
 
 static int
@@ -278,7 +286,7 @@ omgetcmap(struct omfb_softc *sc, struct wsdisplay_cmap *p)
 
 	cmsize = sc->sc_dc->dc_cmsize;
 	if (index >= cmsize || count > cmsize - index)
-		return (EINVAL);
+		return EINVAL;
 
 	error = copyout(&sc->sc_cmap.r[index], p->red, count);
 	if (error)
@@ -317,33 +325,31 @@ omsetcmap(struct omfb_softc *sc, struct wsdisplay_cmap *p)
 	if (hwplanemask == 0x0f) {
 		struct bt454 *odac = (struct bt454 *)OMFB_RAMDAC;
 		odac->bt_addr = index;
-		for (i = index; i < count; i++) {
+		for (i = index; i < index + count; i++) {
 			odac->bt_cmap = sc->sc_cmap.r[i];
 			odac->bt_cmap = sc->sc_cmap.g[i];
 			odac->bt_cmap = sc->sc_cmap.b[i];
 		}
-	}
-	else if (hwplanemask == 0xff) {
+	} else if (hwplanemask == 0xff) {
 		struct bt458 *ndac = (struct bt458 *)OMFB_RAMDAC;
 		ndac->bt_addr = index;
-		for (i = index; i < count; i++) {
+		for (i = index; i < index + count; i++) {
 			ndac->bt_cmap = sc->sc_cmap.r[i];
 			ndac->bt_cmap = sc->sc_cmap.g[i];
 			ndac->bt_cmap = sc->sc_cmap.b[i];
 		}
 	}
-	return (0);
+	return 0;
 }
 
 static void
 omfb_getdevconfig(paddr_t paddr, struct om_hwdevconfig *dc)
 {
 	int bpp, i;
-	struct raster *rap;
-	struct rcons *rcp;
+	struct rasops_info *ri;
 	union {
 		struct { short h, v; } p;
-		u_int32_t u;
+		uint32_t u;
 	} rfcnt;
 
 	switch (hwplanemask) {
@@ -352,8 +358,15 @@ omfb_getdevconfig(paddr_t paddr, struct om_hwdevconfig *dc)
 		break;
 	default:
 	case 0x0f:
+#if 0
+		/*
+		 * XXX
+		 * experiment resulted in WHITE on SKYBLUE after Xorg server
+		 * touches pallete. Disable 4bpp for now.
+		 */
 		bpp = 4;	/* XXX check monochrome bit in DIPSW */
 		break;
+#endif
 	case 1:
 		bpp = 1;
 		break;
@@ -365,9 +378,9 @@ omfb_getdevconfig(paddr_t paddr, struct om_hwdevconfig *dc)
 	dc->dc_cmsize = (bpp == 1) ? 0 : 1 << bpp;
 	dc->dc_videobase = paddr;
 
-#if 0 /* WHITE on BLACK XXX experiment resulted in WHITE on SKYBLUE... */
+	/* WHITE on BLACK */
 	if (hwplanemask == 0x0f) {
-		/* XXX Need Bt454 initialization */
+		/* XXX Need Bt454 more initialization */
 		struct bt454 *odac = (struct bt454 *)OMFB_RAMDAC;
 		odac->bt_addr = 0;
 		odac->bt_cmap = 0;
@@ -378,8 +391,7 @@ omfb_getdevconfig(paddr_t paddr, struct om_hwdevconfig *dc)
 			odac->bt_cmap = 255;
 			odac->bt_cmap = 255;
 		}
-	}
-	else if (hwplanemask == 0xff) {
+	} else if (hwplanemask == 0xff) {
 		struct bt458 *ndac = (struct bt458 *)OMFB_RAMDAC;
 
 		ndac->bt_addr = 0x04;
@@ -397,56 +409,57 @@ omfb_getdevconfig(paddr_t paddr, struct om_hwdevconfig *dc)
 			ndac->bt_cmap = 255;
 		}
 	}
-#endif
 
-	/* adjust h/v orgin on screen */
+	/* adjust h/v origin on screen */
 	rfcnt.p.h = 7;
 	rfcnt.p.v = -27;
-	*(u_int32_t *)OMFB_RFCNT = rfcnt.u; /* single write of 0x007ffe6 */
+	/* single write of 0x007ffe6 */
+	*(volatile uint32_t *)OMFB_RFCNT = rfcnt.u;
 
 	/* clear the screen */
-	*(u_int32_t *)OMFB_PLANEMASK = 0xff;
-	((u_int32_t *)OMFB_ROPFUNC)[5] = ~0;	/* ROP copy */
-	for (i = 0; i < dc->dc_ht * dc->dc_rowbytes/sizeof(u_int32_t); i++)
-		*((u_int32_t *)dc->dc_videobase + i) = 0;
-	*(u_int32_t *)OMFB_PLANEMASK = 0x01;
+	*(volatile uint32_t *)OMFB_PLANEMASK = 0xff;
+	((volatile uint32_t *)OMFB_ROPFUNC)[5] = ~0;	/* ROP copy */
+	for (i = 0; i < dc->dc_ht * dc->dc_rowbytes / sizeof(uint32_t); i++)
+		*((volatile uint32_t *)dc->dc_videobase + i) = 0;
+	*(volatile uint32_t *)OMFB_PLANEMASK = 0x01;
 
 	/* initialize the raster */
-	rap = &dc->dc_raster;
-	rap->width = dc->dc_wid;
-	rap->height = dc->dc_ht;
-	rap->depth = dc->dc_depth;
-	rap->linelongs = dc->dc_rowbytes / sizeof(u_int32_t);
-	rap->pixels = (u_int32_t *)dc->dc_videobase;
+	ri = &dc->dc_ri;
+	ri->ri_width = dc->dc_wid;
+	ri->ri_height = dc->dc_ht;
+	ri->ri_depth = 1;       /* since planes are independently addressed */
+	ri->ri_stride = dc->dc_rowbytes;
+	ri->ri_bits = (void *)dc->dc_videobase;
+	ri->ri_flg = RI_CENTER;
+	if (dc == &omfb_console_dc)
+		ri->ri_flg |= RI_NO_AUTO;
+	ri->ri_hw = dc;
 
-	/* initialize the raster console blitter */
-	rcp = &dc->dc_rcons;
-	rcp->rc_sp = rap;
-	rcp->rc_crow = rcp->rc_ccol = -1;
-	rcp->rc_crowp = &rcp->rc_crow;
-	rcp->rc_ccolp = &rcp->rc_ccol;
-	rcons_init(rcp, 34, 80);
+	omrasops_init(ri, 34, 80);
 
-	omfb_stdscreen.nrows = dc->dc_rcons.rc_maxrow;
-	omfb_stdscreen.ncols = dc->dc_rcons.rc_maxcol;
+	omfb_stdscreen.nrows = ri->ri_rows;
+	omfb_stdscreen.ncols = ri->ri_cols;
+	omfb_stdscreen.textops = &ri->ri_ops;
+	omfb_stdscreen.fontwidth = ri->ri_font->fontwidth;
+	omfb_stdscreen.fontheight = ri->ri_font->fontheight;
 }
 
 static int
-omfb_alloc_screen(void *v, const struct wsscreen_descr *type, void **cookiep, int *curxp, int *curyp, long *attrp)
+omfb_alloc_screen(void *v, const struct wsscreen_descr *type, void **cookiep,
+    int *curxp, int *curyp, long *attrp)
 {
 	struct omfb_softc *sc = v;
-	long defattr;
+	struct rasops_info *ri = &sc->sc_dc->dc_ri;
 
 	if (sc->nscreens > 0)
-		return (ENOMEM);
+		return ENOMEM;
 
-	*cookiep = &sc->sc_dc->dc_rcons; /* one and only for now */
+	*cookiep = ri;
 	*curxp = 0;
 	*curyp = 0;
-	(*omfb_emulops.allocattr)(&sc->sc_dc->dc_rcons, 0, 0, 0, &defattr);
-	*attrp = defattr;
+	(*ri->ri_ops.allocattr)(ri, 0, 0, 0, attrp);
 	sc->nscreens++;
-	return (0);
+	return 0;
 }
 
 static void
@@ -461,7 +474,9 @@ omfb_free_screen(void *v, void *cookie)
 }
 
 static int
-omfb_show_screen(void *v, void *cookie, int waitok, void (*cb)(void *, int, int), void *cbarg)
+omfb_show_screen(void *v, void *cookie, int waitok,
+    void (*cb)(void *, int, int), void *cbarg)
 {
+
 	return 0;
 }

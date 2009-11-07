@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.210 2009/11/04 21:23:02 rmind Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.219 2011/10/14 09:23:28 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.210 2009/11/04 21:23:02 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.219 2011/10/14 09:23:28 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -107,8 +107,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.210 2009/11/04 21:23:02 rmind Exp $
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_sem.h>
 
-#include <compat/linux/linux_syscallargs.h>
-
 #include <compat/linux/common/linux_fcntl.h>
 #include <compat/linux/common/linux_mmap.h>
 #include <compat/linux/common/linux_dirent.h>
@@ -121,6 +119,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.210 2009/11/04 21:23:02 rmind Exp $
 #include <compat/linux/common/linux_ptrace.h>
 #include <compat/linux/common/linux_reboot.h>
 #include <compat/linux/common/linux_emuldata.h>
+
+#include <compat/linux/linux_syscallargs.h>
 
 #ifndef COMPAT_LINUX32
 const int linux_ptrace_request_map[] = {
@@ -147,7 +147,6 @@ const struct linux_mnttypes linux_fstypes[] = {
 	{ MOUNT_MSDOS,		LINUX_MSDOS_SUPER_MAGIC		},
 	{ MOUNT_LFS,		LINUX_DEFAULT_SUPER_MAGIC	},
 	{ MOUNT_FDESC,		LINUX_DEFAULT_SUPER_MAGIC	},
-	{ MOUNT_PORTAL,		LINUX_DEFAULT_SUPER_MAGIC	},
 	{ MOUNT_NULL,		LINUX_DEFAULT_SUPER_MAGIC	},
 	{ MOUNT_OVERLAY,	LINUX_DEFAULT_SUPER_MAGIC	},
 	{ MOUNT_UMAP,		LINUX_DEFAULT_SUPER_MAGIC	},
@@ -271,8 +270,7 @@ linux_sys_wait4(struct lwp *l, const struct linux_sys_wait4_args *uap, register_
 }
 
 /*
- * Linux brk(2). The check if the new address is >= the old one is
- * done in the kernel in Linux. NetBSD does it in the library.
+ * Linux brk(2).  Like native, but always return the new break value.
  */
 int
 linux_sys_brk(struct lwp *l, const struct linux_sys_brk_args *uap, register_t *retval)
@@ -281,20 +279,13 @@ linux_sys_brk(struct lwp *l, const struct linux_sys_brk_args *uap, register_t *r
 		syscallarg(char *) nsize;
 	} */
 	struct proc *p = l->l_proc;
-	char *nbrk = SCARG(uap, nsize);
-	struct sys_obreak_args oba;
 	struct vmspace *vm = p->p_vmspace;
-	struct linux_emuldata *ed = (struct linux_emuldata*)p->p_emuldata;
+	struct sys_obreak_args oba;
 
-	SCARG(&oba, nsize) = nbrk;
+	SCARG(&oba, nsize) = SCARG(uap, nsize);
 
-	if ((void *) nbrk > vm->vm_daddr && sys_obreak(l, &oba, retval) == 0)
-		ed->s->p_break = (char*)nbrk;
-	else
-		nbrk = ed->s->p_break;
-
-	retval[0] = (register_t)nbrk;
-
+	(void) sys_obreak(l, &oba, retval);
+	retval[0] = (register_t)((char *)vm->vm_daddr + ptoa(vm->vm_dsize));
 	return 0;
 }
 
@@ -705,7 +696,10 @@ linux_sys_getdents(struct lwp *l, const struct linux_sys_getdents_args *uap, reg
 		goto out1;
 	}
 
-	if ((error = VOP_GETATTR(vp, &va, l->l_cred)))
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error)
 		goto out1;
 
 	nbytes = SCARG(uap, count);
@@ -788,6 +782,7 @@ again:
 			idb.d_reclen = (u_short)linux_reclen;
 		}
 		strcpy(idb.d_name, bdp->d_name);
+		idb.d_name[strlen(idb.d_name) + 1] = bdp->d_type;
 		if ((error = copyout((void *)&idb, outp, linux_reclen)))
 			goto out;
 		/* advance past this real entry */
@@ -804,8 +799,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG(uap, dent))
+	if (outp == (void *)SCARG(uap, dent)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 	if (oldcall)
@@ -814,7 +813,7 @@ again:
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
@@ -851,7 +850,8 @@ linux_sys_select(struct lwp *l, const struct linux_sys_select_args *uap, registe
  * 2) select never returns ERESTART on Linux, always return EINTR
  */
 int
-linux_select1(struct lwp *l, register_t *retval, int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct linux_timeval *timeout)
+linux_select1(struct lwp *l, register_t *retval, int nfds, fd_set *readfds,
+    fd_set *writefds, fd_set *exceptfds, struct linux_timeval *timeout)
 {
 	struct timespec ts0, ts1, uts, *ts = NULL;
 	struct linux_timeval ltv;
@@ -884,8 +884,7 @@ linux_select1(struct lwp *l, register_t *retval, int nfds, fd_set *readfds, fd_s
 		nanotime(&ts0);
 	}
 
-	error = selcommon(l, retval, nfds, readfds, writefds, exceptfds,
-	    ts, NULL);
+	error = selcommon(retval, nfds, readfds, writefds, exceptfds, ts, NULL);
 
 	if (error) {
 		/*
@@ -931,18 +930,29 @@ int
 linux_sys_personality(struct lwp *l, const struct linux_sys_personality_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(int) per;
+		syscallarg(unsigned long) per;
 	} */
+	struct linux_emuldata *led;
+	int per;
 
-	switch (SCARG(uap, per)) {
+	per = SCARG(uap, per);
+	led = l->l_emuldata;
+	if (per == LINUX_PER_QUERY) {
+		retval[0] = led->led_personality;
+		return 0;
+	}
+	 
+	switch (per & LINUX_PER_MASK) {
 	case LINUX_PER_LINUX:
-	case LINUX_PER_QUERY:
+	case LINUX_PER_LINUX32:
+		led->led_personality = per;
 		break;
+
 	default:
 		return EINVAL;
 	}
 
-	retval[0] = LINUX_PER_LINUX;
+	retval[0] = per;
 	return 0;
 }
 
@@ -1330,5 +1340,4 @@ linux_sys_getpriority(struct lwp *l, const struct linux_sys_getpriority_args *ua
 
         return 0;
 }
-
 #endif /* !COMPAT_LINUX32 */

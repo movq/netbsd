@@ -1,4 +1,4 @@
-/*	$NetBSD: printnat.c,v 1.3 2009/08/19 08:35:32 darrenr Exp $	*/
+/*	$NetBSD: printnat.c,v 1.5 2012/02/15 17:55:07 riz Exp $	*/
 
 /*
  * Copyright (C) 2002-2005 by Darren Reed.

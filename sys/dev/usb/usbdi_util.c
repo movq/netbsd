@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi_util.c,v 1.52 2009/08/16 13:20:40 martin Exp $	*/
+/*	$NetBSD: usbdi_util.c,v 1.55 2010/11/03 22:34:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.52 2009/08/16 13:20:40 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.55 2010/11/03 22:34:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,8 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.52 2009/08/16 13:20:40 martin Exp $
 #include <dev/usb/usbdi_util.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 extern int usbdebug;
 #else
 #define DPRINTF(x)
@@ -68,8 +68,7 @@ usbd_get_desc(usbd_device_handle dev, int type, int index, int len, void *desc)
 	USETW2(req.wValue, type, index);
 	USETW(req.wIndex, 0);
 	USETW(req.wLength, len);
-	return (usbd_do_request_flags(dev, &req, desc, 0, 0,
-	    USBD_CONFIG_TIMEOUT));
+	return (usbd_do_request(dev, &req, desc));
 }
 
 usbd_status
@@ -373,7 +372,7 @@ usbd_get_hid_descriptor(usbd_interface_handle ifc)
 
 usbd_status
 usbd_read_report_desc(usbd_interface_handle ifc, void **descp, int *sizep,
-		       usb_malloc_type mem)
+		       struct malloc_type * mem)
 {
 	usb_interface_descriptor_t *id;
 	usb_hid_descriptor_t *hid;
@@ -440,7 +439,7 @@ usbd_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 		splx(s);
 		return (err);
 	}
-	error = tsleep((void *)xfer, PZERO | PCATCH, lbl, 0);
+	error = tsleep(xfer, PZERO | PCATCH, lbl, 0);
 	splx(s);
 	if (error) {
 		DPRINTF(("usbd_bulk_transfer: tsleep=%d\n", error));
@@ -499,19 +498,19 @@ usbd_intr_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 }
 
 void
-usb_detach_wait(device_ptr_t dv)
+usb_detach_wait(device_t dv)
 {
-	DPRINTF(("usb_detach_wait: waiting for %s\n", USBDEVPTRNAME(dv)));
+	DPRINTF(("usb_detach_wait: waiting for %s\n", device_xname(dv)));
 	if (tsleep(dv, PZERO, "usbdet", hz * 60))
 		printf("usb_detach_wait: %s didn't detach\n",
-		        USBDEVPTRNAME(dv));
-	DPRINTF(("usb_detach_wait: %s done\n", USBDEVPTRNAME(dv)));
+		        device_xname(dv));
+	DPRINTF(("usb_detach_wait: %s done\n", device_xname(dv)));
 }
 
 void
-usb_detach_wakeup(device_ptr_t dv)
+usb_detach_wakeup(device_t dv)
 {
-	DPRINTF(("usb_detach_wakeup: for %s\n", USBDEVPTRNAME(dv)));
+	DPRINTF(("usb_detach_wakeup: for %s\n", device_xname(dv)));
 	wakeup(dv);
 }
 
@@ -539,6 +538,9 @@ usb_find_desc_if(usbd_device_handle dev, int type, int subtype,
 {
 	usbd_desc_iter_t iter;
 	const usb_cdc_descriptor_t *desc;
+
+	if (id == NULL)
+		return usb_find_desc(dev, type, subtype);
 
 	usb_desc_iter_init(dev, &iter);
 

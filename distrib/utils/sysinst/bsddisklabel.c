@@ -1,4 +1,4 @@
-/*	$NetBSD: bsddisklabel.c,v 1.53 2009/10/18 12:09:48 ahoka Exp $	*/
+/*	$NetBSD: bsddisklabel.c,v 1.56 2011/05/30 14:20:48 joerg Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -156,12 +152,12 @@ set_ptn_titles(menudesc *m, int opt, void *arg)
 
 	p = &pi->ptn_sizes[opt];
 	if (p->mount[0] == 0) {
-		wprintw(m->mw, msg_string(MSG_add_another_ptn));
+		wprintw(m->mw, "%s", msg_string(MSG_add_another_ptn));
 		return;
 	}
 	size = p->size;
 	if (p == pi->pool_part)
-		snprintf(inc_free, sizeof inc_free, "(%" PRIi64 ")", 
+		snprintf(inc_free, sizeof inc_free, "(%" PRIi64 ")",
 		    (size + pi->free_space) / sm);
 	else
 		inc_free[0] = 0;
@@ -359,9 +355,9 @@ get_ptn_sizes(daddr_t part_start, daddr_t sectors, int no_swap)
 	 	  DEFSWAPSIZE,	DEFSWAPSIZE, 0, 0 },
 		{ PART_TMP_RAMDISK,
 #ifdef HAVE_TMPFS
-		  { 't', 'm', 'p', ' ', '(', 't', 'm', 'p', 'f', 's', ')', '\0' },
+		  { '/', 't', 'm', 'p', ' ', '(', 't', 'm', 'p', 'f', 's', ')', '\0' },
 #else
-		  { 't', 'm', 'p', ' ', '(', 'm', 'f', 's', ')', '\0' },
+		  { '/', 't', 'm', 'p', ' ', '(', 'm', 'f', 's', ')', '\0' },
 #endif
 		  64, 0, 0, 0 },
 #define PI_USR 3
@@ -394,7 +390,7 @@ get_ptn_sizes(daddr_t part_start, daddr_t sectors, int no_swap)
 			    pi.ptn_sizes[PI_SWAP].dflt_size;
 #endif
 		}
-			
+
 		/* If installing X increase default size of /usr */
 		if (set_X11_selected())
 			pi.ptn_sizes[PI_USR].dflt_size += XNEEDMB;
@@ -688,7 +684,7 @@ make_bsd_partitions(void)
 				}
 			}
 		} else {
-			if (p->pi_offset < ptstart + ptsize &&			
+			if (p->pi_offset < ptstart + ptsize &&
 			    p->pi_offset + p->pi_size > ptstart)
 				/* Not outside area we are allocating */
 				continue;

@@ -1,7 +1,24 @@
-#	$NetBSD: Makefile,v 1.3 2004/05/16 09:53:09 lukem Exp $
+#	$NetBSD: Makefile,v 1.5 2011/08/22 20:48:38 jym Exp $
 
-CONFIGFILES=	daily.conf monthly.conf rc.conf security.conf weekly.conf
+.include <bsd.own.mk>
+
+CONFIGFILES=	daily.conf monthly.conf security.conf weekly.conf
 FILESDIR=	/etc/defaults
 FILESMODE=	${NONBINMODE}
+
+# Manage arch-specific rc.conf(5) file
+CONFIGFILES+=	rc_conf
+FILESNAME_rc_conf=	rc.conf
+FILESBUILD_rc_conf=	yes
+
+# If present, rc.conf.append is added to the end of the default rc.conf file
+RCCONF_SRCS=	${.CURDIR}/rc.conf
+.if exists(../etc.${MACHINE}/rc.conf.append)
+RCCONF_SRCS+=	${.CURDIR}/../etc.${MACHINE}/rc.conf.append
+.endif
+
+rc_conf: ${RCCONF_SRCS}
+	${_MKTARGET_CREATE}
+	${TOOL_CAT} ${RCCONF_SRCS} > ${.TARGET}
 
 .include <bsd.prog.mk>

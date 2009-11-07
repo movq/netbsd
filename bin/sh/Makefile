@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.86 2009/10/29 14:21:40 christos Exp $
+#	$NetBSD: Makefile,v 1.98 2011/08/23 10:47:06 christos Exp $
 #	@(#)Makefile	8.4 (Berkeley) 5/5/95
 
 .include <bsd.own.mk>
@@ -15,11 +15,10 @@ SRCS=	${SHSRCS} ${GENSRCS}
 
 DPSRCS+=${GENHDRS}
 
-LDADD+=	-ll -ledit -ltermcap
-DPADD+=	${LIBL} ${LIBEDIT} ${LIBTERMCAP}
+LDADD+=	-ll -ledit -lterminfo
+DPADD+=	${LIBL} ${LIBEDIT} ${LIBTERMINFO}
 
 LFLAGS=	-8	# 8-bit lex scanner for arithmetic
-YFLAGS=	-d
 
 # Environment for scripts executed during build.
 SCRIPT_ENV= \
@@ -36,7 +35,8 @@ YFLAGS+=-l
 
 CPPFLAGS+=-DSHELL -I. -I${.CURDIR}
 #XXX: For testing only.
-#CPPFLAGS+=-DDEBUG=1
+#CPPFLAGS+=-DDEBUG=2
+#COPTS+=-g
 #CFLAGS+=-funsigned-char
 #TARGET_CHARFLAG?= -DTARGET_CHAR="unsigned char" -funsigned-char
 
@@ -57,10 +57,8 @@ token.h: mktokens
 	${_MKTARGET_CREATE}
 	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC}
 
-builtins.h: builtins.c
-	${_MKTARGET_CREATE}
-
-builtins.c: mkbuiltins shell.h builtins.def
+.ORDER: builtins.h builtins.c
+builtins.h builtins.c: mkbuiltins shell.h builtins.def
 	${_MKTARGET_CREATE}
 	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC} ${.OBJDIR}
 	[ -f builtins.h ]
@@ -69,9 +67,8 @@ init.c: mkinit.sh ${SHSRCS}
 	${_MKTARGET_CREATE}
 	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC}
 
-nodes.h: nodes.c
-
-nodes.c: mknodes.sh nodetypes nodes.c.pat
+.ORDER: nodes.h nodes.c
+nodes.c nodes.h: mknodes.sh nodetypes nodes.c.pat
 	${_MKTARGET_CREATE}
 	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC} ${.OBJDIR}
 	[ -f nodes.h ]
@@ -81,4 +78,12 @@ COMPATOBJDIR!=	cd ${NETBSDSRCDIR}/tools/compat && ${PRINTOBJDIR}
 NBCOMPATLIB=	-L${COMPATOBJDIR} -lnbcompat
 .endif
 
+.if make(install)
+SUBDIR+=USD.doc
+.endif
+
+COPTS.printf.c = -Wno-format-nonliteral
+COPTS.jobs.c = -Wno-format-nonliteral
+
 .include <bsd.prog.mk>
+.include <bsd.subdir.mk>

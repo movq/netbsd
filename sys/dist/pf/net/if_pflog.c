@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pflog.c,v 1.15 2009/07/28 18:15:26 minskim Exp $	*/
+/*	$NetBSD: if_pflog.c,v 1.18 2010/04/12 13:57:38 ahoka Exp $	*/
 /*	$OpenBSD: if_pflog.c,v 1.24 2007/05/26 17:13:30 jason Exp $	*/
 
 /*
@@ -36,13 +36,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pflog.c,v 1.15 2009/07/28 18:15:26 minskim Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pflog.c,v 1.18 2010/04/12 13:57:38 ahoka Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #endif
 
-#include "bpfilter.h"
 #include "pflog.h"
 
 #include <sys/param.h>
@@ -83,6 +82,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_pflog.c,v 1.15 2009/07/28 18:15:26 minskim Exp $"
 #endif
 
 void	pflogattach(int);
+#ifdef _MODULE
+void	pflogdetach(void);
+#endif /* _MODULE */
 int	pflogoutput(struct ifnet *, struct mbuf *, const struct sockaddr *,
 	    	       struct rtentry *);
 int	pflogioctl(struct ifnet *, u_long, void *);
@@ -106,6 +108,20 @@ pflogattach(int npflog)
 		pflogifs[i] = NULL;
 	if_clone_attach(&pflog_cloner);
 }
+
+#ifdef _MODULE
+void
+pflogdetach(void)
+{
+	int i;
+
+	for (i = 0; i < PFLOGIFS_MAX; i++) {
+		if (pflogifs[i] != NULL)
+			pflog_clone_destroy(pflogifs[i]);
+	}
+	if_clone_detach(&pflog_cloner);
+}
+#endif /* _MODULE */
 
 int
 pflog_clone_create(struct if_clone *ifc, int unit)
@@ -136,13 +152,11 @@ pflog_clone_create(struct if_clone *ifc, int unit)
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 
-#if NBPFILTER > 0
 #ifdef __NetBSD__
-	bpfattach(ifp, DLT_PFLOG, PFLOG_HDRLEN);
+	bpf_attach(ifp, DLT_PFLOG, PFLOG_HDRLEN);
 #else
 	bpfattach(&pflogif->sc_if.if_bpf, ifp, DLT_PFLOG, PFLOG_HDRLEN);
 #endif /* !__NetBSD__ */
-#endif
 
 	s = splnet();
 	LIST_INSERT_HEAD(&pflogif_list, pflogif, sc_list);
@@ -163,9 +177,7 @@ pflog_clone_destroy(struct ifnet *ifp)
 	LIST_REMOVE(pflogif, sc_list);
 	splx(s);
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	free(pflogif, M_DEVBUF);
 	return (0);
@@ -232,7 +244,6 @@ pflog_packet(struct pfi_kif *kif, struct mbuf *m, sa_family_t af, u_int8_t dir,
     u_int8_t reason, struct pf_rule *rm, struct pf_rule *am,
     struct pf_ruleset *ruleset, struct pf_pdesc *pd)
 {
-#if NBPFILTER > 0
 	struct ifnet *ifn;
 	struct pfloghdr hdr;
 
@@ -292,7 +303,6 @@ pflog_packet(struct pfi_kif *kif, struct mbuf *m, sa_family_t af, u_int8_t dir,
 	    BPF_DIRECTION_OUT);
 #endif /* !__NetBSD__ */
 
-#endif
 
 	return (0);
 }

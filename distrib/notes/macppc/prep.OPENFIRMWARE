@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep.OPENFIRMWARE,v 1.13 2009/04/25 21:21:49 snj Exp $
+.\"	$NetBSD: prep.OPENFIRMWARE,v 1.15 2012/01/14 22:56:30 jmcneill Exp $
 .if \*[OF_VERSION_3] \{\
 .
 .Ss2 Updating your BootROM
@@ -1175,7 +1175,7 @@ system to boot the installer
 Go to one of the
 .Nx
 mirror sites and download the CD-R image
-.Pa macppccd-\*V.iso
+.Pa NetBSD-\*V-macppc.iso
 from the
 .Pa pub/NetBSD/iso
 directory.
@@ -1196,7 +1196,7 @@ systems should get it from the official website:
 .Lk http://www.fokus.gmd.de/research/cc/glone/employees/joerg.schilling/private/cdrecord.html
 .Pp
 .(disp
-.No # Ic "cdrecord -v speed=4 dev=/dev/cd1c macppccd-\*V.iso"
+.No # Ic "cdrecord -v speed=4 dev=/dev/cd1c NetBSD-\*V-macppc.iso"
 .disp)
 .Pp
 You will need to substitute the correct name of the disk image file,
@@ -1268,7 +1268,7 @@ program from the
 distribution or
 .Ic rawrite32.exe
 from
-.Lk http://www.duskware.com/rawrite32/
+.Lk http://www.NetBSD.org/~martin/rawrite32/
 .Pp
 .It
 .Em "From a MacOS 9 (or earlier) machine"
@@ -1535,7 +1535,7 @@ CD-R image is compressed, then you will need to uncompress it first.
 .Pp
 Find a spare bootable drive (i.e. SCSI or IDE), and use some tool to write
 the disk image
-.Pa macppccd-\*V.iso
+.Pa NetBSD-\*V-macppc.iso
 to your spare drive, and boot from that drive.
 For example, you could use a Zip drive, a Jaz drive,
 a Compact Flash drive, or even a spare hard drive.
@@ -1556,7 +1556,7 @@ loads the installation kernel from the ISO file system on the disk image.
 .Em From an UNIX-like machine (including MacOS X)
 .Pp
 .(disp
-.No # Ic "dd if=macppccd-\*V.iso of=/dev/rsd0c"
+.No # Ic "dd if=NetBSD-\*V-macppc.iso of=/dev/rsd0c"
 .disp)
 .Pp
 where
@@ -1572,7 +1572,7 @@ Be certain you have typed this correctly, as it will erase the disk.
 Get
 .Ic rawrite32.exe
 from
-.Lk http://www.duskware.com/rawrite32/
+.Lk http://www.NetBSD.org/~martin/rawrite32/
 .Pp
 Be certain you have selected the correct disk, as it will erase the
 contents.
@@ -1616,7 +1616,7 @@ Hit return (i.e. start at sector number zero)
 .Pp
 .It
 Select
-.Pa macppccd-\*V.iso
+.Pa NetBSD-\*V-macppc.iso
 and click
 .Dq Open
 .Pp

@@ -1,4 +1,4 @@
-/*	$NetBSD: zusb.c,v 1.4 2009/01/29 12:28:15 nonaka Exp $	*/
+/*	$NetBSD: zusb.c,v 1.6 2011/07/19 15:11:49 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2008 Christopher Gilbert
@@ -27,18 +27,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zusb.c,v 1.4 2009/01/29 12:28:15 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zusb.c,v 1.6 2011/07/19 15:11:49 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0var.h>
 #include <arm/xscale/pxa2x0_gpio.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
 
 #include <zaurus/zaurus/zaurus_reg.h>
 #include <zaurus/zaurus/zaurus_var.h>
@@ -75,7 +75,7 @@ static int
 zusb_match(device_t parent, cfdata_t cf, void *aux)
 {
 
-	if (ZAURUS_ISC3000)
+	if (ZAURUS_ISC1000 || ZAURUS_ISC3000)
 		return 1;
 	return 0;
 }

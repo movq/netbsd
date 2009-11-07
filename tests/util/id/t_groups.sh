@@ -1,4 +1,4 @@
-# $NetBSD: t_groups.sh,v 1.4 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_groups.sh,v 1.6 2010/11/07 17:51:23 jmmv Exp $
 #
 # Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.

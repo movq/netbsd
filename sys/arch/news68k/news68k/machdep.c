@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.82 2009/11/07 07:27:45 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.98 2011/12/12 19:03:11 mrg Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,48 +37,9 @@
  *
  *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.74 92/12/20$
- *
- *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.82 2009/11/07 07:27:45 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.98 2011/12/12 19:03:11 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -96,12 +58,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.82 2009/11/07 07:27:45 cegger Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/tty.h>
-#include <sys/user.h>
 #include <sys/exec.h>
 #include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -115,12 +77,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.82 2009/11/07 07:27:45 cegger Exp $");
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/pte.h>
 #include <machine/intr.h>
 
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #define MAXMEM	64*1024		/* XXX - from cmap.h */
 #include <uvm/uvm_extern.h>
@@ -135,6 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.82 2009/11/07 07:27:45 cegger Exp $");
 #include "ms.h"
 #include "si.h"
 #include "ksyms.h"
+#include "romcons.h"
 /* XXX etc. etc. */
 
 /* the following is used externally (sysctl_hw) */
@@ -143,7 +108,6 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
@@ -224,8 +188,6 @@ news68k_init(void)
 		panic("impossible system type");
 	}
 
-	isrinit();
-
 	/*
 	 * Initialize error message buffer (at end of core).
 	 * avail_end was pre-decremented in pmap_bootstrap to compensate.
@@ -277,12 +239,6 @@ cpu_startup(void)
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 	    VM_PHYS_SIZE, 0, false, NULL);
 
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
-
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
@@ -293,39 +249,6 @@ cpu_startup(void)
 	 * Set up CPU-specific registers, cache, etc.
 	 */
 	initcpu();
-}
-
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype != FPU_NONE)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
 }
 
 /*
@@ -352,16 +275,16 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "machdep", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_MACHDEP, CTL_EOL);
+	    CTLFLAG_PERMANENT,
+	    CTLTYPE_NODE, "machdep", NULL,
+	    NULL, 0, NULL, 0,
+	    CTL_MACHDEP, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "console_device", NULL,
-		       sysctl_consdev, 0, NULL, sizeof(dev_t),
-		       CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
+	    CTLFLAG_PERMANENT,
+	    CTLTYPE_STRUCT, "console_device", NULL,
+	    sysctl_consdev, 0, NULL, sizeof(dev_t),
+	    CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
 }
 
 int	waittime = -1;
@@ -369,10 +292,11 @@ int	waittime = -1;
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* If system is cold, just halt. */
 	if (cold) {
@@ -548,20 +472,12 @@ long	dumplo = 0;		/* blocks */
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int chdrsize;	/* size of dump header */
 	int nblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		return;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	if (bdev->d_psize == NULL)
-		return;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	chdrsize = cpu_dumpsize();
 
 	dumpsize = btoc(cpu_kcore_hdr.un._m68k.ram_segs[0].size);
@@ -758,7 +674,7 @@ badbaddr(void *addr)
 /*
  * cpu_exec_aout_makecmds():
  *	CPU-dependent a.out format hook for execve().
- * 
+ *
  * Determine of the given exec package refers to something which we
  * understand and, if so, set up the vmcmds for it.
  *
@@ -872,15 +788,15 @@ news1700_init(void)
 	uint8_t *q;
 	u_int i;
 
-	dip_switch	= (uint8_t *)IIOV(0xe1c00100);
-	int_status	= (uint8_t *)IIOV(0xe1c00200);
+	dip_switch	= (uint8_t *)(0xe1c00100);
+	int_status	= (uint8_t *)(0xe1c00200);
 
-	idrom_addr	= (uint8_t *)IIOV(0xe1c00000);
-	ctrl_ast	= (uint8_t *)IIOV(0xe1280000);
-	ctrl_int2	= (uint8_t *)IIOV(0xe1180000);
-	ctrl_led	= (uint8_t *)IIOV(ctrl_led_phys);
+	idrom_addr	= (uint8_t *)(0xe1c00000);
+	ctrl_ast	= (uint8_t *)(0xe1280000);
+	ctrl_int2	= (uint8_t *)(0xe1180000);
+	ctrl_led	= (uint8_t *)(ctrl_led_phys);
 
-	sccport0a	= IIOV(0xe0d40002);
+	sccport0a	= (0xe0d40002);
 	lance_mem_phys	= 0xe0e00000;
 
 	p = idrom_addr;
@@ -901,9 +817,9 @@ news1700_init(void)
 	strcat(cpu_model, t);
 	news_machine_id = (idrom.id_serial[0] << 8) + idrom.id_serial[1];
 
-	ctrl_parity	= (uint8_t *)IIOV(0xe1080000);
-	ctrl_parity_clr	= (uint8_t *)IIOV(0xe1a00000);
-	parity_vector	= (uint8_t *)IIOV(0xe1c00200);
+	ctrl_parity	= (uint8_t *)(0xe1080000);
+	ctrl_parity_clr	= (uint8_t *)(0xe1a00000);
+	parity_vector	= (uint8_t *)(0xe1c00200);
 
 	parityenable();
 
@@ -964,15 +880,15 @@ news1200_init(void)
 	uint8_t *q;
 	int i;
 
-	dip_switch	= (uint8_t *)IIOV(0xe1680000);
-	int_status	= (uint8_t *)IIOV(0xe1200000);
+	dip_switch	= (uint8_t *)0xe1680000;
+	int_status	= (uint8_t *)0xe1200000;
 
-	idrom_addr	= (uint8_t *)IIOV(0xe1400000);
-	ctrl_ast	= (uint8_t *)IIOV(0xe1100000);
-	ctrl_int2	= (uint8_t *)IIOV(0xe10c0000);
-	ctrl_led	= (uint8_t *)IIOV(ctrl_led_phys);
+	idrom_addr	= (uint8_t *)0xe1400000;
+	ctrl_ast	= (uint8_t *)0xe1100000;
+	ctrl_int2	= (uint8_t *)0xe10c0000;
+	ctrl_led	= (uint8_t *)ctrl_led_phys;
 
-	sccport0a	= IIOV(0xe1780002);
+	sccport0a	= 0xe1780002;
 	lance_mem_phys	= 0xe1a00000;
 
 	p = idrom_addr;
@@ -1002,7 +918,7 @@ intrhand_lev3(void)
 
 	stat = *int_status;
 	intrcnt[3]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 #if 1
 	printf("level 3 interrupt: INT_STATUS = 0x%02x\n", stat);
 #endif
@@ -1021,7 +937,7 @@ intrhand_lev4(void)
 
 	stat = *int_status;
 	intrcnt[4]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 #if NSI > 0
 	if (stat & INTST_SCSI) {
@@ -1058,21 +974,27 @@ intrhand_lev4(void)
 #define SW_AUTOSEL	0x07
 
 struct consdev *cn_tab = NULL;
-extern struct consdev consdev_bm, consdev_zs;
+extern struct consdev consdev_rom, consdev_zs;
 
 int tty00_is_console = 0;
 
 void
 consinit(void)
 {
+	uint8_t dipsw;
 
-	int dipsw = *dip_switch;
+	dipsw = *dip_switch;
 
-	dipsw &= ~SW_CONSOLE;
+	dipsw = ~dipsw;
 
 	switch (dipsw & SW_CONSOLE) {
-	    default: /* XXX no fb support yet */
-	    case 0:
+	default: /* XXX no real fb support yet */
+#if NROMCONS > 0
+		cn_tab = &consdev_rom;
+		(*cn_tab->cn_init)(cn_tab);
+		break;
+#endif
+	case 0:
 		tty00_is_console = 1;
 		cn_tab = &consdev_zs;
 		(*cn_tab->cn_init)(cn_tab);
@@ -1080,10 +1002,35 @@ consinit(void)
 	}
 #if NKSYMS || defined(DDB) || defined(MODULAR)
 	ksyms_addsyms_elf((int)esym - (int)&end - sizeof(Elf32_Ehdr),
-		    (void *)&end, esym);
+	    (void *)&end, esym);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
 }
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return (pa < lowram || pa >= 0xfffffffc) ? EFAULT : 0;
+}
+
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+
+	*handled = false;
+	return ISIIOVA(ptr) ? EFAULT : 0;
+}
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

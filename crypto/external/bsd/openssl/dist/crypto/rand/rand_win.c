@@ -463,7 +463,7 @@ int RAND_poll(void)
 		PROCESSENTRY32 p;
 		THREADENTRY32 t;
 		MODULEENTRY32 m;
-		DWORD stoptime = 0;
+		DWORD starttime = 0;
 
 		snap = (CREATETOOLHELP32SNAPSHOT)
 			GetProcAddress(kernel, "CreateToolhelp32Snapshot");
@@ -496,7 +496,8 @@ int RAND_poll(void)
                          */
 			ZeroMemory(&hlist, sizeof(HEAPLIST32));
 			hlist.dwSize = sizeof(HEAPLIST32);		
-			if (good) stoptime = GetTickCount() + MAXDELAY;
+			if (good) starttime = GetTickCount();
+#ifdef _MSC_VER
 			if (heaplist_first(handle, &hlist))
 				{
 				/*
@@ -526,6 +527,7 @@ int RAND_poll(void)
 							RAND_add(&hentry,
 								hentry.dwSize, 5);
 						while (heap_next(&hentry)
+						&& (!good || (GetTickCount()-starttime)<MAXDELAY)
 							&& --entrycnt > 0);
 						}
 						}
@@ -535,9 +537,32 @@ int RAND_poll(void)
 							ex_cnt_limit--;
 						}
 					} while (heaplist_next(handle, &hlist) 
-						&& GetTickCount() < stoptime 
+						&& (!good || (GetTickCount()-starttime)<MAXDELAY)
 						&& ex_cnt_limit > 0);
 				}
+
+#else
+			if (heaplist_first(handle, &hlist))
+				{
+				do
+					{
+					RAND_add(&hlist, hlist.dwSize, 3);
+					hentry.dwSize = sizeof(HEAPENTRY32);
+					if (heap_first(&hentry,
+						hlist.th32ProcessID,
+						hlist.th32HeapID))
+						{
+						int entrycnt = 80;
+						do
+							RAND_add(&hentry,
+								hentry.dwSize, 5);
+						while (heap_next(&hentry)
+							&& --entrycnt > 0);
+						}
+					} while (heaplist_next(handle, &hlist) 
+						&& (!good || (GetTickCount()-starttime)<MAXDELAY));
+				}
+#endif
 
 			/* process walking */
                         /* PROCESSENTRY32 contains 9 fields that will change
@@ -546,11 +571,11 @@ int RAND_poll(void)
                          */
 			p.dwSize = sizeof(PROCESSENTRY32);
 		
-			if (good) stoptime = GetTickCount() + MAXDELAY;
+			if (good) starttime = GetTickCount();
 			if (process_first(handle, &p))
 				do
 					RAND_add(&p, p.dwSize, 9);
-				while (process_next(handle, &p) && GetTickCount() < stoptime);
+				while (process_next(handle, &p) && (!good || (GetTickCount()-starttime)<MAXDELAY));
 
 			/* thread walking */
                         /* THREADENTRY32 contains 6 fields that will change
@@ -558,11 +583,11 @@ int RAND_poll(void)
                          * 1 byte of entropy.
                          */
 			t.dwSize = sizeof(THREADENTRY32);
-			if (good) stoptime = GetTickCount() + MAXDELAY;
+			if (good) starttime = GetTickCount();
 			if (thread_first(handle, &t))
 				do
 					RAND_add(&t, t.dwSize, 6);
-				while (thread_next(handle, &t) && GetTickCount() < stoptime);
+				while (thread_next(handle, &t) && (!good || (GetTickCount()-starttime)<MAXDELAY));
 
 			/* module walking */
                         /* MODULEENTRY32 contains 9 fields that will change
@@ -570,12 +595,12 @@ int RAND_poll(void)
                          * 1 byte of entropy.
                          */
 			m.dwSize = sizeof(MODULEENTRY32);
-			if (good) stoptime = GetTickCount() + MAXDELAY;
+			if (good) starttime = GetTickCount();
 			if (module_first(handle, &m))
 				do
 					RAND_add(&m, m.dwSize, 9);
 				while (module_next(handle, &m)
-					       	&& (GetTickCount() < stoptime));
+					       	&& (!good || (GetTickCount()-starttime)<MAXDELAY));
 			if (close_snap)
 				close_snap(handle);
 			else
@@ -725,7 +750,7 @@ static void readscreen(void)
   int		y;		/* y-coordinate of screen lines to grab */
   int		n = 16;		/* number of screen lines to grab at a time */
 
-  if (GetVersion() >= 0x80000000 || !OPENSSL_isservice())
+  if (GetVersion() < 0x80000000 && OPENSSL_isservice()>0)
     return;
 
   /* Create a screen DC and a memory DC compatible to screen DC */

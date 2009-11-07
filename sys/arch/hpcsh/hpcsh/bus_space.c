@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.15 2008/04/28 20:23:22 martin Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.19 2012/01/27 18:52:57 para Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.15 2008/04/28 20:23:22 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.19 2012/01/27 18:52:57 para Exp $");
 
 #include "debug_hpcsh.h"
 
@@ -35,8 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.15 2008/04/28 20:23:22 martin Exp $"
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/extent.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* bus.h turn on BUS_SPACE_DEBUG if the global DEBUG option is enabled. */
 #ifdef	BUS_SPACE_DEBUG
@@ -44,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.15 2008/04/28 20:23:22 martin Exp $"
 #define DPRINTF_DEBUG	bus_space_debug
 #endif
 #include <machine/debug.h>
+
+#include <hpcsh/bus_util.h>
 
 #define _BUS_SPACE_ACCESS_HOOK()	((void)0)
 _BUS_SPACE_READ(_bus_space, 1, 8)
@@ -138,11 +139,13 @@ bus_space_tag_t
 bus_space_create(struct hpcsh_bus_space *hbs, const char *name,
 		 bus_addr_t addr, bus_size_t size)
 {
-	if (hbs == NULL)
-		hbs = malloc(sizeof(*hbs), M_DEVBUF, M_NOWAIT);
-	KASSERT(hbs);
 
-	memset(hbs, 0, sizeof(*hbs));
+	if (hbs == NULL) {
+		hbs = malloc(sizeof(*hbs), M_DEVBUF, M_NOWAIT | M_ZERO);
+		hbs->hbs_flags = HBS_FLAGS_ALLOCATED;
+	} else
+		memset(hbs, 0, sizeof(*hbs));
+	KASSERT(hbs);
 
 	/* set default method */
 	*hbs = __default_bus_space;
@@ -153,7 +156,7 @@ bus_space_create(struct hpcsh_bus_space *hbs, const char *name,
 		hbs->hbs_base_addr = addr; /* no extent */
 	} else {
 		hbs->hbs_extent = extent_create(name, addr, addr + size - 1,
-						M_DEVBUF, 0, 0, EX_NOWAIT);
+						0, 0, EX_NOWAIT);
 		if (hbs->hbs_extent == NULL) {
 			panic("%s:: unable to create bus_space for "
 			      "0x%08lx-%#lx", __func__, addr, size);
@@ -172,7 +175,8 @@ bus_space_destroy(bus_space_tag_t t)
 	if (ex != NULL)
 		extent_destroy(ex);
 
-	free(t, M_DEVBUF);
+	if (hbs->hbs_flags & HBS_FLAGS_ALLOCATED)
+		free(hbs, M_DEVBUF);
 }
 
 /* default bus_space tag */

@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.7 2007/11/16 07:36:11 skrll Exp $	*/
+/*	$NetBSD: proc.h,v 1.12 2011/06/05 16:52:25 matt Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -30,6 +30,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #ifndef _POWERPC_PROC_H_
 #define _POWERPC_PROC_H_
 
@@ -37,15 +38,25 @@
  * Machine-dependent part of the lwp structure
  */
 struct mdlwp {
-	int md_flags;
+	volatile int md_flags;
+	volatile int md_astpending;
+	struct trapframe *md_utf;		/* user trampframe */
 };
-#define MDP_USEDFP	0x0001	/* this process has used the FPU */
-#define	MDP_USEDVEC	0x0002	/* this process has used AltiVec */
+#define MDLWP_USEDFPU	__BIT(PCU_FPU)	/* this thread has used the FPU */
+#define	MDLWP_USEDVEC	__BIT(PCU_VEC)	/* this thread has used the VEC */
 
 struct trapframe;
 
 struct mdproc {
 	void (*md_syscall)(struct trapframe *);
 };
+
+#ifdef _KERNEL
+#define	LWP0_CPU_INFO	&cpu_info[0]
+#define	LWP0_MD_INITIALIZER {	\
+		.md_flags = 0, \
+		.md_utf = (void *)0xdeadbeef, \
+	}
+#endif /* _KERNEL */
 
 #endif /* _POWERPC_PROC_H_ */

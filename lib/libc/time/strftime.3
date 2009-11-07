@@ -30,13 +30,14 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)strftime.3	5.12 (Berkeley) 6/29/91
-.\"	$NetBSD: strftime.3,v 1.24 2009/04/11 16:15:27 joerg Exp $
+.\"	$NetBSD: strftime.3,v 1.28 2011/04/14 05:50:50 jruoho Exp $
 .\"
-.Dd April 14, 2004
+.Dd April 14, 2011
 .Dt STRFTIME 3
 .Os
 .Sh NAME
-.Nm strftime
+.Nm strftime ,
+.Nm strftime_z
 .Nd format date and time
 .Sh LIBRARY
 .Lb libc
@@ -44,6 +45,8 @@
 .In time.h
 .Ft size_t
 .Fn strftime "char * restrict buf" "size_t maxsize" "const char * restrict format" "const struct tm * restrict timeptr"
+.Ft size_t
+.Fn strftime_z "const timezone_t tz" "char * restrict buf" "size_t maxsize" "const char * restrict format" "const struct tm * restrict timeptr"
 .Sh DESCRIPTION
 The
 .Fn strftime
@@ -193,12 +196,22 @@ is replaced by the offset from ITC in the ISO 8601 format
 is replaced by
 .Ql % .
 .El
+.Pp
+The
+.Fn strftime_z
+function is similar to
+.Fn strftime ,
+but it also takes a
+.Ft "const timezone_t"
+.Fa tz
+argument.
 .Sh SEE ALSO
 .Xr date 1 ,
 .Xr printf 1 ,
 .Xr ctime 3 ,
 .Xr printf 3 ,
-.Xr strptime 3
+.Xr strptime 3 ,
+.Xr tm 3
 .Sh STANDARDS
 The
 .Fn strftime
@@ -240,3 +253,13 @@ For example, the first week of the year 1997 lasts from
 1996-12-30 to 1997-01-05.
 .Sh BUGS
 There is no conversion specification for the phase of the moon.
+.Pp
+A return value of zero does not necessarily indicate an error.
+If the resulting string is an empty string, the result value is
+zero and it is not possible to distinguish between success and error.
+For example, in many locales
+.Cm \&%p
+yields an empty string.
+This problem can be avoided by inserting an extra space at the
+beginning of the format string and then skipping over it or removing
+it from the result.

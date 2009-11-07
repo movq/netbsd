@@ -1,4 +1,4 @@
-#	$NetBSD: files.amiga,v 1.141 2009/09/14 02:23:05 mhitch Exp $
+#	$NetBSD: files.amiga,v 1.154 2012/01/24 00:19:39 rkujawa Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!
@@ -33,6 +33,8 @@ defflag				P5PPC68KBOARD
 defflag				LEV6_DEFER
 defflag				DEVRELOAD
 
+defflag opt_p5pb.h		P5PB_DEBUG P5PB_CONSOLE
+
 defparam			IOBZCLOCK
 
 device	mainbus {}
@@ -42,7 +44,6 @@ device	cpu
 attach	cpu at mainbus
 
 # for bus_space
-
 define	amibus_bl
 file	arch/amiga/amiga/amiga_bus_simple_4.c
 
@@ -57,6 +58,8 @@ file	arch/amiga/amiga/amiga_bus_simple_16.c	amibus_b16
 
 define	amibus_b800
 file	arch/amiga/amiga/amiga_bus_simple_0x800.c	amibus_b800
+
+file	arch/amiga/amiga/bus.c
 
 # zorro expansion bus.
 device	zbus {}
@@ -129,7 +132,7 @@ file	arch/amiga/dev/fd.c		fd needs-flag
 # graphic devices
 define	grfbus {}
 
-device	grf {}
+device	grf {}: wsemuldisplaydev, vcons
 attach	grf at grfbus
 file	arch/amiga/dev/grf.c		grf needs-count
 
@@ -139,11 +142,11 @@ file	arch/amiga/dev/ite.c		ite needs-flag
 file	arch/amiga/dev/kbdmap.c		ite
 file	arch/amiga/dev/kf_custom.c	kfont_custom
 file	arch/amiga/dev/kf_iso8859_1_8x8.c	kfont_cons_iso8859_1 &
-	( ite | amidisplaycc )
+	( ite | wsdisplay)
 file	arch/amiga/dev/kf_iso8859_1_8x11.c	kfont_cons_iso8859_1 &
 	kfont_8x11
 file	arch/amiga/dev/kf_iso8859_2_8x8.c	kfont_cons_iso8859_2 &
-	( ite | amidisplaycc )
+	( ite | wsdisplay )
 file	arch/amiga/dev/kf_iso8859_2_8x11.c	kfont_cons_iso8859_2 &
 	kfont_8x11
 
@@ -365,11 +368,6 @@ file	arch/amiga/dev/afsc.c		afsc | aftsc needs-flag
 define	siopng
 file	arch/amiga/dev/siop2.c		siopng
 
-# CyberStorm MKIII scsi
-device	cbiiisc: scsi, siopng
-attach	cbiiisc at zbus
-file	arch/amiga/dev/cbiiisc.c	cbiiisc needs-flag
-
 # Emulex ESP216 & FAS216 controllers
 
 # FastlaneZ3
@@ -434,8 +432,6 @@ file	arch/amiga/amiga/conf.c
 file	arch/amiga/amiga/disksubr.c
 file	arch/amiga/amiga/dkbad.c
 file	arch/amiga/amiga/machdep.c
-file	arch/amiga/amiga/mem.c
-#file	arch/amiga/amiga/pmap.c
 file	arch/amiga/amiga/pmap_bootstrap.c
 file	arch/amiga/amiga/trap.c
 file	arch/amiga/amiga/cc.c
@@ -466,6 +462,11 @@ file	arch/amiga/dev/wdc_amiga.c	wdc_amiga
 attach	wdc at zbus with wdc_buddha
 file	arch/amiga/dev/wdc_buddha.c	wdc_buddha
 
+# FastATA 
+device  efa: ata,wdc_common
+attach  efa at mainbus
+file    arch/amiga/dev/efa.c		efa
+
 # Compatibility modules
 
 # NetBSD m68k a.out Binary Compatibility (COMPAT_AOUT_M68K)
@@ -486,4 +487,45 @@ file arch/m68k/m68k/linux_trap.c		compat_linux
 # OSS audio driver compatibility
 include "compat/ossaudio/files.ossaudio"
 
-include "arch/amiga/conf/majors.amiga"
+# Bluetooth stack
+include "dev/bluetooth/files.bluetooth"
+
+# Phase5 BPPC/CSPPC internal bus
+device	p5bus {}
+attach	p5bus at zbus
+file	arch/amiga/dev/p5bus.c		p5bus
+
+device	p5membar {}
+attach	p5membar at zbus
+file	arch/amiga/pci/p5membar.c	p5membar
+
+# CyberStorm MKIII scsi
+device	cbiiisc: scsi, siopng
+attach	cbiiisc at p5bus 
+file	arch/amiga/dev/cbiiisc.c	cbiiisc needs-flag
+
+# Phase5 Blizzard 603e+ SCSI
+device	bppcsc: scsi, asiop
+attach	bppcsc at p5bus 
+file	arch/amiga/dev/bppcsc.c		bppcsc needs-flag
+
+# PCI bus
+file	arch/amiga/pci/p5pb.c		pci
+file	arch/amiga/pci/mppb.c		pci
+file	arch/amiga/pci/cv3dpb.c		pci
+file	arch/amiga/pci/pci_machdep.c	pci
+
+device	p5pb: pcibus
+attach	p5pb at p5bus 
+
+device	mppb: pcibus
+attach	mppb at zbus
+
+device	cv3dpb: pcibus
+attach	cv3dpb at zbus
+
+include	"dev/i2o/files.i2o"
+include	"dev/pci/files.pci"
+
+include	"arch/amiga/conf/majors.amiga"
+

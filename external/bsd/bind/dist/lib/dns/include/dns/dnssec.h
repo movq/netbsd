@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssec.h,v 1.1.1.3 2009/10/25 00:02:37 christos Exp $	*/
+/*	$NetBSD: dnssec.h,v 1.3.4.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dnssec.h,v 1.38 2009/10/12 23:48:02 tbox Exp */
+/* Id */
 
 #ifndef DNS_DNSSEC_H
 #define DNS_DNSSEC_H 1
@@ -33,6 +33,9 @@
 #include <dst/dst.h>
 
 ISC_LANG_BEGINDECLS
+
+/*%< Maximum number of keys supported in a zone. */
+#define DNS_MAXZONEKEYS 32
 
 /*
  * Indicates how the signer found this key: in the key repository, at the
@@ -222,6 +225,19 @@ dns_dnssec_selfsigns(dns_rdata_t *rdata, dns_name_t *name,
 		     isc_boolean_t ignoretime, isc_mem_t *mctx);
 
 
+isc_boolean_t
+dns_dnssec_signs(dns_rdata_t *rdata, dns_name_t *name,
+		 dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset,
+		 isc_boolean_t ignoretime, isc_mem_t *mctx);
+/*%<
+ * Verify that 'rdataset' is validly signed in 'sigrdataset' by
+ * the key in 'rdata'.
+ *
+ * dns_dnssec_selfsigns() requires that rdataset be a DNSKEY or KEY
+ * rrset.  dns_dnssec_signs() works on any rrset.
+ */
+
+
 isc_result_t
 dns_dnsseckey_create(isc_mem_t *mctx, dst_key_t **dstkey,
 		     dns_dnsseckey_t **dkp);
@@ -273,8 +289,9 @@ dns_dnssec_findmatchingkeys(dns_name_t *origin, const char *directory,
 isc_result_t
 dns_dnssec_keylistfromrdataset(dns_name_t *origin,
 			       const char *directory, isc_mem_t *mctx,
-			       dns_rdataset_t *keyset, dns_rdataset_t *sigset,
-			       isc_boolean_t savekeys, isc_boolean_t public,
+			       dns_rdataset_t *keyset, dns_rdataset_t *keysigs,
+			       dns_rdataset_t *soasigs, isc_boolean_t savekeys,
+			       isc_boolean_t public,
 			       dns_dnsseckeylist_t *keylist);
 /*%<
  * Append the contents of a DNSKEY rdataset 'keyset' to 'keylist'.
@@ -282,24 +299,27 @@ dns_dnssec_keylistfromrdataset(dns_name_t *origin,
  * matching key files, and load the private keys that go with
  * the public ones.  If 'savekeys' is ISC_TRUE, mark the keys so
  * they will not be deleted or inactivated regardless of metadata.
+ *
+ * 'keysigs' and 'soasigs', if not NULL and associated, contain the
+ * RRSIGS for the DNSKEY and SOA records respectively and are used to mark
+ * whether a key is already active in the zone.
  */
 
 isc_result_t
 dns_dnssec_updatekeys(dns_dnsseckeylist_t *keys, dns_dnsseckeylist_t *newkeys,
 		      dns_dnsseckeylist_t *removed, dns_name_t *origin,
-		      dns_ttl_t ttl, dns_diff_t *add, dns_diff_t *del,
-		      isc_boolean_t allzsk, isc_mem_t *mctx,
-		      void (*report)(const char *, ...));
+		      dns_ttl_t hint_ttl, dns_diff_t *diff, isc_boolean_t allzsk,
+		      isc_mem_t *mctx, void (*report)(const char *, ...));
 /*%<
  * Update the list of keys in 'keys' with new key information in 'newkeys'.
  *
  * For each key in 'newkeys', see if it has a match in 'keys'.
  * - If not, and if the metadata says the key should be published:
- *   add it to 'keys', and place a dns_difftuple into 'add' so
+ *   add it to 'keys', and place a dns_difftuple into 'diff' so
  *   the key can be added to the DNSKEY set.  If the metadata says it
  *   should be active, set the first_sign flag.
  * - If so, and if the metadata says it should be removed:
- *   remove it from 'keys', and place a dns_difftuple into 'del' so
+ *   remove it from 'keys', and place a dns_difftuple into 'diff' so
  *   the key can be removed from the DNSKEY set.  if 'removed' is non-NULL,
  *   copy the key into that list; otherwise destroy it.
  * - Otherwise, make sure keys has current metadata.
@@ -307,9 +327,11 @@ dns_dnssec_updatekeys(dns_dnsseckeylist_t *keys, dns_dnsseckeylist_t *newkeys,
  * If 'allzsk' is true, we are allowing KSK-flagged keys to be used as
  * ZSKs.
  *
- * 'ttl' is the TTL of the DNSKEY RRset; if it is longer than the
- * time until a new key will be activated, then we have to delay the
- * key's activation.
+ * 'hint_ttl' is the TTL to use for the DNSKEY RRset if there is no
+ * existing RRset, and if none of the keys to be added has a default TTL
+ * (in which case we would use the shortest one).  If the TTL is longer
+ * than the time until a new key will be activated, then we have to delay
+ * the key's activation.
  *
  * 'report' points to a function for reporting status.
  *

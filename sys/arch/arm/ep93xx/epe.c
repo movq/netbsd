@@ -1,4 +1,4 @@
-/*	$NetBSD: epe.c,v 1.22 2009/10/23 00:39:30 snj Exp $	*/
+/*	$NetBSD: epe.c,v 1.26 2011/07/01 19:31:17 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.22 2009/10/23 00:39:30 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.26 2011/07/01 19:31:17 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.22 2009/10/23 00:39:30 snj Exp $");
 #include <sys/device.h>
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -70,11 +70,8 @@ __KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.22 2009/10/23 00:39:30 snj Exp $");
 #include <netns/ns_if.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <arm/ep93xx/ep93xxreg.h>
 #include <arm/ep93xx/epereg.h> 
@@ -146,7 +143,7 @@ epe_attach(struct device *parent, struct device *self, void *aux)
 		panic("%s: Cannot map registers", self->dv_xname);
 
 	/* Fetch the Ethernet address from property if set. */
-	enaddr = prop_dictionary_get(device_properties(self), "mac-addr");
+	enaddr = prop_dictionary_get(device_properties(self), "mac-address");
 	if (enaddr != NULL) {
 		KASSERT(prop_object_type(enaddr) == PROP_TYPE_DATA);
 		KASSERT(prop_data_size(enaddr) == ETHER_ADDR_LEN);
@@ -238,10 +235,7 @@ begin:
 				sc->rxq[bi].m->m_pkthdr.rcvif = ifp;
 				sc->rxq[bi].m->m_pkthdr.len = 
 					sc->rxq[bi].m->m_len = fl;
-#if NBPFILTER > 0
-				if (ifp->if_bpf) 
-					bpf_mtap(ifp->if_bpf, sc->rxq[bi].m);
-#endif /* NBPFILTER > 0 */
+				bpf_mtap(ifp, sc->rxq[bi].m);
                                 (*ifp->if_input)(ifp, sc->rxq[bi].m);
 				sc->rxq[bi].m = m;
 				bus_dmamap_load(sc->sc_dmat, 
@@ -614,10 +608,7 @@ more:
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 	}
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf) 
-		bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+	bpf_mtap(ifp, m);
 
 	nsegs = sc->txq[bi].m_dmamap->dm_nsegs;
 	segs = sc->txq[bi].m_dmamap->dm_segs;

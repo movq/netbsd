@@ -1,4 +1,4 @@
-.\"	$NetBSD: ld.elf_so.1,v 1.12 2008/05/25 19:48:35 wiz Exp $
+.\"	$NetBSD: ld.elf_so.1,v 1.15 2010/12/17 08:50:26 wiz Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 18, 2007
+.Dd December 17, 2010
 .Dt LD.ELF_SO 1
 .Os
 .Sh NAME
@@ -62,14 +62,6 @@ and the number of entries.
 The entry point of the program and the base address of where
 .Nm
 is loaded is also supplied.
-.Pp
-Careful use of code allows
-.Nm
-to relocate itself before proceeding.
-Specifically the use of global variables and
-large switch statements is not allowed.
-The later can cause the output of a jump table that
-can use the equivalent of a global variable.
 .Ss Finding objects
 Each
 .Xr elf 5
@@ -108,6 +100,9 @@ List of instructions sets this processor can execute.
 Currently unimplemented.
 .It $ORIGIN
 The directory of the main object.
+Implemented in
+.Nm
+but the kernel support is currently disabled.
 .It $OSNAME
 The value of the
 .Dv kern.ostype

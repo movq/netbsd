@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.7 2008/02/02 05:33:57 itohy Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.10 2012/02/03 00:35:35 nisimura Exp $	*/
 /* Based on english version: */
 /*	NetBSD: msg.md.en,v 1.2 2002/04/02 17:02:54 thorpej Exp */
 
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -43,8 +39,11 @@
 
 
 message md_hello
-{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
+{
+}
 
+message md_may_remove_boot_medium
+{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
 }
 
 message badreadbb
@@ -80,6 +79,8 @@ message set_kernel_3
 message set_kernel_4
 {Kernel (IQ80321)}
 message set_kernel_5
-{Kernel (TEAMASA_NPWR)}
+{Kernel (MINI2440)}
 message set_kernel_6
+{Kernel (TEAMASA_NPWR)}
+message set_kernel_7
 {Kernel (TS7200)}

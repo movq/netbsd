@@ -1,4 +1,4 @@
-/* $NetBSD: pseye.c,v 1.14 2009/09/23 19:07:19 plunky Exp $ */
+/* $NetBSD: pseye.c,v 1.21 2011/05/24 16:42:31 joerg Exp $ */
 
 /*-
  * Copyright (c) 2008 Jared D. McNeill <jmcneill@invisible.ca>
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.14 2009/09/23 19:07:19 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.21 2011/05/24 16:42:31 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,10 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.14 2009/09/23 19:07:19 plunky Exp $");
 #include <sys/condvar.h>
 #include <sys/module.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
+#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uvideoreg.h>
@@ -81,7 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: pseye.c,v 1.14 2009/09/23 19:07:19 plunky Exp $");
 #define PSEYE_SCCB_OP_READ_2	0xf9
 
 struct pseye_softc {
-	USBBASEDEVICE		sc_dev;
+	device_t		sc_dev;
 
 	usbd_device_handle	sc_udev;
 	usbd_interface_handle	sc_iface;
@@ -99,6 +98,8 @@ struct pseye_softc {
 	int			sc_bulkin_bufferlen;
 
 	char			sc_dying;
+
+	char			sc_businfo[32];
 };
 
 static int	pseye_match(device_t, cfdata_t, void *);
@@ -128,6 +129,7 @@ static void	pseye_submit_payload(struct pseye_softc *, uint32_t);
 static int		pseye_open(void *, int);
 static void		pseye_close(void *);
 static const char *	pseye_get_devname(void *);
+static const char *	pseye_get_businfo(void *);
 static int		pseye_enum_format(void *, uint32_t,
 					  struct video_format *);
 static int		pseye_get_format(void *, struct video_format *);
@@ -144,6 +146,7 @@ static const struct video_hw_if pseye_hw_if = {
 	.open = pseye_open,
 	.close = pseye_close,
 	.get_devname = pseye_get_devname,
+	.get_businfo = pseye_get_businfo,
 	.enum_format = pseye_enum_format,
 	.get_format = pseye_get_format,
 	.set_format = pseye_set_format,
@@ -198,6 +201,8 @@ pseye_attach(device_t parent, device_t self, void *opaque)
 	sc->sc_dev = self;
 	sc->sc_udev = dev;
 	sc->sc_iface = uaa->iface;
+	snprintf(sc->sc_businfo, sizeof(sc->sc_businfo), "usb:%08x",
+	    sc->sc_udev->cookie.cookie);
 	sc->sc_bulkin_bufferlen = PSEYE_BULKIN_BUFLEN;
 
 	sc->sc_dying = sc->sc_running = 0;
@@ -261,7 +266,7 @@ pseye_attach(device_t parent, device_t self, void *opaque)
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-	    USBDEV(self));
+	    self);
 
 }
 
@@ -300,28 +305,23 @@ pseye_detach(device_t self, int flags)
 	mutex_destroy(&sc->sc_mtx);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-	    USBDEV(sc->sc_dev));
+	    sc->sc_dev);
 
 	return 0;
 }
 
 int
-pseye_activate(device_ptr_t self, enum devact act)
+pseye_activate(device_t self, enum devact act)
 {
 	struct pseye_softc *sc = device_private(self);
-	int rv;
-
-	rv = 0;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		break;
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	return rv;
 }
 
 static void
@@ -748,6 +748,14 @@ pseye_get_devname(void *opaque)
 	return "PlayStation Eye";
 }
 
+static const char *
+pseye_get_businfo(void *opaque)
+{
+	struct pseye_softc *sc = opaque;
+
+	return sc->sc_businfo;
+}
+
 static int
 pseye_enum_format(void *opaque, uint32_t index, struct video_format *format)
 {
@@ -804,7 +812,7 @@ pseye_start_transfer(void *opaque)
 	if (sc->sc_running == 0) {
 		sc->sc_running = 1;
 		err = kthread_create(PRI_PSEYE, 0, NULL, pseye_transfer_thread,
-		    opaque, NULL, device_xname(sc->sc_dev));
+		    opaque, NULL, "%s", device_xname(sc->sc_dev));
 	} else
 		aprint_error_dev(sc->sc_dev, "transfer already in progress\n");
 	mutex_exit(&sc->sc_mtx);
@@ -827,67 +835,31 @@ pseye_stop_transfer(void *opaque)
 	return 0;
 }
 
-#ifdef _MODULE
-
 MODULE(MODULE_CLASS_DRIVER, pseye, NULL);
 
-static const struct cfiattrdata videobuscf_iattrdata = {
-	"videobus", 0, { { NULL, NULL, 0 }, }
-};
-static const struct cfiattrdata * const pseye_attrs[] = {
-	&videobuscf_iattrdata, NULL
-};
-CFDRIVER_DECL(pseye, DV_DULL, pseye_attrs);
-extern struct cfattach video_ca;
-static int pseyeloc[6] = { -1, -1, -1, -1, -1, -1 };
-static struct cfparent uhubparent = {
-	"usbifif", NULL, DVUNIT_ANY
-};
-static struct cfdata pseye_cfdata[] = {
-	{
-		.cf_name = "pseye",
-		.cf_atname = "pseye",
-		.cf_unit = 0,
-		.cf_fstate = FSTATE_STAR,
-		.cf_loc = pseyeloc,
-		.cf_flags = 0,
-		.cf_pspec = &uhubparent,
-	},
-	{ NULL }
-};
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
 
 static int
 pseye_modcmd(modcmd_t cmd, void *opaque)
 {
-	int err;
-
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		err = config_cfdriver_attach(&pseye_cd);
-		if (err)
-			return err;
-		err = config_cfattach_attach("pseye", &pseye_ca);
-		if (err) {
-			config_cfdriver_detach(&pseye_cd);
-			return err;
-		}
-		err = config_cfdata_attach(pseye_cfdata, 1);
-		if (err) {
-			config_cfattach_detach("pseye", &pseye_ca);
-			config_cfdriver_detach(&pseye_cd);
-			return err;
-		}
+#ifdef _MODULE
+		return config_init_component(cfdriver_ioconf_pseye,
+		    cfattach_ioconf_pseye, cfdata_ioconf_pseye);
+#else
 		return 0;
+#endif
 	case MODULE_CMD_FINI:
-		err = config_cfdata_detach(pseye_cfdata);
-		if (err)
-			return err;
-		config_cfattach_detach("pseye", &pseye_ca);
-		config_cfdriver_detach(&pseye_cd);
+#ifdef _MODULE
+		return config_fini_component(cfdriver_ioconf_pseye,
+		    cfattach_ioconf_pseye, cfdata_ioconf_pseye);
+#else
 		return 0;
+#endif
 	default:
 		return ENOTTY;
 	}
 }
-
-#endif /* !_MODULE */

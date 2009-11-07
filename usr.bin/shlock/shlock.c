@@ -1,4 +1,4 @@
-/*	$NetBSD: shlock.c,v 1.10 2008/04/28 20:24:14 martin Exp $	*/
+/*	$NetBSD: shlock.c,v 1.12 2011/09/06 18:30:38 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: shlock.c,v 1.10 2008/04/28 20:24:14 martin Exp $");
+__RCSID("$NetBSD: shlock.c,v 1.12 2011/09/06 18:30:38 joerg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -88,11 +88,11 @@ __RCSID("$NetBSD: shlock.c,v 1.10 2008/04/28 20:24:14 martin Exp $");
 #define	TRUE	1
 #define	FALSE	0
 
-int	Debug = FALSE;
-char	*Pname;
-const char USAGE[] = "%s: USAGE: %s [-du] [-p PID] -f file\n";
-const char E_unlk[] = "%s: unlink(%s): %s\n";
-const char E_open[] = "%s: open(%s): %s\n";
+static int	Debug = FALSE;
+static char	*Pname;
+static const char USAGE[] = "%s: USAGE: %s [-du] [-p PID] -f file\n";
+static const char E_unlk[] = "%s: unlink(%s): %s\n";
+static const char E_open[] = "%s: open(%s): %s\n";
 
 #define	dprintf	if (Debug) printf
 
@@ -103,12 +103,11 @@ const char E_open[] = "%s: open(%s): %s\n";
 */
 
 /* the following is in case you need to make the prototypes go away. */
-char	*xtmpfile(char *, pid_t, int);
-int	p_exists(pid_t);
-int	cklock(char *, int);
-int	mklock(char *, pid_t, int);
-void	bad_usage(void);
-int	main(int, char **);
+static char	*xtmpfile(char *, pid_t, int);
+static int	p_exists(pid_t);
+static int	cklock(char *, int);
+static int	mklock(char *, pid_t, int);
+__dead static void	bad_usage(void);
 
 /*
 ** Create a temporary file, all ready to lock with.
@@ -116,8 +115,8 @@ int	main(int, char **);
 ** gave us a full path, instead of using the current directory
 ** which might not be in the same filesystem.
 */
-char *
-xtmpfile(char *file, __pid_t pid, int uucpstyle)
+static char *
+xtmpfile(char *file, pid_t pid, int uucpstyle)
 {
 	int	fd;
 	int	len;
@@ -125,7 +124,7 @@ xtmpfile(char *file, __pid_t pid, int uucpstyle)
 	static char	tempname[BUFSIZ];
 
 	sprintf(buf, "shlock%ld", (u_long)getpid());
-	if ((cp = strrchr(strcpy(tempname, file), '/')) != (char *)NULL) {
+	if ((cp = strrchr(strcpy(tempname, file), '/')) != NULL) {
 		*++cp = '\0';
 		(void) strcat(tempname, buf);
 	} else
@@ -143,7 +142,7 @@ openloop:
 			if (unlink(tempname) < 0) {
 				fprintf(stderr, E_unlk,
 					Pname, tempname, strerror(errno));
-				return((char *)NULL);
+				return (NULL);
 			}
 			/*
 			** Further profanity
@@ -152,7 +151,7 @@ openloop:
 		default:
 			fprintf(stderr, E_open,
 				Pname, tempname, strerror(errno));
-			return((char *)NULL);
+			return (NULL);
 		}
 	}
 
@@ -172,7 +171,7 @@ openloop:
 			fprintf(stderr, E_unlk,
 				Pname, tempname, strerror(errno));
 		}
-		return((char *)NULL);
+		return (NULL);
 	}
 	(void) close(fd);
 	return(tempname);
@@ -182,8 +181,8 @@ openloop:
 ** Does the PID exist?
 ** Send null signal to find out.
 */
-int
-p_exists(__pid_t pid)
+static int
+p_exists(pid_t pid)
 {
 	dprintf("%s: process %ld is ", Pname, (u_long)pid);
 	if (pid <= 0) {
@@ -222,7 +221,7 @@ p_exists(__pid_t pid)
 **	o	No clean up to do if the system or application crashes.
 **
 */
-int
+static int
 cklock(char *file, int uucpstyle)
 {
 	int	fd = open(file, O_RDONLY);
@@ -250,15 +249,15 @@ cklock(char *file, int uucpstyle)
 	return(p_exists(uucpstyle ? pid : atoi(buf)));
 }
 
-int
-mklock(char *file, __pid_t pid, int uucpstyle)
+static int
+mklock(char *file, pid_t pid, int uucpstyle)
 {
 	char	*tmp;
 	int	retcode = FALSE;
 
 	dprintf("%s: trying lock <%s> for process %ld\n", Pname, file,
 	    (u_long)pid);
-	if ((tmp = xtmpfile(file, pid, uucpstyle)) == (char *)NULL)
+	if ((tmp = xtmpfile(file, pid, uucpstyle)) == NULL)
 		return(FALSE);
 
 linkloop:
@@ -298,7 +297,7 @@ linkloop:
 	return(retcode);
 }
 
-void
+static void
 bad_usage(void)
 {
 	fprintf(stderr, USAGE, Pname, Pname);
@@ -309,7 +308,7 @@ int
 main(int ac, char **av)
 {
 	int	x;
-	char	*file = (char *)NULL;
+	char	*file = NULL;
 	pid_t	pid = 0;
 	int	uucpstyle = FALSE;	/* indicating UUCP style locks */
 	int	only_check = TRUE;	/* don't make a lock */
@@ -352,7 +351,7 @@ main(int ac, char **av)
 		}
 	}
 
-	if (file == (char *)NULL || (!only_check && pid <= 0)) {
+	if (file == NULL || (!only_check && pid <= 0)) {
 		bad_usage();
 	}
 

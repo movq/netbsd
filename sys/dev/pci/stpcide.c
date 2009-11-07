@@ -1,4 +1,4 @@
-/*	$NetBSD: stpcide.c,v 1.19 2008/05/26 10:31:22 nisimura Exp $	*/
+/*	$NetBSD: stpcide.c,v 1.21 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stpcide.c,v 1.19 2008/05/26 10:31:22 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stpcide.c,v 1.21 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: stpcide.c,v 1.19 2008/05/26 10:31:22 nisimura Exp $"
 #include <dev/pci/pciidereg.h>
 #include <dev/pci/pciidevar.h>
 
-static void stpc_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void stpc_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void stpc_setup_channel(struct ata_channel *);
 
 static int  stpcide_match(device_t, cfdata_t, void *);
@@ -84,12 +85,11 @@ stpcide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-stpc_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+stpc_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -117,8 +117,7 @@ stpc_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }
 

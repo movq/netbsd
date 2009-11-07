@@ -1,4 +1,4 @@
-/*	$NetBSD: uvideo.c,v 1.29 2009/03/09 15:59:33 uebayasi Exp $	*/
+/*	$NetBSD: uvideo.c,v 1.37 2011/12/23 00:51:49 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2008 Patrick Mahoney
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.29 2009/03/09 15:59:33 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.37 2011/12/23 00:51:49 jakllsch Exp $");
 
 #ifdef _MODULE
 #include <sys/module.h>
@@ -64,18 +64,20 @@ __KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.29 2009/03/09 15:59:33 uebayasi Exp $")
 #include <sys/poll.h>
 #include <sys/queue.h>	/* SLIST */
 #include <sys/kthread.h>
+#include <sys/bus.h>
 
 #include <sys/videoio.h>
 #include <dev/video_if.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
+#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usb_quirks.h>
 
 #include <dev/usb/uvideoreg.h>
 
-#if !defined(_MODULE)
+#if defined(_KERNEL_OPT)
 #include "opt_uvideo.h"
 #endif
 
@@ -85,8 +87,8 @@ __KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.29 2009/03/09 15:59:33 uebayasi Exp $")
 /* #define UVIDEO_DISABLE_MJPEG */
 
 #ifdef UVIDEO_DEBUG
-#define DPRINTF(x)	do { if (uvideodebug) logprintf x; } while (0)
-#define DPRINTFN(n,x)	do { if (uvideodebug>(n)) logprintf x; } while (0)
+#define DPRINTF(x)	do { if (uvideodebug) printf x; } while (0)
+#define DPRINTFN(n,x)	do { if (uvideodebug>(n)) printf x; } while (0)
 int	uvideodebug = 20;
 #else
 #define DPRINTF(x)
@@ -238,13 +240,13 @@ struct uvideo_stream {
 SLIST_HEAD(uvideo_stream_list, uvideo_stream);
 
 struct uvideo_softc {
-        USBBASEDEVICE   	sc_dev;		/* base device */
+        device_t   	sc_dev;		/* base device */
         usbd_device_handle      sc_udev;	/* device */
 	usbd_interface_handle   sc_iface;	/* interface handle */
         int     		sc_ifaceno;	/* interface number */
 	char			*sc_devname;
 
-	device_ptr_t		sc_videodev;
+	device_t		sc_videodev;
 	
 	int			sc_dying;
 	uvideo_state		sc_state;
@@ -255,6 +257,8 @@ struct uvideo_softc {
 	struct uvideo_stream	*sc_stream_in;
 
 	struct uvideo_stream_list sc_stream_list;
+
+	char			sc_businfo[32];
 };
 
 int	uvideo_match(device_t, cfdata_t, void *);
@@ -266,6 +270,7 @@ int	uvideo_activate(device_t, enum devact);
 static int	uvideo_open(void *, int);
 static void	uvideo_close(void *);
 static const char * uvideo_get_devname(void *);
+static const char * uvideo_get_businfo(void *);
 
 static int	uvideo_enum_format(void *, uint32_t, struct video_format *);
 static int	uvideo_get_format(void *, struct video_format *);
@@ -377,6 +382,7 @@ static const struct video_hw_if uvideo_hw_if = {
 	.open = uvideo_open,
 	.close = uvideo_close,
 	.get_devname = uvideo_get_devname,
+	.get_businfo = uvideo_get_businfo,
 	.enum_format = uvideo_enum_format,
 	.get_format = uvideo_get_format,
 	.set_format = uvideo_set_format,
@@ -461,9 +467,10 @@ static void print_vs_format_dv_descriptor(
 	} while (0)
 
 
-USB_MATCH(uvideo)
+int 
+uvideo_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_IFMATCH_START(uvideo, uaa);
+	struct usbif_attach_arg *uaa = aux;
 
         /* TODO: May need to change in the future to work with
          * Interface Association Descriptor. */
@@ -476,9 +483,11 @@ USB_MATCH(uvideo)
 	return UMATCH_NONE;
 }
 
-USB_ATTACH(uvideo)
+void 
+uvideo_attach(device_t parent, device_t self, void *aux)
 {
-	USB_IFATTACH_START(uvideo, sc, uaa);
+	struct uvideo_softc *sc = device_private(self);
+	struct usbif_attach_arg *uaa = aux;
 	usbd_desc_iter_t iter;
 	const usb_interface_descriptor_t *ifdesc;
 	struct uvideo_stream *vs;
@@ -498,6 +507,8 @@ USB_ATTACH(uvideo)
 	sc->sc_dying = 0;
 	sc->sc_state = UVIDEO_STATE_CLOSED;
 	SLIST_INIT(&sc->sc_stream_list);
+	snprintf(sc->sc_businfo, sizeof(sc->sc_businfo), "usb:%08x",
+	    sc->sc_udev->cookie.cookie);
 
 #ifdef UVIDEO_DEBUG
 	/* Debugging dump of descriptors. TODO: move this to userspace
@@ -599,7 +610,7 @@ USB_ATTACH(uvideo)
 
 	
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
 
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -608,37 +619,30 @@ USB_ATTACH(uvideo)
 	DPRINTF(("uvideo_attach: attached video driver at %p\n",
 		 sc->sc_videodev));
 
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 
 bad:
 	if (err != USBD_NORMAL_COMPLETION) {
 		DPRINTF(("uvideo_attach: error: %s (%d)\n",
 			 usbd_errstr(err), err));
 	}
-	USB_ATTACH_ERROR_RETURN;
+	return;
 }
 
 
 int
 uvideo_activate(device_t self, enum devact act)
 {
-	struct uvideo_softc *sc;
-	int rv;
+	struct uvideo_softc *sc = device_private(self);
 	
-	sc = device_private(self);
-	rv = 0;
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return EOPNOTSUPP;
-
 	case DVACT_DEACTIVATE:
 		DPRINTF(("uvideo_activate: deactivating\n"));
-		if (sc->sc_videodev != NULL)
-			rv = config_deactivate(sc->sc_videodev);
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return rv;
 }
 
 
@@ -667,29 +671,32 @@ uvideo_detach(device_t self, int flags)
 
 	pmf_device_deregister(self);
 
-	usbd_devinfo_free(sc->sc_devname);
-
 	/* TODO: close the device if it is currently opened?  Or will
 	 * close be called automatically? */
 
 	while (!SLIST_EMPTY(&sc->sc_stream_list)) {
 		vs = SLIST_FIRST(&sc->sc_stream_list);
 		SLIST_REMOVE_HEAD(&sc->sc_stream_list, entries);
+		uvideo_stream_stop_xfer(vs);
 		uvideo_stream_free(vs);
 	}
 
+#if 0
 	/* Wait for outstanding request to complete.  TODO: what is
 	 * appropriate here? */
 	usbd_delay_ms(sc->sc_udev, 1000);
+#endif
 
 	DPRINTFN(15, ("uvideo: detaching from %s\n",
-		USBDEVNAME(sc->sc_dev)));
+		device_xname(sc->sc_dev)));
 
 	if (sc->sc_videodev != NULL)
 		rv = config_detach(sc->sc_videodev, flags);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-	    USBDEV(sc->sc_dev));
+	    sc->sc_dev);
+
+	usbd_devinfo_free(sc->sc_devname);
 
 	return rv;
 }
@@ -1504,7 +1511,7 @@ uvideo_stream_start_xfer(struct uvideo_stream *vs)
 			bx->bx_running = true;
 			ret = kthread_create(PRI_UVIDEO, 0, NULL,
 			    uvideo_stream_recv_bulk_transfer, vs,
-			    NULL, device_xname(sc->sc_dev));
+			    NULL, "%s", device_xname(sc->sc_dev));
 			if (ret) {
 				DPRINTF(("uvideo: couldn't create kthread:"
 					 " %d\n", err));
@@ -1915,6 +1922,13 @@ uvideo_get_devname(void *addr)
 {
 	struct uvideo_softc *sc = addr;
 	return sc->sc_devname;
+}
+
+static const char *
+uvideo_get_businfo(void *addr)
+{
+	struct uvideo_softc *sc = addr;
+	return sc->sc_businfo;
 }
 
 static int
@@ -2349,7 +2363,7 @@ static struct cfdata uvideo_cfdata[] = {
 		.cf_flags = 0,
 		.cf_pspec = &uhubparent,
 	},
-	{ NULL }
+	{ NULL, NULL, 0, 0, NULL, 0, NULL },
 };
 
 static int

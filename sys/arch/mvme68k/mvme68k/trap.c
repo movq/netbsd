@@ -1,6 +1,7 @@
-/*	$NetBSD: trap.c,v 1.98 2009/01/27 20:30:13 martin Exp $	*/
+/*	$NetBSD: trap.c,v 1.105 2011/02/08 20:20:20 rmind Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,53 +37,15 @@
  *
  *	@(#)trap.c	8.5 (Berkeley) 1/4/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: trap.c 1.37 92/12/20$
- *
- *	@(#)trap.c	8.5 (Berkeley) 1/4/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.98 2009/01/27 20:30:13 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.105 2011/02/08 20:20:20 rmind Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
 #include "opt_kgdb.h"
 #include "opt_compat_sunos.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,7 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.98 2009/01/27 20:30:13 martin Exp $");
 #include <sys/sa.h>
 #include <sys/savar.h>
 #include <sys/syslog.h>
-#include <sys/user.h>
 #include <sys/userret.h>
 #include <sys/kauth.h>
 
@@ -103,6 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.98 2009/01/27 20:30:13 martin Exp $");
 #endif
 
 #include <machine/db_machdep.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/cpu.h>
@@ -316,23 +279,21 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 	extern char fubail[], subail[];
 	struct lwp *l;
 	struct proc *p;
+	struct pcb *pcb;
+	void *onfault;
 	ksiginfo_t ksi;
 	int s;
+	int rv;
 	u_quad_t sticks = 0 /* XXX initialiser works around compiler bug */;
 	static int panicking = 0;
 
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 	l = curlwp;
+	p = l->l_proc;
+	pcb = lwp_getpcb(l);
 
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_trap = type & ~T_USER;
-
-	p = l->l_proc;
-
-#ifdef DIAGNOSTIC
-	if (l->l_addr == NULL)
-		panic("trap: no pcb");
-#endif
 
 	if (USERMODE(fp->f_sr)) {
 		type |= T_USER;
@@ -380,8 +341,9 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		panic("trap");
 
 	case T_BUSERR:		/* kernel bus error */
-		if (l->l_addr->u_pcb.pcb_onfault == 0)
+		if (pcb->pcb_onfault == NULL)
 			goto dopanic;
+		rv = EFAULT;
 		/* FALLTHROUGH */
 
 	copyfault:
@@ -393,7 +355,8 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		 */
 		fp->f_stackadj = exframesize[fp->f_format];
 		fp->f_format = fp->f_vector = 0;
-		fp->f_pc = (int) l->l_addr->u_pcb.pcb_onfault;
+		fp->f_pc = (int)pcb->pcb_onfault;
+		fp->f_regs[D0] = rv;
 		return;
 
 	case T_BUSERR|T_USER:	/* bus error */
@@ -565,8 +528,8 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		 * If we were doing profiling ticks or other user mode
 		 * stuff from interrupt code, Just Say No.
 		 */
-		if (l->l_addr->u_pcb.pcb_onfault == fubail ||
-		    l->l_addr->u_pcb.pcb_onfault == subail)
+		rv = EFAULT;
+		if (pcb->pcb_onfault == fubail || pcb->pcb_onfault == subail)
 			goto copyfault;
 		/* fall into ... */
 
@@ -575,10 +538,10 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		vaddr_t va;
 		struct vmspace *vm = p->p_vmspace;
 		struct vm_map *map;
-		int rv;
 		vm_prot_t ftype;
 		extern struct vm_map *kernel_map;
 
+		onfault = pcb->pcb_onfault;
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
 		printf("trap: T_MMUFLT pid=%d, code=%x, v=%x, pc=%x, sr=%x\n",
@@ -592,8 +555,7 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		 * The last can occur during an exec() copyin where the
 		 * argument space is lazy-allocated.
 		 */
-		if ((type & T_USER) == 0 &&
-		    ((l->l_addr->u_pcb.pcb_onfault == 0) || KDFAULT(code)))
+		if ((type & T_USER) == 0 && (onfault == NULL || KDFAULT(code)))
 			map = kernel_map;
 		else {
 			map = vm ? &vm->vm_map : kernel_map;
@@ -625,7 +587,9 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		}
 #endif
 
+		pcb->pcb_onfault = NULL;
 		rv = uvm_fault(map, va, ftype);
+		pcb->pcb_onfault = onfault;
 #ifdef DEBUG
 		if (rv && MDB_ISPID(p->p_pid))
 			printf("uvm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
@@ -643,6 +607,9 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 				uvm_grow(p, va);
 
 			if (type == T_MMUFLT) {
+				if (ucas_ras_check(&fp->F_t)) {
+					return;
+				}
 #ifdef M68040
 #if defined(M68030) || defined(M68060)
 				if (cputype == CPU_68040)
@@ -660,7 +627,7 @@ trap(struct frame *fp, int type, unsigned int code, unsigned int v)
 		} else
 			ksi.ksi_code = SEGV_MAPERR;
 		if (type == T_MMUFLT) {
-			if (l->l_addr->u_pcb.pcb_onfault)
+			if (onfault)
 				goto copyfault;
 			printf("uvm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			    map, va, ftype, rv);
@@ -727,9 +694,10 @@ writeback(struct frame *fp, int docachepush)
 	struct fmt7 *f = &fp->f_fmt7;
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb = lwp_getpcb(l);
 	int err = 0;
 	u_int fa;
-	void *oonfault = l->l_addr->u_pcb.pcb_onfault;
+	void *oonfault = pcb->pcb_onfault;
 	extern int suline(void *, void *);	/* locore.s */
 
 #ifdef DEBUG
@@ -952,7 +920,7 @@ writeback(struct frame *fp, int docachepush)
 #endif
 		}
 	}
-	l->l_addr->u_pcb.pcb_onfault = oonfault;
+	pcb->pcb_onfault = oonfault;
 	if (err)
 		err = SIGSEGV;
 	return err;

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.17 2009/08/23 16:15:45 ahoka Exp $	*/
+/*	$NetBSD: machdep.c,v 1.30 2011/10/01 15:59:28 chs Exp $	*/
 
 /*-
  * Copyright (c) 2003,2004 Marcel Moolenaar
@@ -100,7 +100,6 @@
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 
 #include <machine/ia64_cpu.h>
 #include <machine/pal.h>
@@ -115,10 +114,12 @@
 
 #include <machine/atomic.h>
 #include <machine/pte.h>
+#include <machine/pcb.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 /* the following is used externally (sysctl_hw) */
 char	machine[] = MACHINE;		/* from <machine/param.h> */
@@ -131,14 +132,10 @@ vaddr_t ia64_unwindtab;
 vsize_t ia64_unwindtablen;
 #endif
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 void *msgbufaddr;
-int	physmem;
-
-char	cpu_model[64];
-char	cpu_family[64];
+int physmem;
 
 vaddr_t kernstart, kernend;
 
@@ -161,80 +158,6 @@ extern vaddr_t kernel_text, end;
 
 struct fpswa_iface *fpswa_iface;
 
-struct	user *proc0paddr; /* XXX: See: kern/kern_proc.c:proc0_init() */
-
-#define Mhz     1000000L
-#define Ghz     (1000L*Mhz)
-
-static void
-identifycpu(void)
-{
-	uint64_t vendor[3];
-	const char *family_name, *model_name;
-	uint64_t features, tmp;
-	int number, revision, model, family, archrev;
-
-	/*
-	 * Assumes little-endian.
-	 */
-	vendor[0] = ia64_get_cpuid(0);
-	vendor[1] = ia64_get_cpuid(1);
-	vendor[2] = '\0';
-
-	tmp = ia64_get_cpuid(3);
-	number = (tmp >> 0) & 0xff;
-	revision = (tmp >> 8) & 0xff;
-	model = (tmp >> 16) & 0xff;
-	family = (tmp >> 24) & 0xff;
-	archrev = (tmp >> 32) & 0xff;
-
-	family_name = model_name = "unknown";
-	switch (family) {
-	case 0x07:
-		family_name = "Itanium";
-		model_name = "Merced";
-		break;
-	case 0x1f:
-		family_name = "Itanium 2";
-		switch (model) {
-		case 0x00:
-			model_name = "McKinley";
-			break;
-		case 0x01:
-			/*
-			 * Deerfield is a low-voltage variant based on the
-			 * Madison core. We need circumstantial evidence
-			 * (i.e. the clock frequency) to identify those.
-			 * Allow for roughly 1% error margin.
-			 */
-			tmp = processor_frequency >> 7;
-			if ((processor_frequency - tmp) < 1*Ghz &&
-			    (processor_frequency + tmp) >= 1*Ghz)
-				model_name = "Deerfield";
-			else
-				model_name = "Madison";
-			break;
-		case 0x02:
-			model_name = "Madison II";
-			break;
-		}
-		break;
-	}
-	snprintf(cpu_family, sizeof(cpu_family), "%s", family_name);
-	snprintf(cpu_model, sizeof(cpu_model), "%s", model_name);
-
-	features = ia64_get_cpuid(4);
-
-	printf("CPU: %s (", model_name);
-	if (processor_frequency) {
-		printf("%ld.%02ld-MHz ", (processor_frequency + 4999) / Mhz,
-		    ((processor_frequency + 4999) / (Mhz/100)) % 100);
-	}
-	printf("%s)\n", family_name);
-	printf("  Origin = \"%s\"  Revision = %d\n", (char *) vendor, revision);
-	printf("  Features = 0x%x\n", (uint32_t) features);
-
-}
 
 /*
  * Machine-dependent startup code
@@ -243,11 +166,6 @@ void
 cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
-
-	/*
-	 * Good {morning,afternoon,evening,night}.
-	 */
-	identifycpu();
 
 	/* XXX: startrtclock(); */
 #ifdef PERFMON
@@ -264,14 +182,14 @@ cpu_startup(void)
 
 		printf("Physical memory chunk(s):\n");
 		for (lcv = 0;
-		    lcv < vm_nphysseg || vm_physmem[lcv].avail_end != 0;
+		    lcv < vm_nphysseg || VM_PHYSMEM_PTR(lcv)->avail_end != 0;
 		    lcv++) {
-			sizetmp = vm_physmem[lcv].avail_end -
-			    vm_physmem[lcv].avail_start;
+			sizetmp = VM_PHYSMEM_PTR(lcv)->avail_end -
+			    VM_PHYSMEM_PTR(lcv)->avail_start;
 
 			printf("0x%016lx - 0x%016lx, %ld bytes (%d pages)\n",
-			    ptoa(vm_physmem[lcv].avail_start),
-				ptoa(vm_physmem[lcv].avail_end) - 1,
+			    ptoa(VM_PHYSMEM_PTR(lcv)->avail_start),
+				ptoa(VM_PHYSMEM_PTR(lcv)->avail_end) - 1,
 				    ptoa(sizetmp), sizetmp);
 		}
 		printf("Total number of segments: vm_nphysseg = %d \n",
@@ -440,7 +358,9 @@ void
 ia64_init(void)
 {
 	paddr_t kernstartpfn, kernendpfn, pfn0, pfn1;
+	struct pcb *pcb0;
 	struct efi_md *md;
+	vaddr_t v;
 
 	/* NO OUTPUT ALLOWED UNTIL FURTHER NOTICE */
 
@@ -661,13 +581,12 @@ ia64_init(void)
 	/*
 	 * Init mapping for u page(s) for proc 0
 	 */
-	lwp0.l_addr = proc0paddr =
-	    (struct user *)uvm_pageboot_alloc(UPAGES * PAGE_SIZE);
-
+	v = uvm_pageboot_alloc(UPAGES * PAGE_SIZE);
+	uvm_lwp_setuarea(&lwp0, v);
 
 	/*
 	 * Set the kernel sp, reserving space for an (empty) trapframe,
-	 * and make proc0's trapframe pointer point to it for sanity.
+	 * and make lwp0's trapframe pointer point to it for sanity.
 	 */
 
 	/*
@@ -684,30 +603,23 @@ ia64_init(void)
 	 *                 --------------------------->
          *                       Higher Addresses
 	 *
-	 *	PCB: struct user;    TF: struct trapframe;
+	 *	PCB: struct pcb;    TF: struct trapframe;
 	 */
 
 
-	lwp0.l_md.md_tf = (struct trapframe *)((uint64_t)proc0paddr +
-					USPACE - sizeof(struct trapframe));
+	lwp0.l_md.md_tf = (struct trapframe *)(v + USPACE) - 1;
 
-	proc0paddr->u_pcb.pcb_special.sp =
-	    (uint64_t)lwp0.l_md.md_tf - 16;	/* 16 bytes is the
-						 * scratch area defined
-						 * by the ia64 ABI
-						 */
+	pcb0 = lwp_getpcb(&lwp0);
 
-	proc0paddr->u_pcb.pcb_special.bspstore =
-	    (uint64_t) proc0paddr + sizeof(struct user);
+	/* 16 bytes is the scratch area defined by the ia64 ABI. */
+	pcb0->pcb_special.sp = (vaddr_t)lwp0.l_md.md_tf - 16;
+	pcb0->pcb_special.bspstore = v + 1;
 
-	mutex_init(&proc0paddr->u_pcb.pcb_fpcpu_slock, MUTEX_DEFAULT, 0);
-
+	mutex_init(&pcb0->pcb_fpcpu_slock, MUTEX_DEFAULT, 0);
 
 	/*
 	 * Setup global data for the bootstrap cpu.
 	 */
-
-
 	ci = curcpu();
 
 	/* ar.k4 contains the cpu_info pointer to the
@@ -727,11 +639,10 @@ ia64_init(void)
 	 * MULTIPROCESSOR configuration, each CPU will later get
 	 * its own idle PCB when autoconfiguration runs.
 	 */
-	ci->ci_idle_pcb = &proc0paddr->u_pcb;
+	ci->ci_idle_pcb = pcb0;
 
 	/* Indicate that proc0 has a CPU. */
 	lwp0.l_cpu = ci;
-
 
 	ia64_set_tpr(0);
 	ia64_srlz_d();
@@ -741,7 +652,8 @@ ia64_init(void)
 	 * sane) context as the initial context for new threads that are
 	 * forked from us.
 	 */
-	if (savectx(&lwp0.l_addr->u_pcb)) panic("savectx failed");
+	if (savectx(pcb0))
+		panic("savectx failed");
 
 	/*
 	 * Initialize debuggers, and break into them if appropriate.
@@ -773,13 +685,14 @@ ia64_get_hcdp(void)
  * Set registers on exec.
  */
 void
-setregs(register struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(register struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
 	struct trapframe *tf;
 	uint64_t *ksttop, *kst, regstkp;
+	vaddr_t uv = uvm_lwp_getuarea(l);
 
 	tf = l->l_md.md_tf;
-	regstkp = (uint64_t) (l->l_addr) + sizeof(struct user);
+	regstkp = uv + sizeof(struct pcb);
 
 	ksttop =
 	    (uint64_t*)(regstkp + tf->tf_special.ndirty +
@@ -812,7 +725,7 @@ setregs(register struct lwp *l, struct exec_package *pack, u_long stack)
 		kst = ksttop - 1;
 		if (((uintptr_t)kst & 0x1ff) == 0x1f8)
 			*kst-- = 0;
-		*kst-- = (uint64_t)l->l_proc->p_psstr;	/* in3 = ps_strings */
+		*kst-- = l->l_proc->p_psstrp;	/* in3 = ps_strings */
 		if (((uintptr_t)kst & 0x1ff) == 0x1f8)
 			*kst-- = 0;
 		*kst-- = 0;				/* in2 = *obj */
@@ -844,7 +757,7 @@ setregs(register struct lwp *l, struct exec_package *pack, u_long stack)
 
 		/* in3 = ps_strings */
 		suword((char *)tf->tf_special.bspstore - 8,
-		    (uint64_t)l->l_proc->p_psstr);
+		    l->l_proc->p_psstrp);
 
 	}
 
@@ -880,4 +793,11 @@ int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	return EINVAL;
+}
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return 0; /* TODO: Implement. */
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: pci_kn300.c,v 1.32 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: pci_kn300.c,v 1.35 2012/02/06 02:14:15 matt Exp $ */
 
 /*
  * Copyright (c) 1998 by Matthew Jacob
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_kn300.c,v 1.32 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_kn300.c,v 1.35 2012/02/06 02:14:15 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -42,8 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_kn300.c,v 1.32 2009/03/14 21:04:02 dsl Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -61,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_kn300.c,v 1.32 2009/03/14 21:04:02 dsl Exp $");
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_kn300_intr_map(struct pci_attach_args *,
+int	dec_kn300_intr_map(const struct pci_attach_args *,
 	    pci_intr_handle_t *);
 const char *dec_kn300_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *dec_kn300_intr_evcnt(void *, pci_intr_handle_t);
@@ -123,8 +121,8 @@ pci_kn300_pickintr(struct mcpcia_config *ccp, int first)
 	}
 }
 
-int     
-dec_kn300_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+int
+dec_kn300_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
@@ -194,13 +192,13 @@ dec_kn300_intr_evcnt(void *ccv, pci_intr_handle_t ih)
 }
 
 void *
-dec_kn300_intr_establish(ccv, ih, level, func, arg)
-        void *ccv;
-        pci_intr_handle_t ih;
-        int level;
-        int (*func)(void *);
-        void *arg;
-{           
+dec_kn300_intr_establish(
+	void *ccv,
+	pci_intr_handle_t ih,
+	int level,
+	int (*func)(void *),
+	void *arg)
+{
 	struct mcpcia_config *ccp = ccv;
 	void *cookie;
 	int irq;
@@ -221,7 +219,7 @@ dec_kn300_intr_establish(ccv, ih, level, func, arg)
 	return (cookie);
 }
 
-void    
+void
 dec_kn300_intr_disestablish(void *ccv, void *cookie)
 {
 	panic("dec_kn300_intr_disestablish not implemented");

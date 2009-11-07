@@ -1,4 +1,4 @@
-/*      $NetBSD: procfs_linux.c,v 1.58 2009/10/19 01:25:29 dholland Exp $      */
+/*      $NetBSD: procfs_linux.c,v 1.64 2011/12/19 03:02:31 christos Exp $      */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.58 2009/10/19 01:25:29 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.64 2011/12/19 03:02:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,10 +53,14 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.58 2009/10/19 01:25:29 dholland E
 #include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/conf.h>
+#include <sys/sysctl.h>
+#include <sys/kauth.h>
+#include <sys/filedesc.h>
 
 #include <miscfs/procfs/procfs.h>
 
 #include <compat/linux/common/linux_exec.h>
+#include <compat/linux32/common/linux32_sysctl.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm.h>
@@ -96,7 +100,7 @@ get_proc_size_info(struct lwp *l, unsigned long *stext, unsigned long *etext, un
 			break;
 		}
 	}
-#ifdef LINUX_USRSTACK32
+#if defined(LINUX_USRSTACK32) && defined(USRSTACK32)
 	if (strcmp(p->p_emul->e_name, "linux32") == 0 &&
 	    LINUX_USRSTACK32 < USRSTACK32)
 		*sstack = (unsigned long)LINUX_USRSTACK32;
@@ -253,6 +257,8 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
         CPU_INFO_ITERATOR cii;
 #endif
 	int	 	 i;
+	uint64_t	nintr;
+	uint64_t	nswtch;
 
 	error = ENAMETOOLONG;
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
@@ -275,6 +281,8 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
 #endif
 
 	i = 0;
+	nintr = 0;
+	nswtch = 0;
 	for (ALLCPUS) {
 		len += snprintf(&bf[len], LBFSZ - len, 
 			"cpu%d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
@@ -286,20 +294,22 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
 		if (len >= LBFSZ)
 			goto out;
 		i += 1;
+		nintr += CPUNAME->ci_data.cpu_nintr;
+		nswtch += CPUNAME->ci_data.cpu_nswtch;
 	}
 
 	len += snprintf(&bf[len], LBFSZ - len,
 			"disk 0 0 0 0\n"
 			"page %u %u\n"
 			"swap %u %u\n"
-			"intr %u\n"
-			"ctxt %u\n"
-			"btime %lld\n",
+			"intr %"PRIu64"\n"
+			"ctxt %"PRIu64"\n"
+			"btime %"PRId64"\n",
 			uvmexp.pageins, uvmexp.pdpageouts,
 			uvmexp.pgswapin, uvmexp.pgswapout,
-			uvmexp.intrs,
-			uvmexp.swtch,
-			(long long)boottime.tv_sec);
+			nintr,
+			nswtch,
+			boottime.tv_sec);
 	if (len >= LBFSZ)
 		goto out;
 
@@ -548,53 +558,70 @@ out:
 	return error;
 }
 
+static int
+procfs_format_sfs(char **mtab, size_t *mlen, char *buf, size_t blen,
+    const struct statvfs *sfs, struct lwp *curl, int suser)
+{
+	const char *fsname;
+
+	/* Linux uses different names for some filesystems */
+	fsname = sfs->f_fstypename;
+	if (strcmp(fsname, "procfs") == 0)
+		fsname = "proc";
+	else if (strcmp(fsname, "ext2fs") == 0)
+		fsname = "ext2";
+
+	blen = snprintf(buf, blen, "%s %s %s %s%s%s%s%s%s 0 0\n",
+	    sfs->f_mntfromname, sfs->f_mntonname, fsname,
+	    (sfs->f_flag & ST_RDONLY) ? "ro" : "rw",
+	    (sfs->f_flag & ST_NOSUID) ? ",nosuid" : "",
+	    (sfs->f_flag & ST_NOEXEC) ? ",noexec" : "",
+	    (sfs->f_flag & ST_NODEV) ? ",nodev" : "",
+	    (sfs->f_flag & ST_SYNCHRONOUS) ? ",sync" : "",
+	    (sfs->f_flag & ST_NOATIME) ? ",noatime" : "");
+
+	*mtab = realloc(*mtab, *mlen + blen, M_TEMP, M_WAITOK);
+	memcpy(*mtab + *mlen, buf, blen);
+	*mlen += blen;
+	return sfs->f_mntonname[0] == '/' && sfs->f_mntonname[1] == '\0';
+}
+
 int
 procfs_domounts(struct lwp *curl, struct proc *p,
     struct pfsnode *pfs, struct uio *uio)
 {
 	char *bf, *mtab = NULL;
-	const char *fsname;
-	size_t len, mtabsz = 0;
+	size_t mtabsz = 0;
 	struct mount *mp, *nmp;
-	struct statvfs *sfs;
-	int error = 0;
+	int error = 0, root = 0;
+	struct cwdinfo *cwdi = curl->l_proc->p_cwdi;
 
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
+
 	mutex_enter(&mountlist_lock);
 	for (mp = CIRCLEQ_FIRST(&mountlist); mp != (void *)&mountlist;
-	     mp = nmp) {
-		if (vfs_busy(mp, &nmp)) {
+	    mp = nmp) {
+		struct statvfs sfs;
+
+		if (vfs_busy(mp, &nmp))
 			continue;
-		}
 
-		sfs = &mp->mnt_stat;
-
-		/* Linux uses different names for some filesystems */
-		fsname = sfs->f_fstypename;
-		if (strcmp(fsname, "procfs") == 0)
-			fsname = "proc";
-		else if (strcmp(fsname, "ext2fs") == 0)
-			fsname = "ext2";
-
-		len = snprintf(bf, LBFSZ, "%s %s %s %s%s%s%s%s%s 0 0\n",
-			sfs->f_mntfromname,
-			sfs->f_mntonname,
-			fsname,
-			(mp->mnt_flag & MNT_RDONLY) ? "ro" : "rw",
-			(mp->mnt_flag & MNT_NOSUID) ? ",nosuid" : "",
-			(mp->mnt_flag & MNT_NOEXEC) ? ",noexec" : "",
-			(mp->mnt_flag & MNT_NODEV) ? ",nodev" : "",
-			(mp->mnt_flag & MNT_SYNCHRONOUS) ? ",sync" : "",
-			(mp->mnt_flag & MNT_NOATIME) ? ",noatime" : ""
-			);
-
-		mtab = realloc(mtab, mtabsz + len, M_TEMP, M_WAITOK);
-		memcpy(mtab + mtabsz, bf, len);
-		mtabsz += len;
+		if ((error = dostatvfs(mp, &sfs, curl, MNT_WAIT, 0)) == 0)
+			root |= procfs_format_sfs(&mtab, &mtabsz, bf, LBFSZ,
+			    &sfs, curl, 0);
 
 		vfs_unbusy(mp, false, &nmp);
 	}
 	mutex_exit(&mountlist_lock);
+
+	/*
+	 * If we are inside a chroot that is not itself a mount point,
+	 * fake a root entry.
+	 */
+	if (!root && cwdi->cwdi_rdir)
+		(void)procfs_format_sfs(&mtab, &mtabsz, bf, LBFSZ,
+		    &cwdi->cwdi_rdir->v_mount->mnt_stat, curl, 1);
+
 	free(bf, M_TEMP);
 
 	if (mtabsz > 0) {
@@ -602,5 +629,104 @@ procfs_domounts(struct lwp *curl, struct proc *p,
 		free(mtab, M_TEMP);
 	}
 
+	return error;
+}
+
+/*
+ * Linux compatible /proc/version. Only active when the -o linux
+ * mountflag is used.
+ */
+int
+procfs_doversion(struct lwp *curl, struct proc *p,
+    struct pfsnode *pfs, struct uio *uio)
+{
+	char *bf;
+	char lostype[20], losrelease[20], lversion[80];
+	const char *postype, *posrelease, *pversion;
+	const char *emulname = curlwp->l_proc->p_emul->e_name;
+	int len;
+	int error = 0;
+	int nm[4];
+	size_t buflen;
+
+	CTASSERT(EMUL_LINUX_KERN_OSTYPE == EMUL_LINUX32_KERN_OSTYPE);
+	CTASSERT(EMUL_LINUX_KERN_OSRELEASE == EMUL_LINUX32_KERN_OSRELEASE);
+	CTASSERT(EMUL_LINUX_KERN_VERSION == EMUL_LINUX32_KERN_VERSION);
+
+	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
+
+	sysctl_lock(false);
+
+	if (strncmp(emulname, "linux", 5) == 0) {
+		/*
+		 * Lookup the emulation ostype, osrelease, and version.
+		 * Since compat_linux and compat_linux32 can be built as
+		 * modules, we use sysctl to obtain the values instead of
+		 * using the symbols directly.
+		 */
+
+		if (strcmp(emulname, "linux32") == 0) {
+			nm[0] = CTL_EMUL;
+			nm[1] = EMUL_LINUX32;
+			nm[2] = EMUL_LINUX32_KERN;
+		} else {
+			nm[0] = CTL_EMUL;
+			nm[1] = EMUL_LINUX;
+			nm[2] = EMUL_LINUX_KERN;
+		}
+
+		nm[3] = EMUL_LINUX_KERN_OSTYPE;
+		buflen = sizeof(lostype);
+		error = sysctl_dispatch(nm, __arraycount(nm),
+		    lostype, &buflen,
+		    NULL, 0, NULL, NULL, NULL);
+		if (error)
+			goto out;
+
+		nm[3] = EMUL_LINUX_KERN_OSRELEASE;
+		buflen = sizeof(losrelease);
+		error = sysctl_dispatch(nm, __arraycount(nm),
+		    losrelease, &buflen,
+		    NULL, 0, NULL, NULL, NULL);
+		if (error)
+			goto out;
+
+		nm[3] = EMUL_LINUX_KERN_VERSION;
+		buflen = sizeof(lversion);
+		error = sysctl_dispatch(nm, __arraycount(nm),
+		    lversion, &buflen,
+		    NULL, 0, NULL, NULL, NULL);
+		if (error)
+			goto out;
+
+		postype = lostype;
+		posrelease = losrelease;
+		pversion = lversion;
+	} else {
+		postype = ostype;
+		posrelease = osrelease;
+		strlcpy(lversion, version, sizeof(lversion));
+		if (strchr(lversion, '\n'))
+			*strchr(lversion, '\n') = '\0';
+		pversion = lversion;
+	}
+
+	len = snprintf(bf, LBFSZ,
+		"%s version %s (%s@localhost) (gcc version %s) %s\n",
+		postype, posrelease, emulname,
+#ifdef __VERSION__
+		__VERSION__,
+#else
+		"unknown",
+#endif
+		pversion);
+
+	if (len == 0)
+		goto out;
+
+	error = uiomove_frombuf(bf, len, uio);
+out:
+	free(bf, M_TEMP);
+	sysctl_unlock();
 	return error;
 }

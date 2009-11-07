@@ -1,4 +1,5 @@
-/*	$Id: optim.c,v 1.1.1.2 2009/09/04 00:27:33 gmcgarry Exp $	*/
+/*	Id: optim.c,v 1.49 2012/03/22 18:51:40 plunky Exp 	*/	
+/*	$NetBSD: optim.c,v 1.1.1.4.4.1 2012/04/03 16:36:21 riz Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *
@@ -43,8 +44,6 @@
 # define LO(p) p->n_left->n_op
 # define LV(p) p->n_left->n_lval
 
-int oflag = 0;
-
 /* remove left node */
 static NODE *
 zapleft(NODE *p)
@@ -87,11 +86,10 @@ optim(NODE *p)
 {
 	int o, ty;
 	NODE *sp, *q;
+	OFFSZ sz;
 	int i;
-	TWORD t;
 
-	t = BTYPE(p->n_type);
-	if( oflag ) return(p);
+	if (odebug) return(p);
 
 	ty = coptype(p->n_op);
 	if( ty == LTYPE ) return(p);
@@ -104,8 +102,17 @@ again:	o = p->n_op;
 	switch(o){
 
 	case SCONV:
+		if (concast(p->n_left, p->n_type)) {
+			q = p->n_left;
+			nfree(p);
+			p = q;
+			break;
+		}
+		/* FALLTHROUGH */
 	case PCONV:
-		return( clocal(p) );
+		if (p->n_type != VOID)
+			p = clocal(p);
+		break;
 
 	case FORTCALL:
 		p->n_right = fortarg( p->n_right );
@@ -113,10 +120,11 @@ again:	o = p->n_op;
 
 	case ADDROF:
 		if (LO(p) == TEMP)
-			return p;
+			break;
 		if( LO(p) != NAME ) cerror( "& error" );
 
-		if( !andable(p->n_left) ) return(p);
+		if( !andable(p->n_left) && !statinit)
+			break;
 
 		LO(p) = ICON;
 
@@ -124,19 +132,40 @@ again:	o = p->n_op;
 		/* paint over the type of the left hand side with the type of the top */
 		p->n_left->n_type = p->n_type;
 		p->n_left->n_df = p->n_df;
-		p->n_left->n_sue = p->n_sue;
+		p->n_left->n_ap = p->n_ap;
 		q = p->n_left;
 		nfree(p);
-		return q;
+		p = q;
+		break;
+
+	case NOT:
+	case UMINUS:
+	case COMPL:
+		if (LCON(p) && conval(p->n_left, o, p->n_left))
+			p = nfree(p);
+		break;
 
 	case UMUL:
+		/* Do not discard ADDROF TEMP's */
+		if (LO(p) == ADDROF && LO(p->n_left) != TEMP) {
+			q = p->n_left->n_left;
+			nfree(p->n_left);
+			nfree(p);
+			p = q;
+			break;
+		}
 		if( LO(p) != ICON ) break;
 		LO(p) = NAME;
 		goto setuleft;
 
 	case RS:
+		if (LCON(p) && RCON(p) && conval(p->n_left, o, p->n_right))
+			goto zapright;
+
+		sz = tsize(p->n_type, p->n_df, p->n_ap);
+
 		if (LO(p) == RS && RCON(p->n_left) && RCON(p) &&
-		    (RV(p) + RV(p->n_left)) < p->n_sue->suesize) {
+		    (RV(p) + RV(p->n_left)) < sz) {
 			/* two right-shift  by constants */
 			RV(p) += RV(p->n_left);
 			p->n_left = zapleft(p->n_left);
@@ -165,8 +194,8 @@ again:	o = p->n_op;
 			} else
 #endif
 			/* avoid larger shifts than type size */
-			if (RV(p) >= p->n_sue->suesize) {
-				RV(p) = RV(p) % p->n_sue->suesize;
+			if (RV(p) >= sz) {
+				RV(p) = RV(p) % sz;
 				werror("shift larger than type");
 			}
 			if (RV(p) == 0)
@@ -175,6 +204,11 @@ again:	o = p->n_op;
 		break;
 
 	case LS:
+		if (LCON(p) && RCON(p) && conval(p->n_left, o, p->n_right))
+			goto zapright;
+
+		sz = tsize(p->n_type, p->n_df, p->n_ap);
+
 		if (LO(p) == LS && RCON(p->n_left) && RCON(p)) {
 			/* two left-shift  by constants */
 			RV(p) += RV(p->n_left);
@@ -201,8 +235,8 @@ again:	o = p->n_op;
 			} else
 #endif
 			/* avoid larger shifts than type size */
-			if (RV(p) >= p->n_sue->suesize) {
-				RV(p) = RV(p) % p->n_sue->suesize;
+			if (RV(p) >= sz) {
+				RV(p) = RV(p) % sz;
 				werror("shift larger than type");
 			}
 			if (RV(p) == 0)  
@@ -221,6 +255,28 @@ again:	o = p->n_op;
 		o = p->n_op = PLUS;
 
 	case MUL:
+		/*
+		 * Check for u=(x-y)+z; where all vars are pointers to
+		 * the same struct. This has two advantages:
+		 * 1: avoid a mul+div
+		 * 2: even if not allowed, people may get surprised if this
+		 *    calculation do not give correct result if using
+		 *    unaligned structs.
+		 */
+		if (p->n_type == INTPTR && RCON(p) &&
+		    LO(p) == DIV && RCON(p->n_left) &&
+		    RV(p) == RV(p->n_left) &&
+		    LO(p->n_left) == MINUS) {
+			q = p->n_left->n_left;
+			if (q->n_left->n_type == PTR+STRTY &&
+			    q->n_right->n_type == PTR+STRTY &&
+			    strmemb(q->n_left->n_ap) ==
+			    strmemb(q->n_right->n_ap)) {
+				p = zapleft(p);
+				p = zapleft(p);
+			}
+		}
+		/* FALLTHROUGH */
 	case PLUS:
 	case AND:
 	case OR:
@@ -240,6 +296,7 @@ again:	o = p->n_op;
 			p->n_left = sp;
 			sp->n_left = t1;
 			sp->n_right = t2;
+			sp->n_type = p->n_type;
 			p->n_right = t3;
 			}
 		if(o == PLUS && LO(p) == MINUS && RCON(p) && RCON(p->n_left) &&
@@ -259,9 +316,10 @@ again:	o = p->n_op;
 			zapright:
 			nfree(p->n_right);
 			q = makety(p->n_left, p->n_type, p->n_qual,
-			    p->n_df, p->n_sue);
+			    p->n_df, p->n_ap);
 			nfree(p);
-			return clocal(q);
+			p = clocal(q);
+			break;
 			}
 
 		/* change muls to shifts */
@@ -298,8 +356,8 @@ again:	o = p->n_op;
 			p->n_op = RS;
 			RV(p) = i;
 			q = p->n_right;
-			if(tsize(q->n_type, q->n_df, q->n_sue) > SZINT)
-				p->n_right = makety(q, INT, 0, 0, MKSUE(INT));
+			if(tsize(q->n_type, q->n_df, q->n_ap) > SZINT)
+				p->n_right = makety(q, INT, 0, 0, 0);
 
 			break;
 		}

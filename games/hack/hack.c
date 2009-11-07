@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.c,v 1.9 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: hack.c,v 1.11 2011/08/07 06:03:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.c,v 1.9 2009/08/12 07:28:40 dholland Exp $");
+__RCSID("$NetBSD: hack.c,v 1.11 2011/08/07 06:03:45 dholland Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -459,7 +459,7 @@ pickup(int all)
 
 				pline("Pick up %s ? [ynaq]", doname(obj));
 				while (!strchr("ynaq ", (c = readchar())))
-					bell();
+					sound_bell();
 				if (c == 'q')
 					return;
 				if (c == 'n')
@@ -600,7 +600,7 @@ lookaround(void)
 					break;
 				if (flags.run != 1)
 					goto stop;
-				/* fall into next case */
+				/* FALLTHROUGH */
 			case CORR_SYM:
 		corr:
 				if (flags.run == 1 || flags.run == 3) {

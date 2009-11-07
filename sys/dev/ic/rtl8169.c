@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl8169.c,v 1.128 2009/09/15 19:29:17 dyoung Exp $	*/
+/*	$NetBSD: rtl8169.c,v 1.134.4.1 2012/03/05 20:31:49 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.128 2009/09/15 19:29:17 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.134.4.1 2012/03/05 20:31:49 sborrill Exp $");
 /* $FreeBSD: /repoman/r/ncvs/src/sys/dev/re/if_re.c,v 1.20 2004/04/11 20:34:08 ru Exp $ */
 
 /*
@@ -111,7 +111,6 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.128 2009/09/15 19:29:17 dyoung Exp $")
  * driver is 7500 bytes.
  */
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -134,9 +133,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.128 2009/09/15 19:29:17 dyoung Exp $")
 #include <netinet/in.h>		/* XXX for IP_MAXPACKET */
 #include <netinet/ip.h>		/* XXX for IP_MAXPACKET */
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -573,6 +570,7 @@ re_attach(struct rtk_softc *sc)
 		case RTK_HWREV_8169S:
 		case RTK_HWREV_8110S:
 		case RTK_HWREV_8169_8110SB:
+		case RTK_HWREV_8169_8110SBL:
 		case RTK_HWREV_8169_8110SC:
 			sc->sc_quirk |= RTKQ_MACLDPS;
 			break;
@@ -602,6 +600,15 @@ re_attach(struct rtk_softc *sc)
 			 * RTL8111C/CP : supports up to 9KB jumbo frame.
 			 */
 			sc->sc_quirk |= RTKQ_NOJUMBO;
+			break;
+		case RTK_HWREV_8168E:
+			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
+			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_PHYWAKE_PM |
+			    RTKQ_NOJUMBO;
+			break;
+		case RTK_HWREV_8168E_VL:
+			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
+			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_NOJUMBO;
 			break;
 		case RTK_HWREV_8100E:
 		case RTK_HWREV_8100E_SPIN2:
@@ -660,6 +667,10 @@ re_attach(struct rtk_softc *sc)
 			eaddr[(i * 2) + 1] = val >> 8;
 		}
 	}
+
+	/* Take PHY out of power down mode. */
+	if ((sc->sc_quirk & RTKQ_PHYWAKE_PM) != 0)
+		CSR_WRITE_1(sc, RTK_PMCH, CSR_READ_1(sc, RTK_PMCH) | 0x80);
 
 	aprint_normal_dev(sc->sc_dev, "Ethernet address %s\n",
 	    ether_sprintf(eaddr));
@@ -956,6 +967,9 @@ re_detach(struct rtk_softc *sc)
 	    &sc->re_ldata.re_tx_listseg, sc->re_ldata.re_tx_listnseg);
 
 	pmf_device_deregister(sc->sc_dev);
+
+	/* we don't want to run again */
+	sc->sc_flags &= ~RTK_ATTACHED;
 
 	return 0;
 }
@@ -1302,10 +1316,7 @@ re_rxeof(struct rtk_softc *sc)
 			     bswap16(rxvlan & RE_RDESC_VLANCTL_DATA),
 			     continue);
 		}
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		(*ifp->if_input)(ifp, m);
 	}
 
@@ -1669,14 +1680,11 @@ re_start(struct ifnet *ifp)
 		sc->re_ldata.re_tx_free -= nsegs;
 		sc->re_ldata.re_tx_nextfree = curdesc;
 
-#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 	}
 
 	if (sc->re_ldata.re_txq_free < ofree) {
@@ -1747,7 +1755,7 @@ re_init(struct ifnet *ifp)
 	if ((sc->sc_quirk & RTKQ_8169NONS) != 0)
 		cfg |= (0x1 << 14);
 
-	if ((ifp->if_capenable & ETHERCAP_VLAN_HWTAGGING) != 0)
+	if ((sc->ethercom.ec_capenable & ETHERCAP_VLAN_HWTAGGING) != 0)
 		cfg |= RE_CPLUSCMD_VLANSTRIP;
 	if ((ifp->if_capenable & (IFCAP_CSUM_IPv4_Rx |
 	     IFCAP_CSUM_TCPv4_Rx | IFCAP_CSUM_UDPv4_Rx)) != 0)

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.49 2009/04/14 22:15:23 lukem Exp $
+#	$NetBSD: Makefile,v 1.55 2011/08/14 13:06:09 christos Exp $
 #	@(#)Makefile	5.2 (Berkeley) 12/28/90
 
 PROG=	make
@@ -13,6 +13,17 @@ SRCS+=	lstAppend.c lstAtEnd.c lstAtFront.c lstClose.c lstConcat.c \
 	lstMember.c lstNext.c lstOpen.c lstRemove.c lstReplace.c lstSucc.c
 SRCS += lstPrev.c
 
+# let people experiment for a bit
+USE_META ?= no
+.if ${USE_META:tl} != "no"
+SRCS+=	meta.c
+CPPFLAGS+= -DUSE_META
+FILEMON_H ?= ${.CURDIR:H:H}/sys/dev/filemon/filemon.h
+.if exists(${FILEMON_H}) && ${FILEMON_H:T} == "filemon.h"
+COPTS.meta.c += -DHAVE_FILEMON_H -I${FILEMON_H:H}
+.endif
+.endif
+
 .PATH:	${.CURDIR}/lst.lib
 .if make(install)
 SUBDIR=	PSD.doc
@@ -25,7 +36,10 @@ SUBDIR+= unit-tests
 .include <bsd.subdir.mk>
 
 CPPFLAGS+= -DMAKE_NATIVE
-COPTS.var.c+= -Wno-cast-qual
+COPTS.var.c += -Wno-cast-qual
+COPTS.job.c += -Wno-format-nonliteral
+COPTS.parse.c += -Wno-format-nonliteral
+COPTS.var.c += -Wno-format-nonliteral
 
 .ifdef TOOLDIR
 # this is a native netbsd build, 
@@ -37,4 +51,4 @@ DPADD+=${LIBUTIL}
 
 # A simple unit-test driver to help catch regressions
 accept test:
-	cd ${.CURDIR}/unit-tests && ${.MAKE:S,^./,${.CURDIR}/,} TEST_MAKE=${TEST_MAKE:U${.OBJDIR}/${PROG:T}} ${.TARGET}
+	cd ${.CURDIR}/unit-tests && ${.MAKE} -r -m / TEST_MAKE=${TEST_MAKE:U${.OBJDIR}/${PROG:T}} ${.TARGET}

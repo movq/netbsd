@@ -1,8 +1,9 @@
-#	$NetBSD: list,v 1.6 2009/01/03 18:11:26 tsutsui Exp $
+#	$NetBSD: list,v 1.10 2011/01/14 10:26:30 tsutsui Exp $
 
 PROG	bin/cat
 PROG	bin/chmod
 PROG	bin/cp
+PROG	bin/dd
 PROG	bin/df
 PROG	bin/expr
 PROG	bin/ln
@@ -15,6 +16,7 @@ PROG	bin/rm
 PROG	bin/sh
 PROG	bin/stty
 
+PROG	sbin/chown	bin/chgrp
 PROG	sbin/edlabel
 PROG	sbin/fsck
 PROG	sbin/fsck_ffs
@@ -35,13 +37,14 @@ PROG	usr/bin/gzip	usr/bin/gzcat usr/bin/gunzip
 PROG	usr/bin/sed
 PROG	usr/bin/sort
 
-PROG	usr/sbin/chown	usr/bin/chgrp
 PROG	usr/sbin/chroot
 
 PROG	sbin/ahdilabel
 PROG	usr/sbin/loadkmap
 
+SPECIAL	gzip		srcdir	distrib/utils/x_gzip
 SPECIAL	umount		srcdir	distrib/utils/x_umount
+SPECIAL	edlabel		srcdir	distrib/utils/edlabel
 
 # The installation scripts
 COPY	${CURDIR}/install.md		install.md

@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6.h,v 1.53 2009/11/06 20:41:22 dyoung Exp $	*/
+/*	$NetBSD: nd6.h,v 1.56 2011/11/19 22:51:29 tls Exp $	*/
 /*	$KAME: nd6.h,v 1.95 2002/06/08 11:31:06 itojun Exp $	*/
 
 /*
@@ -32,11 +32,6 @@
 
 #ifndef _NETINET6_ND6_H_
 #define _NETINET6_ND6_H_
-
-/* see net/route.h, or net/if_inarp.h */
-#ifndef RTF_ANNOUNCE
-#define RTF_ANNOUNCE	RTF_PROTO2
-#endif
 
 #include <sys/queue.h>
 #include <sys/callout.h>
@@ -260,7 +255,7 @@ struct	in6_ndifreq {
 #define TEMPADDR_REGEN_ADVANCE		5	/* sec */
 #define MAX_TEMP_DESYNC_FACTOR		600	/* 10 min */
 #define ND_COMPUTE_RTIME(x) \
-		(((MIN_RANDOM_FACTOR * (x >> 10)) + (arc4random() & \
+		(((MIN_RANDOM_FACTOR * (x >> 10)) + (cprng_fast32() & \
 		((MAX_RANDOM_FACTOR - MIN_RANDOM_FACTOR) * (x >> 10)))) /1000)
 
 TAILQ_HEAD(nd_drhead, nd_defrouter);
@@ -372,6 +367,7 @@ extern int ip6_desync_factor;	/* seconds */
 extern u_int32_t ip6_temp_preferred_lifetime; /* seconds */
 extern u_int32_t ip6_temp_valid_lifetime; /* seconds */
 extern int ip6_temp_regen_advance; /* seconds */
+extern int nd6_numroutes;
 
 union nd_opts {
 	struct nd_opt_hdr *nd_opt_array[8];

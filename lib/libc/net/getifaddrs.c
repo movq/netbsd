@@ -1,4 +1,4 @@
-/*	$NetBSD: getifaddrs.c,v 1.12 2009/04/27 20:10:49 dyoung Exp $	*/
+/*	$NetBSD: getifaddrs.c,v 1.14 2011/02/04 02:01:12 matt Exp $	*/
 
 /*
  * Copyright (c) 1995, 1999
@@ -27,10 +27,12 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getifaddrs.c,v 1.12 2009/04/27 20:10:49 dyoung Exp $");
+__RCSID("$NetBSD: getifaddrs.c,v 1.14 2011/02/04 02:01:12 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
+#ifndef RUMP_ACTION
 #include "namespace.h"
+#endif
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -46,13 +48,17 @@ __RCSID("$NetBSD: getifaddrs.c,v 1.12 2009/04/27 20:10:49 dyoung Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __weak_alias
+#if defined(__weak_alias) && !defined(RUMP_ACTION)
 __weak_alias(getifaddrs,_getifaddrs)
 __weak_alias(freeifaddrs,_freeifaddrs)
 #endif
 
-#define	SALIGN	(sizeof(long) - 1)
-#define	SA_RLEN(sa)	((sa)->sa_len ? (((sa)->sa_len + SALIGN) & ~SALIGN) : (SALIGN + 1))
+#ifdef RUMP_ACTION
+#include <rump/rump_syscalls.h>
+#define sysctl(a,b,c,d,e,f) rump_sys___sysctl(a,b,c,d,e,f)
+#endif
+
+#define	SA_RLEN(sa)	RT_ROUNDUP((sa)->sa_len)
 
 int
 getifaddrs(struct ifaddrs **pif)

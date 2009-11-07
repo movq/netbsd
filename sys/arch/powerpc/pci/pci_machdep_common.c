@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep_common.c,v 1.8 2008/04/28 20:23:32 martin Exp $ */
+/* $NetBSD: pci_machdep_common.c,v 1.15 2012/02/01 09:54:03 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,22 +37,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.8 2008/04/28 20:23:32 martin Exp $");
-
-#include <sys/types.h>
-#include <sys/param.h>
-#include <sys/time.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/extent.h>
-#include <sys/device.h>
-#include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.15 2012/02/01 09:54:03 matt Exp $");
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <machine/intr.h>
+
+#include <sys/param.h>
+#include <sys/bus.h>
+#include <sys/device.h>
+#include <sys/errno.h>
+#include <sys/extent.h>
+#include <sys/intr.h>
+#include <sys/systm.h>
+#include <sys/time.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -82,7 +80,7 @@ struct powerpc_bus_dma_tag pci_bus_dma_tag = {
 };
 
 int
-genppc_pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+genppc_pci_bus_maxdevs(void *v, int busno)
 {
 	return 32;
 }
@@ -92,6 +90,7 @@ genppc_pci_intr_string(void *v, pci_intr_handle_t ih)
 {
 	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
 
+#ifdef ICU_LEN
 	if (ih == 0 || ih >= ICU_LEN
 /* XXX on macppc it's completely legal to have PCI interrupts on a slave PIC */
 #ifdef IRQ_SLAVE
@@ -99,6 +98,7 @@ genppc_pci_intr_string(void *v, pci_intr_handle_t ih)
 #endif
 	    )
 		panic("pci_intr_string: bogus handle 0x%x", ih);
+#endif
 
 	sprintf(irqstr, "irq %d", ih);
 	return (irqstr);
@@ -118,12 +118,14 @@ genppc_pci_intr_establish(void *v, pci_intr_handle_t ih, int level,
     int (*func)(void *), void *arg)
 {
 
+#ifdef ICU_LEN
 	if (ih == 0 || ih >= ICU_LEN
 #ifdef IRQ_SLAVE
 	    || ih == IRQ_SLAVE
 #endif
 	    )
 		panic("pci_intr_establish: bogus handle 0x%x", ih);
+#endif
 
 	return intr_establish(ih, IST_LEVEL, level, func, arg);
 }
@@ -135,22 +137,29 @@ genppc_pci_intr_disestablish(void *v, void *cookie)
 	intr_disestablish(cookie);
 }
 
+int
+genppc_pci_intr_setattr(void *v, pci_intr_handle_t *ihp, int attr,
+    uint64_t data)
+{
+
+	return ENODEV;
+}
+
 void
-genppc_pci_conf_interrupt(pci_chipset_tag_t pct, int bus, int dev, int pin,
+genppc_pci_conf_interrupt(void *v, int bus, int dev, int pin,
     int swiz, int *iline)
 {
 	/* do nothing */
 }
 
 int
-genppc_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
-	pcireg_t id)
+genppc_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
 {
 	return (PCI_CONF_DEFAULT);
 }
 
 int
-genppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+genppc_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
@@ -187,11 +196,13 @@ genppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	if (line == 0 || line == 255) {
 		aprint_error("pci_intr_map: no mapping for pin %c\n", '@' + pin);
 		goto bad;
+#ifdef ICU_LEN
 	} else {
 		if (line >= ICU_LEN) {
 			aprint_error("pci_intr_map: bad interrupt line %d\n", line);
 			goto bad;
 		}
+#endif
 	}
 
 	*ihp = line;
@@ -202,15 +213,93 @@ bad:
 	return 1;
 }
 
+int
+genppc_pci_msi_request(const struct pci_attach_args *pa,
+    pci_msi_handle_t *msihp, size_t nmsirq, int ipl, int capid)
+{
+	return EOPNOTSUPP;
+}
+
+int
+genppc_pci_msi_type(void *v, pci_msi_handle_t msih)
+{
+	panic("%s", __func__);
+}
+
+size_t
+genppc_pci_msi_available(void *v, pci_msi_handle_t msih)
+{
+	panic("%s", __func__);
+}
+
+const char *
+genppc_pci_msi_string(void *v, pci_msi_handle_t msih, size_t msirq)
+{
+	panic("%s", __func__);
+}
+
+const struct evcnt *
+genppc_pci_msi_evcnt(void *v, pci_msi_handle_t msih, size_t msirq)
+{
+	panic("%s", __func__);
+}
+
+void *
+genppc_pci_msi_establish(void *v, pci_msi_handle_t msih, size_t msirq,
+		    int ipl, int (*func)(void *), void *arg)
+{
+	panic("%s", __func__);
+}
+
+void *
+genppc_pci_msix_establish(void *v, pci_msi_handle_t msih, size_t vec,
+    size_t msirq, int ipl, int (*func)(void *), void *arg)
+{
+	panic("%s", __func__);
+}
+
+void
+genppc_pci_msi_disestablish(void *v, void *ih)
+{
+	panic("%s", __func__);
+}
+
+void
+genppc_pci_msi_free(void *v, pci_msi_handle_t msih, size_t msirq)
+{
+	panic("%s", __func__);
+}
+
+void
+genppc_pci_msi_release(void *v, pci_msi_handle_t msih)
+{
+	panic("%s", __func__);
+}
+
+void
+genppc_pci_chipset_msi_init(pci_chipset_tag_t pc)
+{
+	pc->pc_msi_request = genppc_pci_msi_request;
+	pc->pc_msi_type = genppc_pci_msi_type;
+	pc->pc_msi_available = genppc_pci_msi_available;
+	pc->pc_msi_evcnt = genppc_pci_msi_evcnt;
+	pc->pc_msi_string = genppc_pci_msi_string;
+	pc->pc_msi_establish = genppc_pci_msi_establish;
+	pc->pc_msix_establish = genppc_pci_msix_establish;
+	pc->pc_msi_disestablish = genppc_pci_msi_disestablish;
+	pc->pc_msi_free = genppc_pci_msi_free;
+	pc->pc_msi_release = genppc_pci_msi_release;
+}
+
 #ifdef __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH
 #include <machine/isa_machdep.h>
 #include "isa.h"
 
-void *genppc_pciide_machdep_compat_intr_establish(struct device *,
+void *genppc_pciide_machdep_compat_intr_establish(device_t,
     struct pci_attach_args *, int, int (*)(void *), void *);
 
 void *
-genppc_pciide_machdep_compat_intr_establish(struct device *dev,
+genppc_pciide_machdep_compat_intr_establish(device_t dev,
     struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
 {
 #if NISA > 0
@@ -221,7 +310,7 @@ genppc_pciide_machdep_compat_intr_establish(struct device *dev,
 	cookie = isa_intr_establish(NULL, irq, IST_LEVEL, IPL_BIO, func, arg);
 	if (cookie == NULL)
 		return (NULL);
-	printf("%s: %s channel interrupting at irq %d\n", dev->dv_xname,
+	aprint_normal_dev(dev, "%s channel interrupting at irq %d\n",
 	    PCIIDE_CHANNEL_NAME(chan), irq);
 	return (cookie);
 #else

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.20 2007/10/17 19:57:43 garbled Exp $	*/
+/*	$NetBSD: locore.s,v 1.24 2011/11/15 10:57:04 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -154,7 +154,8 @@ L_high_code:
 	movc	%d0,%dfc
 
 | Setup process zero user/kernel stacks.
-	movl	_C_LABEL(proc0paddr),%a1 | get proc0 pcb addr
+	lea	_C_LABEL(lwp0),%a0	| lwp0
+	movl	%a0@(L_PCB),%a1		| XXXuvm_lwp_getuarea
 	lea	%a1@(USPACE-4),%sp	| set SSP to last word
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
@@ -166,7 +167,7 @@ L_high_code:
 | is finished, to avoid spurrious interrupts.
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -175,8 +176,7 @@ L_high_code:
 	movw	#PSL_USER,%sp@-		| tf_sr for user mode
 	clrl	%sp@-			| tf_stackadj
 	lea	%sp@(-64),%sp		| tf_regs[16]
-	lea	_C_LABEL(lwp0),%a0	| proc0.p_md.md_regs = 
-	movl	%a1,%a0@(L_MD_REGS)	|   trapframe
+	movl	%a1,%a0@(L_MD_REGS)	| lwp0.p_md.md_regs = trapframe
 	jbsr	_C_LABEL(main)		| main(&trapframe)
 	PANIC("main() returned")
 
@@ -575,14 +575,6 @@ Ldorte:
 GLOBAL(getsp)
 	movl	%sp,%d0			| get current SP
 	addql	#4,%d0			| compensate for return address
-	rts
-
-ENTRY(getsfc)
-	movc	%sfc,%d0
-	rts
-
-ENTRY(getdfc)
-	movc	%dfc,%d0
 	rts
 
 ENTRY(getvbr)

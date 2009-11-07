@@ -1,4 +1,4 @@
-/*	$NetBSD: getgrent.c,v 1.62 2008/04/28 20:22:59 martin Exp $	*/
+/*	$NetBSD: getgrent.c,v 1.64 2011/10/15 23:00:01 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999-2000, 2004-2005 The NetBSD Foundation, Inc.
@@ -88,7 +88,7 @@
 #if 0
 static char sccsid[] = "@(#)getgrent.c	8.2 (Berkeley) 3/21/94";
 #else
-__RCSID("$NetBSD: getgrent.c,v 1.62 2008/04/28 20:22:59 martin Exp $");
+__RCSID("$NetBSD: getgrent.c,v 1.64 2011/10/15 23:00:01 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -270,6 +270,9 @@ _gr_copy(struct group *fromgrp, struct group *grp, char *buf, size_t buflen)
 	COPYSTR(grp->gr_passwd, fromgrp->gr_passwd);
 	grp->gr_gid = fromgrp->gr_gid;
 
+	if (fromgrp->gr_mem == NULL)
+		return 0;
+
 	for (memc = 0; fromgrp->gr_mem[memc]; memc++)
 		continue;
 	memc++;					/* for final NULL */
@@ -301,7 +304,7 @@ __grstart_files(struct __grstate_files *state)
 	_DIAGASSERT(state != NULL);
 
 	if (state->fp == NULL) {
-		state->fp = fopen(_PATH_GROUP, "r");
+		state->fp = fopen(_PATH_GROUP, "re");
 		if (state->fp == NULL)
 			return NS_UNAVAIL;
 	} else {
@@ -1262,7 +1265,7 @@ __grstart_compat(struct __grstate_compat *state)
 	_DIAGASSERT(state != NULL);
 
 	if (state->fp == NULL) {
-		state->fp = fopen(_PATH_GROUP, "r");
+		state->fp = fopen(_PATH_GROUP, "re");
 		if (state->fp == NULL)
 			return NS_UNAVAIL;
 	} else {

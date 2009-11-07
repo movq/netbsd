@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_domain.c,v 1.85 2009/10/03 20:24:39 elad Exp $	*/
+/*	$NetBSD: uipc_domain.c,v 1.87 2011/10/27 21:10:55 seanb Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.85 2009/10/03 20:24:39 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.87 2011/10/27 21:10:55 seanb Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -518,6 +518,12 @@ sysctl_net_setup(void)
 		       CTL_NET, PF_LOCAL, SOCK_STREAM, CTL_EOL);
 	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "seqpacket",
+		       SYSCTL_DESCR("SOCK_SEQPACKET settings"),
+		       NULL, 0, NULL, 0,
+		       CTL_NET, PF_LOCAL, SOCK_SEQPACKET, CTL_EOL);
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "dgram",
 		       SYSCTL_DESCR("SOCK_DGRAM settings"),
 		       NULL, 0, NULL, 0,
@@ -529,6 +535,13 @@ sysctl_net_setup(void)
 		       SYSCTL_DESCR("SOCK_STREAM protocol control block list"),
 		       sysctl_unpcblist, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_STREAM, CTL_CREATE, CTL_EOL);
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRUCT, "pcblist",
+		       SYSCTL_DESCR("SOCK_SEQPACKET protocol control "
+				    "block list"),
+		       sysctl_unpcblist, 0, NULL, 0,
+		       CTL_NET, PF_LOCAL, SOCK_SEQPACKET, CTL_CREATE, CTL_EOL);
 	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "pcblist",
@@ -589,7 +602,7 @@ pfslowtimo(void *arg)
 			if (pr->pr_slowtimo)
 				(*pr->pr_slowtimo)();
 	}
-	callout_schedule(&pfslowtimo_ch, hz / 2);
+	callout_schedule(&pfslowtimo_ch, hz / PR_SLOWHZ);
 }
 
 void
@@ -605,5 +618,5 @@ pffasttimo(void *arg)
 			if (pr->pr_fasttimo)
 				(*pr->pr_fasttimo)();
 	}
-	callout_schedule(&pffasttimo_ch, hz / 5);
+	callout_schedule(&pffasttimo_ch, hz / PR_FASTHZ);
 }

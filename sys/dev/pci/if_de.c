@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.133 2009/05/12 08:23:00 cegger Exp $	*/
+/*	$NetBSD: if_de.c,v 1.139 2012/02/02 19:43:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -37,7 +37,7 @@
  *   board which support 21040, 21041, or 21140 (mostly).
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.133 2009/05/12 08:23:00 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.139 2012/02/02 19:43:05 tls Exp $");
 
 #define	TULIP_HDR_DATA
 
@@ -63,10 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.133 2009/05/12 08:23:00 cegger Exp $");
 #endif
 
 #if defined(__NetBSD__)
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 #endif
 
 #include <net/if.h>
@@ -83,22 +80,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.133 2009/05/12 08:23:00 cegger Exp $");
 #include <dev/mii/miivar.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
-#endif
-
-
-#if defined(__NetBSD__)
-#include <uvm/uvm_extern.h>
 #endif
 
 #if defined(__FreeBSD__)
@@ -3652,14 +3641,12 @@ tulip_rx_intr(
 #endif /* TULIP_BUS_DMA */
 
 	    eh = *mtod(ms, struct ether_header *);
-#if NBPFILTER > 0
 	    if (sc->tulip_bpf != NULL) {
 		if (me == ms)
-		    TULIP_BPF_TAP(sc, mtod(ms, void *), total_len);
+		    bpf_tap(ifp, mtod(ms, void *), total_len);
 		else
-		    TULIP_BPF_MTAP(sc, ms);
+		    bpf_mtap(ifp, ms);
 	    }
-#endif
 	    sc->tulip_flags |= TULIP_RXACT;
 	    if ((sc->tulip_flags & (TULIP_PROMISC|TULIP_HASHONLY))
 		    && (eh.ether_dhost[0] & 1) == 0
@@ -3765,7 +3752,7 @@ tulip_rx_intr(
 #if defined(__NetBSD__)
 		(*ifp->if_input)(ifp, ms);
 #else
-		m_adj(ms, sizeof(struct ether_header);
+		m_adj(ms, sizeof(struct ether_header));
 		ether_input(ifp, &eh, ms);
 #endif /* __NetBSD__ */
 #else
@@ -3779,7 +3766,7 @@ tulip_rx_intr(
 #if defined(__NetBSD__)
 		(*ifp->if_input)(ifp, m0);
 #else
-		m_adj(m0, sizeof(struct ether_header);
+		m_adj(m0, sizeof(struct ether_header));
 		ether_input(ifp, &eh, m0);
 #endif /* __NetBSD__ */
 		m0 = ms;
@@ -3910,10 +3897,8 @@ tulip_tx_intr(
 		    TULIP_TXMAP_POSTSYNC(sc, map);
 		    tulip_free_txmap(sc, map);
 #endif /* TULIP_BUS_DMA */
-#if NBPFILTER > 0
 		    if (sc->tulip_bpf != NULL)
-			TULIP_BPF_MTAP(sc, m);
-#endif
+			bpf_mtap(&sc->tulip_if, m);
 		    m_freem(m);
 #if defined(TULIP_DEBUG)
 		} else {
@@ -4041,9 +4026,7 @@ tulip_intr_handler(
     while ((csr = TULIP_CSR_READ(sc, csr_status)) & sc->tulip_intrmask) {
 #if defined(__NetBSD__) && !defined(TULIP_USE_SOFTINTR)
         if (only_once == 1) {
-#if NRND > 0
 	    rnd_add_uint32(&sc->tulip_rndsource, csr);
-#endif
 	    only_once = 0;
 	}
 #endif
@@ -4171,7 +4154,7 @@ tulip_hardintr_handler(
      */
     tulip_softintr_mask |= (1U << sc->tulip_unit);
 
-#if defined(__NetBSD__) && NRND > 0
+#if defined(__NetBSD__)
     /*
      * This isn't all that random (the value we feed in) but it is
      * better than a constant probably.  It isn't used in entropy
@@ -5158,7 +5141,7 @@ tulip_attach(
 #endif
 #endif /* __bsdi__ */
 
-#if defined(__NetBSD__) && NRND > 0
+#if defined(__NetBSD__)
     rnd_attach_source(&sc->tulip_rndsource, device_xname(&sc->tulip_dev),
 		      RND_TYPE_NET, 0);
 #endif
@@ -5897,8 +5880,8 @@ tulip_pci_attach(
 	    if (sc->tulip_ih == NULL) {
 		aprint_error_dev(&sc->tulip_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-		    printf(" at %s", intrstr);
-		printf("\n");
+		    aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	    }
 	    printf("%s: interrupting at %s\n", device_xname(&sc->tulip_dev), intrstr);

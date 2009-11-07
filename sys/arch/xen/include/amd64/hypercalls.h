@@ -1,4 +1,4 @@
-/* $NetBSD: hypercalls.h,v 1.5 2008/11/13 01:45:48 cegger Exp $ */
+/* $NetBSD: hypercalls.h,v 1.8 2011/12/07 16:01:39 cegger Exp $ */
 /******************************************************************************
  * hypercall.h
  * 
@@ -399,11 +399,19 @@ HYPERVISOR_dom0_op(
 }
 #endif	/* __XEN_INTERFACE_VERSION__ */
 
+#include <xen/xen-public/arch-x86/xen-mca.h>
+
 static inline int
 HYPERVISOR_machine_check(struct xen_mc *mc)
 {
 	mc->interface_version = XEN_MCA_INTERFACE_VERSION;
 	return _hypercall1(int, mca, mc);
+}
+
+static inline int
+HYPERVISOR_sysctl(void *sysctl)
+{
+	return _hypercall1(int, sysctl, sysctl);
 }
 
 #endif /* __HYPERCALL_H__ */

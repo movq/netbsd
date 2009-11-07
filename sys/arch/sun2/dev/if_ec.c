@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ec.c,v 1.16 2008/11/07 00:20:02 dyoung Exp $	*/
+/*	$NetBSD: if_ec.c,v 1.20 2012/02/02 19:43:00 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,12 +34,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.16 2008/11/07 00:20:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.20 2012/02/02 19:43:00 tls Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,9 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.16 2008/11/07 00:20:02 dyoung Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/endian.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -74,10 +70,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.16 2008/11/07 00:20:02 dyoung Exp $");
 #include <netns/ns_if.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
@@ -104,9 +98,7 @@ struct ec_softc {
 	u_char sc_colliding;	/* nonzero if the net is colliding */
 	uint32_t sc_backoff_seed;	/* seed for the backoff PRNG */
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 /* Macros to read and write the CSR. */
@@ -252,10 +244,8 @@ ec_attach(device_t parent, device_t self, void *aux)
 	bus_intr_establish(mbma->mbma_bustag, mbma->mbma_pri, IPL_NET, 0,
 	    ec_intr, sc);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 }
 
 /*
@@ -332,11 +322,8 @@ ec_start(struct ifnet *ifp)
 		return;
 	}
 
-#if NBPFILTER > 0
 	/* The BPF tap. */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	/* Size the packet. */
 	count = EC_BUF_SZ - m0->m_pkthdr.len;
@@ -543,14 +530,11 @@ ec_recv(struct ec_softc *sc, int intbit)
 	if (total_length == 0) {
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 		/*
 	 	* Check if there's a BPF listener on this interface.
 	 	* If so, hand off the raw packet to BPF.
 	 	*/
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		/* Pass the packet up. */
 		(*ifp->if_input)(ifp, m0);

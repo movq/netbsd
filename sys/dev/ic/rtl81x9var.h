@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9var.h,v 1.49 2009/09/05 03:50:49 tsutsui Exp $	*/
+/*	$NetBSD: rtl81x9var.h,v 1.53 2012/02/02 19:43:03 tls Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -34,11 +34,7 @@
  *	FreeBSD Id: if_rlreg.h,v 1.9 1999/06/20 18:56:09 wpaul Exp
  */
 
-#include "rnd.h"
-
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #define RTK_ETHER_ALIGN	2
 #define RTK_RXSTAT_LEN	4
@@ -177,12 +173,13 @@ struct rtk_tx_desc {
 };
 
 struct rtk_softc {
-	device_t sc_dev;		/* generic device structures */
+	device_t		sc_dev;
 	struct ethercom		ethercom;	/* interface info */
 	struct mii_data		mii;
 	struct callout		rtk_tick_ch;	/* tick callout */
-	bus_space_handle_t	rtk_bhandle;	/* bus space handle */
 	bus_space_tag_t		rtk_btag;	/* bus space tag */
+	bus_space_handle_t	rtk_bhandle;	/* bus space handle */
+	bus_size_t		rtk_bsize;	/* bus space mapping size */
 	u_int			sc_quirk;	/* chip quirks */
 #define RTKQ_8129		0x00000001	/* 8129 */
 #define RTKQ_8139CPLUS		0x00000002	/* 8139C+ */
@@ -194,6 +191,7 @@ struct rtk_softc {
 #define RTKQ_NOEECMD		0x00000080	/* unusable EEPROM command */
 #define RTKQ_MACSTAT		0x00000100	/* set MACSTAT_DIS on init */
 #define RTKQ_CMDSTOP		0x00000200	/* set STOPREQ on stop */
+#define RTKQ_PHYWAKE_PM		0x00000400	/* wake PHY from power down */
 
 	bus_dma_tag_t		sc_dmat;
 
@@ -224,9 +222,8 @@ struct rtk_softc {
 	/* Power management hooks. */
 	int	(*sc_enable)	(struct rtk_softc *);
 	void	(*sc_disable)	(struct rtk_softc *);
-#if NRND > 0
-	rndsource_element_t     rnd_source;
-#endif
+
+	krndsource_t     rnd_source;
 };
 
 #define RE_TX_DESC_CNT(sc)	((sc)->re_ldata.re_tx_desc_cnt)

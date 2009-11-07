@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.5 2009/11/07 07:27:49 cegger Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.14 2012/01/21 16:48:57 chs Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.5 2009/11/07 07:27:49 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.14 2012/01/21 16:48:57 chs Exp $");
 
 #include "opt_mtrr.h"
 
@@ -89,12 +89,11 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.5 2009/11/07 07:27:49 cegger Exp $"
 #include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/buf.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 #include <sys/ptrace.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/cpu.h>
 #include <machine/gdt.h>
@@ -120,8 +119,6 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
 {
 
 	p2->p_md.md_flags = p1->p_md.md_flags;
-	if (p1->p_flag & PK_32)
-		p2->p_flag |= PK_32;
 }
 
 /*
@@ -141,9 +138,10 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 {
 	struct pcb *pcb1, *pcb2;
 	struct trapframe *tf;
+	vaddr_t uv;
 
-	pcb1 = &l1->l_addr->u_pcb;
-	pcb2 = &l2->l_addr->u_pcb;
+	pcb1 = lwp_getpcb(l1);
+	pcb2 = lwp_getpcb(l2);
 
 	/*
 	 * If parent LWP was using FPU, then we have to save the FPU h/w
@@ -179,34 +177,32 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	 * newly-created child process to go directly to user level with a
 	 * parent return value of 0 from fork(), while the parent process
 	 * returns normally.
-	 * 
-	 * Also, copy PCB %fs/%gs base from parent.
 	 */
-#ifdef __x86_64__
-	pcb2->pcb_rsp0 = (USER_TO_UAREA(l2->l_addr) + KSTACK_SIZE - 16) & ~0xf;
-	tf = (struct trapframe *)pcb2->pcb_rsp0 - 1;
+	uv = uvm_lwp_getuarea(l2);
 
-	pcb2->pcb_fs = pcb1->pcb_fs;
-	pcb2->pcb_gs = pcb1->pcb_gs;
+#ifdef __x86_64__
+	pcb2->pcb_rsp0 = (uv + KSTACK_SIZE - 16) & ~0xf;
+	tf = (struct trapframe *)pcb2->pcb_rsp0 - 1;
 #else
-	pcb2->pcb_esp0 = (USER_TO_UAREA(l2->l_addr) + KSTACK_SIZE - 16);
+	pcb2->pcb_esp0 = (uv + KSTACK_SIZE - 16);
 	tf = (struct trapframe *)pcb2->pcb_esp0 - 1;
 
-	memcpy(&pcb2->pcb_fsd, pcb1->pcb_fsd, sizeof(pcb2->pcb_fsd));
-	memcpy(&pcb2->pcb_gsd, pcb1->pcb_gsd, sizeof(pcb2->pcb_gsd));
 	pcb2->pcb_iomap = NULL;
 #endif
 	l2->l_md.md_regs = tf;
 
-	/* Copy the trapframe from parent. */
+	/*
+	 * Copy the trapframe from parent, so that return to userspace
+	 * will be to right address, with correct registers.
+	 */
 	memcpy(tf, l1->l_md.md_regs, sizeof(struct trapframe));
 
 	/* Child LWP might get aston() before returning to userspace. */
 	tf->tf_trapno = T_ASTFLT;
 
-#ifdef DIAGNOSTIC
+#if 0 /* DIAGNOSTIC */
 	/* Set a red zone in the kernel stack after the uarea. */
-	pmap_kremove(USER_TO_UAREA(l2->l_addr), PAGE_SIZE);
+	pmap_kremove(uv, PAGE_SIZE);
 	pmap_update(pmap_kernel());
 #endif
 
@@ -228,7 +224,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct trapframe *tf = l->l_md.md_regs;
 	struct switchframe *sf = (struct switchframe *)tf - 1;
 
@@ -258,9 +254,10 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 void
 cpu_lwp_free(struct lwp *l, int proc)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
 	/* If we were using the FPU, forget about it. */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL) {
+	if (pcb->pcb_fpcpu != NULL) {
 		fpusave_lwp(l, false);
 	}
 
@@ -278,7 +275,8 @@ void
 cpu_lwp_free2(struct lwp *l)
 {
 
-	/* nothing */
+	KASSERT(l->l_md.md_gc_ptp == NULL);
+	KASSERT(l->l_md.md_gc_pmap == NULL);
 }
 
 /*
@@ -300,7 +298,7 @@ kvtop(void *addr)
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t faddr, taddr, off;
@@ -335,6 +333,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 		len -= PAGE_SIZE;
 	}
 	pmap_update(pmap_kernel());
+
+	return 0;
 }
 
 /*
@@ -356,3 +356,58 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = 0;
 }
+
+#ifdef __HAVE_CPU_UAREA_ROUTINES
+void *
+cpu_uarea_alloc(bool system)
+{
+	struct pglist pglist;
+	int error;
+
+	/*
+	 * Allocate a new physically contiguous uarea which can be
+	 * direct-mapped.
+	 */
+	error = uvm_pglistalloc(USPACE, 0, ptoa(physmem), 0, 0, &pglist, 1, 1);
+	if (error) {
+		return NULL;
+	}
+
+	/*
+	 * Get the physical address from the first page.
+	 */
+	const struct vm_page * const pg = TAILQ_FIRST(&pglist);
+	KASSERT(pg != NULL);
+	const paddr_t pa = VM_PAGE_TO_PHYS(pg);
+
+	/*
+	 * We need to return a direct-mapped VA for the pa.
+	 */
+
+	return (void *)PMAP_MAP_POOLPAGE(pa);
+}
+
+/*
+ * Return true if we freed it, false if we didn't.
+ */
+bool
+cpu_uarea_free(void *vva)
+{
+	vaddr_t va = (vaddr_t) vva;
+
+	if (va >= VM_MIN_KERNEL_ADDRESS && va < VM_MAX_KERNEL_ADDRESS) {
+		return false;
+	}
+
+	/*
+	 * Since the pages are physically contiguous, the vm_page structures
+	 * will be as well.
+	 */
+	struct vm_page *pg = PHYS_TO_VM_PAGE(PMAP_UNMAP_POOLPAGE(va));
+	KASSERT(pg != NULL);
+	for (size_t i = 0; i < UPAGES; i++, pg++) {
+		uvm_pagefree(pg);
+	}
+	return true;
+}
+#endif /* __HAVE_CPU_UAREA_ROUTINES */

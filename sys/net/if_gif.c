@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.c,v 1.76 2008/11/07 00:20:13 dyoung Exp $	*/
+/*	$NetBSD: if_gif.c,v 1.80 2011/10/28 16:42:52 dyoung Exp $	*/
 /*	$KAME: if_gif.c,v 1.76 2001/08/20 02:01:02 kjc Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.76 2008/11/07 00:20:13 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.80 2011/10/28 16:42:52 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.76 2008/11/07 00:20:13 dyoung Exp $");
 #include <sys/syslog.h>
 #include <sys/proc.h>
 #include <sys/protosw.h>
-#include <sys/kauth.h>
 #include <sys/cpu.h>
 #include <sys/intr.h>
 
@@ -85,7 +84,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.76 2008/11/07 00:20:13 dyoung Exp $");
 #include <netinet/ip_encap.h>
 #include <net/if_gif.h>
 
-#include "bpfilter.h"
 
 #include <net/net_osdep.h>
 
@@ -161,9 +159,7 @@ gifattach0(struct gif_softc *sc)
 	IFQ_SET_READY(&sc->gif_if.if_snd);
 	if_attach(&sc->gif_if);
 	if_alloc_sadl(&sc->gif_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->gif_if, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(&sc->gif_if, DLT_NULL, sizeof(u_int));
 }
 
 static int
@@ -180,9 +176,7 @@ gif_clone_destroy(struct ifnet *ifp)
 	encap_detach(sc->encap_cookie4);
 #endif
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	rtcache_free(&sc->gif_ro);
 
@@ -317,6 +311,10 @@ gif_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	}
 	*mtod(m, int *) = dst->sa_family;
 
+	/* Clear checksum-offload flags. */
+	m->m_pkthdr.csum_flags = 0;
+	m->m_pkthdr.csum_data = 0;
+
 	s = splnet();
 	IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
 	if (error) {
@@ -366,10 +364,7 @@ gifintr(void *arg)
 			}
 		}
 		family = *mtod(m, int *);
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		m_adj(m, sizeof(int));
 
 		len = m->m_pkthdr.len;
@@ -415,10 +410,7 @@ gif_input(struct mbuf *m, int af, struct ifnet *ifp)
 
 	m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, af, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(ifp, af, m);
 
 	/*
 	 * Put the packet to the network layer input queue according to the
@@ -477,34 +469,14 @@ gif_input(struct mbuf *m, int af, struct ifnet *ifp)
 int
 gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
-	struct lwp *l = curlwp;	/* XXX */
 	struct gif_softc *sc  = ifp->if_softc;
 	struct ifreq     *ifr = (struct ifreq*)data;
 	int error = 0, size;
 	struct sockaddr *dst, *src;
 
 	switch (cmd) {
-	case SIOCSIFMTU:
-	case SIOCSLIFPHYADDR:
-#ifdef SIOCDIFPHYADDR
-	case SIOCDIFPHYADDR:
-#endif
-		if ((error = kauth_authorize_network(l->l_cred,
-		    KAUTH_NETWORK_INTERFACE,
-		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
-		    NULL)) != 0)
-			return (error);
-		/* FALLTHROUGH */
-	default:
-		break;
-	}
-
-	switch (cmd) {
 	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
-		break;
-
-	case SIOCSIFDSTADDR:
 		break;
 
 	case SIOCADDMULTI:

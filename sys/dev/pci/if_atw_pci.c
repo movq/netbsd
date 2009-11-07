@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atw_pci.c,v 1.22 2009/09/16 16:34:50 dyoung Exp $	*/
+/*	$NetBSD: if_atw_pci.c,v 1.25 2011/07/26 20:51:24 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.22 2009/09/16 16:34:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.25 2011/07/26 20:51:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,8 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.22 2009/09/16 16:34:50 dyoung Exp $
 /*
  * PCI configuration space registers used by the ADM8211.
  */
-#define	ATW_PCI_IOBA		0x10	/* i/o mapped base */
-#define	ATW_PCI_MMBA		0x14	/* memory mapped base */
+#define ATW_PCI_IOBA PCI_BAR(0)	/* i/o mapped base */
+#define ATW_PCI_MMBA PCI_BAR(1)	/* memory mapped base */
 
 struct atw_pci_softc {
 	struct atw_softc	psc_atw;	/* real ADM8211 softc */
@@ -90,8 +90,8 @@ struct atw_pci_softc {
 
 static int	atw_pci_match(device_t, cfdata_t, void *);
 static void	atw_pci_attach(device_t, device_t, void *);
-static bool	atw_pci_suspend(device_t PMF_FN_PROTO);
-static bool	atw_pci_resume(device_t PMF_FN_PROTO);
+static bool	atw_pci_suspend(device_t, const pmf_qual_t *);
+static bool	atw_pci_resume(device_t, const pmf_qual_t *);
 
 CFATTACH_DECL_NEW(atw_pci, sizeof(struct atw_pci_softc),
     atw_pci_match, atw_pci_attach, NULL, NULL);
@@ -134,7 +134,7 @@ atw_pci_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static bool
-atw_pci_resume(device_t self PMF_FN_ARGS)
+atw_pci_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct atw_pci_softc *psc = device_private(self);
 	struct atw_softc *sc = &psc->psc_atw;
@@ -151,7 +151,7 @@ atw_pci_resume(device_t self PMF_FN_ARGS)
 }
 
 static bool
-atw_pci_suspend(device_t self PMF_FN_ARGS)
+atw_pci_suspend(device_t self, const pmf_qual_t *qual)
 {
 	struct atw_pci_softc *psc = device_private(self);
 
@@ -159,7 +159,7 @@ atw_pci_suspend(device_t self PMF_FN_ARGS)
 	pci_intr_disestablish(psc->psc_pc, psc->psc_intrcookie);
 	psc->psc_intrcookie = NULL;
 
-	return atw_suspend(self PMF_FN_CALL);
+	return atw_suspend(self, qual);
 }
 
 static void

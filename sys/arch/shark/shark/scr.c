@@ -1,4 +1,4 @@
-/*	$NetBSD: scr.c,v 1.24 2009/03/14 14:46:07 dsl Exp $	*/
+/*	$NetBSD: scr.c,v 1.27 2012/01/31 04:28:50 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -102,7 +102,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scr.c,v 1.24 2009/03/14 14:46:07 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scr.c,v 1.27 2012/01/31 04:28:50 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -112,7 +112,6 @@ __KERNEL_RCSID(0, "$NetBSD: scr.c,v 1.24 2009/03/14 14:46:07 dsl Exp $");
 /* #include <sys/select.h> */
 /* #include <sys/tty.h> */
 #include <sys/proc.h>
-/* #include <sys/user.h> */
 #include <sys/conf.h>
 /* #include <sys/file.h> */
 /* #include <sys/uio.h> */
@@ -451,8 +450,7 @@ typedef unsigned char BYTE;
 /* our soft c structure */
 struct scr_softc 
 {
-    struct device       dev;
-    int                 open;
+    int     open;
 
     /* configuration information */
     int     status;                 /* status to be returned */
@@ -578,8 +576,8 @@ static unsigned char hatStack[HATSTACKSIZE];   /* actual stack used during a FIQ
 */
 
 /* configure routines */
-int     scrprobe(struct device *, struct cfdata *, void *);
-void    scrattach(struct device *, struct device *, void *);
+int     scrprobe(device_t, cfdata_t, void *);
+void    scrattach(device_t, device_t, void *);
 
 static void   initStates(struct scr_softc * sc); 
 
@@ -633,7 +631,7 @@ static void scrUntimeout(void (*func)(struct scr_softc*,int), struct scr_softc*,
 
 
 
-CFATTACH_DECL(scr, sizeof(struct scr_softc),
+CFATTACH_DECL_NEW(scr, sizeof(struct scr_softc),
     scrprobe, scrattach, NULL, NULL);
 
 extern struct cfdriver scr_cd;
@@ -681,10 +679,8 @@ const struct cdevsw scr_cdevsw = {
 **     none.
 **--
 */
-int scrprobe(parent, match, aux)
-    struct  device  *parent;
-    struct cfdata   *match;
-    void            *aux;
+int
+scrprobe(device_t parent, cfdata_t match, void *aux)
 {
     struct isa_attach_args  *ia = aux;
     int                     rv = 0;           
@@ -747,10 +743,8 @@ int scrprobe(parent, match, aux)
 **      none.
 **--
 */
-void scrattach(parent, self, aux)
-    struct device *parent;
-    struct device *self;
-    void         *aux;
+void
+scrattach(device_t parent, device_t self, void *aux)
 {
     struct scr_softc       *sc = (void *)self;
 
@@ -3696,11 +3690,12 @@ static void myHatWedge(int nFIQs)
 **--
 */
 
-static void scrTimeout(ftn, sc, arg, count)
-    void (*ftn)(struct scr_softc*,int);
-    struct scr_softc* sc;
-    int arg;
-    register int count;
+static void
+scrTimeout(
+    void (*ftn)(struct scr_softc*,int),
+    struct scr_softc* sc,
+    int arg,
+    int count)
 {
 
     register Callout *new, *p, *t;
@@ -3784,10 +3779,11 @@ static void scrTimeout(ftn, sc, arg, count)
 **      nill
 **--
 */
-static void scrUntimeout(ftn, sc, arg)
-void (*ftn)(struct scr_softc*,int);
-struct scr_softc* sc;
-int arg;
+static void
+scrUntimeout(
+    void (*ftn)(struct scr_softc*, int),
+    struct scr_softc* sc,
+    int arg)
 {
     register Callout *p, *t;
     ASSERT(scrClkEnable);

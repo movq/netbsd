@@ -1,4 +1,4 @@
-/*	$NetBSD: cgsix.c,v 1.46 2009/09/19 07:07:43 tsutsui Exp $ */
+/*	$NetBSD: cgsix.c,v 1.51 2012/01/11 16:10:13 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgsix.c,v 1.46 2009/09/19 07:07:43 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgsix.c,v 1.51 2012/01/11 16:10:13 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,8 +94,6 @@ __KERNEL_RCSID(0, "$NetBSD: cgsix.c,v 1.46 2009/09/19 07:07:43 tsutsui Exp $");
 #include <sys/proc.h>
 #include <sys/syslog.h>
 #endif
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 
@@ -637,20 +635,6 @@ cg6attach(struct cgsix_softc *sc, const char *name, int isconsole)
 		 * we're not the console so we just clear the screen and don't 
 		 * set up any sort of text display
 		 */
-		if (cgsix_defaultscreen.textops == NULL) {
-			/* 
-			 * ugly, but...
-			 * we want the console settings to win, so we only
-			 * touch anything when we find an untouched screen
-			 * definition. In this case we fill it from fb to
-			 * avoid problems in case no cgsix is the console
-			 */
-			ri = &sc->sc_fb.fb_rinfo;
-			cgsix_defaultscreen.textops = &ri->ri_ops;
-			cgsix_defaultscreen.capabilities = ri->ri_caps;
-			cgsix_defaultscreen.nrows = ri->ri_rows;
-			cgsix_defaultscreen.ncols = ri->ri_cols;
-		}
 	}
 	
 	aa.scrdata = &cgsix_screenlist;
@@ -1151,6 +1135,10 @@ cgsix_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 			return cgsix_putcmap(sc, 
 			    (struct wsdisplay_cmap *)data);
 
+		case WSDISPLAYIO_LINEBYTES:
+			*(u_int *)data = sc->sc_stride;
+			return 0;
+
 		case WSDISPLAYIO_SMODE:
 			{
 				int new_mode = *(int*)data;
@@ -1262,7 +1250,7 @@ cgsix_init_screen(void *cookie, struct vcons_screen *scr,
 	if (sc->sc_fhcrev < 2)
 		memset(sc->sc_fb.fb_pixels, (*defattr >> 16) & 0xff,
 		    sc->sc_stride * sc->sc_height);
-	rasops_init(ri, sc->sc_height/8, sc->sc_width/8);
+	rasops_init(ri, 0, 0);
 	ri->ri_caps = WSSCREEN_WSCOLORS | WSSCREEN_REVERSE;
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);
@@ -1345,6 +1333,7 @@ void
 cgsix_putchar(void *cookie, int row, int col, u_int c, long attr)
 {
 	struct rasops_info *ri = cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, c);
 	struct vcons_screen *scr = ri->ri_hw;
 	struct cgsix_softc *sc = scr->scr_cookie;
 	int inv;
@@ -1359,10 +1348,10 @@ cgsix_putchar(void *cookie, int row, int col, u_int c, long attr)
 			int x, y, wi, he;
 			volatile struct cg6_fbc *fbc = sc->sc_fbc;
 
-			wi = ri->ri_font->fontwidth;
-			he = ri->ri_font->fontheight;
+			wi = font->fontwidth;
+			he = font->fontheight;
 			
-			if (!CHAR_IN_FONT(c, ri->ri_font))
+			if (!CHAR_IN_FONT(c, font))
 				return;
 			inv = ((attr >> 8) & WSATTR_REVERSE);
 			if (inv) {
@@ -1383,15 +1372,15 @@ cgsix_putchar(void *cookie, int row, int col, u_int c, long attr)
 			if (c == 0x20) {
 				cgsix_rectfill(sc, x, y, wi, he, bg);
 			} else {
-				uc = c-ri->ri_font->firstchar;
-				data = (uint8_t *)ri->ri_font->data + uc * 
+				uc = c - font->firstchar;
+				data = (uint8_t *)font->data + uc * 
 				    ri->ri_fontscale;
 
 				cgsix_setup_mono(sc, x, y, wi, 1, fg, bg);		
 				for (i = 0; i < he; i++) {
-					cgsix_feed_line(sc, ri->ri_font->stride,
+					cgsix_feed_line(sc, font->stride,
 					    data);
-					data += ri->ri_font->stride;
+					data += font->stride;
 				}
 				/* put the chip back to normal */
 				fbc->fbc_incy = 0;

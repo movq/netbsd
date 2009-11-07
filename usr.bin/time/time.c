@@ -1,4 +1,4 @@
-/*	$NetBSD: time.c,v 1.19 2008/07/21 14:19:26 lukem Exp $	*/
+/*	$NetBSD: time.c,v 1.22 2011/11/09 19:10:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)time.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: time.c,v 1.19 2008/07/21 14:19:26 lukem Exp $");
+__RCSID("$NetBSD: time.c,v 1.22 2011/11/09 19:10:10 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -56,9 +56,10 @@ __RCSID("$NetBSD: time.c,v 1.19 2008/07/21 14:19:26 lukem Exp $");
 
 #include "ext.h"
 
-int		main(int, char **);
-static void	usage(void);
+__dead static void	usage(void);
 static void	prl(long, const char *);
+static void	prts(const char *, const char *, const struct timespec *,
+    const char *);
 static void	prtv(const char *, const char *, const struct timeval *,
     const char *);
 
@@ -72,7 +73,7 @@ main(int argc, char ** volatile argv)
 	int volatile cshflag;
 	const char *decpt;
 	const struct lconv *lconv;
-	struct timeval before, after;
+	struct timespec before, after;
 	struct rusage ru;
 
 	(void)setlocale(LC_ALL, "");
@@ -106,7 +107,7 @@ main(int argc, char ** volatile argv)
 	if (argc < 1)
 		usage();
 
-	gettimeofday(&before, (struct timezone *)NULL);
+	(void)clock_gettime(CLOCK_MONOTONIC, &before);
 	switch(pid = vfork()) {
 	case -1:			/* error */
 		err(EXIT_FAILURE, "Vfork failed");
@@ -123,10 +124,10 @@ main(int argc, char ** volatile argv)
 	(void)signal(SIGQUIT, SIG_IGN);
 	if ((pid = wait4(pid, &status, 0, &ru)) == -1)
 		err(EXIT_FAILURE, "wait4 %d failed", pid);
-	(void)gettimeofday(&after, (struct timezone *)NULL);
+	(void)clock_gettime(CLOCK_MONOTONIC, &after);
 	if (!WIFEXITED(status))
 		warnx("Command terminated abnormally.");
-	timersub(&after, &before, &after);
+	timespecsub(&after, &before, &after);
 
 	if ((lconv = localeconv()) == NULL ||
 	    (decpt = lconv->decimal_point) == NULL)
@@ -135,14 +136,14 @@ main(int argc, char ** volatile argv)
 	if (cshflag) {
 		static struct rusage null_ru;
 		before.tv_sec = 0;
-		before.tv_usec = 0;
+		before.tv_nsec = 0;
 		prusage(stderr, &null_ru, &ru, &after, &before);
 	} else if (portableflag) {
-		prtv("real ", decpt, &after, "\n");
+		prts("real ", decpt, &after, "\n");
 		prtv("user ", decpt, &ru.ru_utime, "\n");
 		prtv("sys  ", decpt, &ru.ru_stime, "\n");
 	} else {
-		prtv("", decpt, &after, " real ");
+		prts("", decpt, &after, " real ");
 		prtv("", decpt, &ru.ru_utime, " user ");
 		prtv("", decpt, &ru.ru_stime, " sys\n");
 	}
@@ -174,10 +175,10 @@ main(int argc, char ** volatile argv)
 }
 
 static void
-usage()
+usage(void)
 {
 
-	(void)fprintf(stderr, "usage: %s [-clp] utility [argument ...]\n",
+	(void)fprintf(stderr, "Usage: %s [-clp] utility [argument ...]\n",
 	    getprogname());
 	exit(EXIT_FAILURE);
 }
@@ -190,10 +191,19 @@ prl(long val, const char *expn)
 }
 
 static void
+prts(const char *pre, const char *decpt, const struct timespec *ts,
+    const char *post)
+{
+
+	(void)fprintf(stderr, "%s%9lld%s%02ld%s", pre, (long long)ts->tv_sec,
+	    decpt, (long)ts->tv_nsec / 10000000, post);
+}
+
+static void
 prtv(const char *pre, const char *decpt, const struct timeval *tv,
     const char *post)
 {
 
-	(void)fprintf(stderr, "%s%9ld%s%02ld%s", pre, (long)tv->tv_sec, decpt,
-	    (long)tv->tv_usec / 10000, post);
+	(void)fprintf(stderr, "%s%9lld%s%02ld%s", pre, (long long)tv->tv_sec,
+	    decpt, (long)tv->tv_usec / 10000, post);
 }

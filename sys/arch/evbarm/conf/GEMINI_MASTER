@@ -1,5 +1,5 @@
 #
-#	GEMINI -- 
+#	GEMINI --
 #
 
 include	"arch/evbarm/conf/std.gemini"
@@ -35,17 +35,17 @@ file-system	MSDOSFS		# MS-DOS file system
 #file-system	FDESC		# /dev/fd
 #file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	NFSSERVER
-#options 	WAPBL		# File system journaling support - Experimental
+#options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -221,7 +221,7 @@ geminigpio2	at obio0 addr 0x4f000000 intrbase 96  intr 24
 
 # USB
 ##ehci0	at obio? addr 0x68000000 size 0x400 intr 10 # 30?
-##ehci1	at obio? addr 0x69000000 size 0x400 intr 11 # 31? 
+##ehci1	at obio? addr 0x69000000 size 0x400 intr 11 # 31?
 
 ##usb* at ehci?
 ##uhub* at usb?
@@ -230,7 +230,7 @@ geminigpio2	at obio0 addr 0x4f000000 intrbase 96  intr 24
 
 # PCI
 ##pci0	at obio? bus ?
-##options PCI_NETBSD_CONFIGURE		# set up the PCI bus 
+##options PCI_NETBSD_CONFIGURE		# set up the PCI bus
 ##options	PCIVERBOSE
 ##options PCI_CONFIG_DUMP
 
@@ -245,9 +245,9 @@ geminigpio2	at obio0 addr 0x4f000000 intrbase 96  intr 24
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-pseudo-device	md	1		# memory disk
+pseudo-device	md			# memory disk
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -256,7 +256,6 @@ pseudo-device	loop			# network loopback
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options	RND_COM
 #pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms

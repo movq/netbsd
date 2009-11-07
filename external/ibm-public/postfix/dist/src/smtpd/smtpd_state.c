@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_state.c,v 1.1.1.1 2009/06/23 10:08:56 tron Exp $	*/
+/*	$NetBSD: smtpd_state.c,v 1.1.1.4 2011/09/10 10:36:31 tron Exp $	*/
 
 /*++
 /* NAME
@@ -86,6 +86,7 @@ void    smtpd_state_init(SMTPD_STATE *state, VSTREAM *stream,
     state->service = mystrdup(service);
     state->buffer = vstring_alloc(100);
     state->addr_buf = vstring_alloc(100);
+    state->conn_count = state->conn_rate = 0;
     state->error_count = 0;
     state->error_mask = 0;
     state->notify_mask = name_mask(VAR_NOTIFY_CLASSES, mail_error_masks,
@@ -120,9 +121,7 @@ void    smtpd_state_init(SMTPD_STATE *state, VSTREAM *stream,
     state->expand_buf = 0;
     state->prepend = 0;
     state->proxy = 0;
-    state->proxy_buffer = 0;
     state->proxy_mail = 0;
-    state->proxy_xforward_features = 0;
     state->saved_filter = 0;
     state->saved_redirect = 0;
     state->saved_bcc = 0;
@@ -142,9 +141,9 @@ void    smtpd_state_init(SMTPD_STATE *state, VSTREAM *stream,
     state->dsn_buf = vstring_alloc(100);
     state->dsn_orcpt_buf = vstring_alloc(100);
 #ifdef USE_TLS
-    state->tls_use_tls = 0;
-    state->tls_enforce_tls = 0;
-    state->tls_auth_only = 0;
+#ifdef USE_TLSPROXY
+    state->tlsproxy = 0;
+#endif
     state->tls_context = 0;
 #endif
 
@@ -209,12 +208,14 @@ void    smtpd_state_reset(SMTPD_STATE *state)
 	vstring_free(state->defer_if_reject.reason);
     if (state->expand_buf)
 	vstring_free(state->expand_buf);
-    if (state->proxy_buffer)
-	vstring_free(state->proxy_buffer);
     if (state->instance)
 	vstring_free(state->instance);
     if (state->dsn_buf)
 	vstring_free(state->dsn_buf);
     if (state->dsn_orcpt_buf)
 	vstring_free(state->dsn_orcpt_buf);
+#if (defined(USE_TLS) && defined(USE_TLSPROXY))
+    if (state->tlsproxy)			/* still open after longjmp */
+	vstream_fclose(state->tlsproxy);
+#endif
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.12 2009/11/03 05:07:26 snj Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.15 2012/02/04 16:33:27 skrll Exp $	*/
 
 /*	$OpenBSD: cpufunc.h,v 1.17 2000/05/15 17:22:40 mickey Exp $	*/
 
@@ -68,7 +68,8 @@
 #define hptbtop(b) ((b) >> 17)
 
 /* Get space register for an address */
-static __inline register_t ldsid(vaddr_t p) {
+static __inline register_t
+ldsid(vaddr_t p) {
 	register_t ret;
 	__asm volatile("ldsid (%1),%0" : "=r" (ret) : "r" (p));
 	return ret;
@@ -87,6 +88,19 @@ static __inline register_t ldsid(vaddr_t p) {
 
 #define ssm(v,r) __asm volatile("ssm %1,%0": "=r" (r): "i" (v))
 #define rsm(v,r) __asm volatile("rsm %1,%0": "=r" (r): "i" (v))
+
+
+/* Get coherence index for an address */
+static __inline register_t
+lci(pa_space_t sp, vaddr_t va) {
+	register_t ret;
+
+	mtsp((sp), 1);	\
+	__asm volatile("lci 0(%%sr1, %1), %0" : "=r" (ret) : "r" (va));
+
+	return ret;
+}
+
 
 /* Move to system mask. Old value of system mask is returned. */
 static __inline register_t mtsm(register_t mask) {
@@ -172,36 +186,6 @@ hppa_hpa_t cpu_gethpa(int);
 #define PCXL2_ACCEL_IO_END		(0xfc000000 - 1)
 #define PCXL2_ACCEL_IO_ADDR2MASK(a)	(0x8 >> ((((a) >> 25) - 2) & 3))
 void eaio_l2(int);
-
-/*
- * These flush or purge the data cache for a item whose total 
- * size is <= the size of a data cache line, however they don't
- * check this constraint.
- */
-static __inline void
-fdcache_small(pa_space_t sp, vaddr_t va, vsize_t size)
-{
-	__asm volatile(
-		"	mtsp	%0,%%sr1		\n"
-		"	fdc	%%r0(%%sr1, %1)		\n"
-		"	fdc	%2(%%sr1, %1)		\n"
-		"	sync				\n"
-		"	syncdma				\n"
-		:
-		: "r" (sp), "r" (va), "r" (size - 1));
-}
-static __inline void
-pdcache_small(pa_space_t sp, vaddr_t va, vsize_t size)
-{
-	__asm volatile(
-		"	mtsp	%0,%%sr1		\n"
-		"	pdc	%%r0(%%sr1, %1)		\n"
-		"	pdc	%2(%%sr1, %1)		\n"
-		"	sync				\n"
-		"	syncdma				\n"
-		:
-		: "r" (sp), "r" (va), "r" (size - 1));
-}
 
 #endif /* _KERNEL */
 

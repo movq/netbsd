@@ -1,4 +1,4 @@
-/* $Id: if_ae.c,v 1.15 2008/11/07 00:20:02 dyoung Exp $ */
+/* $Id: if_ae.c,v 1.22 2012/02/02 19:43:00 tls Exp $ */
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
  * Copyright (c) 2006 Garrett D'Amore.
@@ -98,22 +98,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.15 2008/11/07 00:20:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.22 2012/02/02 19:43:00 tls Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/callout.h>
-#include <sys/mbuf.h>
-#include <sys/malloc.h>
-#include <sys/kernel.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/errno.h>
 #include <sys/device.h>
-
-#include <machine/endian.h>
+#include <sys/endian.h>
+#include <sys/errno.h>
+#include <sys/intr.h>
+#include <sys/ioctl.h>
+#include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/mbuf.h>
+#include <sys/socket.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -122,12 +121,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.15 2008/11/07 00:20:02 dyoung Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
-
-#include <machine/bus.h>
-#include <machine/intr.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -238,7 +232,7 @@ ae_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Try to get MAC address.
 	 */
-	ea = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-addr");
+	ea = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-address");
 	if (ea == NULL) {
 		printf("%s: unable to get mac-addr property\n",
 		    sc->sc_dev.dv_xname);
@@ -390,10 +384,8 @@ ae_attach(device_t parent, device_t self, void *aux)
 	ether_ifattach(ifp, enaddr);
 	ether_set_ifflags_cb(&sc->sc_ethercom, ae_ifflags_cb);
 
-#if NRND > 0
 	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname,
 	    RND_TYPE_NET, 0);
-#endif
 
 	/*
 	 * Make sure the interface is shutdown during reboot.
@@ -453,22 +445,14 @@ int
 ae_activate(device_t self, enum devact act)
 {
 	struct ae_softc *sc = device_private(self);
-	int s, error = 0;
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		mii_activate(&sc->sc_mii, act, MII_PHY_ANY, MII_OFFSET_ANY);
 		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-
-	return (error);
 }
 
 /*
@@ -501,9 +485,7 @@ ae_detach(device_t self, int flags)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->sc_rnd_source);
-#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -746,13 +728,10 @@ ae_start(struct ifnet *ifp)
 
 		last_txs = txs;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (txs == NULL || sc->sc_txfree == 0) {
@@ -1016,10 +995,8 @@ ae_intr(void *arg)
 	/* Try to get more packets going. */
 	ae_start(ifp);
 
-#if NRND > 0
 	if (handled)
 		rnd_add_uint32(&sc->sc_rnd_source, status);
-#endif
 	return (handled);
 }
 
@@ -1157,14 +1134,11 @@ ae_rxintr(struct ae_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass it up the stack if its for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);

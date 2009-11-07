@@ -74,7 +74,7 @@ struct drm_file;
 #include <machine/param.h>
 #endif
 #include <machine/pmap.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #if defined(__i386__) || defined(__x86_64__)
 #include <machine/specialreg.h>
 #include <machine/sysarch.h>
@@ -186,6 +186,7 @@ MALLOC_DECLARE(DRM_MEM_AGPLISTS);
 MALLOC_DECLARE(DRM_MEM_CTXBITMAP);
 MALLOC_DECLARE(DRM_MEM_SGLISTS);
 MALLOC_DECLARE(DRM_MEM_DRAWABLE);
+MALLOC_DECLARE(DRM_MEM_MM);
 
 #define DRM_MAX_CTXBITMAP (PAGE_SIZE * 8)
 
@@ -266,6 +267,10 @@ typedef int			irqreturn_t;
 #define IRQ_NONE		0
 #endif
 
+#define container_of(ptr, type, member) ({			\
+	__typeof( ((type *)0)->member ) *__mptr = (ptr);	\
+	(type *)( (char *)__mptr - offsetof(type,member) );})
+
 enum {
 	DRM_IS_NOT_AGP,
 	DRM_IS_AGP,
@@ -294,7 +299,7 @@ enum {
 
 #elif   defined(__NetBSD__)
 
-#define PAGE_ALIGN(addr)    ALIGN(addr)
+#define PAGE_ALIGN(addr)	round_page(addr)
 #define DRM_SUSER(p)    (kauth_cred_getsvuid((p)->p_cred) == 0)
 #define DRM_AGP_FIND_DEVICE()	agp_find_device(0)
 #ifdef MTRR_TYPE_WC
@@ -355,53 +360,6 @@ typedef uint8_t u8;
 #define DRM_WRITEMEMORYBARRIER()	__asm __volatile("" : : : "memory");
 #define DRM_MEMORYBARRIER()		__asm __volatile( \
 					"lock; addl $0,0(%%rsp)" : : : "memory");
-#endif
-
-#if defined(__FreeBSD__)
-
-#define DRM_READ8(map, offset)						\
-	*(volatile u_int8_t *)(((vm_offset_t)(map)->handle) +		\
-	    (vm_offset_t)(offset))
-#define DRM_READ16(map, offset)						\
-	*(volatile u_int16_t *)(((vm_offset_t)(map)->handle) +		\
-	    (vm_offset_t)(offset))
-#define DRM_READ32(map, offset)						\
-	*(volatile u_int32_t *)(((vm_offset_t)(map)->handle) +		\
-	    (vm_offset_t)(offset))
-#define DRM_WRITE8(map, offset, val)					\
-	*(volatile u_int8_t *)(((vm_offset_t)(map)->handle) +		\
-	    (vm_offset_t)(offset)) = val
-#define DRM_WRITE16(map, offset, val)					\
-	*(volatile u_int16_t *)(((vm_offset_t)(map)->handle) +		\
-	    (vm_offset_t)(offset)) = val
-#define DRM_WRITE32(map, offset, val)					\
-	*(volatile u_int32_t *)(((vm_offset_t)(map)->handle) +		\
-	    (vm_offset_t)(offset)) = val
-
-#define DRM_VERIFYAREA_READ( uaddr, size )		\
-	(!useracc(__DECONST(caddr_t, uaddr), size, VM_PROT_READ))
-
-#elif   defined(__NetBSD__)
-
-typedef vaddr_t vm_offset_t;
-
-#define DRM_READ8(map, offset)		\
-	bus_space_read_1( (map)->bst, (map)->bsh, (offset))
-#define DRM_READ16(map, offset)		\
-	bus_space_read_2( (map)->bst, (map)->bsh, (offset))
-#define DRM_READ32(map, offset)		\
-	bus_space_read_4( (map)->bst, (map)->bsh, (offset))
-#define DRM_WRITE8(map, offset, val)	\
-	bus_space_write_1((map)->bst, (map)->bsh, (offset), (val))
-#define DRM_WRITE16(map, offset, val)	\
-	bus_space_write_2((map)->bst, (map)->bsh, (offset), (val))
-#define DRM_WRITE32(map, offset, val)	\
-	bus_space_write_4((map)->bst, (map)->bsh, (offset), (val))
-
-#define DRM_VERIFYAREA_READ( uaddr, size )		\
-	(!uvm_map_checkprot(&(curproc->p_vmspace->vm_map),              \
-		(vaddr_t)uaddr, (vaddr_t)uaddr+size, UVM_PROT_READ))
-
 #endif
 
 #define DRM_COPY_TO_USER(user, kern, size) \
@@ -658,6 +616,21 @@ typedef struct drm_sg_mem {
 
 typedef TAILQ_HEAD(drm_map_list, drm_local_map) drm_map_list_t;
 
+#if defined(__NetBSD__)
+typedef struct {
+	int			mapped;
+	int			maptype;
+	bus_addr_t		base;
+	bus_size_t		size;
+	bus_space_handle_t	bsh;
+	int			flags;
+	void *			vaddr;
+} pci_map_data_t;
+
+/* XXX */
+#define readl(va) (*(volatile u_int32_t *) (va))
+#endif
+
 typedef struct drm_local_map {
 	unsigned long	offset;	 /* Physical address (0 for SAREA)*/
 	unsigned long	size;	 /* Physical size (bytes)	    */
@@ -675,7 +648,7 @@ typedef struct drm_local_map {
 	bus_space_handle_t bsh;
 	drm_dma_handle_t *dmah;
 #if defined(__NetBSD__)
-	int *cnt;
+	pci_map_data_t *fullmap;
 	bus_size_t mapsize;
 #endif
 	TAILQ_ENTRY(drm_local_map) link;
@@ -723,7 +696,7 @@ struct drm_ati_pcigart_info {
 };
 
 #ifndef DMA_BIT_MASK
-#define DMA_BIT_MASK(n) (((n) == 64) ? ~0ULL : (1ULL<<(n)) - 1)
+#define DMA_BIT_MASK(n) ((dma_addr_t)(((n) == 64) ? ~0ULL : (1ULL<<(n)) - 1))
 #endif
 
 #define upper_32_bits(n) ((u32)(((n) >> 16) >> 16))
@@ -755,9 +728,9 @@ struct drm_driver_info {
 	int	(*irq_postinstall)(struct drm_device *dev);
 	void	(*irq_uninstall)(struct drm_device *dev);
 	irqreturn_t	(*irq_handler)(DRM_IRQ_ARGS);
-	u32	(*get_vblank_counter)(struct drm_device *dev, int crtc);
-	int	(*enable_vblank)(struct drm_device *dev, int crtc);
-	void	(*disable_vblank)(struct drm_device *dev, int crtc);
+	u32	(*get_vblank_counter)(struct drm_device *dev, unsigned int crtc);
+	int	(*enable_vblank)(struct drm_device *dev, unsigned int crtc);
+	void	(*disable_vblank)(struct drm_device *dev, unsigned int crtc);
 
 	drm_pci_id_list_t *id_entry;	/* PCI ID, name, and chipset private */
 
@@ -791,18 +764,6 @@ struct drm_driver_info {
 
 /* Length for the array of resource pointers for drm_get_resource_*. */
 #define DRM_MAX_PCI_RESOURCE	6
-
-#if defined(__NetBSD__)
-typedef struct {
-	int			mapped;
-	int			maptype;
-	bus_addr_t		base;
-	bus_size_t		size;
-	bus_space_handle_t	bsh;
-	int			flags;
-	void *			vaddr;
-} pci_map_data_t;
-#endif
 
 /** 
  * DRM device functions structure
@@ -929,6 +890,97 @@ static inline int drm_core_has_AGP(struct drm_device *dev)
 #define drm_core_has_AGP(dev) (0)
 #endif
 
+#if defined(__FreeBSD__)
+
+#define DRM_READ8(map, offset)						\
+	*(volatile u_int8_t *)(((vm_offset_t)(map)->handle) +		\
+	    (vm_offset_t)(offset))
+#define DRM_READ16(map, offset)						\
+	*(volatile u_int16_t *)(((vm_offset_t)(map)->handle) +		\
+	    (vm_offset_t)(offset))
+#define DRM_READ32(map, offset)						\
+	*(volatile u_int32_t *)(((vm_offset_t)(map)->handle) +		\
+	    (vm_offset_t)(offset))
+#define DRM_WRITE8(map, offset, val)					\
+	*(volatile u_int8_t *)(((vm_offset_t)(map)->handle) +		\
+	    (vm_offset_t)(offset)) = val
+#define DRM_WRITE16(map, offset, val)					\
+	*(volatile u_int16_t *)(((vm_offset_t)(map)->handle) +		\
+	    (vm_offset_t)(offset)) = val
+#define DRM_WRITE32(map, offset, val)					\
+	*(volatile u_int32_t *)(((vm_offset_t)(map)->handle) +		\
+	    (vm_offset_t)(offset)) = val
+
+#define DRM_VERIFYAREA_READ( uaddr, size )		\
+	(!useracc(__DECONST(caddr_t, uaddr), size, VM_PROT_READ))
+
+#elif   defined(__NetBSD__)
+
+typedef vaddr_t vm_offset_t;
+
+#define DRM_IS_BUS_SPACE(map)	((map)->type == _DRM_REGISTERS || \
+				 (map)->type == _DRM_CONSISTENT)
+
+static __inline__ u_int8_t
+DRM_READ8(drm_local_map_t *map, bus_size_t offset)
+{
+	if (DRM_IS_BUS_SPACE(map))
+		return bus_space_read_1(map->bst, map->bsh, offset);
+	else
+		return *(volatile u_int8_t *)((vaddr_t)map->handle + offset);
+}
+
+static __inline__ u_int16_t
+DRM_READ16(drm_local_map_t *map, bus_size_t offset)
+{
+	if (DRM_IS_BUS_SPACE(map))
+		return bus_space_read_2(map->bst, map->bsh, offset);
+	else
+		return *(volatile u_int16_t *)((vaddr_t)map->handle + offset);
+}
+
+static __inline__ u_int32_t
+DRM_READ32(drm_local_map_t *map, bus_size_t offset)
+{
+	if (DRM_IS_BUS_SPACE(map))
+		return bus_space_read_4(map->bst, map->bsh, offset);
+	else
+		return *(volatile u_int32_t *)((vaddr_t)map->handle + offset);
+}
+
+static __inline__ void
+DRM_WRITE8(drm_local_map_t *map, bus_size_t offset, u_int8_t val)
+{
+	if (DRM_IS_BUS_SPACE(map))
+		bus_space_write_1(map->bst, map->bsh, offset, val);
+	else
+		*(volatile u_int8_t *)((vaddr_t)map->handle + offset) = val;
+}
+
+static __inline__ void
+DRM_WRITE16(drm_local_map_t *map, bus_size_t offset, u_int16_t val)
+{
+	if (DRM_IS_BUS_SPACE(map))
+		bus_space_write_2(map->bst, map->bsh, offset, val);
+	else
+		*(volatile u_int16_t *)((vaddr_t)map->handle + offset) = val;
+}
+
+static __inline__ void
+DRM_WRITE32(drm_local_map_t *map, bus_size_t offset, u_int32_t val)
+{
+	if (DRM_IS_BUS_SPACE(map))
+		bus_space_write_4(map->bst, map->bsh, offset, val);
+	else
+		*(volatile u_int32_t *)((vaddr_t)map->handle + offset) = val;
+}
+
+#define DRM_VERIFYAREA_READ( uaddr, size )		\
+	(!uvm_map_checkprot(&(curproc->p_vmspace->vm_map),              \
+		(vaddr_t)uaddr, (vaddr_t)uaddr+size, UVM_PROT_READ))
+
+#endif
+
 extern int	drm_debug_flag;
 
 /* Device setup support (drm_drv.c) */
@@ -946,7 +998,6 @@ d_mmap_t drm_mmap;
 int	drm_probe(struct pci_attach_args *pa, drm_pci_id_list_t *idlist);
 void	drm_attach(device_t kdev, struct pci_attach_args *pa, drm_pci_id_list_t *idlist);
 int     drm_detach(device_t self, int flags);
-int     drm_activate(device_t self, devact_t act);
 dev_type_ioctl(drm_ioctl);
 dev_type_open(drm_open);
 dev_type_close(drm_close);
@@ -1024,14 +1075,14 @@ irqreturn_t drm_irq_handler(DRM_IRQ_ARGS);
 void	drm_driver_irq_preinstall(struct drm_device *dev);
 void	drm_driver_irq_postinstall(struct drm_device *dev);
 void	drm_driver_irq_uninstall(struct drm_device *dev);
-void	drm_handle_vblank(struct drm_device *dev, int crtc);
-u32	drm_vblank_count(struct drm_device *dev, int crtc);
-int	drm_vblank_get(struct drm_device *dev, int crtc);
-void	drm_vblank_put(struct drm_device *dev, int crtc);
+void	drm_handle_vblank(struct drm_device *dev, unsigned int crtc);
+u32	drm_vblank_count(struct drm_device *dev, unsigned int crtc);
+int	drm_vblank_get(struct drm_device *dev, unsigned int crtc);
+void	drm_vblank_put(struct drm_device *dev, unsigned int crtc);
 void	drm_vblank_cleanup(struct drm_device *dev);
 int	drm_vblank_wait(struct drm_device *dev, unsigned int *vbl_seq);
 int	drm_vblank_init(struct drm_device *dev, int num_crtcs);
-void	drm_vbl_send_signals(struct drm_device *dev, int crtc);
+void	drm_vbl_send_signals(struct drm_device *dev, unsigned int crtc);
 int 	drm_modeset_ctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv);
 

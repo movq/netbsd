@@ -1,4 +1,4 @@
-/* $NetBSD: dbau1550.c,v 1.8 2007/01/24 13:08:14 hubertf Exp $ */
+/* $NetBSD: dbau1550.c,v 1.12 2011/07/10 00:03:52 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,19 +32,22 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbau1550.c,v 1.8 2007/01/24 13:08:14 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbau1550.c,v 1.12 2011/07/10 00:03:52 matt Exp $");
 
 #include <sys/param.h>
+#include <sys/bus.h>
 #include <sys/kernel.h>
-#include <sys/time.h>
 #include <sys/proc.h>
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/time.h>
+
+#include <mips/locore.h>
+
 #include <mips/alchemy/include/aureg.h>
 #include <mips/alchemy/dev/aupcmciavar.h>
 #include <mips/alchemy/dev/aupcmciareg.h>
 #include <mips/alchemy/dev/augpioreg.h>
 #include <mips/alchemy/dev/auspivar.h>
+
 #include <evbmips/alchemy/obiovar.h>
 #include <evbmips/alchemy/board.h>
 #include <evbmips/alchemy/dbau1550reg.h>
@@ -64,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: dbau1550.c,v 1.8 2007/01/24 13:08:14 hubertf Exp $")
 	(*((volatile uint32_t *)MIPS_PHYS_TO_KSEG1(x)) = (v))
 
 static void dbau1550_init(void);
-static int dbau1550_pci_intr_map(struct pci_attach_args *,
+static int dbau1550_pci_intr_map(const struct pci_attach_args *,
 				 pci_intr_handle_t *);
 static void dbau1550_poweroff(void);
 static void dbau1550_reboot(void);
@@ -94,7 +97,7 @@ static struct alchemy_board dbau1550_info = {
 	.ab_name = "AMD Alchemy DBAu1550",
 	.ab_devices = dbau1550_devices,
 	.ab_init = dbau1550_init,
-	.ab_pci_intr_map =dbau1550_pci_intr_map,
+	.ab_pci_intr_map = dbau1550_pci_intr_map,
 	.ab_reboot = dbau1550_reboot,
 	.ab_poweroff = dbau1550_poweroff,
 	.ab_pcmcia = &dbau1550_pcmcia,
@@ -115,7 +118,7 @@ dbau1550_init(void)
 	uint32_t		sysclk;
 	uint32_t		pinfunc;
 
-	if (MIPS_PRID_COPTS(cpu_id) != MIPS_AU1550)
+	if (MIPS_PRID_COPTS(mips_options.mips_cpu_id) != MIPS_AU1550)
 		panic("dbau1550: CPU not Au1550");
 
 	/* check the whoami register for a match */
@@ -166,7 +169,7 @@ dbau1550_init(void)
 }
 
 int
-dbau1550_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+dbau1550_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	/*
 	 * This platform has one onboard PCI IDE controller, and two

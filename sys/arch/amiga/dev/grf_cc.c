@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cc.c,v 1.38 2009/10/26 19:16:54 cegger Exp $ */
+/*	$NetBSD: grf_cc.c,v 1.40 2011/12/15 14:25:13 phx Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,9 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_cc.c,v 1.38 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_cc.c,v 1.40 2011/12/15 14:25:13 phx Exp $");
 
 #include "grfcc.h"
+#include "ite.h"
 #if NGRFCC > 0
 /*
  * currently this is a backward compat hack that interface to
@@ -58,8 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: grf_cc.c,v 1.38 2009/10/26 19:16:54 cegger Exp $");
 #include <amiga/dev/grf_ccreg.h>
 #include <amiga/dev/grfabs_reg.h>
 #include <amiga/dev/viewioctl.h>
-
-#include <uvm/uvm_extern.h>
 
 #include "view.h"
 
@@ -136,8 +135,10 @@ grfccattach(struct device *pdp, struct device *dp, void *auxp)
 		gp->g_unit = GRF_CC_UNIT;
 		gp->g_flags = GF_ALIVE;
 		gp->g_mode = cc_mode;
+#if NITE > 0
 		gp->g_conpri = grfcc_cnprobe();
 		grfcc_iteinit(gp);
+#endif
 		grf_cc_on(gp);
 	}
 	if (dp != NULL)

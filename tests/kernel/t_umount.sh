@@ -1,4 +1,4 @@
-# $NetBSD: t_umount.sh,v 1.1 2009/02/20 21:39:57 jmmv Exp $
+# $NetBSD: t_umount.sh,v 1.5 2010/11/07 17:51:19 jmmv Exp $
 #
 # Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -33,7 +33,7 @@ BVND=/dev/${VND}
 CVND=/dev/r${VND}
 MPART=a
 
-atf_test_case umount
+atf_test_case umount cleanup
 umount_head()
 {
 	atf_set "descr" "Checks forced unmounting"
@@ -65,6 +65,7 @@ EOF
 	test -e "${TMPMP}/in_mounted_directory" || \
 	    atf_fail "Test file not present in mounted directory!"
 
+	mydir="`pwd`"
 	cd "${TMPMP}"
 	atf_check -o ignore -e ignore umount -f "${BVND}${MPART}"
 
@@ -76,7 +77,7 @@ EOF
 	atf_check -s ne:0 -e ignore -o inline:"cd: can't cd to ..\n" \
 	    -x "cd .. 2>&1"
 
-	cd ..
+	cd "${mydir}"
 
 	test -e "${TMPMP}/under_the_mount" || \
 	    atf_fail "Original mount point dissapeared!"

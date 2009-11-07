@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.162 2009/11/07 07:27:42 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.173 2011/12/12 19:03:08 mrg Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -36,48 +37,9 @@
  *
  *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.63 91/04/24$
- *
- *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.162 2009/11/07 07:27:42 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.173 2011/12/12 19:03:08 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -98,12 +60,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.162 2009/11/07 07:27:42 cegger Exp $")
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/queue.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #include <sys/intr.h>
 #include <sys/exec.h>
 #include <sys/exec_aout.h>
@@ -128,8 +90,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.162 2009/11/07 07:27:42 cegger Exp $")
 #include <machine/pte.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include "ksyms.h"
+#include "nvr.h"
+
+#define	DEV_NVRAM	11	/* Nvram minor-number */
 
 static void bootsync(void);
 static void call_sicallbacks(void);
@@ -141,7 +107,6 @@ void	straytrap(int, u_short);
 void	nmihandler(void);
 #endif
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 void *	msgbufaddr;
@@ -175,7 +140,7 @@ struct cpu_info cpu_info_store;
 void
 consinit(void)
 {
-	int	i;
+	int i;
 
 	/*
 	 * Initialize error message buffer. pmap_bootstrap() has
@@ -208,7 +173,7 @@ consinit(void)
 		ksyms_addsyms_elf(*(int *)&end, ((int *)&end) + 1, esym);
 #else
 		ksyms_addsyms_elf((int)esym - (int)&end - sizeof(Elf32_Ehdr),
-			(void *)&end, esym);
+		    (void *)&end, esym);
 #endif
 	}
 #endif
@@ -225,15 +190,14 @@ consinit(void)
 void
 cpu_startup(void)
 {
-	extern	 int		iomem_malloc_safe;
-		 char		pbuf[9];
-
+	extern int iomem_malloc_safe;
+	char pbuf[9];
 #ifdef DEBUG
-	extern	 int		pmapdebug;
-		 int		opmapdebug = pmapdebug;
+	extern int pmapdebug;
+	int opmapdebug = pmapdebug;
 #endif
-		 vaddr_t	minaddr, maxaddr;
-	extern	 vsize_t	mem_size;	/* from pmap.c */
+	vaddr_t minaddr, maxaddr;
+	extern vsize_t mem_size;	/* from pmap.c */
 
 #ifdef DEBUG
 	pmapdebug = 0;
@@ -259,12 +223,6 @@ cpu_startup(void)
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 	    VM_PHYS_SIZE, 0, false, NULL);
 
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
-
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
@@ -275,39 +233,6 @@ cpu_startup(void)
 	 * Alloc extent allocation to use malloc
 	 */
 	iomem_malloc_safe = 1;
-}
-
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-	
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
 }
 
 /*
@@ -346,13 +271,13 @@ identifycpu(void)
  
 	case CPU_68060:
 		{
-			u_int32_t	pcr;
+			uint32_t	pcr;
 			char		cputxt[30];
 
 			__asm(".word 0x4e7a,0x0808;"
 			    "movl %%d0,%0" : "=d"(pcr) : : "d0");
 			sprintf(cputxt, "68%s060 rev.%d",
-				pcr & 0x10000 ? "LC/EC" : "", (pcr>>8)&0xff);
+			    pcr & 0x10000 ? "LC/EC" : "", (pcr >> 8) & 0xff);
 			cpu = cputxt;
 			mmu = "/MMU";
 		}
@@ -414,10 +339,11 @@ bootsync(void)
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0)
@@ -460,14 +386,13 @@ reserve_dumppages(vaddr_t p)
 	return p + BYTES_PER_DUMP;
 }
 
-u_int32_t	dumpmag  = 0x8fca0101;	/* magic number for savecore	*/
+uint32_t	dumpmag  = 0x8fca0101;	/* magic number for savecore	*/
 int		dumpsize = 0;		/* also for savecore (pages)	*/
 long		dumplo   = 0;		/* (disk blocks)		*/
 
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int	nblks, i;
 
 	for (i = dumpsize = 0; i < NMEM_SEGS; i++) {
@@ -478,13 +403,8 @@ cpu_dumpconf(void)
 	dumpsize = btoc(dumpsize);
 
 	if (dumpdev != NODEV) {
-		bdev = bdevsw_lookup(dumpdev);
-		if (bdev == NULL) {
-			dumpdev = NODEV;
-			return;
-		}
-		if (bdev->d_psize != NULL) {
-			nblks = (*bdev->d_psize)(dumpdev);
+		nblks = bdev_size(dumpdev);
+		if (nblks > 0) {
 			if (dumpsize > btoc(dbtob(nblks - dumplo)))
 				dumpsize = btoc(dbtob(nblks - dumplo));
 			else if (dumplo == 0)
@@ -577,7 +497,7 @@ dumpsys(void)
 			 * Print Mb's to go
 			 */
 			n = nbytes - i;
-			if (n && (n % (1024*1024)) == 0)
+			if (n && (n % (1024 * 1024)) == 0)
 				printf_nolog("%d ", n / (1024 * 1024));
 
 			/*
@@ -631,16 +551,16 @@ dumpsys(void)
 void
 straytrap(int pc, u_short evec)
 {
-	static int	prev_evec;
+	static int prev_evec;
 
 	printf("unexpected trap (vector offset 0x%x) from 0x%x\n",
 	    evec & 0xFFF, pc);
 
-	if(prev_evec == evec) {
+	if (prev_evec == evec) {
 		delay(1000000);
 		prev_evec = 0;
-	}
-	else prev_evec = evec;
+	} else
+		prev_evec = evec;
 }
 
 void
@@ -669,18 +589,18 @@ badbaddr(void *addr, int size)
 	}
 	switch (size) {
 	case 1:
-		i = *(volatile char *)addr;
+		i = *(volatile uint8_t *)addr;
 		break;
 	case 2:
-		i = *(volatile short *)addr;
+		i = *(volatile uint16_t *)addr;
 		break;
 	case 4:
-		i = *(volatile long *)addr;
+		i = *(volatile uint32_t *)addr;
 		break;
 	default:
 		panic("badbaddr: unknown size");
 	}
-	nofault = (int *) 0;
+	nofault = (int *)0;
 	return 0;
 }
 
@@ -720,25 +640,25 @@ init_sicallback(void)
 void
 add_sicallback(void (*function)(void *, void *), void *rock1, void *rock2)
 {
-	struct si_callback	*si;
-	int			s;
+	struct si_callback *si;
+	int s;
 
 	/*
 	 * this function may be called from high-priority interrupt handlers.
 	 * We may NOT block for  memory-allocation in here!.
 	 */
-	s  = splhigh();
+	s = splhigh();
 	if ((si = si_free) != NULL)
 		si_free = si->next;
 	splx(s);
 
-	if(si == NULL) {
+	if (si == NULL) {
 		si = malloc(sizeof(*si), M_TEMP, M_NOWAIT);
 #ifdef DIAGNOSTIC
 		if (si)
 			++ncbd;		/* count # dynamically allocated */
 #endif
-		if (!si)
+		if (si == NULL)
 			return;
 	}
 
@@ -770,8 +690,8 @@ add_sicallback(void (*function)(void *, void *), void *rock1, void *rock2)
 void
 rem_sicallback(void (*function)(void *rock1, void *rock2))
 {
-	struct si_callback	*si, *psi, *nsi;
-	int			s;
+	struct si_callback *si, *psi, *nsi;
+	int s;
 
 	s = splhigh();
 	for (psi = 0, si = si_callbacks; si; ) {
@@ -782,7 +702,7 @@ rem_sicallback(void (*function)(void *rock1, void *rock2))
 		else {
 			si->next = si_free;
 			si_free  = si;
-			if (psi)
+			if (psi != NULL)
 				psi->next = nsi;
 			else
 				si_callbacks = nsi;
@@ -796,22 +716,22 @@ rem_sicallback(void (*function)(void *rock1, void *rock2))
 static void
 call_sicallbacks(void)
 {
-	struct si_callback	*si;
-	int			s;
-	void			*rock1, *rock2;
-	void			(*function)(void *, void *);
+	struct si_callback *si;
+	int s;
+	void *rock1, *rock2;
+	void (*function)(void *, void *);
 
 	do {
-		s = splhigh ();
+		s = splhigh();
 		if ((si = si_callbacks) != NULL)
 			si_callbacks = si->next;
 		splx(s);
 
-		if (si) {
+		if (si != NULL) {
 			function = si->function;
 			rock1    = si->rock1;
 			rock2    = si->rock2;
-			s = splhigh ();
+			s = splhigh();
 			if (si_callbacks)
 				softint_schedule(si_callback_cookie);
 			si->next = si_free;
@@ -832,7 +752,7 @@ call_sicallbacks(void)
 			function(rock1, rock2);
 			splx(s);
 		}
-	} while (si);
+	} while (si != NULL);
 #ifdef DIAGNOSTIC
 	if (ncbd) {
 #ifdef DEBUG
@@ -879,10 +799,20 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 #ifdef COMPAT_NOMID
 	if (!((execp->a_midmag >> 16) & 0x0fff)
 	    && execp->a_midmag == ZMAGIC)
-		return(exec_aout_prep_zmagic(l->l_proc, epp));
+		return exec_aout_prep_zmagic(l->l_proc, epp);
 #endif
 	return error;
 }
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif
 
 #ifdef _MILANHW_
 
@@ -902,3 +832,30 @@ nmihandler(void)
 	printf("nmihandler: plx_status = 0x%08lx\n", plx_status);
 }
 #endif
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+	struct memseg *ms;
+
+	for (ms = boot_segs; ms->start != ms->end; ms++) {
+		if ((pa >= ms->start) && (pa < ms->end))
+			return 0;
+	}
+	return EFAULT;
+}
+
+int
+mm_md_readwrite(dev_t dev, struct uio *uio)
+{
+	switch (minor(dev)) {
+	case DEV_NVRAM:
+#if NNVR > 0
+		return nvram_uio(uio);
+#else
+		return ENXIO;
+#endif
+	default:
+		return ENXIO;
+	}
+}

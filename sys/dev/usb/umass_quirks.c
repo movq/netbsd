@@ -1,4 +1,4 @@
-/*	$NetBSD: umass_quirks.c,v 1.78 2009/10/30 16:22:32 is Exp $	*/
+/*	$NetBSD: umass_quirks.c,v 1.92.2.1 2012/03/17 17:17:07 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
@@ -32,7 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass_quirks.c,v 1.78 2009/10/30 16:22:32 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass_quirks.c,v 1.92.2.1 2012/03/17 17:17:07 bouyer Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_umass.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -199,7 +203,7 @@ Static const struct umass_quirk umass_quirks[] = {
 	  UMATCH_DEVCLASS_DEVSUBCLASS_DEVPROTO,
 	  NULL, NULL
 	},
-	/* IBEAD devices don't like all SCSI commands */
+	/* Some Sigmatel-based devices don't like all SCSI commands */
 	{ { USB_VENDOR_SIGMATEL, USB_PRODUCT_SIGMATEL_MUSICSTICK },
 	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
 	  0,
@@ -221,6 +225,45 @@ Static const struct umass_quirk umass_quirks[] = {
 	  UMATCH_VENDOR_PRODUCT,
 	  NULL, NULL
 	},
+	{ { USB_VENDOR_PHILIPS, USB_PRODUCT_PHILIPS_SA235 },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  0,
+	  PQUIRK_NODOORLOCK | PQUIRK_NOSYNCCACHE,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+	/* Creative Nomad MuVo, NetBSD PR 30389, FreeBSD PR 53094 */
+	{ { USB_VENDOR_CREATIVE, USB_PRODUCT_CREATIVE_NOMAD },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  0,
+	  PQUIRK_NODOORLOCK | PQUIRK_NOSYNCCACHE,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	/* iRiver iFP-[135]xx players fail on PREVENT/ALLOW, see PR 25440 */
+	{ { USB_VENDOR_IRIVER, USB_PRODUCT_IRIVER_IFP_1XX },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+	{ { USB_VENDOR_IRIVER, USB_PRODUCT_IRIVER_IFP_3XX },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+	{ { USB_VENDOR_IRIVER, USB_PRODUCT_IRIVER_IFP_5XX },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
 	/* Meizu M6 doesn't like synchronize-cache, see PR 40442 */
 	{ { USB_VENDOR_MEIZU, USB_PRODUCT_MEIZU_M6_SL },
 	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
@@ -230,16 +273,78 @@ Static const struct umass_quirk umass_quirks[] = {
 	  NULL, NULL
 	},
 
-        /*
-         * Devices with bad residue.
-         */
-        { { USB_VENDOR_SUPERTOP, USB_PRODUCT_SUPERTOP_IDEBRIDGE },
-          UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
-          UMASS_QUIRK_IGNORE_RESIDUE,
-          0,
-          UMATCH_VENDOR_PRODUCT,
-          NULL, NULL
-        },
+	/*
+	 * SanDisk Sansa Clip rejects cache sync in unconventional way.
+	 * However, unlike some other devices listed in this table,
+	 * this is does not cause the device firmware to stop responding.
+	 */
+	{ { USB_VENDOR_SANDISK, USB_PRODUCT_SANDISK_SANSA_CLIP },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
+	  0,
+	  PQUIRK_NOSYNCCACHE,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	/* Kingston USB pendrives don't like being told to lock the door */
+	{ { USB_VENDOR_KINGSTON, USB_PRODUCT_KINGSTON_DT101_II },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	{ { USB_VENDOR_KINGSTON, USB_PRODUCT_KINGSTON_DT101_G2 },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	{ { USB_VENDOR_KINGSTON, USB_PRODUCT_KINGSTON_DT102_G2 },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	{ { USB_VENDOR_KINGSTON, USB_PRODUCT_KINGSTON_DTMINI10 },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	/* Also, some Kingston pendrives have Toshiba vendor ID */
+	{ { USB_VENDOR_TOSHIBA, USB_PRODUCT_KINGSTON_DT100_G2 },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC, 
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	/* HP USB pendrives don't like being told to lock the door */
+	{ { USB_VENDOR_HP, USB_PRODUCT_HP_V125W },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  0,
+	  PQUIRK_NODOORLOCK,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
+
+	/* Devices with bad residue. */
+	{ { USB_VENDOR_SUPERTOP, USB_PRODUCT_SUPERTOP_IDEBRIDGE },
+	  UMASS_WPROTO_UNSPEC, UMASS_CPROTO_UNSPEC,
+	  UMASS_QUIRK_IGNORE_RESIDUE,
+	  0,
+	  UMATCH_VENDOR_PRODUCT,
+	  NULL, NULL
+	},
 };
 
 const struct umass_quirk *
@@ -258,7 +363,7 @@ umass_init_insystem(struct umass_softc *sc)
 	if (err) {
 		DPRINTF(UDMASS_USB,
 			("%s: could not switch to Alt Interface 1\n",
-			USBDEVNAME(sc->sc_dev)));
+			device_xname(sc->sc_dev)));
 		return (err);
 	}
 

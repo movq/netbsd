@@ -1,14 +1,26 @@
-# $NetBSD: Makefile,v 1.18 2009/11/05 17:34:25 dyoung Exp $
+# $NetBSD: Makefile,v 1.34 2011/11/12 01:19:25 jmmv Exp $
 
 .include <bsd.own.mk>
 
-SUBDIR=	crypto fs games ipf kernel lib libexec net rump syscall util
-
-.if ${MACHINE} != "evbppc" && ${MKKMOD} != "no"
-SUBDIR+= modules
-.endif
+.if ${MKATF} != "no"
 
 TESTSDIR=	${TESTSBASE}
+ATFFILE=	yes
+
+SUBDIR=		dev examples fs games include ipf kernel lib libexec net
+SUBDIR+=	rump sbin sys toolchain usr.bin usr.sbin util
+
+. if ${MKKMOD} != "no"
+SUBDIR+= modules
+. endif
+
+. if ${MKCRYPTO} != "no"
+SUBDIR+=	crypto
+. endif
 
 .include <bsd.test.mk>
+
+.else
+
 .include <bsd.subdir.mk>
+.endif

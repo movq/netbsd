@@ -1,4 +1,4 @@
-/*	$NetBSD: artsata.c,v 1.18 2008/04/28 20:23:54 martin Exp $	*/
+/*	$NetBSD: artsata.c,v 1.21 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: artsata.c,v 1.18 2008/04/28 20:23:54 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: artsata.c,v 1.21 2011/04/04 20:37:56 dyoung Exp $");
 
 #include "opt_pciide.h"
 
@@ -49,7 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: artsata.c,v 1.18 2008/04/28 20:23:54 martin Exp $");
 #include <dev/ata/atareg.h>
 #include <dev/ata/atavar.h>
 
-static void artisea_chip_map(struct pciide_softc*, struct pci_attach_args *);
+static void artisea_chip_map(struct pciide_softc*,
+    const struct pci_attach_args *);
 
 static int  artsata_match(device_t, cfdata_t, void *);
 static void artsata_attach(device_t, device_t, void *);
@@ -118,8 +119,7 @@ artsata_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-artisea_mapregs(struct pci_attach_args *pa, struct pciide_channel *cp,
-    bus_size_t *cmdsizep, bus_size_t *ctlsizep,
+artisea_mapregs(const struct pci_attach_args *pa, struct pciide_channel *cp,
     int (*pci_intr)(void *))
 {
 	struct pciide_softc *sc = CHAN_TO_PCIIDE(&cp->ata_channel);
@@ -148,8 +148,8 @@ artisea_mapregs(struct pci_attach_args *pa, struct pciide_channel *cp,
 			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 			    "couldn't establish native-PCI interrupt");
 			if (intrstr != NULL)
-				aprint_normal(" at %s", intrstr);
-			aprint_normal("\n");
+				aprint_error(" at %s", intrstr);
+			aprint_error("\n");
 			goto bad;
 		}
 	}
@@ -244,7 +244,7 @@ artisea_chansetup(struct pciide_softc *sc, int channel,
 }
 
 static void
-artisea_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
+artisea_mapreg_dma(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *pc;
 	int chan;
@@ -317,10 +317,9 @@ artisea_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
 }
 
 static void
-artisea_chip_map_dpa(struct pciide_softc *sc, struct pci_attach_args *pa)
+artisea_chip_map_dpa(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface;
 	int channel;
 
@@ -330,7 +329,7 @@ artisea_chip_map_dpa(struct pciide_softc *sc, struct pci_attach_args *pa)
 	    "interface wired in DPA mode\n");
 
 	if (pci_mapreg_map(pa, ARTISEA_PCI_DPA_BASE, PCI_MAPREG_MEM_TYPE_64BIT,
-	    0, &sc->sc_ba5_st, &sc->sc_ba5_sh, NULL, NULL) != 0)
+	    0, &sc->sc_ba5_st, &sc->sc_ba5_sh, NULL, &sc->sc_ba5_ss) != 0)
 		return;
 
 	artisea_mapreg_dma(sc, pa);
@@ -380,15 +379,14 @@ artisea_chip_map_dpa(struct pciide_softc *sc, struct pci_attach_args *pa)
 		if (artisea_chansetup(sc, channel, interface) == 0)
 			continue;
 		/* XXX We can probably do interrupts more efficiently.  */
-		artisea_mapregs(pa, cp, &cmdsize, &ctlsize, pciide_pci_intr);
+		artisea_mapregs(pa, cp, pciide_pci_intr);
 	}
 }
 
 static void
-artisea_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+artisea_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface;
 	int channel;
 
@@ -438,7 +436,6 @@ artisea_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }

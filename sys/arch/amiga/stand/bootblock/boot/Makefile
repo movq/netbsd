@@ -1,5 +1,6 @@
-#	$NetBSD: Makefile,v 1.40 2009/10/17 11:18:17 mlelstv Exp $
+#	$NetBSD: Makefile,v 1.47 2011/10/04 04:04:15 chs Exp $
 
+.include <bsd.own.mk>
 .include <bsd.sys.mk>		# for HOST_SH
 
 ### what we need:
@@ -32,7 +33,7 @@ LIBZ= ${ZLIB}
 # prefer our assembler versions over assembler, and assembler over C:
 
 .SUFFIXES:
-.SUFFIXES: .out .o .po .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
+.SUFFIXES: .out .o .po .pico .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
 
 FILES= boot.amiga
 BINDIR=/usr/mdec
@@ -48,8 +49,8 @@ SOBJS += libstubs.o
 
 OBJS=	$(SOBJS) $(COBJS)
 
-#XX#DEFS = -D_STANDALONE -DINSECURE -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
-DEFS = -D_STANDALONE -DINSECURE 
+#XX#DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER -DDYNAMIC_CRC_TABLE -DNOBYFOUR -UBYFOUR 
+DEFS = -D_STANDALONE -DSA_EXEC_ANYOWNER 
 DEFS += -D__INTERNAL_LIBSA_CREAD
 #DEFS += -DSERCONSOLE
 SOBJS += cread.o
@@ -77,7 +78,7 @@ INCPATH = -nostdinc -I${DIR_TOP} -I${DIR_TOP}/lib/libsa
 INCPATH += -I${DIR_TOP}/../common/dist/zlib
 INCPATH += -I${.CURDIR}
 INCPATH += -I${.CURDIR}/../../.. -I${.OBJDIR}
-INCPATH += -I${.CURDIR}/../aout2bb
+INCPATH += -I${.CURDIR}/../elf2bb
 
 AFLAGS += -m68030 -l
 CAFLAGS += -Wa,-l -Wa,-m68030 ${INCPATH}
@@ -87,9 +88,12 @@ CFLAGS= -ffreestanding ${COPTIM} ${INCPATH} ${DEFS}
 CFLAGS+= -Werror
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
 
+# XXX work around a gcc 4.5 bug
+COPTS.cread.c = -O1
+
 .c.o:
-	${CC} ${CFLAGS} -S $< -o $*.s
-	${TXLT} < $*.s | ${AS} ${AFLAGS} -o $*.o
+	${CC} ${CFLAGS} ${COPTS.${.IMPSRC:T}} -S $< -o $*.s
+	${TXLT} < $*.s | ${AS} ${AFLAGS} -o $@
 	rm $*.s
 
 .s.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
@@ -97,10 +101,10 @@ CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
 .S.o: ; ${CC} ${CAFLAGS} ${COPTS} -x assembler-with-cpp -o $@ -c $<
 
 boot.amiga: x.out
-	${RELOC2BB} -S x.out $@ || ${NM} -u x.out
+	${RELOC2BB} -S x.out $@ || (${NM} -u x.out && false)
 
 x.out: xxstart.o libboot.a ${LIBZ}
-	${LD} ${LDFLAGS} -r -dc -e _start -o $@ $>
+	${LD} ${LDFLAGS} -r -dc -e start -o $@ $>
 	${SIZE} $@
 	${NM} -u $@
 
@@ -111,9 +115,10 @@ xxstart.o: ${.CURDIR}/bbstart.s
 libboot.a: ${OBJS}
 	${AR} r $@ $> && ${RANLIB} $@
 
-.PHONY:	vers.c
+vers.o: vers.c
 vers.c:	${.CURDIR}/version
-	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh -N ${.CURDIR}/version "amiga"
+	${HOST_SH} ${DIR_TOP}/conf/newvers_stand.sh \
+	    ${${MKREPRO} == "yes" :?:-D} -N ${.CURDIR}/version "amiga"
 
 .if !make(obj) && !make(clean) && !make(cleandir)
 .NOPATH: machine m68k

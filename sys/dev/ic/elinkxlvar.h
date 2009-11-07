@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxlvar.h,v 1.20 2008/04/28 20:23:49 martin Exp $	*/
+/*	$NetBSD: elinkxlvar.h,v 1.24 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -29,17 +29,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rnd.h"
-
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 /*
  * Ethernet software status per interface.
  */
 struct ex_softc {
 	device_t sc_dev;
+	device_suspensor_t sc_suspensor;
+	pmf_qual_t sc_qual;
 	void *sc_ih;
 
 	struct ethercom sc_ethercom;	/* Ethernet common part		*/
@@ -107,14 +105,7 @@ struct ex_softc {
 #define EX_FLAGS_POWERMGMT		0x2000
 #define EX_FLAGS_ATTACHED		0x4000	/* attach has succeeded */
 
-	u_char	ex_bustype;		/* parent bus type (currently unused) */
-
-#define EX_BUS_PCI	0
-#define EX_BUS_CARDBUS	1
-
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 
 	/* power management hooks */
 	int (*enable)(struct ex_softc *);

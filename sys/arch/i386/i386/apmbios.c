@@ -1,4 +1,4 @@
-/*	$NetBSD: apmbios.c,v 1.14 2009/05/04 12:22:41 cegger Exp $ */
+/*	$NetBSD: apmbios.c,v 1.19 2011/07/17 20:54:41 joerg Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -30,10 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apmbios.c,v 1.14 2009/05/04 12:22:41 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apmbios.c,v 1.19 2011/07/17 20:54:41 joerg Exp $");
 
 #include "opt_apm.h"
-#include "opt_compat_mach.h"	/* Needed to get the right segment def */
 
 #ifdef APM_NOIDLE
 #error APM_NOIDLE option deprecated; use APM_NO_IDLE instead
@@ -49,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: apmbios.c,v 1.14 2009/05/04 12:22:41 cegger Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -62,7 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: apmbios.c,v 1.14 2009/05/04 12:22:41 cegger Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/stdarg.h>
 #include <machine/cpufunc.h>
 #include <machine/gdt.h>
 #include <machine/psl.h>
@@ -222,6 +219,7 @@ apmcall_debug(int func, struct bioscallregs *regs, int line)
 	const char *name;
 	int inf;
 	int outf = 0; /* XXX: gcc */
+	long long milli;
 		
 	if (print) {
 		if (func >= sizeof(aci) / sizeof(aci[0])) {
@@ -233,12 +231,13 @@ apmcall_debug(int func, struct bioscallregs *regs, int line)
 			outf = aci[func].outflag;
 		}
 		inittodr(time_second);	/* update timestamp */
+		milli = time_second % 1000;
 		if (name)
-			printf("apmcall@%03ld: %s/%#x (line=%d) ", 
-				time_second % 1000, name, func, line);
+			printf("apmcall@%03lld: %s/%#x (line=%d) ", 
+			    milli, name, func, line);
 		else
-			printf("apmcall@%03ld: %#x (line=%d) ", 
-				time_second % 1000, func, line);
+			printf("apmcall@%03lld: %#x (line=%d) ", 
+			    milli, func, line);
 		acallpr(inf, "in:", regs);
 	}
     	rv = apmcall(func, regs);
@@ -780,7 +779,7 @@ apmbiosattach(device_t parent, device_t self, void *aux)
 		 * implementation on i386 so it can be done without
 		 * extent checking.
 		 */
-		if (_x86_memio_map(X86_BUS_SPACE_MEM,
+		if (_x86_memio_map(x86_bus_space_mem,
 		    apminfo.apm_data_seg_base,
 		    apminfo.apm_data_seg_len, 0, &memh)) {
 			aprint_error_dev(self,

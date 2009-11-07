@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_mainbus.c,v 1.4 2009/09/22 14:55:19 tsutsui Exp $	*/
+/*	$NetBSD: if_cs_mainbus.c,v 1.7 2012/02/02 19:42:59 tls Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,17 +30,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_mainbus.c,v 1.4 2009/09/22 14:55:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_mainbus.c,v 1.7 2012/02/02 19:42:59 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
+#include <sys/bus.h>
 
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -50,10 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_mainbus.c,v 1.4 2009/09/22 14:55:19 tsutsui Ex
 #include <netinet/if_inarp.h>
 #endif
 
-#include <machine/bus.h>
+#include <powerpc/psl.h>
+
 #include <machine/pio.h>
 #include <machine/pmppc.h>
-#include <arch/evbppc/pmppc/dev/mainbus.h>
+#include <evbppc/pmppc/dev/mainbus.h>
 
 #include <dev/ic/cs89x0reg.h>
 #include <dev/ic/cs89x0var.h>
@@ -65,8 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_mainbus.c,v 1.4 2009/09/22 14:55:19 tsutsui Ex
 
 static void	cs_check_eeprom(struct cs_softc *sc);
 
-static int	cs_mainbus_match(struct device *, struct cfdata *, void *);
-static void	cs_mainbus_attach(struct device *, struct device *, void *);
+static int	cs_mainbus_match(device_t, cfdata_t, void *);
+static void	cs_mainbus_attach(device_t, device_t, void *);
 
 CFATTACH_DECL_NEW(cs_mainbus, sizeof(struct cs_softc),
     cs_mainbus_match, cs_mainbus_attach, NULL, NULL);

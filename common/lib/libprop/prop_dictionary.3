@@ -1,4 +1,4 @@
-.\"	$NetBSD: prop_dictionary.3,v 1.14 2009/10/10 18:06:54 bad Exp $
+.\"	$NetBSD: prop_dictionary.3,v 1.18 2011/09/30 22:08:18 jym Exp $
 .\"
 .\" Copyright (c) 2006, 2009 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 10, 2009
+.Dd December 5, 2009
 .Dt PROP_DICTIONARY 3
 .Os
 .Sh NAME
@@ -53,6 +53,7 @@
 .Nm prop_dictionary_externalize_to_file ,
 .Nm prop_dictionary_internalize_from_file ,
 .Nm prop_dictionary_externalize_to_pref ,
+.Nm prop_dictionary_internalize_from_pref ,
 .Nm prop_dictionary_equals ,
 .Nm prop_dictionary_keysym_cstring_nocopy ,
 .Nm prop_dictionary_keysym_equals
@@ -130,6 +131,9 @@
 .Ft bool
 .Fn prop_dictionary_externalize_to_pref "prop_dictionary_t dict" \
     "struct plistref *pref"
+.Ft bool
+.Fn prop_dictionary_internalize_from_pref "const struct plistref *pref" \
+    "prop_dictionary_t *dictp"
 .\"
 .Sh DESCRIPTION
 The
@@ -165,7 +169,8 @@ Like
 except the resulting dictionary is always mutable.
 .It Fn prop_dictionary_count "prop_dictionary_t dict"
 Returns the number of objects stored in the dictionary.
-.It Fn prop_dictionary_ensure_capacity "prop_dictionary_t dict"
+.It Fn prop_dictionary_ensure_capacity "prop_dictionary_t dict" \
+    "unsigned int capacity"
 Ensure that the dictionary has a total capacity of
 .Fa capacity ,
 including objects already stored in the dictionary.
@@ -304,7 +309,7 @@ Externalizes a dictionary and writes it to the file specified by
 The file is saved with the mode
 .Dv 0666
 as modified by the process's file creation mask
-.Pq see Xr umask 3
+.Pq see Xr umask 2
 and is written atomically.
 Returns
 .Dv false
@@ -312,7 +317,7 @@ if externalizing or writing the dictionary fails for any reason.
 .It Fn prop_dictionary_internalize_from_file "const char *path"
 Reads the XML property list contained in the file specified by
 .Fa path ,
-internalizes it, and returns the corresponding array.
+internalizes it, and returns the corresponding dictionary.
 Returns
 .Dv NULL
 on failure.
@@ -323,6 +328,14 @@ Externalizes a dictionary and packs it into the plistref specified by
 Returns
 .Dv false
 if externalizing the dictionary fails for any reason.
+.It Fn prop_dictionary_internalize_from_pref "const struct plistref *pref" \
+    "prop_dictionary_t *dictp"
+Reads the plistref specified by
+.Fa pref ,
+internalizes it, and returns the corresponding dictionary.
+Returns
+.Dv false
+if internalizing or writing the dictionary fails for any reason.
 .El
 .Sh SEE ALSO
 .Xr prop_array 3 ,

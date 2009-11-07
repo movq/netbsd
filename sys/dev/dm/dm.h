@@ -1,4 +1,4 @@
-/*        $NetBSD: dm.h,v 1.14 2009/06/05 21:52:31 haad Exp $      */
+/*        $NetBSD: dm.h,v 1.23 2011/08/27 17:07:49 ahoka Exp $      */
 
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -38,11 +38,15 @@
 #include <sys/errno.h>
 
 #include <sys/atomic.h>
+#include <sys/fcntl.h>
 #include <sys/condvar.h>
+#include <sys/kauth.h>
 #include <sys/mutex.h>
 #include <sys/rwlock.h>
 #include <sys/queue.h>
 
+#include <sys/device.h>
+#include <sys/disk.h>
 #include <sys/disklabel.h>
 
 #include <prop/proplib.h>
@@ -51,8 +55,9 @@
 #define DM_NAME_LEN 128
 #define DM_UUID_LEN 129
 
-#define DM_VERSION_MAJOR	5
-#define DM_VERSION_MINOR	13
+#define DM_VERSION_MAJOR	4
+#define DM_VERSION_MINOR	16
+
 #define DM_VERSION_PATCHLEVEL	0
 
 /*** Internal device-mapper structures ***/
@@ -83,7 +88,7 @@ typedef struct dm_table dm_table_t;
 
 typedef struct dm_table_head {
 	/* Current active table is selected with this. */
-	int cur_active_table; 
+	int cur_active_table;
 	struct dm_table tables[2];
 
 	kmutex_t   table_mtx;
@@ -104,6 +109,8 @@ typedef struct dm_pdev {
 	char name[MAX_DEV_NAME];
 
 	struct vnode *pdev_vnode;
+	uint64_t pdev_numsec;
+	unsigned pdev_secsize;
 	int ref_cnt; /* reference counter for users ofthis pdev */
 
 	SLIST_ENTRY(dm_pdev) next_pdev;
@@ -114,17 +121,18 @@ typedef struct dm_pdev {
  * It points to SLIST of device tables and mirrored, snapshoted etc. devices.
  */
 TAILQ_HEAD(dm_dev_head, dm_dev) dm_devs;
-				
+
 typedef struct dm_dev {
 	char name[DM_NAME_LEN];
 	char uuid[DM_UUID_LEN];
 
-	uint64_t minor;
+	device_t devt; /* pointer to autoconf device_t structure */
+	uint64_t minor; /* Device minor number */
 	uint32_t flags; /* store communication protocol flags */
 
 	kmutex_t dev_mtx; /* mutex for generall device lock */
 	kcondvar_t dev_cv; /* cv for between ioctl synchronisation */
-	
+
 	uint32_t event_nr;
 	uint32_t ref_cnt;
 
@@ -133,9 +141,10 @@ typedef struct dm_dev {
 	dm_table_head_t table_head;
 
 	struct dm_dev_head upcalls;
-	
+
 	struct disk *diskp;
-	
+	kmutex_t diskp_mtx;
+
 	TAILQ_ENTRY(dm_dev) next_upcall; /* LIST of mirrored, snapshoted devices. */
 
 	TAILQ_ENTRY(dm_dev) next_devlist; /* Major device list. */
@@ -143,7 +152,7 @@ typedef struct dm_dev {
 
 /* Device types used for upcalls */
 #define DM_ZERO_DEV            (1 << 0)
-#define DM_ERROR_DEV           (1 << 1)	
+#define DM_ERROR_DEV           (1 << 1)
 #define DM_LINEAR_DEV          (1 << 2)
 #define DM_MIRROR_DEV          (1 << 3)
 #define DM_STRIPE_DEV          (1 << 4)
@@ -151,25 +160,36 @@ typedef struct dm_dev {
 #define DM_SNAPSHOT_ORIG_DEV   (1 << 6)
 #define DM_SPARE_DEV           (1 << 7)
 /* Set this device type only during dev remove ioctl. */
-#define DM_DELETING_DEV        (1 << 8) 
+#define DM_DELETING_DEV        (1 << 8)
 
 
 /* for zero, error : dm_target->target_config == NULL */
-				
+
 /*
  * Target config is initiated with target_init function.
  */
-				
+
 /* for linear : */
 typedef struct target_linear_config {
 	dm_pdev_t *pdev;
 	uint64_t offset;
+	TAILQ_ENTRY(target_linear_config) entries;
 } dm_target_linear_config_t;
+
+/*
+ * Striping devices are stored in a linked list, this might be inefficient
+ * for more than 8 striping devices and can be changed to something more
+ * scalable.
+ * TODO: look for other options than linked list.
+ */
+TAILQ_HEAD(target_linear_devs, target_linear_config);
+
+typedef struct target_linear_devs dm_target_linear_devs_t;
 
 /* for stripe : */
 typedef struct target_stripe_config {
-#define MAX_STRIPES 2
-	struct target_linear_config stripe_devs[MAX_STRIPES];
+#define DM_STRIPE_DEV_OFFSET 2
+	struct target_linear_devs stripe_devs;
 	uint8_t stripe_num;
 	uint64_t stripe_chunksize;
 	size_t params_len;
@@ -194,7 +214,7 @@ typedef struct target_snapshot_config {
 	dm_pdev_t *tsc_snap_dev;
 	/* cow dev is set only for persistent snapshot devices */
 	dm_pdev_t *tsc_cow_dev;
-	
+
 	uint64_t tsc_chunk_size;
 	uint32_t tsc_persistent_dev;
 } dm_target_snapshot_config_t;
@@ -209,11 +229,11 @@ typedef struct target_snapshot_origin_config {
 typedef struct dm_target {
 	char name[DM_MAX_TYPE_NAME];
 	/* Initialize target_config area */
-	int (*init)(dm_dev_t *, void **, prop_dictionary_t);
+	int (*init)(dm_dev_t *, void **, char *);
 
 	/* Destroy target_config area */
 	int (*destroy)(dm_table_entry_t *);
-	
+
 	int (*deps) (dm_table_entry_t *, prop_array_t);
 	/*
 	 * Status routine is called to get params string, which is target
@@ -222,11 +242,13 @@ typedef struct dm_target {
 	 */
 	char * (*status)(void *);
 	int (*strategy)(dm_table_entry_t *, struct buf *);
+	int (*sync)(dm_table_entry_t *);
 	int (*upcall)(dm_table_entry_t *, struct buf *);
-	
+	int (*secsize)(dm_table_entry_t *, unsigned *);
+
 	uint32_t version[3];
 	int ref_cnt;
-	
+
 	TAILQ_ENTRY(dm_target) dm_target_next;
 } dm_target_t;
 
@@ -236,11 +258,13 @@ typedef struct dm_target {
  * This structure is used to translate command sent to kernel driver in
  * <key>command</key>
  * <value></value>
- * to function which I can call.
+ * to function which I can call, and if the command is allowed for
+ * non-superusers.
  */
 struct cmd_function {
 	const char *cmd;
 	int  (*fn)(prop_dictionary_t);
+	int  allowed;
 };
 
 /* device-mapper */
@@ -280,64 +304,28 @@ int dm_target_init(void);
 
 #define DM_MAX_PARAMS_SIZE 1024
 
-/* dm_target_zero.c */
-int dm_target_zero_init(dm_dev_t *, void**, prop_dictionary_t);
-char * dm_target_zero_status(void *);
-int dm_target_zero_strategy(dm_table_entry_t *, struct buf *);
-int dm_target_zero_destroy(dm_table_entry_t *);
-int dm_target_zero_deps(dm_table_entry_t *, prop_array_t);
-int dm_target_zero_upcall(dm_table_entry_t *, struct buf *);
-
-/* dm_target_error.c */
-int dm_target_error_init(dm_dev_t *, void**, prop_dictionary_t);
-char * dm_target_error_status(void *);
-int dm_target_error_strategy(dm_table_entry_t *, struct buf *);
-int dm_target_error_deps(dm_table_entry_t *, prop_array_t);
-int dm_target_error_destroy(dm_table_entry_t *);
-int dm_target_error_upcall(dm_table_entry_t *, struct buf *);
-
 /* dm_target_linear.c */
-int dm_target_linear_init(dm_dev_t *, void**, prop_dictionary_t);
+int dm_target_linear_init(dm_dev_t *, void**, char *);
 char * dm_target_linear_status(void *);
 int dm_target_linear_strategy(dm_table_entry_t *, struct buf *);
+int dm_target_linear_sync(dm_table_entry_t *);
 int dm_target_linear_deps(dm_table_entry_t *, prop_array_t);
 int dm_target_linear_destroy(dm_table_entry_t *);
 int dm_target_linear_upcall(dm_table_entry_t *, struct buf *);
+int dm_target_linear_secsize(dm_table_entry_t *, unsigned *);
 
 /* Generic function used to convert char to string */
-uint64_t atoi(const char *); 
-
-/* dm_target_mirror.c */
-int dm_target_mirror_init(dm_dev_t *, void**, prop_dictionary_t);
-char * dm_target_mirror_status(void *);
-int dm_target_mirror_strategy(dm_table_entry_t *, struct buf *);
-int dm_target_mirror_deps(dm_table_entry_t *, prop_array_t);
-int dm_target_mirror_destroy(dm_table_entry_t *);
-int dm_target_mirror_upcall(dm_table_entry_t *, struct buf *);
+uint64_t atoi(const char *);
 
 /* dm_target_stripe.c */
-int dm_target_stripe_init(dm_dev_t *, void**, prop_dictionary_t);
+int dm_target_stripe_init(dm_dev_t *, void**, char *);
 char * dm_target_stripe_status(void *);
 int dm_target_stripe_strategy(dm_table_entry_t *, struct buf *);
+int dm_target_stripe_sync(dm_table_entry_t *);
 int dm_target_stripe_deps(dm_table_entry_t *, prop_array_t);
 int dm_target_stripe_destroy(dm_table_entry_t *);
 int dm_target_stripe_upcall(dm_table_entry_t *, struct buf *);
-
-/* dm_target_snapshot.c */
-int dm_target_snapshot_init(dm_dev_t *, void**, prop_dictionary_t);
-char * dm_target_snapshot_status(void *);
-int dm_target_snapshot_strategy(dm_table_entry_t *, struct buf *);
-int dm_target_snapshot_deps(dm_table_entry_t *, prop_array_t);
-int dm_target_snapshot_destroy(dm_table_entry_t *);
-int dm_target_snapshot_upcall(dm_table_entry_t *, struct buf *);
-
-/* dm snapshot origin driver */
-int dm_target_snapshot_orig_init(dm_dev_t *, void**, prop_dictionary_t);
-char * dm_target_snapshot_orig_status(void *);
-int dm_target_snapshot_orig_strategy(dm_table_entry_t *, struct buf *);
-int dm_target_snapshot_orig_deps(dm_table_entry_t *, prop_array_t);
-int dm_target_snapshot_orig_destroy(dm_table_entry_t *);
-int dm_target_snapshot_orig_upcall(dm_table_entry_t *, struct buf *);
+int dm_target_stripe_secsize(dm_table_entry_t *, unsigned *);
 
 /* dm_table.c  */
 #define DM_TABLE_ACTIVE 0
@@ -345,6 +333,8 @@ int dm_target_snapshot_orig_upcall(dm_table_entry_t *, struct buf *);
 
 int dm_table_destroy(dm_table_head_t *, uint8_t);
 uint64_t dm_table_size(dm_table_head_t *);
+uint64_t dm_inactive_table_size(dm_table_head_t *);
+void dm_table_disksize(dm_table_head_t *, uint64_t *, unsigned *);
 dm_table_t * dm_table_get_entry(dm_table_head_t *, uint8_t);
 int dm_table_get_target_count(dm_table_head_t *, uint8_t);
 void dm_table_release(dm_table_head_t *, uint8_t s);
@@ -356,6 +346,7 @@ void dm_table_head_destroy(dm_table_head_t *);
 dm_dev_t* dm_dev_alloc(void);
 void dm_dev_busy(dm_dev_t *);
 int dm_dev_destroy(void);
+dm_dev_t* dm_dev_detach(device_t);
 int dm_dev_free(dm_dev_t *);
 int dm_dev_init(void);
 int dm_dev_insert(dm_dev_t *);

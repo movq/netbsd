@@ -211,7 +211,7 @@ href="STANDARD_CONFIGURATION_README.html#null_client">null client</a>:
     #
     root    	mtaadmin+root=mta1
 
-/etc/postfix/<a href="virtual.8.html">virtual</a>:
+/etc/postfix/virtual:
     # Caretaker aliases:
     #
     root    	mtaadmin
@@ -420,7 +420,7 @@ context (MAIL_CONFIG=/etc/postfix-out) of the output instance.  </p>
 <ul>
 
 <li> <p> Lines 1-2: With "<a href="postconf.5.html#authorized_submit_users">authorized_submit_users</a> = root", the
-superuser can test the postix-out instance with "postmulti -i
+superuser can test the postfix-out instance with "postmulti -i
 postfix-out -x sendmail -bv recipient...", but otherwise local
 submission remains disabled.  </p>
 

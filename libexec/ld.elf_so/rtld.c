@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.c,v 1.125 2009/09/24 21:21:34 pooka Exp $	 */
+/*	$NetBSD: rtld.c,v 1.155 2011/11/25 21:27:15 joerg Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,19 +40,21 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rtld.c,v 1.125 2009/09/24 21:21:34 pooka Exp $");
+__RCSID("$NetBSD: rtld.c,v 1.155 2011/11/25 21:27:15 joerg Exp $");
 #endif /* not lint */
 
+#include <sys/param.h>
+#include <sys/atomic.h>
+#include <sys/mman.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <lwp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/param.h>
-#include <sys/mman.h>
 #include <dirent.h>
 
 #include <ctype.h>
@@ -85,6 +87,9 @@ Obj_Entry      *_rtld_objlist;	/* Head of linked list of shared objects */
 Obj_Entry     **_rtld_objtail;	/* Link field of last object in list */
 Obj_Entry      *_rtld_objmain;	/* The main program shared object */
 Obj_Entry       _rtld_objself;	/* The dynamic linker shared object */
+u_int		_rtld_objcount;	/* Number of objects in _rtld_objlist */
+u_int		_rtld_objloads;	/* Number of objects loaded in _rtld_objlist */
+u_int		_rtld_objgen;	/* Generation count for _rtld_objlist */
 const char	_rtld_path[] = _PATH_RTLD;
 
 /* Initialize a fake symbol for resolving undefined weak references. */
@@ -92,7 +97,7 @@ Elf_Sym		_rtld_sym_zero = {
     .st_info	= ELF_ST_INFO(STB_GLOBAL, STT_NOTYPE),
     .st_shndx	= SHN_ABS,
 };
-unsigned int	_rtld_pagesz;	/* Page size, as provided by kernel */
+size_t	_rtld_pagesz;	/* Page size, as provided by kernel */
 
 Search_Path    *_rtld_default_paths;
 Search_Path    *_rtld_paths;
@@ -105,6 +110,8 @@ Library_Xform  *_rtld_xforms;
 char           *__progname;
 char          **environ;
 
+static volatile bool _rtld_mutex_may_recurse;
+
 #if defined(RTLD_DEBUG)
 #ifndef __sh__
 extern Elf_Addr _GLOBAL_OFFSET_TABLE_[];
@@ -114,8 +121,8 @@ register Elf_Addr *_GLOBAL_OFFSET_TABLE_ asm("r12");
 #endif /* RTLD_DEBUG */
 extern Elf_Dyn  _DYNAMIC;
 
-static void _rtld_call_fini_functions(int);
-static void _rtld_call_init_functions(void);
+static void _rtld_call_fini_functions(sigset_t *, int);
+static void _rtld_call_init_functions(sigset_t *);
 static void _rtld_initlist_visit(Objlist *, Obj_Entry *, int);
 static void _rtld_initlist_tsort(Objlist *, int);
 static Obj_Entry *_rtld_dlcheck(void *);
@@ -123,19 +130,23 @@ static void _rtld_init_dag(Obj_Entry *);
 static void _rtld_init_dag1(Obj_Entry *, Obj_Entry *);
 static void _rtld_objlist_remove(Objlist *, Obj_Entry *);
 static void _rtld_objlist_clear(Objlist *);
-static void _rtld_unload_object(Obj_Entry *, bool);
+static void _rtld_unload_object(sigset_t *, Obj_Entry *, bool);
 static void _rtld_unref_dag(Obj_Entry *);
 static Obj_Entry *_rtld_obj_from_addr(const void *);
 
 static void
-_rtld_call_fini_functions(int force)
+_rtld_call_fini_functions(sigset_t *mask, int force)
 {
 	Objlist_Entry *elm;
 	Objlist finilist;
 	Obj_Entry *obj;
+	void (*fini)(void);
+	u_int cur_objgen;
 
 	dbg(("_rtld_call_fini_functions(%d)", force));
 
+restart:
+	cur_objgen = ++_rtld_objgen;
 	SIMPLEQ_INIT(&finilist);
 	_rtld_initlist_tsort(&finilist, 1);
 
@@ -145,13 +156,26 @@ _rtld_call_fini_functions(int force)
 		if (obj->refcount > 0 && !force) {
 			continue;
 		}
-		if (obj->fini == NULL || obj->fini_called || obj->initfirst) {
+		if (obj->fini == NULL || obj->fini_called || obj->z_initfirst) {
 		    	continue;
 		}
 		dbg (("calling fini function %s at %p",  obj->path,
 		    (void *)obj->fini));
 		obj->fini_called = 1;
-		(*obj->fini)();
+		/*
+		 * XXX This can race against a concurrent dlclose().
+		 * XXX In that case, the object could be unmapped before
+		 * XXX the fini() call is done.
+		 */
+		fini = obj->fini;
+		_rtld_exclusive_exit(mask);
+		(*fini)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting fini iteration"));
+			_rtld_objlist_clear(&finilist);
+			goto restart;
+		}
 	}
 
 	/* Second pass: objects marked with DF_1_INITFIRST. */
@@ -166,33 +190,55 @@ _rtld_call_fini_functions(int force)
 		dbg (("calling fini function %s at %p (DF_1_INITFIRST)",
 		    obj->path, (void *)obj->fini));
 		obj->fini_called = 1;
-		(*obj->fini)();
+		/* XXX See above for the race condition here */
+		fini = obj->fini;
+		_rtld_exclusive_exit(mask);
+		(*fini)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting fini iteration"));
+			_rtld_objlist_clear(&finilist);
+			goto restart;
+		}
 	}
 
         _rtld_objlist_clear(&finilist);
 }
 
 static void
-_rtld_call_init_functions()
+_rtld_call_init_functions(sigset_t *mask)
 {
 	Objlist_Entry *elm;
 	Objlist initlist;
 	Obj_Entry *obj;
+	void (*init)(void);
+	u_int cur_objgen;
 
 	dbg(("_rtld_call_init_functions()"));
+
+restart:
+	cur_objgen = ++_rtld_objgen;
 	SIMPLEQ_INIT(&initlist);
 	_rtld_initlist_tsort(&initlist, 0);
 
 	/* First pass: objects marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &initlist, link) {
 		obj = elm->obj;
-		if (obj->init == NULL || obj->init_called || !obj->initfirst) {
+		if (obj->init == NULL || obj->init_called || !obj->z_initfirst) {
 			continue;
 		}
 		dbg (("calling init function %s at %p (DF_1_INITFIRST)",
 		    obj->path, (void *)obj->init));
 		obj->init_called = 1;
-		(*obj->init)();
+		init = obj->init;
+		_rtld_exclusive_exit(mask);
+		(*init)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting init iteration"));
+			_rtld_objlist_clear(&initlist);
+			goto restart;
+		}
 	}
 
 	/* Second pass: all other objects. */
@@ -204,7 +250,15 @@ _rtld_call_init_functions()
 		dbg (("calling init function %s at %p",  obj->path,
 		    (void *)obj->init));
 		obj->init_called = 1;
-		(*obj->init)();
+		init = obj->init;
+		_rtld_exclusive_exit(mask);
+		(*init)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting init iteration"));
+			_rtld_objlist_clear(&initlist);
+			goto restart;
+		}
 	}
 
         _rtld_objlist_clear(&initlist);
@@ -231,10 +285,12 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	_rtld_objself.strtab = "_rtld_sym_zero";
 
 	/*
-	 * Set value to -relocabase so that
-	 * _rtld_objself.relocbase + _rtld_smy_zero.st_value == 0
+	 * Set value to -relocbase so that
+	 *
+	 *     _rtld_objself.relocbase + _rtld_sym_zero.st_value == 0
+	 *
 	 * This allows unresolved references to weak symbols to be computed
-	 * to value a value of 0.
+	 * to a value of 0.
 	 */
 	_rtld_sym_zero.st_value = -(uintptr_t)relocbase;
 
@@ -269,6 +325,7 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	/* Make the object list empty again. */
 	_rtld_objlist = NULL;
 	_rtld_objtail = &_rtld_objlist;
+	_rtld_objcount = 0;
 
 	_rtld_debug.r_brk = _rtld_debug_state;
 	_rtld_debug.r_state = RT_CONSISTENT;
@@ -281,9 +338,15 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 static void
 _rtld_exit(void)
 {
+	sigset_t mask;
+
 	dbg(("rtld_exit()"));
 
-	_rtld_call_fini_functions(1);
+	_rtld_exclusive_enter(&mask);
+
+	_rtld_call_fini_functions(&mask, 1);
+
+	_rtld_exclusive_exit(&mask);
 }
 
 /*
@@ -307,19 +370,24 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	               *pAUX_phent, *pAUX_phnum, *pAUX_euid, *pAUX_egid,
 		       *pAUX_ruid, *pAUX_rgid;
 	const AuxInfo  *pAUX_pagesz;
-	char          **env;
+	char          **env, **oenvp;
 	const AuxInfo  *aux;
 	const AuxInfo  *auxp;
+	Obj_Entry      *obj;
 	Elf_Addr       *const osp = sp;
 	bool            bind_now = 0;
-	const char     *ld_bind_now;
+	const char     *ld_bind_now, *ld_preload, *ld_library_path;
 	const char    **argv;
 	const char     *execname;
 	long		argc;
 	const char **real___progname;
 	const Obj_Entry **real___mainprog_obj;
 	char ***real_environ;
-#if defined(RTLD_DEBUG)
+	sigset_t        mask;
+#ifdef DEBUG
+	const char     *ld_debug;
+#endif
+#ifdef RTLD_DEBUG
 	int i = 0;
 #endif
 
@@ -335,8 +403,10 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	debug = 1;
 	dbg(("sp = %p, argc = %ld, argv = %p <%s> relocbase %p", sp,
 	    (long)sp[2], &sp[3], (char *) sp[3], (void *)relocbase));
+#if 0
 	dbg(("got is at %p, dynamic is at %p", _GLOBAL_OFFSET_TABLE_,
 	    &_DYNAMIC));
+#endif
 	dbg(("_ctype_ is %p", _ctype_));
 #endif
 
@@ -423,24 +493,68 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	    ((pAUX_egid ? (gid_t)pAUX_egid->a_v : getegid()) ==
 	    (pAUX_rgid ? (gid_t)pAUX_rgid->a_v : getgid()));
 
-	ld_bind_now = getenv("LD_BIND_NOW");
+#ifdef DEBUG
+	ld_debug = NULL;
+#endif
+	ld_bind_now = NULL;
+	ld_library_path = NULL;
+	ld_preload = NULL;
+	/*
+	 * Inline avoid using normal getenv/unsetenv here as the libc
+	 * code is quite a bit more complicated.
+	 */
+	for (oenvp = env; *env != NULL; ++env) {
+		static const char bind_var[] = "LD_BIND_NOW=";
+		static const char debug_var[] =  "LD_DEBUG=";
+		static const char path_var[] = "LD_LIBRARY_PATH=";
+		static const char preload_var[] = "LD_PRELOAD=";
+#define LEN(x)	(sizeof(x) - 1)
+
+		if ((*env)[0] != 'L' || (*env)[1] != 'D') {
+			/*
+			 * Special case to skip most entries without
+			 * the more expensive calls to strncmp.
+			 */
+			*oenvp++ = *env;
+		} else if (strncmp(*env, debug_var, LEN(debug_var)) == 0) {
+			if (_rtld_trust) {
+#ifdef DEBUG
+				ld_debug = *env + LEN(debug_var);
+#endif
+				*oenvp++ = *env;
+			}
+		} else if (strncmp(*env, bind_var, LEN(bind_var)) == 0) {
+			ld_bind_now = *env + LEN(bind_var);
+		} else if (strncmp(*env, path_var, LEN(path_var)) == 0) {
+			if (_rtld_trust) {
+				ld_library_path = *env + LEN(path_var);
+				*oenvp++ = *env;
+			}
+		} else if (strncmp(*env, preload_var, LEN(preload_var)) == 0) {
+			if (_rtld_trust) {
+				ld_preload = *env + LEN(preload_var);
+				*oenvp++ = *env;
+			}
+		} else {
+			*oenvp++ = *env;
+		}
+#undef LEN
+	}
+	*oenvp++ = NULL;
+
 	if (ld_bind_now != NULL && *ld_bind_now != '\0')
 		bind_now = true;
 	if (_rtld_trust) {
 #ifdef DEBUG
-		const char     *ld_debug = getenv("LD_DEBUG");
 #ifdef RTLD_DEBUG
 		debug = 0;
 #endif
 		if (ld_debug != NULL && *ld_debug != '\0')
 			debug = 1;
 #endif
-		_rtld_add_paths(execname, &_rtld_paths,
-		    getenv("LD_LIBRARY_PATH"));
+		_rtld_add_paths(execname, &_rtld_paths, ld_library_path);
 	} else {
 		execname = NULL;
-		unsetenv("LD_DEBUG");
-		unsetenv("LD_LIBRARY_PATH");
 	}
 	_rtld_process_hints(execname, &_rtld_paths, &_rtld_xforms,
 	    _PATH_LD_HINTS);
@@ -497,6 +611,8 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	/* Link the main program into the list of objects. */
 	*_rtld_objtail = _rtld_objmain;
 	_rtld_objtail = &_rtld_objmain->next;
+	_rtld_objcount++;
+	_rtld_objloads++;
 
 	_rtld_linkmap_add(_rtld_objmain);
 	_rtld_linkmap_add(&_rtld_objself);
@@ -505,20 +621,34 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	_rtld_objmain->mainref = 1;
 	_rtld_objlist_push_tail(&_rtld_list_main, _rtld_objmain);
 
-	if (_rtld_trust) {
+	if (ld_preload) {
 		/*
 		 * Pre-load user-specified objects after the main program
 		 * but before any shared object dependencies.
 		 */
 		dbg(("preloading objects"));
-		if (_rtld_preload(getenv("LD_PRELOAD")) == -1)
+		if (_rtld_preload(ld_preload) == -1)
 			_rtld_die();
-	} else
-		unsetenv("LD_PRELOAD");
+	}
 
 	dbg(("loading needed objects"));
-	if (_rtld_load_needed_objects(_rtld_objmain, RTLD_MAIN) == -1)
+	if (_rtld_load_needed_objects(_rtld_objmain, _RTLD_MAIN) == -1)
 		_rtld_die();
+
+	dbg(("checking for required versions"));
+	for (obj = _rtld_objlist; obj != NULL; obj = obj->next) {
+		if (_rtld_verify_object_versions(obj) == -1)
+			_rtld_die();
+	}
+
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	dbg(("initializing initial Thread Local Storage offsets"));
+	/*
+	 * All initial objects get the TLS space from the static block.
+	 */
+	for (obj = _rtld_objlist; obj != NULL; obj = obj->next)
+		_rtld_tls_offset_allocate(obj);
+#endif
 
 	dbg(("relocating objects"));
 	if (_rtld_relocate_objects(_rtld_objmain, bind_now) == -1)
@@ -527,6 +657,16 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	dbg(("doing copy relocations"));
 	if (_rtld_do_copy_relocations(_rtld_objmain) == -1)
 		_rtld_die();
+
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	dbg(("initializing Thread Local Storage for main thread"));
+	/*
+	 * Set up TLS area for the main thread.
+	 * This has to be done after all relocations are processed,
+	 * since .tdata may contain relocations.
+	 */
+	_rtld_tls_initial_allocation();
+#endif
 
 	/*
 	 * Set the __progname,  environ and, __mainprog_obj before
@@ -553,11 +693,15 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	if (real___mainprog_obj)
 		*real___mainprog_obj = _rtld_objmain;
 
+	_rtld_exclusive_enter(&mask);
+
 	dbg(("calling _init functions"));
-	_rtld_call_init_functions();
+	_rtld_call_init_functions(&mask);
 
 	dbg(("control at program entry point = %p, obj = %p, exit = %p",
 	     _rtld_objmain->entry, _rtld_objmain, _rtld_exit));
+
+	_rtld_exclusive_exit(&mask);
 
 	/*
 	 * Return with the entry point and the exit procedure in at the top
@@ -652,7 +796,7 @@ _rtld_init_dag1(Obj_Entry *root, Obj_Entry *obj)
 	if (!obj->mainref) {
 		if (_rtld_objlist_find(&obj->dldags, root))
 			return;
-		rdbg(("add %p (%s) to %p (%s) DAG", obj, obj->path, root,
+		dbg(("add %p (%s) to %p (%s) DAG", obj, obj->path, root,
 		    root->path));
 		_rtld_objlist_push_tail(&obj->dldags, root);
 		_rtld_objlist_push_tail(&root->dagmembers, obj);
@@ -666,7 +810,7 @@ _rtld_init_dag1(Obj_Entry *root, Obj_Entry *obj)
  * Note, this is called only for objects loaded by dlopen().
  */
 static void
-_rtld_unload_object(Obj_Entry *root, bool do_fini_funcs)
+_rtld_unload_object(sigset_t *mask, Obj_Entry *root, bool do_fini_funcs)
 {
 
 	_rtld_unref_dag(root);
@@ -677,7 +821,7 @@ _rtld_unload_object(Obj_Entry *root, bool do_fini_funcs)
 
 		/* Finalize objects that are about to be unmapped. */
 		if (do_fini_funcs)
-			_rtld_call_fini_functions(0);
+			_rtld_call_fini_functions(mask, 0);
 
 		/* Remove the DAG from all objects' DAG lists. */
 		SIMPLEQ_FOREACH(elm, &root->dagmembers, link)
@@ -693,20 +837,37 @@ _rtld_unload_object(Obj_Entry *root, bool do_fini_funcs)
 		linkp = &_rtld_objlist->next;
 		while ((obj = *linkp) != NULL) {
 			if (obj->refcount == 0) {
-#ifdef RTLD_DEBUG
 				dbg(("unloading \"%s\"", obj->path));
-#endif
 				if (obj->ehdr != MAP_FAILED)
 					munmap(obj->ehdr, _rtld_pagesz);
 				munmap(obj->mapbase, obj->mapsize);
 				_rtld_objlist_remove(&_rtld_list_global, obj);
 				_rtld_linkmap_delete(obj);
 				*linkp = obj->next;
+				_rtld_objcount--;
 				_rtld_obj_free(obj);
 			} else
 				linkp = &obj->next;
 		}
 		_rtld_objtail = linkp;
+	}
+}
+
+void
+_rtld_ref_dag(Obj_Entry *root)
+{
+	const Needed_Entry *needed;
+
+	assert(root);
+
+	++root->refcount;
+
+	dbg(("incremented reference on \"%s\" (%d)", root->path,
+	    root->refcount));
+	for (needed = root->needed; needed != NULL;
+	     needed = needed->next) {
+		if (needed->obj != NULL)
+			_rtld_ref_dag(needed->obj);
 	}
 }
 
@@ -716,7 +877,11 @@ _rtld_unref_dag(Obj_Entry *root)
 
 	assert(root);
 	assert(root->refcount != 0);
+
 	--root->refcount;
+	dbg(("decremented reference on \"%s\" (%d)", root->path,
+	    root->refcount));
+
 	if (root->refcount == 0) {
 		const Needed_Entry *needed;
 
@@ -732,19 +897,30 @@ __strong_alias(__dlclose,dlclose)
 int
 dlclose(void *handle)
 {
-	Obj_Entry *root = _rtld_dlcheck(handle);
+	Obj_Entry *root;
+	sigset_t mask;
 
-	if (root == NULL)
+	dbg(("dlclose of %p", handle));
+
+	_rtld_exclusive_enter(&mask);
+
+	root = _rtld_dlcheck(handle);
+
+	if (root == NULL) {
+		_rtld_exclusive_exit(&mask);
 		return -1;
+	}
 
 	_rtld_debug.r_state = RT_DELETE;
 	_rtld_debug_state();
 
 	--root->dl_refcount;
-	_rtld_unload_object(root, true);
+	_rtld_unload_object(&mask, root, true);
 
 	_rtld_debug.r_state = RT_CONSISTENT;
 	_rtld_debug_state();
+
+	_rtld_exclusive_exit(&mask);
 
 	return 0;
 }
@@ -765,6 +941,21 @@ dlopen(const char *name, int mode)
 {
 	Obj_Entry **old_obj_tail = _rtld_objtail;
 	Obj_Entry *obj = NULL;
+	int flags = _RTLD_DLOPEN;
+	bool nodelete;
+	bool now;
+	sigset_t mask;
+	int result;
+
+	dbg(("dlopen of %s %d", name, mode));
+
+	_rtld_exclusive_enter(&mask);
+
+	flags |= (mode & RTLD_GLOBAL) ? _RTLD_GLOBAL : 0;
+	flags |= (mode & RTLD_NOLOAD) ? _RTLD_NOLOAD : 0;
+	
+	nodelete = (mode & RTLD_NODELETE) ? true : false;
+	now = ((mode & RTLD_MODEMASK) == RTLD_NOW) ? true : false;
 
 	_rtld_debug.r_state = RT_ADD;
 	_rtld_debug_state();
@@ -773,27 +964,45 @@ dlopen(const char *name, int mode)
 		obj = _rtld_objmain;
 		obj->refcount++;
 	} else
-		obj = _rtld_load_library(name, _rtld_objmain, mode);
+		obj = _rtld_load_library(name, _rtld_objmain, flags);
+
 
 	if (obj != NULL) {
 		++obj->dl_refcount;
 		if (*old_obj_tail != NULL) {	/* We loaded something new. */
 			assert(*old_obj_tail == obj);
 
-			if (_rtld_load_needed_objects(obj, mode) == -1 ||
-			    (_rtld_init_dag(obj),
-			    _rtld_relocate_objects(obj,
-			    ((mode & 3) == RTLD_NOW))) == -1) {
-				_rtld_unload_object(obj, false);
+			result = _rtld_load_needed_objects(obj, flags);
+			if (result != -1) {
+				Objlist_Entry *entry;
+				_rtld_init_dag(obj);
+				SIMPLEQ_FOREACH(entry, &obj->dagmembers, link) {
+					result = _rtld_verify_object_versions(entry->obj);
+					if (result == -1)
+						break;
+				}
+			}
+			if (result == -1 || _rtld_relocate_objects(obj,
+			    (now || obj->z_now)) == -1) {
+				_rtld_unload_object(&mask, obj, false);
 				obj->dl_refcount--;
 				obj = NULL;
 			} else {
-				_rtld_call_init_functions();
+				_rtld_call_init_functions(&mask);
+			}
+		}
+		if (obj != NULL) {
+			if ((nodelete || obj->z_nodelete) && !obj->ref_nodel) {
+				dbg(("dlopen obj %s nodelete", obj->path));
+				_rtld_ref_dag(obj);
+				obj->z_nodelete = obj->ref_nodel = true;
 			}
 		}
 	}
 	_rtld_debug.r_state = RT_CONSISTENT;
 	_rtld_debug_state();
+
+	_rtld_exclusive_exit(&mask);
 
 	return obj;
 }
@@ -807,15 +1016,18 @@ _rtld_objmain_sym(const char *name)
 	unsigned long hash;
 	const Elf_Sym *def;
 	const Obj_Entry *obj;
+	DoneList donelist;
 
 	hash = _rtld_elf_hash(name);
 	obj = _rtld_objmain;
+	_rtld_donelist_init(&donelist);
 
-	def = _rtld_symlook_list(name, hash, &_rtld_list_main, &obj, false);
+	def = _rtld_symlook_list(name, hash, &_rtld_list_main, &obj, 0,
+	    NULL, &donelist);
 
 	if (def != NULL)
 		return obj->relocbase + def->st_value;
-	return(NULL);
+	return NULL;
 }
 
 #ifdef __powerpc__
@@ -826,16 +1038,29 @@ hackish_return_address(void)
 }
 #endif
 
-__strong_alias(__dlsym,dlsym)
-void *
-dlsym(void *handle, const char *name)
+#ifdef __HAVE_FUNCTION_DESCRIPTORS
+#define	lookup_mutex_enter()	_rtld_exclusive_enter(&mask)
+#define	lookup_mutex_exit()	_rtld_exclusive_exit(&mask)
+#else
+#define	lookup_mutex_enter()	_rtld_shared_enter()
+#define	lookup_mutex_exit()	_rtld_shared_exit()
+#endif
+
+static void *
+do_dlsym(void *handle, const char *name, const Ver_Entry *ventry, void *retaddr)
 {
 	const Obj_Entry *obj;
 	unsigned long hash;
 	const Elf_Sym *def;
 	const Obj_Entry *defobj;
-	void *retaddr;
-	
+	DoneList donelist;
+	const u_int flags = SYMLOOK_DLSYM | SYMLOOK_IN_PLT;
+#ifdef __HAVE_FUNCTION_DESCRIPTORS
+	sigset_t mask;
+#endif
+
+	lookup_mutex_enter();
+
 	hash = _rtld_elf_hash(name);
 	def = NULL;
 	defobj = NULL;
@@ -845,19 +1070,15 @@ dlsym(void *handle, const char *name)
 	case (intptr_t)RTLD_NEXT:
 	case (intptr_t)RTLD_DEFAULT:
 	case (intptr_t)RTLD_SELF:
-#ifdef __powerpc__
-		retaddr = hackish_return_address();
-#else
-		retaddr = __builtin_return_address(0);
-#endif
 		if ((obj = _rtld_obj_from_addr(retaddr)) == NULL) {
 			_rtld_error("Cannot determine caller's shared object");
+			lookup_mutex_exit();
 			return NULL;
 		}
 
 		switch ((intptr_t)handle) {
 		case (intptr_t)NULL:	 /* Just the caller's shared object. */
-			def = _rtld_symlook_obj(name, hash, obj, false);
+			def = _rtld_symlook_obj(name, hash, obj, flags, ventry);
 			defobj = obj;
 			break;
 
@@ -868,7 +1089,7 @@ dlsym(void *handle, const char *name)
 		case (intptr_t)RTLD_SELF:	/* Caller included */
 			for (; obj; obj = obj->next) {
 				if ((def = _rtld_symlook_obj(name, hash, obj,
-				    false)) != NULL) {
+				    flags, ventry)) != NULL) {
 					defobj = obj;
 					break;
 				}
@@ -877,7 +1098,7 @@ dlsym(void *handle, const char *name)
 
 		case (intptr_t)RTLD_DEFAULT:
 			def = _rtld_symlook_default(name, hash, obj, &defobj,
-			    false);
+			    flags, ventry);
 			break;
 
 		default:
@@ -886,37 +1107,93 @@ dlsym(void *handle, const char *name)
 		break;
 
 	default:
-		if ((obj = _rtld_dlcheck(handle)) == NULL)
+		if ((obj = _rtld_dlcheck(handle)) == NULL) {
+			lookup_mutex_exit();
 			return NULL;
-		
+		}
+
+		_rtld_donelist_init(&donelist);
+
 		if (obj->mainprog) {
 			/* Search main program and all libraries loaded by it */
 			def = _rtld_symlook_list(name, hash, &_rtld_list_main,
-			    &defobj, false);
+			    &defobj, flags, ventry, &donelist);
 		} else {
 			Needed_Entry fake;
+			DoneList depth;
 
 			/* Search the object and all the libraries loaded by it. */
 			fake.next = NULL;
 			fake.obj = __UNCONST(obj);
 			fake.name = 0;
+
+			_rtld_donelist_init(&depth);
 			def = _rtld_symlook_needed(name, hash, &fake, &defobj,
-			    false);
+			    flags, ventry, &donelist, &depth);
 		}
+
 		break;
 	}
 	
 	if (def != NULL) {
+		void *p;
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
-		if (ELF_ST_TYPE(def->st_info) == STT_FUNC)
-			return (void *)_rtld_function_descriptor_alloc(defobj, 
+		if (ELF_ST_TYPE(def->st_info) == STT_FUNC) {
+			p = (void *)_rtld_function_descriptor_alloc(defobj,
 			    def, 0);
+			lookup_mutex_exit();
+			return p;
+		}
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
-		return defobj->relocbase + def->st_value;
+		p = defobj->relocbase + def->st_value;
+		lookup_mutex_exit();
+		return p;
 	}
 	
 	_rtld_error("Undefined symbol \"%s\"", name);
+	lookup_mutex_exit();
 	return NULL;
+}
+
+__strong_alias(__dlsym,dlsym)
+void *
+dlsym(void *handle, const char *name)
+{
+	void *retaddr;
+
+	dbg(("dlsym of %s in %p", name, handle));
+
+#ifdef __powerpc__
+	retaddr = hackish_return_address();
+#else
+	retaddr = __builtin_return_address(0);
+#endif
+	return do_dlsym(handle, name, NULL, retaddr);
+}
+
+__strong_alias(__dlvsym,dlvsym)
+void *
+dlvsym(void *handle, const char *name, const char *version)
+{
+	Ver_Entry *ventry = NULL;
+	Ver_Entry ver_entry;
+	void *retaddr;
+
+	dbg(("dlvsym of %s@%s in %p", name, version ? version : NULL, handle));
+
+	if (version != NULL) {
+		ver_entry.name = version;
+		ver_entry.file = NULL;
+		ver_entry.hash = _rtld_elf_hash(version);
+		ver_entry.flags = 0;
+		ventry = &ver_entry;
+	}
+#ifdef __powerpc__
+	retaddr = hackish_return_address();
+#else
+	retaddr = __builtin_return_address(0);
+#endif
+	return do_dlsym(handle, name, ventry, retaddr);
 }
 
 __strong_alias(__dladdr,dladdr)
@@ -927,7 +1204,14 @@ dladdr(const void *addr, Dl_info *info)
 	const Elf_Sym *def, *best_def;
 	void *symbol_addr;
 	unsigned long symoffset;
-	
+#ifdef __HAVE_FUNCTION_DESCRIPTORS
+	sigset_t mask;
+#endif
+
+	dbg(("dladdr of %p", addr));
+
+	lookup_mutex_enter();
+
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
 	addr = _rtld_function_descriptor_function(addr);
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
@@ -935,6 +1219,7 @@ dladdr(const void *addr, Dl_info *info)
 	obj = _rtld_obj_from_addr(addr);
 	if (obj == NULL) {
 		_rtld_error("No shared object contains address");
+		lookup_mutex_enter();
 		return 0;
 	}
 	info->dli_fname = obj->path;
@@ -982,6 +1267,7 @@ dladdr(const void *addr, Dl_info *info)
 		    best_def, 0);
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
 
+	lookup_mutex_exit();
 	return 1;
 }
 
@@ -992,6 +1278,10 @@ dlinfo(void *handle, int req, void *v)
 	const Obj_Entry *obj;
 	void *retaddr;
 
+	dbg(("dlinfo for %p %d", handle, req));
+
+	_rtld_shared_enter();
+
 	if (handle == RTLD_SELF) {
 #ifdef __powerpc__
 		retaddr = hackish_return_address();
@@ -1000,11 +1290,13 @@ dlinfo(void *handle, int req, void *v)
 #endif
 		if ((obj = _rtld_obj_from_addr(retaddr)) == NULL) {
 			_rtld_error("Cannot determine caller's shared object");
+			_rtld_shared_exit();
 			return -1;
 		}
 	} else {
 		if ((obj = _rtld_dlcheck(handle)) == NULL) {
 			_rtld_error("Invalid handle");
+			_rtld_shared_exit();
 			return -1;
 		}
 	}
@@ -1020,10 +1312,50 @@ dlinfo(void *handle, int req, void *v)
 
 	default:
 		_rtld_error("Invalid request");
+		_rtld_shared_exit();
 		return -1;
 	}
 
+	_rtld_shared_exit();
 	return 0;
+}
+
+__strong_alias(__dl_iterate_phdr,dl_iterate_phdr);
+int
+dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *param)
+{
+	struct dl_phdr_info phdr_info;
+	const Obj_Entry *obj;
+	int error = 0;
+
+	dbg(("dl_iterate_phdr"));
+
+	_rtld_shared_enter();
+
+	for (obj = _rtld_objlist;  obj != NULL;  obj = obj->next) {
+		phdr_info.dlpi_addr = (Elf_Addr)obj->relocbase;
+		phdr_info.dlpi_name = STAILQ_FIRST(&obj->names) ?
+		    STAILQ_FIRST(&obj->names)->name : obj->path;
+		phdr_info.dlpi_phdr = obj->phdr;
+		phdr_info.dlpi_phnum = obj->phsize / sizeof(obj->phdr[0]);
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		phdr_info.dlpi_tls_modid = obj->tlsindex;
+		phdr_info.dlpi_tls_data = obj->tlsinit;
+#else
+		phdr_info.dlpi_tls_modid = 0;
+		phdr_info.dlpi_tls_data = 0;
+#endif
+		phdr_info.dlpi_adds = _rtld_objloads;
+		phdr_info.dlpi_subs = _rtld_objloads - _rtld_objcount;
+
+		/* XXXlocking: exit point */
+		error = callback(&phdr_info, sizeof(phdr_info), param);
+		if (error)
+			break;
+	}
+
+	_rtld_shared_exit();
+	return error;
 }
 
 /*
@@ -1131,4 +1463,124 @@ _rtld_objlist_remove(Objlist *list, Obj_Entry *obj)
 		SIMPLEQ_REMOVE(list, elm, Struct_Objlist_Entry, link);
 		xfree(elm);
 	}
+}
+
+#define	RTLD_EXCLUSIVE_MASK	0x80000000U
+static volatile unsigned int _rtld_mutex;
+static volatile unsigned int _rtld_waiter_exclusive;
+static volatile unsigned int _rtld_waiter_shared;
+
+void
+_rtld_shared_enter(void)
+{
+	unsigned int cur;
+	lwpid_t waiter, self = 0;
+
+	membar_enter();
+
+	for (;;) {
+		cur = _rtld_mutex;
+		/*
+		 * First check if we are currently not exclusively locked.
+		 */
+		if ((cur & RTLD_EXCLUSIVE_MASK) == 0) {
+			/* Yes, so increment use counter */
+			if (atomic_cas_uint(&_rtld_mutex, cur, cur + 1) != cur)
+				continue;
+			return;
+		}
+		/*
+		 * Someone has an exclusive lock.  Puts us on the waiter list.
+		 */
+		if (!self)
+			self = _lwp_self();
+		if (cur == (self | RTLD_EXCLUSIVE_MASK)) {
+			if (_rtld_mutex_may_recurse)
+				return;
+			_rtld_error("dead lock detected");
+			_rtld_die();
+		}
+		waiter = atomic_swap_uint(&_rtld_waiter_shared, self);
+		/*
+		 * Check for race against _rtld_exclusive_exit before sleeping.
+		 */
+		if ((_rtld_mutex & RTLD_EXCLUSIVE_MASK) ||
+		    _rtld_waiter_exclusive)
+			_lwp_park(NULL, -1, __UNVOLATILE(&_rtld_mutex), NULL);
+		/* Try to remove us from the waiter list. */
+		atomic_cas_uint(&_rtld_waiter_shared, self, 0);
+		if (waiter)
+			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+	}
+}
+
+void
+_rtld_shared_exit(void)
+{
+	lwpid_t waiter;
+
+	/*
+	 * Shared lock taken after an exclusive lock.
+	 * Just assume this is a partial recursion.
+	 */
+	if (_rtld_mutex & RTLD_EXCLUSIVE_MASK)
+		return;
+
+	/*
+	 * Wakeup LWPs waiting for an exclusive lock if this is the last
+	 * LWP on the shared lock.
+	 */
+	if (atomic_dec_uint_nv(&_rtld_mutex))
+		return;
+	if ((waiter = _rtld_waiter_exclusive) != 0)
+		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+
+	membar_exit();
+}
+
+void
+_rtld_exclusive_enter(sigset_t *mask)
+{
+	lwpid_t waiter, self = _lwp_self();
+	unsigned int locked_value = (unsigned int)self | RTLD_EXCLUSIVE_MASK;
+	unsigned int cur;
+	sigset_t blockmask;
+
+	sigfillset(&blockmask);
+	sigdelset(&blockmask, SIGTRAP);	/* Allow the debugger */
+	sigprocmask(SIG_BLOCK, &blockmask, mask);
+
+	membar_enter();
+
+	for (;;) {
+		if (atomic_cas_uint(&_rtld_mutex, 0, locked_value) == 0)
+			break;
+		waiter = atomic_swap_uint(&_rtld_waiter_exclusive, self);
+		cur = _rtld_mutex;
+		if (cur == locked_value) {
+			_rtld_error("dead lock detected");
+			_rtld_die();
+		}
+		if (cur)
+			_lwp_park(NULL, -1, __UNVOLATILE(&_rtld_mutex), NULL);
+		atomic_cas_uint(&_rtld_waiter_exclusive, self, 0);
+		if (waiter)
+			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+	}
+}
+
+void
+_rtld_exclusive_exit(sigset_t *mask)
+{
+	lwpid_t waiter;
+
+	_rtld_mutex = 0;
+	if ((waiter = _rtld_waiter_exclusive) != 0)
+		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+
+	if ((waiter = _rtld_waiter_shared) != 0)
+		_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));
+
+	membar_exit();
+	sigprocmask(SIG_SETMASK, mask, NULL);
 }

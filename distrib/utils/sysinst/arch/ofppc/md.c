@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.6 2009/09/19 14:57:29 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.12 2012/02/02 21:58:31 phx Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -40,6 +36,7 @@
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/disklabel_rdb.h>
 #include <stdio.h>
 #include <util.h>
 #include <machine/cpu.h>
@@ -50,12 +47,16 @@
 #include "menu_defs.h"
 #include "endian.h"
 
+static int check_rdb(void);
+static uint32_t rdbchksum(void *);
+
 /* We use MBR_PTYPE_PREP like port-prep does. */
 static int nonewfsmsdos = 0, nobootfix = 0, noprepfix=0;
 static int bootpart_fat12 = PART_BOOT_FAT12;
 static int bootpart_binfo = PART_BOOT_BINFO;
 static int bootpart_prep = PART_BOOT_PREP;
 static int bootinfo_mbr = 1;
+static int rdb_found = 0;
 
 /* bootstart/bootsize are for the fat */
 int binfostart, binfosize, bprepstart, bprepsize;
@@ -66,14 +67,19 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+
+	(void)flags;
 }
 
 int
 md_get_info(void)
 {
+
+	if (check_rdb())
+		return 1;
+
 	return set_bios_geom_with_mbr_guess();
 }
 
@@ -91,6 +97,41 @@ md_make_bsd_partitions(void)
 	int ptend;
 	int no_swap = 0;
 	partinfo *p;
+
+	if (rdb_found) {
+		/*
+		 * We found RDB partitions on the disk, which cannot be
+		 * modified by rewriting the disklabel.
+		 * So just use what we have got.
+		 */
+		for (part = 0; part < maxpart; part++) {
+			if (PI_ISBSDFS(&bsdlabel[part])) {
+				bsdlabel[part].pi_flags |=
+				    PIF_NEWFS | PIF_MOUNT;
+
+				if (part == PART_A)
+					strcpy(bsdlabel[part].pi_mount, "/");
+			}
+		}
+
+		part_bsd = part_raw = getrawpartition();
+		if (part_raw == -1)
+			part_raw = PART_C;	/* for sanity... */
+		bsdlabel[part_raw].pi_offset = 0;
+		bsdlabel[part_raw].pi_size = dlsize;
+
+		set_sizemultname_meg();
+rdb_edit_check:
+		if (edit_and_check_label(bsdlabel, maxpart, part_raw,
+		    part_bsd) == 0) {
+			msg_display(MSG_abort);
+			return 0;
+		}
+		if (md_check_partitions() == 0)
+			goto rdb_edit_check;
+
+		return 1;
+	}
 
 	/*
 	 * Initialize global variables that track space used on this disk.
@@ -181,7 +222,7 @@ md_make_bsd_partitions(void)
 			if (PI_ISBSDFS(p))
 				p->pi_flags |= PIF_MOUNT;
 		} else {
-			if (p->pi_offset < ptstart + ptsize &&			
+			if (p->pi_offset < ptstart + ptsize &&
 			    p->pi_offset + p->pi_size > ptstart)
 				/* Not outside area we are allocating */
 				continue;
@@ -227,6 +268,9 @@ md_check_partitions(void)
 {
 	int part, fprep=0, ffat=0;
 
+	if (rdb_found)
+		return 1;
+
 	/* we need to find a boot partition, otherwise we can't create
 	 * our msdos fs boot partition.  We make the assumption that
 	 * the user hasn't done something stupid, like move it away
@@ -263,6 +307,10 @@ md_check_partitions(void)
 int
 md_pre_disklabel(void)
 {
+
+	if (rdb_found)
+		return 0;
+
 	msg_display(MSG_dofdisk);
 
 	/* write edited MBR onto disk. */
@@ -282,13 +330,13 @@ md_post_disklabel(void)
 {
 	char bootdev[100];
 
-	if (bootstart == 0 || bootsize == 0)
+	if (bootstart == 0 || bootsize == 0 || rdb_found)
 		return 0;
-	
+
 	snprintf(bootdev, sizeof bootdev, "/dev/r%s%c", diskdev,
 	    'a'+bootpart_fat12);
 	run_program(RUN_DISPLAY, "/sbin/newfs_msdos %s", bootdev);
-	
+
 	return 0;
 }
 
@@ -301,8 +349,7 @@ int
 md_post_newfs(void)
 {
 
-	/* just in case */
-	run_program(RUN_DISPLAY, "/sbin/umount /targetroot/boot");
+	/* No bootblock. We use ofwboot from a partition visiable by OFW. */
 	return 0;
 }
 
@@ -312,33 +359,24 @@ md_post_extract(void)
 	char bootdev[100], bootbdev[100], version[64];
 
 	/* if we can't make it bootable, just punt */
-	if (nobootfix && noprepfix)
+	if ((nobootfix && noprepfix) || rdb_found)
 		return 0;
 
 	snprintf(version, sizeof version, "NetBSD/%s %s", MACH, REL);
 	run_program(RUN_DISPLAY, "/usr/mdec/mkbootinfo '%s' %d "
 	    "/tmp/bootinfo.txt", version, bootinfo_mbr);
-	
-	if (!nobootfix) {
-		snprintf(bootdev, sizeof bootdev, "/dev/r%s%c", diskdev,
-		    'a'+bootpart_fat12);
-		snprintf(bootbdev, sizeof bootbdev, "/dev/%s%c", diskdev,
-		    'a'+bootpart_fat12);
 
-		if (nonewfsmsdos == 0) 
-			run_program(RUN_DISPLAY, "/sbin/newfs_msdos %s",
-			    bootdev);
-		run_program(RUN_DISPLAY, "/sbin/mount_msdos %s /mnt2",
-		    bootbdev);
-		run_program(RUN_DISPLAY, "/bin/mkdir -p /mnt2/ppc");
-		run_program(RUN_DISPLAY, "/bin/mkdir -p /mnt2/netbsd");
+	if (!nobootfix) {
+		run_program(RUN_DISPLAY, "/bin/mkdir -p /%s/boot/ppc",
+		    target_prefix());
+		run_program(RUN_DISPLAY, "/bin/mkdir -p /%s/boot/netbsd",
+		    target_prefix());
 		run_program(RUN_DISPLAY, "/bin/cp /usr/mdec/ofwboot "
-		    "/mnt2/netbsd");
+		    "/%s/boot/netbsd", target_prefix());
 		run_program(RUN_DISPLAY, "/bin/cp /tmp/bootinfo.txt "
-		    "/mnt2/ppc");
-		run_program(RUN_DISPLAY,
-		    "/bin/cp /usr/mdec/ofwboot /mnt2/ofwboot");
-		run_program(RUN_DISPLAY, "/sbin/umount /mnt2");
+		    "/%s/boot/ppc", target_prefix());
+		run_program(RUN_DISPLAY, "/bin/cp /usr/mdec/ofwboot "
+		    "/%s/boot/ofwboot", target_prefix());
 	}
 
 	if (!noprepfix) {
@@ -350,7 +388,7 @@ md_post_extract(void)
 		    bootdev);
 		run_program(RUN_DISPLAY, "/bin/dd if=/usr/mdec/ofwboot "
 		    "of=%s bs=512", bootbdev);
-		
+
 		snprintf(bootdev, sizeof bootdev, "/dev/r%s%c", diskdev,
 		    'a'+bootpart_binfo);
 		snprintf(bootbdev, sizeof bootbdev, "/dev/%s%c", diskdev,
@@ -360,13 +398,14 @@ md_post_extract(void)
 		run_program(RUN_DISPLAY, "/bin/dd if=/tmp/bootinfo.txt "
 		    "of=%s bs=512", bootbdev);
 	}
-	
+
 	return 0;
 }
 
 void
 md_cleanup_install(void)
 {
+
 #ifndef DEBUG
 	enable_rc_conf();
 #endif
@@ -378,6 +417,9 @@ md_pre_update(void)
 	struct mbr_partition *part;
 	mbr_info_t *ext;
 	int i;
+
+	if (check_rdb())
+		return 1;
 
 	read_mbr(diskdev, &mbr);
 	/* do a sanity check of the partition table */
@@ -406,7 +448,7 @@ md_pre_update(void)
 	case 2: nobootfix=1; break;
 	default: break;
 	}
-	
+
 	return 1;
 }
 
@@ -414,6 +456,7 @@ md_pre_update(void)
 int
 md_update(void)
 {
+
 	nonewfsmsdos = 1;
 	md_post_newfs();
 	return 1;
@@ -447,7 +490,7 @@ md_check_mbr(mbr_info_t *mbri)
 			break;
 		}
 	}
-	
+
 	/* we need to either have a pair of prep partitions, or a single
 	 * fat.  if neither, things are broken. */
 	if (!(bootsize >= (MIN_FAT12_BOOT/512) ||
@@ -472,7 +515,7 @@ md_check_mbr(mbr_info_t *mbri)
 			return 0;
 		return 1;
 	}
-	
+
 	/* check the fat12 parititons */
 	if (bootsize > 0 && bootsize < (MIN_FAT12_BOOT/512)) {
 		msg_display(MSG_boottoosmall);
@@ -543,7 +586,7 @@ md_mbr_use_wholedisk(mbr_info_t *mbri)
 	part[3].mbrp_size = PREP_BOOT_SIZE/512;
 	part[3].mbrp_start = bsec + FAT12_BOOT_SIZE/512 + BINFO_BOOT_SIZE/512;
 	part[3].mbrp_flag = 0;
-	
+
 	ptstart = part[1].mbrp_start;
 	ptsize = part[1].mbrp_size;
 	bootstart = part[0].mbrp_start;
@@ -555,4 +598,58 @@ md_mbr_use_wholedisk(mbr_info_t *mbri)
 	bootinfo_mbr = 4;
 
 	return 1;
+}
+
+const char *md_disklabel_cmd(void)
+{
+
+	/* we cannot rewrite an RDB disklabel */
+	if (rdb_found)
+		return "sync No disklabel";
+
+	return "disklabel -w -r";
+}
+
+static int
+check_rdb(void)
+{
+	char buf[512], diskpath[MAXPATHLEN];
+	struct rdblock *rdb;
+	off_t blk;
+	int fd;
+
+	/* Find out if this disk has a valid RDB, before continuing. */
+	rdb = (struct rdblock *)buf;
+	fd = opendisk(diskdev, O_RDONLY, diskpath, sizeof(diskpath), 0);
+	if (fd < 0)
+		return 0;
+	for (blk = 0; blk < RDB_MAXBLOCKS; blk++) {
+		if (pread(fd, rdb, 512, blk * 512) != 512)
+			return 0;
+		if (rdb->id == RDBLOCK_ID && rdbchksum(rdb) == 0) {
+			rdb_found = 1;	/* do not repartition! */
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static uint32_t
+rdbchksum(void *bdata)
+{
+	uint32_t *blp, cnt, val;
+
+	blp = bdata;
+	cnt = blp[1];
+	val = 0;
+	while (cnt--)
+		val += *blp++;
+	return val;
+}
+
+int
+md_pre_mount()
+{
+
+	return 0;
 }

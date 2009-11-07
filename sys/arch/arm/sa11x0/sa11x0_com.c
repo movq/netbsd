@@ -1,4 +1,4 @@
-/*      $NetBSD: sa11x0_com.c,v 1.45 2009/05/29 14:15:44 rjs Exp $        */
+/*      $NetBSD: sa11x0_com.c,v 1.50 2012/02/02 19:42:58 tls Exp $        */
 
 /*-
  * Copyright (c) 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.45 2009/05/29 14:15:44 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.50 2012/02/02 19:42:58 tls Exp $");
 
 #include "opt_com.h"
 #include "opt_ddb.h"
@@ -74,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.45 2009/05/29 14:15:44 rjs Exp $");
 #include "opt_lockdebug.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
@@ -93,7 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0_com.c,v 1.45 2009/05/29 14:15:44 rjs Exp $");
 
 #include <dev/cons.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <arm/sa11x0/sa11x0_reg.h>
 #include <arm/sa11x0/sa11x0_var.h>
 #include <arm/sa11x0/sa11x0_comreg.h>
@@ -159,7 +159,7 @@ static inline void sacom_schedrx(struct sacom_softc *);
 
 #ifdef hpcarm
 /* HPCARM specific functions */
-static void	sacom_j720_init(struct sa11x0_softc *, struct sacom_softc *);
+static void	sacom_j720_init(device_t, device_t);
 #endif
 
 #define COMUNIT_MASK	0x7ffff
@@ -234,7 +234,7 @@ sacom_attach(device_t parent, device_t self, void *aux)
 
 #ifdef hpcarm
 	struct platid_data *p;
-	void (*mdinit)(device_t, struct sacom_softc *);
+	void (*mdinit)(device_t, device_t);
 #endif
 
 	aprint_normal("\n");
@@ -270,7 +270,7 @@ sacom_attach(device_t parent, device_t self, void *aux)
 	/* Do hpcarm specific initialization, if any */
 	if ((p = platid_search_data(&platid, sacom_platid_table)) != NULL) {
 		mdinit = p->data;
-		(mdinit)(parent, sc);
+		(*mdinit)(parent, self);
 	}
 #endif
 
@@ -296,7 +296,7 @@ sacom_attach_subr(struct sacom_softc *sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sacomstart;
 	tp->t_param = sacomparam;
 	tp->t_hwiflow = sacomhwiflow;
@@ -330,7 +330,7 @@ sacom_attach_subr(struct sacom_softc *sc)
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, sacomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif
@@ -352,6 +352,14 @@ sacom_detach(device_t dev, int flags)
 	struct sacom_softc *sc = device_private(dev);
 	int maj, mn;
 
+	if (sc->sc_hwflags & (COM_HW_CONSOLE|COM_HW_KGDB))
+		return EBUSY;
+
+	if (sc->disable != NULL && sc->enabled != 0) {
+		(*sc->disable)(sc);
+		sc->enabled = 0;
+	}
+
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&sacom_cdevsw);
 
@@ -367,12 +375,12 @@ sacom_detach(device_t dev, int flags)
 
 	/* Detach and free the tty. */
 	tty_detach(sc->sc_tty);
-	ttyfree(sc->sc_tty);
+	tty_free(sc->sc_tty);
 
 	/* Unhook the soft interrupt handler. */
 	softint_disestablish(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
 #endif
@@ -417,31 +425,14 @@ int
 sacom_activate(device_t dev, enum devact act)
 {
 	struct sacom_softc *sc = device_private(dev);
-	int s, rv = 0;
 
-	s = splserial();
-	COM_LOCK(sc);
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (COM_HW_CONSOLE|COM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		if (sc->disable != NULL && sc->enabled != 0) {
-			(*sc->disable)(sc);
-			sc->enabled = 0;
-		}
-		break;
+		sc->enabled = 0;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	COM_UNLOCK(sc);	
-	splx(s);
-	return rv;
 }
 
 void
@@ -1402,19 +1393,23 @@ sacomintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 	return 1;
 }
 
 static void
-sacom_j720_init(struct sa11x0_softc *parent, struct sacom_softc *sc) {
+sacom_j720_init(device_t parent, device_t self)
+{
+	struct sa11x0_softc *sasc;
+
+	sasc = device_private(parent);
 
 	/* XXX  this should be done at sc->enable function */
-	bus_space_write_4(parent->sc_iot, parent->sc_gpioh,
+	bus_space_write_4(sasc->sc_iot, sasc->sc_gpioh,
 	    SAGPIO_PCR, 0xa0000);
-	bus_space_write_4(parent->sc_iot, parent->sc_gpioh,
+	bus_space_write_4(sasc->sc_iot, sasc->sc_gpioh,
 	    SAGPIO_PSR, 0x100);
 }
 

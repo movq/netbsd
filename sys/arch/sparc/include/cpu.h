@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.87 2009/10/21 21:12:02 rmind Exp $ */
+/*	$NetBSD: cpu.h,v 1.92 2011/07/30 19:29:12 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -151,20 +151,28 @@ extern int cpu_arch;
 /* Number of CPUs in the system */
 extern int sparc_ncpus;
 
+/* Provide %pc of a lwp */
+#define LWP_PC(l)       ((l)->l_md.md_tf->tf_pc)
+
 /*
  * Interrupt handler chains.  Interrupt handlers should return 0 for
  * ``not me'' or 1 (``I took care of it'').  intr_establish() inserts a
  * handler into the list.  The handler is called with its (single)
  * argument, or with a pointer to a clockframe if ih_arg is NULL.
+ *
+ * realfun/realarg are used to chain callers, usually with the
+ * biglock wrapper.
  */
 extern struct intrhand {
 	int	(*ih_fun)(void *);
 	void	*ih_arg;
 	struct	intrhand *ih_next;
 	int	ih_classipl;
+	int	(*ih_realfun)(void *);
+	void	*ih_realarg;
 } *intrhand[15];
 
-void	intr_establish(int, int, struct intrhand *, void (*)(void));
+void	intr_establish(int, int, struct intrhand *, void (*)(void), bool);
 void	intr_disestablish(int, struct intrhand *);
 
 void	intr_lock_kernel(void);
@@ -188,6 +196,7 @@ void	schedintr(void *);
 
 /* locore.s */
 struct fpstate;
+void	ipi_savefpstate(struct fpstate *);
 void	savefpstate(struct fpstate *);
 void	loadfpstate(struct fpstate *);
 int	probeget(void *, int);
@@ -204,7 +213,7 @@ void	qcopy(const void *, void *, size_t);
 void	qzero(void *, size_t);
 
 /* trap.c */
-void	kill_user_windows(struct lwp *);
+void	cpu_vmspace_exec(struct lwp *, vaddr_t, vaddr_t);
 int	rwindow_save(struct lwp *);
 
 /* cons.c */

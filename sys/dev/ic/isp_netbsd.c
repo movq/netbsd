@@ -1,4 +1,4 @@
-/* $NetBSD: isp_netbsd.c,v 1.81 2009/09/07 13:39:19 tsutsui Exp $ */
+/* $NetBSD: isp_netbsd.c,v 1.85 2011/12/12 18:28:34 jdc Exp $ */
 /*
  * Platform (NetBSD) dependent common attachment code for Qlogic adapters.
  */
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.81 2009/09/07 13:39:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.85 2011/12/12 18:28:34 jdc Exp $");
 
 #include <dev/ic/isp_netbsd.h>
 #include <dev/ic/isp_ioctl.h>
@@ -624,6 +624,18 @@ ispcmd(struct ispsoftc *isp, XS_T *xs)
 
 	switch (isp_start(xs)) {
 	case CMD_QUEUED:
+		if (IS_FC(isp) && isp->isp_osinfo.wwns[XS_TGT(xs)] == 0) {
+			fcparam *fcp = FCPARAM(isp, XS_CHANNEL(xs));
+			int dbidx = fcp->isp_dev_map[XS_TGT(xs)] - 1;
+			device_t dev = xs->xs_periph->periph_dev;
+			
+			if (dbidx >= 0 && dev &&
+			    prop_dictionary_set_uint64(device_properties(dev),
+			    "port-wwn", fcp->portdb[dbidx].port_wwn) == TRUE) {
+				isp->isp_osinfo.wwns[XS_TGT(xs)] =
+				    fcp->portdb[dbidx].port_wwn;
+			}
+                }
 		if (xs->xs_control & XS_CTL_POLL) {
 			isp_polled_cmd_wait(isp, xs);
 			isp->isp_osinfo.mbox_sleep_ok = ombi;
@@ -1514,6 +1526,20 @@ isp_prt(struct ispsoftc *isp, int level, const char *fmt, ...)
 }
 
 void
+isp_xs_prt(struct ispsoftc *isp, XS_T *xs, int level, const char *fmt, ...)
+{
+	va_list ap;
+	if (level != ISP_LOGALL && (level & isp->isp_dblev) == 0) {
+		return;
+	}
+	scsipi_printaddr(xs->xs_periph);
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+	printf("\n");
+}
+
+void
 isp_lock(struct ispsoftc *isp)
 {
 	int s = splbio();
@@ -1572,17 +1598,14 @@ isp_mbox_wait_complete(struct ispsoftc *isp, mbreg_t *mbp)
 	microtime(&start);
 	if (isp->isp_osinfo.mbox_sleep_ok) {
 		int to;
-		struct timeval tv;
+		struct timeval tv, utv;
 
 		tv.tv_sec = 0;
 		tv.tv_usec = 0;
 		for (olim = 0; olim < maxc; olim++) {
-			tv.tv_sec += (usecs / 1000000);
-			tv.tv_usec += (usecs % 1000000);
-			if (tv.tv_usec >= 100000) {
-				tv.tv_sec++;
-				tv.tv_usec -= 1000000;
-			}
+			utv.tv_sec = 0;
+			utv.tv_usec = usecs;
+			timeradd(&tv, &utv, &tv);
 		}
 		timeradd(&tv, &start, &tv);
 		to = tvhzto(&tv);

@@ -1,4 +1,4 @@
-/*	$NetBSD: scores.c,v 1.18 2009/08/12 08:04:05 dholland Exp $	*/
+/*	$NetBSD: scores.c,v 1.20 2010/04/24 00:56:14 dholland Exp $	*/
 
 /*
  * scores.c			 Larn is copyrighted 1986 by Noah Morgan.
@@ -26,7 +26,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: scores.c,v 1.18 2009/08/12 08:04:05 dholland Exp $");
+__RCSID("$NetBSD: scores.c,v 1.20 2010/04/24 00:56:14 dholland Exp $");
 #endif				/* not lint */
 #include <sys/types.h>
 #include <sys/times.h>
@@ -64,7 +64,7 @@ struct wscofmt {		/* This is the structure for the winning
 
 struct log_fmt {		/* 102 bytes struct for the log file 				 */
 	long            score;	/* the players score 								 */
-	time_t          diedtime;	/* time when game was over 							 */
+	int32_t          diedtime;	/* time when game was over 							 */
 	short           cavelev;/* level in caves 									 */
 	short           diff;	/* difficulty player played at 						 */
 #ifdef EXTRA
@@ -772,7 +772,10 @@ diedlog()
 {
 	int    n;
 	char  *p;
+	static char  q[] = "?";
 	struct stat     stbuf;
+	time_t t;
+
 	lcreat((char *) 0);
 	if (lopen(logfile) < 0) {
 		lprintf("Can't locate log file <%s>\n", logfile);
@@ -784,9 +787,13 @@ diedlog()
 	}
 	for (n = stbuf.st_size / sizeof(struct log_fmt); n > 0; --n) {
 		lrfill((char *) &logg, sizeof(struct log_fmt));
-		p = ctime(&logg.diedtime);
-		p[16] = '\n';
-		p[17] = 0;
+		t = logg.diedtime;
+		if ((p = ctime(&t)) == NULL)
+			p = q;
+		else {
+			p[16] = '\n';
+			p[17] = 0;
+		}
 		lprintf("Score: %ld, Diff: %ld,  %s %s on %ld at %s", (long) (logg.score), (long) (logg.diff), logg.who, logg.what, (long) (logg.cavelev), p + 4);
 #ifdef EXTRA
 		if (logg.moves <= 0)

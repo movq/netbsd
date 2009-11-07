@@ -1,4 +1,4 @@
-/*	$NetBSD: sys-bsd.c,v 1.60 2009/05/24 20:31:25 christos Exp $	*/
+/*	$NetBSD: sys-bsd.c,v 1.65 2011/09/24 20:19:39 christos Exp $	*/
 
 /*
  * sys-bsd.c - System-dependent procedures for setting up
@@ -79,7 +79,7 @@
 #if 0
 #define RCSID	"Id: sys-bsd.c,v 1.47 2000/04/13 12:04:23 paulus Exp "
 #else
-__RCSID("$NetBSD: sys-bsd.c,v 1.60 2009/05/24 20:31:25 christos Exp $");
+__RCSID("$NetBSD: sys-bsd.c,v 1.65 2011/09/24 20:19:39 christos Exp $");
 #endif
 #endif
 
@@ -120,6 +120,27 @@ __RCSID("$NetBSD: sys-bsd.c,v 1.60 2009/05/24 20:31:25 christos Exp $");
 #include <netinet6/nd6.h>
 #endif
 #include <ifaddrs.h>
+
+#ifndef IN6_LLADDR_FROM_EUI64
+#ifdef __KAME__
+#define IN6_LLADDR_FROM_EUI64(sin6, eui64) do {			\
+	sin6.sin6_family = AF_INET6;				\
+	sin6.sin6_len = sizeof(struct sockaddr_in6);		\
+	sin6.sin6_addr.s6_addr[0] = 0xfe;			\
+	sin6.sin6_addr.s6_addr[1] = 0x80;			\
+	eui64_copy(eui64, sin6.sin6_addr.s6_addr[8]);		\
+} while (/*CONSTCOND*/0)
+#define IN6_IFINDEX(sin6, ifindex)	 			\
+    /* KAME ifindex hack */					\
+    *(u_int16_t *)&sin6.sin6_addr.s6_addr[2] = htons(ifindex)
+#else
+#define IN6_LLADDR_FROM_EUI64(sin6, eui64) do {			\
+	memset(&sin6.s6_addr, 0, sizeof(struct in6_addr));	\
+	sin6.s6_addr16[0] = htons(0xfe80);			\
+	eui64_copy(eui64, sin6.s6_addr32[2]);			\
+} while (/*CONSTCOND*/0)
+#endif
+#endif
 
 #if RTM_VERSION >= 3
 #include <sys/param.h>
@@ -758,30 +779,23 @@ sif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     strlcpy(addreq6.ifra_name, ifname, sizeof(addreq6.ifra_name));
 
     /* my addr */
-    addreq6.ifra_addr.sin6_family = AF_INET6;
-    addreq6.ifra_addr.sin6_len = sizeof(struct sockaddr_in6);
-    addreq6.ifra_addr.sin6_addr.s6_addr[0] = 0xfe;
-    addreq6.ifra_addr.sin6_addr.s6_addr[1] = 0x80;
-    memcpy(&addreq6.ifra_addr.sin6_addr.s6_addr[8], &our_eui64,
-	sizeof(our_eui64));
-    /* KAME ifindex hack */
-    *(u_int16_t *)&addreq6.ifra_addr.sin6_addr.s6_addr[2] = htons(ifindex);
+    IN6_LLADDR_FROM_EUI64(addreq6.ifra_addr, our_eui64);
+    IN6_IFINDEX(addreq6.ifra_addr, ifindex);
 
+#ifdef notdef
     /* his addr */
-    addreq6.ifra_dstaddr.sin6_family = AF_INET6;
-    addreq6.ifra_dstaddr.sin6_len = sizeof(struct sockaddr_in6);
-    addreq6.ifra_dstaddr.sin6_addr.s6_addr[0] = 0xfe;
-    addreq6.ifra_dstaddr.sin6_addr.s6_addr[1] = 0x80;
-    memcpy(&addreq6.ifra_dstaddr.sin6_addr.s6_addr[8], &his_eui64,
-	sizeof(our_eui64));
-    /* KAME ifindex hack */
-    *(u_int16_t *)&addreq6.ifra_dstaddr.sin6_addr.s6_addr[2] = htons(ifindex);
+    IN6_LLADDR_FROM_EUI64(addreq6.ifra_dstaddr, his_eui64);
+    IN6_IFINDEX(addreq6.ifra_dstaddr, ifindex);
+#endif
 
-    /* prefix mask: 128bit */
+    /* prefix mask: 72bit */
     addreq6.ifra_prefixmask.sin6_family = AF_INET6;
     addreq6.ifra_prefixmask.sin6_len = sizeof(struct sockaddr_in6);
     memset(&addreq6.ifra_prefixmask.sin6_addr, 0xff,
-	sizeof(addreq6.ifra_prefixmask.sin6_addr));
+	sizeof(addreq6.ifra_prefixmask.sin6_addr) - sizeof(our_eui64));
+    memset((char *)&addreq6.ifra_prefixmask.sin6_addr +
+	sizeof(addreq6.ifra_prefixmask.sin6_addr) - sizeof(our_eui64), 0x00,
+	sizeof(our_eui64));
 
     /* address lifetime (infty) */
     addreq6.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
@@ -824,8 +838,8 @@ sif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     /* Route to remote host */
     memset(&rt6, 0, sizeof(rt6));
     IN6_LLADDR_FROM_EUI64(rt6.rtmsg_dst, his_eui64);
-    rt6.rtmsg_flags = RTF_UP | RTF_HOST;
-    rt6.rtmsg_dst_len = 128;
+    rt6.rtmsg_flags = RTF_UP;
+    rt6.rtmsg_dst_len = 10;
     rt6.rtmsg_ifindex = ifr.ifr_ifindex;
     rt6.rtmsg_metric = 1;
     
@@ -865,15 +879,8 @@ cif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     strlcpy(delreq6.ifr_name, ifname, sizeof(delreq6.ifr_name));
 
     /* my addr */
-    delreq6.ifr_ifru.ifru_addr.sin6_family = AF_INET6;
-    delreq6.ifr_ifru.ifru_addr.sin6_len = sizeof(struct sockaddr_in6);
-    delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[0] = 0xfe;
-    delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[1] = 0x80;
-    memcpy(&delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[8], &our_eui64,
-	sizeof(our_eui64));
-    /* KAME ifindex hack */
-    *(u_int16_t *)&delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[2] =
-	htons(ifindex);
+    IN6_LLADDR_FROM_EUI64(delreq6.ifr_ifru.ifru_addr, our_eui64);
+    IN6_IFINDEX(delreq6.ifr_ifru.ifru_addr, ifindex);
 
     if (ioctl(sock6_fd, SIOCDIFADDR_IN6, &delreq6) < 0) {
 	error("%s: cif6addr: ioctl(SIOCDIFADDR_IN6): %m", __func__);
@@ -924,17 +931,26 @@ cif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
 int
 get_pty(int *master_fdp, int *slave_fdp, char *slave_name, int uid)
 {
+#ifdef TIOCSQSIZE
+    int qsize = 32768;
+#endif
     struct termios tios;
 
     if (openpty(master_fdp, slave_fdp, slave_name, NULL, NULL) < 0)
 	return 0;
 
+#ifdef TIOCSQSIZE
+    if (ioctl(*master_fdp, TIOCSQSIZE, &qsize) == -1)
+	warn("%s: couldn't set master queue size: %m", __func__);
+    if (ioctl(*slave_fdp, TIOCSQSIZE, &qsize) == -1)
+	warn("%s: couldn't set slave queue size: %m", __func__);
+#endif
     fchown(*slave_fdp, uid, -1);
     fchmod(*slave_fdp, S_IRUSR | S_IWUSR);
     if (tcgetattr(*slave_fdp, &tios) == 0) {
 	tios.c_cflag &= ~(CSIZE | CSTOPB | PARENB);
-	tios.c_cflag |= CS8 | CREAD;
-	tios.c_iflag  = IGNPAR | CLOCAL;
+	tios.c_cflag |= CS8 | CREAD | CLOCAL;
+	tios.c_iflag  = IGNPAR;
 	tios.c_oflag  = 0;
 	tios.c_lflag  = 0;
 	if (tcsetattr(*slave_fdp, TCSAFLUSH, &tios) < 0)
@@ -964,7 +980,7 @@ open_ppp_loopback(void)
 
     if (tcgetattr(loop_slave, &tios) == 0) {
 	tios.c_cflag &= ~(CSIZE | CSTOPB | PARENB);
-	tios.c_cflag |= CS8 | CREAD;
+	tios.c_cflag |= CS8 | CREAD | CLOCAL;
 	tios.c_iflag = IGNPAR;
 	tios.c_oflag = 0;
 	tios.c_lflag = 0;
@@ -972,9 +988,13 @@ open_ppp_loopback(void)
 	    warn("%s: couldn't set attributes on loopback: %m", __func__);
     }
 
-    if ((flags = fcntl(loop_master, F_GETFL)) != -1) 
-	if (fcntl(loop_master, F_SETFL, flags | O_NONBLOCK) == -1)
-	    warn("%s: couldn't set loopback to nonblock: %m", __func__);
+    flags = fcntl(loop_master, F_GETFL);
+    if (flags == -1 || fcntl(loop_master, F_SETFL, flags | O_NONBLOCK) == -1)
+	    warn("%s: couldn't set master loopback to nonblock: %m", __func__);
+
+    flags = fcntl(loop_slave, F_GETFL);
+    if (flags == -1 || fcntl(loop_slave, F_SETFL, flags | O_NONBLOCK) == -1)
+	    warn("%s: couldn't set slave loopback to nonblock: %m", __func__);
 
     ppp_fd = loop_slave;
     if (ioctl(ppp_fd, TIOCSETD, &pppdisc) < 0)
@@ -1925,7 +1945,7 @@ GetMask(u_int32_t addr)
 	/*
 	 * Get its netmask and OR it into our mask.
 	 */
-	mask |= ((struct sockaddr_in *)&ifa->ifa_netmask)->sin_addr.s_addr;
+	mask |= ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr.s_addr;
     }
 
     freeifaddrs(ifap);

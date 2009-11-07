@@ -1,4 +1,4 @@
-/* $NetBSD: vmparam.h,v 1.3 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: vmparam.h,v 1.16 2012/02/08 17:55:21 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,22 +29,56 @@
 #ifndef _ARCH_USERMODE_INCLUDE_VMPARAM_H
 #define _ARCH_USERMODE_INCLUDE_VMPARAM_H
 
-#include </usr/include/machine/vmparam.h>
+#include <machine/pmap.h>
 #include "opt_memsize.h"
 
-#undef VM_MIN_ADDRESS
-#define VM_MIN_ADDRESS 0
+#define __USE_TOPDOWN_VM
 
-#undef VM_MAX_ADDRESS
-#define VM_MAX_ADDRESS (MEMSIZE*1024)
+extern paddr_t kmem_k_start, kmem_k_end;
+extern paddr_t kmem_kvm_start, kmem_kvm_end;
+extern paddr_t kmem_kvm_cur_end;
+extern paddr_t kmem_user_start, kmem_user_end;
 
-#undef VM_MIN_KERNEL_ADDRESS
-#define VM_MIN_KERNEL_ADDRESS	0
+#define VM_MIN_ADDRESS		kmem_user_start
+#define VM_MAX_ADDRESS		kmem_user_end
+#define VM_MAXUSER_ADDRESS	kmem_user_end
+#define VM_MIN_KERNEL_ADDRESS	kmem_kvm_start
+#define VM_MAX_KERNEL_ADDRESS 	kmem_kvm_end
 
-#undef VM_MAX_KERNEL_ADDRESS
-#define VM_MAX_KERNEL_ADDRESS (MEMSIZE*1024)
+#define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
+#define VM_PHYSSEG_MAX		1
+#define	VM_NFREELIST		1
+#define	VM_FREELIST_DEFAULT	0
 
-#undef VM_MAXUSER_ADDRESS
-#define VM_MAXUSER_ADDRESS (MEMSIZE*1024)
+#define	USRSTACK		VM_MAXUSER_ADDRESS
+
+/*
+ * When an architecture has little KVA then override the default pager_map
+ * size in its block by limiting it like this:
+ *
+ * #define PAGER_MAP_DEFAULT_SIZE	(8 * 1024 * 1024)
+ */
+
+#if defined(__i386__) 
+#define	PAGE_SHIFT		12
+#define	PAGE_SIZE		(1 << PAGE_SHIFT)
+#define	PAGE_MASK		(PAGE_SIZE - 1)
+#define	MAXSSIZ			(64 * 1024 * 1024)
+#define	MAXTSIZ			(64 * 1024 * 1024)
+#define	MAXDSIZ			(3U * 1024 * 1024 * 1024)
+#define DFLSSIZ			(2 * 1024 * 1024)
+#define	DFLDSIZ			(256 * 1024 * 1024)
+#elif defined(__x86_64__)
+#define	PAGE_SHIFT		12
+#define	PAGE_SIZE		(1 << PAGE_SHIFT)
+#define	PAGE_MASK		(PAGE_SIZE - 1)
+#define	MAXSSIZ			(128 * 1024 * 1024)
+#define	MAXTSIZ			(64 * 1024 * 1024)
+#define	MAXDSIZ			(8L * 1024 * 1024 * 1024)
+#define DFLSSIZ			(4 * 1024 * 1024)
+#define	DFLDSIZ			(256 * 1024 * 1024)
+#else
+#error "platform not supported"
+#endif
 
 #endif /* !_ARCH_USERMODE_INCLUDE_VMPARAM_H */

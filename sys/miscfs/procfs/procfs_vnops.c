@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vnops.c,v 1.176 2009/07/03 21:17:42 elad Exp $	*/
+/*	$NetBSD: procfs_vnops.c,v 1.182 2011/09/04 17:32:10 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.176 2009/07/03 21:17:42 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.182 2011/09/04 17:32:10 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -196,6 +196,7 @@ static const struct proc_target proc_root_targets[] = {
 	{ DT_REG, N("devices"),     PFSdevices,        procfs_validfile_linux },
 	{ DT_REG, N("stat"),	    PFScpustat,        procfs_validfile_linux },
 	{ DT_REG, N("loadavg"),	    PFSloadavg,        procfs_validfile_linux },
+	{ DT_REG, N("version"),     PFSversion,        procfs_validfile_linux },
 #undef N
 };
 static const int nproc_root_targets =
@@ -416,10 +417,10 @@ procfs_inactive(void *v)
 	struct pfsnode *pfs = VTOPFS(vp);
 
 	mutex_enter(proc_lock);
-	*ap->a_recycle = (p_find(pfs->pfs_pid, PFIND_LOCKED) == NULL);
+	*ap->a_recycle = (proc_find(pfs->pfs_pid) == NULL);
 	mutex_exit(proc_lock);
 
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	return (0);
 }
@@ -672,7 +673,7 @@ procfs_getattr(void *v)
 	error = 0;
 
 	/* start by zeroing out the attributes */
-	VATTR_NULL(vap);
+	vattr_null(vap);
 
 	/* next do all the common fields */
 	vap->va_type = ap->a_vp->v_type;
@@ -723,6 +724,8 @@ procfs_getattr(void *v)
 	case PFScmdline:
 	case PFSemul:
 	case PFSstatm:
+		if (pfs->pfs_type == PFSmap || pfs->pfs_type == PFSmaps)
+			vap->va_mode = S_IRUSR;
 		vap->va_nlink = 1;
 		vap->va_uid = kauth_cred_geteuid(procp->p_cred);
 		vap->va_gid = kauth_cred_getegid(procp->p_cred);
@@ -734,6 +737,7 @@ procfs_getattr(void *v)
 	case PFSmounts:
 	case PFScpustat:
 	case PFSloadavg:
+	case PFSversion:
 		vap->va_nlink = 1;
 		vap->va_uid = vap->va_gid = 0;
 		break;
@@ -843,6 +847,7 @@ procfs_getattr(void *v)
 	case PFScpustat:
 	case PFSloadavg:
 	case PFSstatm:
+	case PFSversion:
 		vap->va_bytes = vap->va_size = 0;
 		break;
 	case PFSmap:
@@ -1004,7 +1009,7 @@ procfs_lookup(void *v)
 
 	if (cnp->cn_namelen == 1 && *pname == '.') {
 		*vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		return (0);
 	}
 
@@ -1064,7 +1069,7 @@ procfs_lookup(void *v)
 		 * re-lock.
 		 */
 		if (cnp->cn_flags & ISDOTDOT) {
-			VOP_UNLOCK(dvp, 0);
+			VOP_UNLOCK(dvp);
 			error = procfs_root(dvp->v_mount, vpp);
 			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 			return (error);
@@ -1107,7 +1112,7 @@ procfs_lookup(void *v)
 		if (pt->pt_pfstype == PFSfile) {
 			fvp = p->p_textvp;
 			/* We already checked that it exists. */
-			VREF(fvp);
+			vref(fvp);
 			procfs_proc_unlock(p);
 			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 			*vpp = fvp;
@@ -1132,7 +1137,7 @@ procfs_lookup(void *v)
 		 * locked. Then re-lock the directory.
 		 */
 		if (cnp->cn_flags & ISDOTDOT) {
-			VOP_UNLOCK(dvp, 0);
+			VOP_UNLOCK(dvp);
 			error = procfs_allocvp(dvp->v_mount, vpp, pfs->pfs_pid,
 			    PFSproc, -1, p);
 			procfs_proc_unlock(p);
@@ -1150,11 +1155,10 @@ procfs_lookup(void *v)
 
 		/* Don't show directories */
 		if (fp->f_type == DTYPE_VNODE && fvp->v_type != VDIR) {
-			VREF(fvp);
+			vref(fvp);
 			closef(fp);
 			procfs_proc_unlock(p);
-			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY |
-			    (p == curproc ? LK_CANRECURSE : 0));
+			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 			*vpp = fvp;
 			return 0;
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.30 2009/09/19 14:57:29 abs Exp $ */
+/*	$NetBSD: md.c,v 1.39 2012/01/25 19:03:35 phx Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -40,7 +36,10 @@
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/utsname.h>
+
 #include <stdio.h>
+#include <string.h>
 #include <util.h>
 
 #include "defs.h"
@@ -48,15 +47,46 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
+static char *prodname;
+
 void
 md_init(void)
 {
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	static const char mib_name[] = "machdep.prodfamily";
+	static char unknown[] = "unknown";
+	size_t len;
+
+	(void)flags;
+
+	/*
+	 * Determine the product family of the board we are running on and
+	 * enable the installation of the corresponding GENERIC kernel.
+	 *
+	 * Note:  In md.h the two kernels are disabled.  If they are
+	 *        enabled there the logic here needs to be switched.
+	 */
+	if (sysctlbyname(mib_name, NULL, &len, NULL, 0) != 0) {
+		prodname = unknown;
+		return;
+	}
+	prodname = malloc(len);
+	sysctlbyname(mib_name, prodname, &len, NULL, 0);
+
+	if (strcmp(prodname, "kurobox") == 0)
+		/*
+		 * Running on a KuroBox family product, so enable KUROBOX
+		 */
+		set_kernel_set(SET_KERNEL_2);
+        else
+		/*
+		 * Otherwise enable GENERIC
+		 */
+		set_kernel_set(SET_KERNEL_1);
 }
 
 int
@@ -123,11 +153,7 @@ md_post_disklabel(void)
 int
 md_post_newfs(void)
 {
-	/* boot blocks ... */
-	printf (msg_string(MSG_dobootblks), diskdev);
-	run_program(RUN_DISPLAY, 
-	    "/usr/mdec/installboot -v /usr/mdec/biosboot.sym /dev/r%sa",
-	    diskdev);
+	/* no boot blocks, we are using altboot */
 	return 0;
 }
 
@@ -141,7 +167,28 @@ void
 md_cleanup_install(void)
 {
 #ifndef DEBUG
+	int new_speed;
+
 	enable_rc_conf();
+
+	/*
+	 * Set the console speed in /etc/ttys depending on the board.
+	 * The default speed is 115200, which is patched when needed.
+	 */
+	if (strcmp(prodname, "kurobox") == 0)
+		new_speed = 57600;			/* KuroBox */
+
+	else if (strcmp(prodname, "dlink") == 0 ||	/* D-Link DSM-G600 */
+	    strcmp(prodname, "nhnas") == 0)		/* NH23x, All6250 */
+		new_speed = 9600;
+
+	else
+		new_speed = 0;
+
+	if (new_speed != 0) {
+		run_program(RUN_CHROOT, "sed -an -e 's/115200/%d/;H;$!d;g;w"
+		    "/etc/ttys' /etc/ttys", new_speed);
+	}
 #endif
 }
 
@@ -169,4 +216,10 @@ int
 md_mbr_use_wholedisk(mbr_info_t *mbri)
 {
 	return mbr_use_wholedisk(mbri);
+}
+
+int
+md_pre_mount()
+{
+	return 0;
 }

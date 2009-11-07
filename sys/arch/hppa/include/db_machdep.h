@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.8 2009/11/03 05:07:26 snj Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.12 2012/01/18 09:35:48 skrll Exp $	*/
 
 /*	$OpenBSD: db_machdep.h,v 1.5 2001/02/16 19:20:13 mickey Exp $	*/
 
@@ -31,18 +31,27 @@
 #ifndef	_HPPA_DB_MACHDEP_H_
 #define	_HPPA_DB_MACHDEP_H_
 
+#include <sys/param.h>
+
 #include <uvm/uvm_extern.h>
+
+#include <machine/pcb.h>
+#include <machine/frame.h>
 
 #define	DB_ELF_SYMBOLS
 #define	DB_ELFSIZE	32
 
 /* types the generic ddb module needs */
 typedef	vaddr_t db_addr_t;
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long db_expr_t;
 
 typedef struct trapframe db_regs_t;
 extern db_regs_t	ddb_regs;
 #define	DDB_REGS	(&ddb_regs)
+
+/* DDB commands not in db_interface.c */
+void	db_dump_trap(db_expr_t, bool, db_expr_t, const char *);
 
 /*
  * Things needed by kgdb:
@@ -111,6 +120,8 @@ static __inline int inst_trap_return(u_int ins)	{
 
 #define db_clear_single_step(r)	((r)->tf_ipsw &= ~PSW_R)
 #define db_set_single_step(r)	((r)->tf_ipsw |= PSW_R)
+
+#define DB_MACHINE_COMMANDS
 
 int db_valid_breakpoint(db_addr_t);
 int kdb_trap(int, int, db_regs_t *);

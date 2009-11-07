@@ -1,13 +1,14 @@
-#	$NetBSD: Makefile,v 1.9 2009/09/20 23:19:56 abs Exp $
+#	$NetBSD: Makefile,v 1.14 2011/05/20 07:57:07 tsutsui Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 IMAGE=		ramdisk.fs
-IMAGESIZE=	2560k
+IMAGESIZE=	2048k
 MAKEFS_FLAGS=	-f 14
 
 WARNS=		1
+DBG=		-Os
 
 CRUNCHBIN=	ramdiskbin
 LISTS=		${.CURDIR}/list ${DISTRIBDIR}/common/list.sysinst
@@ -18,8 +19,7 @@ IMAGEDEPENDS=	${CRUNCHBIN} \
 		dot.profile \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
-		${DISTRIBDIR}/common/services \
-		${DISTRIBDIR}/common/termcap
+		${DISTRIBDIR}/common/services
 
 .if ${USE_INET6} != "no"
 LISTS+=		${DISTRIBDIR}/common/list.inet6

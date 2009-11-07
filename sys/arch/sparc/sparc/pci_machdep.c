@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.14 2008/05/30 19:26:35 ad Exp $ */
+/*	$NetBSD: pci_machdep.c,v 1.16 2011/07/01 18:51:51 dyoung Exp $ */
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.14 2008/05/30 19:26:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.16 2011/07/01 18:51:51 dyoung Exp $");
 
 #if defined(DEBUG) && !defined(SPARC_PCI_DEBUG)
 #define SPARC_PCI_DEBUG
@@ -64,7 +64,7 @@ int sparc_pci_debug = 0;
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 
 #include <machine/ctlreg.h>
@@ -366,7 +366,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
  */
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int i;
 

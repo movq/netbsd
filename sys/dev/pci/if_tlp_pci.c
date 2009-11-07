@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_pci.c,v 1.115 2009/09/01 21:46:53 jmcneill Exp $	*/
+/*	$NetBSD: if_tlp_pci.c,v 1.121 2011/11/11 23:01:59 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.115 2009/09/01 21:46:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.121 2011/11/11 23:01:59 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,9 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.115 2009/09/01 21:46:53 jmcneill Ex
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-#ifdef __sparc__
-#include <machine/promlib.h>
-#endif
 
 #include <dev/mii/miivar.h>
 #include <dev/mii/mii_bitbang.h>
@@ -74,8 +71,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_pci.c,v 1.115 2009/09/01 21:46:53 jmcneill Ex
 /*
  * PCI configuration space registers used by the Tulip.
  */
-#define	TULIP_PCI_IOBA		0x10	/* i/o mapped base */
-#define	TULIP_PCI_MMBA		0x14	/* memory mapped base */
+#define TULIP_PCI_IOBA PCI_BAR(0)	/* i/o mapped base */
+#define TULIP_PCI_MMBA PCI_BAR(1)	/* memory mapped base */
 #define	TULIP_PCI_CFDA		0x40	/* configuration driver area */
 
 #define	CFDA_SLEEP		0x80000000	/* sleep mode */
@@ -273,9 +270,8 @@ tlp_pci_lookup(const struct pci_attach_args *pa)
 	    PCI_SUBSYS_ID_REG)) == PCI_VENDOR_LMC)
 		return NULL;
 
-	for (tpp = tlp_pci_products;
-	     tlp_chip_names[tpp->tpp_chip] != NULL;
-	     tpp++) {
+	for (tpp = tlp_pci_products; tpp->tpp_chip != TULIP_CHIP_INVALID;
+	    tpp++) {
 		if (PCI_VENDOR(pa->pa_id) == tpp->tpp_vendor &&
 		    PCI_PRODUCT(pa->pa_id) == tpp->tpp_product)
 			return tpp;
@@ -464,7 +460,7 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 	}
 
 	aprint_normal(": %s Ethernet, pass %d.%d\n",
-	    tlp_chip_names[sc->sc_chip],
+	    tlp_chip_name(sc->sc_chip),
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	switch (sc->sc_chip) {
@@ -645,7 +641,7 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 		 * XXX dependent wart from the PCI front-end.
 		 */
 		ea = prop_dictionary_get(device_properties(self),
-					 "mac-addr");
+					 "mac-address");
 		if (ea != NULL) {
 			extern int tlp_srom_debug;
 			KASSERT(prop_object_type(ea) == PROP_TYPE_DATA);
@@ -930,17 +926,20 @@ tlp_pci_attach(device_t parent, device_t self, void *aux)
 		 * multi-port boards).
 		 */
 		if (!tlp_isv_srom_enaddr(sc, enaddr)) {
-#ifdef __sparc__
-			if ((sc->sc_srom[20] == 0 &&
-			     sc->sc_srom[21] == 0 &&
-			     sc->sc_srom[22] == 0) ||
-			    (sc->sc_srom[20] == 0xff &&
-			     sc->sc_srom[21] == 0xff &&
-			     sc->sc_srom[22] == 0xff)) {
-				prom_getether(PCITAG_NODE(pa->pa_tag), enaddr);
-			} else
-#endif
-			memcpy(enaddr, &sc->sc_srom[20], ETHER_ADDR_LEN);
+
+			prop_data_t eaddrprop;
+
+			eaddrprop = prop_dictionary_get(
+				device_properties(self), "mac-address");
+
+			if (eaddrprop != NULL
+			    && prop_data_size(eaddrprop) == ETHER_ADDR_LEN)
+				memcpy(enaddr,
+				    prop_data_data_nocopy(eaddrprop),
+				    ETHER_ADDR_LEN);
+			else
+				memcpy(enaddr, &sc->sc_srom[20],
+				    ETHER_ADDR_LEN);
 		}
 
 		/*
@@ -1342,7 +1341,7 @@ tlp_pci_phobos_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 	struct tulip_softc *sc = &psc->sc_tulip;
 
 	/*
-	 * Phobo boards just use MII-on_SIO.
+	 * Phobos boards just use MII-on-SIO.
 	 */
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 	sc->sc_reset = tlp_pci_phobos_21140_reset;
@@ -1358,7 +1357,7 @@ static void
 tlp_pci_phobos_21140_reset(struct tulip_softc *sc)
 {
 
-	TULIP_WRITE(sc, CSR_GPP, 0x1fd);
+	TULIP_WRITE(sc, CSR_GPP, GPP_GPC | 0xfd);
 	delay(10);
 	TULIP_WRITE(sc, CSR_GPP, 0xfd);
 	delay(10);
@@ -1381,9 +1380,6 @@ tlp_pci_smc_21140_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 {
 	struct tulip_softc *sc = &psc->sc_tulip;
 
-	if (sc->sc_mediasw != NULL) {
-		return;
-	}
 	strcpy(psc->sc_tulip.sc_name, "SMC 9332DST");
 	sc->sc_mediasw = &tlp_smc9332dst_mediasw;
 }
@@ -1657,7 +1653,7 @@ tlp_pci_netwinder_21142_quirks(struct tulip_pci_softc *psc,
 	struct tulip_softc *sc = &psc->sc_tulip;
 
 	/*
-	 * Netwinders just use MII-on_SIO.
+	 * Netwinders just use MII-on-SIO.
 	 */
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 	sc->sc_reset = tlp_pci_netwinder_21142_reset;
@@ -1686,7 +1682,7 @@ tlp_pci_phobos_21142_quirks(struct tulip_pci_softc *psc, const uint8_t *enaddr)
 	struct tulip_softc *sc = &psc->sc_tulip;
 
 	/*
-	 * Phobo boards just use MII-on_SIO.
+	 * Phobos boards just use MII-on-SIO.
 	 */
 	sc->sc_mediasw = &tlp_sio_mii_mediasw;
 	sc->sc_reset = tlp_pci_phobos_21142_reset;

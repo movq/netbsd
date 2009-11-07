@@ -1,4 +1,4 @@
-/*	$NetBSD: pfkey_dump.c,v 1.16 2007/07/18 12:07:50 vanhu Exp $	*/
+/*	$NetBSD: pfkey_dump.c,v 1.20 2012/01/09 15:25:13 drochner Exp $	*/
 
 /*	$KAME: pfkey_dump.c,v 1.45 2003/09/08 10:14:56 itojun Exp $	*/
 
@@ -197,6 +197,12 @@ static struct val2str str_alg_enc[] = {
 #ifdef SADB_X_EALG_AESCTR
 	{ SADB_X_EALG_AESCTR, "aes-ctr", },
 #endif
+#ifdef SADB_X_EALG_AESGCM16
+	{ SADB_X_EALG_AESGCM16, "aes-gcm-16", },
+#endif
+#ifdef SADB_X_EALG_AESGMAC
+	{ SADB_X_EALG_AESGMAC, "aes-gmac", },
+#endif
 #ifdef SADB_X_EALG_CAMELLIACBC
 	{ SADB_X_EALG_CAMELLIACBC, "camellia-cbc", },
 #endif
@@ -254,6 +260,9 @@ pfkey_sadump1(m, withports)
 	struct sadb_x_nat_t_type *natt_type;
 	struct sadb_x_nat_t_port *natt_sport, *natt_dport;
 	struct sadb_address *natt_oa;
+#ifdef SADB_X_EXT_NAT_T_FRAG
+	struct sadb_x_nat_t_frag *esp_frag;
+#endif
 
 	int use_natt = 0;
 #endif
@@ -294,6 +303,9 @@ pfkey_sadump1(m, withports)
 	natt_sport = (void *)mhp[SADB_X_EXT_NAT_T_SPORT];
 	natt_dport = (void *)mhp[SADB_X_EXT_NAT_T_DPORT];
 	natt_oa = (void *)mhp[SADB_X_EXT_NAT_T_OA];
+#ifdef SADB_X_EXT_NAT_T_FRAG
+	esp_frag = (void *)mhp[SADB_X_EXT_NAT_T_FRAG];
+#endif
 
 	if (natt_type && natt_type->sadb_x_nat_t_type_type)
 		use_natt = 1;
@@ -365,6 +377,11 @@ pfkey_sadump1(m, withports)
 	if (use_natt && natt_oa)
 		printf("\tNAT OA=%s\n",
 		       str_ipaddr((void *)(natt_oa + 1)));
+
+#ifdef SADB_X_EXT_NAT_T_FRAG
+	if (use_natt && esp_frag && esp_frag->sadb_x_nat_t_frag_fraglen != 0)
+		printf("\tNAT-T esp_frag=%u\n", esp_frag->sadb_x_nat_t_frag_fraglen);
+#endif
 #endif
 
 	/* encryption key */
@@ -716,13 +733,19 @@ str_prefport(family, pref, port, ulp)
 	else
 		snprintf(prefbuf, sizeof(prefbuf), "/%u", pref);
 
-	if (ulp == IPPROTO_ICMPV6)
+	switch (ulp) {
+	case IPPROTO_ICMP:
+	case IPPROTO_ICMPV6:
+	case IPPROTO_MH:
+	case IPPROTO_GRE:
 		memset(portbuf, 0, sizeof(portbuf));
-	else {
+		break;
+	default:
 		if (port == IPSEC_PORT_ANY)
-			snprintf(portbuf, sizeof(portbuf), "[%s]", "any");
+			strcpy(portbuf, "[any]");
 		else
 			snprintf(portbuf, sizeof(portbuf), "[%u]", port);
+		break;
 	}
 
 	snprintf(buf, sizeof(buf), "%s%s", prefbuf, portbuf);
@@ -734,29 +757,26 @@ static void
 str_upperspec(ulp, p1, p2)
 	u_int ulp, p1, p2;
 {
-	if (ulp == IPSEC_ULPROTO_ANY)
-		printf("any");
-	else if (ulp == IPPROTO_ICMPV6) {
-		printf("icmp6");
-		if (!(p1 == IPSEC_PORT_ANY && p2 == IPSEC_PORT_ANY))
-			printf(" %u,%u", p1, p2);
-	} else {
-		struct protoent *ent;
+	struct protoent *ent;
 
-		switch (ulp) {
-		case IPPROTO_IPV4:
-			printf("ip4");
-			break;
-		default:
-			ent = getprotobynumber((int)ulp);
-			if (ent)
-				printf("%s", ent->p_name);
-			else
-				printf("%u", ulp);
+	ent = getprotobynumber((int)ulp);
+	if (ent)
+		printf("%s", ent->p_name);
+	else
+		printf("%u", ulp);
 
-			endprotoent();
-			break;
-		}
+	if (p1 == IPSEC_PORT_ANY && p2 == IPSEC_PORT_ANY)
+		return;
+
+	switch (ulp) {
+	case IPPROTO_ICMP:
+	case IPPROTO_ICMPV6:
+	case IPPROTO_MH:
+		printf(" %u,%u", p1, p2);
+		break;
+	case IPPROTO_GRE:
+		printf(" %u", (p1 << 16) + p2);
+		break;
 	}
 }
 
@@ -774,8 +794,10 @@ str_time(t)
 		for (;i < 20;) buf[i++] = ' ';
 	} else {
 		char *t0;
-		t0 = ctime(&t);
-		memcpy(buf, t0 + 4, 20);
+		if ((t0 = ctime(&t)) == NULL)
+			memset(buf, '?', 20);
+		else
+			memcpy(buf, t0 + 4, 20);
 	}
 
 	buf[20] = '\0';

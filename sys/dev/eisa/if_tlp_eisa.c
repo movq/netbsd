@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_eisa.c,v 1.22 2009/04/17 10:20:32 cegger Exp $	*/
+/*	$NetBSD: if_tlp_eisa.c,v 1.24 2010/01/18 19:00:58 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -36,10 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.22 2009/04/17 10:20:32 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.24 2010/01/18 19:00:58 pooka Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,10 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.22 2009/04/17 10:20:32 cegger Exp 
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -275,13 +270,12 @@ tlp_eisa_attach(device_t parent, device_t self, void *aux)
 	if (esc->sc_ih == NULL) {
 		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", device_xname(self),
-		    intrstr);
+		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Finish off the attach.

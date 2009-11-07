@@ -1,27 +1,27 @@
-/* $NetBSD: db_interface.c,v 1.31 2009/03/18 10:22:22 cegger Exp $ */
+/* $NetBSD: db_interface.c,v 1.34 2012/02/06 02:14:10 matt Exp $ */
 
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1992,1991,1990 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS ``AS IS''
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  *
@@ -52,14 +52,12 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.31 2009/03/18 10:22:22 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.34 2012/02/06 02:14:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
@@ -94,7 +92,8 @@ void	db_mach_cpu(db_expr_t, bool, db_expr_t, const char *);
 
 const struct db_command db_machine_command_table[] = {
 #if defined(MULTIPROCESSOR)
-	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,
+	  "switch to another cpu", "cpu-no", NULL) },
 #endif
 	{ DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) },
 };

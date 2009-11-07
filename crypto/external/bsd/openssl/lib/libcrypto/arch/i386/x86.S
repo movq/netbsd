@@ -1,4 +1,4 @@
-.file	"/net/shiny/src-6/NetBSD/cvsroot/src/crypto/dist/openssl/crypto/bn/asm/x86.s"
+#include <machine/asm.h>
 .text
 .globl	bn_mul_add_words
 .type	bn_mul_add_words,@function

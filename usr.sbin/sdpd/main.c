@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.7 2009/08/30 19:24:40 plunky Exp $	*/
+/*	$NetBSD: main.c,v 1.9 2011/08/31 13:32:41 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@ __COPYRIGHT("@(#) Copyright (c) 2009 The NetBSD Foundation, Inc.\
   Copyright (c) 2006 Itronix, Inc.\
   Copyright (c) 2004 Maksim Yevmenkin m_evmenkin@yahoo.com.\
   All rights reserved.");
-__RCSID("$NetBSD: main.c,v 1.7 2009/08/30 19:24:40 plunky Exp $");
+__RCSID("$NetBSD: main.c,v 1.9 2011/08/31 13:32:41 joerg Exp $");
 
 #include <errno.h>
 #include <grp.h>
@@ -51,7 +51,7 @@ __RCSID("$NetBSD: main.c,v 1.7 2009/08/30 19:24:40 plunky Exp $");
 
 static bool	drop_root	(char const *user, char const *group);
 static void	sighandler	(int s);
-static void	usage		(void);
+__dead static void	usage		(void);
 
 static bool	done;
 
@@ -155,7 +155,8 @@ main(int argc, char *argv[])
 static bool
 drop_root(char const *user, char const *group)
 {
-	int	 uid, gid;
+	gid_t	gid;
+	uid_t	uid;
 	char	*ep;
 
 	if ((uid = getuid()) != 0) {

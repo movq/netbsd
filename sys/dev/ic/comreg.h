@@ -1,4 +1,4 @@
-/*	$NetBSD: comreg.h,v 1.15 2008/04/28 22:00:01 matt Exp $	*/
+/*	$NetBSD: comreg.h,v 1.17 2011/05/28 19:30:19 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -33,8 +33,14 @@
 
 #include <dev/ic/ns16550reg.h>
 
+#ifdef _KERNEL_OPT
+#include "opt_com.h"
+#endif
+
 #define	COM_FREQ	1843200	/* 16-bit baud rate divisor */
+#ifndef COM_TOLERANCE
 #define	COM_TOLERANCE	30	/* baud rate tolerance, in 0.1% units */
+#endif
 
 /* interrupt enable register */
 #define	IER_ERXRDY	0x1	/* Enable receiver interrupt */
@@ -98,6 +104,7 @@
 #define	LCR_5BITS	0x00	/* 5 bits */
 
 /* modem control register */
+#define MCR_PRESCALE	0x80	/* 16650/16950: Baud rate prescaler select */
 #define MCR_TCR_TLR	0x40	/* OMAP: enables access to the TCR & TLR regs */
 #define MCR_XONENABLE	0x20	/* OMAP XON_EN */
 #define	MCR_LOOPBACK	0x10	/* Loop test: echos from TX to RX */

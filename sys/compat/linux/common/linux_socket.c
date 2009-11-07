@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.104 2009/06/17 14:18:51 njoly Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.112 2012/01/20 14:08:07 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.104 2009/06/17 14:18:51 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.112 2012/01/20 14:08:07 joerg Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
@@ -70,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.104 2009/06/17 14:18:51 njoly Exp
 #include <sys/kauth.h>
 #include <sys/syscallargs.h>
 #include <sys/ktrace.h>
+#include <sys/fcntl.h>
 
 #include <lib/libkern/libkern.h>
 
@@ -84,6 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.104 2009/06/17 14:18:51 njoly Exp
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_ioctl.h>
 #include <compat/linux/common/linux_socket.h>
+#include <compat/linux/common/linux_fcntl.h>
 #if !defined(__alpha__) && !defined(__amd64__)
 #include <compat/linux/common/linux_socketcall.h>
 #endif
@@ -114,6 +116,7 @@ int linux_to_bsd_so_sockopt(int);
 int linux_to_bsd_ip_sockopt(int);
 int linux_to_bsd_tcp_sockopt(int);
 int linux_to_bsd_udp_sockopt(int);
+int linux_getifname(struct lwp *, register_t *, void *);
 int linux_getifconf(struct lwp *, register_t *, void *);
 int linux_getifhwaddr(struct lwp *, register_t *, u_int, void *);
 static int linux_get_sa(struct lwp *, int, struct mbuf **,
@@ -199,13 +202,13 @@ static const struct {
 	{MSG_DONTWAIT,		LINUX_MSG_DONTWAIT},
 	{MSG_BCAST,		0},		/* not supported, clear */
 	{MSG_MCAST,		0},		/* not supported, clear */
+	{MSG_NOSIGNAL,		LINUX_MSG_NOSIGNAL},
 	{-1, /* not supp */	LINUX_MSG_PROBE},
 	{-1, /* not supp */	LINUX_MSG_FIN},
 	{-1, /* not supp */	LINUX_MSG_SYN},
 	{-1, /* not supp */	LINUX_MSG_CONFIRM},
 	{-1, /* not supp */	LINUX_MSG_RST},
 	{-1, /* not supp */	LINUX_MSG_ERRQUEUE},
-	{-1, /* not supp */	LINUX_MSG_NOSIGNAL},
 	{-1, /* not supp */	LINUX_MSG_MORE},
 };
 
@@ -296,14 +299,52 @@ linux_sys_socket(struct lwp *l, const struct linux_sys_socket_args *uap, registe
 		syscallarg(int) protocol;
 	} */
 	struct sys___socket30_args bsa;
-	int error;
+	struct sys_fcntl_args fsa;
+	register_t fretval[2];
+	int error, flags;
+
 
 	SCARG(&bsa, protocol) = SCARG(uap, protocol);
-	SCARG(&bsa, type) = SCARG(uap, type);
+	SCARG(&bsa, type) = SCARG(uap, type) & LINUX_SOCK_TYPE_MASK;
 	SCARG(&bsa, domain) = linux_to_bsd_domain(SCARG(uap, domain));
 	if (SCARG(&bsa, domain) == -1)
 		return EINVAL;
+	/*
+	 * Apparently linux uses this to talk to ISDN sockets. If we fail
+	 * now programs seems to handle it, but if we don't we are going
+	 * to fail when we bind and programs don't handle this well.
+	 */
+	if (SCARG(&bsa, domain) == AF_ROUTE && SCARG(&bsa, type) == SOCK_RAW)
+		return ENOTSUP;
+	flags = SCARG(uap, type) & ~LINUX_SOCK_TYPE_MASK;
+	if (flags & ~(LINUX_SOCK_CLOEXEC | LINUX_SOCK_NONBLOCK))
+		return EINVAL;
 	error = sys___socket30(l, &bsa, retval);
+
+	/*
+	 * Linux overloads the "type" parameter to include some
+	 * fcntl flags to be set on the file descriptor.
+	 * Process those if creating the socket succeeded.
+	 */
+
+	if (!error && flags & LINUX_SOCK_CLOEXEC) {
+		SCARG(&fsa, fd) = *retval;
+		SCARG(&fsa, cmd) = F_SETFD;
+		SCARG(&fsa, arg) = (void *)(uintptr_t)FD_CLOEXEC;
+		(void) sys_fcntl(l, &fsa, fretval);
+	}
+	if (!error && flags & LINUX_SOCK_NONBLOCK) {
+		SCARG(&fsa, fd) = *retval;
+		SCARG(&fsa, cmd) = F_SETFL;
+		SCARG(&fsa, arg) = (void *)(uintptr_t)O_NONBLOCK;
+		error = sys_fcntl(l, &fsa, fretval);
+		if (error) {
+			struct sys_close_args csa;
+
+			SCARG(&csa, fd) = *retval;
+			(void) sys_close(l, &csa, fretval);
+		}
+	}
 
 #ifdef INET6
 	/*
@@ -504,6 +545,14 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 					/* Linux SCM_RIGHTS is same as NetBSD */
 					break;
 
+				case LINUX_SCM_CREDENTIALS:
+					/* no native equivalent, just drop it */
+					m_free(ctl_mbuf);
+					ctl_mbuf = NULL;
+					msg.msg_control = NULL;
+					msg.msg_controllen = 0;
+					goto skipcmsg;
+
 				default:
 					/* other types not supported */
 					error = EINVAL;
@@ -544,13 +593,13 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 			cmsg->cmsg_level = l_cmsg.cmsg_level;
 			cmsg->cmsg_type = l_cmsg.cmsg_type;
 
-			/* Zero are between header and data */
+			/* Zero area between header and data */
 			memset(cmsg + 1, 0, 
-				CMSG_ALIGN(sizeof(cmsg)) - sizeof(cmsg));
+				CMSG_ALIGN(sizeof(*cmsg)) - sizeof(*cmsg));
 
 			/* Copyin the data */
 			error = copyin(LINUX_CMSG_DATA(l_cc),
-				CMSG_DATA(control),
+				CMSG_DATA(cmsg),
 				l_cmsg.cmsg_len - sizeof(l_cmsg));
 			if (error)
 				goto done;
@@ -574,6 +623,7 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 		    msg.msg_controllen);
 	}
 
+skipcmsg:
 	error = do_sys_sendmsg(l, SCARG(uap, s), &msg, bflags, retval);
 	/* Freed internally */
 	ctl_mbuf = NULL;
@@ -678,7 +728,7 @@ linux_copyout_msg_control(struct lwp *l, struct msghdr *mp, struct mbuf *control
 				error = EINVAL;
 				goto done;
 			}
-			/* machine dependant ! */
+			/* machine dependent ! */
 			break;
 		default:
 			/* pray and leave intact */
@@ -848,6 +898,8 @@ linux_to_bsd_ip_sockopt(int lopt)
 		return IP_TOS;
 	case LINUX_IP_TTL:
 		return IP_TTL;
+	case LINUX_IP_HDRINCL:
+		return IP_HDRINCL;
 	case LINUX_IP_MULTICAST_TTL:
 		return IP_MULTICAST_TTL;
 	case LINUX_IP_MULTICAST_LOOP:
@@ -1002,6 +1054,29 @@ linux_sys_getsockopt(struct lwp *l, const struct linux_sys_getsockopt_args *uap,
 	SCARG(&bga, name) = name;
 
 	return sys_getsockopt(l, &bga, retval);
+}
+
+int
+linux_getifname(struct lwp *l, register_t *retval, void *data)
+{
+	struct ifnet *ifp;
+	struct linux_ifreq ifr;
+	int error;
+
+	error = copyin(data, &ifr, sizeof(ifr));
+	if (error)
+		return error;
+
+	if (ifr.ifr_ifru.ifru_ifindex >= if_indexlim)
+		return ENODEV;
+	
+	ifp = ifindex2ifnet[ifr.ifr_ifru.ifru_ifindex];
+	if (ifp == NULL)
+		return ENODEV;
+
+	strncpy(ifr.ifr_name, ifp->if_xname, sizeof(ifr.ifr_name));
+
+	return copyout(&ifr, data, sizeof(ifr));
 }
 
 int
@@ -1225,6 +1300,10 @@ linux_ioctl_socket(struct lwp *l, const struct linux_sys_ioctl_args *uap, regist
 	retval[0] = 0;
 
 	switch (com) {
+	case LINUX_SIOCGIFNAME:
+		error = linux_getifname(l, retval, SCARG(uap, data));
+		dosys = 0;
+		break;
 	case LINUX_SIOCGIFCONF:
 		error = linux_getifconf(l, retval, SCARG(uap, data));
 		dosys = 0;
@@ -1246,6 +1325,9 @@ linux_ioctl_socket(struct lwp *l, const struct linux_sys_ioctl_args *uap, regist
 		break;
 	case LINUX_SIOCGIFNETMASK:
 		SCARG(&ia, com) = OOSIOCGIFNETMASK;
+		break;
+	case LINUX_SIOCGIFMTU:
+		SCARG(&ia, com) = OSIOCGIFMTU;
 		break;
 	case LINUX_SIOCADDMULTI:
 		SCARG(&ia, com) = OSIOCADDMULTI;
@@ -1294,7 +1376,7 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 
 	if (error == EISCONN) {
 		struct socket *so;
-		int state, prflags, nbio;
+		int state, prflags;
 
 		/* fd_getsock() will use the descriptor for us */
 	    	if (fd_getsock(SCARG(uap, s), &so) != 0)
@@ -1302,7 +1384,6 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 
 		solock(so);
 		state = so->so_state;
-		nbio = so->so_nbio;
 		prflags = so->so_proto->pr_flags;
 		sounlock(so);
 		fd_putfile(SCARG(uap, s));
@@ -1311,7 +1392,8 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 		 * non-blocking connect; however we don't have
 		 * a convenient place to keep that state..
 		 */
-		if (nbio && (state & SS_ISCONNECTED) &&
+		if ((state & (SS_ISCONNECTED|SS_NBIO)) ==
+		    (SS_ISCONNECTED|SS_NBIO) &&
 		    (prflags & PR_CONNREQUIRED))
 			return 0;
 	}

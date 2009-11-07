@@ -1,4 +1,4 @@
-/*	$NetBSD: ld.c,v 1.66 2009/07/23 21:38:33 dyoung Exp $	*/
+/*	$NetBSD: ld.c,v 1.69 2012/02/02 19:43:01 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -34,9 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.66 2009/07/23 21:38:33 dyoung Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.69 2012/02/02 19:43:01 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,9 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.66 2009/07/23 21:38:33 dyoung Exp $");
 #include <sys/vnode.h>
 #include <sys/syslog.h>
 #include <sys/mutex.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <dev/ldvar.h>
 
@@ -67,6 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.66 2009/07/23 21:38:33 dyoung Exp $");
 static void	ldgetdefaultlabel(struct ld_softc *, struct disklabel *);
 static void	ldgetdisklabel(struct ld_softc *);
 static void	ldminphys(struct buf *bp);
+static bool	ld_suspend(device_t, const pmf_qual_t *);
 static bool	ld_shutdown(device_t, int);
 static void	ldstart(struct ld_softc *, struct buf *);
 static void	ld_set_properties(struct ld_softc *);
@@ -144,17 +141,16 @@ ldattach(struct ld_softc *sc)
 	    "%d bytes/sect x %"PRIu64" sectors\n",
 	    tbuf, sc->sc_ncylinders, sc->sc_nheads,
 	    sc->sc_nsectors, sc->sc_secsize, sc->sc_secperunit);
+	sc->sc_disksize512 = sc->sc_secperunit * sc->sc_secsize / DEV_BSIZE;
 
 	ld_set_properties(sc);
 
-#if NRND > 0
 	/* Attach the device into the rnd source list. */
 	rnd_attach_source(&sc->sc_rnd_source, device_xname(sc->sc_dv),
 	    RND_TYPE_DISK, 0);
-#endif
 
 	/* Register with PMF */
-	if (!pmf_device_register1(sc->sc_dv, NULL, NULL, ld_shutdown))
+	if (!pmf_device_register1(sc->sc_dv, ld_suspend, NULL, ld_shutdown))
 		aprint_error_dev(sc->sc_dv,
 		    "couldn't establish power handler\n");
 
@@ -241,10 +237,8 @@ ldenddetach(struct ld_softc *sc)
 	disk_detach(&sc->sc_dk);
 	disk_destroy(&sc->sc_dk);
 
-#if NRND > 0
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->sc_rnd_source);
-#endif
 
 	/* Deregister with PMF */
 	pmf_device_deregister(sc->sc_dv);
@@ -261,6 +255,13 @@ ldenddetach(struct ld_softc *sc)
 			aprint_error_dev(&sc->sc_dv, "unable to flush cache\n");
 #endif
 	mutex_destroy(&sc->sc_mutex);
+}
+
+/* ARGSUSED */
+static bool
+ld_suspend(device_t dev, const pmf_qual_t *qual)
+{
+	return ld_shutdown(dev, 0);
 }
 
 /* ARGSUSED */
@@ -618,10 +619,14 @@ ldstrategy(struct buf *bp)
 	 * Do bounds checking and adjust the transfer.  If error, process.
 	 * If past the end of partition, just return.
 	 */
-	if (part != RAW_PART &&
-	    bounds_check_with_label(&sc->sc_dk, bp,
-	    (sc->sc_flags & (LDF_WLABEL | LDF_LABELLING)) != 0) <= 0) {
-		goto done;
+	if (part == RAW_PART) {
+		if (bounds_check_with_mediasize(bp, DEV_BSIZE,
+		    sc->sc_disksize512) <= 0)
+			goto done;
+	} else {
+		if (bounds_check_with_label(&sc->sc_dk, bp,
+		    (sc->sc_flags & (LDF_WLABEL | LDF_LABELLING)) != 0) <= 0)
+			goto done;
 	}
 
 	/*
@@ -712,9 +717,7 @@ lddone(struct ld_softc *sc, struct buf *bp)
 
 	disk_unbusy(&sc->sc_dk, bp->b_bcount - bp->b_resid,
 	    (bp->b_flags & B_READ));
-#if NRND > 0
 	rnd_add_uint32(&sc->sc_rnd_source, bp->b_rawblkno);
-#endif
 	biodone(bp);
 
 	mutex_enter(&sc->sc_mutex);

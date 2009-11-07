@@ -1,7 +1,7 @@
-/*	$NetBSD: keytable.h,v 1.1.1.2 2009/10/25 00:02:38 christos Exp $	*/
+/*	$NetBSD: keytable.h,v 1.2.6.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009, 2010  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keytable.h,v 1.18 2009/07/01 23:47:36 tbox Exp */
+/* Id: keytable.h,v 1.23 2010/06/25 03:24:05 marka Exp  */
 
 #ifndef DNS_KEYTABLE_H
 #define DNS_KEYTABLE_H 1
@@ -175,7 +175,7 @@ dns_keytable_marksecure(dns_keytable_t *keytable, dns_name_t *name);
  * Add a null key to 'keytable' for name 'name'.  This marks the
  * name as a secure domain, but doesn't supply any key data to allow the
  * domain to be validated.  (Used when automated trust anchor management
- * has gotten broken by a zone misconfiguration; for exmaple, when the
+ * has gotten broken by a zone misconfiguration; for example, when the
  * active key has been revoked but the stand-by key was still in its 30-day
  * waiting period for validity.)
  *
@@ -353,6 +353,22 @@ dns_keytable_finddeepestmatch(dns_keytable_t *keytable, dns_name_t *name,
  */
 
 void
+dns_keytable_attachkeynode(dns_keytable_t *keytable, dns_keynode_t *source,
+			   dns_keynode_t **target);
+/*%<
+ * Attach a keynode and and increment the active_nodes counter in a
+ * corresponding keytable.
+ *
+ * Requires:
+ *
+ *\li	'keytable' is a valid keytable.
+ *
+ *\li	'source' is a valid keynode.
+ *
+ *\li	'target' is not null and '*target' is null.
+ */
+
+void
 dns_keytable_detachkeynode(dns_keytable_t *keytable,
 			   dns_keynode_t **keynodep);
 /*%<
@@ -396,6 +412,12 @@ dns_keytable_issecuredomain(dns_keytable_t *keytable, dns_name_t *name,
  *\li	Any other result is an error.
  */
 
+isc_result_t
+dns_keytable_dump(dns_keytable_t *keytable, FILE *fp);
+/*%<
+ * Dump the keytable on fp.
+ */
+
 dst_key_t *
 dns_keynode_key(dns_keynode_t *keynode);
 /*%<
@@ -423,9 +445,15 @@ dns_keynode_attach(dns_keynode_t *source, dns_keynode_t **target);
 void
 dns_keynode_detach(isc_mem_t *mctx, dns_keynode_t **target);
 /*%<
- * Detach keynode.
+ * Detach a single keynode, without touching any keynodes that
+ * may be pointed to by its 'next' pointer
  */
 
+void
+dns_keynode_detachall(isc_mem_t *mctx, dns_keynode_t **target);
+/*%<
+ * Detach a keynode and all its succesors.
+ */
 ISC_LANG_ENDDECLS
 
 #endif /* DNS_KEYTABLE_H */

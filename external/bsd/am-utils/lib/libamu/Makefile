@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2008/09/19 21:38:41 christos Exp $
+#	$NetBSD: Makefile,v 1.3 2011/06/20 07:43:57 mrg Exp $
 
 NOLINKLIB=	# defined
 
@@ -18,7 +18,7 @@ SRCS=	hasmntopt.c misc_rpc.c mount_fs.c mtab.c mtab_bsd.c \
 	wire.c xdr_func.c xutil.c
 
 # XXX
-.if ${HAVE_GCC} == 4
+.if defined(HAVE_GCC)
 COPTS.xdr_func.c+=	-fno-strict-aliasing
 .endif
 

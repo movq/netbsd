@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.161 2009/01/24 05:06:07 mrg Exp $
+# $NetBSD: GENERIC,v 1.171 2011/12/18 05:49:31 dholland Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/pmax/conf/std.pmax"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.161 $"
+#ident		"GENERIC-$Revision: 1.171 $"
 
 maxusers	64
 
@@ -42,9 +42,10 @@ options 	DEC_3MAXPLUS	# DECstation 5000/240 (kn03), 5000/260 (kn05)
 #options 	DEC_5500	# DECsystem 5500 (kn220)
 #options 	DEC_5800	# DECsystem 58x0 (kn5800)
 
+makeoptions	DEBUG="-g"
 # Standard system options
 options 	DDB			# in-kernel debugger
-#options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
+options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 options 	DDB_ONPANIC=0		# don't enter debugger on panic
 #options 	DIAGNOSTIC		# extra kernel debugging checks
 #options 	DEBUG			# extra kernel debugging support
@@ -87,18 +88,19 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern (kernel informational filesystem)
 file-system	NULLFS		# loopback file system
 file-system	OVERLAY		# overlay file system
-file-system	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	PROCFS		# /proc
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 options 	NFSSERVER	# Sun NFS-compatible filesystem (server)
-options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 
@@ -122,6 +124,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -308,9 +311,9 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		 4	# file system snapshot device
+pseudo-device	fss		 	# file system snapshot device
+pseudo-device	putter			# for puffs and pud
 
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter

@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs.h,v 1.132 2009/11/05 17:16:36 pooka Exp $	*/
+/*	$NetBSD: lfs.h,v 1.135.2.1 2012/03/17 17:40:07 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -203,7 +203,7 @@ typedef struct lfs_res_blk {
 		locked_queue_bytes -= bp->b_bufsize;			\
 		if (locked_queue_count < LFS_WAIT_BUFS &&		\
 		    locked_queue_bytes < LFS_WAIT_BYTES)		\
-			wakeup(&locked_queue_count);			\
+			cv_broadcast(&locked_queue_cv);			\
 		mutex_exit(&lfs_lock);					\
 	}								\
 	(bp)->b_flags &= ~B_LOCKED;					\
@@ -219,7 +219,7 @@ extern u_long bufmem_lowater, bufmem_hiwater; /* XXX */
 #  define LFS_DEBUG_COUNTLOCKED(m) do {					\
 	if (lfs_debug_log_subsys[DLOG_LLIST]) {				\
 		lfs_countlocked(&locked_queue_count, &locked_queue_bytes, (m)); \
-		wakeup(&locked_queue_count);				\
+		cv_broadcast(&locked_queue_cv);				\
 	}								\
 } while (0)
 # else
@@ -280,7 +280,7 @@ extern struct lfs_log_entry lfs_log[LFS_LOGLENGTH];
 #  define DLOG(a) lfs_debug_log a
 # else /* ! DEBUG */
 #  define LFS_BCLEAN_LOG(fs, bp)
-#  define LFS_BWRITE_LOG(bp)		VOP_BWRITE((bp))
+#  define LFS_BWRITE_LOG(bp)		VOP_BWRITE((bp)->b_vp, (bp))
 #  define DLOG(a)
 # endif /* ! DEBUG */
 #else /* ! _KERNEL */
@@ -592,6 +592,7 @@ struct segsum_v1 {
 #define	SS_CONT		0x02		/* more partials to finish this write*/
 #define	SS_CLEAN	0x04		/* written by the cleaner */
 #define	SS_RFW		0x08		/* written by the roll-forward agent */
+#define	SS_RECLAIM	0x10		/* written by the roll-forward agent */
 	u_int16_t ss_flags;		/* 24: used for directory operations */
 	u_int16_t ss_pad;		/* 26: extra space */
 	/* FINFO's and inode daddr's... */
@@ -608,7 +609,8 @@ struct segsum {
 	u_int16_t ss_nfinfo;		/* 20: number of file info structures */
 	u_int16_t ss_ninos;		/* 22: number of inodes in summary */
 	u_int16_t ss_flags;		/* 24: used for directory operations */
-	u_int8_t  ss_pad[6];		/* 26: extra space */
+	u_int8_t  ss_pad[2];		/* 26: extra space */
+	u_int32_t ss_reclino;           /* 28: inode being reclaimed */
 	u_int64_t ss_serial;		/* 32: serial number */
 	u_int64_t ss_create;		/* 40: time stamp */
 	/* FINFO's and inode daddr's... */
@@ -840,6 +842,8 @@ struct lfs {
 	int lfs_nowrap;			/* Suspend log wrap */
 	int lfs_wrappass;		/* Allow first log wrap requester to pass */
 	int lfs_wrapstatus;		/* Wrap status */
+	int lfs_reclino;		/* Inode being reclaimed */
+	int lfs_startseg;               /* Segment we started writing at */
 	LIST_HEAD(, segdelta) lfs_segdhd;	/* List of pending trunc accounting events */
 };
 
@@ -858,31 +862,30 @@ struct lfs {
 #define	blkoff(fs, loc)		((int)((loc) & (fs)->lfs_bmask))
 #define fragoff(fs, loc)    /* calculates (loc % fs->lfs_fsize) */ \
     ((int)((loc) & (fs)->lfs_ffmask))
+
+#if defined (_KERNEL)
+#define	fsbtodb(fs, b)		((b) << ((fs)->lfs_ffshift - DEV_BSHIFT))
+#define	dbtofsb(fs, b)		((b) >> ((fs)->lfs_ffshift - DEV_BSHIFT))
+#else
 #define	fsbtodb(fs, b)		((b) << (fs)->lfs_fsbtodb)
 #define	dbtofsb(fs, b)		((b) >> (fs)->lfs_fsbtodb)
-#define fragstodb(fs, b)	((b) << ((fs)->lfs_blktodb - (fs)->lfs_fbshift))
-#define dbtofrags(fs, b)	((b) >> ((fs)->lfs_blktodb - (fs)->lfs_fbshift))
+#endif
+
 #define	lblkno(fs, loc)		((loc) >> (fs)->lfs_bshift)
 #define	lblktosize(fs, blk)	((blk) << (fs)->lfs_bshift)
-/* Same as above, but named like dbtob(), btodb() */
-#define fsbtob(fs, b)		((b) << ((fs)->lfs_bshift - \
-				(fs)->lfs_blktodb + (fs)->lfs_fsbtodb))
-#define btofsb(fs, b)		((b) >> ((fs)->lfs_bshift - \
-				(fs)->lfs_blktodb + (fs)->lfs_fsbtodb))
-#define fsbtofrags(fs, b)	((b) >> ((fs)->lfs_blktodb - (fs)->lfs_fbshift - \
-				(fs)->lfs_fsbtodb))
-#define fragstofsb(fs, b)	((b) << ((fs)->lfs_blktodb - (fs)->lfs_fbshift - \
-				(fs)->lfs_fsbtodb))
-#define btofrags(fs, b)		((b) >> (fs)->lfs_ffshift)
+
+#define fsbtob(fs, b)		((b) << (fs)->lfs_ffshift)
+#define btofsb(fs, b)		((b) >> (fs)->lfs_ffshift)
+
 #define numfrags(fs, loc)	/* calculates (loc / fs->lfs_fsize) */	\
 	((loc) >> (fs)->lfs_ffshift)
 #define blkroundup(fs, size)	/* calculates roundup(size, fs->lfs_bsize) */ \
 	((off_t)(((size) + (fs)->lfs_bmask) & (~(fs)->lfs_bmask)))
 #define fragroundup(fs, size)	/* calculates roundup(size, fs->lfs_fsize) */ \
 	((off_t)(((size) + (fs)->lfs_ffmask) & (~(fs)->lfs_ffmask)))
-#define fragstoblks(fs, frags)	/* calculates (frags / fs->lfs_frag) */	\
+#define fragstoblks(fs, frags)/* calculates (frags / fs->fs_frag) */ \
 	((frags) >> (fs)->lfs_fbshift)
-#define blkstofrags(fs, blks)	/* calculates (blks * fs->lfs_frag) */	\
+#define blkstofrags(fs, blks)	/* calculates (blks * fs->fs_frag) */ \
 	((blks) << (fs)->lfs_fbshift)
 #define fragnum(fs, fsb)	/* calculates (fsb % fs->lfs_frag) */	\
 	((fsb) & ((fs)->lfs_frag - 1))
@@ -946,13 +949,15 @@ struct segment {
 	u_int32_t seg_number;		/* number of this segment */
 	int32_t *start_lbp;		/* beginning lbn for this set */
 
-#define	SEGM_CKP	0x01		/* doing a checkpoint */
-#define	SEGM_CLEAN	0x02		/* cleaner call; don't sort */
-#define	SEGM_SYNC	0x04		/* wait for segment */
-#define	SEGM_PROT	0x08		/* don't inactivate at segunlock */
-#define SEGM_PAGEDAEMON	0x10		/* pagedaemon called us */
-#define SEGM_WRITERD	0x20		/* LFS writed called us */
-#define SEGM_FORCE_CKP	0x40		/* Force checkpoint right away */
+#define SEGM_CKP	0x0001		/* doing a checkpoint */
+#define SEGM_CLEAN	0x0002		/* cleaner call; don't sort */
+#define SEGM_SYNC	0x0004		/* wait for segment */
+#define SEGM_PROT	0x0008		/* don't inactivate at segunlock */
+#define SEGM_PAGEDAEMON	0x0010		/* pagedaemon called us */
+#define SEGM_WRITERD	0x0020		/* LFS writed called us */
+#define SEGM_FORCE_CKP	0x0040		/* Force checkpoint right away */
+#define SEGM_RECLAIM	0x0080		/* Writing to reclaim vnode */
+#define SEGM_SINGLE	0x0100		/* Opportunistic writevnodes */
 	u_int16_t seg_flags;		/* run-time flags for this segment */
 	u_int32_t seg_iocount;		/* number of ios pending */
 	int	  ndupino;		/* number of duplicate inodes */
@@ -993,6 +998,7 @@ struct lfs_inode_ext {
 #define LFSI_DELETED      0x02
 #define LFSI_WRAPBLOCK    0x04
 #define LFSI_WRAPWAIT     0x08
+#define LFSI_BMAP         0x10
 	u_int32_t lfs_iflags;           /* Inode flags */
 	daddr_t   lfs_hiblk;		/* Highest lbn held by inode */
 #ifdef _KERNEL
@@ -1018,10 +1024,26 @@ struct lfs_inode_ext {
  * Macros for determining free space on the disk, with the variable metadata
  * of segment summaries and inode blocks taken into account.
  */
-/* Estimate number of clean blocks not available for writing */
-#define LFS_EST_CMETA(F) (int32_t)((((F)->lfs_dmeta *			     \
-				     (int64_t)(F)->lfs_nclean) /	     \
-				      ((F)->lfs_nseg - (F)->lfs_nclean)))
+/*
+ * Estimate number of clean blocks not available for writing because
+ * they will contain metadata or overhead.  This is calculated as
+ *
+ *		E = ((C * M / D) * D + (0) * (T - D)) / T
+ * or more simply
+ *		E = (C * M) / T
+ *
+ * where
+ * C is the clean space,
+ * D is the dirty space,
+ * M is the dirty metadata, and
+ * T = C + D is the total space on disk.
+ *
+ * This approximates the old formula of E = C * M / D when D is close to T,
+ * but avoids falsely reporting "disk full" when the sample size (D) is small.
+ */
+#define LFS_EST_CMETA(F) (int32_t)((					\
+	((F)->lfs_dmeta * (int64_t)(F)->lfs_nclean) / 			\
+	((F)->lfs_nseg)))
 
 /* Estimate total size of the disk not including metadata */
 #define LFS_EST_NONMETA(F) ((F)->lfs_dsize - (F)->lfs_dmeta - LFS_EST_CMETA(F))

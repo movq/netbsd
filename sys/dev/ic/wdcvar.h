@@ -1,4 +1,4 @@
-/*	$NetBSD: wdcvar.h,v 1.89 2008/04/28 20:23:51 martin Exp $	*/
+/*	$NetBSD: wdcvar.h,v 1.92 2012/01/09 01:01:49 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -47,9 +47,11 @@ struct wdc_regs {
 	/* Our registers */
 	bus_space_tag_t       cmd_iot;
 	bus_space_handle_t    cmd_baseioh;
+	bus_size_t            cmd_ios;
 	bus_space_handle_t    cmd_iohs[WDC_NREG+WDC_NSHADOWREG];
 	bus_space_tag_t       ctl_iot;
 	bus_space_handle_t    ctl_ioh;
+	bus_size_t            ctl_ios;
 
 	/* data32{iot,ioh} are only used for 32-bit data xfers */
 	bus_space_tag_t       data32iot;
@@ -141,7 +143,6 @@ int	wdcprobe(struct ata_channel *);
 void	wdcattach(struct ata_channel *);
 int	wdcdetach(device_t, int);
 void	wdc_childdetached(device_t, device_t);
-int	wdcactivate(device_t, enum devact);
 int	wdcintr(void *);
 
 void	wdc_sataprobe(struct ata_channel *);
@@ -160,7 +161,7 @@ int	wdc_dmawait(struct ata_channel *, struct ata_xfer *, int);
 void	wdccommand(struct ata_channel *, u_int8_t, u_int8_t, u_int16_t,
 		   u_int8_t, u_int8_t, u_int8_t, u_int8_t);
 void	wdccommandext(struct ata_channel *, u_int8_t, u_int8_t, u_int64_t,
-		      u_int16_t);
+		      u_int16_t, u_int16_t);
 void	wdccommandshort(struct ata_channel *, int, int);
 void	wdctimeout(void *arg);
 void	wdc_reset_drive(struct ata_drive_datas *, int);

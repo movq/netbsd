@@ -1,4 +1,4 @@
-/*	$NetBSD: smartbat.c,v 1.3 2008/08/12 17:16:16 macallan Exp $ */
+/*	$NetBSD: smartbat.c,v 1.8 2011/07/26 08:36:02 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smartbat.c,v 1.3 2008/08/12 17:16:16 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smartbat.c,v 1.8 2011/07/26 08:36:02 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: smartbat.c,v 1.3 2008/08/12 17:16:16 macallan Exp $"
 
 #include <macppc/dev/pmuvar.h>
 #include <macppc/dev/batteryvar.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include "opt_battery.h"
 
 #ifdef SMARTBAT_DEBUG
@@ -61,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: smartbat.c,v 1.3 2008/08/12 17:16:16 macallan Exp $"
 #define BAT_NSENSORS		8  /* number of sensors */
 
 struct smartbat_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct pmu_ops *sc_pmu_ops;
 	int sc_num;
 	
@@ -81,18 +81,18 @@ struct smartbat_softc {
 	uint32_t sc_timestamp;
 };
 
-static void smartbat_attach(struct device *, struct device *, void *);
-static int smartbat_match(struct device *, struct cfdata *, void *);
+static void smartbat_attach(device_t, device_t, void *);
+static int smartbat_match(device_t, cfdata_t, void *);
 static void smartbat_setup_envsys(struct smartbat_softc *);
 static void smartbat_refresh(struct sysmon_envsys *, envsys_data_t *);
 static void smartbat_poll(void *);
 static int smartbat_update(struct smartbat_softc *, int);
 
-CFATTACH_DECL(smartbat, sizeof(struct smartbat_softc),
+CFATTACH_DECL_NEW(smartbat, sizeof(struct smartbat_softc),
     smartbat_match, smartbat_attach, NULL, NULL);
 
 static int
-smartbat_match(struct device *parent, struct cfdata *cf, void *aux)
+smartbat_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct battery_attach_args *baa = aux;
 
@@ -103,11 +103,12 @@ smartbat_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-smartbat_attach(struct device *parent, struct device *self, void *aux)
+smartbat_attach(device_t parent, device_t self, void *aux)
 {
 	struct battery_attach_args *baa = aux;
-	struct smartbat_softc *sc = (struct smartbat_softc *)self;
+	struct smartbat_softc *sc = device_private(self);
 
+	sc->sc_dev = self;
 	sc->sc_pmu_ops = baa->baa_pmu_ops;
 	sc->sc_num = baa->baa_num;
 
@@ -126,11 +127,12 @@ smartbat_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_sm_acpower.smpsw_type = PSWITCH_TYPE_ACADAPTER;
 	if (sysmon_pswitch_register(&sc->sc_sm_acpower) != 0)
 		printf("%s: unable to register AC power status with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 }
 
 #define INITDATA(index, unit, string)					\
 	sc->sc_sensor[index].units = unit;     				\
+	sc->sc_sensor[index].state = ENVSYS_SINVALID;			\
 	snprintf(sc->sc_sensor[index].desc,				\
 	    sizeof(sc->sc_sensor[index].desc), "%s", string);
 
@@ -159,13 +161,13 @@ smartbat_setup_envsys(struct smartbat_softc *sc)
 		}
 	}
 
-	sc->sc_sme->sme_name = sc->sc_dev.dv_xname;
+	sc->sc_sme->sme_name = device_xname(sc->sc_dev);
 	sc->sc_sme->sme_cookie = sc;
 	sc->sc_sme->sme_refresh = smartbat_refresh;
 
 	if (sysmon_envsys_register(sc->sc_sme)) {
 		aprint_error("%s: unable to register with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		sysmon_envsys_destroy(sc->sc_sme);
 	}
 }
@@ -174,43 +176,60 @@ static void
 smartbat_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 {
 	struct smartbat_softc *sc = sme->sme_cookie;
-	int which = edata->sensor;
+	int which = edata->sensor, present;
 
 	smartbat_update(sc, 0);
+	present = (sc->sc_flags & PMU_PWR_BATT_PRESENT) != 0;
 
-	switch (which) {
-	case BAT_AC_PRESENT:
-		edata->value_cur = (sc->sc_flags & PMU_PWR_AC_PRESENT);
-		break;
-	case BAT_PRESENT:
-		edata->value_cur = (sc->sc_flags & PMU_PWR_BATT_PRESENT);
-		break;
-	case BAT_VOLTAGE:
-		edata->value_cur = sc->sc_voltage * 1000;
-		break;
-	case BAT_CURRENT:
-		edata->value_cur = sc->sc_draw * 1000;
-		break;
-	case BAT_MAX_CHARGE:
-		edata->value_cur = sc->sc_max_charge * 1000;
-		break;
-	case BAT_CHARGE:
-		edata->value_cur = sc->sc_charge * 1000;
-		break;
-	case BAT_CHARGING:
-		if ((sc->sc_flags & PMU_PWR_BATT_CHARGING) &&
-		    (sc->sc_flags & PMU_PWR_AC_PRESENT))
-			edata->value_cur = 1;
-		else
+	if (present) {
+		switch (which) {
+		case BAT_AC_PRESENT:
+			edata->value_cur = (sc->sc_flags & PMU_PWR_AC_PRESENT);
+			break;
+		case BAT_PRESENT:
+			edata->value_cur = present;
+			break;
+		case BAT_VOLTAGE:
+			edata->value_cur = sc->sc_voltage * 1000;
+			break;
+		case BAT_CURRENT:
+			edata->value_cur = sc->sc_draw * 1000;
+			break;
+		case BAT_MAX_CHARGE:
+			edata->value_cur = sc->sc_max_charge * 1000;
+			break;
+		case BAT_CHARGE:
+			edata->value_cur = sc->sc_charge * 1000;
+			break;
+		case BAT_CHARGING:
+			if ((sc->sc_flags & PMU_PWR_BATT_CHARGING) &&
+			    (sc->sc_flags & PMU_PWR_AC_PRESENT))
+				edata->value_cur = 1;
+			else
+				edata->value_cur = 0;
+
+			break;
+		case BAT_FULL:
+			edata->value_cur = (sc->sc_flags & PMU_PWR_BATT_FULL);
+			break;
+		}
+		edata->state = ENVSYS_SVALID;
+	} else {
+		/* battery isn't there */
+		switch (which) {
+		case BAT_AC_PRESENT:
+			edata->value_cur = (sc->sc_flags & PMU_PWR_AC_PRESENT);
+			edata->state = ENVSYS_SVALID;
+			break;
+		case BAT_PRESENT:
+			edata->value_cur = present;
+			edata->state = ENVSYS_SVALID;
+			break;
+		default:
+			edata->state = ENVSYS_SINVALID;
 			edata->value_cur = 0;
-
-		break;
-	case BAT_FULL:
-		edata->value_cur = (sc->sc_flags & PMU_PWR_BATT_FULL);
-		break;
+		}
 	}
-
-	edata->state = ENVSYS_SVALID;
 }
 
 /*
@@ -236,7 +255,7 @@ smartbat_update(struct smartbat_softc *sc, int out)
 					 16, buf);
 
 	if (len < 0) {
-		DPRINTF("%s: couldn't get battery data\n", sc->sc_dev.dv_xname);
+		DPRINTF("%s: couldn't get battery data\n", device_xname(sc->sc_dev));
 		/* XXX: the return value is never checked */
 		return -1;
 	}
@@ -277,7 +296,7 @@ smartbat_update(struct smartbat_softc *sc, int out)
 		break;
 	default:
 		/* XXX - Error condition */
-		DPRINTF("%s: why is buf[1] %x?\n", sc->sc_dev.dv_xname, buf[1]);
+		DPRINTF("%s: why is buf[1] %x?\n", device_xname(sc->sc_dev), buf[1]);
 		sc->sc_charge = 0;
 		sc->sc_max_charge = 0;
 		sc->sc_draw = 0;

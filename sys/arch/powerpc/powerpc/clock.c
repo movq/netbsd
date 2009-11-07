@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.6 2008/02/05 22:31:50 garbled Exp $	*/
+/*	$NetBSD: clock.c,v 1.12 2011/06/20 05:50:39 matt Exp $	*/
 /*      $OpenBSD: clock.c,v 1.3 1997/10/13 13:42:53 pefo Exp $	*/
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.6 2008/02/05 22:31:50 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.12 2011/06/20 05:50:39 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -43,7 +43,17 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.6 2008/02/05 22:31:50 garbled Exp $");
 
 #include <uvm/uvm_extern.h>
 
+#include <powerpc/psl.h>
 #include <powerpc/spr.h>
+#if defined (PPC_OEA) || defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
+#include <powerpc/oea/spr.h>
+#elif defined (PPC_BOOKE)
+#include <powerpc/booke/spr.h>
+#elif defined (PPC_IBM4XX)
+#include <powerpc/ibm4xx/spr.h>
+#else
+#error unknown powerpc variant
+#endif
 
 void decr_intr(struct clockframe *);
 void init_powerpc_tc(void);
@@ -106,7 +116,7 @@ setstatclockrate(int arg)
 }
 
 void
-decr_intr(struct clockframe *frame)
+decr_intr(struct clockframe *cfp)
 {
 	struct cpu_info * const ci = curcpu();
 	int msr;
@@ -128,11 +138,11 @@ decr_intr(struct clockframe *frame)
 		ticks += ticks_per_intr;
 	__asm volatile ("mtdec %0" :: "r"(ticks));
 
-	uvmexp.intrs++;
+	ci->ci_data.cpu_nintr++;
 	ci->ci_ev_clock.ev_count++;
 
 	pri = splclock();
-	if (pri & (1 << SPL_CLOCK)) {
+	if (pri >= IPL_CLOCK) {
 		ci->ci_tickspending += nticks;
 	} else {
 		nticks += ci->ci_tickspending;
@@ -162,11 +172,9 @@ decr_intr(struct clockframe *frame)
 		 * Do standard timer interrupt stuff.
 		 * Do softclock stuff only on the last iteration.
 		 */
-		frame->pri = pri | (1 << SIR_CLOCK);
 		while (--nticks > 0)
-			hardclock(frame);
-		frame->pri = pri;
-		hardclock(frame);
+			hardclock(cfp);
+		hardclock(cfp);
 	}
 	splx(pri);
 }

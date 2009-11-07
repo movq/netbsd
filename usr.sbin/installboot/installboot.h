@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.35 2008/04/28 20:24:16 martin Exp $	*/
+/*	$NetBSD: installboot.h,v 1.38 2011/06/14 05:35:08 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -65,6 +65,8 @@ typedef enum {
 	IB_PASSWORD =	1<<18,		/* i386 boot password */
 	IB_KEYMAP = 	1<<19,		/* i386 console keymap */
 	IB_CONSADDR = 	1<<20,		/* i386 console io address */
+	IB_MODULES =	1<<21,		/* i386: load modules */
+	IB_BOOTCONF = 	1<<22,		/* i386: read boot.conf */
 } ib_flags;
 
 typedef struct {
@@ -80,6 +82,7 @@ typedef struct {
 	uint64_t	 s1start;	/*  start block of stage1 */
 	const char	*stage2;	/* name of stage2 bootstrap */
 	uint64_t	 s2start;	/*  start block of stage2 */
+	uint32_t	 sectorsize;	/* sector size of target fs */
 		/* parsed -o option=value data */
 	const char	*command;	/* name of command string */
 	const char	*console;	/* name of console */
@@ -132,7 +135,7 @@ struct bbinfo_params {
 	bbinfo_endian	endian;
 };
 
-extern struct ib_mach	*machines[];
+extern struct ib_mach	* const machines[];
 extern struct ib_fs	fstypes[];
 
 	/* installboot.c */

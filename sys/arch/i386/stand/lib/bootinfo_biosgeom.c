@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo_biosgeom.c,v 1.19 2005/12/11 12:17:48 christos Exp $	*/
+/*	$NetBSD: bootinfo_biosgeom.c,v 1.21 2010/12/25 01:19:33 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -99,7 +99,7 @@ bi_getbiosgeom(void)
 #ifdef GEOM_DEBUG
 		printf("#%d: %x: C %d H %d S %d\n", nvalid,
 		       d.dev, d.cyl, d.head, d.sec);
-		printf("   sz %d fl %x cyl %d head %d sec %d totsec %lld sbytes %d\n",
+		printf("   sz %d fl %x cyl %d head %d sec %d totsec %"PRId64" sbytes %d\n",
 		       ed.size, ed.flags, ed.cyl, ed.head, ed.sec,
 		       ed.totsec, ed.sbytes);
 #endif
@@ -117,7 +117,7 @@ bi_getbiosgeom(void)
 
 		/* The v3.0 stuff will help identify the disks */
 		if (ed.size >= offsetof(struct biosdisk_ext13info, checksum)
-		    && ed.devpath_sig == EXT13_DEVPATH_SIGNATURE) {
+		    && ed.devpath_sig == EXTINFO_DEVPATH_SIGNATURE) {
 			char *cp;
 
 			for (cp = (void *)&ed.devpath_sig, cksum = 0;

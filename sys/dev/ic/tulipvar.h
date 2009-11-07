@@ -1,4 +1,4 @@
-/*	$NetBSD: tulipvar.h,v 1.64 2009/04/17 15:22:35 cegger Exp $	*/
+/*	$NetBSD: tulipvar.h,v 1.67 2012/02/02 19:43:04 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -33,14 +33,10 @@
 #ifndef _DEV_IC_TULIPVAR_H_
 #define	_DEV_IC_TULIPVAR_H_
 
-#include "rnd.h"
-
 #include <sys/queue.h>
 #include <sys/callout.h>
 
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 /*
  * Misc. definitions for the Digital Semiconductor ``Tulip'' (21x4x)
@@ -447,9 +443,7 @@ struct tulip_softc {
 
 	int	sc_rxptr;		/* next ready RX descriptor/descsoft */
 
-#if NRND > 0
-	rndsource_element_t sc_rnd_source; /* random source */
-#endif
+	krndsource_t sc_rnd_source; /* random source */
 };
 #endif
 
@@ -571,8 +565,6 @@ do {									\
 #define	TULIP_SP_FIELD(x, f)	TULIP_SP_FIELD_C((x)[f * 2], (x)[f * 2 + 1])
 
 #ifdef _KERNEL
-extern const char * const tlp_chip_names[];
-
 extern const struct tulip_mediasw tlp_21040_mediasw;
 extern const struct tulip_mediasw tlp_21040_tp_mediasw;
 extern const struct tulip_mediasw tlp_21040_auibnc_mediasw;
@@ -604,6 +596,7 @@ void	tlp_mediastatus(struct ifnet *, struct ifmediareq *);
 
 void	tlp_21140_gpio_get(struct tulip_softc *sc, struct ifmediareq *ifmr);
 int	tlp_21140_gpio_set(struct tulip_softc *sc);
+const char *tlp_chip_name(tulip_chip_t);
 
 #endif /* _KERNEL */
 

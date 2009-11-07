@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.16 2009/06/02 23:21:37 pooka Exp $     */
+/*	$NetBSD: syscall.c,v 1.20 2012/02/11 23:16:16 martin Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,33 +33,21 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.16 2009/06/02 23:21:37 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.20 2012/02/11 23:16:16 martin Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_sa.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/syscall.h>
-#include <sys/syscallvar.h>
 #include <sys/systm.h>
-#include <sys/signalvar.h>
-#include <sys/exec.h>
+#include <sys/cpu.h>
+#include <sys/ktrace.h>
+#include <sys/proc.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
-#include <sys/ktrace.h>
-#include <sys/pool.h>
+#include <sys/syscall.h>
+#include <sys/syscallvar.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/mtpr.h>
-#include <machine/pte.h>
-#include <machine/pcb.h>
-#include <machine/trap.h>
-#include <machine/pmap.h>
-#include <machine/cpu.h>
 #include <machine/userret.h>
 
 #ifdef TRAPDEBUG
@@ -79,12 +67,11 @@ syscall_intern(struct proc *p)
 }
 
 void
-syscall(struct trapframe *frame)
+syscall(struct trapframe *tf)
 {
 	int error;
 	int rval[2];
 	int args[2+SYS_MAXSYSARGS]; /* add two for SYS___syscall + padding */
-	struct trapframe * const exptr = frame;
 	struct lwp * const l = curlwp;
 	struct proc * const p = l->l_proc;
 	const struct emul * const emul = p->p_emul;
@@ -92,25 +79,25 @@ syscall(struct trapframe *frame)
 	const u_quad_t oticks = p->p_sticks;
 
 	TDB(("trap syscall %s pc %lx, psl %lx, sp %lx, pid %d, frame %p\n",
-	    syscallnames[frame->code], frame->pc, frame->psl,frame->sp,
+	    syscallnames[tf->tf_code], tf->tf_pc, tf->tf_psl,tf->tf_sp,
 	    p->p_pid,frame));
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
  
  	LWP_CACHE_CREDS(l, p);
 
-	l->l_addr->u_pcb.framep = frame;
+	l->l_md.md_utf = tf;
 
-	if ((unsigned long) frame->code >= emul->e_nsysent)
+	if ((unsigned long) tf->tf_code >= emul->e_nsysent)
 		callp += emul->e_nosys;
 	else
-		callp += frame->code;
+		callp += tf->tf_code;
 
 	rval[0] = 0;
-	rval[1] = frame->r1;
+	rval[1] = tf->tf_r1;
 
 	if (callp->sy_narg) {
-		error = copyin((char*)frame->ap + 4, args, callp->sy_argsize);
+		error = copyin((char*)tf->tf_ap + 4, args, callp->sy_argsize);
 		if (error)
 			goto bad;
 	}
@@ -127,20 +114,19 @@ syscall(struct trapframe *frame)
 	 */
 	if (__predict_true(!p->p_trace_enabled)
 	    || __predict_false(callp->sy_flags & SYCALL_INDIRECT)
-	    || (error = trace_enter(frame->code, args, callp->sy_narg)) == 0) {
+	    || (error = trace_enter(tf->tf_code, args, callp->sy_narg)) == 0) {
 		error = sy_call(callp, curlwp, args, rval);
 	}
 
-	KASSERT(exptr == l->l_addr->u_pcb.framep);
 	TDB(("return %s pc %lx, psl %lx, sp %lx, pid %d, err %d r0 %d, r1 %d, "
-	    "frame %p\n", syscallnames[exptr->code], exptr->pc, exptr->psl,
-	    exptr->sp, p->p_pid, error, rval[0], rval[1], exptr));
+	    "tf %p\n", syscallnames[tf->tf_code], tf->tf_pc, tf->tf_psl,
+	    tf->tf_sp, p->p_pid, error, rval[0], rval[1], exptr));
 bad:
 	switch (error) {
 	case 0:
-		exptr->r1 = rval[1];
-		exptr->r0 = rval[0];
-		exptr->psl &= ~PSL_C;
+		tf->tf_r1 = rval[1];
+		tf->tf_r0 = rval[0];
+		tf->tf_psl &= ~PSL_C;
 		break;
 
 	case EJUSTRETURN:
@@ -148,27 +134,37 @@ bad:
 
 	case ERESTART:
 		/* assumes CHMK $n was used */
-		exptr->pc -= (exptr->code > 63 ? 4 : 2);
+		tf->tf_pc -= (tf->tf_code > 63 ? 4 : 2);
 		break;
 
 	default:
-		exptr->r0 = error;
-		exptr->psl |= PSL_C;
+		tf->tf_r0 = error;
+		tf->tf_psl |= PSL_C;
 		break;
 	}
 
 	if (__predict_false(p->p_trace_enabled)
 	    && __predict_true(!(callp->sy_flags & SYCALL_INDIRECT)))
-		trace_exit(frame->code, rval, error);
+		trace_exit(tf->tf_code, rval, error);
 
-	userret(l, frame, oticks);
+	userret(l, tf, oticks);
 }
 
 void
 child_return(void *arg)
 {
-        struct lwp *l = arg;
+	struct lwp *l = arg;
 
-	userret(l, l->l_addr->u_pcb.framep, 0);
+	userret(l, l->l_md.md_utf, 0);
 	ktrsysret(SYS_fork, 0, 0);
+}
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l, l->l_md.md_utf, 0);
 }

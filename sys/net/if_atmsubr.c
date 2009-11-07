@@ -1,7 +1,6 @@
-/*      $NetBSD: if_atmsubr.c,v 1.46 2009/04/18 14:58:04 tsutsui Exp $       */
+/*      $NetBSD: if_atmsubr.c,v 1.49 2011/02/01 19:46:28 chuck Exp $       */
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *	Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,13 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.46 2009/04/18 14:58:04 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.49 2011/02/01 19:46:28 chuck Exp $");
 
 #include "opt_inet.h"
 #include "opt_gateway.h"
 #include "opt_natm.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,9 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.46 2009/04/18 14:58:04 tsutsui Exp 
 #include <net/if_atm.h>
 #include <net/ethertypes.h> /* XXX: for ETHERTYPE_* */
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <netinet/in.h>
 #include <netinet/if_atm.h>
@@ -340,9 +330,7 @@ atm_ifattach(struct ifnet *ifp)
 	if_alloc_sadl(ifp);
 	/* XXX Store LLADDR for ATMARP. */
 
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_ATM_RFC1483, sizeof(struct atmllc));
-#endif
+	bpf_attach(ifp, DLT_ATM_RFC1483, sizeof(struct atmllc));
 }
 
 #ifdef ATM_PVCEXT

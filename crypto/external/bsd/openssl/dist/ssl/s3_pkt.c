@@ -115,6 +115,7 @@
 #include "ssl_locl.h"
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
+#include <openssl/rand.h>
 
 static int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
 			 unsigned int len, int create_empty_fragment);
@@ -246,7 +247,8 @@ int ssl3_read_n(SSL *s, int n, int max, int extend)
 		if (i <= 0)
 			{
 			rb->left = left;
-			if (s->mode & SSL_MODE_RELEASE_BUFFERS)
+			if (s->mode & SSL_MODE_RELEASE_BUFFERS &&
+			    SSL_version(s) != DTLS1_VERSION && SSL_version(s) != DTLS1_BAD_VER)
 				if (len+left == 0)
 					ssl3_release_read_buffer(s);
 			return(i);
@@ -336,9 +338,9 @@ fprintf(stderr, "Record type=%d, Length=%d\n", rr->type, rr->length);
 			if (version != s->version)
 				{
 				SSLerr(SSL_F_SSL3_GET_RECORD,SSL_R_WRONG_VERSION_NUMBER);
-				/* Send back error using their
-				 * version number :-) */
-				s->version=version;
+                                if ((s->version & 0xFF00) == (version & 0xFF00))
+                                	/* Send back error using their minor version number :-) */
+					s->version = (unsigned short)version;
 				al=SSL_AD_PROTOCOL_VERSION;
 				goto f_err;
 				}
@@ -630,6 +632,7 @@ static int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
 	unsigned char *p,*plen;
 	int i,mac_size,clear=0;
 	int prefix_len=0;
+	int eivlen;
 	long align=0;
 	SSL3_RECORD *wr;
 	SSL3_BUFFER *wb=&(s->s3->wbuf);
@@ -662,10 +665,14 @@ static int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
 	if (	(sess == NULL) ||
 		(s->enc_write_ctx == NULL) ||
 		(EVP_MD_CTX_md(s->write_hash) == NULL))
+		{
+#if 1
+		clear=s->enc_write_ctx?0:1;	/* must be AEAD cipher */
+#else
 		clear=1;
-
-	if (clear)
+#endif
 		mac_size=0;
+		}
 	else
 		{
 		mac_size=EVP_MD_CTX_size(s->write_hash);
@@ -734,14 +741,39 @@ static int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
 	wr->type=type;
 
 	*(p++)=(s->version>>8);
-	*(p++)=s->version&0xff;
+	/* Some servers hang if iniatial client hello is larger than 256
+	 * bytes and record version number > TLS 1.0
+	 */
+	if (s->state == SSL3_ST_CW_CLNT_HELLO_B
+				&& TLS1_get_version(s) > TLS1_VERSION)
+		*(p++) = 0x1;
+	else
+		*(p++)=s->version&0xff;
 
 	/* field where we are to write out packet length */
 	plen=p; 
 	p+=2;
+	/* Explicit IV length, block ciphers and TLS version 1.1 or later */
+	if (s->enc_write_ctx && s->version >= TLS1_1_VERSION)
+		{
+		int mode = EVP_CIPHER_CTX_mode(s->enc_write_ctx);
+		if (mode == EVP_CIPH_CBC_MODE)
+			{
+			eivlen = EVP_CIPHER_CTX_iv_length(s->enc_write_ctx);
+			if (eivlen <= 1)
+				eivlen = 0;
+			}
+		/* Need explicit part of IV for GCM mode */
+		else if (mode == EVP_CIPH_GCM_MODE)
+			eivlen = EVP_GCM_TLS_EXPLICIT_IV_LEN;
+		else
+			eivlen = 0;
+		}
+	else 
+		eivlen = 0;
 
 	/* lets setup the record stuff. */
-	wr->data=p;
+	wr->data=p + eivlen;
 	wr->length=(int)len;
 	wr->input=(unsigned char *)buf;
 
@@ -769,11 +801,19 @@ static int do_ssl3_write(SSL *s, int type, const unsigned char *buf,
 
 	if (mac_size != 0)
 		{
-		if (s->method->ssl3_enc->mac(s,&(p[wr->length]),1) < 0)
+		if (s->method->ssl3_enc->mac(s,&(p[wr->length + eivlen]),1) < 0)
 			goto err;
 		wr->length+=mac_size;
-		wr->input=p;
-		wr->data=p;
+		}
+
+	wr->input=p;
+	wr->data=p;
+
+	if (eivlen)
+		{
+	/*	if (RAND_pseudo_bytes(p, eivlen) <= 0)
+			goto err; */
+		wr->length += eivlen;
 		}
 
 	/* ssl3_enc can only have an error on read */
@@ -847,7 +887,8 @@ int ssl3_write_pending(SSL *s, int type, const unsigned char *buf,
 			{
 			wb->left=0;
 			wb->offset+=i;
-			if (s->mode & SSL_MODE_RELEASE_BUFFERS)
+			if (s->mode & SSL_MODE_RELEASE_BUFFERS &&
+			    SSL_version(s) != DTLS1_VERSION && SSL_version(s) != DTLS1_BAD_VER)
 				ssl3_release_write_buffer(s);
 			s->rwstate=SSL_NOTHING;
 			return(s->s3->wpend_ret);
@@ -1041,6 +1082,19 @@ start:
 			dest = s->s3->alert_fragment;
 			dest_len = &s->s3->alert_fragment_len;
 			}
+#ifndef OPENSSL_NO_HEARTBEATS
+		else if (rr->type == TLS1_RT_HEARTBEAT)
+			{
+			tls1_process_heartbeat(s);
+
+			/* Exit and notify application to read again */
+			rr->length = 0;
+			s->rwstate=SSL_READING;
+			BIO_clear_retry_flags(SSL_get_rbio(s));
+			BIO_set_retry_read(SSL_get_rbio(s));
+			return(-1);
+			}
+#endif
 
 		if (dest_maxlen > 0)
 			{
@@ -1121,7 +1175,25 @@ start:
 		 * now try again to obtain the (application) data we were asked for */
 		goto start;
 		}
-
+	/* If we are a server and get a client hello when renegotiation isn't
+	 * allowed send back a no renegotiation alert and carry on.
+	 * WARNING: experimental code, needs reviewing (steve)
+	 */
+	if (s->server &&
+		SSL_is_init_finished(s) &&
+    		!s->s3->send_connection_binding &&
+		(s->version > SSL3_VERSION) &&
+		(s->s3->handshake_fragment_len >= 4) &&
+		(s->s3->handshake_fragment[0] == SSL3_MT_CLIENT_HELLO) &&
+		(s->session != NULL) && (s->session->cipher != NULL) &&
+		!(s->ctx->options & SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION))
+		
+		{
+		/*s->s3->handshake_fragment_len = 0;*/
+		rr->length = 0;
+		ssl3_send_alert(s,SSL3_AL_WARNING, SSL_AD_NO_RENEGOTIATION);
+		goto start;
+		}
 	if (s->s3->alert_fragment_len >= 2)
 		{
 		int alert_level = s->s3->alert_fragment[0];
@@ -1151,6 +1223,25 @@ start:
 				s->shutdown |= SSL_RECEIVED_SHUTDOWN;
 				return(0);
 				}
+			/* This is a warning but we receive it if we requested
+			 * renegotiation and the peer denied it. Terminate with
+			 * a fatal alert because if application tried to
+			 * renegotiatie it presumably had a good reason and
+			 * expects it to succeed.
+			 *
+			 * In future we might have a renegotiation where we
+			 * don't care if the peer refused it where we carry on.
+			 */
+			else if (alert_descr == SSL_AD_NO_RENEGOTIATION)
+				{
+				al = SSL_AD_HANDSHAKE_FAILURE;
+				SSLerr(SSL_F_SSL3_READ_BYTES,SSL_R_NO_RENEGOTIATION);
+				goto f_err;
+				}
+#ifdef SSL_AD_MISSING_SRP_USERNAME
+			if (alert_descr == SSL_AD_MISSING_SRP_USERNAME)
+				return(0);
+#endif
 			}
 		else if (alert_level == 2) /* fatal */
 			{
@@ -1229,6 +1320,7 @@ start:
 #else
 			s->state = s->server ? SSL_ST_ACCEPT : SSL_ST_CONNECT;
 #endif
+			s->renegotiate=1;
 			s->new_session=1;
 			}
 		i=s->handshake_func(s);
@@ -1262,8 +1354,10 @@ start:
 		{
 	default:
 #ifndef OPENSSL_NO_TLS
-		/* TLS just ignores unknown message types */
-		if (s->version == TLS1_VERSION)
+		/* TLS up to v1.1 just ignores unknown message types:
+		 * TLS v1.2 give an unexpected message alert.
+		 */
+		if (s->version >= TLS1_VERSION && s->version <= TLS1_1_VERSION)
 			{
 			rr->length = 0;
 			goto start;

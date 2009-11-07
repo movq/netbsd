@@ -1,4 +1,4 @@
-#	$NetBSD: M403,v 1.48 2009/03/06 20:31:47 joerg Exp $
+#	$NetBSD: M403,v 1.53 2011/11/22 21:24:59 tls Exp $
 #
 #	configuration file for MIPS Magnum 4000 system
 #
@@ -70,7 +70,6 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
@@ -78,7 +77,8 @@ file-system 	PROCFS		# /proc
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-options 	QUOTA		# FFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -190,8 +190,8 @@ wsmouse*	at pms?
 # disk/mass storage pseudo-devices
 pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	raid		4	# RAIDframe disk driver
-#pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device (ramdisk)
+#pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 
 # network pseudo-devices
@@ -212,7 +212,6 @@ pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port arc yet.
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 

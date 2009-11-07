@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_lfs.c,v 1.12 2009/11/05 14:17:07 pooka Exp $	*/
+/*	$NetBSD: rump_lfs.c,v 1.16 2010/03/03 17:37:01 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -32,6 +32,7 @@
 
 #include <err.h>
 #include <pthread.h>
+#include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -60,18 +61,24 @@ int
 main(int argc, char *argv[])
 {
 	struct ufs_args args;
-	char canon_dev[UKFS_PARTITION_MAXPATHLEN], canon_dir[MAXPATHLEN];
+	char canon_dev[UKFS_DEVICE_MAXPATHLEN], canon_dir[MAXPATHLEN];
 	char rawdev[MAXPATHLEN];
 	struct p2k_mount *p2m;
 	pthread_t cleanerthread;
-	int mntflags, part;
+	struct ukfs_part *part;
+	int mntflags;
 	int rv;
 
 	setprogname(argv[0]);
+	puffs_unmountonsignal(SIGINT, true);
+	puffs_unmountonsignal(SIGTERM, true);
 
-	UKFS_PARTITION_ARGVPROBE(part);
-	if (part != UKFS_PARTITION_NONE) {
-		errx(1, "lfs does not currently support embedded partitions");
+	if (argc >= 3) {
+		UKFS_DEVICE_ARGVPROBE(&part);
+		if (part != ukfs_part_none) {
+			errx(1, "lfs does not currently support "
+			    "embedded partitions");
+		}
 	}
 	mount_lfs_parseargs(argc, argv, &args, &mntflags, canon_dev, canon_dir);
 
@@ -101,6 +108,7 @@ main(int argc, char *argv[])
 	if (p2k_setup_diskfs(p2m, MOUNT_LFS, canon_dev, part, canon_dir,
 	    mntflags, &args, sizeof(args)) == -1)
 		err(1, "mount");
+	ukfs_part_release(part);
 
 #ifndef CLEANER_TESTING
 	if ((mntflags & MNT_RDONLY) == 0) {

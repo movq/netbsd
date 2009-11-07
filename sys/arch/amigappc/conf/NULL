@@ -1,4 +1,4 @@
-# $NetBSD: NULL,v 1.26 2009/07/21 09:49:15 phx Exp $
+# $NetBSD: NULL,v 1.33 2011/12/18 05:49:24 dholland Exp $
 #
 # NULL machine description file
 # 
@@ -7,7 +7,7 @@ include "arch/amigappc/conf/std.amigappc"
 
 #options 	INCLUDE_CONFIG_FILE     # embed config file in kernel binary
 
-#ident          "GENERIC-$Revision: 1.26 $"
+#ident          "GENERIC-$Revision: 1.33 $"
 
 maxusers	8
 
@@ -95,7 +95,6 @@ file-system 	ADOSFS		# AmigaDOS file system
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal file system (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
@@ -105,10 +104,11 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	FFS_EI		# FFS Endian Independant support
-#options 	WAPBL		# File system journaling support - Experimental
+#options 	FFS_EI		# FFS Endian Independent support
+#options 	WAPBL		# File system journaling support
 
-#options 	QUOTA		# User and group quotas in FFS
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	NFSSERVER	# Network File System server side code
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -302,6 +302,8 @@ ite0		at grf0			# terminal emulators for grfs
 #scsibus*	at mgnsc0
 #wesc0		at zbus0		# Warp Engine scsi
 #scsibus*	at wesc0
+#bppcsc0 	at zbus0		# BlizzardPPC 603e+ scsi
+#scsibus*	at bppcsc0
 #afsc0		at zbus0		# A4091 scsi
 #scsibus*	at afsc0
 #aftsc0		at mainbus0		# A4000T scsi
@@ -403,7 +405,7 @@ pseudo-device	loop			# loopback network interface
 #pseudo-device	agr			# IEEE 802.3ad link aggregation
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 
 pseudo-device	view		4	# views (needed for grfcc)
 pseudo-device	pty			# pseudo-terminals
@@ -427,7 +429,6 @@ pseudo-device	clockctl		# user control of clock subsystem
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
 
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 
 pseudo-device	ksyms			# /dev/ksyms (kernel symbols)

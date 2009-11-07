@@ -1,4 +1,4 @@
-/*	$NetBSD: gemvar.h,v 1.19 2009/07/27 18:10:53 dyoung Exp $ */
+/*	$NetBSD: gemvar.h,v 1.23.2.1 2012/07/05 17:59:12 riz Exp $ */
 
 /*
  *
@@ -33,14 +33,10 @@
 #define	_IF_GEMVAR_H
 
 
-#include "rnd.h"
-
 #include <sys/queue.h>
 #include <sys/callout.h>
 
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 /*
  * Misc. definitions for the Sun ``Gem'' Ethernet controller family driver.
@@ -134,6 +130,7 @@ struct gem_softc {
 	struct ethercom sc_ethercom;	/* ethernet common data */
 	struct mii_data	sc_mii;		/* MII media control */
 	struct callout	sc_tick_ch;	/* tick callout */
+	struct callout	sc_rx_watchdog;	/* RX watchdog callout */
 
 	/* The following bus handles are to be provided by the bus front-end */
 	bus_space_tag_t	sc_bustag;	/* bus tag */
@@ -216,9 +213,7 @@ struct gem_softc {
 	void	(*sc_hwreset)(struct gem_softc *);
 	void	(*sc_hwinit)(struct gem_softc *);
 
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 
 	struct evcnt sc_ev_intr;
 #ifdef GEM_COUNTERS
@@ -228,6 +223,10 @@ struct gem_softc {
 	struct evcnt sc_ev_rxfull;
 	struct evcnt sc_ev_rxhist[9];
 #endif
+
+	/* For use by the RX watchdog */
+	u_int32_t 	sc_rx_fifo_wr_ptr;
+	u_int32_t	sc_rx_fifo_rd_ptr;
 
 	enum gem_attach_stage	sc_att_stage;
 };
@@ -308,8 +307,8 @@ do {									\
 
 #ifdef _KERNEL
 bool	gem_shutdown(device_t, int);
-bool	gem_suspend(device_t PMF_FN_PROTO);
-bool	gem_resume(device_t PMF_FN_PROTO);
+bool	gem_suspend(device_t, const pmf_qual_t *);
+bool	gem_resume(device_t, const pmf_qual_t *);
 void	gem_attach(struct gem_softc *, const uint8_t *);
 int	gem_intr(void *);
 int	gem_detach(struct gem_softc *, int);

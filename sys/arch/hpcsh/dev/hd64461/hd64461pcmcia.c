@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461pcmcia.c,v 1.46 2009/04/05 00:56:20 uwe Exp $	*/
+/*	$NetBSD: hd64461pcmcia.c,v 1.49 2011/07/26 22:52:48 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.46 2009/04/05 00:56:20 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.49 2011/07/26 22:52:48 dyoung Exp $");
 
 #include "opt_hd64461pcmcia.h"
 
@@ -40,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.46 2009/04/05 00:56:20 uwe Exp $
 #include <sys/malloc.h>
 #include <sys/kthread.h>
 #include <sys/boot_flag.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
@@ -56,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.46 2009/04/05 00:56:20 uwe Exp $
 #include <hpcsh/dev/hd64461/hd64461gpioreg.h>
 #include <hpcsh/dev/hd64461/hd64461pcmciavar.h>
 #include <hpcsh/dev/hd64461/hd64461pcmciareg.h>
+
+#include <hpcsh/bus_util.h>	/* for _BUS_SPACE_WRITE(), et cetera */
 
 #include "locators.h"
 
@@ -416,8 +418,6 @@ hd64461pcmcia_attach_channel(struct hd64461pcmcia_softc *sc,
 
 	paa.paa_busname = "pcmcia";
 	paa.pch = (pcmcia_chipset_handle_t)ch;
-	paa.iobase = ch->ch_iobase;
-	paa.iosize = ch->ch_iosize;
 
 	ch->ch_pcmcia = config_found_sm_loc(parent, "pcmciabus", NULL, &paa,
 	    hd64461pcmcia_print, hd64461pcmcia_submatch);

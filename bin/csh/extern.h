@@ -1,4 +1,4 @@
-/* $NetBSD: extern.h,v 1.22 2007/12/24 16:11:50 perry Exp $ */
+/* $NetBSD: extern.h,v 1.24 2011/11/09 19:16:01 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,10 +42,10 @@
 int gethdir(Char *);
 void dosource(Char **, struct command *);
 __dead void exitstat(void);
-void goodbye(void);
+__dead void goodbye(void);
 void importpath(Char *);
 void initdesc(void);
-void pintr(int);
+__dead void pintr(int);
 __dead void pintr1(int);
 void printprompt(void);
 void process(int);
@@ -128,8 +128,8 @@ void doglob(Char **, struct command *);
 void dogoto(Char **, struct command *);
 void doif(Char **, struct command *);
 void dolimit(Char **, struct command *);
-void dologin(Char **, struct command *);
-void dologout(Char **, struct command *);
+__dead void dologin(Char **, struct command *);
+__dead void dologout(Char **, struct command *);
 void donohup(Char **, struct command *);
 void doonintr(Char **, struct command *);
 void doprintf(Char **, struct command *);
@@ -288,8 +288,8 @@ void plist(struct varent *);
  */
 void donice(Char **, struct command *);
 void dotime(Char **, struct command *);
-void prusage(FILE *, struct rusage *, struct rusage *, struct timeval *,
-             struct timeval *);
+void prusage(FILE *, struct rusage *, struct rusage *, struct timespec *,
+             struct timespec *);
 void ruadd(struct rusage *, struct rusage *);
 void settimes(void);
 void psecs(long);

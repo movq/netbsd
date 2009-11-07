@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.90 2009/11/07 07:27:47 cegger Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.98 2011/10/08 08:49:07 nakayama Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,32 +50,33 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.90 2009/11/07 07:27:47 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.98 2011/10/08 08:49:07 nakayama Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/vnode.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/trap.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /*
  * Map a user I/O request into kernel virtual address space.
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().   
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	struct pmap *upmap, *kpmap;
@@ -107,6 +108,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 		len -= PAGE_SIZE;
 	} while (len);
 	pmap_update(pmap_kernel());
+
+	return 0;
 }
 
 /*
@@ -161,7 +164,7 @@ void setfunc_trampoline(void);
 inline void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	struct pcb *npcb = &l->l_addr->u_pcb;
+	struct pcb *npcb = lwp_getpcb(l);
 	struct rwindow *rp;
 
 	rp = (struct rwindow *)((u_long)npcb + TOPFRAMEOFF);
@@ -194,8 +197,8 @@ void lwp_trampoline(void);
 void
 cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size_t stacksize, void (*func)(void *), void *arg)
 {
-	struct pcb *opcb = &l1->l_addr->u_pcb;
-	struct pcb *npcb = &l2->l_addr->u_pcb;
+	struct pcb *opcb = lwp_getpcb(l1);
+	struct pcb *npcb = lwp_getpcb(l2);
 	struct trapframe *tf2;
 	struct rwindow *rp;
 
@@ -224,7 +227,7 @@ cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size
 		opcb->pcb_cwp = getcwp();
 	}
 #ifdef DIAGNOSTIC
-	else if (l1 != &lwp0)	/* XXX is this valid? */
+	else if (l1 != &lwp0)
 		panic("cpu_lwp_fork: curlwp");
 #endif
 #ifdef DEBUG
@@ -241,9 +244,6 @@ cpu_lwp_fork(register struct lwp *l1, register struct lwp *l2, void *stack, size
 		    sizeof(struct fpstate64));
 	} else
 		l2->l_md.md_fpstate = NULL;
-
-	if (l1->l_proc->p_flag & PK_32)
-		l2->l_proc->p_flag |= PK_32;
 
 	/*
 	 * Setup (kernel) stack frame that will by-pass the child
@@ -325,7 +325,7 @@ fpusave_lwp(struct lwp *l, bool save)
 
 		spincount = 0;
 		while (ci->ci_fplwp == l) {
-			membar_sync();
+			membar_Sync();
 			spincount++;
 			if (spincount > 10000000)
 				panic("fpusave_lwp ipi didn't");
@@ -354,4 +354,14 @@ cpu_lwp_free2(struct lwp *l)
 
 	if ((fs = l->l_md.md_fpstate) != NULL)
 		pool_cache_put(fpstate_cache, fs);
+}
+
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+	struct trapframe *tf = l->l_md.md_tf;
+
+	tf->tf_global[7] = (uintptr_t)addr;
+
+	return 0;
 }

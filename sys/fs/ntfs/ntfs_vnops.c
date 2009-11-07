@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vnops.c,v 1.45 2009/07/03 21:17:41 elad Exp $	*/
+/*	$NetBSD: ntfs_vnops.c,v 1.49.10.2 2012/08/12 12:59:50 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.45 2009/07/03 21:17:41 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.49.10.2 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -215,7 +215,7 @@ ntfs_inactive(void *v)
 	dprintf(("ntfs_inactive: vnode: %p, ntnode: %llu\n", vp,
 	    (unsigned long long)ip->i_number));
 
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	/* XXX since we don't support any filesystem changes
 	 * right now, nothing more needs to be done
@@ -246,8 +246,6 @@ ntfs_reclaim(void *v)
 	if ((error = ntfs_ntget(ip)) != 0)
 		return (error);
 
-	/* Purge old data structures associated with the inode. */
-	cache_purge(vp);
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);
 		ip->i_devvp = NULL;
@@ -690,7 +688,7 @@ ntfs_lookup(void *v)
 		dprintf(("ntfs_lookup: faking . directory in %llu\n",
 		    (unsigned long long)dip->i_number));
 
-		VREF(dvp);
+		vref(dvp);
 		*ap->a_vpp = dvp;
 		error = 0;
 	} else if (cnp->cn_flags & ISDOTDOT) {
@@ -699,7 +697,7 @@ ntfs_lookup(void *v)
 		dprintf(("ntfs_lookup: faking .. directory in %llu\n",
 		    (unsigned long long)dip->i_number));
 
-		VOP_UNLOCK(dvp, 0);
+		VOP_UNLOCK(dvp);
 		error = ntfs_ntvattrget(ntmp, dip, NTFS_A_NAME, NULL, 0, &vap);
 		if (error) {
 			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
@@ -726,10 +724,9 @@ ntfs_lookup(void *v)
 		    (unsigned long long)VTONT(*ap->a_vpp)->i_number));
 	}
 
-	if (cnp->cn_flags & MAKEENTRY)
-		cache_enter(dvp, *ap->a_vpp, cnp);
+	cache_enter(dvp, *ap->a_vpp, cnp);
 
-	return (error);
+	return error;
 }
 
 /*
@@ -749,16 +746,12 @@ ntfs_fsync(void *v)
 		off_t offhi;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
-	int wait;
 
 	if (ap->a_flags & FSYNC_CACHE) {
 		return EOPNOTSUPP;
 	}
 
-	wait = (ap->a_flags & FSYNC_WAIT) != 0;
-	vflushbuf(vp, wait);
-
-	return 0;
+	return vflushbuf(vp, ap->a_flags);
 }
 
 /*

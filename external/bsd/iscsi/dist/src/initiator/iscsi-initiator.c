@@ -163,12 +163,14 @@ read_capacity(uint64_t target, uint32_t lun, uint32_t *maxlba, uint32_t *blockle
 		iscsi_err(__FILE__, __LINE__, "READ_CAPACITY failed (status %#x)\n", args.status);
 		return -1;
 	}
-	*maxlba = ISCSI_NTOHL(*((uint32_t *) (data)));
-	*blocklen = ISCSI_NTOHL(*((uint32_t *) (data + 4)));
+	memcpy(maxlba, data, sizeof(*maxlba));
+	*maxlba = ISCSI_NTOHL(*maxlba);
 	if (*maxlba == 0) {
 		iscsi_err(__FILE__, __LINE__, "Device returned Maximum LBA of zero\n");
 		return -1;
 	}
+	memcpy(blocklen, data + 4, sizeof(*blocklen));
+	*blocklen = ISCSI_NTOHL(*blocklen);
 	if (*blocklen % 2) {
 		iscsi_err(__FILE__, __LINE__, "Device returned strange block len: %u\n", *blocklen);
 		return -1;
@@ -546,6 +548,7 @@ main(int argc, char **argv)
 	int			discover;
 	int			cc;
 	int			i;
+	uint32_t		max_targets;
 
 	(void) memset(&tinfo, 0x0, sizeof(tinfo));
 	iscsi_initiator_set_defaults(&ini);
@@ -555,6 +558,8 @@ main(int argc, char **argv)
 	(void) stat("/etc/hosts", &sti.st);
 	devtype = 'f';
 	iscsi_initiator_setvar(&ini, "address family", "4");
+	max_targets = iscsi_initiator_get_max_targets();
+	
 	while ((i = getopt(argc, argv, "46a:bcd:Dfh:p:t:u:v:V")) != -1) {
 		switch(i) {
 		case '4':
@@ -618,9 +623,20 @@ main(int argc, char **argv)
 					*argv, i);
 		}
 	}
-	if (iscsi_initiator_getvar(&ini, "user") == NULL) {
-		iscsi_err(__FILE__, __LINE__, "user must be specified with -u");
+	if (!strcmp(iscsi_initiator_getvar(&ini, "auth type"), "chap") &&
+	    iscsi_initiator_getvar(&ini, "user") == NULL) {
+		iscsi_err(__FILE__, __LINE__, "user must be specified with "
+		    "-u if using CHAP authentication\n");
 		exit(EXIT_FAILURE);
+	}
+
+	if (strcmp(iscsi_initiator_getvar(&ini, "auth type"), "none") &&
+	    iscsi_initiator_getvar(&ini, "user") != NULL) {
+		/* 
+		 * For backwards compatibility, default to using CHAP
+		 * if username given
+		 */
+		iscsi_initiator_setvar(&ini, "auth type", "chap");
 	}
 
 	if (iscsi_initiator_start(&ini) == -1) {
@@ -650,16 +666,19 @@ main(int argc, char **argv)
                 exit(EXIT_SUCCESS);
         }
 
-	if (all_targets.c/2 > CONFIG_INITIATOR_NUM_TARGETS) {
+	if (all_targets.c/2 > max_targets) {
 		(void) fprintf(stderr,
 			"CONFIG_INITIATOR_NUM_TARGETS in initiator.h "
 			"is too small.  %d targets available, "
 			"only %d configurable.\n",
-			all_targets.c/2, CONFIG_INITIATOR_NUM_TARGETS);
+			all_targets.c/2, max_targets);
+		(void) fprintf(stderr,
+			"To increase this value, libiscsi will have be "
+			"recompiled.\n");
 		(void) fprintf(stderr,
 			"Truncating number of targets to %d.\n",
-			CONFIG_INITIATOR_NUM_TARGETS);
-		all_targets.c = CONFIG_INITIATOR_NUM_TARGETS;
+			max_targets);
+		all_targets.c = 2 * max_targets;
 	}
 
 	sti.st.st_ino = 0x15c51;
@@ -690,8 +709,22 @@ main(int argc, char **argv)
 		}
 
 		/* stuff size into st.st_size */
-		(void) read_capacity(u, 0, &lbac, &blocksize);
-		sti.st.st_size = ((uint64_t)lbac + 1) * blocksize;
+		{
+			int retry = 5;
+			while (retry > 0) {
+				if (read_capacity(u, 0, &lbac, &blocksize) == 0)
+					break;
+				retry--;
+				iscsi_warn(__FILE__, __LINE__,
+				    "read_capacity failed - retrying %d\n", retry);
+				sleep(1);
+			}
+			if (retry == 0) {
+				iscsi_err(__FILE__, __LINE__, "read_capacity failed - giving up\n");
+				break;
+			}
+		}
+		sti.st.st_size = (off_t)(((uint64_t)lbac + 1) * blocksize);
 		sti.target = u;
 
 		tv.v[tv.c].host = strdup(tinfo.name);
@@ -718,36 +751,31 @@ main(int argc, char **argv)
 		tv.v[tv.c].serial = strdup((char *)&data[4]);
 
 		/* create the tree using virtdir routines */
-		cc = snprintf(name, sizeof(name), "/%s/%s", host, colon);
+		cc = snprintf(name, sizeof(name), "/%s", colon);
 		virtdir_add(&iscsi, name, cc, 'd', name, cc);
-		cc = snprintf(name, sizeof(name), "/%s/%s/storage", host,
-				colon);
+		cc = snprintf(name, sizeof(name), "/%s/storage", colon);
 		virtdir_add(&iscsi, name, cc, devtype, (void *)&sti,
 				sizeof(sti));
-		cc = snprintf(name, sizeof(name), "/%s/%s/hostname", host,
-				colon);
+		cc = snprintf(name, sizeof(name), "/%s/hostname", colon);
 		virtdir_add(&iscsi, name, cc, 'l', tinfo.name,
 				strlen(tinfo.name));
-		cc = snprintf(name, sizeof(name), "/%s/%s/ip", host, colon);
+		cc = snprintf(name, sizeof(name), "/%s/ip", colon);
 		virtdir_add(&iscsi, name, cc, 'l', tinfo.ip, strlen(tinfo.ip));
-		cc = snprintf(name, sizeof(name), "/%s/%s/targetname", host,
-				colon);
+		cc = snprintf(name, sizeof(name), "/%s/targetname", colon);
 		virtdir_add(&iscsi, name, cc, 'l', tinfo.TargetName,
 				strlen(tinfo.TargetName));
-		cc = snprintf(name, sizeof(name), "/%s/%s/vendor", host, colon);
+		cc = snprintf(name, sizeof(name), "/%s/vendor", colon);
 		virtdir_add(&iscsi, name, cc, 'l', tv.v[tv.c].vendor,
 				strlen(tv.v[tv.c].vendor));
-		cc = snprintf(name, sizeof(name), "/%s/%s/product", host,
-				colon);
+		cc = snprintf(name, sizeof(name), "/%s/product", colon);
 		virtdir_add(&iscsi, name, cc, 'l', tv.v[tv.c].product,
 				strlen(tv.v[tv.c].product));
-		cc = snprintf(name, sizeof(name), "/%s/%s/version", host,
-				colon);
+		cc = snprintf(name, sizeof(name), "/%s/version", colon);
 		virtdir_add(&iscsi, name, cc, 'l', tv.v[tv.c].version,
 				strlen(tv.v[tv.c].version));
 		if (tv.v[tv.c].serial[0] && tv.v[tv.c].serial[0] != ' ') {
-			cc = snprintf(name, sizeof(name), "/%s/%s/serial",
-				host, colon);
+			cc = snprintf(name, sizeof(name), "/%s/serial",
+				colon);
 			virtdir_add(&iscsi, name, cc, 'l', tv.v[tv.c].serial,
 				strlen(tv.v[tv.c].serial));
 		}

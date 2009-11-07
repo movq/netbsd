@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_cpu.c,v 1.42 2009/04/19 14:11:37 ad Exp $	*/
+/*	$NetBSD: kern_cpu.c,v 1.55 2012/01/29 22:55:40 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008, 2009, 2010, 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -56,7 +56,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.42 2009/04/19 14:11:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.55 2012/01/29 22:55:40 rmind Exp $");
+
+#include "opt_cpu_ucode.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,6 +81,17 @@ __KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.42 2009/04/19 14:11:37 ad Exp $");
 
 #include <uvm/uvm_extern.h>
 
+/*
+ * If the port has stated that cpu_data is the first thing in cpu_info,
+ * verify that the claim is true. This will prevent them from getting out
+ * of sync.
+ */
+#ifdef __HAVE_CPU_DATA_FIRST
+CTASSERT(offsetof(struct cpu_info, ci_data) == 0);
+#else
+CTASSERT(offsetof(struct cpu_info, ci_data) != 0);
+#endif
+
 void	cpuctlattach(int);
 
 static void	cpu_xc_online(struct cpu_info *);
@@ -92,24 +105,59 @@ const struct cdevsw cpuctl_cdevsw = {
 	D_OTHER | D_MPSAFE
 };
 
-kmutex_t cpu_lock;
-int	ncpu;
-int	ncpuonline;
-bool	mp_online;
-struct	cpuqueue cpu_queue = CIRCLEQ_HEAD_INITIALIZER(cpu_queue);
+kmutex_t	cpu_lock		__cacheline_aligned;
+int		ncpu			__read_mostly;
+int		ncpuonline		__read_mostly;
+bool		mp_online		__read_mostly;
 
-static struct cpu_info *cpu_infos[MAXCPUS];
+/* Note: set on mi_cpu_attach() and idle_loop(). */
+kcpuset_t *	kcpuset_attached	__read_mostly	= NULL;
+kcpuset_t *	kcpuset_running		__read_mostly	= NULL;
+
+struct cpuqueue	cpu_queue		__cacheline_aligned
+    = CIRCLEQ_HEAD_INITIALIZER(cpu_queue);
+
+static struct cpu_info **cpu_infos	__read_mostly;
+
+/*
+ * mi_cpu_init: early initialisation of MI CPU related structures.
+ *
+ * Note: may not block and memory allocator is not yet available.
+ */
+void
+mi_cpu_init(void)
+{
+
+	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
+
+	kcpuset_create(&kcpuset_attached, true);
+	kcpuset_create(&kcpuset_running, true);
+	kcpuset_set(kcpuset_running, 0);
+}
 
 int
 mi_cpu_attach(struct cpu_info *ci)
 {
 	int error;
 
+	KASSERT(maxcpus > 0);
+
 	ci->ci_index = ncpu;
-	cpu_infos[cpu_index(ci)] = ci;
+	kcpuset_set(kcpuset_attached, cpu_index(ci));
+
 	CIRCLEQ_INSERT_TAIL(&cpu_queue, ci, ci_data.cpu_qchain);
 	TAILQ_INIT(&ci->ci_data.cpu_ld_locks);
 	__cpu_simple_lock_init(&ci->ci_data.cpu_ld_lock);
+
+	/* This is useful for eg, per-cpu evcnt */
+	snprintf(ci->ci_data.cpu_name, sizeof(ci->ci_data.cpu_name), "cpu%d",
+	    cpu_index(ci));
+
+	if (__predict_false(cpu_infos == NULL)) {
+		cpu_infos =
+		    kmem_zalloc(sizeof(cpu_infos[0]) * maxcpus, KM_SLEEP);
+	}
+	cpu_infos[cpu_index(ci)] = ci;
 
 	sched_cpuattach(ci);
 
@@ -142,6 +190,7 @@ void
 cpuctlattach(int dummy)
 {
 
+	KASSERT(cpu_infos != NULL);
 }
 
 int
@@ -165,7 +214,7 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		    NULL);
 		if (error != 0)
 			break;
-		if (cs->cs_id >= __arraycount(cpu_infos) ||
+		if (cs->cs_id >= maxcpus ||
 		    (ci = cpu_lookup(cs->cs_id)) == NULL) {
 			error = ESRCH;
 			break;
@@ -180,7 +229,7 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		id = cs->cs_id;
 		memset(cs, 0, sizeof(*cs));
 		cs->cs_id = id;
-		if (cs->cs_id >= __arraycount(cpu_infos) ||
+		if (cs->cs_id >= maxcpus ||
 		    (ci = cpu_lookup(id)) == NULL) {
 			error = ESRCH;
 			break;
@@ -197,6 +246,7 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		cs->cs_lastmodhi = (int32_t)
 		    (ci->ci_schedstate.spc_lastmod >> 32);
 		cs->cs_intrcnt = cpu_intr_count(ci) + 1;
+		cs->cs_hwid = ci->ci_cpuid;
 		break;
 
 	case IOC_CPU_MAPID:
@@ -215,6 +265,21 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		*(int *)data = ncpu;
 		break;
 
+#ifdef CPU_UCODE
+	case IOC_CPU_UCODE_GET_VERSION:
+		error = cpu_ucode_get_version(data);
+		break;
+
+	case IOC_CPU_UCODE_APPLY:
+		error = kauth_authorize_machdep(l->l_cred,
+		    KAUTH_MACHDEP_CPU_UCODE_APPLY,
+		    NULL, NULL, NULL, NULL);
+		if (error != 0)
+			break;
+		error = cpu_ucode_apply(data);
+		break;
+#endif
+
 	default:
 		error = ENOTTY;
 		break;
@@ -227,9 +292,16 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 struct cpu_info *
 cpu_lookup(u_int idx)
 {
-	struct cpu_info *ci = cpu_infos[idx];
+	struct cpu_info *ci;
 
-	KASSERT(idx < __arraycount(cpu_infos));
+	KASSERT(idx < maxcpus);
+
+	if (__predict_false(cpu_infos == NULL)) {
+		KASSERT(idx == 0);
+		return curcpu();
+	}
+
+	ci = cpu_infos[idx];
 	KASSERT(ci == NULL || cpu_index(ci) == idx);
 
 	return ci;
@@ -274,17 +346,16 @@ cpu_xc_offline(struct cpu_info *ci)
 			lwp_unlock(l);
 			continue;
 		}
-		/* Normal case - no affinity */
-		if ((l->l_flag & LW_AFFINITY) == 0) {
+		/* Regular case - no affinity. */
+		if (l->l_affinity == NULL) {
 			lwp_migrate(l, target_ci);
 			continue;
 		}
-		/* Affinity is set, find an online CPU in the set */
-		KASSERT(l->l_affinity != NULL);
+		/* Affinity is set, find an online CPU in the set. */
 		for (CPU_INFO_FOREACH(cii, mci)) {
 			mspc = &mci->ci_schedstate;
 			if ((mspc->spc_flags & SPCF_OFFLINE) == 0 &&
-			    kcpuset_isset(cpu_index(mci), l->l_affinity))
+			    kcpuset_isset(l->l_affinity, cpu_index(mci)))
 				break;
 		}
 		if (mci == NULL) {
@@ -471,3 +542,46 @@ cpu_softintr_p(void)
 
 	return (curlwp->l_pflag & LP_INTR) != 0;
 }
+
+#ifdef CPU_UCODE
+int
+cpu_ucode_load(struct cpu_ucode_softc *sc, const char *fwname)
+{
+	firmware_handle_t fwh;
+	int error;
+
+	if (sc->sc_blob != NULL) {
+		firmware_free(sc->sc_blob, 0);
+		sc->sc_blob = NULL;
+		sc->sc_blobsize = 0;
+	}
+
+	error = cpu_ucode_md_open(&fwh, fwname);
+	if (error != 0) {
+		aprint_error("ucode: firmware_open failed: %i\n", error);
+		goto err0;
+	}
+
+	sc->sc_blobsize = firmware_get_size(fwh);
+	sc->sc_blob = firmware_malloc(sc->sc_blobsize);
+	if (sc->sc_blob == NULL) {
+		error = ENOMEM;
+		firmware_close(fwh);
+		goto err0;
+	}
+
+	error = firmware_read(fwh, 0, sc->sc_blob, sc->sc_blobsize);
+	firmware_close(fwh);
+	if (error != 0)
+		goto err1;
+
+	return 0;
+
+err1:
+	firmware_free(sc->sc_blob, 0);
+	sc->sc_blob = NULL;
+	sc->sc_blobsize = 0;
+err0:
+	return error;
+}
+#endif

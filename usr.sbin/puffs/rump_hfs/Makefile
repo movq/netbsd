@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.2 2008/08/05 20:57:46 pooka Exp $
+#	$NetBSD: Makefile,v 1.4 2010/01/25 15:55:36 pooka Exp $
 #
 
 MOUNTNAME=	hfs
 
-LDADD+=		-lrumpfs_hfs
 ISRUMP=		# rump roast
+RUMP_DISKFS=
 
 .include <bsd.prog.mk>

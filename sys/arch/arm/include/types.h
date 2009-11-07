@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.16 2008/01/20 18:09:05 joerg Exp $	*/
+/*	$NetBSD: types.h,v 1.21 2011/11/18 16:10:02 joerg Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,20 +46,27 @@ typedef struct label_t {	/* Used by setjmp & longjmp */
          
 /* NB: This should probably be if defined(_KERNEL) */
 #if defined(_NETBSD_SOURCE)
-typedef	unsigned long	vm_offset_t;
-typedef	unsigned long	vm_size_t;
+typedef	unsigned long	vm_offset_t;	/* depreciated */
+typedef	unsigned long	vm_size_t;	/* depreciated */
 
-typedef vm_offset_t	paddr_t;
-typedef vm_size_t	psize_t;
-typedef vm_offset_t	vaddr_t;
-typedef vm_size_t	vsize_t;
+typedef unsigned long	paddr_t;
+typedef unsigned long	psize_t;
+typedef unsigned long	vaddr_t;
+typedef unsigned long	vsize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 #endif
+
+typedef int		register_t;
+#define	PRIxREGISTER	"x"
 
 typedef unsigned long	pmc_evid_t;
 #define PMC_INVALID_EVID	(-1)
 typedef unsigned long	pmc_ctr_t;
-
-typedef int		register_t;
 
 /*
  * This should have always been an 8-bit type, but since it's been exposed
@@ -75,7 +82,12 @@ typedef	volatile int		__cpu_simple_lock_t;
 #define	__SIMPLELOCK_UNLOCKED	0
 
 #define	__HAVE_SYSCALL_INTERN
+#define	__HAVE_NEW_STYLE_BUS_H
 #define	__HAVE_MINIMAL_EMUL
+#define __HAVE_CPU_DATA_FIRST
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE_TLS_VARIANT_I
 
 #if defined(_KERNEL)
 #define	__HAVE_RAS

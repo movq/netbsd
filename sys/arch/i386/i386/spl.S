@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.33 2009/11/03 05:23:27 dyoung Exp $	*/
+/*	$NetBSD: spl.S,v 1.36 2011/03/18 15:18:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.33 2009/11/03 05:23:27 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.36 2011/03/18 15:18:16 joerg Exp $");
 
 #include "opt_vm86.h"
 #include "opt_ddb.h"
@@ -123,14 +123,14 @@ ENTRY(cx8_spllower)
 	movl	CPUVAR(ILEVEL),%edx
 	cmpl	%edx,%ecx			/* new level is lower? */
 	pushl	%ebx
-	jae,pn	1f
+	jae	1f
 0:
 	movl	CPUVAR(IPENDING),%eax
 	testl	%eax,CPUVAR(IUNMASK)(,%ecx,4)	/* deferred interrupts? */
 	movl	%eax,%ebx
-	jnz,pn	2f
+	jnz	2f
 	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz,pn	0b
+	jnz	0b
 1:
 	popl	%ebx
 	ret
@@ -157,7 +157,7 @@ END(cx8_spllower)
  * It is important that the bit scan instruction is bsr, it will get
  * the highest 2 bits (currently the IPI and clock handlers) first,
  * to avoid deadlocks where one CPU sends an IPI, another one is at
- * splipi() and defers it, lands in here via splx(), and handles
+ * splhigh() and defers it, lands in here via splx(), and handles
  * a lower-prio one first, which needs to take the kernel lock -->
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
@@ -379,8 +379,8 @@ IDTVEC(softintr)
 	movl	CPUVAR(CURLWP),%esi
 	movl	IS_LWP(%eax),%edi	/* switch to handler LWP */
 	movl	%edi,CPUVAR(CURLWP)
-	movl	L_ADDR(%edi),%edx
-	movl	L_ADDR(%esi),%ecx
+	movl	L_PCB(%edi),%edx
+	movl	L_PCB(%esi),%ecx
 	movl	%esp,PCB_ESP(%ecx)
 	movl	%ebp,PCB_EBP(%ecx)
 	movl	PCB_ESP0(%edx),%esp	/* onto new stack */
@@ -390,7 +390,7 @@ IDTVEC(softintr)
 	call	_C_LABEL(softint_dispatch)/* run handlers */
 	addl	$8,%esp
 	cli
-	movl	L_ADDR(%esi),%ecx
+	movl	L_PCB(%esi),%ecx
 	movl	PCB_ESP(%ecx),%esp
 	xchgl	%esi,CPUVAR(CURLWP)	/* must be globally visible */
 	popl	%edi			/* unwind switchframe */

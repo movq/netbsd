@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.296 2009/11/07 07:27:46 cegger Exp $ */
+/*	$NetBSD: machdep.c,v 1.316.2.1 2012/05/21 15:25:59 riz Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.296 2009/11/07 07:27:46 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.316.2.1 2012/05/21 15:25:59 riz Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_sunos.h"
@@ -83,9 +83,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.296 2009/11/07 07:27:46 cegger Exp $")
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/extent.h>
 #include <sys/savar.h>
+#include <sys/cpu.h>
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/reboot.h>
@@ -103,6 +103,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.296 2009/11/07 07:27:46 cegger Exp $")
 #include <sys/ucontext.h>
 #include <sys/simplelock.h>
 #include <sys/module.h>
+#include <sys/mutex.h>
+
+#include <dev/mm.h>
 
 #include <uvm/uvm.h>		/* we use uvm.kernel_object */
 
@@ -115,13 +118,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.296 2009/11/07 07:27:46 cegger Exp $")
 
 #define _SPARC_BUS_DMA_PRIVATE
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/frame.h>
 #include <machine/cpu.h>
+#include <machine/pcb.h>
 #include <machine/pmap.h>
 #include <machine/oldmon.h>
 #include <machine/bsd_openprom.h>
 #include <machine/bootinfo.h>
+#include <machine/eeprom.h>
 
 #include <sparc/sparc/asm.h>
 #include <sparc/sparc/cache.h>
@@ -135,12 +140,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.296 2009/11/07 07:27:46 cegger Exp $")
 #include <sparc/dev/power.h>
 #endif
 
-struct vm_map *mb_map = NULL;
 extern paddr_t avail_end;
 
 int	physmem;
 
-struct simplelock fpulock = SIMPLELOCK_INITIALIZER;
+kmutex_t fpu_mtx;
 
 /*
  * safepri is a safe priority for sleep to set for a spin-wait
@@ -167,7 +171,7 @@ cpu_startup(void)
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 #endif
-	vaddr_t minaddr, maxaddr;
+	struct pcb *pcb;
 	vsize_t size;
 	paddr_t pa;
 	char pbuf[9];
@@ -177,8 +181,9 @@ cpu_startup(void)
 #endif
 
 	/* XXX */
-	if (lwp0.l_addr && lwp0.l_addr->u_pcb.pcb_psr == 0)
-		lwp0.l_addr->u_pcb.pcb_psr = getpsr();
+	pcb = lwp_getpcb(&lwp0);
+	if (pcb && pcb->pcb_psr == 0)
+		pcb->pcb_psr = getpsr();
 
 	/*
 	 * Re-map the message buffer from its temporary address
@@ -311,7 +316,6 @@ cpu_startup(void)
 #endif
 	}
 
-	minaddr = 0;
 	if (CPU_ISSUN4 || CPU_ISSUN4C) {
 		/*
 		 * Allocate DMA map for 24-bit devices (le, ie)
@@ -319,16 +323,10 @@ cpu_startup(void)
 		 */
 		dvmamap24 = extent_create("dvmamap24",
 					  D24_DVMA_BASE, D24_DVMA_END,
-					  M_DEVBUF, 0, 0, EX_NOWAIT);
+					  0, 0, EX_NOWAIT);
 		if (dvmamap24 == NULL)
 			panic("unable to allocate DVMA map");
 	}
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-        mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -337,6 +335,8 @@ cpu_startup(void)
 	printf("avail memory = %s\n", pbuf);
 
 	pmap_redzone();
+
+	mutex_init(&fpu_mtx, MUTEX_DEFAULT, IPL_SCHED);
 }
 
 /*
@@ -346,7 +346,7 @@ cpu_startup(void)
  */
 /* ARGSUSED */
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
 	struct trapframe *tf = l->l_md.md_tf;
 	struct fpstate *fs;
@@ -359,7 +359,7 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	 * Set the registers to 0 except for:
 	 *	%o6: stack pointer, built in exec())
 	 *	%psr: (retain CWP and PSR_S bits)
-	 *	%g1: address of p->p_psstr (used by crt0)
+	 *	%g1: p->p_psstrp (used by crt0)
 	 *	%pc,%npc: entry point of program
 	 */
 	psr = tf->tf_psr & (PSR_S | PSR_CWP);
@@ -380,18 +380,18 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 				savefpstate(fs);
 #if defined(MULTIPROCESSOR)
 			else
-				XCALL1(savefpstate, fs, 1 << cpi->ci_cpuid);
+				XCALL1(ipi_savefpstate, fs, 1 << cpi->ci_cpuid);
 #endif
 			cpi->fplwp = NULL;
 		}
 		l->l_md.md_fpu = NULL;
 		FPU_UNLOCK(s);
-		free((void *)fs, M_SUBPROC);
+		kmem_free(fs, sizeof(struct fpstate));
 		l->l_md.md_fpstate = NULL;
 	}
 	memset((void *)tf, 0, sizeof *tf);
 	tf->tf_psr = psr;
-	tf->tf_global[1] = (int)l->l_proc->p_psstr;
+	tf->tf_global[1] = l->l_proc->p_psstrp;
 	tf->tf_pc = pack->ep_entry & ~3;
 	tf->tf_npc = tf->tf_pc + 4;
 	stack -= sizeof(struct rwindow);
@@ -710,6 +710,23 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	return;
 }
 
+int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mc)
+{
+	const __greg_t *gr = mc->__gregs;
+
+	/*
+ 	 * Only the icc bits in the psr are used, so it need not be
+ 	 * verified.  pc and npc must be multiples of 4.  This is all
+ 	 * that is required; if it holds, just do it.
+	 */
+	if (((gr[_REG_PC] | gr[_REG_nPC]) & 3) != 0 ||
+	    gr[_REG_PC] == 0 || gr[_REG_nPC] == 0)
+		return EINVAL;
+
+	return 0;
+}
+
 /*
  * Set to mcontext specified.
  * Return to previous pc and psl as specified by
@@ -725,6 +742,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	struct trapframe *tf;
 	const __greg_t *r = mcp->__gregs;
 	struct proc *p = l->l_proc;
+	int error;
 #ifdef FPU_CONTEXT
 	__fpregset_t *f = &mcp->__fpregs;
 	struct fpstate *fps = l->l_md.md_fpstate;
@@ -743,18 +761,13 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 #endif
 
 	if (flags & _UC_CPU) {
+		/* Validate */
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
+
 		/* Restore register context. */
 		tf = (struct trapframe *)l->l_md.md_tf;
-
-		/*
-		 * Only the icc bits in the psr are used, so it need not be
-		 * verified.  pc and npc must be multiples of 4.  This is all
-		 * that is required; if it holds, just do it.
-		 */
-		if (((r[_REG_PC] | r[_REG_nPC]) & 3) != 0) {
-			printf("pc or npc are not multiples of 4!\n");
-			return (EINVAL);
-		}
 
 		/* take only psr ICC field */
 		tf->tf_psr = (tf->tf_psr & ~PSR_ICC) |
@@ -780,6 +793,8 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_out[5] = r[_REG_O5];
 		tf->tf_out[6] = r[_REG_O6];
 		tf->tf_out[7] = r[_REG_O7];
+
+		lwp_setprivate(l, (void *)(uintptr_t)r[_REG_G7]);
 	}
 
 #ifdef FPU_CONTEXT
@@ -936,16 +951,11 @@ long	dumplo = 0;
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks, dumpblks;
 
 	if (dumpdev == NODEV)
 		return;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL || bdev->d_psize == NULL)
-		return;
-
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 
 	dumpblks = ctod(physmem) + pmap_dumpsize();
 	if (dumpblks > (nblks - ctod(1)))
@@ -1017,7 +1027,7 @@ dumpsys(void)
 	printf("\ndumping to dev %u,%u offset %ld\n",
 	    major(dumpdev), minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -1103,10 +1113,9 @@ stackdump(void)
 	printf("Frame pointer is at %p\n", fp);
 	printf("Call traceback:\n");
 	while (fp && ((u_long)fp >> PGSHIFT) == ((u_long)sfp >> PGSHIFT)) {
-		printf("  pc = 0x%x  args = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp = %p\n",
+		printf("  pc = 0x%x  args = (0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp = %p\n",
 		    fp->fr_pc, fp->fr_arg[0], fp->fr_arg[1], fp->fr_arg[2],
-		    fp->fr_arg[3], fp->fr_arg[4], fp->fr_arg[5], fp->fr_arg[6],
-		    fp->fr_fp);
+		    fp->fr_arg[3], fp->fr_arg[4], fp->fr_arg[5], fp->fr_fp);
 		fp = fp->fr_fp;
 	}
 }
@@ -1122,18 +1131,17 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 void
 oldmon_w_trace(u_long va)
 {
+	struct cpu_info * const ci = curcpu();
 	u_long stop;
 	struct frame *fp;
 
-	if (curlwp)
-		printf("curlwp = %p, pid %d\n",
-			curlwp, curproc->p_pid);
-	else
-		printf("no curlwp\n");
+	printf("curlwp = %p, pid %d\n", curlwp, curproc->p_pid);
 
-	printf("uvm: swtch %d, trap %d, sys %d, intr %d, soft %d, faults %d\n",
-	    uvmexp.swtch, uvmexp.traps, uvmexp.syscalls, uvmexp.intrs,
-		uvmexp.softs, uvmexp.faults);
+	printf("uvm: cpu%u: swtch %"PRIu64", trap %"PRIu64", sys %"PRIu64", "
+	    "intr %"PRIu64", soft %"PRIu64", faults %"PRIu64"\n",
+	    cpu_index(ci), ci->ci_data.cpu_nswtch, ci->ci_data.cpu_ntrap,
+	    ci->ci_data.cpu_nsyscall, ci->ci_data.cpu_nintr,
+	    ci->ci_data.cpu_nsoft, ci->ci_data.cpu_nfault);
 	write_user_windows();
 
 #define round_up(x) (( (x) + (PAGE_SIZE-1) ) & (~(PAGE_SIZE-1)) )
@@ -1143,9 +1151,9 @@ oldmon_w_trace(u_long va)
 	printf("stop at 0x%lx\n", stop);
 	fp = (struct frame *) va;
 	while (round_up((u_long) fp) == stop) {
-		printf("  0x%x(0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp %p\n", fp->fr_pc,
+		printf("  0x%x(0x%x, 0x%x, 0x%x, 0x%x, 0x%x, 0x%x) fp %p\n", fp->fr_pc,
 		    fp->fr_arg[0], fp->fr_arg[1], fp->fr_arg[2], fp->fr_arg[3],
-		    fp->fr_arg[4], fp->fr_arg[5], fp->fr_arg[6], fp->fr_fp);
+		    fp->fr_arg[4], fp->fr_arg[5], fp->fr_fp);
 		fp = fp->fr_fp;
 		if (fp == NULL)
 			break;
@@ -1181,7 +1189,6 @@ int
 ldcontrolb(void *addr)
 {
 	struct pcb *xpcb;
-	extern struct user *proc0paddr;
 	u_long saveonfault;
 	int res;
 	int s;
@@ -1192,10 +1199,7 @@ ldcontrolb(void *addr)
 	}
 
 	s = splhigh();
-	if (curlwp == NULL)
-		xpcb = (struct pcb *)proc0paddr;
-	else
-		xpcb = &curlwp->l_addr->u_pcb;
+	xpcb = lwp_getpcb(curlwp);
 
 	saveonfault = (u_long)xpcb->pcb_onfault;
         res = xldcontrolb(addr, xpcb);
@@ -1867,6 +1871,950 @@ static void	*sparc_mainbus_intr_establish(bus_space_tag_t, int, int,
 static void     sparc_bus_barrier(bus_space_tag_t, bus_space_handle_t,
 					bus_size_t, bus_size_t, int);
 
+int
+bus_space_map(
+	bus_space_tag_t	t,
+	bus_addr_t	a,
+	bus_size_t	s,
+	int		f,
+	bus_space_handle_t *hp)
+{
+	return (*t->sparc_bus_map)(t, a, s, f, (vaddr_t)0, hp);
+}
+
+int
+bus_space_map2(
+	bus_space_tag_t	t,
+	bus_addr_t	a,
+	bus_size_t	s,
+	int		f,
+	vaddr_t		v,
+	bus_space_handle_t *hp)
+{
+	return (*t->sparc_bus_map)(t, a, s, f, v, hp);
+}
+
+void
+bus_space_unmap(
+	bus_space_tag_t t,
+	bus_space_handle_t h,
+	bus_size_t	s)
+{
+	(*t->sparc_bus_unmap)(t, h, s);
+}
+
+int
+bus_space_subregion(
+	bus_space_tag_t	t,
+	bus_space_handle_t h,
+	bus_size_t	o,
+	bus_size_t	s,
+	bus_space_handle_t *hp)
+{
+	return (*t->sparc_bus_subregion)(t, h, o, s, hp);
+}
+
+paddr_t
+bus_space_mmap(
+	bus_space_tag_t	t,
+	bus_addr_t	a,
+	off_t		o,
+	int		p,
+	int		f)
+{
+	return (*t->sparc_bus_mmap)(t, a, o, p, f);
+}
+
+void *
+bus_intr_establish(
+	bus_space_tag_t t,
+	int	p,
+	int	l,
+	int	(*h)(void *),
+	void	*a)
+{
+	return (*t->sparc_intr_establish)(t, p, l, h, a, NULL);
+}
+
+void *
+bus_intr_establish2(
+	bus_space_tag_t t,
+	int	p,
+	int	l,
+	int	(*h)(void *),
+	void	*a,
+	void	(*v)(void))
+{
+	return (*t->sparc_intr_establish)(t, p, l, h, a, v);
+}
+
+void
+bus_space_barrier(
+	bus_space_tag_t t,
+	bus_space_handle_t h,
+	bus_size_t o,
+	bus_size_t s,
+	int f)
+{
+	(*t->sparc_bus_barrier)(t, h, o, s, f);
+}
+
+void
+bus_space_write_multi_stream_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_2_real(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_stream_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_4_real(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_stream_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_8_real(t, h, o, *a++);
+}
+
+
+/*
+ *	void bus_space_set_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_size_t count);
+ *
+ * Write the 1, 2, 4, or 8 byte value `val' to bus space described
+ * by tag/handle/offset `count' times.
+ */
+void
+bus_space_set_multi_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint8_t		v,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_1(t, h, o, v);
+}
+
+void
+bus_space_set_multi_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		v,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_2(t, h, o, v);
+}
+
+void
+bus_space_set_multi_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		v,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_4(t, h, o, v);
+}
+
+void
+bus_space_set_multi_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		v,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_8(t, h, o, v);
+}
+
+
+/*
+ *	void bus_space_read_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_read_region_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint8_t			*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o++)
+		*a = bus_space_read_1(t, h, o);
+}
+
+void
+bus_space_read_region_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint16_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=2)
+		*a = bus_space_read_2(t, h, o);
+}
+
+void
+bus_space_read_region_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint32_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=4)
+		*a = bus_space_read_4(t, h, o);
+}
+
+void
+bus_space_read_region_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint64_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=8)
+		*a = bus_space_read_8(t, h, o);
+}
+
+/*
+ *	void bus_space_write_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_write_region_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint8_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o++)
+		bus_space_write_1(t, h, o, *a);
+}
+
+void
+bus_space_write_region_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=2)
+		bus_space_write_2(t, h, o, *a);
+}
+
+void
+bus_space_write_region_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=4)
+		bus_space_write_4(t, h, o, *a);
+}
+
+void
+bus_space_write_region_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=8)
+		bus_space_write_8(t, h, o, *a);
+}
+
+
+/*
+ *	void bus_space_set_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_set_region_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint8_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o++)
+		bus_space_write_1(t, h, o, v);
+}
+
+void
+bus_space_set_region_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o+=2)
+		bus_space_write_2(t, h, o, v);
+}
+
+void
+bus_space_set_region_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o+=4)
+		bus_space_write_4(t, h, o, v);
+}
+
+void
+bus_space_set_region_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o+=8)
+		bus_space_write_8(t, h, o, v);
+}
+
+
+/*
+ *	void bus_space_copy_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh1, bus_size_t off1,
+ *	    bus_space_handle_t bsh2, bus_size_t off2,
+ *	    bus_size_t count);
+ *
+ * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
+ * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
+ */
+void
+bus_space_copy_region_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1++, o2++)
+	    bus_space_write_1(t, h1, o1, bus_space_read_1(t, h2, o2));
+}
+
+void
+bus_space_copy_region_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1+=2, o2+=2)
+	    bus_space_write_2(t, h1, o1, bus_space_read_2(t, h2, o2));
+}
+
+void
+bus_space_copy_region_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1+=4, o2+=4)
+	    bus_space_write_4(t, h1, o1, bus_space_read_4(t, h2, o2));
+}
+
+void
+bus_space_copy_region_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1+=8, o2+=8)
+	    bus_space_write_8(t, h1, o1, bus_space_read_8(t, h2, o2));
+}
+
+/*
+ *	void bus_space_read_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_read_region_stream_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint8_t			*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o++)
+		*a = bus_space_read_stream_1(t, h, o);
+}
+void
+bus_space_read_region_stream_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint16_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=2)
+		*a = bus_space_read_stream_2(t, h, o);
+ }
+void
+bus_space_read_region_stream_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint32_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=4)
+		*a = bus_space_read_stream_4(t, h, o);
+}
+void
+bus_space_read_region_stream_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint64_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=8)
+		*a = bus_space_read_stream_8(t, h, o);
+}
+
+/*
+ *	void bus_space_write_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_write_region_stream_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint8_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o++)
+		bus_space_write_stream_1(t, h, o, *a);
+}
+
+void
+bus_space_write_region_stream_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=2)
+		bus_space_write_stream_2(t, h, o, *a);
+}
+
+void
+bus_space_write_region_stream_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=4)
+		bus_space_write_stream_4(t, h, o, *a);
+}
+
+void
+bus_space_write_region_stream_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		*a,
+	bus_size_t		c)
+{
+	for (; c; a++, c--, o+=8)
+		bus_space_write_stream_8(t, h, o, *a);
+}
+
+
+/*
+ *	void bus_space_set_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_set_region_stream_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint8_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o++)
+		bus_space_write_stream_1(t, h, o, v);
+}
+
+void
+bus_space_set_region_stream_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o+=2)
+		bus_space_write_stream_2(t, h, o, v);
+}
+
+void
+bus_space_set_region_stream_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o+=4)
+		bus_space_write_stream_4(t, h, o, v);
+}
+
+void
+bus_space_set_region_stream_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		v,
+	bus_size_t		c)
+{
+	for (; c; c--, o+=8)
+		bus_space_write_stream_8(t, h, o, v);
+}
+
+/*
+ *	void bus_space_copy_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh1, bus_size_t off1,
+ *	    bus_space_handle_t bsh2, bus_size_t off2,
+ *	    bus_size_t count);
+ *
+ * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
+ * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
+ */
+
+void
+bus_space_copy_region_stream_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1++, o2++)
+	    bus_space_write_stream_1(t, h1, o1, bus_space_read_stream_1(t, h2, o2));
+}
+
+void
+bus_space_copy_region_stream_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1+=2, o2+=2)
+	    bus_space_write_stream_2(t, h1, o1, bus_space_read_stream_2(t, h2, o2));
+}
+
+void
+bus_space_copy_region_stream_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1+=4, o2+=4)
+	    bus_space_write_stream_4(t, h1, o1, bus_space_read_stream_4(t, h2, o2));
+}
+
+void
+bus_space_copy_region_stream_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h1,
+	bus_size_t		o1,
+	bus_space_handle_t	h2,
+	bus_size_t		o2,
+	bus_size_t		c)
+{
+	for (; c; c--, o1+=8, o2+=8)
+	    bus_space_write_stream_8(t, h1, o1, bus_space_read_8(t, h2, o2));
+}
+
+void
+bus_space_write_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint8_t			v)
+{
+	(*t->sparc_write_1)(t, h, o, v);
+}
+
+void
+bus_space_write_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint16_t		v)
+{
+	(*t->sparc_write_2)(t, h, o, v);
+}
+
+void
+bus_space_write_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint32_t		v)
+{
+	(*t->sparc_write_4)(t, h, o, v);
+}
+
+void
+bus_space_write_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint64_t		v)
+{
+	(*t->sparc_write_8)(t, h, o, v);
+}
+
+#if __SLIM_SPARC_BUS_SPACE
+
+void
+bus_space_write_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint8_t			v)
+{
+	__insn_barrier();
+	bus_space_write_1_real(t, h, o, v);
+}
+
+void
+bus_space_write_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint16_t		v)
+{
+	__insn_barrier();
+	bus_space_write_2_real(t, h, o, v);
+}
+
+void
+bus_space_write_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint32_t		v)
+{
+	__insn_barrier();
+	bus_space_write_4_real(
+}
+
+void
+bus_space_write_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint64_t		v)
+{
+	__insn_barrier();
+	bus_space_write_8_real(t, h, o, v);
+}
+
+#endif /* __SLIM_SPARC_BUS_SPACE */
+
+uint8_t
+bus_space_read_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	return (*t->sparc_read_1)(t, h, o);
+}
+
+uint16_t
+bus_space_read_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	return (*t->sparc_read_2)(t, h, o);
+}
+
+uint32_t
+bus_space_read_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	return (*t->sparc_read_4)(t, h, o);
+}
+
+uint64_t
+bus_space_read_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	return (*t->sparc_read_8)(t, h, o);
+}
+
+#if __SLIM_SPARC_BUS_SPACE
+uint8_t
+bus_space_read_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	__insn_barrier();
+	return bus_space_read_1_real(t, h, o);
+}
+
+uint16_t
+bus_space_read_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	__insn_barrier();
+	return bus_space_read_2_real(t, h, o);
+}
+
+uint32_t
+bus_space_read_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	__insn_barrier();
+	return bus_space_read_4_real(t, h, o);
+}
+
+uint64_t
+bus_space_read_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o)
+{
+	__insn_barrier();
+	return bus_space_read_8_real(t, h, o);
+}
+
+#endif /* __SLIM_SPARC_BUS_SPACE */
+
+void
+bus_space_read_multi_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint8_t			*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_1(t, h, o);
+}
+
+void
+bus_space_read_multi_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint16_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_2(t, h, o);
+}
+
+void
+bus_space_read_multi_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint32_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_4(t, h, o);
+}
+
+void
+bus_space_read_multi_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint64_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_8(t, h, o);
+}
+
+/*
+ *	void bus_space_read_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ * Read `count' 1, 2, 4, or 8 byte quantities from bus space
+ * described by tag/handle/offset and copy into buffer provided.
+ */
+void
+bus_space_read_multi_stream_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint16_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_2_real(t, h, o);
+}
+
+void
+bus_space_read_multi_stream_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint32_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_4_real(t, h, o);
+}
+
+void
+bus_space_read_multi_stream_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	uint64_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_8_real(t, h, o);
+}
+
+/*
+ *	void bus_space_write_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    const u_intN_t *addr, bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
+ * provided to bus space described by tag/handle/offset.
+ */
+void
+bus_space_write_multi_1(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint8_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_1(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_2(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint16_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_2(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_4(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint32_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_4(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_8(
+	bus_space_tag_t		t,
+	bus_space_handle_t	h,
+	bus_size_t		o,
+	const uint64_t		*a,
+	bus_size_t		c)
+{
+	while (c-- > 0)
+		bus_space_write_8(t, h, o, *a++);
+}
+
 /*
  * Allocate a new bus tag and have it inherit the methods of the
  * given parent.
@@ -2104,7 +3052,7 @@ sparc_mainbus_intr_establish(bus_space_tag_t t, int pil, int level,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, level, ih, fastvec);
+	intr_establish(pil, level, ih, fastvec, false);
 	return (ih);
 }
 
@@ -2197,3 +3145,39 @@ struct sparc_bus_space_tag mainbus_space_tag = {
 	sparc_bus_space_write_4,	/* bus_space_write_4 */
 	sparc_bus_space_write_8		/* bus_space_write_8 */
 };
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return pmap_pa_exists(pa) ? 0 : EFAULT;
+}
+
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+	extern vaddr_t prom_vstart;
+	extern vaddr_t prom_vend;
+	const vaddr_t v = (vaddr_t)ptr;
+
+	*handled = (v >= MSGBUF_VA && v < MSGBUF_VA + PAGE_SIZE) ||
+	    (v >= prom_vstart && v < prom_vend && (prot & VM_PROT_WRITE) == 0);
+	return 0;
+}
+
+int
+mm_md_readwrite(dev_t dev, struct uio *uio)
+{
+
+	switch (minor(dev)) {
+#if defined(SUN4)
+	case DEV_EEPROM:
+		if (cputyp == CPU_SUN4)
+			return eeprom_uio(uio);
+		else
+#endif
+		return ENXIO;
+	default:
+		return ENXIO;
+	}
+}

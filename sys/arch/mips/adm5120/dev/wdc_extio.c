@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_extio.c,v 1.3 2009/10/19 23:19:38 rmind Exp $ */
+/*	$NetBSD: wdc_extio.c,v 1.5 2011/07/10 23:13:23 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 David Young.  All rights reserved.
@@ -61,19 +61,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_extio.c,v 1.3 2009/10/19 23:19:38 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_extio.c,v 1.5 2011/07/10 23:13:23 matt Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/malloc.h>
-#include <sys/kernel.h>
+#include <sys/bus.h>
 #include <sys/callout.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/cpu.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/systm.h>
 
 #include <mips/adm5120/include/adm5120_extiovar.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_int.h,v 1.72 2009/05/17 14:49:00 ad Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.82 2012/01/17 20:34:57 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -37,6 +37,8 @@
 #ifndef _LIB_PTHREAD_INT_H
 #define _LIB_PTHREAD_INT_H
 
+#include <sys/tls.h>
+
 /* #define PTHREAD__DEBUG */
 #define ERRORCHECK
 
@@ -52,6 +54,7 @@
 
 #include <lwp.h>
 #include <signal.h>
+#include <limits.h>
 
 #ifdef __GNUC__
 #define	PTHREAD_HIDE	__attribute__ ((visibility("hidden")))
@@ -59,7 +62,6 @@
 #define	PTHREAD_HIDE	/* nothing */
 #endif
 
-#define PTHREAD_KEYS_MAX 	256
 #define	PTHREAD__UNPARK_MAX	32
 
 /*
@@ -92,6 +94,9 @@ struct pthread_lock_ops {
 
 struct	__pthread_st {
 	pthread_t	pt_self;	/* Must be first. */
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	struct tls_tcb	*pt_tls;	/* Thread Local Storage area */
+#endif
 	unsigned int	pt_magic;	/* Magic number */
 	int		pt_state;	/* running, blocked, etc. */
 	pthread_mutex_t	pt_lock;	/* lock on state */
@@ -107,7 +112,7 @@ struct	__pthread_st {
 	pthread_mutex_t	*pt_droplock;	/* Drop this lock if cancelled */
 	pthread_cond_t	pt_joiners;	/* Threads waiting to join. */
 	void		*(*pt_func)(void *);/* Function to call at start. */
-	void		*pt_arg;	/* Argumen to pass at start. */
+	void		*pt_arg;	/* Argument to pass at start. */
 
 	/* Threads to defer waking, usually until pthread_mutex_unlock(). */
 	lwpid_t		pt_waiters[PTHREAD__UNPARK_MAX];
@@ -249,14 +254,20 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
 	_INITCONTEXT_U_MD(ucp)						\
 	} while (/*CONSTCOND*/0)
 
-/* Stack location of pointer to a particular thread */
-#define pthread__id(sp) \
-	((pthread_t) (((vaddr_t)(sp)) & pthread__threadmask))
 
-#ifdef PTHREAD__HAVE_THREADREG
-#define	pthread__self()		pthread__threadreg_get()
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+static inline pthread_t __constfunc
+pthread__self(void)
+{
+#ifdef __HAVE___LWP_GETTCB_FAST
+	struct tls_tcb * const tcb = __lwp_gettcb_fast();
 #else
-#define pthread__self() 	(pthread__id(pthread__sp()))
+	struct tls_tcb * const tcb = __lwp_getprivate_fast();
+#endif
+	return (pthread_t)tcb->tcb_pthread;
+}
+#else
+#error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
 #endif
 
 #define pthread__abort()						\
@@ -275,12 +286,12 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
         } while (/*CONSTCOND*/0)
 
 void	pthread__destroy_tsd(pthread_t) PTHREAD_HIDE;
-void	pthread__assertfunc(const char *, int, const char *, const char *)
+__dead void	pthread__assertfunc(const char *, int, const char *, const char *)
 			    PTHREAD_HIDE;
 void	pthread__errorfunc(const char *, int, const char *, const char *)
 			   PTHREAD_HIDE;
 char	*pthread__getenv(const char *) PTHREAD_HIDE;
-void	pthread__cancelled(void) PTHREAD_HIDE;
+__dead void	pthread__cancelled(void) PTHREAD_HIDE;
 void	pthread__mutex_deferwake(pthread_t, pthread_mutex_t *) PTHREAD_HIDE;
 int	pthread__checkpri(int) PTHREAD_HIDE;
 

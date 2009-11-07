@@ -1,5 +1,5 @@
 .\"	$OpenBSD: crypto.9,v 1.25 2003/07/11 13:47:41 jmc Exp $
-.\"	$NetBSD: opencrypto.9,v 1.7 2009/05/04 19:40:02 wiz Exp $
+.\"	$NetBSD: opencrypto.9,v 1.12 2011/09/16 22:27:36 jym Exp $
 .\"
 .\" The author of this man page is Angelos D. Keromytis (angelos@cis.upenn.edu)
 .\"
@@ -16,7 +16,7 @@
 .\" MERCHANTABILITY OF THIS SOFTWARE OR ITS FITNESS FOR ANY PARTICULAR
 .\" PURPOSE.
 .\"
-.Dd December 20, 2003
+.Dd September 17, 2011
 .Dt OPENCRYPTO 9
 .Os
 .Sh NAME
@@ -105,7 +105,7 @@ struct crparam {
 
 struct cryptkop {
 	TAILQ_ENTRY(cryptkop) krp_next;
-        u_int              krp_op;         /* ie. CRK_MOD_EXP or other */
+        u_int              krp_op;         /* i.e. CRK_MOD_EXP or other */
         u_int              krp_status;     /* return status */
         u_short            krp_iparams;    /* # of input parameters */
         u_short            krp_oparams;    /* # of output parameters */
@@ -177,16 +177,35 @@ CRYPTO_DES_CBC
 CRYPTO_3DES_CBC
 CRYPTO_BLF_CBC
 CRYPTO_CAST_CBC
+CRYPTO_CAMELLIA_CBC
 CRYPTO_SKIPJACK_CBC
-CRYPTO_MD5_HMAC
-CRYPTO_SHA1_HMAC
-CRYPTO_RIPEMD160_HMAC
-CRYPTO_MD5_KPDK
-CRYPTO_SHA1_KPDK
-CRYPTO_AES_CBC
 CRYPTO_ARC4
+CRYPTO_AES_CBC
+CRYPTO_AES_CTR
+CRYPTO_AES_GCM_16
+CRYPTO_AES_GMAC
+CRYPTO_AES_128_GMAC
+CRYPTO_AES_192_GMAC
+CRYPTO_AES_256_GMAC
+CRYPTO_AES_XCBC_MAC_96
 CRYPTO_MD5
+CRYPTO_MD5_HMAC
+CRYPTO_MD5_HMAC_96
+CRYPTO_MD5_KPDK
+CRYPTO_NULL_CBC
+CRYPTO_NULL_HMAC
 CRYPTO_SHA1
+CRYPTO_SHA1_HMAC
+CRYPTO_SHA1_HMAC_96
+CRYPTO_SHA1_KPDK
+CRYPTO_SHA2_256_HMAC
+CRYPTO_SHA2_384_HMAC
+CRYPTO_SHA2_512_HMAC
+CRYPTO_RIPEMD160_HMAC
+CRYPTO_RIPEMD160_HMAC_96
+CRYPTO_DEFLATE_COMP
+CRYPTO_DEFLATE_COMP_NOGROW
+CRYPTO_GZIP_COMP
 .Ed
 .Pp
 .It Fa cri_klen
@@ -324,7 +343,8 @@ decrypting (subject to
 For MAC algorithms, this is where the result of the keyed hash will be
 inserted.
 .It Fa crd_flags
-The following flags are defined:
+For adjusting general operation from userland,
+the following flags are defined:
 .Bl -tag -width CRD_F_IV_EXPLICIT
 .It Dv CRD_F_ENCRYPT
 For encryption algorithms, this bit is set when encryption is required
@@ -337,8 +357,6 @@ value will be ignored and no IV will be written in the buffer.
 Otherwise, the IV used to encrypt the packet will be written
 at the location pointed to by
 .Fa crd_inject .
-The IV length is assumed to be equal to the blocksize of the
-encryption algorithm.
 Some applications that do special
 .Dq IV cooking ,
 such as the half-IV mode in
@@ -429,6 +447,28 @@ Identifier specifying which low-level driver is being used.
 .It Fa krp_callback
 Callback called on completion of a keying operation.
 .El
+.Pp
+The following sysctl entries exist to adjust
+the behaviour of the system from userland:
+.Bl -tag -width kern.cryptodevallowsoft
+.It kern.usercrypto
+Allow (1) or forbid (0) userland access to
+.Pa /dev/crypto .
+.It kern.userasymcrypto
+Allow (1) or forbid (0) userland access to
+do asymmetric crypto requests.
+.It kern.cryptodevallowsoft
+Enable/disable access to hardware versus software operations:
+.Bl -tag -width xxx
+.It \*[Lt] 0
+Force userlevel requests to use software operations, always.
+.It = 0
+Use hardware if present, grant userlevel requests for non-accelerated
+operations (handling the latter in software).
+.It \*[Gt] 0
+Allow user requests only for operations which are hardware-accelerated.
+.El
+.El
 .Sh DRIVER-SIDE API
 The
 .Fn crypto_get_driverid ,
@@ -511,7 +551,7 @@ The
 .Fa hint
 argument can be set to
 .Dv CRYPTO_HINT_MORE
-the there will be more request right after this request.
+when there will be more request right after this request.
 When the request is completed, or an error is detected, the
 .Fn process
 routine should invoke
@@ -559,9 +599,11 @@ The callback is provided with an error code in case of failure, in the
 .Fa crp_etype
 field.
 .Sh FILES
-.Bl -tag -width sys/crypto/crypto.c
-.It Pa sys/crypto/crypto.c
+.Bl -tag -width sys/opencrypto/crypto.c
+.It Pa sys/opencrypto/crypto.c
 most of the framework code
+.It Pa sys/crypto
+crypto algorithm implementations
 .El
 .Sh SEE ALSO
 .Xr ipsec 4 ,

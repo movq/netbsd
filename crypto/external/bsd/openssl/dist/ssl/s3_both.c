@@ -166,6 +166,23 @@ int ssl3_send_finished(SSL *s, int a, int b, const char *sender, int slen)
 		p+=i;
 		l=i;
 
+                /* Copy the finished so we can use it for
+                   renegotiation checks */
+                if(s->type == SSL_ST_CONNECT)
+                        {
+                         OPENSSL_assert(i <= EVP_MAX_MD_SIZE);
+                         memcpy(s->s3->previous_client_finished, 
+                             s->s3->tmp.finish_md, i);
+                         s->s3->previous_client_finished_len=i;
+                        }
+                else
+                        {
+                        OPENSSL_assert(i <= EVP_MAX_MD_SIZE);
+                        memcpy(s->s3->previous_server_finished, 
+                            s->s3->tmp.finish_md, i);
+                        s->s3->previous_server_finished_len=i;
+                        }
+
 #ifdef OPENSSL_SYS_WIN16
 		/* MSVC 1.5 does not clear the top bytes of the word unless
 		 * I do this.
@@ -185,15 +202,38 @@ int ssl3_send_finished(SSL *s, int a, int b, const char *sender, int slen)
 	return(ssl3_do_write(s,SSL3_RT_HANDSHAKE));
 	}
 
+#ifndef OPENSSL_NO_NEXTPROTONEG
+/* ssl3_take_mac calculates the Finished MAC for the handshakes messages seen to far. */
+static void ssl3_take_mac(SSL *s) {
+	const char *sender;
+	int slen;
+
+	if (s->state & SSL_ST_CONNECT)
+		{
+		sender=s->method->ssl3_enc->server_finished_label;
+		slen=s->method->ssl3_enc->server_finished_label_len;
+		}
+	else
+		{
+		sender=s->method->ssl3_enc->client_finished_label;
+		slen=s->method->ssl3_enc->client_finished_label_len;
+		}
+
+	s->s3->tmp.peer_finish_md_len = s->method->ssl3_enc->final_finish_mac(s,
+		sender,slen,s->s3->tmp.peer_finish_md);
+}
+#endif
+
 int ssl3_get_finished(SSL *s, int a, int b)
 	{
 	int al,i,ok;
 	long n;
 	unsigned char *p;
 
-	/* the mac has already been generated when we received the
-	 * change cipher spec message and is in s->s3->tmp.peer_finish_md
-	 */ 
+#ifdef OPENSSL_NO_NEXTPROTONEG
+	/* the mac has already been generated when we received the change
+	 * cipher spec message and is in s->s3->tmp.peer_finish_md. */
+#endif
 
 	n=s->method->ssl_get_message(s,
 		a,
@@ -229,6 +269,23 @@ int ssl3_get_finished(SSL *s, int a, int b)
 		SSLerr(SSL_F_SSL3_GET_FINISHED,SSL_R_DIGEST_CHECK_FAILED);
 		goto f_err;
 		}
+
+        /* Copy the finished so we can use it for
+           renegotiation checks */
+        if(s->type == SSL_ST_ACCEPT)
+                {
+                OPENSSL_assert(i <= EVP_MAX_MD_SIZE);
+                memcpy(s->s3->previous_client_finished, 
+                    s->s3->tmp.peer_finish_md, i);
+                s->s3->previous_client_finished_len=i;
+                }
+        else
+                {
+                OPENSSL_assert(i <= EVP_MAX_MD_SIZE);
+                memcpy(s->s3->previous_server_finished, 
+                    s->s3->tmp.peer_finish_md, i);
+                s->s3->previous_server_finished_len=i;
+                }
 
 	return(1);
 f_err:
@@ -318,6 +375,8 @@ unsigned long ssl3_output_cert_chain(SSL *s, X509 *x)
 				return(0);
 				}
 			X509_verify_cert(&xs_ctx);
+			/* Don't leave errors in the queue */
+			ERR_clear_error();
 			for (i=0; i < sk_X509_num(xs_ctx.chain); i++)
 				{
 				x = sk_X509_value(xs_ctx.chain, i);
@@ -478,6 +537,13 @@ long ssl3_get_message(SSL *s, int st1, int stn, int mt, long max, int *ok)
 		s->init_num += i;
 		n -= i;
 		}
+#ifndef OPENSSL_NO_NEXTPROTONEG
+	/* If receiving Finished, record MAC of prior handshake messages for
+	 * Finished verification. */
+	if (*s->init_buf->data == SSL3_MT_FINISHED)
+		ssl3_take_mac(s);
+#endif
+	/* Feed this message into MAC computation. */
 	ssl3_finish_mac(s, (unsigned char *)s->init_buf->data, s->init_num + 4);
 	if (s->msg_callback)
 		s->msg_callback(0, s->version, SSL3_RT_HANDSHAKE, s->init_buf->data, (size_t)s->init_num + 4, s, s->msg_callback_arg);
@@ -666,7 +732,12 @@ freelist_insert(SSL_CTX *ctx, int for_read, size_t sz, void *mem)
 int ssl3_setup_read_buffer(SSL *s)
 	{
 	unsigned char *p;
-	size_t len,align=0;
+	size_t len,align=0,headerlen;
+	
+	if (SSL_version(s) == DTLS1_VERSION || SSL_version(s) == DTLS1_BAD_VER)
+		headerlen = DTLS1_RT_HEADER_LENGTH;
+	else
+		headerlen = SSL3_RT_HEADER_LENGTH;
 
 #if defined(SSL3_ALIGN_PAYLOAD) && SSL3_ALIGN_PAYLOAD!=0
 	align = (-SSL3_RT_HEADER_LENGTH)&(SSL3_ALIGN_PAYLOAD-1);
@@ -676,7 +747,7 @@ int ssl3_setup_read_buffer(SSL *s)
 		{
 		len = SSL3_RT_MAX_PLAIN_LENGTH
 			+ SSL3_RT_MAX_ENCRYPTED_OVERHEAD
-			+ SSL3_RT_HEADER_LENGTH + align;
+			+ headerlen + align;
 		if (s->options & SSL_OP_MICROSOFT_BIG_SSLV3_BUFFER)
 			{
 			s->s3->init_extra = 1;
@@ -703,7 +774,12 @@ err:
 int ssl3_setup_write_buffer(SSL *s)
 	{
 	unsigned char *p;
-	size_t len,align=0;
+	size_t len,align=0,headerlen;
+
+	if (SSL_version(s) == DTLS1_VERSION || SSL_version(s) == DTLS1_BAD_VER)
+		headerlen = DTLS1_RT_HEADER_LENGTH + 1;
+	else
+		headerlen = SSL3_RT_HEADER_LENGTH;
 
 #if defined(SSL3_ALIGN_PAYLOAD) && SSL3_ALIGN_PAYLOAD!=0
 	align = (-SSL3_RT_HEADER_LENGTH)&(SSL3_ALIGN_PAYLOAD-1);
@@ -713,13 +789,13 @@ int ssl3_setup_write_buffer(SSL *s)
 		{
 		len = s->max_send_fragment
 			+ SSL3_RT_SEND_MAX_ENCRYPTED_OVERHEAD
-			+ SSL3_RT_HEADER_LENGTH + align;
+			+ headerlen + align;
 #ifndef OPENSSL_NO_COMP
 		if (!(s->options & SSL_OP_NO_COMPRESSION))
 			len += SSL3_RT_MAX_COMPRESSED_OVERHEAD;
 #endif
 		if (!(s->options & SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS))
-			len += SSL3_RT_HEADER_LENGTH + align
+			len += headerlen + align
 				+ SSL3_RT_SEND_MAX_ENCRYPTED_OVERHEAD;
 
 		if ((p=freelist_extract(s->ctx, 0, len)) == NULL)

@@ -1,6 +1,7 @@
-/*	$NetBSD: clock.c,v 1.50 2009/09/11 19:43:08 phx Exp $ */
+/*	$NetBSD: clock.c,v 1.53 2011/06/03 00:52:22 matt Exp $ */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -36,48 +37,9 @@
  *
  *	@(#)clock.c	7.6 (Berkeley) 5/7/91
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: clock.c 1.18 91/01/21$
- *
- *	@(#)clock.c	7.6 (Berkeley) 5/7/91
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.50 2009/09/11 19:43:08 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.53 2011/06/03 00:52:22 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -100,26 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.50 2009/09/11 19:43:08 phx Exp $");
 #include <sys/PROF.h>
 #endif
 
-/* the clocks run at NTSC: 715.909kHz or PAL: 709.379kHz.
-   We're using a 100 Hz clock. */
-int amiga_clk_interval;
-int eclockfreq;
-unsigned int fast_delay_limit;
-struct CIA *clockcia;
-
-static u_int clk_getcounter(struct timecounter *);
-
-static struct timecounter clk_timecounter = {
-	clk_getcounter,	/* get_timecount */
-	0,		/* no poll_pps */
-	~0u,		/* counter_mask */
-	0,		/* frequency */
-	"clock",	/* name, overriden later */
-	100,		/* quality */
-	NULL,		/* prev */
-	NULL,		/* next */
-};
-
 /*
  * Machine-dependent clock routines.
  *
@@ -137,15 +79,35 @@ static struct timecounter clk_timecounter = {
  * periods where N is the value loaded into the counter.
  */
 
-int clockmatch(struct device *, struct cfdata *, void *);
-void clockattach(struct device *, struct device *, void *);
+int clockmatch(device_t, cfdata_t, void *);
+void clockattach(device_t, device_t, void *);
 void cpu_initclocks(void);
+static void calibrate_delay(device_t);
 
-CFATTACH_DECL(clock, sizeof(struct device),
+/* the clocks run at NTSC: 715.909kHz or PAL: 709.379kHz.
+   We're using a 100 Hz clock. */
+int amiga_clk_interval;
+int eclockfreq;
+struct CIA *clockcia;
+
+static u_int clk_getcounter(struct timecounter *);
+
+static struct timecounter clk_timecounter = {
+	clk_getcounter,	/* get_timecount */
+	0,		/* no poll_pps */
+	~0u,		/* counter_mask */
+	0,		/* frequency */
+	"clock",	/* name, overriden later */
+	100,		/* quality */
+	NULL,		/* prev */
+	NULL,		/* next */
+};
+
+CFATTACH_DECL_NEW(clock, 0,
     clockmatch, clockattach, NULL, NULL);
 
 int
-clockmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+clockmatch(device_t pdp, cfdata_t cfp, void *auxp)
 {
 	if (matchname("clock", auxp))
 		return(1);
@@ -156,25 +118,24 @@ clockmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
  * Start the real-time clock.
  */
 void
-clockattach(struct device *pdp, struct device *dp, void *auxp)
+clockattach(device_t pdp, device_t dp, void *auxp)
 {
 	const char *clockchip;
 	unsigned short interval;
+	int chipfreq;
 #ifdef DRACO
 	u_char dracorev;
-#endif
-
-#ifdef DRACO
-	dracorev = is_draco();
 #endif
 
 	if (eclockfreq == 0)
 		eclockfreq = 715909;	/* guess NTSC */
 
+	chipfreq = eclockfreq;
+
 #ifdef DRACO
+	dracorev = is_draco();
 	if (dracorev >= 4) {
-		if (amiga_clk_interval == 0)	/* Only do this 1st time */
-			eclockfreq /= 7;
+		chipfreq = eclockfreq / 7;
 		clockchip = "QuickLogic";
 	} else if (dracorev) {
 		clockcia = (struct CIA *)CIAAbase;
@@ -186,16 +147,14 @@ clockattach(struct device *pdp, struct device *dp, void *auxp)
 		clockchip = "CIA B";
 	}
 
-	amiga_clk_interval = (eclockfreq / hz);
-
-	clk_timecounter.tc_name = clockchip;
-	clk_timecounter.tc_frequency = eclockfreq;
-
-	fast_delay_limit = UINT_MAX / amiga_clk_interval;
+	amiga_clk_interval = chipfreq / hz;
 
 	if (dp != NULL) {	/* real autoconfig? */
 		printf(": %s system hz %d hardware hz %d\n", clockchip, hz,
-		    eclockfreq);
+		    chipfreq);
+
+		clk_timecounter.tc_name = clockchip;
+		clk_timecounter.tc_frequency = chipfreq;
 		tc_init(&clk_timecounter);
 	}
 
@@ -208,6 +167,8 @@ clockattach(struct device *pdp, struct device *dp, void *auxp)
 
 		draco_ioct->io_timerlo = amiga_clk_interval & 0xff;
 		draco_ioct->io_timerhi = amiga_clk_interval >> 8;
+
+		calibrate_delay(dp);
 
 		return;
 	}
@@ -222,7 +183,6 @@ clockattach(struct device *pdp, struct device *dp, void *auxp)
 	/*
 	 * load interval into registers.
          * the clocks run at NTSC: 715.909kHz or PAL: 709.379kHz
-	 * supprort for PAL WHEN?!?! XXX
 	 */
 	interval = amiga_clk_interval - 1;
 
@@ -235,6 +195,8 @@ clockattach(struct device *pdp, struct device *dp, void *auxp)
 	 * start timer A in continuous mode
 	 */
 	clockcia->cra = (clockcia->cra & 0xc0) | 1;
+
+	calibrate_delay(dp);
 }
 
 void
@@ -280,7 +242,7 @@ setstatclockrate(int hertz)
 }
 
 /*
- * Returns ticks  since last recorded clock "tick"
+ * Returns ticks since last recorded clock "tick"
  * (i.e. clock interrupt).
  */
 static u_int
@@ -326,30 +288,88 @@ clk_gettick(void)
 static u_int
 clk_getcounter(struct timecounter *tc)
 {
-	static int last_hardclock_ticks;
-	static u_int last_clock_tick = 0;
-	int old_hardclock_ticks;
-	u_int clock_tick;
+	static int prev_hardclock;
+	static u_int prev_counter;
+	int cur_hardclock;
+	u_int counter;
 
 	do {
-		old_hardclock_ticks = hardclock_ticks;
-		clock_tick = clk_gettick();
-	} while (old_hardclock_ticks != hardclock_ticks);
+		cur_hardclock = hardclock_ticks;
+		counter = clk_gettick();
+	} while (cur_hardclock != hardclock_ticks);
 
 	/*
 	 * Handle the situation of a wrapped interval counter, while
 	 * the hardclock() interrupt was not yet executed to update
 	 * hardclock_ticks.
 	 */
-	if (last_hardclock_ticks > old_hardclock_ticks)
-		old_hardclock_ticks = last_hardclock_ticks;
-	if (clock_tick < last_clock_tick &&
-	    old_hardclock_ticks == last_hardclock_ticks)
-		old_hardclock_ticks++;
-	last_hardclock_ticks = old_hardclock_ticks;
-	last_clock_tick = clock_tick;
+	if (cur_hardclock < prev_hardclock)
+		cur_hardclock = prev_hardclock;
+	if (counter < prev_counter && cur_hardclock == prev_hardclock)
+		cur_hardclock++;
 
-	return old_hardclock_ticks * amiga_clk_interval + clock_tick;
+	prev_hardclock = cur_hardclock;
+	prev_counter = counter;
+
+	return cur_hardclock * amiga_clk_interval + counter;
+}
+
+/*
+ * Calibrate delay loop.
+ * We use two iterations because we don't have enough bits to do a factor of
+ * 8 with better than 1%.
+ *
+ * XXX Note that we MUST stay below 1 tick if using clk_gettick(), even for
+ * underestimated values of delaydivisor.
+ *
+ * XXX the "ns" below is only correct for a shift of 10 bits, and even then
+ * off by 2.4%
+ */
+static void
+calibrate_delay(device_t dp)
+{
+	unsigned long t1, t2;
+	extern u_int32_t delaydivisor;
+		/* XXX this should be defined elsewhere */
+
+	if (dp)
+		printf("Calibrating delay loop... ");
+
+	do {
+		t1 = clk_gettick();
+		delay(1024);
+		t2 = clk_gettick();
+	} while (t2 <= t1);
+	t2 = ((t2 - t1) * 1000000) / (amiga_clk_interval * hz);
+	delaydivisor = (delaydivisor * t2 + 1023) >> 10;
+#ifdef DEBUG
+	if (dp)
+		printf("\ndiff %ld us, new divisor %u/1024 us\n", t2,
+		    delaydivisor);
+	do {
+		t1 = clk_gettick();
+		delay(1024);
+		t2 = clk_gettick();
+	} while (t2 <= t1);
+	t2 = ((t2 - t1) * 1000000) / (amiga_clk_interval * hz);
+	delaydivisor = (delaydivisor * t2 + 1023) >> 10;
+	if (dp)
+		printf("diff %ld us, new divisor %u/1024 us\n", t2,
+		    delaydivisor);
+#endif
+	do {
+		t1 = clk_gettick();
+		delay(1024);
+		t2 = clk_gettick();
+	} while (t2 <= t1);
+	t2 = ((t2 - t1) * 1000000) / (amiga_clk_interval * hz);
+	delaydivisor = (delaydivisor * t2 + 1023) >> 10;
+#ifdef DEBUG
+	if (dp)
+		printf("diff %ld us, new divisor ", t2);
+#endif
+	if (dp)
+		printf("%u/1024 us\n", delaydivisor);
 }
 
 #if notyet
@@ -652,51 +672,3 @@ profclock(void *pc, int ps)
 }
 #endif
 #endif
-
-void
-delay(unsigned int n)
-{
-	unsigned int cur_tick, initial_tick;
-	int remaining;
-
-	/*
-	 * Read the counter first, so that the rest of the setup overhead is
-	 * counted.
-	 */
-	initial_tick = clk_gettick();
-
-	if (amiga_clk_interval == 0) {
-		/*
-		 * Clock is not initialised yet,
-		 * so just do some ad-hoc loop.
-		 */
-		static uint32_t dummy;
-
-		n *= 4;
-		while (n--)
-			dummy *= eclockfreq;
-		return;
-	}
-
-	if (n <= fast_delay_limit) {
-		/*
-		 * For unsigned arithmetic, division can be replaced with
-		 * multiplication with the inverse and a shift.
-		 */
-		remaining = n * eclockfreq / 1000000;
-	} else {
-		/* This is a very long delay.
-		 * Being slow here doesn't matter.
-		 */
-		remaining = (unsigned long long) n * eclockfreq / 1000000;
-	}
-
-	while (remaining > 0) {
-		cur_tick = clk_gettick();
-		if (cur_tick > initial_tick)
-			remaining -= amiga_clk_interval - (cur_tick - initial_tick);
-		else
-			remaining -= initial_tick - cur_tick;
-		initial_tick = cur_tick;
-	}
-}

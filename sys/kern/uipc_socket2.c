@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket2.c,v 1.104 2009/09/02 14:56:57 tls Exp $	*/
+/*	$NetBSD: uipc_socket2.c,v 1.110 2011/12/20 23:56:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.104 2009/09/02 14:56:57 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.110 2011/12/20 23:56:28 christos Exp $");
 
 #include "opt_mbuftrace.h"
 #include "opt_sb_max.h"
@@ -68,7 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.104 2009/09/02 14:56:57 tls Exp $
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/buf.h>
-#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
 #include <sys/domain.h>
@@ -266,14 +265,12 @@ sonewconn(struct socket *head, int connstatus)
 	so->so_options = head->so_options &~ SO_ACCEPTCONN;
 	so->so_linger = head->so_linger;
 	so->so_state = head->so_state | SS_NOFDREF;
-	so->so_nbio = head->so_nbio;
 	so->so_proto = head->so_proto;
 	so->so_timeo = head->so_timeo;
 	so->so_pgid = head->so_pgid;
 	so->so_send = head->so_send;
 	so->so_receive = head->so_receive;
 	so->so_uidinfo = head->so_uidinfo;
-	so->so_egid = head->so_egid;
 	so->so_cpid = head->so_cpid;
 #ifdef MBUFTRACE
 	so->so_mowner = head->so_mowner;
@@ -286,8 +283,8 @@ sonewconn(struct socket *head, int connstatus)
 	so->so_rcv.sb_lowat = head->so_rcv.sb_lowat;
 	so->so_rcv.sb_timeo = head->so_rcv.sb_timeo;
 	so->so_snd.sb_timeo = head->so_snd.sb_timeo;
-	so->so_rcv.sb_flags |= head->so_rcv.sb_flags & SB_AUTOSIZE;
-	so->so_snd.sb_flags |= head->so_snd.sb_flags & SB_AUTOSIZE;
+	so->so_rcv.sb_flags |= head->so_rcv.sb_flags & (SB_AUTOSIZE | SB_ASYNC);
+	so->so_snd.sb_flags |= head->so_snd.sb_flags & (SB_AUTOSIZE | SB_ASYNC);
 	soqinsque(head, so, soqueue);
 	error = (*so->so_proto->pr_usrreq)(so, PRU_ATTACH, NULL, NULL,
 	    NULL, NULL);
@@ -597,10 +594,7 @@ sbreserve(struct sockbuf *sb, u_long cc, struct socket *so)
 	if (cc == 0 || cc > sb_max_adj)
 		return (0);
 
-	if (kauth_cred_geteuid(l->l_cred) == so->so_uidinfo->ui_uid)
-		maxcc = l->l_proc->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
-	else
-		maxcc = RLIM_INFINITY;
+	maxcc = l->l_proc->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
 
 	uidinfo = so->so_uidinfo;
 	if (!chgsbsize(uidinfo, &sb->sb_hiwat, cc, maxcc))
@@ -1318,7 +1312,7 @@ sbcreatecontrol(void *p, int size, int type, int level)
 	}
 
 	if ((m = m_get(M_DONTWAIT, MT_CONTROL)) == NULL)
-		return ((struct mbuf *) NULL);
+		return (NULL);
 	if (CMSG_SPACE(size) > MLEN) {
 		MCLGET(m, M_DONTWAIT);
 		if ((m->m_flags & M_EXT) == 0) {

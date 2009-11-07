@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.92 2009/01/18 02:40:05 isaki Exp $	*/
+/*	$NetBSD: fd.c,v 1.96.2.1 2012/05/09 20:01:51 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -64,11 +64,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.92 2009/01/18 02:40:05 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.96.2.1 2012/05/09 20:01:51 riz Exp $");
 
-#include "rnd.h"
 #include "opt_ddb.h"
-#include "opt_m680x0.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,9 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.92 2009/01/18 02:40:05 isaki Exp $");
 #include <sys/syslog.h>
 #include <sys/queue.h>
 #include <sys/fdio.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -151,6 +148,7 @@ struct fdc_softc {
 	u_int8_t *sc_addr;			/* physical address */
 	struct dmac_channel_stat *sc_dmachan; /* intio DMA channel */
 	struct dmac_dma_xfer *sc_xfer;	/* DMA transfer */
+	int sc_read;
 
 	struct fd_softc *sc_fd[4];	/* pointers to children */
 	TAILQ_HEAD(drivehead, fd_softc) sc_drives;
@@ -212,7 +210,9 @@ struct fd_softc {
 	struct fd_type *sc_deftype;	/* default type descriptor */
 	struct fd_type *sc_type;	/* current type descriptor */
 
+#if 0	/* see comments in fd_motor_on() */
 	struct callout sc_motoron_ch;
+#endif
 	struct callout sc_motoroff_ch;
 
 	daddr_t	sc_blkno;	/* starting block number */
@@ -242,9 +242,7 @@ struct fd_softc {
 #define	SEC_P01	0x01		/* second part */
 #define	SEC_P11	0x03		/* both part */
 
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 };
 
 /* floppy driver configuration */
@@ -278,7 +276,9 @@ struct dkdriver fddkdriver = { fdstrategy };
 
 void fd_set_motor(struct fdc_softc *, int);
 void fd_motor_off(void *);
+#if 0
 void fd_motor_on(void *);
+#endif
 int fdcresult(struct fdc_softc *);
 int out_fdc(bus_space_tag_t, bus_space_handle_t, u_char);
 void fdcstart(struct fdc_softc *);
@@ -325,6 +325,7 @@ fdc_dmastart(struct fdc_softc *fdc, int read, void *addr, vsize_t count)
 					 (u_int8_t*) (fdc->sc_addr +
 						      fddata));	/* XXX */
 
+	fdc->sc_read = read;
 	dmac_start_xfer(fdc->sc_dmachan->ch_softc, fdc->sc_xfer);
 }
 
@@ -333,6 +334,10 @@ fdcdmaintr(void *arg)
 {
 	struct fdc_softc *fdc = arg;
 
+	bus_dmamap_sync(fdc->sc_dmat, fdc->sc_dmamap,
+	    0, fdc->sc_dmamap->dm_mapsize,
+	    fdc->sc_read ?
+	    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
 	bus_dmamap_unload(fdc->sc_dmat, fdc->sc_dmamap);
 
 	return 0;
@@ -564,7 +569,9 @@ fdattach(device_t parent, device_t self, void *aux)
 	struct fd_type *type = &fd_types[0];	/* XXX 1.2MB */
 	int drive = fa->fa_drive;
 
+#if 0
 	callout_init(&fd->sc_motoron_ch, 0);
+#endif
 	callout_init(&fd->sc_motoroff_ch, 0);
 
 	fd->sc_dev = self;
@@ -599,10 +606,8 @@ fdattach(device_t parent, device_t self, void *aux)
 	 */
 	mountroothook_establish(fd_mountroot_hook, fd->sc_dev);
 
-#if NRND > 0
 	rnd_attach_source(&fd->rnd_source, device_xname(fd->sc_dev),
 			  RND_TYPE_DISK, 0);
-#endif
 }
 
 inline struct fd_type *
@@ -731,9 +736,7 @@ fdfinish(struct fd_softc *fd, struct buf *bp)
 	bp->b_resid = fd->sc_bcount;
 	fd->sc_skip = 0;
 
-#if NRND > 0
 	rnd_add_uint32(&fd->rnd_source, bp->b_blkno);
-#endif
 
 	biodone(bp);
 	/* turn off motor 5s from now */
@@ -788,6 +791,7 @@ fd_motor_off(void *arg)
 	splx(s);
 }
 
+#if 0 /* on x68k motor on triggers interrupts by state change of ready line. */
 void
 fd_motor_on(void *arg)
 {
@@ -803,6 +807,7 @@ fd_motor_on(void *arg)
 		(void) fdcintr(fdc);
 	splx(s);
 }
+#endif
 
 int
 fdcresult(struct fdc_softc *fdc)
@@ -1082,9 +1087,11 @@ loop:
 			fd->sc_flags |= FD_MOTOR | FD_MOTOR_WAIT;
 			fd_set_motor(fdc, 0);
 			fdc->sc_state = MOTORWAIT;
+#if 0	/* no need to callout on x68k; motor on will trigger interrupts */
 			/* allow .5s for motor to stabilize */
 			callout_reset(&fd->sc_motoron_ch, hz / 2,
 			    fd_motor_on, fd);
+#endif
 			return 1;
 		}
 		/* Make sure the right drive is selected. */
@@ -1437,8 +1444,22 @@ loop:
 		goto doseek;
 
 	case MOTORWAIT:
+#if 0 /* on x68k motor on triggers interrupts by state change of ready line. */
 		if (fd->sc_flags & FD_MOTOR_WAIT)
 			return 1;		/* time's not up yet */
+#else
+		/* check drive ready by state change interrupt */
+		KASSERT(fd->sc_flags & FD_MOTOR_WAIT);
+		out_fdc(iot, ioh, NE7CMD_SENSEI);
+		tmp = fdcresult(fdc);
+		if (tmp != 2 || (st0 & 0xc0) != 0xc0 /* ready changed */) {
+			printf("%s: unexpected interrupt during MOTORWAIT",
+			    device_xname(fd->sc_dev));
+			fdcpstatus(7, fdc);
+			return 1;
+		}
+		fd->sc_flags &= ~FD_MOTOR_WAIT;
+#endif
 		goto doseek;
 
 	default:

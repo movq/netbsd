@@ -1,4 +1,4 @@
-/*	$NetBSD: printbuf.c,v 1.6 2007/04/14 20:34:31 martin Exp $	*/
+/*	$NetBSD: printbuf.c,v 1.8 2012/02/15 17:55:07 riz Exp $	*/
 
 /*
  * Copyright (C) 2000-2004 by Darren Reed.

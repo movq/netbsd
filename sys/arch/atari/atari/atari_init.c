@@ -1,4 +1,4 @@
-/*	$NetBSD: atari_init.c,v 1.86 2009/08/23 01:27:13 mrg Exp $	*/
+/*	$NetBSD: atari_init.c,v 1.98.2.1 2012/02/27 20:17:19 riz Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -33,16 +33,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atari_init.c,v 1.86 2009/08/23 01:27:13 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atari_init.c,v 1.98.2.1 2012/02/27 20:17:19 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mbtype.h"
 #include "opt_m060sp.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/tty.h>
@@ -118,11 +117,7 @@ int iomem_malloc_safe;
 static cpu_kcore_hdr_t cpu_kcore_hdr;
 
 extern u_int 	lowram;
-extern u_int	proc0paddr;
 int		machineid, mmutype, cputype, astpending;
-#if defined(M68040) || defined(M68060)
-extern int	protostfree;
-#endif
 
 extern char		*esym;
 extern struct pcb	*curpcb;
@@ -201,7 +196,6 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	vaddr_t		end_loaded;
 	paddr_t		kbase;
 	u_int		kstsize;
-	paddr_t		Sysseg_pa;
 	paddr_t		Sysptmap_pa;
 
 #if defined(_MILANHW_)
@@ -232,6 +226,7 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	st_pool_phys   = stphysize - st_pool_size;
 	stphysize      = st_pool_phys;
 
+	physmem        = btoc(stphysize) + btoc(ttphysize);
 	machineid      = id;
 	esym           = esym_addr;
 
@@ -275,9 +270,9 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	avail  = stphysize - pstart;
 
 	/*
-	 * Save KVA of proc0 user-area and allocate it
+	 * Save KVA of lwp0 uarea and allocate it.
 	 */
-	proc0paddr = vstart;
+	lwp0uarea  = vstart;
 	pstart    += USPACE;
 	vstart    += USPACE;
 	avail     -= USPACE;
@@ -328,6 +323,12 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	if (machineid & ATARI_MILAN)
 		ptextra += btoc(PCI_IO_SIZE + PCI_MEM_SIZE);
 	ptextra += btoc(BOOTM_VA_POOL);
+	/*
+	 * now need to account for the kmem area, which is allocated
+	 * before pmap_init() is called.  It is roughly the size of physical
+	 * memory.
+	 */
+	ptextra += physmem;
 
 	/*
 	 * The 'pt' (the initial kernel pagetable) has to map the kernel and
@@ -343,7 +344,7 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	/*
 	 * Sysmap is now placed at the end of Supervisor virtual address space.
 	 */
-	Sysmap = (pt_entry_t *)-(NPTEPG * PAGE_SIZE);
+	Sysmap = (pt_entry_t *)SYSMAP_VA;
 
 	/*
 	 * Initialize segment tables
@@ -380,9 +381,9 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 
 #if defined(M68040) || defined(M68060)
 	/*
-	 * Map the kernel segment table cache invalidated for 
-	 * these machines (for the 68040 not strictly necessary, but
-	 * recommended by Motorola; for the 68060 mandatory)
+	 * Map the kernel segment table cache invalidated for 68040/68060.
+	 * (for the 68040 not strictly necessary, but recommended by Motorola;
+	 *  for the 68060 mandatory)
 	 */
 	if (mmutype == MMU_68040) {
 
@@ -408,7 +409,7 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 
 	/*
 	 * go till end of data allocated so far
-	 * plus proc0 u-area (to be allocated)
+	 * plus lwp0 u-area (to be allocated)
 	 */
 	for (; kva < vstart; kva += PAGE_SIZE) {
 		*pg++ = pg_proto;
@@ -510,7 +511,7 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	/*
 	 * get the pmap module in sync with reality.
 	 */
-	pmap_bootstrap(vstart, Sysseg_pa);
+	pmap_bootstrap(vstart);
 
 	/*
 	 * Prepare to enable the MMU.
@@ -532,7 +533,7 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 		lp = (paddr_t *)0;
 		le = (paddr_t *)pstart;
 		fp = (paddr_t *)kbase;
-		while(lp < le)
+		while (lp < le)
 			*fp++ = *lp++;
 	}
 #if defined(M68040) || defined(M68060)
@@ -565,22 +566,14 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 		 * A = 8 bits, B = 11 bits
 		 */
 		tc = 0x82d08b00;
+		__asm volatile ("pflusha" : : );
 		__asm volatile ("pmove %0@,%%tc" : : "a" (&tc));
 	}
 
-	/* Is this to fool the optimizer?? */
-	i = *(int *)proc0paddr;
-	*(volatile int *)proc0paddr = i;
-
 	/*
-	 * Initialize the "u-area" pages.
-	 * Must initialize p_addr before autoconfig or the
-	 * fault handler will get a NULL reference.
+	 * Initialize the "u-area" pages etc.
 	 */
-	memset((u_char *)proc0paddr, 0, USPACE);
-	lwp0.l_addr = (struct user *)proc0paddr;
-	curlwp = &lwp0;
-	curpcb  = &((struct user *)proc0paddr)->u_pcb;
+	pmap_bootstrap_finalize();
 
 	/*
 	 * Get the hardware into a defined state
@@ -602,7 +595,7 @@ start_c(int id, u_int ttphystart, u_int ttphysize, u_int stphysize,
 	 * on the machine.  When the amount of RAM is found, all
 	 * extents of RAM are allocated from the map.
 	 */
-	iomem_ex = extent_create("iomem", 0x0, 0xffffffff, M_DEVBUF,
+	iomem_ex = extent_create("iomem", 0x0, 0xffffffff,
 	    (void *)iomem_ex_storage, sizeof(iomem_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 
@@ -763,7 +756,7 @@ map_io_areas(paddr_t ptpa, psize_t ptsize, u_int ptextra)
 #else
 	pg_proto  = STIO_PHYS | PG_RW | PG_CI | PG_V;
 #endif
-	while(pg < epg) {
+	while (pg < epg) {
 		*pg++     = pg_proto;
 		pg_proto += PAGE_SIZE;
 	}
@@ -958,11 +951,11 @@ mmu030_setup(paddr_t sysseg_pa, u_int kstsize, paddr_t ptpa, psize_t ptsize,
 	 * Invalidate the remainder of the tables.
 	 */
 	esg = (st_entry_t *)sysseg_pa;
-	esg = &esg[256];			/* XXX should be TIA_SIZE */
+	esg = &esg[TIA_SIZE];
 	while (sg < esg)
 		*sg++ = SG_NV;
 	epg = (pt_entry_t *)sysptmap_pa;
-	epg = &epg[NPTEPG];			/* XXX should be TIB_SIZE */
+	epg = &epg[TIB_SIZE];
 	while (pg < epg)
 		*pg++ = PG_NV;
 
@@ -970,9 +963,9 @@ mmu030_setup(paddr_t sysseg_pa, u_int kstsize, paddr_t ptpa, psize_t ptsize,
 	 * Initialize the PTE for the last one to point Sysptmap.
 	 */
 	sg = (st_entry_t *)sysseg_pa;
-	sg = &sg[256 - 1];			/* XXX should be TIA_SIZE */
+	sg = &sg[SYSMAP_VA >> SEGSHIFT];
 	pg = (pt_entry_t *)sysptmap_pa;
-	pg = &pg[256 - 1];			/* XXX should be TIA_SIZE */
+	pg = &pg[SYSMAP_VA >> SEGSHIFT];
 	*sg = RELOC_PA(kbase, sysptmap_pa) | SG_RW | SG_V;
 	*pg = RELOC_PA(kbase, sysptmap_pa) | PG_RW | PG_CI | PG_V;
 }
@@ -1070,7 +1063,7 @@ mmu040_setup(paddr_t sysseg_pa, u_int kstsize, paddr_t ptpa, psize_t ptsize,
 	 * Invalidate rest of Sysptmap page.
 	 */
 	epg = (pt_entry_t *)sysptmap_pa;
-	epg = &epg[NPTEPG];		/* XXX: should be TIB_SIZE */
+	epg = &epg[TIB_SIZE];
 	while (pg < epg)
 		*pg++ = PG_NV;
 
@@ -1078,7 +1071,7 @@ mmu040_setup(paddr_t sysseg_pa, u_int kstsize, paddr_t ptpa, psize_t ptsize,
 	 * Initialize the PTE for the last one to point Sysptmap.
 	 */
 	pg = (pt_entry_t *)sysptmap_pa;
-	pg = &pg[256 - 1];		/* XXX: should be TIA_SIZE */
+	pg = &pg[SYSMAP_VA >> SEGSHIFT];
 	*pg = RELOC_PA(kbase, sysptmap_pa) | PG_RW | PG_CI | PG_V;
 }
 #endif /* M68040 */

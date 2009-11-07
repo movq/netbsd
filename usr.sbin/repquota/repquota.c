@@ -1,3 +1,5 @@
+/*	$NetBSD: repquota.c,v 1.43.2.1 2012/05/19 15:31:22 riz Exp $	*/
+
 /*
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -40,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)repquota.c	8.2 (Berkeley) 11/22/94";
 #else
-__RCSID("$NetBSD: repquota.c,v 1.24 2009/04/18 09:20:40 lukem Exp $");
+__RCSID("$NetBSD: repquota.c,v 1.43.2.1 2012/05/19 15:31:22 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,9 +51,11 @@ __RCSID("$NetBSD: repquota.c,v 1.24 2009/04/18 09:20:40 lukem Exp $");
  */
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/queue.h>
-#include <ufs/ufs/quota.h>
+#include <sys/types.h>
+#include <sys/statvfs.h>
+
 #include <errno.h>
+#include <err.h>
 #include <fstab.h>
 #include <grp.h>
 #include <pwd.h>
@@ -60,46 +64,75 @@ __RCSID("$NetBSD: repquota.c,v 1.24 2009/04/18 09:20:40 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 
-const char *qfname = QUOTAFILENAME;
-const char *qfextension[] = INITQFNAMES;
+#include <quota.h>
+
+#include "printquota.h"
+
+/*
+ * XXX. Ideally we shouldn't compile either of these in, but it's a
+ * nontrivial rework to avoid it and it'll work ok for now.
+ */
+#define REPQUOTA_NUMIDTYPES	2
+#define REPQUOTA_NUMOBJTYPES	2
 
 struct fileusage {
 	struct	fileusage *fu_next;
-	struct	dqblk fu_dqblk;
-	u_long	fu_id;
+	struct	quotaval fu_qv[REPQUOTA_NUMOBJTYPES];
+	uint32_t	fu_id;
 	char	fu_name[1];
 	/* actually bigger */
 };
+
 #define FUHASH 1024	/* must be power of two */
-struct fileusage *fuhead[MAXQUOTAS][FUHASH];
-u_long highid[MAXQUOTAS];	/* highest addid()'ed identifier per type */
+static struct fileusage *fuhead[REPQUOTA_NUMIDTYPES][FUHASH];
 
-int	vflag;			/* verbose */
-int	aflag;			/* all file systems */
+/* highest addid()'ed identifier per idtype */
+static uint32_t highid[REPQUOTA_NUMIDTYPES];
 
-struct fileusage *addid __P((u_long, int, const char *));
-int	hasquota __P((struct fstab *, int, char **));
-struct fileusage *lookup __P((u_long, int));
-int	main __P((int, char **));
-int	oneof __P((const char *, char **, int));
-int	repquota __P((struct fstab *, int, char *));
-const char *timeprt __P((time_t));
-void	usage __P((void));
+int valid[REPQUOTA_NUMIDTYPES];
+
+static struct quotaval defaultqv[REPQUOTA_NUMIDTYPES][REPQUOTA_NUMOBJTYPES];
+
+static int	vflag = 0;		/* verbose */
+static int	aflag = 0;		/* all file systems */
+static int	hflag = 0;		/* humanize */
+static int	xflag = 0;		/* export */
+
+/*
+ * XXX this should go away and be replaced with a call to
+ * quota_idtype_getname(), but that needs a quotahandle and requires
+ * the same nontrivial rework as getting rid of REPQUOTA_NUMIDTYPES.
+ */
+static const char *const repquota_idtype_names[REPQUOTA_NUMIDTYPES] = {
+	"user",
+	"group",
+};
+
+static struct fileusage *addid(uint32_t, int, const char *);
+static struct fileusage *lookup(uint32_t, int);
+static struct fileusage *qremove(uint32_t, int);
+static int	repquota(struct quotahandle *, int);
+static void	usage(void) __attribute__((__noreturn__));
+static void	printquotas(int, struct quotahandle *);
+static void	exportquotas(void);
+static int	oneof(const char *, char *[], int cnt);
+static int isover(struct quotaval *qv, time_t now);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	struct fstab *fs;
-	struct passwd *pw;
-	struct group *gr;
 	int gflag = 0, uflag = 0, errs = 0;
 	long i, argnum, done = 0;
-	char *qfnp;
 	int ch;
+	struct statvfs *fst;
+	int nfst;
+	struct quotahandle *qh;
 
-	while ((ch = getopt(argc, argv, "aguv")) != -1) {
+	if (!strcmp(getprogname(), "quotadump")) {
+		xflag = 1;
+	}
+
+	while ((ch = getopt(argc, argv, "aguhvx")) != -1) {
 		switch(ch) {
 		case 'a':
 			aflag++;
@@ -110,8 +143,14 @@ main(argc, argv)
 		case 'u':
 			uflag++;
 			break;
+		case 'h':
+			hflag++;
+			break;
 		case 'v':
 			vflag++;
+			break;
+		case 'x':
+			xflag++;
 			break;
 		default:
 			usage();
@@ -119,6 +158,8 @@ main(argc, argv)
 	}
 	argc -= optind;
 	argv += optind;
+	if (xflag && (argc != 1 || aflag))
+		usage();
 	if (argc == 0 && !aflag)
 		usage();
 	if (!gflag && !uflag) {
@@ -126,272 +167,407 @@ main(argc, argv)
 			gflag++;
 		uflag++;
 	}
-	if (gflag) {
-		setgrent();
-		while ((gr = getgrent()) != 0)
-			(void) addid((u_long)gr->gr_gid, GRPQUOTA, gr->gr_name);
-		endgrent();
-	}
-	if (uflag) {
-		setpwent();
-		while ((pw = getpwent()) != 0)
-			(void) addid((u_long)pw->pw_uid, USRQUOTA, pw->pw_name);
-		endpwent();
-	}
-	setfsent();
-	while ((fs = getfsent()) != NULL) {
-		if (strcmp(fs->fs_vfstype, "ffs"))
+
+	nfst = getmntinfo(&fst, MNT_WAIT);
+	if (nfst == 0)
+		errx(1, "no filesystems mounted!");
+	for (i = 0; i < nfst; i++) {
+		if ((fst[i].f_flag & ST_QUOTA) == 0)
 			continue;
-		if (aflag) {
-			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
-				errs += repquota(fs, GRPQUOTA, qfnp);
-			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
-				errs += repquota(fs, USRQUOTA, qfnp);
+		/* check if we want this volume */
+		if (!aflag) {
+			argnum = oneof(fst[i].f_mntonname, argv, argc);
+			if (argnum < 0) {
+				argnum = oneof(fst[i].f_mntfromname,
+					       argv, argc);
+			}
+			if (argnum < 0) {
+				continue;
+			}
+			done |= 1U << argnum;
+		}
+
+		qh = quota_open(fst[i].f_mntonname);
+		if (qh == NULL) {
+			/* XXX: check this errno */
+			if (errno == EOPNOTSUPP || errno == ENXIO) {
+				continue;
+			}
+			warn("%s: quota_open", fst[i].f_mntonname);
 			continue;
 		}
-		if ((argnum = oneof(fs->fs_file, argv, argc)) >= 0 ||
-		    (argnum = oneof(fs->fs_spec, argv, argc)) >= 0) {
-			done |= 1 << argnum;
-			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
-				errs += repquota(fs, GRPQUOTA, qfnp);
-			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
-				errs += repquota(fs, USRQUOTA, qfnp);
-		}
+
+		if (gflag)
+			errs += repquota(qh, QUOTA_IDTYPE_GROUP);
+		if (uflag)
+			errs += repquota(qh, QUOTA_IDTYPE_USER);
+
+		quota_close(qh);
 	}
-	endfsent();
+	if (xflag)
+		exportquotas();
 	for (i = 0; i < argc; i++)
-		if ((done & (1 << i)) == 0)
-			fprintf(stderr, "%s not found in fstab\n", argv[i]);
-	exit(errs);
+		if ((done & (1U << i)) == 0)
+			warnx("%s not mounted", argv[i]);
+	return errs;
 }
 
-void
-usage()
+static void
+usage(void)
 {
-	fprintf(stderr, "usage:\n\t%s\n\t%s\n",
-		"repquota [-v] [-g] [-u] -a",
-		"repquota [-v] [-g] [-u] filesys ...");
+	const char *p = getprogname();
+	fprintf(stderr, "usage: %s [-D] [-v] [-g] [-u] -a\n"
+		"\t%s [-D] [-v] [-g] [-u] filesys ...\n"
+		"\t%s -x [-D] [-g] [-u] filesys\n", p, p, p);
 	exit(1);
 }
 
-int
-repquota(fs, type, qfpathname)
-	struct fstab *fs;
-	int type;
-	char *qfpathname;
+static int
+repquota(struct quotahandle *qh, int idtype)
 {
+	struct quotacursor *qc;
+	struct quotakey qk;
+	struct quotaval qv;
+	struct quotaval *qvp;
 	struct fileusage *fup;
-	FILE *qf;
-	u_long id;
-	struct dqblk dqbuf;
-	static struct dqblk zerodqblk;
-	static int warned = 0;
-	static int multiple = 0;
 
-	if (quotactl(fs->fs_file, QCMD(Q_SYNC, type), 0, 0) < 0 &&
-	    errno == EOPNOTSUPP && !warned && vflag) {
-		warned++;
-		fprintf(stdout,
-		    "*** Warning: Quotas are not compiled into this kernel\n");
+	qc = quota_opencursor(qh);
+	if (qc == NULL) {
+		return 1;
 	}
+
+	if (idtype == QUOTA_IDTYPE_USER) {
+		quotacursor_skipidtype(qc, QUOTA_IDTYPE_GROUP);
+	}
+	if (idtype == QUOTA_IDTYPE_GROUP) {
+		quotacursor_skipidtype(qc, QUOTA_IDTYPE_USER);
+	}
+
+	valid[idtype] = 0;
+	while (!quotacursor_atend(qc)) {
+		if (quotacursor_get(qc, &qk, &qv)) {
+			err(1, "%s: quotacursor_get", quota_getmountpoint(qh));
+		}
+		if (qk.qk_idtype != idtype) {
+			continue;
+		}
+
+		valid[idtype] = 1;
+		if (qk.qk_id == QUOTA_DEFAULTID) {
+			qvp = defaultqv[idtype];
+		} else {
+			if ((fup = lookup(qk.qk_id, idtype)) == 0)
+				fup = addid(qk.qk_id, idtype, (char *)0);
+			qvp = fup->fu_qv;
+		}
+		if (qk.qk_objtype == QUOTA_OBJTYPE_BLOCKS) {
+			qvp[QUOTA_OBJTYPE_BLOCKS] = qv;
+		} else if (qk.qk_objtype == QUOTA_OBJTYPE_FILES) {
+			qvp[QUOTA_OBJTYPE_FILES] = qv;
+		}
+	}
+
+	if (xflag == 0 && valid[idtype])
+		printquotas(idtype, qh);
+
+	return 0;
+}
+
+static void
+printquotas(int idtype, struct quotahandle *qh)
+{
+	static int multiple = 0;
+	uint32_t id;
+	int i;
+	struct fileusage *fup;
+	struct quotaval *q;
+	const char *timemsg[REPQUOTA_NUMOBJTYPES];
+	char overchar[REPQUOTA_NUMOBJTYPES];
+	time_t now;
+	char b0[2][20], b1[20], b2[20], b3[20];
+	int ok, objtype;
+	int isbytes, width;
+
+	switch (idtype) {
+	case QUOTA_IDTYPE_GROUP:
+		{
+		struct group *gr;
+		setgrent();
+		while ((gr = getgrent()) != 0)
+			(void)addid(gr->gr_gid, idtype, gr->gr_name);
+		endgrent();
+		break;
+		}
+	case QUOTA_IDTYPE_USER:
+		{
+		struct passwd *pw;
+		setpwent();
+		while ((pw = getpwent()) != 0)
+			(void)addid(pw->pw_uid, idtype, pw->pw_name);
+		endpwent();
+		break;
+		}
+	default:
+		errx(1, "Unknown quota ID type %d", idtype);
+	}
+
+	time(&now);
+
 	if (multiple++)
 		printf("\n");
 	if (vflag)
-		fprintf(stdout, "*** Report for %s quotas on %s (%s)\n",
-		    qfextension[type], fs->fs_file, fs->fs_spec);
-	if ((qf = fopen(qfpathname, "r")) == NULL) {
-		perror(qfpathname);
-		return (1);
-	}
-	for (id = 0; ; id++) {
-		fread(&dqbuf, sizeof(struct dqblk), 1, qf);
-		if (feof(qf))
-			break;
-		if (dqbuf.dqb_curinodes == 0 && dqbuf.dqb_curblocks == 0)
-			continue;
-		if ((fup = lookup(id, type)) == 0)
-			fup = addid(id, type, (char *)0);
-		fup->fu_dqblk = dqbuf;
-	}
-	fclose(qf);
-	printf("                        Block limits               File limits\n");
-	printf(type == USRQUOTA ? "User " : "Group");
-	printf("           used    soft    hard  grace      used    soft    hard  grace\n");
-	for (id = 0; id <= highid[type]; id++) {
-		fup = lookup(id, type);
+		printf("*** Report for %s quotas on %s (%s: %s)\n",
+		    repquota_idtype_names[idtype], quota_getmountpoint(qh),
+		    quota_getmountdevice(qh), quota_getimplname(qh));
+	printf("                        Block limits               "
+	    "File limits\n");
+	printf(idtype == QUOTA_IDTYPE_USER ? "User " : "Group");
+	printf("            used     soft     hard  grace      used"
+	    "    soft    hard  grace\n");
+	for (id = 0; id <= highid[idtype]; id++) {
+		fup = qremove(id, idtype);
+		q = fup->fu_qv;
 		if (fup == 0)
 			continue;
-		if (fup->fu_dqblk.dqb_curinodes == 0 &&
-		    fup->fu_dqblk.dqb_curblocks == 0)
+		for (i = 0; i < REPQUOTA_NUMOBJTYPES; i++) {
+			if (isover(&q[i], now)) {
+				timemsg[i] = timeprt(b0[i], 8, now,
+				    q[i].qv_expiretime);
+				overchar[i] = '+';
+			} else {
+				if (vflag && q[i].qv_grace != QUOTA_NOTIME) {
+					timemsg[i] = timeprt(b0[i], 8, 0,
+							     q[i].qv_grace);
+				} else {
+					timemsg[i] = "";
+				}
+				overchar[i] = '-';
+			}
+		}
+
+		ok = 1;
+		for (objtype = 0; objtype < REPQUOTA_NUMOBJTYPES; objtype++) {
+			if (q[objtype].qv_usage != 0 ||
+			    overchar[objtype] != '-') {
+				ok = 0;
+			}
+		}
+		if (ok && vflag == 0)
 			continue;
 		if (strlen(fup->fu_name) > 9)
 			printf("%s ", fup->fu_name);
 		else
 			printf("%-10s", fup->fu_name);
-		printf("%c%c%8d%8d%8d%7s",
-			fup->fu_dqblk.dqb_bsoftlimit && 
-			    fup->fu_dqblk.dqb_curblocks >= 
-			    fup->fu_dqblk.dqb_bsoftlimit ? '+' : '-',
-			fup->fu_dqblk.dqb_isoftlimit &&
-			    fup->fu_dqblk.dqb_curinodes >=
-			    fup->fu_dqblk.dqb_isoftlimit ? '+' : '-',
-			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_curblocks) / 1024),
-			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_bsoftlimit) / 1024),
-			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_bhardlimit) / 1024),
-			fup->fu_dqblk.dqb_bsoftlimit && 
-			    fup->fu_dqblk.dqb_curblocks >= 
-			    fup->fu_dqblk.dqb_bsoftlimit ?
-			    timeprt(fup->fu_dqblk.dqb_btime) : "");
-		printf("  %8d%8d%8d%7s\n",
-			fup->fu_dqblk.dqb_curinodes,
-			fup->fu_dqblk.dqb_isoftlimit,
-			fup->fu_dqblk.dqb_ihardlimit,
-			fup->fu_dqblk.dqb_isoftlimit &&
-			    fup->fu_dqblk.dqb_curinodes >=
-			    fup->fu_dqblk.dqb_isoftlimit ?
-			    timeprt(fup->fu_dqblk.dqb_itime) : "");
-		fup->fu_dqblk = zerodqblk;
+		for (objtype = 0; objtype < REPQUOTA_NUMOBJTYPES; objtype++) {
+			printf("%c", overchar[objtype]);
+		}
+		for (objtype = 0; objtype < REPQUOTA_NUMOBJTYPES; objtype++) {
+			isbytes = quota_objtype_isbytes(qh, objtype);
+			width = isbytes ? 9 : 8;
+			printf("%*s%*s%*s%7s",
+			       width,
+			       intprt(b1, width+1, q[objtype].qv_usage,
+				      isbytes ? HN_B : 0, hflag),
+			       width,
+			       intprt(b2, width+1, q[objtype].qv_softlimit,
+				      isbytes ? HN_B : 0, hflag),
+			       width,
+			       intprt(b3, width+1, q[objtype].qv_hardlimit,
+				      isbytes ? HN_B : 0, hflag),
+			       timemsg[objtype]);
+
+			if (objtype + 1 < REPQUOTA_NUMOBJTYPES) {
+				printf("  ");
+			} else {
+				printf("\n");
+			}
+		}
+		free(fup);
 	}
-	return (0);
 }
 
-/*
- * Check to see if target appears in list of size cnt.
- */
-int
-oneof(target, list, cnt)
-	const char *target;
-	char *list[];
-	int cnt;
+static void
+exportquotaval(const struct quotaval *qv)
 {
-	int i;
+	if (qv->qv_hardlimit == QUOTA_NOLIMIT) {
+		printf(" -");
+	} else {
+		printf(" %llu", (unsigned long long)qv->qv_hardlimit);
+	}
 
-	for (i = 0; i < cnt; i++)
-		if (strcmp(target, list[i]) == 0)
-			return (i);
-	return (-1);
+	if (qv->qv_softlimit == QUOTA_NOLIMIT) {
+		printf(" -");
+	} else {
+		printf(" %llu", (unsigned long long)qv->qv_softlimit);
+	}
+
+	printf(" %llu", (unsigned long long)qv->qv_usage);
+
+	if (qv->qv_expiretime == QUOTA_NOTIME) {
+		printf(" -");
+	} else {
+		printf(" %lld", (long long)qv->qv_expiretime);
+	}
+
+	if (qv->qv_grace == QUOTA_NOTIME) {
+		printf(" -");
+	} else {
+		printf(" %lld", (long long)qv->qv_grace);
+	}
 }
 
-/*
- * Check to see if a particular quota is to be enabled.
- */
-int
-hasquota(fs, type, qfnamep)
-	struct fstab *fs;
-	int type;
-	char **qfnamep;
+static void
+exportquotas(void)
 {
-	char *opt;
-	char *cp = NULL;
-	static char initname, usrname[100], grpname[100];
-	static char buf[BUFSIZ];
+	int idtype;
+	id_t id;
+	struct fileusage *fup;
 
-	if (!initname) {
-		sprintf(usrname, "%s%s", qfextension[USRQUOTA], qfname);
-		sprintf(grpname, "%s%s", qfextension[GRPQUOTA], qfname);
-		initname = 1;
+	/* header */
+	printf("@format netbsd-quota-dump v1\n");
+	printf("# idtype id objtype   hard soft usage expire grace\n");
+
+	for (idtype = 0; idtype < REPQUOTA_NUMIDTYPES; idtype++) {
+		if (valid[idtype] == 0)
+			continue;
+
+		printf("%s default block  ", repquota_idtype_names[idtype]);
+		exportquotaval(&defaultqv[idtype][QUOTA_OBJTYPE_BLOCKS]);
+		printf("\n");
+			
+		printf("%s default file  ", repquota_idtype_names[idtype]);
+		exportquotaval(&defaultqv[idtype][QUOTA_OBJTYPE_FILES]);
+		printf("\n");
+
+		for (id = 0; id <= highid[idtype]; id++) {
+			fup = qremove(id, idtype);
+			if (fup == 0)
+				continue;
+
+			printf("%s %u block  ", repquota_idtype_names[idtype],
+			       id);
+			exportquotaval(&fup->fu_qv[QUOTA_OBJTYPE_BLOCKS]);
+			printf("\n");
+
+			printf("%s %u file  ", repquota_idtype_names[idtype],
+			       id);
+			exportquotaval(&fup->fu_qv[QUOTA_OBJTYPE_FILES]);
+			printf("\n");
+
+			free(fup);
+		}
 	}
-	strcpy(buf, fs->fs_mntops);
-	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
-		if ((cp = strchr(opt, '=')) != NULL)
-			*cp++ = '\0';
-		if (type == USRQUOTA && strcmp(opt, usrname) == 0)
-			break;
-		if (type == GRPQUOTA && strcmp(opt, grpname) == 0)
-			break;
-	}
-	if (!opt)
-		return (0);
-	if (cp) {
-		*qfnamep = cp;
-		return (1);
-	}
-	(void) sprintf(buf, "%s/%s.%s", fs->fs_file, qfname, qfextension[type]);
-	*qfnamep = buf;
-	return (1);
+	printf("@end\n");
 }
 
 /*
  * Routines to manage the file usage table.
  *
- * Lookup an id of a specific type.
+ * Lookup an id of a specific id type.
  */
 struct fileusage *
-lookup(id, type)
-	u_long id;
-	int type;
+lookup(uint32_t id, int idtype)
 {
 	struct fileusage *fup;
 
-	for (fup = fuhead[type][id & (FUHASH-1)]; fup != 0; fup = fup->fu_next)
+	for (fup = fuhead[idtype][id & (FUHASH-1)]; fup != 0; fup = fup->fu_next)
 		if (fup->fu_id == id)
-			return (fup);
-	return ((struct fileusage *)0);
+			return fup;
+	return NULL;
+}
+/*
+ * Lookup and remove an id of a specific id type.
+ */
+static struct fileusage *
+qremove(uint32_t id, int idtype)
+{
+	struct fileusage *fup, **fupp;
+
+	for (fupp = &fuhead[idtype][id & (FUHASH-1)]; *fupp != 0;) {
+		fup = *fupp;
+		if (fup->fu_id == id) {
+			*fupp = fup->fu_next;
+			return fup;
+		}
+		fupp = &fup->fu_next;
+	}
+	return NULL;
 }
 
 /*
  * Add a new file usage id if it does not already exist.
  */
-struct fileusage *
-addid(id, type, name)
-	u_long id;
-	int type;
-	const char *name;
+static struct fileusage *
+addid(uint32_t id, int idtype, const char *name)
 {
 	struct fileusage *fup, **fhp;
-	int len;
+	struct group *gr = NULL;
+	struct passwd *pw = NULL;
+	size_t len;
 
-	if ((fup = lookup(id, type)) != NULL)
-		return (fup);
+	if ((fup = lookup(id, idtype)) != NULL) {
+		return fup;
+	}
+	if (name == NULL) {
+		switch(idtype) {
+		case  QUOTA_IDTYPE_GROUP:
+			gr = getgrgid(id);
+			
+			if (gr != NULL)
+				name = gr->gr_name;
+			break;
+		case QUOTA_IDTYPE_USER:
+			pw = getpwuid(id);
+			if (pw)
+				name = pw->pw_name;
+			break;
+		default:
+			errx(1, "Unknown quota ID type %d\n", idtype);
+		}
+	}
+
 	if (name)
 		len = strlen(name);
 	else
 		len = 10;
-	if ((fup = (struct fileusage *)calloc(1, sizeof(*fup) + len)) == NULL) {
-		fprintf(stderr, "out of memory for fileusage structures\n");
-		exit(1);
-	}
-	fhp = &fuhead[type][id & (FUHASH - 1)];
+	if ((fup = calloc(1, sizeof(*fup) + len)) == NULL)
+		err(1, "out of memory for fileusage structures");
+	fhp = &fuhead[idtype][id & (FUHASH - 1)];
 	fup->fu_next = *fhp;
 	*fhp = fup;
 	fup->fu_id = id;
-	if (id > highid[type])
-		highid[type] = id;
+	if (id > highid[idtype])
+		highid[idtype] = id;
 	if (name) {
 		memmove(fup->fu_name, name, len + 1);
 	} else {
-		sprintf(fup->fu_name, "%lu", (u_long)id);
+		snprintf(fup->fu_name, len + 1, "%u", id);
 	}
-	return (fup);
+	/*
+	 * XXX nothing guarantees the default limits have been loaded yet
+	 */
+	fup->fu_qv[QUOTA_OBJTYPE_BLOCKS] = defaultqv[idtype][QUOTA_OBJTYPE_BLOCKS];
+	fup->fu_qv[QUOTA_OBJTYPE_FILES] = defaultqv[idtype][QUOTA_OBJTYPE_FILES];
+	return fup;
 }
 
 /*
- * Calculate the grace period and return a printable string for it.
+ * Check to see if target appears in list of size cnt.
  */
-const char *
-timeprt(seconds)
-	time_t seconds;
+static int
+oneof(const char *target, char *list[], int cnt)
 {
-	time_t hours, minutes;
-	static char buf[20];
-	static time_t now;
+	int i;
 
-	if (now == 0)
-		time(&now);
-	if (now > seconds)
-		return ("none");
-	seconds -= now;
-	minutes = (seconds + 30) / 60;
-	hours = (minutes + 30) / 60;
-	if (hours >= 36) {
-		sprintf(buf, "%lddays", (long)((hours + 12) / 24));
-		return (buf);
-	}
-	if (minutes >= 60) {
-		sprintf(buf, "%2ld:%ld", (long)(minutes / 60),
-		    (long)(minutes % 60));
-		return (buf);
-	}
-	sprintf(buf, "%2ld", (long)minutes);
-	return (buf);
+	for (i = 0; i < cnt; i++)
+		if (strcmp(target, list[i]) == 0)
+			return i;
+	return -1;
 }
+
+static int
+isover(struct quotaval *qv, time_t now)
+{ 
+	return (qv->qv_usage >= qv->qv_hardlimit ||
+		qv->qv_usage >= qv->qv_softlimit);
+} 

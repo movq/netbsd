@@ -1,42 +1,26 @@
 #	from: @(#)Makefile.inc	5.1 (Berkeley) 2/18/91
-#	$NetBSD: Makefile.inc,v 1.54 2009/01/11 02:46:28 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.60 2012/01/20 16:31:29 joerg Exp $
 
 # locale sources
 .PATH: ${ARCHDIR}/locale ${.CURDIR}/locale
 
 SRCS+=	_def_messages.c _def_monetary.c _def_numeric.c _def_time.c \
-	setlocale.c setlocale1.c setlocale32.c __mb_cur_max.c \
+	setlocale.c __mb_cur_max.c \
 	current_locale.c global_locale.c fix_grouping.c \
 	localeconv.c nl_langinfo.c \
 	generic_lc_all.c dummy_lc_collate.c \
 	wcstol.c wcstoll.c wcstoimax.c wcstoul.c wcstoull.c wcstoumax.c \
 	wcstod.c wcstof.c wcstold.c wcscoll.c wcsxfrm.c wcsftime.c
 
-.if ${CITRUS} == "no"
-RUNE=		no
-.endif
-
-RUNE?=		yes
-
-.if ${RUNE} == "no"
-# singlebyte locale - dummy
-CPPFLAGS+=	-UWITH_RUNE
-SRCS+=	aliasname.c bsdctype.c localeio.c \
-	multibyte_sb.c iswctype_sb.c \
-	localeio_lc_ctype.c localeio_lc_monetary.c \
-	localeio_lc_numeric.c localeio_lc_time.c
-.else
 # citrus multibyte locale support
 # we have quirk for libc.a - see the last part of lib/libc/Makefile
 CPPFLAGS+=	-DWITH_RUNE -I${.CURDIR}
-SRCS+=	_wctrans.c _wctype.c rune.c runeglue.c runetable.c \
+SRCS+=	_wctrans.c _wctype.c rune.c runetable.c \
 	multibyte_c90.c multibyte_amd1.c iswctype_mb.c
 CPPFLAGS.rune.c+=		-I${LIBCDIR}/citrus
-CPPFLAGS.runeglue.c+=		-I${LIBCDIR}/citrus
 CPPFLAGS.runetable.c+=		-I${LIBCDIR}/citrus
 CPPFLAGS.multibyte_c90.c+=	-I${LIBCDIR}/citrus
 CPPFLAGS.multibyte_amd1.c+=	-I${LIBCDIR}/citrus
-.endif
 
 MAN+=	setlocale.3 nl_langinfo.3
 
@@ -68,3 +52,5 @@ MLINKS+=towlower.3 towupper.3
 MLINKS+=wcstod.3 wcstof.3 wcstod.3 wcstold.3
 MLINKS+=wcstol.3 wcstoll.3 wcstol.3 wcstoimax.3 \
 	wcstol.3 wcstoul.3 wcstol.3 wcstoull.3 wcstol.3 wcstoumax.3
+
+COPTS.wcsftime.c = -Wno-format-nonliteral

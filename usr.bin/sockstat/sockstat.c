@@ -1,4 +1,4 @@
-/*	$NetBSD: sockstat.c,v 1.15 2009/04/13 10:56:56 lukem Exp $ */
+/*	$NetBSD: sockstat.c,v 1.17 2011/05/29 04:45:08 manu Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sockstat.c,v 1.15 2009/04/13 10:56:56 lukem Exp $");
+__RCSID("$NetBSD: sockstat.c,v 1.17 2011/05/29 04:45:08 manu Exp $");
 #endif
 
 #include <sys/types.h>
@@ -66,6 +66,8 @@ __RCSID("$NetBSD: sockstat.c,v 1.15 2009/04/13 10:56:56 lukem Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 #include <util.h>
+
+#include "prog_ops.h"
 
 #define satosun(sa)	((struct sockaddr_un *)(sa))
 #define satosin(sa)	((struct sockaddr_in *)(sa))
@@ -172,6 +174,9 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if (prog_init && prog_init() == -1)
+		err(1, "init");
+
 	if ((portmap != NULL) && (pf_list == 0)) {
 		pf_list = PF_LIST_INET;
 #ifdef INET6
@@ -205,6 +210,7 @@ main(int argc, char *argv[])
 
 	if (pf_list & PF_LIST_LOCAL) {
 		get_sockets("net.local.stream.pcblist");
+		get_sockets("net.local.seqpacket.pcblist");
 		get_sockets("net.local.dgram.pcblist");
 	}
 
@@ -355,7 +361,7 @@ sysctl_sucker(int *name, u_int namelen, void **vp, size_t *szp)
 	v = NULL;
 	sz = 0;
 	do {
-		rc = sysctl(&name[0], namelen, v, &sz, NULL, 0);
+		rc = prog_sysctl(&name[0], namelen, v, &sz, NULL, 0);
 		if (rc == -1 && errno != ENOMEM)
 			err(1, "sysctl");
 		if (rc == -1 && v != NULL) {
@@ -534,7 +540,7 @@ get_proc(struct kinfo_proc2 *p, int pid)
 	name[namelen++] = sz;
 	name[namelen++] = 1;
 
-	return (sysctl(&name[0], namelen, p, &sz, NULL, 0));
+	return (prog_sysctl(&name[0], namelen, p, &sz, NULL, 0));
 }
 
 int

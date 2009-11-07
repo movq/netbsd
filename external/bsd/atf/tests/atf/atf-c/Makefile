@@ -1,38 +1,37 @@
-# $NetBSD: Makefile,v 1.1 2009/01/19 07:13:05 jmmv Exp $
+# $NetBSD: Makefile,v 1.7 2010/10/20 09:20:10 jmmv Exp $
 
 .include <bsd.own.mk>
 
+TESTS_SUBDIRS=	detail
+
 TESTSDIR=	${TESTSBASE}/atf/atf-c
+ATFFILE=	yes
 
 SRCDIR=		${NETBSDSRCDIR}/external/bsd/atf/dist
-.PATH:		${SRCDIR}/tests/atf/atf-c
+.PATH:		${SRCDIR}/atf-c
+.PATH:		${SRCDIR}/atf-c/detail
 
 CPPFLAGS+=	-DHAVE_CONFIG_H
 CPPFLAGS+=	-I${NETBSDSRCDIR}/external/bsd/atf/lib/libatf-c
 
-PROGS=		h_check
-SRCS.h_check=	h_check.c
-MAN.h_check=	# defined
-BINDIR.h_check=	${TESTSDIR}
+FILESDIR=	${TESTSDIR}
+FILES=		macros_h_test.c
 
-TESTS_C=	t_check
-TESTS_C+=	t_config
-TESTS_C+=	t_dynstr
-TESTS_C+=	t_env
-TESTS_C+=	t_error
-TESTS_C+=	t_expand
-TESTS_C+=	t_fs
-TESTS_C+=	t_io
-TESTS_C+=	t_list
-TESTS_C+=	t_macros
-TESTS_C+=	t_map
-TESTS_C+=	t_process
-TESTS_C+=	t_sanity
-TESTS_C+=	t_signals
-TESTS_C+=	t_tc
-TESTS_C+=	t_tcr
-TESTS_C+=	t_text
-TESTS_C+=	t_ui
-TESTS_C+=	t_user
+TESTS_C=
+.for test in	atf_c_test \
+		build_test \
+		check_test \
+		config_test \
+		error_test \
+		macros_test \
+		tc_test \
+		tp_test \
+		utils_test
+TESTS_C+=	${test}
+SRCS.${test}=	${test}.c test_helpers.c
+.endfor
+.undef test
+
+TESTS_SH=	pkg_config_test
 
 .include <bsd.test.mk>

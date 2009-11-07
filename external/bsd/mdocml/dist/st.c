@@ -1,6 +1,6 @@
-/*	$Vendor-Id: st.c,v 1.5 2009/10/26 17:05:44 kristaps Exp $ */
+/*	$Vendor-Id: st.c,v 1.9 2011/03/22 14:33:05 kristaps Exp $ */
 /*
- * Copyright (c) 2009 Kristaps Dzonsons <kristaps@kth.se>
+ * Copyright (c) 2009 Kristaps Dzonsons <kristaps@bsd.lv>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,10 +14,16 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include "mdoc.h"
+#include "mandoc.h"
 #include "libmdoc.h"
 
 #define LINE(x, y) \

@@ -1,4 +1,4 @@
-/*	$NetBSD: xinstall.c,v 1.113 2009/10/30 20:57:30 joerg Exp $	*/
+/*	$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\
 #if 0
 static char sccsid[] = "@(#)xinstall.c	8.1 (Berkeley) 7/21/93";
 #else
-__RCSID("$NetBSD: xinstall.c,v 1.113 2009/10/30 20:57:30 joerg Exp $");
+__RCSID("$NetBSD: xinstall.c,v 1.115 2011/09/06 18:50:32 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,20 +83,21 @@ __RCSID("$NetBSD: xinstall.c,v 1.113 2009/10/30 20:57:30 joerg Exp $");
 #define STRIP_ARGS_MAX 32
 #define BACKUP_SUFFIX ".old"
 
-int	dobackup, dodir, dostrip, dolink, dopreserve, dorename, dounpriv;
-int	haveopt_f, haveopt_g, haveopt_m, haveopt_o;
-int	numberedbackup;
-int	mode = S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
-char	pathbuf[MAXPATHLEN];
-id_t	uid = -1, gid = -1;
-char	*group, *owner, *fflags, *tags;
-FILE	*metafp;
-char	*metafile;
-u_long	fileflags;
-char	*stripArgs;
-char	*afterinstallcmd;
-const char *suffix = BACKUP_SUFFIX;
-char	*destdir;
+static int	dobackup, dodir, dostrip, dolink, dopreserve, dorename, dounpriv;
+static int	haveopt_f, haveopt_g, haveopt_m, haveopt_o;
+static int	numberedbackup;
+static int	mode = S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
+static char	pathbuf[MAXPATHLEN];
+static uid_t	uid = -1;
+static gid_t	gid = -1;
+static char	*group, *owner, *fflags, *tags;
+static FILE	*metafp;
+static char	*metafile;
+static u_long	fileflags;
+static char	*stripArgs;
+static char	*afterinstallcmd;
+static const char *suffix = BACKUP_SUFFIX;
+static char	*destdir;
 
 enum {
 	DIGEST_NONE = 0,
@@ -107,7 +108,8 @@ enum {
 	DIGEST_SHA384,
 	DIGEST_SHA512,
 } digesttype = DIGEST_NONE;
-char	*digest;
+
+static char	*digest;
 
 #define LN_ABSOLUTE	0x01
 #define LN_RELATIVE	0x02
@@ -120,22 +122,21 @@ char	*digest;
 #define	HASUID		0x04		/* Tell install the uid was given */
 #define	HASGID		0x08		/* Tell install the gid was given */
 
-void	afterinstall(const char *, const char *, int);
-void	backup(const char *);
-char   *copy(int, char *, int, char *, off_t);
-int	do_link(char *, char *);
-void	do_symlink(char *, char *);
-void	install(char *, char *, u_int);
-void	install_dir(char *, u_int);
-int	main(int, char *[]);
-void	makelink(char *, char *);
-void	metadata_log(const char *, const char *, struct timeval *,
+static void	afterinstall(const char *, const char *, int);
+static void	backup(const char *);
+static char   *copy(int, char *, int, char *, off_t);
+static int	do_link(char *, char *);
+static void	do_symlink(char *, char *);
+static void	install(char *, char *, u_int);
+static void	install_dir(char *, u_int);
+static void	makelink(char *, char *);
+static void	metadata_log(const char *, const char *, struct timeval *,
 	    const char *, const char *, off_t);
-int	parseid(char *, id_t *);
-void	strip(char *);
-void	usage(void);
-char   *xbasename(char *);
-char   *xdirname(char *);
+static int	parseid(char *, id_t *);
+static void	strip(char *);
+__dead static void	usage(void);
+static char   *xbasename(char *);
+static char   *xdirname(char *);
 
 int
 main(int argc, char *argv[])
@@ -312,13 +313,21 @@ main(int argc, char *argv[])
 
 	/* get group and owner id's */
 	if (group && !dounpriv) {
-		if (gid_from_group(group, &gid) == -1 && ! parseid(group, &gid))
-			errx(1, "unknown group %s", group);
+		if (gid_from_group(group, &gid) == -1) {
+			id_t id;
+			if (!parseid(group, &id))
+				errx(1, "unknown group %s", group);
+			gid = id;
+		}
 		iflags |= HASGID;
 	}
 	if (owner && !dounpriv) {
-		if (uid_from_user(owner, &uid) == -1 && ! parseid(owner, &uid))
-			errx(1, "unknown user %s", owner);
+		if (uid_from_user(owner, &uid) == -1) {
+			id_t id;
+			if (!parseid(owner, &id))
+				errx(1, "unknown user %s", owner);
+			uid = id;
+		}
 		iflags |= HASUID;
 	}
 
@@ -394,7 +403,7 @@ main(int argc, char *argv[])
  * parseid --
  *	parse uid or gid from arg into id, returning non-zero if successful
  */
-int
+static int
 parseid(char *name, id_t *id)
 {
 	char	*ep;
@@ -411,7 +420,7 @@ parseid(char *name, id_t *id)
  *	make a hard link, obeying dorename if set
  *	return -1 on failure
  */
-int
+static int
 do_link(char *from_name, char *to_name)
 {
 	char tmpl[MAXPATHLEN];
@@ -441,7 +450,7 @@ do_link(char *from_name, char *to_name)
  *	make a symbolic link, obeying dorename if set
  *	exit on failure
  */
-void
+static void
 do_symlink(char *from_name, char *to_name)
 {
 	char tmpl[MAXPATHLEN];
@@ -469,7 +478,7 @@ do_symlink(char *from_name, char *to_name)
  * makelink --
  *	make a link from source to destination
  */
-void
+static void
 makelink(char *from_name, char *to_name)
 {
 	char	src[MAXPATHLEN], dst[MAXPATHLEN], lnk[MAXPATHLEN];
@@ -607,7 +616,7 @@ makelink(char *from_name, char *to_name)
  * install --
  *	build a path name and install the file
  */
-void
+static void
 install(char *from_name, char *to_name, u_int flags)
 {
 	struct stat	from_sb;
@@ -799,7 +808,7 @@ install(char *from_name, char *to_name, u_int flags)
  *
  *	If to_fd < 0, just calculate a digest, don't copy.
  */
-char *
+static char *
 copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 {
 	ssize_t	nr, nw;
@@ -953,7 +962,7 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
  * strip --
  *	use strip(1) to strip the target file
  */
-void
+static void
 strip(char *to_name)
 {
 	static const char exec_failure[] = ": exec of strip failed: ";
@@ -1016,7 +1025,7 @@ strip(char *to_name)
  *	run provided command on the target file or directory after it's been
  *	installed and stripped, but before permissions are set or it's renamed
  */
-void
+static void
 afterinstall(const char *command, const char *to_name, int errunlink)
 {
 	int	serrno, status;
@@ -1060,7 +1069,7 @@ afterinstall(const char *command, const char *to_name, int errunlink)
  *	if suffix contains a "%", it's taken as a printf(3) pattern
  *	used for a numbered backup.
  */
-void
+static void
 backup(const char *to_name)
 {
 	char	bname[FILENAME_MAX];
@@ -1090,7 +1099,7 @@ backup(const char *to_name)
  * install_dir --
  *	build directory hierarchy
  */
-void
+static void
 install_dir(char *path, u_int flags)
 {
 	char		*p;
@@ -1140,7 +1149,7 @@ install_dir(char *path, u_int flags)
  *	metafp, to allow permissions to be set correctly by other tools,
  *	or to allow integrity checks to be performed.
  */
-void
+static void
 metadata_log(const char *path, const char *type, struct timeval *tv,
 	const char *slink, const char *digestresult, off_t size)
 {
@@ -1216,7 +1225,7 @@ metadata_log(const char *path, const char *type, struct timeval *tv,
  *	libc basename(3) that returns a pointer to a static buffer
  *	instead of overwriting that passed-in string.
  */
-char *
+static char *
 xbasename(char *path)
 {
 	static char tmp[MAXPATHLEN];
@@ -1230,7 +1239,7 @@ xbasename(char *path)
  *	libc dirname(3) that returns a pointer to a static buffer
  *	instead of overwriting that passed-in string.
  */
-char *
+static char *
 xdirname(char *path)
 {
 	static char tmp[MAXPATHLEN];
@@ -1243,7 +1252,7 @@ xdirname(char *path)
  * usage --
  *	print a usage message and die
  */
-void
+static void
 usage(void)
 {
 	const char *prog;

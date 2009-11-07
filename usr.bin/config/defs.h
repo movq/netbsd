@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.30 2009/03/13 20:44:59 cube Exp $	*/
+/*	$NetBSD: defs.h,v 1.35.8.1 2012/06/12 19:23:33 riz Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -104,7 +104,7 @@ extern const char *progname;
  * The next two lines define the current version of the config(1) binary,
  * and the minimum version of the configuration files it supports.
  */
-#define CONFIG_VERSION		20090313
+#define CONFIG_VERSION		20100430
 #define CONFIG_MINVERSION	0
 
 /*
@@ -260,6 +260,7 @@ struct devi {
 #define	DEVI_ACTIVE	1	/* instance has an active parent */
 #define	DEVI_IGNORED	2	/* instance's parent has been removed */
 #define DEVI_BROKEN	3	/* instance is broken (syntax error) */
+	int	i_pseudoroot;	/* instance is pseudoroot */
 
 	/* created during packing or ioconf.c generation */
 	short	i_collapsed;	/* set => this alias no longer needed */
@@ -370,6 +371,7 @@ struct devm {
 	devmajor_t	dm_cmajor;	/* character major */
 	devmajor_t	dm_bmajor;	/* block major */
 	struct nvlist	*dm_opts;	/* options */
+	struct nvlist	*dm_devnodes;	/* information on /dev nodes */
 };
 
 /*
@@ -387,6 +389,7 @@ const char *machine;		/* machine type, e.g., "sparc" or "sun3" */
 const char *machinearch;	/* machine arch, e.g., "sparc" or "m68k" */
 struct	nvlist *machinesubarches;
 				/* machine subarches, e.g., "sun68k" or "hpc" */
+const char *ioconfname;		/* ioconf name, mutually exclusive to machine */
 const char *srcdir;		/* path to source directory (rel. to build) */
 const char *builddir;		/* path to build directory */
 const char *defbuilddir;	/* default build directory */
@@ -424,7 +427,7 @@ struct	hashtab *cdevmtab;	/* character devm lookup */
 
 TAILQ_HEAD(, devbase)	allbases;	/* list of all devbase structures */
 TAILQ_HEAD(, deva)	alldevas;	/* list of all devbase attachments */
-TAILQ_HEAD(, config)	allcf;		/* list of configured kernels */
+TAILQ_HEAD(conftq, config) allcf;	/* list of configured kernels */
 TAILQ_HEAD(, devi)	alldevi,	/* list of all instances */
 			allpseudo;	/* list of all pseudo-devices */
 TAILQ_HEAD(, devm)	alldevms;	/* list of all device-majors */
@@ -493,7 +496,7 @@ void	addfsoption(const char *);
 void	addmkoption(const char *, const char *);
 void	appendmkoption(const char *, const char *);
 void	appendcondmkoption(struct nvlist *, const char *, const char *);
-void	deffilesystem(const char *, struct nvlist *, struct nvlist *);
+void	deffilesystem(struct nvlist *, struct nvlist *);
 void	defoption(const char *, struct nvlist *, struct nvlist *);
 void	defflag(const char *, struct nvlist *, struct nvlist *, int);
 void	defparam(const char *, struct nvlist *, struct nvlist *, int);
@@ -523,6 +526,8 @@ int	mkdevsw(void);
 /* mkheaders.c */
 int	mkheaders(void);
 int	moveifchanged(const char *, const char *);
+int	emitlocs(void);
+int	emitioconfh(void);
 
 /* mkioconf.c */
 int	mkioconf(void);

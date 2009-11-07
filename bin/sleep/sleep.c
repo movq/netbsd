@@ -1,4 +1,4 @@
-/* $NetBSD: sleep.c,v 1.22 2008/07/20 00:52:40 lukem Exp $ */
+/* $NetBSD: sleep.c,v 1.24 2011/08/29 14:51:19 joerg Exp $ */
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)sleep.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: sleep.c,v 1.22 2008/07/20 00:52:40 lukem Exp $");
+__RCSID("$NetBSD: sleep.c,v 1.24 2011/08/29 14:51:19 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,9 +53,16 @@ __RCSID("$NetBSD: sleep.c,v 1.22 2008/07/20 00:52:40 lukem Exp $");
 #include <time.h>
 #include <unistd.h>
 
-static void alarmhandle(int);
-static void usage(void);
-int main(int, char *[]);
+__dead static void alarmhandle(int);
+__dead static void usage(void);
+
+static volatile sig_atomic_t report_requested;
+static void
+report_request(int signo __unused)
+{
+
+	report_requested = 1;
+}
 
 int
 main(int argc, char *argv[])
@@ -63,7 +70,8 @@ main(int argc, char *argv[])
 	char *arg, *temp;
 	double fval, ival, val;
 	struct timespec ntime;
-	int ch, fracflag;
+	time_t original;
+	int ch, fracflag, rv;
 
 	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
@@ -115,14 +123,26 @@ main(int argc, char *argv[])
 		ntime.tv_nsec = 0;
 	}
 
-	if (nanosleep(&ntime, NULL) == -1)
+	original = ntime.tv_sec;
+	signal(SIGINFO, report_request);
+	while ((rv = nanosleep(&ntime, &ntime)) != 0) {
+		if (report_requested) {
+		/* Reporting does not bother with nanoseconds. */
+			warnx("about %d second(s) left out of the original %d",
+			(int)ntime.tv_sec, (int)original);
+			report_requested = 0;
+		} else
+			break;
+	}
+
+	if (rv == -1)
 		err(EXIT_FAILURE, "nanosleep failed");
 
 	return EXIT_SUCCESS;
 	/* NOTREACHED */
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: %s seconds\n", getprogname());
@@ -131,7 +151,7 @@ usage(void)
 }
 
 /* ARGSUSED */
-void
+static void
 alarmhandle(int i)
 {
 	_exit(EXIT_SUCCESS);

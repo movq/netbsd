@@ -1,4 +1,4 @@
-/*	$NetBSD: form.h,v 1.19 2004/11/24 11:57:09 blymn Exp $	*/
+/*	$NetBSD: form.h,v 1.21 2011/11/28 12:44:18 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -233,7 +233,7 @@ struct _form_field {
 	FIELDTYPE *type; /* type struct for the field */
 	CIRCLEQ_ENTRY(_form_field) glue; /* circle queue glue for sorting fields */
 	char *args; /* args for field type. */
-	_FORMI_FIELD_LINES *lines; /* array of the starts and ends of lines */
+	_FORMI_FIELD_LINES *alines; /* array of the starts and ends of lines */
 	_FORMI_FIELD_LINES *free; /* list of lines available for reuse */
 	FORM_STR *buffers; /* array of buffers for the field */
 };
@@ -355,8 +355,7 @@ int          set_field_init(FORM *, Form_Hook);
 int          set_field_just(FIELD *, int);
 int          set_field_opts(FIELD *, Form_Options);
 int          set_field_pad(FIELD *, int);
-int          set_field_printf(FIELD *, int, char *, ...)
-				__attribute__((__format__(__printf__, 3, 4)));
+int          set_field_printf(FIELD *, int, char *, ...) __printflike(3, 4);
 int          set_field_status(FIELD *, int);
 int          set_field_term(FORM *, Form_Hook);
 int          set_field_type(FIELD *, FIELDTYPE *, ...);

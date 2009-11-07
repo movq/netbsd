@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.37 2009/10/21 21:12:00 rmind Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.49.10.1 2012/03/17 17:33:08 bouyer Exp $	*/
 
 /*	$OpenBSD: vm_machdep.c,v 1.64 2008/09/30 18:54:26 miod Exp $	*/
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.37 2009/10/21 21:12:00 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.49.10.1 2012/03/17 17:33:08 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,10 +38,11 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.37 2009/10/21 21:12:00 rmind Exp $"
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/ptrace.h>
 #include <sys/exec.h>
 #include <sys/core.h>
+#include <sys/pool.h>
+#include <sys/cpu.h>
 
 #include <machine/cpufunc.h>
 #include <machine/pmap.h>
@@ -49,24 +50,25 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.37 2009/10/21 21:12:00 rmind Exp $"
 
 #include <uvm/uvm.h>
 
+extern struct pool hppa_fppl;
+
 #include <hppa/hppa/machdep.h>
 
 static inline void
 cpu_activate_pcb(struct lwp *l)
 {
 	struct trapframe *tf = l->l_md.md_regs;
-	vaddr_t pcb = (vaddr_t)l->l_addr;
+	struct pcb *pcb = lwp_getpcb(l);
 #ifdef DIAGNOSTIC
-	vaddr_t maxsp = pcb + USPACE;
+	vaddr_t uarea = (vaddr_t)pcb;
+	vaddr_t maxsp = uarea + USPACE;
 #endif
+	KASSERT(tf == (void *)(uarea + PAGE_SIZE));
 
-	KASSERT(tf == (void *)(pcb + PAGE_SIZE));
 	/*
-	 * Stash the physical for the pcb of U for later perusal
+	 * Stash the physical address of FP regs for later perusal
 	 */
-	l->l_addr->u_pcb.pcb_uva = pcb;
-	tf->tf_cr30 = kvtop((void *)pcb);
-	fdcache(HPPA_SID_KERNEL, pcb, sizeof(l->l_addr->u_pcb));
+	tf->tf_cr30 = (u_int)pcb->pcb_fpregs;
 
 #ifdef DIAGNOSTIC
 	/* Create the kernel stack red zone. */
@@ -79,35 +81,41 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	struct proc *p = l2->l_proc;
-	pmap_t pmap = p->p_vmspace->vm_map.pmap;
-	pa_space_t space = pmap->pm_space;
-	struct pcb *pcbp;
+	struct pcb *pcb1, *pcb2;
 	struct trapframe *tf;
 	register_t sp, osp;
+	vaddr_t uv;
 
-#ifdef DIAGNOSTIC
-	if (round_page(sizeof(struct user)) > PAGE_SIZE)
-		panic("USPACE too small for user");
-#endif
+	KASSERT(round_page(sizeof(struct pcb)) <= PAGE_SIZE);
 
+	pcb1 = lwp_getpcb(l1);
+	pcb2 = lwp_getpcb(l2);
+
+	l2->l_md.md_astpending = 0;
 	l2->l_md.md_flags = 0;
 
 	/* Flush the parent LWP out of the FPU. */
 	hppa_fpu_flush(l1);
 
 	/* Now copy the parent PCB into the child. */
-	pcbp = &l2->l_addr->u_pcb;
-	memcpy(pcbp, &l1->l_addr->u_pcb, sizeof(*pcbp));
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)&l1->l_addr->u_pcb,
-		sizeof(pcbp->pcb_fpregs));
-	/* reset any of the pending FPU exceptions from parent */
-	pcbp->pcb_fpregs[0] = HPPA_FPU_FORK(pcbp->pcb_fpregs[0]);
-	pcbp->pcb_fpregs[1] = 0;
-	pcbp->pcb_fpregs[2] = 0;
-	pcbp->pcb_fpregs[3] = 0;
+	memcpy(pcb2, pcb1, sizeof(struct pcb));
 
-	sp = (register_t)l2->l_addr + PAGE_SIZE;
+	pcb2->pcb_fpregs = pool_get(&hppa_fppl, PR_WAITOK);
+	*pcb2->pcb_fpregs = *pcb1->pcb_fpregs;
+
+	/* reset any of the pending FPU exceptions from parent */
+	pcb2->pcb_fpregs->fpr_regs[0] =
+	    HPPA_FPU_FORK(pcb2->pcb_fpregs->fpr_regs[0]);
+	pcb2->pcb_fpregs->fpr_regs[1] = 0;
+	pcb2->pcb_fpregs->fpr_regs[2] = 0;
+	pcb2->pcb_fpregs->fpr_regs[3] = 0;
+
+	l2->l_md.md_bpva = l1->l_md.md_bpva;
+	l2->l_md.md_bpsave[0] = l1->l_md.md_bpsave[0];
+	l2->l_md.md_bpsave[1] = l1->l_md.md_bpsave[1];
+
+	uv = uvm_lwp_getuarea(l2);
+	sp = (register_t)uv + PAGE_SIZE;
 	l2->l_md.md_regs = tf = (struct trapframe *)sp;
 	sp += sizeof(struct trapframe);
 
@@ -117,23 +125,28 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	/* Fill out all the PAs we are going to need in locore. */
 	cpu_activate_pcb(l2);
 
-	/* Load all of the user's space registers. */
-	tf->tf_sr0 = tf->tf_sr1 = tf->tf_sr3 = tf->tf_sr2 = 
-	tf->tf_sr4 = tf->tf_sr5 = tf->tf_sr6 = space;
-	tf->tf_iisq_head = tf->tf_iisq_tail = space;
+	if (__predict_true(l2->l_proc->p_vmspace != NULL)) {
+		struct proc *p = l2->l_proc;
+		pmap_t pmap = p->p_vmspace->vm_map.pmap;
+		pa_space_t space = pmap->pm_space;
 
-	/* Load the protection registers */
-	tf->tf_pidr1 = tf->tf_pidr2 = pmap->pm_pid;
+		/* Load all of the user's space registers. */
+		tf->tf_sr0 = tf->tf_sr1 = tf->tf_sr3 = tf->tf_sr2 = 
+		tf->tf_sr4 = tf->tf_sr5 = tf->tf_sr6 = space;
+		tf->tf_iisq_head = tf->tf_iisq_tail = space;
 
-	/*
-	 * theoretically these could be inherited from the father,
-	 * but just in case.
-	 */
-	tf->tf_sr7 = HPPA_SID_KERNEL;
-	mfctl(CR_EIEM, tf->tf_eiem);
-	tf->tf_ipsw = PSW_C | PSW_Q | PSW_P | PSW_D | PSW_I /* | PSW_L */ |
-	    (kpsw & PSW_O);
-	pcbp->pcb_fpregs[HPPA_NFPREGS] = 0;
+		/* Load the protection registers */
+		tf->tf_pidr1 = tf->tf_pidr2 = pmap->pm_pid;
+
+		/*
+		 * theoretically these could be inherited from the father,
+		 * but just in case.
+		 */
+		tf->tf_sr7 = HPPA_SID_KERNEL;
+		mfctl(CR_EIEM, tf->tf_eiem);
+		tf->tf_ipsw = PSW_C | PSW_Q | PSW_P | PSW_D | PSW_I /* | PSW_L */ |
+		    (curcpu()->ci_psw & PSW_O);
+	}
 
 	/*
 	 * Set up return value registers as libc:fork() expects
@@ -156,6 +169,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	/* lwp_trampoline's frame */
 	sp += HPPA_FRAME_SIZE;
 
+	*(register_t *)(sp) = 0;	/* previous frame pointer */
 	*(register_t *)(sp + HPPA_FRAME_PSP) = osp;
 	*(register_t *)(sp + HPPA_FRAME_CRP) = (register_t)lwp_trampoline;
 
@@ -167,18 +181,19 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	 * 	stack usage is std frame + callee-save registers
 	 */
 	sp += HPPA_FRAME_SIZE + 16*4;
-	pcbp->pcb_ksp = sp;
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)l2->l_addr, sp - (vaddr_t)l2->l_addr);
+	pcb2->pcb_ksp = sp;
+	fdcache(HPPA_SID_KERNEL, uv, sp - uv);
 }
 
 void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	struct pcb *pcbp = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
+	vaddr_t uv = uvm_lwp_getuarea(l);
 	struct trapframe *tf;
 	register_t sp, osp;
 
-	sp = (register_t)pcbp + PAGE_SIZE;
+	sp = (register_t)pcb + PAGE_SIZE;
 	l->l_md.md_regs = tf = (struct trapframe *)sp;
 	sp += sizeof(struct trapframe);
 
@@ -192,8 +207,9 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	/* setfunc_trampoline's frame */
 	sp += HPPA_FRAME_SIZE;
 
+	*(register_t *)(sp) = 0;	/* previous frame pointer */
 	*(register_t *)(sp + HPPA_FRAME_PSP) = osp;
-	*(register_t *)(sp + HPPA_FRAME_CRP) = (register_t)setfunc_trampoline;
+	*(register_t *)(sp + HPPA_FRAME_CRP) = (register_t)lwp_trampoline;
 
 	*HPPA_FRAME_CARG(2, sp) = KERNMODE(func);
 	*HPPA_FRAME_CARG(3, sp) = (register_t)arg;
@@ -203,20 +219,22 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	 * 	stack usage is std frame + callee-save registers
 	 */
 	sp += HPPA_FRAME_SIZE + 16*4;
-	pcbp->pcb_ksp = sp;
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)l->l_addr, sp - (vaddr_t)l->l_addr);
+	pcb->pcb_ksp = sp;
+	fdcache(HPPA_SID_KERNEL, uv, sp - uv);
 }
 
 void
 cpu_lwp_free(struct lwp *l, int proc)
 {
-
+	struct pcb *pcb = lwp_getpcb(l);
+	
 	/*
 	 * If this thread was using the FPU, disable the FPU and record
 	 * that it's unused.
 	 */
 
 	hppa_fpu_flush(l);
+	pool_put(&hppa_fppl, pcb->pcb_fpregs);
 }
 
 void
@@ -229,7 +247,7 @@ cpu_lwp_free2(struct lwp *l)
 /*
  * Map an IO request into kernel virtual address space.
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t uva, kva;
@@ -260,6 +278,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 		kva += PAGE_SIZE;
 	}
 	pmap_update(kpmap);
+
+	return 0;
 }
 
 /*
@@ -286,3 +306,14 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
 }
+
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+
+	l->l_md.md_regs->tf_cr27 = (u_int)addr;
+	if (l == curlwp)
+		mtctl(addr, CR_TLS);
+	return 0;
+}
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cvreg.h,v 1.13 2008/12/18 05:04:22 mhitch Exp $	*/
+/*	$NetBSD: grf_cvreg.h,v 1.19 2012/02/12 16:34:07 matt Exp $	*/
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -34,8 +34,10 @@
 #ifndef _GRF_CVREG_H
 #define _GRF_CVREG_H
 
+#include <machine/cpu.h>
+
 /*
- * This is derived from ciruss driver source
+ * This is derived from Cirrus driver source
  */
 
 /* Extension to grfvideo_mode to support text modes.
@@ -55,17 +57,15 @@ struct grfcvtext_mode {
 	unsigned short	fdend;
 };
 
-/* maximum console size */
-#define MAXROWS 200
-#define MAXCOLS 200
 
 /* read VGA register */
-#define vgar(ba, reg) (*(((volatile char *)ba)+reg))
+#define vgar(ba, reg) \
+	(*(((volatile char *)ba)+reg))
 
 /* write VGA register */
 #define vgaw(ba, reg, val) \
-	*(((volatile char *)ba)+reg) = ((val) & 0xff)
-
+	*(((volatile char *)ba)+reg) = ((val) & 0xff); \
+	amiga_membarrier()
 
 /* read 32 Bit VGA register */
 #define vgar32(ba, reg) \
@@ -73,7 +73,8 @@ struct grfcvtext_mode {
 
 /* write 32 Bit VGA register */
 #define vgaw32(ba, reg, val) \
-	*((unsigned long *)  (((volatile char *)ba)+reg)) = val
+	*((unsigned long *)  (((volatile char *)ba)+reg)) = val; \
+	amiga_membarrier()
 
 /* read 16 Bit VGA register */
 #define vgar16(ba, reg) \
@@ -81,7 +82,8 @@ struct grfcvtext_mode {
 
 /* write 16 Bit VGA register */
 #define vgaw16(ba, reg, val) \
-	*((volatile unsigned short *)  (((volatile char *)ba)+reg)) = val
+	*((volatile unsigned short *) (((volatile char *)ba)+reg)) = val; \
+	amiga_membarrier()
 
 #ifdef _KERNEL
 int grfcv_cnprobe(void);
@@ -365,23 +367,21 @@ static inline unsigned char RGfx(volatile void *, short);
 
 
 /* Gfx engine busy wait */
-
+#ifdef _KERNEL
 static inline void
-GfxBusyWait (ba)
-	volatile void *ba;
+GfxBusyWait (volatile void *ba)
 {
 	int test;
 
 	do {
 		test = vgar16 (ba, ECR_GP_STAT);
-		__asm volatile ("nop");
+		amiga_cpu_sync();
 	} while (test & (1 << 9));
 }
 
 
 static inline void
-GfxFifoWait(ba)
-	volatile void *ba;
+GfxFifoWait(volatile void *ba)
 {
 	int test;
 
@@ -399,9 +399,7 @@ GfxFifoWait(ba)
  */
 
 static inline unsigned char
-RAttr(ba, idx)
-	volatile void *ba;
-	short idx;
+RAttr(volatile void *ba, short idx)
 {
 
 	vgaw(ba, ACT_ADDRESS_W, idx);
@@ -410,30 +408,25 @@ RAttr(ba, idx)
 }
 
 static inline unsigned char
-RSeq(ba, idx)
-	volatile void *ba;
-	short idx;
+RSeq(volatile void *ba, short idx)
 {
 	vgaw(ba, SEQ_ADDRESS, idx);
 	return vgar(ba, SEQ_ADDRESS_R);
 }
 
 static inline unsigned char
-RCrt(ba, idx)
-	volatile void *ba;
-	short idx;
+RCrt(volatile void *ba, short idx)
 {
 	vgaw(ba, CRT_ADDRESS, idx);
 	return vgar(ba, CRT_ADDRESS_R);
 }
 
 static inline unsigned char
-RGfx(ba, idx)
-	volatile void *ba;
-	short idx;
+RGfx(volatile void *ba, short idx)
 {
 	vgaw(ba, GCT_ADDRESS, idx);
 	return vgar(ba, GCT_ADDRESS_R);
 }
+#endif
 
-#endif /* _GRF_RHREG_H */
+#endif /* _GRF_CVREG_H */

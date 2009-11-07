@@ -1,4 +1,4 @@
-/*	$NetBSD: cs89x0.c,v 1.28 2009/09/22 16:44:08 tsutsui Exp $	*/
+/*	$NetBSD: cs89x0.c,v 1.33 2012/02/02 19:43:03 tls Exp $	*/
 
 /*
  * Copyright (c) 2004 Christopher Gilbert
@@ -212,7 +212,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.28 2009/09/22 16:44:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.33 2012/02/02 19:43:03 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -226,10 +226,7 @@ __KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.28 2009/09/22 16:44:08 tsutsui Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -239,13 +236,8 @@ __KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.28 2009/09/22 16:44:08 tsutsui Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -496,10 +488,8 @@ cs_attach(struct cs_softc *sc, u_int8_t *enaddr, int *media,
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 	sc->sc_cfgflags |= CFGFLG_ATTACHED;
 
 	if (pmf_device_register1(sc->sc_dev, NULL, NULL, cs_shutdown))
@@ -524,9 +514,7 @@ cs_detach(struct cs_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	if (sc->sc_cfgflags & CFGFLG_ATTACHED) {
-#if NRND > 0
 		rnd_detach_source(&sc->rnd_source);
-#endif
 		ether_ifdetach(ifp);
 		if_detach(ifp);
 		sc->sc_cfgflags &= ~CFGFLG_ATTACHED;
@@ -1395,9 +1383,7 @@ cs_intr(void *arg)
 {
 	struct cs_softc *sc = arg;
 	u_int16_t Event;
-#if NRND > 0
 	u_int16_t rndEvent;
-#endif
 
 /*printf("cs_intr %p\n", sc);*/
 	/* Ignore any interrupts that happen while the chip is being reset */
@@ -1416,9 +1402,7 @@ cs_intr(void *arg)
 	if ((Event & REG_NUM_MASK) == 0 || Event == 0xffff)
 		return 0;	/* not ours */
 
-#if NRND > 0
 	rndEvent = Event;
-#endif
 
 	/* Process all the events in the Interrupt Status Queue */
 	while ((Event & REG_NUM_MASK) != 0 && Event != 0xffff) {
@@ -1451,9 +1435,7 @@ cs_intr(void *arg)
 	}
 
 	/* have handled the interrupt */
-#if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, rndEvent);
-#endif
 	return 1;
 }
 
@@ -1676,14 +1658,11 @@ cs_ether_input(struct cs_softc *sc, struct mbuf *m)
 
 	ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
@@ -1932,14 +1911,11 @@ cs_start_output(struct ifnet *ifp)
 		if (pMbufChain == NULL)
 			break;
 
-#if NBPFILTER > 0
 		/*
 	         * If BPF is listening on this interface, let it see the packet
 	         * before we commit it to the wire.
 	         */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, pMbufChain);
-#endif
+		bpf_mtap(ifp, pMbufChain);
 
 		/* Find the total length of the data to transmit */
 		Length = 0;
@@ -2198,19 +2174,12 @@ int
 cs_activate(device_t self, enum devact act)
 {
 	struct cs_softc *sc = device_private(self);
-	int s, error = 0;
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-
-	return error;
 }

@@ -1,4 +1,4 @@
-/* 	$NetBSD: ioapic.c,v 1.44 2009/08/18 16:41:03 jmcneill Exp $	*/
+/* 	$NetBSD: ioapic.c,v 1.47 2012/01/30 17:45:37 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2009 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.44 2009/08/18 16:41:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.47 2012/01/30 17:45:37 jakllsch Exp $");
 
 #include "opt_ddb.h"
 
@@ -82,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: ioapic.c,v 1.44 2009/08/18 16:41:03 jmcneill Exp $")
 #include <machine/i82093var.h>
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
+#include <machine/i8259.h>
 #include <machine/mpbiosvar.h>
 #include <machine/pio.h>
 #include <machine/pmap.h>
@@ -279,8 +280,6 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	ioapic_add(sc);
-
 	aprint_verbose(": pa 0x%jx", (uintmax_t)aaa->apic_address);
 #ifndef _IOAPIC_CUSTOM_RW
 	{
@@ -308,7 +307,14 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 
 	apic_id = (ioapic_read(sc,IOAPIC_ID)&IOAPIC_ID_MASK)>>IOAPIC_ID_SHIFT;
 	ver_sz = ioapic_read(sc, IOAPIC_VER);
-	
+
+	if (ver_sz == 0xffffffff) {
+		aprint_error(": failed to read version/size\n");
+		goto out;
+	}
+
+	ioapic_add(sc);
+
 	sc->sc_apic_vers = (ver_sz & IOAPIC_VER_MASK) >> IOAPIC_VER_SHIFT;
 	sc->sc_apic_sz = (ver_sz & IOAPIC_MAX_MASK) >> IOAPIC_MAX_SHIFT;
 	sc->sc_apic_sz++;
@@ -385,6 +391,7 @@ ioapic_attach(device_t parent, device_t self, void *aux)
 		}
 	}
 
+ out:
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
@@ -450,6 +457,8 @@ ioapic_enable(void)
 {
 	if (ioapics == NULL)
 		return;
+
+	i8259_setmask(0xffff);
 
 	if (ioapics->sc_flags & IOAPIC_PICMODE) {
 		aprint_debug_dev(ioapics->sc_dev,

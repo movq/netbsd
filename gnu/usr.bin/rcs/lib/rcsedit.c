@@ -1,4 +1,4 @@
-/*	$NetBSD: rcsedit.c,v 1.8 1997/03/25 13:56:38 lukem Exp $	*/
+/*	$NetBSD: rcsedit.c,v 1.10 2012/01/06 15:16:03 joerg Exp $	*/
 
 /* RCS stream editor */
 
@@ -38,6 +38,12 @@ Report problems and direct all questions to:
 
 /*
  * $Log: rcsedit.c,v $
+ * Revision 1.10  2012/01/06 15:16:03  joerg
+ * Don't use dangling elses.
+ *
+ * Revision 1.9  2011/05/15 14:31:13  christos
+ * register c -> int c
+ *
  * Revision 1.8  1997/03/25 13:56:38  lukem
  * Add "#define has_mkstemp 1" (which needs "#define has_mktemp 1"),
  * and hack to use mkstemp() instead of mktemp(). This *does* cause the
@@ -633,7 +639,7 @@ copystring()
  * editline is incremented by the number of lines copied.
  * Assumption: next character read is first string character.
  */
-{	register c;
+{	int c;
 	declarecache;
 	register FILE *frew, *fcop;
 	register int amidline;
@@ -878,7 +884,7 @@ expandline(infile, outfile, delta, delimstuffed, frewfile, dolog)
  * 2 if a complete line is copied; adds 1 to yield if expansion occurred.
  */
 {
-	register c;
+	int c;
 	declarecache;
 	register FILE *out, *frew;
 	register char * tp;
@@ -1082,12 +1088,13 @@ keyreplace(marker, delta, delimstuffed, infile, out, dolog)
 			  RCSv==VERSION(3) && delta->lockedby ? "Locked"
 			: delta->state
 		);
-		if (delta->lockedby)
+		if (delta->lockedby) {
 		    if (VERSION(5) <= RCSv) {
 			if (locker_expansion || exp==KEYVALLOCK_EXPAND)
 			    aprintf(out, " %s", delta->lockedby);
 		    } else if (RCSv == VERSION(4))
 			aprintf(out, " Locker: %s", delta->lockedby);
+		}
                 break;
 	    case Locker:
 		if (delta->lockedby)
@@ -1750,7 +1757,7 @@ addlock(delta, verbose)
 	register struct rcslock *next;
 
 	for (next = Locks;  next;  next = next->nextlock)
-		if (cmpnum(delta->num, next->delta->num) == 0)
+		if (cmpnum(delta->num, next->delta->num) == 0) {
 			if (strcmp(getcaller(), next->login) == 0)
 				return 0;
 			else {
@@ -1760,6 +1767,7 @@ addlock(delta, verbose)
 				  );
 				return -1;
 			}
+		}
 	next = ftalloc(struct rcslock);
 	delta->lockedby = next->login = getcaller();
 	next->delta = delta;
@@ -1783,7 +1791,7 @@ addsymbol(num, name, rebind)
 	register struct assoc *next;
 
 	for (next = Symbols;  next;  next = next->nextassoc)
-		if (strcmp(name, next->symbol)  ==  0)
+		if (strcmp(name, next->symbol)  ==  0) {
 			if (strcmp(next->num,num) == 0)
 				return 0;
 			else if (rebind) {
@@ -1795,6 +1803,7 @@ addsymbol(num, name, rebind)
 				);
 				return -1;
 			}
+		}
 	next = ftalloc(struct assoc);
 	next->symbol = name;
 	next->num = num;
@@ -1854,7 +1863,7 @@ dorewrite(lockflag, changed)
 {
 	int r = 0, e;
 
-	if (lockflag)
+	if (lockflag) {
 		if (changed) {
 			if (changed < 0)
 				return -1;
@@ -1890,6 +1899,7 @@ dorewrite(lockflag, changed)
 				}
 #			endif
 		}
+	}
 	return r;
 }
 

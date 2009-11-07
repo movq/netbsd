@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/servers/slapd/slapi/proto-slapi.h,v 1.47.2.4 2008/06/02 18:00:53 quanah Exp $ */
+/*	$NetBSD: proto-slapi.h,v 1.1.1.4 2010/12/12 15:23:51 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/servers/slapd/slapi/proto-slapi.h,v 1.47.2.6 2010/04/13 20:23:50 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2002-2008 The OpenLDAP Foundation.
+ * Copyright 2002-2010 The OpenLDAP Foundation.
  * Portions Copyright 1997,2002-2003 IBM Corporation.
  * All rights reserved.
  *

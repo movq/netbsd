@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpga.c,v 1.23 2009/07/21 16:04:16 dyoung Exp $ */
+/*	$NetBSD: ifpga.c,v 1.25 2012/01/27 18:52:53 para Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpga.c,v 1.23 2009/07/21 16:04:16 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpga.c,v 1.25 2012/01/27 18:52:53 para Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -296,13 +296,13 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 
 #if defined(PCI_NETBSD_CONFIGURE)
 	ioext = extent_create("pciio", 0x00000000,
-	    0x00000000 + IFPGA_PCI_IO_VSIZE, M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    0x00000000 + IFPGA_PCI_IO_VSIZE, NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", IFPGA_PCI_APP0_BASE,
 	    IFPGA_PCI_APP0_BASE + IFPGA_PCI_APP0_SIZE,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	pmemext = extent_create("pcipmem", IFPGA_PCI_APP1_BASE,
 	    IFPGA_PCI_APP1_BASE + IFPGA_PCI_APP1_SIZE,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	ifpga_pci_chipset.pc_conf_v = (void *)pci_sc;
 	pci_configure_bus(&ifpga_pci_chipset, ioext, memext, pmemext, 0,
 	    arm_dcache_align);
@@ -325,7 +325,7 @@ ifpga_attach(device_t parent, device_t self, void *aux)
 	pci_pba.pba_memt = &ifpga_pci_mem_tag;
 	pci_pba.pba_dmat = &ifpga_pci_bus_dma_tag;
 	pci_pba.pba_dmat64 = NULL;
-	pci_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pci_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pci_pba.pba_bus = 0;
 	pci_pba.pba_bridgetag = NULL;
 	

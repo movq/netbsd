@@ -1,21 +1,21 @@
-/* $NetBSD: compat_13_machdep.c,v 1.17 2008/04/24 18:39:20 ad Exp $ */
+/* $NetBSD: compat_13_machdep.c,v 1.20 2012/02/06 02:14:10 matt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,14 +29,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.17 2008/04/24 18:39:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.20 2012/02/06 02:14:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -66,6 +65,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	} */
 	struct sigcontext13 *scp, ksc;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb;
 	sigset13_t mask13;
 	sigset_t mask;
 
@@ -75,7 +75,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	 * program jumps out of a signal handler.
 	 */
 	scp = SCARG(uap, sigcntxp);
-	if (ALIGN(scp) != (u_int64_t)scp)
+	if (ALIGN(scp) != (uint64_t)scp)
 		return (EINVAL);
 
 	if (copyin((void *)scp, &ksc, sizeof(ksc)) != 0)
@@ -93,9 +93,9 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	alpha_pal_wrusp(ksc.sc_regs[R_SP]);
 
 	/* XXX ksc.sc_ownedfp ? */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l, 0);
-	memcpy(&l->l_addr->u_pcb.pcb_fp, (struct fpreg *)ksc.sc_fpregs,
+	pcb = lwp_getpcb(l);
+	fpu_discard();
+	memcpy(&pcb->pcb_fp, (struct fpreg *)ksc.sc_fpregs,
 	    sizeof(struct fpreg));
 	/* XXX ksc.sc_fp_control ? */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: link_proto.c,v 1.5 2008/11/07 00:20:13 dyoung Exp $	*/
+/*	$NetBSD: link_proto.c,v 1.7 2011/10/07 16:34:31 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.5 2008/11/07 00:20:13 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.7 2011/10/07 16:34:31 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -144,7 +144,7 @@ link_control(struct socket *so, unsigned long cmd, void *data,
 				}
 			}
 			if (ifa == NULL) {
-				error = EADDRNOTAVAIL; 
+				error = EADDRNOTAVAIL;
 				break;
 			}
 
@@ -189,6 +189,7 @@ link_control(struct socket *so, unsigned long cmd, void *data,
 
 			if (!isactive && mkactive) {
 				if_activate_sadl(ifp, ifa, nsdl);
+				rt_newaddrmsg(RTM_CHANGE, ifa, 0, NULL);
 				error = ENETRESET;
 			}
 			break;

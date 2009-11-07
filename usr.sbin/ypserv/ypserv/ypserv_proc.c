@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv_proc.c,v 1.14 2009/10/20 00:51:15 snj Exp $	*/
+/*	$NetBSD: ypserv_proc.c,v 1.16 2011/08/30 17:06:22 plunky Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv_proc.c,v 1.14 2009/10/20 00:51:15 snj Exp $");
+__RCSID("$NetBSD: ypserv_proc.c,v 1.16 2011/08/30 17:06:22 plunky Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -337,7 +337,7 @@ ypproc_all_2_svc(void *argp, struct svc_req *rqstp)
 
 	case 0:
 		/* CHILD: send result, then exit */
-		if (!svc_sendreply(rqstp->rq_xprt, ypdb_xdr_get_all, (void *)k))
+		if (!svc_sendreply(rqstp->rq_xprt, (xdrproc_t)ypdb_xdr_get_all, (void *)k))
 			svcerr_systemerr(rqstp->rq_xprt);
 
 		/* Note: no need to free args; we're exiting. */
@@ -476,14 +476,12 @@ ypproc_maplist_2_svc(void *argp, struct svc_req *rqstp)
 		suffix = (char *)&dp->d_name[dp->d_namlen - 3];
 		if (strcmp(suffix, ".db") == 0) {
 			/* Found one. */
-			m = (struct ypmaplist *)
-			    malloc(sizeof(struct ypmaplist));
+			m = calloc(1, sizeof(struct ypmaplist));
 			if (m == NULL) {
 				status = YP_YPERR;
 				goto out;
 			}
 
-			(void)memset(m, 0, sizeof(m));
 			(void)strlcpy(m->ypml_name, dp->d_name,
 			    (size_t)(dp->d_namlen - 2));
 			m->ypml_next = res.list;

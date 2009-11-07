@@ -1,4 +1,4 @@
-/*      $NetBSD: subr.c,v 1.47 2009/11/05 13:28:20 pooka Exp $        */
+/*      $NetBSD: subr.c,v 1.50 2010/04/01 02:34:09 pooka Exp $        */
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: subr.c,v 1.47 2009/11/05 13:28:20 pooka Exp $");
+__RCSID("$NetBSD: subr.c,v 1.50 2010/04/01 02:34:09 pooka Exp $");
 #endif /* !lint */
 
 #include <assert.h>
@@ -69,7 +69,9 @@ static void
 setpnva(struct puffs_usermount *pu, struct puffs_node *pn,
 	const struct vattr *vap)
 {
+	struct psshfs_ctx *pctx = puffs_getspecific(pu);
 	struct psshfs_node *psn = pn->pn_data;
+	struct vattr modva;
 
 	/*
 	 * Check if the file was modified from below us.
@@ -81,7 +83,13 @@ setpnva(struct puffs_usermount *pu, struct puffs_node *pn,
 		    && pn->pn_va.va_type == VREG)
 			puffs_inval_pagecache_node(pu, pn);
 
-	puffs_setvattr(&pn->pn_va, vap);
+	modva = *vap;
+	if (pctx->domangleuid && modva.va_uid == pctx->mangleuid)
+		modva.va_uid = pctx->myuid;
+	if (pctx->domanglegid && modva.va_gid == pctx->manglegid)
+		modva.va_gid = pctx->mygid;
+
+	puffs_setvattr(&pn->pn_va, &modva);
 	psn->attrread = time(NULL);
 }
 
@@ -229,7 +237,7 @@ getpathattr(struct puffs_usermount *pu, const char *path, struct vattr *vap)
 }
 
 int
-getnodeattr(struct puffs_usermount *pu, struct puffs_node *pn)
+getnodeattr(struct puffs_usermount *pu, struct puffs_node *pn, const char *path)
 {
 	struct psshfs_ctx *pctx = puffs_getspecific(pu);
 	struct psshfs_node *psn = pn->pn_data;
@@ -237,7 +245,7 @@ getnodeattr(struct puffs_usermount *pu, struct puffs_node *pn)
 	int rv;
 
 	if (!psn->attrread || REFRESHTIMEOUT(pctx, time(NULL)-psn->attrread)) {
-		rv = getpathattr(pu, PNPATH(pn), &va);
+		rv = getpathattr(pu, path ? path : PNPATH(pn), &va);
 		if (rv)
 			return rv;
 
@@ -336,6 +344,14 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 			}
 			free(longname);
 			longname = NULL;
+			
+			/*
+			 * In case of DOT, copy the attributes (mostly
+			 * because we want the link count for the root dir).
+			 */
+			if (strcmp(psn->dir[idx].entryname, ".") == 0) {
+				setpnva(pu, pn, &psn->dir[idx].va);
+			}
 
 			/*
 			 * Check if we already have a psshfs_dir for the
@@ -404,7 +420,7 @@ sftp_readdir(struct puffs_usermount *pu, struct psshfs_ctx *pctx,
 
 struct puffs_node *
 makenode(struct puffs_usermount *pu, struct puffs_node *parent,
-	struct psshfs_dir *pd, const struct vattr *vap)
+	const struct psshfs_dir *pd, const struct vattr *vap)
 {
 	struct psshfs_node *psn_parent = parent->pn_data;
 	struct psshfs_node *psn;
@@ -422,7 +438,6 @@ makenode(struct puffs_usermount *pu, struct puffs_node *parent,
 	setpnva(pu, pn, vap);
 	psn->attrread = pd->attrread;
 
-	pd->entry = pn;
 	psn->parent = parent;
 	psn_parent->childcount++;
 
@@ -450,8 +465,10 @@ allocnode(struct puffs_usermount *pu, struct puffs_node *parent,
 	}
 
 	pn = makenode(pu, parent, pd, vap);
-	if (pn)
+	if (pn) {
 		pd->va.va_fileid = pn->pn_va.va_fileid;
+		pd->entry = pn;
+	}
 
 	return pn;
 }

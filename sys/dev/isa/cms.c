@@ -1,4 +1,4 @@
-/* $NetBSD: cms.c,v 1.18 2008/04/28 20:23:52 martin Exp $ */
+/* $NetBSD: cms.c,v 1.20 2011/11/24 16:11:02 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cms.c,v 1.18 2008/04/28 20:23:52 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cms.c,v 1.20 2011/11/24 16:11:02 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,6 +59,8 @@ int	cmsdebug = 0;
 
 struct cms_softc {
 	struct midi_softc sc_mididev;
+
+	kmutex_t sc_lock;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -166,6 +168,7 @@ cms_attach(device_t parent, device_t self, void *aux)
 	struct audio_attach_args arg;
 
 	sc->sc_mididev.dev = self;
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	aprint_normal("\n");
 
@@ -189,6 +192,7 @@ cms_attach(device_t parent, device_t self, void *aux)
 	strcpy(ms->name, "Creative Music System");
 	ms->nvoice = CMS_NVOICES;
 	ms->data = sc;
+	ms->lock = &sc->sc_lock;
 
 	/* use the synthesiser */
 	midisyn_attach(&sc->sc_mididev, ms);

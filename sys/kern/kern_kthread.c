@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_kthread.c,v 1.27 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: kern_kthread.c,v 1.38 2011/11/01 15:39:37 jym Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2007, 2009 The NetBSD Foundation, Inc.
@@ -31,40 +31,46 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.27 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.38 2011/11/01 15:39:37 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
-#include <sys/proc.h>
+#include <sys/mutex.h>
 #include <sys/sched.h>
 #include <sys/kmem.h>
 
 #include <uvm/uvm_extern.h>
 
-/*
- * note that stdarg.h and the ansi style va_start macro is used for both
- * ansi and traditional c complers.
- * XXX: this requires that stdarg.h define: va_alist and va_dcl
- */
-#include <machine/stdarg.h>
+static lwp_t *		kthread_jtarget;
+static kmutex_t		kthread_lock;
+static kcondvar_t	kthread_cv;
+
+void
+kthread_sysinit(void)
+{
+
+	mutex_init(&kthread_lock, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&kthread_cv, "kthrwait");
+	kthread_jtarget = NULL;
+}
 
 /*
- * Fork a kernel thread.  Any process can request this to be done.
+ * kthread_create: create a kernel thread, that is, system-only LWP.
  */
 int
 kthread_create(pri_t pri, int flag, struct cpu_info *ci,
-	       void (*func)(void *), void *arg,
-	       lwp_t **lp, const char *fmt, ...)
+    void (*func)(void *), void *arg, lwp_t **lp, const char *fmt, ...)
 {
 	lwp_t *l;
 	vaddr_t uaddr;
-	int error;
+	int error, lc;
 	va_list ap;
-	int lc;
 
-	uaddr = uvm_uarea_alloc();
+	KASSERT((flag & KTHREAD_INTR) == 0 || (flag & KTHREAD_MPSAFE) != 0);
+
+	uaddr = uvm_uarea_system_alloc();
 	if (uaddr == 0) {
 		return ENOMEM;
 	}
@@ -73,16 +79,17 @@ kthread_create(pri_t pri, int flag, struct cpu_info *ci,
 	} else {
 		lc = SCHED_RR;
 	}
+
 	error = lwp_create(&lwp0, &proc0, uaddr, LWP_DETACHED, NULL,
 	    0, func, arg, &l, lc);
 	if (error) {
-		uvm_uarea_free(uaddr);
+		uvm_uarea_system_free(uaddr);
 		return error;
 	}
 	if (fmt != NULL) {
 		l->l_name = kmem_alloc(MAXCOMLEN, KM_SLEEP);
 		if (l->l_name == NULL) {
-			lwp_exit(l);
+			kthread_destroy(l);
 			return ENOMEM;
 		}
 		va_start(ap, fmt);
@@ -93,10 +100,6 @@ kthread_create(pri_t pri, int flag, struct cpu_info *ci,
 	/*
 	 * Set parameters.
 	 */
-	if ((flag & KTHREAD_INTR) != 0) {
-		KASSERT((flag & KTHREAD_MPSAFE) != 0);
-	}
-
 	if (pri == PRI_NONE) {
 		if ((flag & KTHREAD_TS) != 0) {
 			/* Maximum user priority level. */
@@ -117,10 +120,17 @@ kthread_create(pri_t pri, int flag, struct cpu_info *ci,
 		l->l_pflag |= LP_BOUND;
 		l->l_cpu = ci;
 	}
-	if ((flag & KTHREAD_INTR) != 0)
+
+	if ((flag & KTHREAD_MUSTJOIN) != 0) {
+		KASSERT(lp != NULL);
+		l->l_pflag |= LP_MUSTJOIN;
+	}
+	if ((flag & KTHREAD_INTR) != 0) {
 		l->l_pflag |= LP_INTR;
-	if ((flag & KTHREAD_MPSAFE) == 0)
+	}
+	if ((flag & KTHREAD_MPSAFE) == 0) {
 		l->l_pflag &= ~LP_MPSAFE;
+	}
 
 	/*
 	 * Set the new LWP running, unless the caller has requested
@@ -130,21 +140,19 @@ kthread_create(pri_t pri, int flag, struct cpu_info *ci,
 		l->l_stat = LSRUN;
 		sched_enqueue(l, false);
 		lwp_unlock(l);
-	} else
-		lwp_unlock_to(l, ci->ci_schedstate.spc_lwplock);
-
-	/*
-	 * The LWP is not created suspended or stopped and cannot be set
-	 * into those states later, so must be considered runnable.
-	 */
-	proc0.p_nrlwps++;
+	} else {
+		if (ci != NULL)
+			lwp_unlock_to(l, ci->ci_schedstate.spc_lwplock);
+		else
+			lwp_unlock(l);
+	}
 	mutex_exit(proc0.p_lock);
 
 	/* All done! */
-	if (lp != NULL)
+	if (lp != NULL) {
 		*lp = l;
-
-	return (0);
+	}
+	return 0;
 }
 
 /*
@@ -165,15 +173,20 @@ kthread_exit(int ecode)
 		    name, l->l_lid, ecode);
 	}
 
+	/* Barrier for joining. */
+	if (l->l_pflag & LP_MUSTJOIN) {
+		mutex_enter(&kthread_lock);
+		while (kthread_jtarget != l) {
+			cv_wait(&kthread_cv, &kthread_lock);
+		}
+		kthread_jtarget = NULL;
+		cv_broadcast(&kthread_cv);
+		mutex_exit(&kthread_lock);
+	}
+
 	/* And exit.. */
 	lwp_exit(l);
-
-	/*
-	 * XXX Fool the compiler.  Making exit1() __noreturn__ is a can
-	 * XXX of worms right now.
-	 */
-	for (;;)
-		;
+	panic("kthread_exit");
 }
 
 /*
@@ -187,4 +200,32 @@ kthread_destroy(lwp_t *l)
 	KASSERT(l->l_stat == LSIDL);
 
 	lwp_exit(l);
+}
+
+/*
+ * Wait for a kthread to exit, as pthread_join().
+ */
+int
+kthread_join(lwp_t *l)
+{
+
+	KASSERT((l->l_flag & LW_SYSTEM) != 0);
+
+	/*
+	 * - Wait if some other thread has occupied the target.
+	 * - Specify our kthread as a target and notify it.
+	 * - Wait for the target kthread to notify us.
+	 */
+	mutex_enter(&kthread_lock);
+	while (kthread_jtarget) {
+		cv_wait(&kthread_cv, &kthread_lock);
+	}
+	kthread_jtarget = l;
+	cv_broadcast(&kthread_cv);
+	while (kthread_jtarget == l) {
+		cv_wait(&kthread_cv, &kthread_lock);
+	}
+	mutex_exit(&kthread_lock);
+
+	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.19 2009/10/19 18:41:08 bouyer Exp $	*/
+/*	$NetBSD: utilities.c,v 1.22 2011/06/09 19:57:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -58,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.19 2009/10/19 18:41:08 bouyer Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.22 2011/06/09 19:57:51 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,6 +70,7 @@ __RCSID("$NetBSD: utilities.c,v 1.19 2009/10/19 18:41:08 bouyer Exp $");
 #include <ufs/ufs/dinode.h> /* for IFMT & friends */
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
@@ -83,8 +84,6 @@ __RCSID("$NetBSD: utilities.c,v 1.19 2009/10/19 18:41:08 bouyer Exp $");
 long	diskreads, totalreads;	/* Disk cache statistics */
 
 static void rwerror(const char *, daddr_t);
-
-extern int returntosingle;
 
 int
 ftypeok(struct ext2fs_dinode *dp)
@@ -157,8 +156,10 @@ bufinit(void)
 		bufcnt = MINBUFS;
 	for (i = 0; i < bufcnt; i++) {
 		bp = malloc(sizeof(struct bufarea));
-		bufp = malloc((unsigned int)sblock.e2fs_bsize);
+		bufp = malloc((size_t)sblock.e2fs_bsize);
 		if (bp == NULL || bufp == NULL) {
+			free(bp);
+			free(bufp);
 			if (i >= MINBUFS)
 				break;
 			errexit("cannot allocate buffer pool");
@@ -456,39 +457,6 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 	if (ino != EXT2_ROOTINO)
 		*--cp = '?';
 	memcpy(namebuf, cp, (size_t)(&namebuf[MAXPATHLEN] - cp));
-}
-
-void
-catch(int n)
-{
-	ckfini(0);
-	exit(FSCK_EXIT_SIGNALLED);
-}
-
-/*
- * When preening, allow a single quit to signal
- * a special exit after filesystem checks complete
- * so that reboot sequence may be interrupted.
- */
-void
-catchquit(int n)
-{
-	printf("returning to single-user after filesystem check\n");
-	returntosingle = 1;
-	(void)signal(SIGQUIT, SIG_DFL);
-}
-
-/*
- * Ignore a single quit signal; wait and flush just in case.
- * Used by child processes in preen.
- */
-void
-voidquit(int n)
-{
-
-	sleep(1);
-	(void)signal(SIGQUIT, SIG_IGN);
-	(void)signal(SIGQUIT, SIG_DFL);
 }
 
 /*

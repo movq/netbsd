@@ -159,16 +159,25 @@ int drm_addmap(struct drm_device * dev, unsigned long offset,
 	map->size = size;
 	map->type = type;
 	map->flags = flags;
-#ifdef __NetBSD__
-	map->cnt = NULL;
+#if defined(__NetBSD__)
+	map->fullmap = NULL;
 	map->mapsize = 0;
 #endif
 
 	switch (map->type) {
 	case _DRM_REGISTERS:
 		map->handle = drm_ioremap(dev, map);
+		if (map->handle == NULL) {
+			DRM_ERROR("drm_addmap couldn't ioremap registers with "
+				"base %lX, size %lX\n",
+				(long) offset, (long) size);
+			DRM_LOCK();
+			return EINVAL;
+		}
+
 		if (!(map->flags & _DRM_WRITE_COMBINING))
 			break;
+
 		/* FALLTHROUGH */
 	case _DRM_FRAME_BUFFER:
 		if (drm_mtrr_add(map->offset, map->size, DRM_MTRR_WC) == 0)
@@ -307,6 +316,22 @@ int drm_addmap_ioctl(struct drm_device *dev, void *data,
 	return 0;
 }
 
+static void
+drm_rmmap_user(void *addr, size_t size)
+{
+	vaddr_t va, eva;
+	paddr_t pa;
+	struct vm_page *pg;
+
+	va = (vaddr_t)addr;
+	eva = va + size;
+	for (; va < eva; va += PAGE_SIZE) {
+		pmap_extract(pmap_kernel(), va, &pa);
+		pg = PHYS_TO_VM_PAGE(pa);
+		pmap_page_protect(pg, VM_PROT_NONE);
+	}
+}
+
 void drm_rmmap(struct drm_device *dev, drm_local_map_t *map)
 {
 	DRM_SPINLOCK_ASSERT(&dev->dev_lock);
@@ -329,6 +354,11 @@ void drm_rmmap(struct drm_device *dev, drm_local_map_t *map)
 		}
 		break;
 	case _DRM_SHM:
+
+		/*
+		 * Remove any user mappings before we free the kernel memory.
+		 */
+		drm_rmmap_user(map->handle, map->size);
 		free(map->handle, DRM_MEM_MAPS);
 		break;
 	case _DRM_AGP:
@@ -1137,6 +1167,9 @@ int drm_mapbufs(struct drm_device *dev, void *data, struct drm_file *file_priv)
 
  done:
 	request->count = dma->buf_count;
+#if defined(__NetBSD__)
+	vrele(vn);
+#endif
 
 	DRM_DEBUG("%d buffers, retcode = %d\n", request->count, retcode);
 

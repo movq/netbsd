@@ -1,4 +1,4 @@
-/*	$NetBSD: iostat.c,v 1.53 2009/04/15 10:05:41 lukem Exp $	*/
+/*	$NetBSD: iostat.c,v 1.60 2011/08/30 19:06:06 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996 John M. Vinopal
@@ -71,7 +71,7 @@ __COPYRIGHT("@(#) Copyright (c) 1986, 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)iostat.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: iostat.c,v 1.53 2009/04/15 10:05:41 lukem Exp $");
+__RCSID("$NetBSD: iostat.c,v 1.60 2011/08/30 19:06:06 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,17 +87,21 @@ __RCSID("$NetBSD: iostat.c,v 1.53 2009/04/15 10:05:41 lukem Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "drvstats.h"
 
 /* Namelist and memory files. */
 char	*nlistf, *memf;
 
-int		hz, reps, interval;
+int		hz;
+static int	reps, interval;
 static int	todo = 0;
 static int	defdrives;
 static int	winlines = 20;
 static int	wincols = 80;
+
+#define	MAX(a,b)	(((a)>(b))?(a):(b))
 
 #define	ISSET(x, a)	((x) & (a))
 #define	SHOW_CPU	(1<<0)
@@ -115,11 +119,9 @@ static void drive_statsx(double);
 static void sig_header(int);
 static volatile int do_header;
 static void header(void);
-static void usage(void);
+__dead static void usage(void);
 static void display(void);
 static int selectdrives(int, char *[]);
-
-int main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -245,7 +247,7 @@ sig_header(int signo)
 }
 
 static void
-header()
+header(void)
 {
 	size_t i;
 
@@ -323,7 +325,8 @@ drive_stats(double etime)
 			    1024.0) / (cur.rxfer[dn] + cur.wxfer[dn]);
 		else
 			mbps = 0.0;
-		(void)printf(" %5.2f", mbps);
+		(void)printf(" %5.*f",
+		    MAX(0, 3 - (int)floor(log10(fmax(1.0, mbps)))), mbps);
 
 					/* average transfers per second. */
 		(void)printf(" %4.0f",
@@ -339,7 +342,9 @@ drive_stats(double etime)
 			    (double)(1024 * 1024);
 		else
 			mbps = 0;
-		(void)printf(" %5.2f ", mbps / etime);
+		mbps /= etime;
+		(void)printf(" %5.*f ",
+		    MAX(0, 3 - (int)floor(log10(fmax(1.0, mbps)))), mbps);
 	}
 }
 

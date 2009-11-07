@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.2 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: mainbus.c,v 1.9 2012/01/07 18:10:18 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2009/10/21 16:06:59 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.9 2012/01/07 18:10:18 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
@@ -51,6 +50,13 @@ typedef struct mainbus_softc {
 CFATTACH_DECL_NEW(mainbus, sizeof(mainbus_softc_t),
     mainbus_match, mainbus_attach, NULL, NULL);
 
+extern char *usermode_disk_image_path[];
+extern int usermode_disk_image_path_count;
+extern char *usermode_tap_device;
+extern char *usermode_tap_eaddr;
+extern char *usermode_audio_device;
+extern int usermode_vnc_width, usermode_vnc_height, usermode_vnc_port;
+
 static int
 mainbus_match(device_t parent, cfdata_t match, void *opaque)
 {
@@ -63,6 +69,7 @@ mainbus_attach(device_t parent, device_t self, void *opaque)
 {
 	mainbus_softc_t *sc = device_private(self);
 	struct thunkbus_attach_args taa;
+	int i;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
@@ -71,10 +78,39 @@ mainbus_attach(device_t parent, device_t self, void *opaque)
 
 	taa.taa_type = THUNKBUS_TYPE_CPU;
 	config_found_ia(self, "thunkbus", &taa, mainbus_print);
-	taa.taa_type = THUNKBUS_TYPE_CLOCK;
-	config_found_ia(self, "thunkbus", &taa, mainbus_print);
+
 	taa.taa_type = THUNKBUS_TYPE_TTYCONS;
 	config_found_ia(self, "thunkbus", &taa, mainbus_print);
+
+	if (usermode_vnc_port > 0 && usermode_vnc_port < 65536) {
+		taa.taa_type = THUNKBUS_TYPE_VNCFB;
+		taa.u.vnc.width = usermode_vnc_width;
+		taa.u.vnc.height = usermode_vnc_height;
+		taa.u.vnc.port = usermode_vnc_port;
+		config_found_ia(self, "thunkbus", &taa, mainbus_print);
+	}
+
+	taa.taa_type = THUNKBUS_TYPE_CLOCK;
+	config_found_ia(self, "thunkbus", &taa, mainbus_print);
+
+	if (usermode_tap_device) {
+		taa.taa_type = THUNKBUS_TYPE_VETH;
+		taa.u.veth.device = usermode_tap_device;
+		taa.u.veth.eaddr = usermode_tap_eaddr;
+		config_found_ia(self, "thunkbus", &taa, mainbus_print);
+	}
+
+	if (usermode_audio_device) {
+		taa.taa_type = THUNKBUS_TYPE_VAUDIO;
+		taa.u.vaudio.device = usermode_audio_device;
+		config_found_ia(self, "thunkbus", &taa, mainbus_print);
+	}
+
+	for (i = 0; i < usermode_disk_image_path_count; i++) {
+		taa.taa_type = THUNKBUS_TYPE_DISKIMAGE;
+		taa.u.diskimage.path = usermode_disk_image_path[i];
+		config_found_ia(self, "thunkbus", &taa, mainbus_print);
+	}
 }
 
 static int

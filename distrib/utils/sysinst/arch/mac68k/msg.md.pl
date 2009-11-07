@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.10 2008/02/02 05:34:01 itohy Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.13 2011/04/04 08:30:34 mbalmer Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.md.en,v 1.10 2001/07/26 22:47:34 wiz Exp */
 
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -44,8 +40,12 @@ message md_hello
 {
 }
 
+message md_may_remove_boot_medium
+{
+}
+
 message fullpart
-{Zainstalujemy teraz NetBSD na dysku %s. Mozesz wybrac, czy chcesz 
+{Zainstalujemy teraz NetBSD na dysku %s. Mozesz wybrac, czy chcesz
 zainstalowac NetBSD na calym dysku, czy tylko na jego czesci.
 
 Ktora instalacje chcesz zrobic?
@@ -141,7 +141,7 @@ Czy chcesz zrezygnowac z podzialu tej partycji?}
 
 message custom_mount_point
 {Podaj Punkt Montazu dla aktualnie wybranej partycji. Powinna byc to
-unikalna nazwa, zaczynajaca sie od "/", ktora nie jest juz uzywana 
+unikalna nazwa, zaczynajaca sie od "/", ktora nie jest juz uzywana
 przez inna partycje.
 
 }
@@ -157,12 +157,12 @@ message dodiskmap
 {Konfigurowanie Mapy Partycji Dysku ...
 }
 
-message label_error	/* XXX translate */
-{The new on-disk partition label does not match the one currently in-core.
-Any attempt to proceed will most likely result in damage to any pre-existing
-disk partitions. However your new Disk Partition Map has been written to
-the disk and will be available the next time NetBSD is booted. Please
-reboot immediately and restart the Installation Process.
+message label_error
+{Nowa etykieta partycji na dysku nie zgadza sie z obecna etykieta w kernelu.
+Kazda proba kontynuacji prawdopodobnie skonczy sie uszkodzeniem istniejacych
+wszesniej partycji. Ale nowa mapa partycji dyskowych zostala zapisana na
+dysk i bedzie dostepna przy nastepnym uruchomieniu NetBSD. Prosze
+natyczmiast uruchomic ponownie komputer i wznowic proces instalacji.
 }
 
 .if debug

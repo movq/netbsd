@@ -1,9 +1,16 @@
-#	$NetBSD: Makefile,v 1.40 2009/06/01 19:57:33 christos Exp $
+#	$NetBSD: Makefile,v 1.41.8.1 2012/06/12 19:11:50 riz Exp $
 
 PROG=	fdisk 
 SRCS=	fdisk.c
 
 MAN=	fdisk.8
+
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
+CPPFLAGS+= -DBOOTSEL
+.if (${HOSTPROG:U} == "")
+CPPFLAGS+= -DUSE_DISKLIST
+.endif
+.endif
 
 .if ${MACHINE} == "arc"
 CPPFLAGS+= -D_PATH_DEFDISK='"/dev/rsd0d"'
@@ -16,8 +23,6 @@ CPPFLAGS+= -D_PATH_DEFDISK='"/dev/rwd0c"'
 .include <bsd.prog.mk>
 
 .if (${HOSTPROG:U} == "")
-SUBDIR=	mbr
 DPADD+=	${LIBUTIL} ${LIBZ}
 LDADD+=	-lutil -lz
-.include <bsd.subdir.mk>
 .endif

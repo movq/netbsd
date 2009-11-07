@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_data.h,v 1.27 2008/06/03 15:50:22 ad Exp $	*/
+/*	$NetBSD: cpu_data.h,v 1.34 2012/01/29 22:55:40 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -39,6 +39,7 @@ struct lwp;
 
 #include <sys/sched.h>	/* for schedstate_percpu */
 #include <sys/condvar.h>
+#include <sys/pcu.h>
 #include <sys/percpu_types.h>
 #include <sys/queue.h>
 
@@ -70,7 +71,13 @@ struct cpu_data {
 	int		cpu_xcall_pending;	/* cross-call support */
 	lwp_t		*cpu_onproc;		/* bottom level LWP */
 	CIRCLEQ_ENTRY(cpu_info) cpu_qchain;	/* circleq of all CPUs */
-	
+
+	cpuid_t		cpu_package_id;
+	cpuid_t		cpu_core_id;
+	cpuid_t		cpu_smt_id;
+
+	struct lwp * volatile cpu_pcu_curlwp[PCU_UNIT_COUNT];
+
 	/*
 	 * This section is mostly CPU-private.
 	 */
@@ -83,19 +90,23 @@ struct cpu_data {
 	u_int		cpu_spin_locks2;	/* # of spin locks held XXX */
 	u_int		cpu_lkdebug_recurse;	/* LOCKDEBUG recursion */
 	u_int		cpu_softints;		/* pending (slow) softints */
-	u_int		cpu_nsyscall;		/* syscall counter */
-	u_int		cpu_ntrap;		/* trap counter */
-	u_int		cpu_nswtch;		/* context switch counter */
+	uint64_t	cpu_nsyscall;		/* syscall counter */
+	uint64_t	cpu_ntrap;		/* trap counter */
+	uint64_t	cpu_nswtch;		/* context switch counter */
+	uint64_t	cpu_nintr;		/* interrupt count */
+	uint64_t	cpu_nsoft;		/* soft interrupt count */
+	uint64_t	cpu_nfault;		/* pagefault counter */
 	void		*cpu_uvm;		/* uvm per-cpu data */
 	void		*cpu_softcpu;		/* soft interrupt table */
 	TAILQ_HEAD(,buf) cpu_biodone;		/* finished block xfers */
 	percpu_cpu_t	cpu_percpu;		/* per-cpu data */
-	struct selcpu	*cpu_selcpu;		/* per-CPU select() info */
+	struct selcluster *cpu_selcluster;	/* per-CPU select() info */
 	void		*cpu_nch;		/* per-cpu vfs_cache data */
 	_TAILQ_HEAD(,struct lockdebug,volatile) cpu_ld_locks;/* !: lockdebug */
 	__cpu_simple_lock_t cpu_ld_lock;	/* lockdebug */
 	uint64_t	cpu_cc_freq;		/* cycle counter frequency */
 	int64_t		cpu_cc_skew;		/* counter skew vs cpu0 */
+	char		cpu_name[8];		/* eg, "cpu4" */
 };
 
 /* compat definitions */
@@ -108,7 +119,13 @@ struct cpu_data {
 #define	ci_lockstat		ci_data.cpu_lockstat
 #define	ci_spin_locks2		ci_data.cpu_spin_locks2
 #define	ci_lkdebug_recurse	ci_data.cpu_lkdebug_recurse
+#define	ci_pcu_curlwp		ci_data.cpu_pcu_curlwp
 
-int mi_cpu_attach(struct cpu_info *ci);
+#define	ci_package_id		ci_data.cpu_package_id
+#define	ci_core_id		ci_data.cpu_core_id
+#define	ci_smt_id		ci_data.cpu_smt_id
+
+void	mi_cpu_init(void);
+int	mi_cpu_attach(struct cpu_info *);
 
 #endif /* _SYS_CPU_DATA_H_ */

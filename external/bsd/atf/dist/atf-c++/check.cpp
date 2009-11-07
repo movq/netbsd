@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
+// Copyright (c) 2007 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,12 +30,15 @@
 #include <cstring>
 
 extern "C" {
+#include "atf-c/build.h"
 #include "atf-c/error.h"
 }
 
-#include "atf-c++/check.hpp"
-#include "atf-c++/exceptions.hpp"
-#include "atf-c++/sanity.hpp"
+#include "check.hpp"
+
+#include "detail/exceptions.hpp"
+#include "detail/process.hpp"
+#include "detail/sanity.hpp"
 
 namespace impl = atf::check;
 #define IMPL_NAME "atf::check"
@@ -69,16 +72,29 @@ impl::check_result::exitcode(void)
     return atf_check_result_exitcode(&m_result);
 }
 
-const atf::fs::path
-impl::check_result::stdout_path(void)
+bool
+impl::check_result::signaled(void)
     const
+{
+    return atf_check_result_signaled(&m_result);
+}
+
+int
+impl::check_result::termsig(void)
+    const
+{
+    PRE(signaled());
+    return atf_check_result_termsig(&m_result);
+}
+
+const std::string
+impl::check_result::stdout_path(void) const
 {
     return atf_check_result_stdout(&m_result);
 }
 
-const atf::fs::path
-impl::check_result::stderr_path(void)
-        const
+const std::string
+impl::check_result::stderr_path(void) const
 {
     return atf_check_result_stderr(&m_result);
 }
@@ -87,14 +103,56 @@ impl::check_result::stderr_path(void)
 // Free functions.
 // ------------------------------------------------------------------------
 
-impl::check_result
-impl::exec(char* const* argv)
+bool
+impl::build_c_o(const std::string& sfile, const std::string& ofile,
+                const atf::process::argv_array& optargs)
 {
-    atf_check_result_t result;
+    bool success;
 
-    atf_error_t err = atf_check_exec(argv, &result);
+    atf_error_t err = atf_check_build_c_o(sfile.c_str(), ofile.c_str(),
+                                          optargs.exec_argv(), &success);
     if (atf_is_error(err))
         throw_atf_error(err);
 
-    return impl::check_result(&result);
+    return success;
+}
+
+bool
+impl::build_cpp(const std::string& sfile, const std::string& ofile,
+                const atf::process::argv_array& optargs)
+{
+    bool success;
+
+    atf_error_t err = atf_check_build_cpp(sfile.c_str(), ofile.c_str(),
+                                          optargs.exec_argv(), &success);
+    if (atf_is_error(err))
+        throw_atf_error(err);
+
+    return success;
+}
+
+bool
+impl::build_cxx_o(const std::string& sfile, const std::string& ofile,
+                  const atf::process::argv_array& optargs)
+{
+    bool success;
+
+    atf_error_t err = atf_check_build_cxx_o(sfile.c_str(), ofile.c_str(),
+                                            optargs.exec_argv(), &success);
+    if (atf_is_error(err))
+        throw_atf_error(err);
+
+    return success;
+}
+
+std::auto_ptr< impl::check_result >
+impl::exec(const atf::process::argv_array& argva)
+{
+    atf_check_result_t result;
+
+    atf_error_t err = atf_check_exec_array(argva.exec_argv(), &result);
+    if (atf_is_error(err))
+        throw_atf_error(err);
+
+    return std::auto_ptr< impl::check_result >(new impl::check_result(&result));
 }

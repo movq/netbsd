@@ -1,4 +1,4 @@
-/*	$NetBSD: dev-io.c,v 1.4 2009/02/18 12:16:13 haad Exp $	*/
+/*	$NetBSD: dev-io.c,v 1.10 2010/12/29 23:14:21 haad Exp $	*/
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
@@ -41,6 +41,7 @@
 #elif __NetBSD__
 #  include <sys/disk.h>
 #  include <sys/disklabel.h>
+#  include <prop/proplib.h>
 #  include <sys/param.h>
 #else
 #  include <sys/disk.h>
@@ -133,14 +134,22 @@ static int _get_block_size(struct device *dev, unsigned int *size)
 	const char *name = dev_name(dev);
 #ifdef __NetBSD__
 	struct disklabel	lab;
+	prop_dictionary_t	disk_dict, geom_dict;
+	uint32_t		secsize;
 #endif
 
 	if ((dev->block_size == -1)) {
 #ifdef __NetBSD__
-		if (ioctl(dev_fd(dev), DIOCGDINFO, &lab) < 0) {
-			dev->block_size = DEV_BSIZE;
-		} else
-			dev->block_size = lab.d_secsize;
+		if (prop_dictionary_recv_ioctl(dev_fd(dev), DIOCGDISKINFO, &disk_dict)) {
+			if (ioctl(dev_fd(dev), DIOCGDINFO, &lab) < 0) {
+				dev->block_size = DEV_BSIZE;
+			} else
+				dev->block_size = lab.d_secsize;
+		} else {
+			geom_dict = prop_dictionary_get(disk_dict, "geometry");
+			prop_dictionary_get_uint32(geom_dict, "sector-size", &secsize);
+			dev->block_size = secsize;
+		}
 #else
 		if (ioctl(dev_fd(dev), BLKBSZGET, &dev->block_size) < 0) {
 			log_sys_error("ioctl BLKBSZGET", name);
@@ -259,6 +268,7 @@ static int _dev_get_size_dev(const struct device *dev, uint64_t *size)
 #ifdef __NetBSD__
 	struct disklabel	lab;
 	struct dkwedge_info     dkw;
+	struct stat stat;
 #endif
 
 	if ((fd = open(name, O_RDONLY)) < 0) {
@@ -266,26 +276,24 @@ static int _dev_get_size_dev(const struct device *dev, uint64_t *size)
 		log_sys_error("open", name);
 #endif		
 		return 0;
-		}
-
-#ifdef __NetBSD__
-	if ((*size = lseek (fd, 0, SEEK_END)) < 0) {
-		log_sys_error("lseek SEEK_END", name);
-		close(fd);
-		return 0;
 	}
 
-	if (ioctl(fd, DIOCGDINFO, &lab) < 0) {
-		if (ioctl(fd, DIOCGWEDGEINFO, &dkw) < 0) {
-			log_debug("ioctl DIOCGWEDGEINFO", name);
+#ifdef __NetBSD__
+        /* Get info about partition/wedge */
+	if (ioctl(fd, DIOCGWEDGEINFO, &dkw) == -1) {
+		if (ioctl(fd, DIOCGDINFO, &lab) == -1) {
+			log_debug("Please implement DIOCGWEDGEINFO or "
+			    "DIOCGDINFO for disk device %s", name);
 			close(fd);
 			return 0;
-		} else
-			if (dkw.dkw_size)
-				*size = dkw.dkw_size;
-	} else 
-		if (lab.d_secsize)
-			*size /= lab.d_secsize;
+		} else {
+			if (fstat(fd, &stat) < 0)
+				log_debug("fstat on device %s failure", name);
+			
+			*size = lab.d_partitions[DISKPART(stat.st_rdev)].p_size;
+		}
+	} else
+		*size = dkw.dkw_size;
 #else
 	if (ioctl(fd, BLKGETSIZE64, size) < 0) {
 		log_sys_error("ioctl BLKGETSIZE64", name);
@@ -304,6 +312,38 @@ static int _dev_get_size_dev(const struct device *dev, uint64_t *size)
 	return 1;
 }
 
+static int _dev_read_ahead_dev(struct device *dev, uint32_t *read_ahead)
+{
+#ifdef linux
+	long read_ahead_long;
+
+	if (dev->read_ahead != -1) {
+		*read_ahead = (uint32_t) dev->read_ahead;
+		return 1;
+	}
+
+	if (!dev_open(dev))
+		return_0;
+
+	if (ioctl(dev->fd, BLKRAGET, &read_ahead_long) < 0) {
+		log_sys_error("ioctl BLKRAGET", dev_name(dev));
+		if (!dev_close(dev))
+			stack;
+		return 0;
+	}
+
+	if (!dev_close(dev))
+		stack;
+
+	*read_ahead = (uint32_t) read_ahead_long;
+	dev->read_ahead = read_ahead_long;
+
+	log_very_verbose("%s: read_ahead is %u sectors",
+			 dev_name(dev), *read_ahead);
+#endif
+	return 1;
+}
+
 /*-----------------------------------------------------------------
  * Public functions
  *---------------------------------------------------------------*/
@@ -317,6 +357,19 @@ int dev_get_size(const struct device *dev, uint64_t *size)
 		return _dev_get_size_file(dev, size);
 	else
 		return _dev_get_size_dev(dev, size);
+}
+
+int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead)
+{
+	if (!dev)
+		return 0;
+
+	if (dev->flags & DEV_REGULAR) {
+		*read_ahead = 0;
+		return 1;
+	}
+
+	return _dev_read_ahead_dev(dev, read_ahead);
 }
 
 /* FIXME Unused

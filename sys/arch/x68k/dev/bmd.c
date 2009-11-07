@@ -1,4 +1,4 @@
-/*	$NetBSD: bmd.c,v 1.16 2008/12/18 05:56:42 isaki Exp $	*/
+/*	$NetBSD: bmd.c,v 1.18 2011/10/16 03:10:17 isaki Exp $	*/
 
 /*
  * Copyright (c) 2002 Tetsuya Isaki. All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bmd.c,v 1.16 2008/12/18 05:56:42 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bmd.c,v 1.18 2011/10/16 03:10:17 isaki Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -124,6 +122,8 @@ bmd_match(device_t parent, cfdata_t cf, void *aux)
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_bst;
 	bus_space_handle_t ioh;
+	int window;
+	int r;
 
 	if (ia->ia_addr == INTIOCF_ADDR_DEFAULT)
 		ia->ia_addr = BMD_ADDR1;
@@ -132,6 +132,7 @@ bmd_match(device_t parent, cfdata_t cf, void *aux)
 	if (ia->ia_addr != BMD_ADDR1 && ia->ia_addr != BMD_ADDR2)
 		return (0);
 
+	/* Check CTRL addr */
  	if (badaddr((void *)IIOV(ia->ia_addr)))
 		return (0);
 
@@ -139,7 +140,16 @@ bmd_match(device_t parent, cfdata_t cf, void *aux)
 	if (bus_space_map(iot, ia->ia_addr, ia->ia_size, 0, &ioh))
 		return (0);
 
+	/* Check window addr */
+	r = bus_space_read_1(iot, ioh, BMD_CTRL);
 	bus_space_unmap(iot, ioh, ia->ia_size);
+
+	if ((r & BMD_CTRL_WINDOW))
+		window = 0xef0000;
+	else
+		window = 0xee0000;
+	if (badaddr((void *)IIOV(window)))
+		return (0);
 
 	return (1);
 }

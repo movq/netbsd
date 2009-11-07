@@ -1,4 +1,4 @@
-/*	$NetBSD: reboot.c,v 1.36 2008/07/20 01:20:23 lukem Exp $	*/
+/*	$NetBSD: reboot.c,v 1.39 2011/08/27 18:46:19 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
 #if 0
 static char sccsid[] = "@(#)reboot.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: reboot.c,v 1.36 2008/07/20 01:20:23 lukem Exp $");
+__RCSID("$NetBSD: reboot.c,v 1.39 2011/08/27 18:46:19 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,11 +57,10 @@ __RCSID("$NetBSD: reboot.c,v 1.36 2008/07/20 01:20:23 lukem Exp $");
 #include <unistd.h>
 #include <util.h>
 
-int main(int, char *[]);
-void usage(void);
+__dead static void usage(void);
 
-int dohalt;
-int dopoweroff;
+static int dohalt;
+static int dopoweroff;
 
 int
 main(int argc, char *argv[])
@@ -85,7 +84,7 @@ main(int argc, char *argv[])
 	} else
 		howto = 0;
 	lflag = nflag = qflag = 0;
-	while ((ch = getopt(argc, argv, "dlnpq")) != -1)
+	while ((ch = getopt(argc, argv, "dlnpqvxz")) != -1)
 		switch(ch) {
 		case 'd':
 			howto |= RB_DUMP;
@@ -104,6 +103,15 @@ main(int argc, char *argv[])
 			break;
 		case 'q':
 			qflag = 1;
+			break;
+		case 'v':
+			howto |= AB_VERBOSE;
+			break;
+		case 'x':
+			howto |= AB_DEBUG;
+			break;
+		case 'z':
+			howto |= AB_SILENT;
 			break;
 		case '?':
 		default:
@@ -237,12 +245,12 @@ restart:
 	/* NOTREACHED */
 }
 
-void
+static void
 usage(void)
 {
 	const char *pflag = dohalt ? "p" : "";
 
-	(void)fprintf(stderr, "usage: %s [-dln%sq] [-- <boot string>]\n",
+	(void)fprintf(stderr, "usage: %s [-dln%sqvxz] [-- <boot string>]\n",
 	    getprogname(), pflag);
 	exit(1);
 }

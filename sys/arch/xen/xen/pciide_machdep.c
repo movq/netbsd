@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.16 2009/07/29 12:02:09 cegger Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.18 2011/04/04 20:37:55 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.16 2009/07/29 12:02:09 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.18 2011/04/04 20:37:55 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,11 +63,11 @@ __KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.16 2009/07/29 12:02:09 cegger E
 
 void *
 pciide_machdep_compat_intr_establish(device_t dev,
-	struct pci_attach_args *pa, int chan,
+	const struct pci_attach_args *pa, int chan,
 	int (*func)(void *), void *arg)
 {
 	struct pintrhand *ih;
-	char evname[8];
+	char evname[16];
         struct xen_intr_handle xenih;
 #if NIOAPIC > 0
 	struct ioapic_softc *pic = NULL;

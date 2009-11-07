@@ -1,4 +1,4 @@
-/*	$NetBSD: devid.h,v 1.1 2009/08/07 20:57:55 haad Exp $	*/
+/*	$NetBSD: devid.h,v 1.3 2010/02/21 01:46:34 darran Exp $	*/
 
 /*
  * CDDL HEADER START

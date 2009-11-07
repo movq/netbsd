@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ramdisk,v 1.7 2009/09/20 23:19:51 abs Exp $
+#	$NetBSD: Makefile.ramdisk,v 1.9 2010/02/11 09:06:47 roy Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -24,8 +24,7 @@ IMAGEDEPENDS+= 	${CRUNCHBIN} \
 		${DESTDIR}/usr/mdec/mbr_bootsel \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
-		${DISTRIBDIR}/common/services \
-		${DISTRIBDIR}/common/termcap
+		${DISTRIBDIR}/common/services
 PARSELISTENV+=	BOOTMODEL=${BOOTMODEL:Q}
 
 .if defined(USE_SYSINST)

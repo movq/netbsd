@@ -1,4 +1,4 @@
-#	$NetBSD: IXDP425,v 1.28 2009/10/11 16:20:22 bsh Exp $
+#	$NetBSD: IXDP425,v 1.35 2011/12/18 05:49:26 dholland Exp $
 #
 #	IXDP425 -- Intel IXDP425/IXCDP1100 Development Platform
 #
@@ -43,17 +43,17 @@ file-system	NFS		# Network file system
 file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 options 	NFSSERVER
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -141,7 +141,7 @@ options 	VERBOSE_INIT_ARM # verbose bootstraping messages
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=350000
+options 	SYMTAB_SPACE=440000
 
 config		netbsd		root on ? type ?
 
@@ -242,7 +242,7 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-#pseudo-device	md		1	# memory disk device (ramdisk)
+#pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 
 # network pseudo-devices
@@ -252,7 +252,6 @@ pseudo-device	kttcp			# network loopback
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 

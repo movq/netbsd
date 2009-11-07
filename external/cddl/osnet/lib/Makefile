@@ -1,4 +1,13 @@
-#	$NetBSD: Makefile,v 1.1 2009/08/07 20:57:55 haad Exp $
+#	$NetBSD: Makefile,v 1.4 2010/02/24 12:18:37 tron Exp $
+#
+#
+
+.include <bsd.own.mk>
+
+.if (defined(MKDTRACE) && ${MKDTRACE} != "no")
+SUBDIR+=	libdtrace
+SUBDIR+=	libctf
+.endif
 
 .if !defined(MKZFS) || ${MKZFS} != "no"
 SUBDIR+=	libavl

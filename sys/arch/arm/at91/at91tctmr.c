@@ -1,4 +1,4 @@
-/*$NetBSD: at91tctmr.c,v 1.3 2009/10/27 03:42:31 snj Exp $*/
+/*$NetBSD: at91tctmr.c,v 1.6 2011/11/04 17:11:19 aymeric Exp $*/
 
 /*
  * AT91 Timer Counter (TC) based clock functions
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.3 2009/10/27 03:42:31 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.6 2011/11/04 17:11:19 aymeric Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.3 2009/10/27 03:42:31 snj Exp $");
 
 #include <dev/clock_subr.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -90,7 +90,9 @@ struct at91tctmr_softc {
 };
 
 static struct at91tctmr_softc *at91tctmr_sc = NULL;
+#if 0
 static struct timeval lasttv;
+#endif
 
     
     
@@ -151,6 +153,7 @@ WRITE_TC(struct at91tctmr_softc *sc, uint offset, u_int32_t value)
 CFATTACH_DECL_NEW(at91tctmr, sizeof(struct at91tctmr_softc),
     at91tctmr_match, at91tctmr_attach, NULL, NULL);
 
+#if 0
 static u_int at91tctmr_get_timecount(struct timecounter *);
 
 static struct timecounter at91tctmr_timecounter = {
@@ -163,6 +166,7 @@ static struct timecounter at91tctmr_timecounter = {
 	NULL,			/* prev */
 	NULL,			/* next */
 };
+#endif
 
 static int
 at91tctmr_match(device_t parent, cfdata_t match, void *aux)
@@ -207,7 +211,7 @@ at91tctmr_attach(device_t parent, device_t self, void *aux)
       sc->sc_timerclock = AT91_MSTCLK / 128U;
       cmr = TC_CMR_TCCLKS_MCK_DIV_128;
     } else
-      panic("%s: cannot setup timer to reach HZ", device-xname(sc->sc_dev));
+      panic("%s: cannot setup timer to reach HZ", device_xname(sc->sc_dev));
 
     sc->sc_divider = (sc->sc_timerclock + HZ - 1) / HZ; /* round up */
     sc->sc_usec_per_tick = 1000000UL / (sc->sc_timerclock / sc->sc_divider);

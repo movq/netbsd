@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.1 2009/08/07 20:57:58 haad Exp $	*/
+/*	$NetBSD: types.h,v 1.12 2011/07/17 20:54:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -63,19 +63,35 @@
 /*
  * This is a bag of dirty hacks to keep things compiling.
  */
-
+#ifdef __APPLE__
+#include <stdint.h>
+#else
 #include <sys/stdint.h>
+#endif
+#ifdef _NETBSD_SOURCE
 #include_next <sys/types.h>
 #include_next <sys/ccompile.h>
+#else
+#define _NETBSD_SOURCE
+#include_next <sys/types.h>
+#include_next <sys/ccompile.h>
+#undef _NETBSD_SOURCE
+#endif
 
 #ifndef _KERNEL
 #include <stdarg.h>
 #else
-#include <machine/stdarg.h>
+#include <sys/stdarg.h>
 #endif
 
 #define	MAXNAMELEN	256
 #define	FMNAMESZ	8
+
+#ifdef __APPLE__
+typedef int64_t longlong_t;
+typedef uint64_t u_longlong_t;
+typedef unsigned long vsize_t;
+#endif
 
 typedef unsigned int	size32_t;
 typedef unsigned int	caddr32_t;
@@ -119,6 +135,7 @@ typedef	short		index_t;
 typedef	off_t		offset_t;
 typedef	long		ptrdiff_t;	/* pointer difference */
 typedef	int64_t		rlim64_t;
+typedef __caddr_t	caddr_t;	/* core address */
 
 #else
 

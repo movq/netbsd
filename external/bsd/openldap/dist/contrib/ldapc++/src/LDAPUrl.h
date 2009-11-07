@@ -1,4 +1,6 @@
-// $OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPUrl.h,v 1.6.8.4 2008/04/14 23:09:26 quanah Exp $
+/*	$NetBSD: LDAPUrl.h,v 1.1.1.3 2010/12/12 15:18:48 adam Exp $	*/
+
+// OpenLDAP: pkg/ldap/contrib/ldapc++/src/LDAPUrl.h,v 1.6.8.5 2010/04/14 23:50:44 quanah Exp
 /*
  * Copyright 2000-2006, OpenLDAP Foundation, All Rights Reserved.
  * COPYING RESTRICTIONS APPLY, see COPYRIGHT file
@@ -178,10 +180,12 @@ class LDAPUrl{
         enum mode { base, attrs, scope, filter, extensions };
 };
 
+/// @cond
 struct code2string_s {
     int code;
     const char* string;
 };
+/// @endcond
 
 class LDAPUrlException {
     public :

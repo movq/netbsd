@@ -1,4 +1,4 @@
-/*	$NetBSD: slinux.c,v 1.3 2004/03/28 09:00:56 martti Exp $	*/
+/*	$NetBSD: slinux.c,v 1.5 2012/02/15 17:55:05 riz Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed. (from tcplog)

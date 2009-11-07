@@ -1,4 +1,4 @@
-/* $NetBSD: ixp12x0_intr.c,v 1.19 2008/04/28 20:23:14 martin Exp $ */
+/* $NetBSD: ixp12x0_intr.c,v 1.22 2011/07/01 20:27:50 dyoung Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.19 2008/04/28 20:23:14 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.22 2011/07/01 20:27:50 dyoung Exp $");
 
 /*
  * Interrupt support for the Intel ixp12x0
@@ -42,9 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.19 2008/04/28 20:23:14 martin Exp
 #include <sys/simplelock.h>
 #include <sys/termios.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -206,21 +204,29 @@ ixp12x0_intr_calculate_masks(void)
 
 	KASSERT(imask[IPL_NONE] == 0);
 	KASSERT(pci_imask[IPL_NONE] == 0);
+	KASSERT(imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(pci_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(imask[IPL_SOFTBIO] == 0);
+	KASSERT(pci_imask[IPL_SOFTBIO] == 0);
+	KASSERT(imask[IPL_SOFTNET] == 0);
+	KASSERT(pci_imask[IPL_SOFTNET] == 0);
+	KASSERT(imask[IPL_SOFTSERIAL] == 0);
+	KASSERT(pci_imask[IPL_SOFTSERIAL] == 0);
 
 	KASSERT(imask[IPL_VM] != 0);
 	KASSERT(pci_imask[IPL_VM] != 0);
 
 	/*
-	 * splclock() must block anything that uses the scheduler.
+	 * splsched() must block anything that uses the scheduler.
 	 */
-	imask[IPL_CLOCK] |= imask[IPL_VM];
-	pci_imask[IPL_CLOCK] |= pci_imask[IPL_VM];
+	imask[IPL_SCHED] |= imask[IPL_VM];
+	pci_imask[IPL_SCHED] |= pci_imask[IPL_VM];
 
 	/*
 	 * splhigh() must block "everything".
 	 */
-	imask[IPL_HIGH] |= imask[IPL_CLOCK];
-	pci_imask[IPL_HIGH] |= pci_imask[IPL_CLOCK];
+	imask[IPL_HIGH] |= imask[IPL_SCHED];
+	pci_imask[IPL_HIGH] |= pci_imask[IPL_SCHED];
 
 	/*
 	 * Now compute which IRQs must be blocked when servicing any
@@ -404,7 +410,7 @@ ixp12x0_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
+		ci->ci_data.cpu_nintr++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);
@@ -419,7 +425,7 @@ ixp12x0_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq + SYS_NIRQ];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
+		ci->ci_data.cpu_nintr++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);

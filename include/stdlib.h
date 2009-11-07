@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.89 2009/07/20 17:03:37 joerg Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.97.6.2 2012/06/23 22:54:56 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -48,7 +48,7 @@ typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
 #endif
 
-#ifdef	_BSD_WCHAR_T_
+#if defined(_BSD_WCHAR_T_) && !defined(__cplusplus)
 typedef	_BSD_WCHAR_T_	wchar_t;
 #undef	_BSD_WCHAR_T_
 #endif
@@ -160,7 +160,9 @@ unsigned short *
 	 seed48(unsigned short[3]);
 void	 srand48(long);
 
-int	 putenv(const char *);
+#ifndef __LIBC12_SOURCE__
+int	 putenv(char *) __RENAME(__putenv50);
+#endif
 #endif
 
 
@@ -242,7 +244,7 @@ int	 posix_memalign(void **, size_t, size_t);
 #if defined(alloca) && (alloca == __builtin_alloca) && \
 	defined(__GNUC__) && (__GNUC__ < 2)
 void	*alloca(int);     /* built-in for gcc */
-#elif defined(__PCC__)
+#elif defined(__PCC__) && !defined(__GNUC__)
 #define alloca(size) __builtin_alloca(size)
 #else
 void	*alloca(size_t);
@@ -250,6 +252,8 @@ void	*alloca(size_t);
 
 uint32_t arc4random(void);
 void	 arc4random_stir(void);
+void	 arc4random_buf(void *, size_t);
+uint32_t arc4random_uniform(uint32_t);
 void	 arc4random_addrandom(u_char *, int);
 char	*getbsize(int *, long *);
 char	*cgetcap(char *, const char *, int);
@@ -265,6 +269,7 @@ int	 cgetustr(char *, const char *, char **);
 void	 csetexpandtc(int);
 
 int	 daemon(int, int);
+int	 devname_r(dev_t, mode_t, char *, size_t);
 #ifndef __LIBC12_SOURCE__
 __aconst char *devname(dev_t, mode_t) __RENAME(__devname50);
 #endif
@@ -299,8 +304,8 @@ void	 mi_vector_hash(const void * __restrict, size_t, uint32_t,
 	    uint32_t[3]);
 
 void	 setproctitle(const char *, ...)
-	    __attribute__((__format__(__printf__, 1, 2)));
-const char *getprogname(void) __attribute__((const));
+	    __printflike(1, 2);
+const char *getprogname(void) __constfunc;
 void	setprogname(const char *);
 
 quad_t	 qabs(quad_t);

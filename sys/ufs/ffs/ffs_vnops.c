@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vnops.c,v 1.113 2009/11/04 09:45:05 hannken Exp $	*/
+/*	$NetBSD: ffs_vnops.c,v 1.120.8.1 2012/05/07 03:01:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.113 2009/11/04 09:45:05 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.120.8.1 2012/05/07 03:01:12 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -175,7 +175,7 @@ const struct vnodeopv_entry_desc ffs_specop_entries[] = {
 	{ &vop_kqfilter_desc, spec_kqfilter },		/* kqfilter */
 	{ &vop_revoke_desc, spec_revoke },		/* revoke */
 	{ &vop_mmap_desc, spec_mmap },			/* mmap */
-	{ &vop_fsync_desc, ffs_fsync },			/* fsync */
+	{ &vop_fsync_desc, ffs_spec_fsync },		/* fsync */
 	{ &vop_seek_desc, spec_seek },			/* seek */
 	{ &vop_remove_desc, spec_remove },		/* remove */
 	{ &vop_link_desc, spec_link },			/* link */
@@ -213,45 +213,45 @@ const struct vnodeopv_desc ffs_specop_opv_desc =
 int (**ffs_fifoop_p)(void *);
 const struct vnodeopv_entry_desc ffs_fifoop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
-	{ &vop_lookup_desc, fifo_lookup },		/* lookup */
-	{ &vop_create_desc, fifo_create },		/* create */
-	{ &vop_mknod_desc, fifo_mknod },		/* mknod */
-	{ &vop_open_desc, fifo_open },			/* open */
+	{ &vop_lookup_desc, vn_fifo_bypass },		/* lookup */
+	{ &vop_create_desc, vn_fifo_bypass },		/* create */
+	{ &vop_mknod_desc, vn_fifo_bypass },		/* mknod */
+	{ &vop_open_desc, vn_fifo_bypass },		/* open */
 	{ &vop_close_desc, ufsfifo_close },		/* close */
 	{ &vop_access_desc, ufs_access },		/* access */
 	{ &vop_getattr_desc, ufs_getattr },		/* getattr */
 	{ &vop_setattr_desc, ufs_setattr },		/* setattr */
 	{ &vop_read_desc, ufsfifo_read },		/* read */
 	{ &vop_write_desc, ufsfifo_write },		/* write */
-	{ &vop_ioctl_desc, fifo_ioctl },		/* ioctl */
+	{ &vop_ioctl_desc, vn_fifo_bypass },		/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
-	{ &vop_poll_desc, fifo_poll },			/* poll */
-	{ &vop_kqfilter_desc, fifo_kqfilter },		/* kqfilter */
-	{ &vop_revoke_desc, fifo_revoke },		/* revoke */
-	{ &vop_mmap_desc, fifo_mmap },			/* mmap */
+	{ &vop_poll_desc, vn_fifo_bypass },		/* poll */
+	{ &vop_kqfilter_desc, vn_fifo_bypass },		/* kqfilter */
+	{ &vop_revoke_desc, vn_fifo_bypass },		/* revoke */
+	{ &vop_mmap_desc, vn_fifo_bypass },		/* mmap */
 	{ &vop_fsync_desc, ffs_fsync },			/* fsync */
-	{ &vop_seek_desc, fifo_seek },			/* seek */
-	{ &vop_remove_desc, fifo_remove },		/* remove */
-	{ &vop_link_desc, fifo_link },			/* link */
-	{ &vop_rename_desc, fifo_rename },		/* rename */
-	{ &vop_mkdir_desc, fifo_mkdir },		/* mkdir */
-	{ &vop_rmdir_desc, fifo_rmdir },		/* rmdir */
-	{ &vop_symlink_desc, fifo_symlink },		/* symlink */
-	{ &vop_readdir_desc, fifo_readdir },		/* readdir */
-	{ &vop_readlink_desc, fifo_readlink },		/* readlink */
-	{ &vop_abortop_desc, fifo_abortop },		/* abortop */
+	{ &vop_seek_desc, vn_fifo_bypass },		/* seek */
+	{ &vop_remove_desc, vn_fifo_bypass },		/* remove */
+	{ &vop_link_desc, vn_fifo_bypass },		/* link */
+	{ &vop_rename_desc, vn_fifo_bypass },		/* rename */
+	{ &vop_mkdir_desc, vn_fifo_bypass },		/* mkdir */
+	{ &vop_rmdir_desc, vn_fifo_bypass },		/* rmdir */
+	{ &vop_symlink_desc, vn_fifo_bypass },		/* symlink */
+	{ &vop_readdir_desc, vn_fifo_bypass },		/* readdir */
+	{ &vop_readlink_desc, vn_fifo_bypass },		/* readlink */
+	{ &vop_abortop_desc, vn_fifo_bypass },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
 	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
 	{ &vop_lock_desc, ufs_lock },			/* lock */
 	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
-	{ &vop_bmap_desc, fifo_bmap },			/* bmap */
-	{ &vop_strategy_desc, fifo_strategy },		/* strategy */
+	{ &vop_bmap_desc, vn_fifo_bypass },		/* bmap */
+	{ &vop_strategy_desc, vn_fifo_bypass },		/* strategy */
 	{ &vop_print_desc, ufs_print },			/* print */
 	{ &vop_islocked_desc, ufs_islocked },		/* islocked */
-	{ &vop_pathconf_desc, fifo_pathconf },		/* pathconf */
-	{ &vop_advlock_desc, fifo_advlock },		/* advlock */
+	{ &vop_pathconf_desc, vn_fifo_bypass },		/* pathconf */
+	{ &vop_advlock_desc, vn_fifo_bypass },		/* advlock */
 	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
-	{ &vop_putpages_desc, fifo_putpages }, 		/* putpages */
+	{ &vop_putpages_desc, vn_fifo_bypass }, 	/* putpages */
 	{ &vop_openextattr_desc, ffs_openextattr },	/* openextattr */
 	{ &vop_closeextattr_desc, ffs_closeextattr },	/* closeextattr */
 	{ &vop_getextattr_desc, ffs_getextattr },	/* getextattr */
@@ -264,6 +264,61 @@ const struct vnodeopv_desc ffs_fifoop_opv_desc =
 	{ &ffs_fifoop_p, ffs_fifoop_entries };
 
 #include <ufs/ufs/ufs_readwrite.c>
+
+int
+ffs_spec_fsync(void *v)
+{
+	struct vop_fsync_args /* {
+		struct vnode *a_vp;
+		kauth_cred_t a_cred;
+		int a_flags;
+		off_t a_offlo;
+		off_t a_offhi;
+		struct lwp *a_l;
+	} */ *ap = v;
+	int error, flags, uflags;
+	struct vnode *vp;
+	struct mount *mp;
+
+	flags = ap->a_flags;
+	uflags = UPDATE_CLOSE | ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
+	vp = ap->a_vp;
+	mp = vp->v_mount;
+
+	fstrans_start(mp, FSTRANS_LAZY);
+
+	error = spec_fsync(v);
+	if (error)
+		goto out;
+
+#ifdef WAPBL
+	if (mp && mp->mnt_wapbl) {
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0)
+			goto out;
+		if ((VTOI(vp)->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE
+		    | IN_MODIFY | IN_MODIFIED | IN_ACCESSED)) != 0) {
+			error = UFS_WAPBL_BEGIN(mp);
+			if (error != 0)
+				goto out;
+			error = ffs_update(vp, NULL, NULL, uflags);
+			UFS_WAPBL_END(mp);
+		}
+		goto out;
+	}
+#endif /* WAPBL */
+
+	error = ffs_update(vp, NULL, NULL, uflags);
+
+out:
+	fstrans_done(mp);
+	return error;
+}
 
 int
 ffs_fsync(void *v)
@@ -282,19 +337,18 @@ ffs_fsync(void *v)
 	int bsize;
 	daddr_t blk_high;
 	struct vnode *vp;
-#ifdef WAPBL
 	struct mount *mp;
-#endif
 
 	vp = ap->a_vp;
+	mp = vp->v_mount;
 
-	fstrans_start(vp->v_mount, FSTRANS_LAZY);
+	fstrans_start(mp, FSTRANS_LAZY);
 	if ((ap->a_offlo == 0 && ap->a_offhi == 0) || (vp->v_type != VREG)) {
 		error = ffs_full_fsync(vp, ap->a_flags);
 		goto out;
 	}
 
-	bsize = vp->v_mount->mnt_stat.f_iosize;
+	bsize = mp->mnt_stat.f_iosize;
 	blk_high = ap->a_offhi / bsize;
 	if (ap->a_offhi % bsize != 0)
 		blk_high++;
@@ -303,7 +357,7 @@ ffs_fsync(void *v)
 	 * First, flush all pages in range.
 	 */
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	error = VOP_PUTPAGES(vp, trunc_page(ap->a_offlo),
 	    round_page(ap->a_offhi), PGO_CLEANIT |
 	    ((ap->a_flags & FSYNC_WAIT) ? PGO_SYNCIO : 0));
@@ -312,7 +366,7 @@ ffs_fsync(void *v)
 	}
 
 #ifdef WAPBL
-	mp = wapbl_vptomp(vp);
+	KASSERT(vp->v_type == VREG);
 	if (mp->mnt_wapbl) {
 		/*
 		 * Don't bother writing out metadata if the syncer is
@@ -321,7 +375,7 @@ ffs_fsync(void *v)
 		 * VFS_SYNC().
 		 */
 		if ((ap->a_flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0) {
-			fstrans_done(vp->v_mount);
+			fstrans_done(mp);
 			return 0;
 		}
 		error = 0;
@@ -330,7 +384,7 @@ ffs_fsync(void *v)
 				 IN_MODIFIED | IN_ACCESSED)) {
 			error = UFS_WAPBL_BEGIN(mp);
 			if (error) {
-				fstrans_done(vp->v_mount);
+				fstrans_done(mp);
 				return error;
 			}
 			error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
@@ -338,11 +392,11 @@ ffs_fsync(void *v)
 			UFS_WAPBL_END(mp);
 		}
 		if (error || (ap->a_flags & FSYNC_NOLOG) != 0) {
-			fstrans_done(vp->v_mount);
+			fstrans_done(mp);
 			return error;
 		}
 		error = wapbl_flush(mp->mnt_wapbl, 0);
-		fstrans_done(vp->v_mount);
+		fstrans_done(mp);
 		return error;
 	}
 #endif /* WAPBL */
@@ -372,10 +426,10 @@ ffs_fsync(void *v)
 	}
 
 	if (ap->a_flags & FSYNC_WAIT) {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		while (vp->v_numoutput > 0)
-			cv_wait(&vp->v_cv, &vp->v_interlock);
-		mutex_exit(&vp->v_interlock);
+			cv_wait(&vp->v_cv, vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 	}
 
 	error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
@@ -389,7 +443,7 @@ ffs_fsync(void *v)
 	}
 
 out:
-	fstrans_done(vp->v_mount);
+	fstrans_done(mp);
 	return error;
 }
 
@@ -400,42 +454,36 @@ out:
 int
 ffs_full_fsync(struct vnode *vp, int flags)
 {
-	struct buf *bp, *nbp;
-	int error, passes, skipmeta, waitfor, i;
-	struct mount *mp;
+	int error, i, uflags;
 
-	KASSERT(VTOI(vp) != NULL);
 	KASSERT(vp->v_tag == VT_UFS);
+	KASSERT(VTOI(vp) != NULL);
+	KASSERT(vp->v_type != VCHR && vp->v_type != VBLK);
 
-	error = 0;
-
-	mp = vp->v_mount;
-	if (vp->v_type == VBLK && vp->v_specmountpoint != NULL) {
-		mp = vp->v_specmountpoint;
-	} else {
-		mp = vp->v_mount;
-	}
-
-	/*
-	 * Flush all dirty data associated with the vnode.
-	 */
-	if (vp->v_type == VREG || vp->v_type == VBLK) {
-		int pflags = PGO_ALLPAGES | PGO_CLEANIT;
-
-		if ((flags & FSYNC_WAIT))
-			pflags |= PGO_SYNCIO;
-		if (vp->v_type == VREG &&
-		    fstrans_getstate(mp) == FSTRANS_SUSPENDING)
-			pflags |= PGO_FREE;
-		mutex_enter(&vp->v_interlock);
-		error = VOP_PUTPAGES(vp, 0, 0, pflags);
-		if (error)
-			return error;
-	}
+	uflags = UPDATE_CLOSE | ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
 
 #ifdef WAPBL
-	mp = wapbl_vptomp(vp);
+	struct mount *mp = vp->v_mount;
 	if (mp && mp->mnt_wapbl) {
+
+		/*
+		 * Flush all dirty data associated with the vnode.
+		 */
+		if (vp->v_type == VREG) {
+			int pflags = PGO_ALLPAGES | PGO_CLEANIT;
+
+			if ((flags & FSYNC_LAZY))
+				pflags |= PGO_LAZY;
+			if ((flags & FSYNC_WAIT))
+				pflags |= PGO_SYNCIO;
+			if (fstrans_getstate(mp) == FSTRANS_SUSPENDING)
+				pflags |= PGO_FREE;
+			mutex_enter(vp->v_interlock);
+			error = VOP_PUTPAGES(vp, 0, 0, pflags);
+			if (error)
+				return error;
+		}
+
 		/*
 		 * Don't bother writing out metadata if the syncer is
 		 * making the request.  We will let the sync vnode
@@ -450,9 +498,10 @@ ffs_full_fsync(struct vnode *vp, int flags)
 			error = UFS_WAPBL_BEGIN(mp);
 			if (error)
 				return error;
-			error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
-			    ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0));
+			error = ffs_update(vp, NULL, NULL, uflags);
 			UFS_WAPBL_END(mp);
+		} else {
+			error = 0;
 		}
 		if (error || (flags & FSYNC_NOLOG) != 0)
 			return error;
@@ -468,97 +517,21 @@ ffs_full_fsync(struct vnode *vp, int flags)
 		}
 
 		if ((flags & FSYNC_WAIT) != 0) {
-			mutex_enter(&vp->v_interlock);
+			mutex_enter(vp->v_interlock);
 			while (vp->v_numoutput != 0)
-				cv_wait(&vp->v_cv, &vp->v_interlock);
-			mutex_exit(&vp->v_interlock);
+				cv_wait(&vp->v_cv, vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 		}
 
 		return error;
 	}
 #endif /* WAPBL */
 
-	/*
-	 * Write out metadata for non-logging file systems. XXX This block
-	 * should be simplified now that softdep is gone.
-	 */
-	passes = NIADDR + 1;
-	skipmeta = 0;
-	if (flags & FSYNC_WAIT)
-		skipmeta = 1;
-
-loop:
-	mutex_enter(&bufcache_lock);
-	LIST_FOREACH(bp, &vp->v_dirtyblkhd, b_vnbufs) {
-		bp->b_cflags &= ~BC_SCANNED;
-	}
-	for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
-		nbp = LIST_NEXT(bp, b_vnbufs);
-		if (bp->b_cflags & (BC_BUSY | BC_SCANNED))
-			continue;
-		if ((bp->b_oflags & BO_DELWRI) == 0)
-			panic("ffs_fsync: not dirty");
-		if (skipmeta && bp->b_lblkno < 0)
-			continue;
-		bp->b_cflags |= BC_BUSY | BC_VFLUSH | BC_SCANNED;
-		mutex_exit(&bufcache_lock);
-		/*
-		 * On our final pass through, do all I/O synchronously
-		 * so that we can find out if our flush is failing
-		 * because of write errors.
-		 */
-		if (passes > 0 || !(flags & FSYNC_WAIT))
-			(void) bawrite(bp);
-		else if ((error = bwrite(bp)) != 0)
-			return (error);
-		/*
-		 * Since we unlocked during the I/O, we need
-		 * to start from a known point.
-		 */
-		mutex_enter(&bufcache_lock);
-		nbp = LIST_FIRST(&vp->v_dirtyblkhd);
-	}
-	mutex_exit(&bufcache_lock);
-	if (skipmeta) {
-		skipmeta = 0;
-		goto loop;
-	}
-
-	if ((flags & FSYNC_WAIT) != 0) {
-		mutex_enter(&vp->v_interlock);
-		while (vp->v_numoutput) {
-			cv_wait(&vp->v_cv, &vp->v_interlock);
-		}
-		mutex_exit(&vp->v_interlock);
-
-		/*
-		 * Ensure that any filesystem metadata associated
-		 * with the vnode has been written.
-		 */
-		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
-			/*
-			* Block devices associated with filesystems may
-			* have new I/O requests posted for them even if
-			* the vnode is locked, so no amount of trying will
-			* get them clean. Thus we give block devices a
-			* good effort, then just give up. For all other file
-			* types, go around and try again until it is clean.
-			*/
-			if (passes > 0) {
-				passes--;
-				goto loop;
-			}
-#ifdef DIAGNOSTIC
-			if (vp->v_type != VBLK)
-				vprint("ffs_fsync: dirty", vp);
-#endif
-		}
-	}
-
-	waitfor = (flags & FSYNC_WAIT) ? UPDATE_WAIT : 0;
-	error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE | waitfor);
-
+	error = vflushbuf(vp, flags);
+	if (error == 0)
+		error = ffs_update(vp, NULL, NULL, uflags);
 	if (error == 0 && (flags & FSYNC_CACHE) != 0) {
+		i = 1;
 		(void)VOP_IOCTL(VTOI(vp)->i_devvp, DIOCCACHESYNC, &i, FWRITE,
 		    kauth_cred_get());
 	}
@@ -584,6 +557,20 @@ ffs_reclaim(void *v)
 	int error;
 
 	fstrans_start(mp, FSTRANS_LAZY);
+	/*
+	 * The inode must be freed and updated before being removed
+	 * from its hash chain.  Other threads trying to gain a hold
+	 * on the inode will be stalled because it is locked (VI_XLOCK).
+	 */
+	error = UFS_WAPBL_BEGIN(mp);
+	if (error) {
+		fstrans_done(mp);
+		return error;
+	}
+	if (ip->i_nlink <= 0 && ip->i_omode != 0 &&
+	    (vp->v_mount->mnt_flag & MNT_RDONLY) == 0)
+		ffs_vfree(vp, ip->i_number, ip->i_omode);
+	UFS_WAPBL_END(mp);
 	if ((error = ufs_reclaim(vp)) != 0) {
 		fstrans_done(mp);
 		return (error);
@@ -598,10 +585,10 @@ ffs_reclaim(void *v)
 	 * To interlock with ffs_sync().
 	 */
 	genfs_node_destroy(vp);
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	data = vp->v_data;
 	vp->v_data = NULL;
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	/*
 	 * XXX MFS ends up here, too, to free an inode.  Should we create
@@ -751,9 +738,19 @@ ffs_listextattr(void *v)
 	struct inode *ip = VTOI(ap->a_vp);
 	struct fs *fs = ip->i_fs;
 
-	/* Not supported for UFS1 file systems. */
-	if (fs->fs_magic == FS_UFS1_MAGIC)
+	if (fs->fs_magic == FS_UFS1_MAGIC) {
+#ifdef UFS_EXTATTR
+		struct vnode *vp = ap->a_vp;
+		int error;
+
+		fstrans_start(vp->v_mount, FSTRANS_SHARED);
+		error = ufs_listextattr(ap);
+		fstrans_done(vp->v_mount);
+		return error;
+#else
 		return (EOPNOTSUPP);
+#endif
+	}
 
 	/* XXX Not implemented for UFS2 file systems. */
 	return (EOPNOTSUPP);

@@ -1,4 +1,4 @@
-/*	$NetBSD: grackle.c,v 1.11 2007/10/17 19:55:34 garbled Exp $	*/
+/*	$NetBSD: grackle.c,v 1.15 2011/10/26 04:56:23 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grackle.c,v 1.11 2007/10/17 19:55:34 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grackle.c,v 1.15 2011/10/26 04:56:23 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -41,23 +41,23 @@ __KERNEL_RCSID(0, "$NetBSD: grackle.c,v 1.11 2007/10/17 19:55:34 garbled Exp $")
 #include <machine/pio.h>
 
 struct grackle_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct genppc_pci_chipset sc_pc;
 	struct powerpc_bus_space sc_iot;
 	struct powerpc_bus_space sc_memt;
 };
 
-static void grackle_attach(struct device *, struct device *, void *);
-static int grackle_match(struct device *, struct cfdata *, void *);
+static void grackle_attach(device_t, device_t, void *);
+static int grackle_match(device_t, cfdata_t, void *);
 
 static pcireg_t grackle_conf_read(void *, pcitag_t, int);
 static void grackle_conf_write(void *, pcitag_t, int, pcireg_t);
 
-CFATTACH_DECL(grackle, sizeof(struct grackle_softc),
+CFATTACH_DECL_NEW(grackle, sizeof(struct grackle_softc),
     grackle_match, grackle_attach, NULL, NULL);
 
 static int
-grackle_match(struct device *parent, struct cfdata *cf, void *aux)
+grackle_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	char compat[32];
@@ -77,9 +77,9 @@ grackle_match(struct device *parent, struct cfdata *cf, void *aux)
 #define GRACKLE_DATA 0xfee00000
 
 static void
-grackle_attach(struct device *parent, struct device *self, void *aux)
+grackle_attach(device_t parent, device_t self, void *aux)
 {
-	struct grackle_softc *sc = (void *)self;
+	struct grackle_softc *sc = device_private(self);
 	pci_chipset_tag_t pc = &sc->sc_pc;
 	struct confargs *ca = aux;
 	struct pcibus_attach_args pba;
@@ -92,6 +92,7 @@ grackle_attach(struct device *parent, struct device *self, void *aux)
 	} ranges[6], *rp = ranges;
 
 	aprint_normal("\n");
+	sc->sc_dev = self;
 
 	/* PCI bus number */
 	if (OF_getprop(node, "bus-range", busrange, sizeof(busrange)) != 8)
@@ -126,8 +127,8 @@ grackle_attach(struct device *parent, struct device *self, void *aux)
 
 	macppc_pci_get_chipset_tag(pc);
 	pc->pc_node = node;
-	pc->pc_addr = mapiodev(GRACKLE_ADDR, 4);
-	pc->pc_data = mapiodev(GRACKLE_DATA, 4);
+	pc->pc_addr = mapiodev(GRACKLE_ADDR, 4, false);
+	pc->pc_data = mapiodev(GRACKLE_DATA, 4, false);
 	pc->pc_bus = busrange[0];
 	pc->pc_conf_read = grackle_conf_read;
 	pc->pc_conf_write = grackle_conf_write;
@@ -142,7 +143,7 @@ grackle_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_bus = pc->pc_bus;
 	pba.pba_bridgetag = NULL;
 	pba.pba_pc = pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

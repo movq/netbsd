@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.146 2009/10/18 12:09:48 ahoka Exp $	*/
+/*	$NetBSD: defs.h,v 1.161.2.2 2012/07/04 20:48:55 jdc Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,24 +14,20 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -44,8 +40,8 @@
 /* System includes needed for this. */
 #include <sys/types.h>
 #include <sys/disklabel.h>
-extern const char * const fstypenames[];
-extern const char * const mountnames[];
+
+const char *getfslabelname(uint8_t);
 
 static inline void *
 deconst(const void *p)
@@ -121,15 +117,23 @@ enum {
     SET_X11_ETC,	/* X11 config */
     SET_X11_LAST,
 
-    /* Machine dependant sets */
-    SET_MD_1,		/* Machine dependant set */
-    SET_MD_2,		/* Machine dependant set */
-    SET_MD_3,		/* Machine dependant set */
-    SET_MD_4,		/* Machine dependant set */
+    /* Machine dependent sets */
+    SET_MD_1,		/* Machine dependent set */
+    SET_MD_2,		/* Machine dependent set */
+    SET_MD_3,		/* Machine dependent set */
+    SET_MD_4,		/* Machine dependent set */
+    
+    /* Source sets */
+    SET_SYSSRC,
+    SET_SRC,
+    SET_SHARESRC,
+    SET_GNUSRC,
+    SET_XSRC,
 
     SET_LAST,
     SET_GROUP,		/* Start of submenu */
     SET_GROUP_END,	/* End of submenu */
+    SET_PKGSRC,		/* pkgsrc, not counted as regular set */
 };
 
 /* Initialisers to select sets */
@@ -145,20 +149,30 @@ enum {
 #define SET_X11_NOSERVERS SET_X11_BASE, SET_X11_FONTS, SET_X11_PROG, SET_X11_ETC
 #define SET_X11 SET_X11_NOSERVERS, SET_X11_SERVERS
 
-/* All machine dependant sets */
+/* All machine dependent sets */
 #define SET_MD SET_MD_1, SET_MD_2, SET_MD_3, SET_MD_4
+
+/* All source sets */
+#define SET_SOURCE SET_SYSSRC, SET_SRC, SET_SHARESRC, SET_GNUSRC, SET_XSRC
+
+/* Set list flags */
+#define SFLAG_MINIMAL	1
+#define	SFLAG_NOX	2
 
 /* Macros */
 #define nelem(x) (sizeof (x) / sizeof *(x))
 
 /* Round up to the next full cylinder size */
 #define NUMSEC(size, sizemult, cylsize) \
-	((size) == -1 ? -1 : (sizemult) == 1 ? (size) : \
+	((size) == ~0u ? ~0u : (sizemult) == 1 ? (size) : \
 	 roundup((size) * (sizemult), (cylsize)))
 
 /* What FS type? */
 #define PI_ISBSDFS(p) ((p)->pi_fstype == FS_BSDLFS || \
 		       (p)->pi_fstype == FS_BSDFFS)
+
+/* standard cd0 device */
+#define CD_NAMES "cd0a"
 
 /* Types */
 typedef struct distinfo {
@@ -224,12 +238,10 @@ int ttysig_ignore;
 pid_t ttysig_forward;
 int layoutkind;
 int sizemult;
-const char *multname; 
+const char *multname;
 
 /* loging variables */
 
-int logging;
-int scripting;
 FILE *logfp;
 FILE *script;
 
@@ -264,7 +276,7 @@ char bsddiskname[DISKNAME_SIZE];
 const char *doessf;
 
 /* Relative file name for storing a distribution. */
-char xfer_dir[STRSIZE];  
+char xfer_dir[STRSIZE];
 int  clean_xfer_dir;
 
 #if !defined(SYSINST_FTP_HOST)
@@ -275,20 +287,50 @@ int  clean_xfer_dir;
 #define SYSINST_FTP_DIR		"pub/NetBSD/NetBSD-" REL
 #endif
 
-/* Abs. path we extract from */
-char ext_dir[STRSIZE];
+#if !defined(SYSINST_PKG_HOST)
+#define SYSINST_PKG_HOST	SYSINST_FTP_HOST
+#endif
 
-/* Place we look in all fs types */
-char set_dir[STRSIZE];
+#if !defined(SYSINST_PKG_DIR)
+#define SYSINST_PKG_DIR		"pub/pkgsrc/packages/NetBSD"
+#endif
 
-struct {
+#if !defined(SYSINST_PKGSRC_HOST)
+#define SYSINST_PKGSRC_HOST	SYSINST_PKG_HOST
+#endif
+
+/* Abs. path we extract binary sets from */
+char ext_dir_bin[STRSIZE];
+
+/* Abs. path we extract source sets from */
+char ext_dir_src[STRSIZE];
+
+/* Abs. path we extract pkgsrc from */
+char ext_dir_pkgsrc[STRSIZE];
+
+/* Place we look for binary sets in all fs types */
+char set_dir_bin[STRSIZE];
+
+/* Place we look for source sets in all fs types */
+char set_dir_src[STRSIZE];
+
+/* Place we look for pkgs in all fs types */
+char pkg_dir[STRSIZE];
+
+/* Place we look for pkgsrc in all fs types */
+char pkgsrc_dir[STRSIZE];
+
+struct ftpinfo {
     char host[STRSIZE];
     char dir[STRSIZE] ;
     char user[SSTRSIZE];
     char pass[STRSIZE];
     char proxy[STRSIZE];
     const char *xfer_type;		/* "ftp" or "http" */
-} ftp;
+};
+
+/* use the same struct for sets ftp and to build pkgpath */
+struct ftpinfo ftp, pkg, pkgsrc;
 
 int (*fetch_fn)(const char *);
 char nfs_host[STRSIZE];
@@ -313,7 +355,7 @@ void set_menu_numopts(int, int);
 
 /* Machine dependent functions .... */
 void	md_init(void);
-void	md_init_set_status(int); /* minimal y/n */
+void	md_init_set_status(int); /* SFLAG_foo */
 
  /* MD functions if user selects install - in order called */
 int	md_get_info(void);
@@ -321,6 +363,7 @@ int	md_make_bsd_partitions(void);
 int	md_check_partitions(void);
 int	md_pre_disklabel(void);
 int	md_post_disklabel(void);
+int	md_pre_mount(void);
 int	md_post_newfs(void);
 int	md_post_extract(void);
 void	md_cleanup_install(void);
@@ -334,6 +377,7 @@ int	md_update(void);
 void	toplevel(void);
 
 /* from disks.c */
+const char *get_default_cdrom(void);
 int	find_disks(const char *);
 struct menudesc;
 void	fmt_fspart(struct menudesc *, int, void *);
@@ -354,8 +398,6 @@ const char *get_last_mounted(int, int, partinfo *);
 int	savenewlabel(partinfo *, int);
 int	incorelabel(const char *, partinfo *);
 int	edit_and_check_label(partinfo *, int, int, int);
-int	getpartoff(int);
-int	getpartsize(int, int);
 void	set_bsize(partinfo *, int);
 void	set_fsize(partinfo *, int);
 void	set_ptype(partinfo *, int, int);
@@ -375,15 +417,18 @@ int	get_geom(const char *, struct disklabel *);
 int	get_real_geom(const char *, struct disklabel *);
 
 /* from net.c */
+extern int network_up;
 extern char net_namesvr6[STRSIZE];
 int	get_via_ftp(const char *);
 int	get_via_nfs(void);
 int	config_network(void);
 void	mnt_net_config(void);
+void	make_url(char *, struct ftpinfo *, const char *);
+int	get_pkgsrc(void);
 
 /* From run.c */
-int	collect(int, char **, const char *, ...);
-int	run_program(int, const char *, ...);
+int	collect(int, char **, const char *, ...) __printflike(3, 4);
+int	run_program(int, const char *, ...) __printflike(2, 3);
 void	do_logging(void);
 int	do_system(const char *);
 
@@ -399,6 +444,7 @@ int	file_mode_match(const char *, unsigned int);
 uint	get_ramsize(void);
 void	ask_sizemult(int);
 void	run_makedev(void);
+int	boot_media_still_needed(void);
 int	get_via_floppy(void);
 int	get_via_cdrom(void);
 int	get_via_localfs(void);
@@ -411,13 +457,11 @@ unsigned int    set_X11_selected(void);
 int 	get_and_unpack_sets(int, msg, msg, msg);
 int	sanity_check(void);
 int	set_timezone(void);
-int	set_crypt_type(void);
-int	set_root_password(void);
-int	set_root_shell(void);
-void	scripting_fprintf(FILE *, const char *, ...);
-void	scripting_vfprintf(FILE *, const char *, va_list);
+void	scripting_fprintf(FILE *, const char *, ...) __printflike(2, 3);
+void	scripting_vfprintf(FILE *, const char *, va_list) __printflike(2, 0);
 void	add_rc_conf(const char *, ...);
-void	add_sysctl_conf(const char *, ...);
+int	del_rc_conf(const char *);
+void	add_sysctl_conf(const char *, ...) __printflike(1, 2);
 void	enable_rc_conf(void);
 void	set_sizemultname_cyl(void);
 void	set_sizemultname_meg(void);
@@ -425,6 +469,12 @@ int	check_lfs_progs(void);
 void	init_set_status(int);
 void	customise_sets(void);
 void	umount_mnt2(void);
+int 	set_is_source(const char *);
+const char *set_dir_for_set(const char *);
+const char *ext_dir_for_set(const char *);
+void	replace(const char *, const char *, ...);
+void	get_tz_default(void);
+int	extract_file(distinfo *, int);
 
 /* from target.c */
 #if defined(DEBUG)  ||	defined(DEBUG_ROOT)
@@ -435,7 +485,8 @@ const	char *target_expand(const char *);
 void	make_target_dir(const char *);
 void	append_to_target_file(const char *, const char *);
 void	echo_to_target_file(const char *, const char *);
-void	sprintf_to_target_file(const char *, const char *, ...);
+void	sprintf_to_target_file(const char *, const char *, ...)
+    __printflike(2, 3);
 void	trunc_target_file(const char *);
 const	char *target_prefix(void);
 int	target_chdir(const char *);
@@ -454,6 +505,7 @@ int	target_dir_exists_p(const char *);
 int	target_file_exists_p(const char *);
 int	target_symlink_exists_p(const char *);
 void	unwind_mounts(void);
+int	target_mounted(void);
 
 /* from bsddisklabel.c */
 int	make_bsd_partitions(void);
@@ -473,4 +525,11 @@ void	save_kb_encoding(void);
 #define	get_kb_encoding()
 #define	save_kb_encoding()
 #endif
+
+/* from configmenu.c */
+void	do_configmenu(void);
+
+/* from checkrc.c */
+int	check_rcvar(const char *);
+int	check_rcdefault(const char *);
 #endif	/* _DEFS_H_ */

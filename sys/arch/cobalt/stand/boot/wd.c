@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.10 2008/04/28 20:23:16 martin Exp $	*/
+/*	$NetBSD: wd.c,v 1.15 2011/07/17 20:54:38 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stdint.h>
 
@@ -36,7 +37,6 @@
 #include <lib/libkern/libkern.h>
 
 #include <machine/param.h>
-#include <machine/stdarg.h>
 #include <dev/raidframe/raidframevar.h>		/* For RF_PROTECTED_SECTORS */
 
 #include "boot.h"
@@ -54,25 +54,53 @@ wd_get_params(struct wd_softc *wd)
 {
 	int error;
 	uint8_t buf[DEV_BSIZE];
+	struct ataparams *params = (struct ataparams *)buf;
 
 	if ((error = wdc_exec_identify(wd, buf)) != 0)
 		return error;
 
-	wd->sc_params = *(struct ataparams *)buf;
+	wd->sc_params = *params;
 
 	/* 48-bit LBA addressing */
-	if ((wd->sc_params.atap_cmd2_en & ATA_CMD2_LBA48) != 0) {
-		DPRINTF(("Drive supports LBA48.\n"));
-#if defined(_ENABLE_LBA48)
+	if ((wd->sc_params.atap_cmd2_en & ATA_CMD2_LBA48) != 0)
 		wd->sc_flags |= WDF_LBA48;
-#endif
-	}
 
 	/* Prior to ATA-4, LBA was optional. */
-	if ((wd->sc_params.atap_capabilities1 & WDC_CAP_LBA) != 0) {
-		DPRINTF(("Drive supports LBA.\n"));
+	if ((wd->sc_params.atap_capabilities1 & WDC_CAP_LBA) != 0)
 		wd->sc_flags |= WDF_LBA;
+	
+	if ((wd->sc_flags & WDF_LBA48) != 0) {
+		DPRINTF(("Drive supports LBA48.\n"));
+		wd->sc_capacity =
+		    ((uint64_t)wd->sc_params.atap_max_lba[3] << 48) |
+		    ((uint64_t)wd->sc_params.atap_max_lba[2] << 32) |
+		    ((uint64_t)wd->sc_params.atap_max_lba[1] << 16) |
+		    ((uint64_t)wd->sc_params.atap_max_lba[0] <<  0);
+		DPRINTF(("atap_max_lba = (0x%x, 0x%x, 0x%x, 0x%x)\n",
+		    wd->sc_params.atap_max_lba[3],
+		    wd->sc_params.atap_max_lba[2],
+		    wd->sc_params.atap_max_lba[1],
+		    wd->sc_params.atap_max_lba[0]));
+		wd->sc_capacity28 =
+		    ((uint32_t)wd->sc_params.atap_capacity[1] << 16) |
+		    ((uint32_t)wd->sc_params.atap_capacity[0] <<  0);
+		DPRINTF(("atap_capacity = (0x%x, 0x%x)\n",
+		    wd->sc_params.atap_capacity[1],
+		    wd->sc_params.atap_capacity[0]));
+	} else if ((wd->sc_flags & WDF_LBA) != 0) {
+		DPRINTF(("Drive supports LBA.\n"));
+		wd->sc_capacity = wd->sc_capacity28 =
+		    ((uint32_t)wd->sc_params.atap_capacity[1] << 16) |
+		    ((uint32_t)wd->sc_params.atap_capacity[0] <<  0);
+	} else {
+		DPRINTF(("Drive doesn't support LBA; using CHS.\n"));
+		wd->sc_capacity = wd->sc_capacity28 =
+		    wd->sc_params.atap_cylinders *
+		    wd->sc_params.atap_heads *
+		    wd->sc_params.atap_sectors;
 	}
+	DPRINTF(("wd->sc_capacity = %" PRId64 ", wd->sc_capacity28 = %d.\n",
+	    wd->sc_capacity, wd->sc_capacity28));
 
 	return 0;
 }
@@ -173,7 +201,7 @@ wdgetdisklabel(struct wd_softc *wd)
 	}
 
 	DPRINTF(("label info: d_secsize %d, d_nsectors %d, d_ncylinders %d,"
-	    "d_ntracks %d, d_secpercyl %d\n",
+	    " d_ntracks %d, d_secpercyl %d\n",
 	    wd->sc_label.d_secsize,
 	    wd->sc_label.d_nsectors,
 	    wd->sc_label.d_ncylinders,

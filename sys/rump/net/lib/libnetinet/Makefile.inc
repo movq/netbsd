@@ -1,12 +1,12 @@
-#	$NetBSD: Makefile.inc,v 1.4 2009/05/26 23:43:39 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.8 2011/05/03 18:28:45 dyoung Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../netinet ${.CURDIR}/../../../../netinet6
 
 # INET
-SRCS+=	in_proto.c igmp.c in.c in_offload.c in_pcb.c ip_icmp.c		\
-	ip_flow.c ip_id.c ip_input.c ip_output.c raw_ip.c in_cksum.c	\
-	cpu_in_cksum.c in4_cksum.c ip_encap.c
+SRCS+=	in_proto.c igmp.c in.c in_offload.c in_pcb.c ip_carp.c ip_icmp.c\
+	ip_flow.c ip_id.c ip_input.c ip_reass.c ip_output.c raw_ip.c	\
+	in_cksum.c cpu_in_cksum.c in4_cksum.c ip_encap.c
 
 # INET6
 SRCS+=	dest6.c frag6.c icmp6.c in6.c in6_cksum.c in6_ifattach.c	\
@@ -19,13 +19,12 @@ SRCS+=	dest6.c frag6.c icmp6.c in6.c in6_cksum.c in6_ifattach.c	\
 SRCS+=	if_arp.c
 
 # TCP
-SRCS+=	tcp_input.c tcp_output.c tcp_sack.c tcp_subr.c tcp_timer.c	\
-	tcp_usrreq.c tcp_congctl.c
+SRCS+=	tcp_congctl.c tcp_input.c tcp_output.c tcp_sack.c tcp_subr.c \
+	tcp_timer.c tcp_usrreq.c tcp_vtw.c
 
 # UDP
 SRCS+=	udp_usrreq.c
 
-CFLAGS+=	-Wno-pointer-sign
 CPPFLAGS+=	-I${.CURDIR}/opt -I${.CURDIR}/../libnet/opt
 
 # TCP debugging

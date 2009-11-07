@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.56 2009/03/08 05:25:30 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.61.8.2 2012/08/08 15:51:03 martin Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,7 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.56 2009/03/08 05:25:30 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.61.8.2 2012/08/08 15:51:03 martin Exp $");
+
+#include "opt_md.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,14 +43,23 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.56 2009/03/08 05:25:30 tsutsui Exp $"
 #include <sys/device.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
+#include <sys/malloc.h>
 #include <machine/disklabel.h>
 #include <machine/cpu.h>
 #include <atari/atari/device.h>
 
+#if defined(MEMORY_DISK_HOOKS)
+#include <dev/md.h>
+#endif
+
+#include "ioconf.h"
+
 static void findroot(void);
-void mbattach(struct device *, struct device *, void *);
+int mbmatch(device_t, cfdata_t, void *);
+void mbattach(device_t, device_t, void *);
+#if 0
 int mbprint(void *, const char *);
-int mbmatch(struct device *, struct cfdata *, void *);
+#endif
 
 int atari_realconfig;
 #include <sys/kernel.h>
@@ -59,8 +70,7 @@ int atari_realconfig;
 void
 cpu_configure(void)
 {
-	extern int atari_realconfig;
-	
+
 	atari_realconfig = 1;
 
 	init_sicallback();
@@ -74,7 +84,42 @@ cpu_rootconf(void)
 {
 
 	findroot();
-	setroot(booted_device, booted_partition);
+#if defined(MEMORY_DISK_HOOKS)
+	/*
+	 * XXX
+	 * quick hacks for atari's traditional "auto-load from floppy on open"
+	 * installation md(4) ramdisk.
+	 * See sys/arch/atari/dev/md_root.c for details.
+	 */
+#define RAMD_NDEV	3	/* XXX */
+
+	if ((boothowto & RB_ASKNAME) != 0) {
+		int md_major, i;
+		dev_t md_dev;
+		cfdata_t cf;
+		struct md_softc *sc;
+
+		md_major = devsw_name2blk("md", NULL, 0);
+		if (md_major >= 0) {
+			for (i = 0; i < RAMD_NDEV; i++) {
+				md_dev = MAKEDISKDEV(md_major, i, RAW_PART);
+				cf = malloc(sizeof(*cf), M_DEVBUF,
+				    M_ZERO|M_WAITOK);
+				if (cf == NULL)
+					break;	/* XXX */
+				cf->cf_name = md_cd.cd_name;
+				cf->cf_atname = md_cd.cd_name;
+				cf->cf_unit = i;
+				cf->cf_fstate = FSTATE_STAR;
+				/* XXX mutex */
+				sc = device_private(config_attach_pseudo(cf));
+				if (sc == NULL)
+					break;	/* XXX */
+			}
+		}
+	}
+#endif
+	rootconf();
 }
 
 /*ARGSUSED*/
@@ -92,13 +137,11 @@ simple_devprint(void *auxp, const char *pnp)
  * by checking for NULL.
  */
 int
-atari_config_found(struct cfdata *pcfp, struct device *pdp, void *auxp,
-    cfprint_t pfn)
+atari_config_found(cfdata_t pcfp, device_t pdp, void *auxp, cfprint_t pfn)
 {
 	struct device temp;
-	struct cfdata *cf;
+	cfdata_t cf;
 	const struct cfattach *ca;
-	extern int	atari_realconfig;
 
 	if (atari_realconfig)
 		return config_found(pdp, auxp, pfn) != NULL;
@@ -131,7 +174,7 @@ atari_config_found(struct cfdata *pcfp, struct device *pdp, void *auxp,
 void
 config_console(void)
 {	
-	struct cfdata *cf;
+	cfdata_t cf;
 
 	config_init();
 
@@ -188,7 +231,7 @@ findroot(void)
 {
 	struct disk *dkp;
 	struct partition *pp;
-	struct device **devs;
+	device_t *devs;
 	const struct bdevsw *bdev;
 	int i, maj, unit;
 
@@ -204,7 +247,7 @@ findroot(void)
 			 * Find the disk structure corresponding to the
 			 * current device.
 			 */
-			devs = (struct device **)genericconf[i]->cd_devs;
+			devs = (device_t *)genericconf[i]->cd_devs;
 			if ((dkp = disk_find(devs[unit]->dv_xname)) == NULL)
 				continue;
 
@@ -243,13 +286,13 @@ findroot(void)
 /* 
  * mainbus driver 
  */
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mbmatch, mbattach, NULL, NULL);
 
 static int mb_attached;
 
 int
-mbmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+mbmatch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if (mb_attached)
@@ -264,32 +307,35 @@ mbmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
  * "find" all the things that should be there.
  */
 void
-mbattach(struct device *pdp, struct device *dp, void *auxp)
+mbattach(device_t parent, device_t self, void *aux)
 {
 
 	mb_attached = 1;
 
 	printf ("\n");
-	config_found(dp, __UNCONST("clock")   , simple_devprint);
-	config_found(dp, __UNCONST("grfbus")  , simple_devprint);
-	config_found(dp, __UNCONST("kbd")     , simple_devprint);
-	config_found(dp, __UNCONST("fdc")     , simple_devprint);
-	config_found(dp, __UNCONST("ser")     , simple_devprint);
-	config_found(dp, __UNCONST("zs")      , simple_devprint);
-	config_found(dp, __UNCONST("ncrscsi") , simple_devprint);
-	config_found(dp, __UNCONST("nvr")     , simple_devprint);
-	config_found(dp, __UNCONST("lpt")     , simple_devprint);
-	config_found(dp, __UNCONST("wdc")     , simple_devprint);
-	config_found(dp, __UNCONST("isab")    , simple_devprint);
-	config_found(dp, __UNCONST("pcib")    , simple_devprint);
-	config_found(dp, __UNCONST("avmebus") , simple_devprint);
+	config_found(self, __UNCONST("clock")   , simple_devprint);
+	config_found(self, __UNCONST("grfbus")  , simple_devprint);
+	config_found(self, __UNCONST("kbd")     , simple_devprint);
+	config_found(self, __UNCONST("fdc")     , simple_devprint);
+	config_found(self, __UNCONST("ser")     , simple_devprint);
+	config_found(self, __UNCONST("zs")      , simple_devprint);
+	config_found(self, __UNCONST("ncrscsi") , simple_devprint);
+	config_found(self, __UNCONST("nvr")     , simple_devprint);
+	config_found(self, __UNCONST("lpt")     , simple_devprint);
+	config_found(self, __UNCONST("wdc")     , simple_devprint);
+	config_found(self, __UNCONST("ne")      , simple_devprint);
+	config_found(self, __UNCONST("isab")    , simple_devprint);
+	config_found(self, __UNCONST("pcib")    , simple_devprint);
+	config_found(self, __UNCONST("avmebus") , simple_devprint);
 }
 
+#if 0
 int
-mbprint(void *auxp, const char *pnp)
+mbprint(void *aux, const char *pnp)
 {
 
 	if (pnp)
-		aprint_normal("%s at %s", (char *)auxp, pnp);
+		aprint_normal("%s at %s", (char *)aux, pnp);
 	return UNCONF;
 }
+#endif

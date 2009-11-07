@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.8 2009/10/03 02:27:43 elad Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2011/08/02 16:46:45 mbalmer Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.8 2009/10/03 02:27:43 elad Exp $");
+__RCSID("$NetBSD: main.c,v 1.14 2011/08/02 16:46:45 mbalmer Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
@@ -38,6 +38,8 @@ __RCSID("$NetBSD: main.c,v 1.8 2009/10/03 02:27:43 elad Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <err.h>
+
+#include "prog_ops.h"
 
 int	main(int, char **);
 static void	usage(void) __dead;
@@ -51,12 +53,14 @@ static const char *classes[] = {
 	"exec",
 	"secmodel",
 };
+const unsigned int class_max = __arraycount(classes);
 
 static const char *sources[] = {
 	"builtin",
 	"boot",
 	"filesys",
 };
+const unsigned int source_max = __arraycount(sources);
 
 int
 main(int argc, char **argv)
@@ -67,6 +71,7 @@ main(int argc, char **argv)
 	const char *name;
 	char sbuf[32];
 	int ch;
+	size_t maxnamelen = 16, i;
 
 	name = NULL;
 
@@ -83,13 +88,18 @@ main(int argc, char **argv)
 
 	argc -= optind;
 	argv += optind;
-	if (argc != 0)
+	if (argc == 1 && name == NULL)
+		name = argv[0];
+	else if (argc != 0)
 		usage();
 
-	for (len = 4096;;) {
+	if (prog_init && prog_init() == -1)
+		err(1, "prog init failed");
+
+	for (len = 8192;;) {
 		iov.iov_base = malloc(len);
 		iov.iov_len = len;
-		if (modctl(MODCTL_STAT, &iov)) {
+		if (prog_modctl(MODCTL_STAT, &iov)) {
 			err(EXIT_FAILURE, "modctl(MODCTL_STAT)");
 		}
 		if (len >= iov.iov_len) {
@@ -99,11 +109,20 @@ main(int argc, char **argv)
 		len = iov.iov_len;
 	}
 
-	printf("%-16s %-10s %-10s %-5s %-8s %s\n",
-	    "NAME", "CLASS", "SOURCE", "REFS", "SIZE", "REQUIRES");
 	len = iov.iov_len / sizeof(modstat_t);
 	qsort(iov.iov_base, len, sizeof(modstat_t), modstatcmp);
+	for (i = 0, ms = iov.iov_base; i < len; i++, ms++) {
+		size_t namelen = strlen(ms->ms_name);
+		if (maxnamelen < namelen)
+			maxnamelen = namelen;
+	}
+	printf("%-*s %-10s %-10s %-5s %-8s %s\n",
+	    (int)maxnamelen, "NAME", "CLASS", "SOURCE", "REFS", "SIZE",
+	    "REQUIRES");
 	for (ms = iov.iov_base; len != 0; ms++, len--) {
+		const char *class;
+		const char *source;
+
 		if (name != NULL && strcmp(ms->ms_name, name) != 0) {
 			continue;
 		}
@@ -117,9 +136,18 @@ main(int argc, char **argv)
 		} else {
 			snprintf(sbuf, sizeof(sbuf), "%u", ms->ms_size);
 		}
-		printf("%-16s %-10s %-10s %-5d %-8s %s\n",
-		    ms->ms_name, classes[ms->ms_class], sources[ms->ms_source],
-		    ms->ms_refcnt, sbuf, ms->ms_required);
+		if (ms->ms_class <= class_max)
+			class = classes[ms->ms_class];
+		else
+			class = "UNKNOWN";
+		if (ms->ms_source < source_max)
+			source = sources[ms->ms_source];
+		else
+			source = "UNKNOWN";
+
+		printf("%-*s %-10s %-10s %-5d %-8s %s\n",
+		    (int)maxnamelen, ms->ms_name, class, source, ms->ms_refcnt,
+		    sbuf, ms->ms_required);
 	}
 
 	exit(EXIT_SUCCESS);
@@ -129,7 +157,7 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "Usage: %s [-n name]\n", getprogname());
+	(void)fprintf(stderr, "Usage: %s [-n] [name]\n", getprogname());
 	exit(EXIT_FAILURE);
 }
 
@@ -143,4 +171,3 @@ modstatcmp(const void *a, const void *b)
 
 	return strcmp(msa->ms_name, msb->ms_name);
 }
-

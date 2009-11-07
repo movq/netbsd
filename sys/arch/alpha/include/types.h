@@ -1,4 +1,4 @@
-/* $NetBSD: types.h,v 1.41 2009/08/20 21:31:49 matt Exp $ */
+/* $NetBSD: types.h,v 1.49 2012/01/25 18:09:13 matt Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -50,15 +50,17 @@ typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
-#define	PRTxPADDR	"lx"
-#define	PRTxPSIZE	"lx"
-#define	PRTxVADDR	"lx"
-#define	PRTxVSIZE	"lx"
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 #endif
 
 typedef long int	register_t;
 #if defined(_NETBSD_SOURCE)
-#define	PRTxREGISTER	"lx"
+#define	PRIxREGISTER	"lx"
 #endif
 
 typedef	volatile int		__cpu_simple_lock_t;
@@ -66,16 +68,28 @@ typedef	volatile int		__cpu_simple_lock_t;
 #define	__SIMPLELOCK_LOCKED	1
 #define	__SIMPLELOCK_UNLOCKED	0
 
-#define	__HAVE_DEVICE_REGISTER
+#define	__HAVE_NEW_STYLE_BUS_H
 #define	__HAVE_ATOMIC_OPERATIONS
 #define	__HAVE_CPU_COUNTER
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_AST_PERPROC
 #define	__HAVE_ATOMIC64_OPS
+#define	__HAVE_MM_MD_DIRECT_MAPPED_IO
+#define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
+#define	__HAVE_CPU_UAREA_ROUTINES
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE_TLS_VARIANT_I
 
 #if defined(_KERNEL)
 #define	__HAVE_RAS
+#endif
+
+#if defined(_KERNEL) || defined(_KMEMUSER)
+#define	PCU_FPU		0	/* FPU */
+#define	PCU_UNIT_COUNT	1
 #endif
 
 #endif	/* _MACHTYPES_H_ */

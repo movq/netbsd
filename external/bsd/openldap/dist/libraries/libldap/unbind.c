@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/libraries/libldap/unbind.c,v 1.56.2.4 2008/02/11 23:26:41 kurt Exp $ */
+/*	$NetBSD: unbind.c,v 1.1.1.3 2010/12/12 15:21:40 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/libraries/libldap/unbind.c,v 1.56.2.8 2010/06/10 17:39:48 quanah Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2008 The OpenLDAP Foundation.
+ * Copyright 1998-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -112,6 +114,18 @@ ldap_ld_free(
 	ldap_pvt_thread_mutex_unlock( &ld->ld_res_mutex );
 #endif
 
+	/* final close callbacks */
+	{
+		ldaplist *ll, *next;
+
+		for ( ll = ld->ld_options.ldo_conn_cbs; ll; ll = next ) {
+			ldap_conncb *cb = ll->ll_data;
+			next = ll->ll_next;
+			cb->lc_del( ld, NULL, cb );
+			LDAP_FREE( ll );
+		}
+	}
+
 	if ( ld->ld_error != NULL ) {
 		LDAP_FREE( ld->ld_error );
 		ld->ld_error = NULL;
@@ -141,6 +155,11 @@ ldap_ld_free(
 	if ( ld->ld_options.ldo_peer != NULL ) {
 		LDAP_FREE( ld->ld_options.ldo_peer );
 		ld->ld_options.ldo_peer = NULL;
+	}
+
+	if ( ld->ld_options.ldo_cldapdn != NULL ) {
+		LDAP_FREE( ld->ld_options.ldo_cldapdn );
+		ld->ld_options.ldo_cldapdn = NULL;
 	}
 #endif
 

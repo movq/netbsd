@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_defs.h,v 1.1.1.1 2009/06/23 10:09:01 tron Exp $	*/
+/*	$NetBSD: sys_defs.h,v 1.3 2011/11/09 19:06:34 tron Exp $	*/
 
 #ifndef _SYS_DEFS_H_INCLUDED_
 #define _SYS_DEFS_H_INCLUDED_
@@ -27,8 +27,10 @@
   */
 #if defined(FREEBSD2) || defined(FREEBSD3) || defined(FREEBSD4) \
     || defined(FREEBSD5) || defined(FREEBSD6) || defined(FREEBSD7) \
+    || defined(FREEBSD8) \
     || defined(BSDI2) || defined(BSDI3) || defined(BSDI4) \
     || defined(OPENBSD2) || defined(OPENBSD3) || defined(OPENBSD4) \
+    || defined(OPENBSD5) \
     || defined(NETBSD1) || defined(NETBSD2) || defined(NETBSD3) \
     || defined(NETBSD4) \
     || defined(EKKOBSD1)
@@ -110,6 +112,11 @@
 
 #if __FreeBSD_version >= 420000
 #define HAS_DUPLEX_PIPE			/* 4.1 breaks with kqueue(2) */
+#endif
+
+#if (__FreeBSD_version >= 702104 && __FreeBSD_version <= 800000) \
+    || __FreeBSD_version >= 800100
+#define HAS_CLOSEFROM
 #endif
 
 /* OpenBSD version is year+month */
@@ -205,7 +212,6 @@
 #define DEF_DB_TYPE	"hash"
 #define ALIAS_DB_MAP	"hash:/etc/aliases"
 #define GETTIMEOFDAY(t) gettimeofday(t,(struct timezone *) 0)
-#define RESOLVE_H_NEEDS_NAMESER8_COMPAT_H
 #define ROOT_PATH	"/bin:/usr/bin:/sbin:/usr/sbin"
 #define USE_STATFS
 #define STATFS_IN_SYS_MOUNT_H
@@ -413,6 +419,10 @@ extern int opterr;
 #define LOCAL_TRIGGER	stream_trigger
 #define LOCAL_SEND_FD	stream_send_fd
 #define LOCAL_RECV_FD	stream_recv_fd
+#define PASS_CONNECT	stream_pass_connect
+#define PASS_LISTEN	stream_pass_listen
+#define PASS_ACCEPT	stream_pass_accept
+#define PASS_TRIGGER	stream_pass_trigger
 #define HAS_VOLATILE_LOCKS
 #define BROKEN_READ_SELECT_ON_TCP_SOCKET
 #define CANT_WRITE_BEFORE_SENDING_FD
@@ -511,7 +521,7 @@ extern int opterr;
   * AIX: a SYSV-flavored hybrid. NB: fcntl() and flock() access the same
   * underlying locking primitives.
   */
-#ifdef AIX5
+#if defined(AIX5) || defined(AIX6)
 #define SUPPORTED
 #include <sys/types.h>
 #define UINT32_TYPE	unsigned int
@@ -569,6 +579,7 @@ extern int opterr;
 #define BROKEN_AI_PASSIVE_NULL_HOST
 #define BROKEN_AI_NULL_SERVICE
 #define USE_SYSV_POLL
+#define MYMALLOC_FUZZ	1
 #endif
 
 #ifdef AIX4
@@ -700,7 +711,7 @@ extern int initgroups(const char *, int);
  /*
   * LINUX.
   */
-#ifdef LINUX2
+#if defined(LINUX2) || defined(LINUX3)
 #define SUPPORTED
 #include <sys/types.h>
 #define UINT32_TYPE	unsigned int
@@ -1265,6 +1276,7 @@ extern int dup2_pass_on_exec(int oldd, int newd);
  /*
   * Defaults for systems that pre-date IPv6 support.
   */
+#ifndef __NetBSD__
 #ifndef HAS_IPV6
 #define EMULATE_IPV4_ADDRINFO
 #define MISSING_INET_PTON
@@ -1272,6 +1284,18 @@ extern int dup2_pass_on_exec(int oldd, int newd);
 extern const char *inet_ntop(int, const void *, char *, size_t);
 extern int inet_pton(int, const char *, void *);
 
+#endif
+#endif
+
+ /*
+  * Workaround: after a watchdog alarm signal, wake up from select/poll/etc.
+  * by writing to a pipe. Solaris needs this, and HP-UX apparently, too. The
+  * run-time cost is negligible so we just turn it on for all systems. As a
+  * side benefit, making this code system-independent will simplify the
+  * detection of bit-rot problems.
+  */
+#ifndef NO_WATCHDOG_PIPE
+#define USE_WATCHDOG_PIPE
 #endif
 
  /*
@@ -1322,9 +1346,10 @@ extern int inet_pton(int, const char *, void *);
 #endif
 
 #ifndef PASS_LISTEN
-#define PASS_LISTEN	upass_listen
-#define PASS_ACCEPT	upass_accept
-#define PASS_TRIGGER	upass_trigger
+#define PASS_CONNECT	unix_pass_connect
+#define PASS_LISTEN	unix_pass_listen
+#define PASS_ACCEPT	unix_pass_accept
+#define PASS_TRIGGER	unix_pass_trigger
 #endif
 
 #if !defined (HAVE_SYS_NDIR_H) && !defined (HAVE_SYS_DIR_H) \
@@ -1473,7 +1498,7 @@ typedef int pid_t;
   * sections above.
   */
 #ifndef PRINTFLIKE
-#if (__GNUC__ == 2 && __GNUC_MINOR__ >= 7) || __GNUC__ == 3
+#if (__GNUC__ == 2 && __GNUC_MINOR__ >= 7) || __GNUC__ >= 3
 #define PRINTFLIKE(x,y) __attribute__ ((format (printf, (x), (y))))
 #else
 #define PRINTFLIKE(x,y)
@@ -1481,10 +1506,37 @@ typedef int pid_t;
 #endif
 
 #ifndef SCANFLIKE
-#if (__GNUC__ == 2 && __GNUC_MINOR__ >= 7) || __GNUC__ == 3
+#if (__GNUC__ == 2 && __GNUC_MINOR__ >= 7) || __GNUC__ >= 3
 #define SCANFLIKE(x,y) __attribute__ ((format (scanf, (x), (y))))
 #else
 #define SCANFLIKE(x,y)
+#endif
+#endif
+
+ /*
+  * Some gcc implementations don't grok these attributes with pointer to
+  * function. Again, wild guess of what is supported. To override, specify
+  * #define PRINTPTRFLIKE  in the system-dependent sections above.
+  */
+#ifndef PRINTFPTRLIKE
+#if (__GNUC__ >= 3)			/* XXX Rough estimate */
+#define PRINTFPTRLIKE(x,y) PRINTFLIKE(x,y)
+#else
+#define PRINTFPTRLIKE(x,y)
+#endif
+#endif
+
+ /*
+  * Compiler optimization hint. This makes sense only for code in a
+  * performance-critical loop.
+  */
+#ifndef EXPECTED
+#if defined(__GNUC__) && (__GNUC__ > 2)
+#define EXPECTED(x)	__builtin_expect(!!(x), 1)
+#define UNEXPECTED(x)	__builtin_expect(!!(x), 0)
+#else
+#define EXPECTED(x)	(x)
+#define UNEXPECTED(x)	(x)
 #endif
 #endif
 

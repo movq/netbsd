@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_msdos.c,v 1.34 2009/04/11 06:59:18 lukem Exp $	*/
+/*	$NetBSD: newfs_msdos.c,v 1.36 2011/08/29 14:35:03 joerg Exp $	*/
 
 /*
  * Copyright (c) 1998 Robert Nordier
@@ -33,7 +33,7 @@
 static const char rcsid[] =
   "$FreeBSD: src/sbin/newfs_msdos/newfs_msdos.c,v 1.15 2000/10/10 01:49:37 wollman Exp $";
 #else
-__RCSID("$NetBSD: newfs_msdos.c,v 1.34 2009/04/11 06:59:18 lukem Exp $");
+__RCSID("$NetBSD: newfs_msdos.c,v 1.36 2011/08/29 14:35:03 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -237,7 +237,7 @@ static off_t argtooff(const char *, const char *);
 static int oklabel(const char *);
 static void mklabel(u_int8_t *, const char *);
 static void setstr(u_int8_t *, const char *, size_t);
-static void usage(void);
+__dead static void usage(void);
 static void infohandler(int sig);
 
 /*
@@ -922,6 +922,7 @@ argtooff(const char *arg, const char *msg)
     char *s;
     off_t x;
 
+    errno = 0;
     x = strtoll(arg, &s, 0);
     /* allow at most one extra char */
     if (errno || x < 0 || (s[0] && s[1]) )

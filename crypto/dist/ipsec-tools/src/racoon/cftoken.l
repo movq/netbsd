@@ -1,4 +1,4 @@
-/*	$NetBSD: cftoken.l,v 1.20 2009/03/12 10:57:26 tteras Exp $	*/
+/*	$NetBSD: cftoken.l,v 1.26 2012/01/01 15:29:28 tteras Exp $	*/
 
 /* Id: cftoken.l,v 1.53 2006/08/22 18:17:17 manubsd Exp */
 
@@ -106,7 +106,7 @@ static int incstackp = 0;
 static int yy_first_time = 1;
 %}
 
-/* common seciton */
+/* common section */
 nl		\n
 ws		[ \t]+
 digit		[0-9]
@@ -226,6 +226,7 @@ hexstring	0x{hexdigit}+
 <S_LDAP>version		{ YYD; return(LDAP_PVER); }
 <S_LDAP>host		{ YYD; return(LDAP_HOST); }
 <S_LDAP>port		{ YYD; return(LDAP_PORT); }
+<S_LDAP>tls		{ YYD; return(LDAP_TLS); }
 <S_LDAP>base		{ YYD; return(LDAP_BASE); }
 <S_LDAP>subtree		{ YYD; return(LDAP_SUBTREE); }
 <S_LDAP>bind_dn		{ YYD; return(LDAP_BIND_DN); }
@@ -307,6 +308,7 @@ hexstring	0x{hexdigit}+
 <S_INI>remote		{ BEGIN S_RMT; YYDB; return(REMOTE); }
 <S_RMT>anonymous	{ YYD; return(ANONYMOUS); }
 <S_RMT>inherit		{ YYD; return(INHERIT); }
+<S_RMT>{semi}		{ BEGIN S_INI; YYDB; return(EOS); }
 	/* remote spec */
 <S_RMT>{bcl}		{ BEGIN S_RMTS; return(BOC); }
 <S_RMTS>{ecl}		{ BEGIN S_INI; return(EOC); }
@@ -365,6 +367,7 @@ hexstring	0x{hexdigit}+
 <S_RMTS>script		{ YYD; return(SCRIPT); }
 <S_RMTS>phase1_up	{ YYD; return(PHASE1_UP); }
 <S_RMTS>phase1_down	{ YYD; return(PHASE1_DOWN); }
+<S_RMTS>phase1_dead	{ YYD; return(PHASE1_DEAD); }
 <S_RMTS>mode_cfg	{ YYD; return(MODE_CFG); }
 <S_RMTS>weak_phase1_check { YYD; return(WEAK_PHASE1_CHECK); }
 <S_RMTS>rekey		{ YYD; return(REKEY); }
@@ -579,7 +582,7 @@ no		{ YYD; yylval.num = FALSE; return(BOOLEAN); }
 			char *bp;
 
 			YYD;
-			yylval.num = strtol(yytext, &bp, 10);
+			yylval.num = strtoul(yytext, &bp, 10);
 			return(NUMBER);
 		}
 
@@ -637,6 +640,10 @@ no		{ YYD; yylval.num = FALSE; return(BOOLEAN); }
 
 <<EOF>>		{
 			yy_delete_buffer(YY_CURRENT_BUFFER);
+			fclose (incstack[incstackp].fp);
+			incstack[incstackp].fp = NULL;
+			racoon_free(incstack[incstackp].path);
+			incstack[incstackp].path = NULL;
 			incstackp--;
     nextfile:
 			if (incstack[incstackp].matchon <
@@ -669,7 +676,7 @@ no		{ YYD; yylval.num = FALSE; return(BOOLEAN); }
 %%
 
 void
-yyerror(char *s, ...)
+yyerror(const char *s, ...)
 {
 	char fmt[512];
 
@@ -689,7 +696,7 @@ yyerror(char *s, ...)
 }
 
 void
-yywarn(char *s, ...)
+yywarn(const char *s, ...)
 {
 	char fmt[512];
 

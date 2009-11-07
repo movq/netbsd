@@ -1,4 +1,4 @@
-/*	$NetBSD: edit.c,v 1.2 2009/04/13 07:18:38 lukem Exp $	*/
+/*	$NetBSD: edit.c,v 1.4 2011/09/01 07:18:51 plunky Exp $	*/
 /*	$OpenBSD: edit.c,v 1.14 2006/05/25 03:20:32 ray Exp $ */
 
 /*

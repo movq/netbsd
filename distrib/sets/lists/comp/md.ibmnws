@@ -1,10 +1,10 @@
-# $NetBSD: md.ibmnws,v 1.7 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.ibmnws,v 1.10 2011/07/17 20:54:31 joerg Exp $
 ./usr/include/ibmnws				comp-c-include
 ./usr/include/ibmnws/_G_config.h		comp-obsolete		obsolete
 ./usr/include/ibmnws/ansi.h			comp-c-include
 ./usr/include/ibmnws/aout_machdep.h		comp-c-include
 ./usr/include/ibmnws/asm.h			comp-c-include
-./usr/include/ibmnws/atomic.h			comp-c-include
+./usr/include/ibmnws/atomic.h			comp-obsolete		obsolete
 ./usr/include/ibmnws/bat.h			comp-obsolete		obsolete
 ./usr/include/ibmnws/bswap.h			comp-c-include
 ./usr/include/ibmnws/bus.h			comp-obsolete		obsolete
@@ -51,11 +51,11 @@
 ./usr/include/ibmnws/rwlock.h			comp-c-include
 ./usr/include/ibmnws/setjmp.h			comp-c-include
 ./usr/include/ibmnws/signal.h			comp-c-include
-./usr/include/ibmnws/spr.h			comp-c-include
-./usr/include/ibmnws/stdarg.h			comp-c-include
+./usr/include/ibmnws/spr.h			comp-obsolete		obsolete
+./usr/include/ibmnws/stdarg.h			comp-obsolete		obsolete
 ./usr/include/ibmnws/trap.h			comp-c-include
 ./usr/include/ibmnws/types.h			comp-c-include
-./usr/include/ibmnws/varargs.h			comp-c-include
+./usr/include/ibmnws/varargs.h			comp-obsolete		obsolete
 ./usr/include/ibmnws/vmparam.h			comp-c-include
 ./usr/include/ibmnws/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include

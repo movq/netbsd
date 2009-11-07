@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.topl.c,v 1.12 2009/08/12 07:28:41 dholland Exp $	*/
+/*	$NetBSD: hack.topl.c,v 1.14 2011/08/06 20:29:37 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.topl.c,v 1.12 2009/08/12 07:28:41 dholland Exp $");
+__RCSID("$NetBSD: hack.topl.c,v 1.14 2011/08/06 20:29:37 dholland Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -123,8 +123,7 @@ remember_topl(void)
 	    !strcmp(toplines, old_toplines->topl_text))
 		return;
 	last_redone_topl = 0;
-	tl = (struct topl *)
-		alloc((unsigned) (strlen(toplines) + sizeof(struct topl) + 1));
+	tl = alloc(strlen(toplines) + sizeof(*tl) + 1);
 	tl->next_topl = old_toplines;
 	tl->topl_text = (char *) (tl + 1);
 	(void) strcpy(tl->topl_text, toplines);
@@ -134,7 +133,7 @@ remember_topl(void)
 		tl = tl->next_topl;
 	}
 	if (tl && tl->next_topl) {
-		free((char *) tl->next_topl);
+		free(tl->next_topl);
 		tl->next_topl = 0;
 	}
 }

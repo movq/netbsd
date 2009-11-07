@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor.h,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: monitor.h,v 1.15 2008/11/04 08:22:13 djm Exp $ */
+/*	$NetBSD: monitor.h,v 1.4 2011/09/16 15:36:18 joerg Exp $	*/
+/* $OpenBSD: monitor.h,v 1.16 2011/06/17 21:44:31 djm Exp $ */
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -74,6 +74,8 @@ struct mm_master;
 struct monitor {
 	int			 m_recvfd;
 	int			 m_sendfd;
+	int			 m_log_recvfd;
+	int			 m_log_sendfd;
 	struct mm_master	*m_zback;
 	struct mm_master	*m_zlib;
 	struct Kex		**m_pkex;
@@ -86,7 +88,7 @@ void monitor_sync(struct monitor *);
 
 struct Authctxt;
 void monitor_child_preauth(struct Authctxt *, struct monitor *);
-void monitor_child_postauth(struct monitor *);
+__dead void monitor_child_postauth(struct monitor *);
 
 struct mon_table;
 int monitor_read(struct monitor*, struct mon_table *, struct mon_table **);

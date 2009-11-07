@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xi.c,v 1.67 2009/05/12 14:42:18 cegger Exp $ */
+/*	$NetBSD: if_xi.c,v 1.72 2012/02/02 19:43:06 tls Exp $ */
 /*	OpenBSD: if_xe.c,v 1.9 1999/09/16 11:28:42 niklas Exp 	*/
 
 /*
@@ -55,11 +55,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.67 2009/05/12 14:42:18 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.72 2012/02/02 19:43:06 tls Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipx.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,10 +90,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.67 2009/05/12 14:42:18 cegger Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 /*
  * Maximum number of bytes to read per interrupt.  Linux recommends
@@ -211,11 +208,11 @@ xi_attach(struct xi_softc *sc, u_int8_t *myea)
 	/* Reset and initialize the card. */
 	xi_full_reset(sc);
 
-	printf("%s: MAC address %s\n", device_xname(&sc->sc_dev), ether_sprintf(myea));
+	printf("%s: MAC address %s\n", device_xname(sc->sc_dev), ether_sprintf(myea));
 
 	ifp = &sc->sc_ethercom.ec_if;
 	/* Initialize the ifnet structure. */
-	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = xi_start;
 	ifp->if_ioctl = xi_ioctl;
@@ -242,33 +239,30 @@ xi_attach(struct xi_softc *sc, u_int8_t *myea)
 	ifmedia_init(&sc->sc_mii.mii_media, 0, xi_mediachange,
 	    ether_mediastatus);
 	DPRINTF(XID_MII | XID_CONFIG,
-	    ("xi: bmsr %x\n", xi_mdi_read(&sc->sc_dev, 0, 1)));
+	    ("xi: bmsr %x\n", xi_mdi_read(sc->sc_dev, 0, 1)));
 
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 		MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL)
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER | IFM_AUTO, 0,
 		    NULL);
 	ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER | IFM_AUTO);
 
-#if NRND > 0
-	rnd_attach_source(&sc->sc_rnd_source, device_xname(&sc->sc_dev), RND_TYPE_NET, 0);
-#endif
+	rnd_attach_source(&sc->sc_rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_NET, 0);
 }
 
 int
 xi_detach(device_t self, int flags)
 {
-	struct xi_softc *sc = (void *)self;
+	struct xi_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	DPRINTF(XID_CONFIG, ("xi_detach()\n"));
 
 	xi_disable(sc);
 
-#if NRND > 0
 	rnd_detach_source(&sc->sc_rnd_source);
-#endif
 
 	mii_detach(&sc->sc_mii, MII_PHY_ANY, MII_OFFSET_ANY);
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
@@ -276,28 +270,6 @@ xi_detach(device_t self, int flags)
 	if_detach(ifp);
 
 	return 0;
-}
-
-int
-xi_activate(device_t self, enum devact act)
-{
-	struct xi_softc *sc = (void *)self;
-	int s, rv = 0;
-
-	DPRINTF(XID_CONFIG, ("xi_activate()\n"));
-
-	s = splnet();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
-	}
-	splx(s);
-	return (rv);
 }
 
 int
@@ -310,8 +282,7 @@ xi_intr(void *arg)
 
 	DPRINTF(XID_CONFIG, ("xi_intr()\n"));
 
-	if (sc->sc_enabled == 0 ||
-	    !device_is_active(&sc->sc_dev))
+	if (sc->sc_enabled == 0 || !device_is_active(sc->sc_dev))
 		return (0);
 
 	ifp->if_timer = 0;	/* turn watchdog timer off */
@@ -329,7 +300,8 @@ xi_intr(void *arg)
 	/* Check to see if card has been ejected. */
 	if (isr == 0xff) {
 #ifdef DIAGNOSTIC
-		printf("%s: interrupt for dead card\n", device_xname(&sc->sc_dev));
+		printf("%s: interrupt for dead card\n",
+		    device_xname(sc->sc_dev));
 #endif
 		goto end;
 	}
@@ -409,9 +381,7 @@ xi_intr(void *arg)
 		ifp->if_oerrors++;
 
 	/* have handled the interrupt */
-#if NRND > 0
 	rnd_add_uint32(&sc->sc_rnd_source, tx_status);
-#endif
 
 end:
 	/* Reenable interrupts. */
@@ -510,10 +480,7 @@ xi_get(struct xi_softc *sc)
 
 	ifp->if_ipackets++;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, top);
-#endif
+	bpf_mtap(ifp, top);
 
 	(*ifp->if_input)(ifp, top);
 	return (recvcount);
@@ -597,7 +564,7 @@ xi_mdi_pulse_bits(struct xi_softc *sc, u_int32_t data, int len)
 STATIC int
 xi_mdi_read(device_t self, int phy, int reg)
 {
-	struct xi_softc *sc = (struct xi_softc *)self;
+	struct xi_softc *sc = device_private(self);
 	int i;
 	u_int32_t mask;
 	u_int32_t data = 0;
@@ -627,7 +594,7 @@ xi_mdi_read(device_t self, int phy, int reg)
 STATIC void
 xi_mdi_write(device_t self, int phy, int reg, int value)
 {
-	struct xi_softc *sc = (struct xi_softc *)self;
+	struct xi_softc *sc = device_private(self);
 	int i;
 
 	PAGE(sc, 2);
@@ -686,7 +653,7 @@ xi_watchdog(struct ifnet *ifp)
 {
 	struct xi_softc *sc = ifp->if_softc;
 
-	printf("%s: device timeout\n", device_xname(&sc->sc_dev));
+	printf("%s: device timeout\n", device_xname(sc->sc_dev));
 	++ifp->if_oerrors;
 
 	xi_reset(sc);
@@ -833,10 +800,7 @@ xi_start(struct ifnet *ifp)
 
 	IFQ_DEQUEUE(&ifp->if_snd, m0);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	/*
 	 * Do the output at splhigh() so that an interrupt from another device

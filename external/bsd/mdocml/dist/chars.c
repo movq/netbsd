@@ -1,6 +1,7 @@
-/*	$Vendor-Id: chars.c,v 1.12 2009/11/01 07:44:32 kristaps Exp $ */
+/*	$Vendor-Id: chars.c,v 1.52 2011/11/08 00:15:23 kristaps Exp $ */
 /*
- * Copyright (c) 2009 Kristaps Dzonsons <kristaps@kth.se>
+ * Copyright (c) 2009, 2010, 2011 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2011 Ingo Schwarze <schwarze@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,12 +15,17 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <assert.h>
-#include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "chars.h"
+#include "mandoc.h"
+#include "libmandoc.h"
 
 #define	PRINT_HI	 126
 #define	PRINT_LO	 32
@@ -28,56 +34,38 @@ struct	ln {
 	struct ln	 *next;
 	const char	 *code;
 	const char	 *ascii;
-	const char	 *html;
-	size_t		  codesz;
-	size_t		  asciisz;
-	size_t		  htmlsz;
-	int		  type;
-#define	CHARS_CHAR	 (1 << 0)
-#define	CHARS_STRING	 (1 << 1)
-#define CHARS_BOTH	 (CHARS_CHAR | CHARS_STRING)
+	int		  unicode;
 };
 
-#define	LINES_MAX	  351
+#define	LINES_MAX	  328
 
-#define CHAR(w, x, y, z, a, b) \
-	{ NULL, (w), (y), (a), (x), (z), (b), CHARS_CHAR },
-#define STRING(w, x, y, z, a, b) \
-	{ NULL, (w), (y), (a), (x), (z), (b), CHARS_STRING },
-#define BOTH(w, x, y, z, a, b) \
-	{ NULL, (w), (y), (a), (x), (z), (b), CHARS_BOTH },
+#define CHAR(in, ch, code) \
+	{ NULL, (in), (ch), (code) },
 
-static	struct ln lines[LINES_MAX] = {
+#define	CHAR_TBL_START	  static struct ln lines[LINES_MAX] = {
+#define	CHAR_TBL_END	  };
+
 #include "chars.in"
-};
 
-struct	tbl {
-	enum chars	  type;
+struct	mchars {
 	struct ln	**htab;
 };
 
-static	inline int	  match(const struct ln *,
-				const char *, size_t, int);
-static	const char	 *find(struct tbl *, const char *, 
-				size_t, size_t *, int);
-
+static	const struct ln	 *find(const struct mchars *, 
+				const char *, size_t);
 
 void
-chars_free(void *arg)
+mchars_free(struct mchars *arg)
 {
-	struct tbl	*tab;
 
-	tab = (struct tbl *)arg;
-
-	free(tab->htab);
-	free(tab);
+	free(arg->htab);
+	free(arg);
 }
 
-
-void *
-chars_init(enum chars type)
+struct mchars *
+mchars_alloc(void)
 {
-	struct tbl	 *tab;
+	struct mchars	 *tab;
 	struct ln	**htab;
 	struct ln	 *pp;
 	int		  i, hash;
@@ -85,21 +73,11 @@ chars_init(enum chars type)
 	/*
 	 * Constructs a very basic chaining hashtable.  The hash routine
 	 * is simply the integral value of the first character.
-	 * Subsequent entries are chained in the order they're processed
-	 * (they're in-line re-ordered during lookup).
+	 * Subsequent entries are chained in the order they're processed.
 	 */
 
-	tab = malloc(sizeof(struct tbl));
-	if (NULL == tab) {
-		perror(NULL);
-		exit(EXIT_FAILURE);
-	}
-
-	htab = calloc(PRINT_HI - PRINT_LO + 1, sizeof(struct ln **));
-	if (NULL == htab) {
-		perror(NULL);
-		exit(EXIT_FAILURE);
-	}
+	tab = mandoc_malloc(sizeof(struct mchars));
+	htab = mandoc_calloc(PRINT_HI - PRINT_LO + 1, sizeof(struct ln **));
 
 	for (i = 0; i < LINES_MAX; i++) {
 		hash = (int)lines[i].code[0] - PRINT_LO;
@@ -115,95 +93,75 @@ chars_init(enum chars type)
 	}
 
 	tab->htab = htab;
-	tab->type = type;
 	return(tab);
 }
 
-
-const char *
-chars_a2ascii(void *arg, const char *p, size_t sz, size_t *rsz)
+int
+mchars_spec2cp(const struct mchars *arg, const char *p, size_t sz)
 {
+	const struct ln	*ln;
 
-	return(find((struct tbl *)arg, p, sz, rsz, CHARS_CHAR));
+	ln = find(arg, p, sz);
+	if (NULL == ln)
+		return(-1);
+	return(ln->unicode);
 }
 
-
-const char *
-chars_a2res(void *arg, const char *p, size_t sz, size_t *rsz)
+char
+mchars_num2char(const char *p, size_t sz)
 {
+	int		  i;
 
-	return(find((struct tbl *)arg, p, sz, rsz, CHARS_STRING));
+	if ((i = mandoc_strntoi(p, sz, 10)) < 0)
+		return('\0');
+	return(i > 0 && i < 256 && isprint(i) ? 
+			/* LINTED */ i : '\0');
 }
 
-
-static const char *
-find(struct tbl *tab, const char *p, size_t sz, size_t *rsz, int type)
+int
+mchars_num2uc(const char *p, size_t sz)
 {
-	struct ln	 *pp, *prev;
-	struct ln	**htab;
+	int               i;
+
+	if ((i = mandoc_strntoi(p, sz, 16)) < 0)
+		return('\0');
+	/* FIXME: make sure we're not in a bogus range. */
+	return(i > 0x80 && i <= 0x10FFFF ? i : '\0');
+}
+
+const char *
+mchars_spec2str(const struct mchars *arg, 
+		const char *p, size_t sz, size_t *rsz)
+{
+	const struct ln	*ln;
+
+	ln = find(arg, p, sz);
+	if (NULL == ln) {
+		*rsz = 1;
+		return(NULL);
+	}
+
+	*rsz = strlen(ln->ascii);
+	return(ln->ascii);
+}
+
+static const struct ln *
+find(const struct mchars *tab, const char *p, size_t sz)
+{
+	const struct ln	 *pp;
 	int		  hash;
 
 	assert(p);
-	assert(sz > 0);
 
-	if (p[0] < PRINT_LO || p[0] > PRINT_HI)
+	if (0 == sz || p[0] < PRINT_LO || p[0] > PRINT_HI)
 		return(NULL);
-
-	/*
-	 * Lookup the symbol in the symbol hash.  See ascii2htab for the
-	 * hashtable specs.  This dynamically re-orders the hash chain
-	 * to optimise for repeat hits.
-	 */
 
 	hash = (int)p[0] - PRINT_LO;
-	htab = tab->htab;
 
-	if (NULL == (pp = htab[hash]))
-		return(NULL);
-
-	if (NULL == pp->next) {
-		if ( ! match(pp, p, sz, type)) 
-			return(NULL);
-
-		if (CHARS_HTML == tab->type) {
-			*rsz = pp->htmlsz;
-			return(pp->html);
-		}
-		*rsz = pp->asciisz;
-		return(pp->ascii);
-	}
-
-	for (prev = NULL; pp; pp = pp->next) {
-		if ( ! match(pp, p, sz, type)) {
-			prev = pp;
-			continue;
-		}
-
-		if (prev) {
-			prev->next = pp->next;
-			pp->next = htab[hash];
-			htab[hash] = pp;
-		}
-
-		if (CHARS_HTML == tab->type) {
-			*rsz = pp->htmlsz;
-			return(pp->html);
-		}
-		*rsz = pp->asciisz;
-		return(pp->ascii);
-	}
+	for (pp = tab->htab[hash]; pp; pp = pp->next)
+		if (0 == strncmp(pp->code, p, sz) && 
+				'\0' == pp->code[(int)sz])
+			return(pp);
 
 	return(NULL);
-}
-
-
-static inline int
-match(const struct ln *ln, const char *p, size_t sz, int type)
-{
-
-	if ( ! (ln->type & type))
-		return(0);
-	if (ln->codesz != sz)
-		return(0);
-	return(0 == strncmp(ln->code, p, sz));
 }

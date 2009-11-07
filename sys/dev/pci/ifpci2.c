@@ -1,4 +1,4 @@
-/* $NetBSD: ifpci2.c,v 1.17 2009/10/27 21:47:23 martin Exp $	*/
+/* $NetBSD: ifpci2.c,v 1.19 2009/12/06 23:14:05 dyoung Exp $	*/
 /*
  *   Copyright (c) 1999 Gary Jennejohn. All rights reserved.
  *
@@ -36,14 +36,14 @@
  *	Fritz!Card PCI driver
  *	------------------------------------------------
  *
- *	$Id: ifpci2.c,v 1.17 2009/10/27 21:47:23 martin Exp $
+ *	$Id: ifpci2.c,v 1.19 2009/12/06 23:14:05 dyoung Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:58 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpci2.c,v 1.17 2009/10/27 21:47:23 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpci2.c,v 1.19 2009/12/06 23:14:05 dyoung Exp $");
 
 
 #include <sys/param.h>
@@ -371,23 +371,17 @@ int
 ifpci2_activate(device_t self, enum devact act)
 {
 	struct ifpci_softc *psc = device_private(self);
-	int error = 0, s;
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		psc->sc_isic.sc_intr_valid = ISIC_INTR_DYING;
 		isdn_layer2_status_ind(&psc->sc_isic.sc_l2, psc->sc_isic.sc_l3token, STI_ATTACH, 0);
 		isdn_detach_isdnif(psc->sc_isic.sc_l3token);
 		psc->sc_isic.sc_l3token = NULL;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (error);
 }
 
 /*---------------------------------------------------------------------------*
@@ -962,12 +956,12 @@ avma1pp2_map_int(struct ifpci_softc *psc, struct pci_attach_args *pa)
 	if (psc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		avma1pp2_disable(sc);
 		return;
 	}
-	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 }
 
 static void

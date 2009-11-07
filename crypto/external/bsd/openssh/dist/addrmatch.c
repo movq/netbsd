@@ -1,5 +1,5 @@
-/*	$NetBSD: addrmatch.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/*	$OpenBSD: addrmatch.c,v 1.4 2008/12/10 03:55:20 stevesk Exp $ */
+/*	$NetBSD: addrmatch.c,v 1.4 2011/09/07 17:49:19 christos Exp $	*/
+/*	$OpenBSD: addrmatch.c,v 1.5 2010/02/26 20:29:54 djm Exp $ */
 
 /*
  * Copyright (c) 2004-2008 Damien Miller <djm@mindrot.org>
@@ -18,7 +18,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: addrmatch.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
+__RCSID("$NetBSD: addrmatch.c,v 1.4 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -82,8 +82,8 @@ masklen_valid(int af, u_int masklen)
 static int
 addr_sa_to_xaddr(struct sockaddr *sa, socklen_t slen, struct xaddr *xa)
 {
-	struct sockaddr_in *in4 = (struct sockaddr_in *)sa;
-	struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)sa;
+	struct sockaddr_in *in4 = (struct sockaddr_in *)(void *)sa;
+	struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)(void *)sa;
 
 	memset(xa, '\0', sizeof(*xa));
 
@@ -125,6 +125,8 @@ addr_netmask(int af, u_int l, struct xaddr *n)
 	switch (af) {
 	case AF_INET:
 		n->af = AF_INET;
+		if (l == 0)
+			return 0;
 		n->v4.s_addr = htonl((0xffffffff << (32 - l)) & 0xffffffff);
 		return 0;
 	case AF_INET6:
@@ -311,7 +313,7 @@ static int
 addr_pton_cidr(const char *p, struct xaddr *n, u_int *l)
 {
 	struct xaddr tmp;
-	long unsigned int masklen = 999;
+	unsigned int masklen = 999;
 	char addrbuf[64], *mp, *cp;
 
 	/* Don't modify argument */
@@ -415,6 +417,80 @@ addr_match_list(const char *addr, const char *_list)
 			/* If CIDR parse failed, try wildcard string match */
 			if (addr != NULL && match_pattern(addr, cp) == 1)
 				goto foundit;
+		}
+	}
+	xfree(o);
+
+	return ret;
+}
+
+/*
+ * Match "addr" against list CIDR list "_list". Lexical wildcards and
+ * negation are not supported. If "addr" == NULL, will verify structure
+ * of "_list".
+ *
+ * Returns 1 on match found (never returned when addr == NULL).
+ * Returns 0 on if no match found, or no errors found when addr == NULL.
+ * Returns -1 on error
+ */
+int
+addr_match_cidr_list(const char *addr, const char *_list)
+{
+	char *list, *cp, *o;
+	struct xaddr try_addr, match_addr;
+	u_int masklen;
+	int ret = 0, r;
+
+	if (addr != NULL && addr_pton(addr, &try_addr) != 0) {
+		debug2("%s: couldn't parse address %.100s", __func__, addr);
+		return 0;
+	}
+	if ((o = list = strdup(_list)) == NULL)
+		return -1;
+	while ((cp = strsep(&list, ",")) != NULL) {
+		if (*cp == '\0') {
+			error("%s: empty entry in list \"%.100s\"",
+			    __func__, o);
+			ret = -1;
+			break;
+		}
+
+		/*
+		 * NB. This function is called in pre-auth with untrusted data,
+		 * so be extra paranoid about junk reaching getaddrino (via
+		 * addr_pton_cidr).
+		 */
+
+		/* Stop junk from reaching getaddrinfo. +3 is for masklen */
+		if (strlen(cp) > INET6_ADDRSTRLEN + 3) {
+			error("%s: list entry \"%.100s\" too long",
+			    __func__, cp);
+			ret = -1;
+			break;
+		}
+#define VALID_CIDR_CHARS "0123456789abcdefABCDEF.:/"
+		if (strspn(cp, VALID_CIDR_CHARS) != strlen(cp)) {
+			error("%s: list entry \"%.100s\" contains invalid "
+			    "characters", __func__, cp);
+			ret = -1;
+		}
+
+		/* Prefer CIDR address matching */
+		r = addr_pton_cidr(cp, &match_addr, &masklen);
+		if (r == -1) {
+			error("Invalid network entry \"%.100s\"", cp);
+			ret = -1;
+			break;
+		} else if (r == -2) {
+			error("Inconsistent mask length for "
+			    "network \"%.100s\"", cp);
+			ret = -1;
+			break;
+		} else if (r == 0 && addr != NULL) {
+			if (addr_netmatch(&try_addr, &match_addr,
+			    masklen) == 0)
+				ret = 1;
+			continue;
 		}
 	}
 	xfree(o);

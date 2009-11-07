@@ -1,6 +1,7 @@
-#	$NetBSD: Makefile,v 1.1 2008/08/24 05:47:05 gmcgarry Exp $
+#	$NetBSD: Makefile,v 1.6 2011/05/20 16:02:23 plunky Exp $
 
-SUBDIR=		cpp ccom
+.include <bsd.own.mk>
+
+SUBDIR=		mkext .WAIT ccom cpp
 
 .include <bsd.subdir.mk>
-

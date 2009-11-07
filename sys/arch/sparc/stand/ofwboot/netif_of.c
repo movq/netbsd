@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_of.c,v 1.7 2009/03/18 16:00:15 cegger Exp $	*/
+/*	$NetBSD: netif_of.c,v 1.9 2011/07/30 04:18:38 jakllsch Exp $	*/
 
 /*
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -73,8 +73,6 @@ netif_open(void *machdep_hint)
 {
 	struct of_dev *op = machdep_hint;
 	struct iodesc *io;
-	int fd, error;
-	char addr[32];
 	
 #ifdef	NETIF_DEBUG
 	printf("netif_open...");
@@ -149,7 +147,7 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
 	{
 		struct ether_header *eh;
 
-		printf("netif_put: desc=0x%x pkt=0x%x len=%d\n",
+		printf("netif_put: desc=%p pkt=%p len=%zu\n",
 		       desc, pkt, len);
 		eh = pkt;
 		printf("dst: %s ", ether_sprintf(eh->ether_dhost));
@@ -162,14 +160,14 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
 	if (sendlen < 60) {
 		sendlen = 60;
 #ifdef	NETIF_DEBUG
-		printf("netif_put: length padded to %d\n", sendlen);
+		printf("netif_put: length padded to %zu\n", sendlen);
 #endif
 	}
 
 	rv = prom_write(op->handle, pkt, sendlen);
 
 #ifdef	NETIF_DEBUG
-	printf("netif_put: xmit returned %d\n", rv);
+	printf("netif_put: xmit returned %zd\n", rv);
 #endif
 
 	if (rv > len)
@@ -192,7 +190,7 @@ netif_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timo)
 	op = ((struct netif *)desc->io_netif)->nif_devdata;
 
 #ifdef	NETIF_DEBUG
-	printf("netif_get: pkt=0x%x, maxlen=%d, tmo=%d\n",
+	printf("netif_get: pkt=%p, maxlen=%zu, tmo=%d\n",
 	       pkt, maxlen, timo);
 #endif
 

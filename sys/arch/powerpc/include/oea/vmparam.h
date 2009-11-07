@@ -163,23 +163,7 @@
 #define	VM_MIN_KERNEL_ADDRESS	((vaddr_t) (KERNEL_SR << ADDR_SR_SHFT))
 #define	VM_MAX_KERNEL_ADDRESS	(VM_MIN_KERNEL_ADDRESS + 2*SEGMENT_LENGTH)
 
-/*
- * The address to which unspecified mapping requests default
- * Put the stack in it's own segment and start mmaping at the
- * top of the next lower segment.
- */
-#ifdef _KERNEL_OPT
-#include "opt_uvm.h"
-#endif
-#define	__USE_TOPDOWN_VM
-#define	VM_DEFAULT_ADDRESS(da, sz) \
-	(((VM_MAXUSER_ADDRESS - MAXSSIZ) & SEGMENT_MASK) - round_page(sz))
-
-#ifndef VM_PHYSSEG_MAX
-#define	VM_PHYSSEG_MAX		16
-#endif
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
-#define	VM_PHYSSEG_NOADD
 
 #ifndef VM_PHYS_SIZE
 #define	VM_PHYS_SIZE		(USRIOSIZE * PAGE_SIZE)
@@ -188,29 +172,5 @@
 #ifndef VM_MAX_KERNEL_BUF
 #define	VM_MAX_KERNEL_BUF	(SEGMENT_LENGTH * 3 / 4)
 #endif
-
-#define	VM_NFREELIST		16	/* 16 distinct memory segments */
-#define	VM_FREELIST_DEFAULT	0
-#define	VM_FREELIST_FIRST256	1
-#define	VM_FREELIST_FIRST16	2
-#define	VM_FREELIST_MAX		3
-
-#ifndef _LOCORE
-
-LIST_HEAD(pvo_head, pvo_entry);
-
-#define	__HAVE_VM_PAGE_MD
-
-struct vm_page_md {
-	struct pvo_head mdpg_pvoh;
-	unsigned int mdpg_attrs; 
-};
-
-#define	VM_MDPAGE_INIT(pg) do {			\
-	LIST_INIT(&(pg)->mdpage.mdpg_pvoh);	\
-	(pg)->mdpage.mdpg_attrs = 0;		\
-} while (/*CONSTCOND*/0)
-
-#endif	/* _LOCORE */
 
 #endif /* _POWERPC_OEA_VMPARAM_H_ */

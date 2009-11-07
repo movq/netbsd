@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2006/10/14 21:23:01 bjh21 Exp $
+#	$NetBSD: Makefile,v 1.7 2011/08/18 02:32:32 christos Exp $
 
 NOMAN=		# defined
 LDSTATIC=	-static

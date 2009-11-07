@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.116 2009/11/05 04:19:47 thorpej Exp $ */
+/* $NetBSD: locore.s,v 1.121 2011/06/07 00:48:30 matt Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 
 #include <machine/asm.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.116 2009/11/05 04:19:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.s,v 1.121 2011/06/07 00:48:30 matt Exp $");
 
 #include "assym.h"
 
@@ -275,11 +275,9 @@ LEAF(exception_return, 1)			/* XXX should be NESTED */
 	bne	t3, 7f				/* yes */
 	/* no: headed back to user space */
 
-	/* Enable the FPU based on whether the current proc is fpcurlwp. */
-4:	ldq	t2, CPU_INFO_FPCURLWP(v0)
-	cmpeq	t1, t2, t1
-	mov	zero, a0
-	cmovne	t1, 1, a0
+	/* Enable the FPU based on whether MDLWP_FPACTIVE is set. */
+4:	ldq	t2, L_MD_FLAGS(t1)
+	cmplt	t2, zero, a0
 	call_pal PAL_OSF1_wrfen
 
 	/* restore the registers, and return */
@@ -625,7 +623,7 @@ LEAF(restorefpstate, 1)
  * if called from boot().)
  *
  * Arguments:
- *	a0	'struct user *' of the process that needs its context saved
+ *	a0	'struct pcb *' of the process that needs its context saved
  *
  * Return:
  *	v0	0.  (note that for child processes, it seems
@@ -636,17 +634,17 @@ LEAF(restorefpstate, 1)
 LEAF(savectx, 1)
 	br	pv, 1f
 1:	LDGP(pv)
-	stq	sp, U_PCB_HWPCB_KSP(a0)		/* store sp */
-	stq	s0, U_PCB_CONTEXT+(0 * 8)(a0)	/* store s0 - s6 */
-	stq	s1, U_PCB_CONTEXT+(1 * 8)(a0)
-	stq	s2, U_PCB_CONTEXT+(2 * 8)(a0)
-	stq	s3, U_PCB_CONTEXT+(3 * 8)(a0)
-	stq	s4, U_PCB_CONTEXT+(4 * 8)(a0)
-	stq	s5, U_PCB_CONTEXT+(5 * 8)(a0)
-	stq	s6, U_PCB_CONTEXT+(6 * 8)(a0)
-	stq	ra, U_PCB_CONTEXT+(7 * 8)(a0)	/* store ra */
+	stq	sp, PCB_HWPCB_KSP(a0)		/* store sp */
+	stq	s0, PCB_CONTEXT+(0 * 8)(a0)	/* store s0 - s6 */
+	stq	s1, PCB_CONTEXT+(1 * 8)(a0)
+	stq	s2, PCB_CONTEXT+(2 * 8)(a0)
+	stq	s3, PCB_CONTEXT+(3 * 8)(a0)
+	stq	s4, PCB_CONTEXT+(4 * 8)(a0)
+	stq	s5, PCB_CONTEXT+(5 * 8)(a0)
+	stq	s6, PCB_CONTEXT+(6 * 8)(a0)
+	stq	ra, PCB_CONTEXT+(7 * 8)(a0)	/* store ra */
 	call_pal PAL_OSF1_rdps			/* NOTE: doesn't kill a0 */
-	stq	v0, U_PCB_CONTEXT+(8 * 8)(a0)	/* store ps, for ipl */
+	stq	v0, PCB_CONTEXT+(8 * 8)(a0)	/* store ps, for ipl */
 
 	mov	zero, v0
 	RET
@@ -670,16 +668,16 @@ LEAF(cpu_switchto, 0)
 	/*
 	 * do an inline savectx(), to save old context
 	 */
-	ldq	a2, L_ADDR(a0)
+	ldq	a2, L_PCB(a0)
 	/* NOTE: ksp is stored by the swpctx */
-	stq	s0, U_PCB_CONTEXT+(0 * 8)(a2)	/* store s0 - s6 */
-	stq	s1, U_PCB_CONTEXT+(1 * 8)(a2)
-	stq	s2, U_PCB_CONTEXT+(2 * 8)(a2)
-	stq	s3, U_PCB_CONTEXT+(3 * 8)(a2)
-	stq	s4, U_PCB_CONTEXT+(4 * 8)(a2)
-	stq	s5, U_PCB_CONTEXT+(5 * 8)(a2)
-	stq	s6, U_PCB_CONTEXT+(6 * 8)(a2)
-	stq	ra, U_PCB_CONTEXT+(7 * 8)(a2)	/* store ra */
+	stq	s0, PCB_CONTEXT+(0 * 8)(a2)	/* store s0 - s6 */
+	stq	s1, PCB_CONTEXT+(1 * 8)(a2)
+	stq	s2, PCB_CONTEXT+(2 * 8)(a2)
+	stq	s3, PCB_CONTEXT+(3 * 8)(a2)
+	stq	s4, PCB_CONTEXT+(4 * 8)(a2)
+	stq	s5, PCB_CONTEXT+(5 * 8)(a2)
+	stq	s6, PCB_CONTEXT+(6 * 8)(a2)
+	stq	ra, PCB_CONTEXT+(7 * 8)(a2)	/* store ra */
 
 1:
 	mov	a0, s4				/* save old curlwp */
@@ -692,9 +690,9 @@ LEAF(cpu_switchto, 0)
 	stq	s2, CPU_INFO_CURLWP(v0)		/* curlwp = l */
 
 	/*
-	 * Now running on the new u struct.
+	 * Now running on the new PCB.
 	 */
-	ldq	s0, L_ADDR(s2)
+	ldq	s0, L_PCB(s2)
 
 	/*
 	 * Check for restartable atomic sequences (RAS).
@@ -715,14 +713,14 @@ LEAF(cpu_switchto, 0)
 	 * Restore registers and return.
 	 * NOTE: ksp is restored by the swpctx.
 	 */
-	ldq	s1, U_PCB_CONTEXT+(1 * 8)(s0)		/* restore s1-s6 */
-	ldq	s2, U_PCB_CONTEXT+(2 * 8)(s0)
-	ldq	s3, U_PCB_CONTEXT+(3 * 8)(s0)
-	ldq	s4, U_PCB_CONTEXT+(4 * 8)(s0)
-	ldq	s5, U_PCB_CONTEXT+(5 * 8)(s0)
-	ldq	s6, U_PCB_CONTEXT+(6 * 8)(s0)
-	ldq	ra, U_PCB_CONTEXT+(7 * 8)(s0)		/* restore ra */
-	ldq	s0, U_PCB_CONTEXT+(0 * 8)(s0)		/* restore s0 */
+	ldq	s1, PCB_CONTEXT+(1 * 8)(s0)		/* restore s1-s6 */
+	ldq	s2, PCB_CONTEXT+(2 * 8)(s0)
+	ldq	s3, PCB_CONTEXT+(3 * 8)(s0)
+	ldq	s4, PCB_CONTEXT+(4 * 8)(s0)
+	ldq	s5, PCB_CONTEXT+(5 * 8)(s0)
+	ldq	s6, PCB_CONTEXT+(6 * 8)(s0)
+	ldq	ra, PCB_CONTEXT+(7 * 8)(s0)		/* restore ra */
+	ldq	s0, PCB_CONTEXT+(0 * 8)(s0)		/* restore s0 */
 
 	RET
 	END(cpu_switchto)
@@ -730,7 +728,7 @@ LEAF(cpu_switchto, 0)
 /*
  * lwp_trampoline()
  *
- * Arrange for a function to be invoked neatly, after a cpu_fork().
+ * Arrange for a function to be invoked neatly, after a cpu_lwp_fork().
  *
  * Invokes the function specified by the s0 register with the return
  * address specified by the s1 register and with one argument specified
@@ -812,14 +810,14 @@ NESTED(copyinstr, 4, 16, ra, IM_RA|IM_S0, 0)
 	lda	v0, copyerr			/* set up fault handler.     */
 	.set noat
 	ldq	at_reg, 0(s0)
-	ldq	at_reg, L_ADDR(at_reg)
-	stq	v0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(at_reg)
+	stq	v0, PCB_ONFAULT(at_reg)
 	.set at
 	CALL(copystr)				/* do the copy.		     */
 	.set noat
 	ldq	at_reg, 0(s0)			/* kill the fault handler.   */
-	ldq	at_reg, L_ADDR(at_reg)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(at_reg)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (16-8)(sp)			/* restore ra.		     */
 	ldq	s0, (16-16)(sp)			/* restore s0.		     */
@@ -841,14 +839,14 @@ NESTED(copyoutstr, 4, 16, ra, IM_RA|IM_S0, 0)
 	lda	v0, copyerr			/* set up fault handler.     */
 	.set noat
 	ldq	at_reg, 0(s0)
-	ldq	at_reg, L_ADDR(at_reg)
-	stq	v0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(at_reg)
+	stq	v0, PCB_ONFAULT(at_reg)
 	.set at
 	CALL(copystr)				/* do the copy.		     */
 	.set noat
 	ldq	at_reg, 0(s0)			/* kill the fault handler.   */
-	ldq	at_reg, L_ADDR(at_reg)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(at_reg)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (16-8)(sp)			/* restore ra.		     */
 	ldq	s0, (16-16)(sp)			/* restore s0.		     */
@@ -881,14 +879,14 @@ NESTED(kcopy, 3, 32, ra, IM_RA|IM_S0|IM_S1, 0)
 	ldq	s1, 0(v0)			/* s1 = curlwp		     */
 	lda	v0, kcopyerr			/* set up fault handler.     */
 	.set noat
-	ldq	at_reg, L_ADDR(s1)
-	ldq	s0, U_PCB_ONFAULT(at_reg)	/* save old handler.	     */
-	stq	v0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s1)
+	ldq	s0, PCB_ONFAULT(at_reg)	/* save old handler.	     */
+	stq	v0, PCB_ONFAULT(at_reg)
 	.set at
 	CALL(memcpy)				/* do the copy.		     */
 	.set noat
-	ldq	at_reg, L_ADDR(s1)		/* restore the old handler.  */
-	stq	s0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s1)		/* restore the old handler.  */
+	stq	s0, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (32-8)(sp)			/* restore ra.		     */
 	ldq	s0, (32-16)(sp)			/* restore s0.		     */
@@ -901,8 +899,8 @@ NESTED(kcopy, 3, 32, ra, IM_RA|IM_S0|IM_S1, 0)
 LEAF(kcopyerr, 0)
 	LDGP(pv)
 	.set noat
-	ldq	at_reg, L_ADDR(s1)		/* restore the old handler.  */
-	stq	s0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s1)		/* restore the old handler.  */
+	stq	s0, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (32-8)(sp)			/* restore ra.		     */
 	ldq	s0, (32-16)(sp)			/* restore s0.		     */
@@ -928,13 +926,13 @@ NESTED(copyin, 3, 16, ra, IM_RA|IM_S0, 0)
 	ldq	s0, 0(v0)			/* s0 = curlwp		     */
 	lda	v0, copyerr			/* set up fault handler.     */
 	.set noat
-	ldq	at_reg, L_ADDR(s0)
-	stq	v0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s0)
+	stq	v0, PCB_ONFAULT(at_reg)
 	.set at
 	CALL(memcpy)				/* do the copy.		     */
 	.set noat
-	ldq	at_reg, L_ADDR(s0)		/* kill the fault handler.   */
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s0)		/* kill the fault handler.   */
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (16-8)(sp)			/* restore ra.		     */
 	ldq	s0, (16-16)(sp)			/* restore s0.		     */
@@ -960,13 +958,13 @@ NESTED(copyout, 3, 16, ra, IM_RA|IM_S0, 0)
 	ldq	s0, 0(v0)			/* s0 = curlwp		     */
 	lda	v0, copyerr			/* set up fault handler.     */
 	.set noat
-	ldq	at_reg, L_ADDR(s0)
-	stq	v0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s0)
+	stq	v0, PCB_ONFAULT(at_reg)
 	.set at
 	CALL(memcpy)				/* do the copy.		     */
 	.set noat
-	ldq	at_reg, L_ADDR(s0)		/* kill the fault handler.   */
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(s0)		/* kill the fault handler.   */
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	ra, (16-8)(sp)			/* restore ra.		     */
 	ldq	s0, (16-16)(sp)			/* restore s0.		     */
@@ -1004,14 +1002,14 @@ XLEAF(fuiword, 1)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	ldq	v0, 0(a0)
 	zap	v0, 0xf0, v0
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	RET
 	END(fuword)
@@ -1027,13 +1025,13 @@ XLEAF(fuisword, 1)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX FETCH IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	RET
 	END(fusword)
@@ -1049,13 +1047,13 @@ XLEAF(fuibyte, 1)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX FETCH IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	RET
 	END(fubyte)
@@ -1070,13 +1068,13 @@ LEAF(suword, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	stq	a1, 0(a0)			/* do the store. */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
 	RET
@@ -1093,13 +1091,13 @@ LEAF(suiword, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	call_pal PAL_OSF1_imb			/* sync instruction stream */
 	mov	zero, v0
@@ -1116,13 +1114,13 @@ LEAF(susword, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
 	RET
@@ -1138,13 +1136,13 @@ LEAF(suisword, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	call_pal PAL_OSF1_imb			/* sync instruction stream */
 	mov	zero, v0
@@ -1162,8 +1160,8 @@ LEAF(subyte, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	zap	a1, 0xfe, a1			/* kill arg's high bytes */
 	insbl	a1, a0, a1			/* move it to the right byte */
@@ -1172,8 +1170,8 @@ LEAF(subyte, 2)
 	or	t0, a1, a1			/* put the result together */
 	stq_u	a1, 0(a0)			/* and store it. */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
 	RET
@@ -1189,8 +1187,8 @@ LEAF(suibyte, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
 	.set at
 	zap	a1, 0xfe, a1			/* kill arg's high bytes */
 	insbl	a1, a0, a1			/* move it to the right byte */
@@ -1199,8 +1197,8 @@ LEAF(suibyte, 2)
 	or	t0, a1, a1			/* put the result together */
 	stq_u	a1, 0(a0)			/* and store it. */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	call_pal PAL_OSF1_imb			/* sync instruction stream */
 	mov	zero, v0
@@ -1232,14 +1230,14 @@ LEAF(fuswintr, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswintrberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
-	stq	a0, U_PCB_ACCESSADDR(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
+	stq	a0, PCB_ACCESSADDR(at_reg)
 	.set at
 	/* XXX FETCH IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	RET
 	END(fuswintr)
@@ -1254,14 +1252,14 @@ LEAF(suswintr, 2)
 	ldq	t1, 0(v0)
 	lda	t0, fswintrberr
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	t0, U_PCB_ONFAULT(at_reg)
-	stq	a0, U_PCB_ACCESSADDR(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	t0, PCB_ONFAULT(at_reg)
+	stq	a0, PCB_ACCESSADDR(at_reg)
 	.set at
 	/* XXX STORE IT */
 	.set noat
-	ldq	at_reg, L_ADDR(t1)
-	stq	zero, U_PCB_ONFAULT(at_reg)
+	ldq	at_reg, L_PCB(t1)
+	stq	zero, PCB_ONFAULT(at_reg)
 	.set at
 	mov	zero, v0
 	RET
@@ -1275,6 +1273,104 @@ XLEAF(suswintr, 2)				/* XXX what is a 'word'? */
 	ldiq	v0, -1
 	RET
 	END(fswberr)
+
+/*
+ * int ucas_32(volatile int32_t *uptr, int32_t old, int32_t new, int32_t *ret);
+ */
+
+NESTED(ucas_32, 4, 16, ra, IM_S0 | IM_RA, 0)
+	LDGP(pv)
+	lda	sp, -16(sp)			/* set up stack frame	     */
+	stq	ra, (16-8)(sp)			/* save ra		     */
+	stq	s0, (16-16)(sp)			/* save s0		     */
+	ldiq	t0, VM_MAX_ADDRESS		/* make sure that src addr   */
+	cmpult	a0, t0, t1			/* is in user space.	     */
+	beq	t1, copyerr_efault		/* if it's not, error out.   */
+	and	a0, 3, t1			/* check if addr is aligned. */
+	bne	t1, copyerr_efault		/* if it's not, error out.   */
+	/* Note: GET_CURLWP clobbers v0, t0, t8...t11. */
+	GET_CURLWP
+	ldq	s0, 0(v0)			/* s0 = curlwp		     */
+	lda	v0, copyerr			/* set up fault handler.     */
+	.set noat
+	ldq	at_reg, L_PCB(s0)
+	stq	v0, PCB_ONFAULT(at_reg)
+	.set at
+
+3:
+	ldl_l	t0, 0(a0)			/* t0 = *uptr */
+	cmpeq	t0, a1, t1			/* does t0 = old? */
+	beq	t1, 1f				/* if not, skip */
+	mov	a2, t1
+	stl_c	t1, 0(a0)			/* *uptr ~= new */
+	beq	t1, 2f				/* did it work? */
+1:
+	stl	t0, 0(a3)			/* *ret = t0 */
+	mov	zero, v0
+
+	.set noat
+	ldq	at_reg, L_PCB(s0)		/* kill the fault handler.   */
+	stq	zero, PCB_ONFAULT(at_reg)
+	.set at
+	ldq	ra, (16-8)(sp)			/* restore ra.		     */
+	ldq	s0, (16-16)(sp)			/* restore s0.		     */
+	lda	sp, 16(sp)			/* kill stack frame.	     */
+	RET					/* v0 left over from copystr */
+
+2:
+	br	3b
+END(ucas_32)
+
+STRONG_ALIAS(ucas_int,ucas_32)
+
+/*
+ * int ucas_64(volatile int64_t *uptr, int64_t old, int64_t new, int64_t *ret);
+ */
+
+NESTED(ucas_64, 4, 16, ra, IM_S0 | IM_RA, 0)
+	LDGP(pv)
+	lda	sp, -16(sp)			/* set up stack frame	     */
+	stq	ra, (16-8)(sp)			/* save ra		     */
+	stq	s0, (16-16)(sp)			/* save s0		     */
+	ldiq	t0, VM_MAX_ADDRESS		/* make sure that src addr   */
+	cmpult	a0, t0, t1			/* is in user space.	     */
+	beq	t1, copyerr_efault		/* if it's not, error out.   */
+	and	a0, 3, t1			/* check if addr is aligned. */
+	bne	t1, copyerr_efault		/* if it's not, error out.   */
+	/* Note: GET_CURLWP clobbers v0, t0, t8...t11. */
+	GET_CURLWP
+	ldq	s0, 0(v0)			/* s0 = curlwp		     */
+	lda	v0, copyerr			/* set up fault handler.     */
+	.set noat
+	ldq	at_reg, L_PCB(s0)
+	stq	v0, PCB_ONFAULT(at_reg)
+	.set at
+
+3:
+	ldq_l	t0, 0(a0)			/* t0 = *uptr */
+	cmpeq	t0, a1, t1			/* does t0 = old? */
+	beq	t1, 1f				/* if not, skip */
+	mov	a2, t1
+	stq_c	t1, 0(a0)			/* *uptr ~= new */
+	beq	t1, 2f				/* did it work? */
+1:
+	stq	t0, 0(a3)			/* *ret = t0 */
+	mov	zero, v0
+
+	.set noat
+	ldq	at_reg, L_PCB(s0)		/* kill the fault handler.   */
+	stq	zero, PCB_ONFAULT(at_reg)
+	.set at
+	ldq	ra, (16-8)(sp)			/* restore ra.		     */
+	ldq	s0, (16-16)(sp)			/* restore s0.		     */
+	lda	sp, 16(sp)			/* kill stack frame.	     */
+	RET					/* v0 left over from copystr */
+
+2:
+	br	3b
+END(ucas_64)
+
+STRONG_ALIAS(ucas_ptr,ucas_64)
 
 /**************************************************************************/
 

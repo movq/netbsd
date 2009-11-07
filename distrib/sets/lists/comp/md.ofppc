@@ -1,11 +1,11 @@
-# $NetBSD: md.ofppc,v 1.9 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.ofppc,v 1.13 2011/07/17 20:54:31 joerg Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/ofppc				comp-c-include
 ./usr/include/ofppc/_G_config.h			comp-obsolete		obsolete
 ./usr/include/ofppc/ansi.h			comp-c-include
 ./usr/include/ofppc/aout_machdep.h		comp-c-include
 ./usr/include/ofppc/asm.h			comp-c-include
-./usr/include/ofppc/atomic.h			comp-c-include
+./usr/include/ofppc/atomic.h			comp-obsolete		obsolete
 ./usr/include/ofppc/bat.h			comp-obsolete		obsolete
 ./usr/include/ofppc/bswap.h			comp-c-include
 ./usr/include/ofppc/cdefs.h			comp-c-include
@@ -47,10 +47,11 @@
 ./usr/include/ofppc/rwlock.h			comp-c-include
 ./usr/include/ofppc/setjmp.h			comp-c-include
 ./usr/include/ofppc/signal.h			comp-c-include
-./usr/include/ofppc/spr.h			comp-c-include
-./usr/include/ofppc/stdarg.h			comp-c-include
+./usr/include/ofppc/spr.h			comp-obsolete		obsolete
+./usr/include/ofppc/stdarg.h			comp-obsolete		obsolete
 ./usr/include/ofppc/trap.h			comp-c-include
 ./usr/include/ofppc/types.h			comp-c-include
-./usr/include/ofppc/varargs.h			comp-c-include
+./usr/include/ofppc/varargs.h			comp-obsolete		obsolete
 ./usr/include/ofppc/vmparam.h			comp-c-include
 ./usr/include/ofppc/wchar_limits.h		comp-c-include
+./usr/libdata/debug/usr/sbin/ofctl.debug	comp-sysutil-debug	debug

@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_syscall.c,v 1.31 2008/10/21 12:16:58 ad Exp $ */
+/* $NetBSD: osf1_syscall.c,v 1.34 2012/02/06 02:14:12 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -65,17 +65,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -89,17 +89,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: osf1_syscall.c,v 1.31 2008/10/21 12:16:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_syscall.c,v 1.34 2012/02/06 02:14:12 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
@@ -111,8 +108,8 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_syscall.c,v 1.31 2008/10/21 12:16:58 ad Exp $")
 #include <compat/osf1/osf1_syscall.h>
 
 void	osf1_syscall_intern(struct proc *);
-void	osf1_syscall_plain(struct lwp *, u_int64_t, struct trapframe *);
-void	osf1_syscall_fancy(struct lwp *, u_int64_t, struct trapframe *);
+void	osf1_syscall_plain(struct lwp *, uint64_t, struct trapframe *);
+void	osf1_syscall_fancy(struct lwp *, uint64_t, struct trapframe *);
 
 void
 osf1_syscall_intern(struct proc *p)
@@ -138,18 +135,18 @@ osf1_syscall_intern(struct proc *p)
  * a3, and v0 from the frame before returning to the user process.
  */
 void
-osf1_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
+osf1_syscall_plain(struct lwp *l, uint64_t code, struct trapframe *framep)
 {
 	const struct sysent *callp;
 	int error;
-	u_int64_t rval[2];
-	u_int64_t *args, copyargs[10];				/* XXX */
+	uint64_t rval[2];
+	uint64_t *args, copyargs[10];				/* XXX */
 	u_int hidden, nargs;
 	struct proc *p = l->l_proc;
 
 	LWP_CACHE_CREDS(l, p);
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	l->l_md.md_tf = framep;
 
 	callp = p->p_emul->e_sysent;
@@ -172,7 +169,7 @@ osf1_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	switch (nargs) {
 	default:
 		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
-		    (nargs - 6) * sizeof(u_int64_t));
+		    (nargs - 6) * sizeof(uint64_t));
 		if (error)
 			goto bad;
 	case 6:	
@@ -222,18 +219,18 @@ osf1_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 }
 
 void
-osf1_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
+osf1_syscall_fancy(struct lwp *l, uint64_t code, struct trapframe *framep)
 {
 	const struct sysent *callp;
 	int error;
-	u_int64_t rval[2];
-	u_int64_t *args, copyargs[10];
+	uint64_t rval[2];
+	uint64_t *args, copyargs[10];
 	u_int hidden, nargs;
 	struct proc *p = l->l_proc;
 
 	LWP_CACHE_CREDS(l, p);
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	l->l_md.md_tf = framep;
 
 	callp = p->p_emul->e_sysent;
@@ -256,7 +253,7 @@ osf1_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	switch (nargs) {
 	default:
 		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
-		    (nargs - 6) * sizeof(u_int64_t));
+		    (nargs - 6) * sizeof(uint64_t));
 		if (error) {
 			args = copyargs;
 			goto bad;

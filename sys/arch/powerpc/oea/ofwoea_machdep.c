@@ -1,4 +1,4 @@
-/* $NetBSD: ofwoea_machdep.c,v 1.17 2009/02/13 22:41:03 apb Exp $ */
+/* $NetBSD: ofwoea_machdep.c,v 1.27.2.1 2012/06/12 19:37:09 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,11 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwoea_machdep.c,v 1.17 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwoea_machdep.c,v 1.27.2.1 2012/06/12 19:37:09 riz Exp $");
 
 #include "opt_ppcarch.h"
 #include "opt_compat_netbsd.h"
-#include "opt_ddb.h" 
+#include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_ipkdb.h"
 #include "opt_modular.h"
@@ -53,13 +53,12 @@ __KERNEL_RCSID(0, "$NetBSD: ofwoea_machdep.c,v 1.17 2009/02/13 22:41:03 apb Exp 
 #include <machine/trap.h>
 #include <machine/vmparam.h>
 #include <machine/autoconf.h>
-#include <powerpc/bus.h>
+#include <sys/bus.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/oea/cpufeat.h>
-#include <powerpc/ofw_bus.h>
 #include <powerpc/ofw_cons.h>
 #include <powerpc/spr.h>
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 
 #include "opt_oea.h"
 
@@ -120,7 +119,7 @@ u_int timebase_freq = TIMEBASE_FREQ;
 u_int timebase_freq = 0;
 #endif
 
-extern int ofmsr;
+extern int ofwmsr;
 extern int chosen;
 extern uint32_t ticks_per_sec;
 extern uint32_t ns_per_tick;
@@ -168,6 +167,9 @@ ofwoea_initppc(u_int startkernel, u_int endkernel, char *args)
 		model_init();
 	}
 
+	/* Initialize bus_space */
+	ofwoea_bus_space_init();
+
 	ofwoea_consinit();
 
 #if defined(MULTIPROCESSOR) && defined(ofppc)
@@ -188,13 +190,25 @@ ofwoea_initppc(u_int startkernel, u_int endkernel, char *args)
 	}
 #endif
 
+#if defined (PPC_OEA64_BRIDGE) && defined (PPC_OEA)
+	if (oeacpufeat & OEACPU_64_BRIDGE)
+		pmap_setup64bridge();
+	else
+		pmap_setup32();
+#endif
+
 	oea_init(pic_ext_intr);
 
 	ofmaplen = save_ofmap(NULL, 0);
 	if (ofmaplen > 0)
 		save_ofmap(ofmap, ofmaplen);
 
-	ofmsr &= ~PSL_IP;
+/*
+ * XXX
+ * we need to do this here instead of earlier on in ofwinit() for some reason
+ * At least some versions of Apple OF 2.0.1 hang if we do this earlier
+ */ 
+	ofwmsr &= ~PSL_IP;
 
 	/* Parse the args string */
 	if (args) {
@@ -210,12 +224,6 @@ ofwoea_initppc(u_int startkernel, u_int endkernel, char *args)
 
 	uvm_setpagesize();
 
-#if defined (PPC_OEA64_BRIDGE) && defined (PPC_OEA)
-	if (oeacpufeat & OEACPU_64_BRIDGE)
-		pmap_setup64bridge();
-	else
-		pmap_setup32();
-#endif
 	pmap_bootstrap(startkernel, endkernel);
 
 /* as far as I can tell, the pmap_setup_seg0 stuff is horribly broken */
@@ -245,6 +253,11 @@ ofwoea_initppc(u_int startkernel, u_int endkernel, char *args)
 
 	/* CPU clock stuff */
 	set_timebase();
+
+#ifdef DDB
+	if (boothowto & RB_KDB)
+		Debugger();
+#endif
 }
 
 void
@@ -344,14 +357,14 @@ restore_ofmap(struct ofw_translations *map, int len)
 		}
 	}
 	pmap_update(&ofw_pmap);
-}	
+}
 
 
 
 /*
- * Scan the device tree for ranges, and batmap them.
+ * Scan the device tree for ranges, and return them as bitmap 0..15
  */
-
+#ifndef macppc
 static u_int16_t
 ranges_bitmap(int node, u_int16_t bitmap)
 {
@@ -373,7 +386,11 @@ ranges_bitmap(int node, u_int16_t bitmap)
 		if (j == -1)
 			goto noranges;
 
+#ifdef ofppc
+		reclen = acells + modeldata.ranges_offset + scells;
+#else
 		reclen = acells + 1 + scells;
+#endif
 
 		for (i=0; i < (mlen/4)/reclen; i++) {
 			addr = map[reclen * i + acells];
@@ -388,22 +405,34 @@ noranges:
 	}
 	return bitmap;
 }
+#endif /* !macppc */
 
 void
 ofwoea_batinit(void)
 {
 #if defined (PPC_OEA)
+
+#ifdef macppc
+	/*
+	 * cover PCI and register space but not the firmware ROM
+	 */
+	oea_batinit(0x80000000, BAT_BL_256M,
+		    0x90000000, BAT_BL_256M,
+		    0xa0000000, BAT_BL_256M,
+		    0xb0000000, BAT_BL_256M,
+		    0xf0000000, BAT_BL_128M,
+		    0xf8000000, BAT_BL_64M,
+		    0xfe000000, BAT_BL_8M,	/* Grackle IO */
+		    0);
+#else
         u_int16_t bitmap;
 	int node, i;
 
 	node = OF_finddevice("/");
+
 	bitmap = ranges_bitmap(node, 0);
 	oea_batinit(0);
-	
-#ifdef macppc
-	/* XXX this is a macppc-specific hack */
-	bitmap = 0x8f00;
-#endif
+
 	for (i=1; i < 0x10; i++) {
 		/* skip the three vital SR regions */
 		if (i == USER_SR || i == KERNEL_SR || i == KERNEL2_SR)
@@ -413,6 +442,7 @@ ofwoea_batinit(void)
 			DPRINTF("Batmapped 256M at 0x%x\n", 0x10000000 * i);
 		}
 	}
+#endif
 #endif /* OEA */
 }
 
@@ -579,6 +609,10 @@ ofwoea_map_space(int rangetype, int iomem, int node,
 		 */
 		if (range == -1) {
 			/* we found a rangeless isa bus */
+			if (iomem == RANGE_IO)
+				size = 0x10000;
+			else
+				size = 0x1000000;
 		}
 		DPRINTF("found isa stuff\n");
 		for (i=0; i < range; i++)
@@ -591,7 +625,10 @@ ofwoea_map_space(int rangetype, int iomem, int node,
 					DPRINTF("found IO\n");
 					tag->pbs_offset = list[i].addr;
 					tag->pbs_limit = size;
-					error = bus_space_init(tag, name, NULL, 0);
+					error = bus_space_init(tag, name,
+					    ex_storage[exmap],
+					    sizeof(ex_storage[exmap]));
+					exmap++;
 					return error;
 				}
 		} else {
@@ -601,7 +638,10 @@ ofwoea_map_space(int rangetype, int iomem, int node,
 					DPRINTF("found mem\n");
 					tag->pbs_offset = list[i].addr;
 					tag->pbs_limit = size;
-					error = bus_space_init(tag, name, NULL, 0);
+					error = bus_space_init(tag, name,
+					    ex_storage[exmap],
+					    sizeof(ex_storage[exmap]));
+					exmap++;
 					return error;
 				}
 		}
@@ -667,7 +707,7 @@ ofwoea_map_space(int rangetype, int iomem, int node,
 			tag->pbs_offset = 0;
 			tag->pbs_base = region.addr;
 			tag->pbs_limit = region.size + region.addr;
-		}	                                
+		}
 
 		error = bus_space_init(tag, name, ex_storage[exmap],
 		    sizeof(ex_storage[exmap]));

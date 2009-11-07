@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.1 2009/06/11 01:49:21 mrg Exp $
+#	$NetBSD: Makefile,v 1.3 2011/02/21 05:10:27 mrg Exp $
 
 .include <bsd.own.mk>
 
 XKBNAME=	geometry
 FILES=		README amiga ataritt chicony dell everex fujitsu hhk hp \
-		keytronic kinesis macintosh microsoft nec northgate pc \
-		sony sun thinkpad winbook
+		keytronic kinesis macintosh microsoft nec nokia northgate \
+		pc sanwa sony sun thinkpad typematrix winbook
 
 SUBDIR=		digital_vndr sgi_vndr
 

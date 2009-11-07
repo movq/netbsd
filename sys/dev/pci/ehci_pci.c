@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci_pci.c,v 1.45 2009/06/15 09:18:45 cegger Exp $	*/
+/*	$NetBSD: ehci_pci.c,v 1.54 2012/01/30 19:41:19 drochner Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.45 2009/06/15 09:18:45 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.54 2012/01/30 19:41:19 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,8 +76,8 @@ static void ehci_release_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc,
 				   pcitag_t tag);
 static void ehci_get_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc,
 			       pcitag_t tag);
-static bool ehci_pci_suspend(device_t PMF_FN_PROTO);
-static bool ehci_pci_resume(device_t PMF_FN_PROTO);
+static bool ehci_pci_suspend(device_t, const pmf_qual_t *);
+static bool ehci_pci_resume(device_t, const pmf_qual_t *);
 
 struct ehci_pci_softc {
 	ehci_softc_t		sc;
@@ -86,12 +86,12 @@ struct ehci_pci_softc {
 	void 			*sc_ih;		/* interrupt vectoring */
 };
 
-static int ehci_sb700_match(struct pci_attach_args *pa);
+static int ehci_sb700_match(const struct pci_attach_args *pa);
 static int ehci_apply_amd_quirks(struct ehci_pci_softc *sc);
 enum ehci_pci_quirk_flags ehci_pci_lookup_quirkdata(pci_vendor_id_t,
 	pci_product_id_t);
 
-#define EHCI_MAX_BIOS_WAIT		1000 /* ms */
+#define EHCI_MAX_BIOS_WAIT		100 /* ms*10 */
 #define EHCI_SBx00_WORKAROUND_REG	0x50
 #define EHCI_SBx00_WORKAROUND_ENABLE	__BIT(27)
 
@@ -120,7 +120,6 @@ ehci_pci_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 	const char *vendor;
-	char devinfo[256];
 	usbd_status r;
 	int ncomp;
 	struct usb_pci *up;
@@ -129,11 +128,7 @@ ehci_pci_attach(device_t parent, device_t self, void *aux)
 	sc->sc.sc_dev = self;
 	sc->sc.sc_bus.hci_private = sc;
 
-	aprint_naive(": USB controller\n");
-
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, "USB controller");
 
 	/* Check for quirks */
 	quirk = ehci_pci_lookup_quirkdata(PCI_VENDOR(pa->pa_id),
@@ -231,13 +226,17 @@ ehci_pci_attach(device_t parent, device_t self, void *aux)
 	 * Find companion controllers.  According to the spec they always
 	 * have lower function numbers so they should be enumerated already.
 	 */
+	const u_int maxncomp = EHCI_HCS_N_CC(EREAD4(&sc->sc, EHCI_HCSPARAMS));
+	KASSERT(maxncomp <= EHCI_COMPANION_MAX);
 	ncomp = 0;
 	TAILQ_FOREACH(up, &ehci_pci_alldevs, next) {
-		if (up->bus == pa->pa_bus && up->device == pa->pa_device) {
+		if (up->bus == pa->pa_bus && up->device == pa->pa_device
+		    && !up->claimed) {
 			DPRINTF(("ehci_pci_attach: companion %s\n",
 				 device_xname(up->usb)));
 			sc->sc.sc_comps[ncomp++] = up->usb;
-			if (ncomp >= EHCI_COMPANION_MAX)
+			up->claimed = true;
+			if (ncomp == maxncomp)
 				break;
 		}
 	}
@@ -278,10 +277,12 @@ ehci_pci_detach(device_t self, int flags)
 	struct ehci_pci_softc *sc = device_private(self);
 	int rv;
 
-	pmf_device_deregister(self);
 	rv = ehci_detach(&sc->sc, flags);
 	if (rv)
 		return rv;
+
+	pmf_device_deregister(self);
+	ehci_shutdown(self, flags);
 
 	/* disable interrupts */
 	EOWRITE2(&sc->sc, EHCI_USBINTR, 0);
@@ -383,16 +384,18 @@ ehci_get_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc, pcitag_t tag)
 		if (EHCI_CAP_GET_ID(cap) != EHCI_CAP_ID_LEGACY)
 			goto next;
 		legsup = pci_conf_read(pc, tag, addr + PCI_EHCI_USBLEGSUP);
-		/* Ask BIOS to give up ownership */
-		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGSUP,
-		    legsup | EHCI_LEG_HC_OS_OWNED);
 		if (legsup & EHCI_LEG_HC_BIOS_OWNED) {
+			/* Ask BIOS to give up ownership */
+			legsup &= ~EHCI_LEG_HC_BIOS_OWNED;
+			legsup |= EHCI_LEG_HC_OS_OWNED;
+			pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGSUP,
+			    legsup);
 			for (ms = 0; ms < EHCI_MAX_BIOS_WAIT; ms++) {
 				legsup = pci_conf_read(pc, tag,
 				    addr + PCI_EHCI_USBLEGSUP);
 				if (!(legsup & EHCI_LEG_HC_BIOS_OWNED))
 					break;
-				delay(1000);
+				delay(10000);
 			}
 			if (ms == EHCI_MAX_BIOS_WAIT) {
 				aprint_normal("%s: BIOS refuses to give up "
@@ -405,9 +408,7 @@ ehci_get_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc, pcitag_t tag)
 		}
 
 		/* Disable SMIs */
-		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGCTLSTS,
-		    EHCI_LEG_EXT_SMI_BAR | EHCI_LEG_EXT_SMI_PCICMD |
-		    EHCI_LEG_EXT_SMI_OS_CHANGE);
+		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGCTLSTS, 0);
 
 next:
 		if (--maxcap < 0) {
@@ -421,27 +422,27 @@ next:
 }
 
 static bool
-ehci_pci_suspend(device_t dv PMF_FN_ARGS)
+ehci_pci_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct ehci_pci_softc *sc = device_private(dv);
 
-	ehci_suspend(dv PMF_FN_CALL);
+	ehci_suspend(dv, qual);
 	ehci_release_ownership(&sc->sc, sc->sc_pc, sc->sc_tag);
 
 	return true;
 }
 
 static bool
-ehci_pci_resume(device_t dv PMF_FN_ARGS)
+ehci_pci_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct ehci_pci_softc *sc = device_private(dv);
 
 	ehci_get_ownership(&sc->sc, sc->sc_pc, sc->sc_tag);
-	return ehci_resume(dv PMF_FN_CALL);
+	return ehci_resume(dv, qual);
 }
 
 static int
-ehci_sb700_match(struct pci_attach_args *pa)
+ehci_sb700_match(const struct pci_attach_args *pa)
 {
 	if (!(PCI_VENDOR(pa->pa_id) == PCI_VENDOR_ATI &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_ATI_SB600_SMB))

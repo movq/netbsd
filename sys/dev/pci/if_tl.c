@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tl.c,v 1.93 2009/10/19 18:41:15 bouyer Exp $	*/
+/*	$NetBSD: if_tl.c,v 1.97 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.93 2009/10/19 18:41:15 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.97 2012/02/02 19:43:05 tls Exp $");
 
 #undef TLDEBUG
 #define TL_PRIV_STATS
@@ -62,16 +62,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.93 2009/10/19 18:41:15 bouyer Exp $");
 #include <net/route.h>
 #include <net/netisr.h>
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -83,7 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.93 2009/10/19 18:41:15 bouyer Exp $");
 
 #if defined(__NetBSD__)
 #include <net/if_ether.h>
-#include <uvm/uvm_extern.h>
 #if defined(INET)
 #include <netinet/if_inarp.h>
 #endif
@@ -475,10 +468,8 @@ tl_pci_attach(device_t parent, device_t self, void *aux)
 	else
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 }
 
 static void
@@ -1085,10 +1076,7 @@ tl_intr(void *v)
 					ether_printheader(eh);
 				}
 #endif
-#if NBPFILTER > 0
-				if (ifp->if_bpf)
-					bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+				bpf_mtap(ifp, m);
 				(*ifp->if_input)(ifp, m);
 			}
 		}
@@ -1233,10 +1221,7 @@ tl_intr(void *v)
 		/* Ack the interrupt and enable interrupts */
 		TL_HR_WRITE(sc, TL_HOST_CMD, ack | int_type | HOST_CMD_ACK |
 		    HOST_CMD_IntOn);
-#if NRND > 0
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, int_reg);
-#endif
+		rnd_add_uint32(&sc->rnd_source, int_reg);
 		return 1;
 	}
 	/* ack = 0 ; interrupt was perhaps not our. Just enable interrupts */
@@ -1418,11 +1403,8 @@ tbdinit:
 			    sc->last_Rx->hw_list->fwd);
 #endif
 	}
-#if NBPFILTER > 0
 	/* Pass packet to bpf if there is a listener */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, mb_head);
-#endif
+	bpf_mtap(ifp, mb_head);
 	/*
 	 * Set a 5 second timer just in case we don't hear from the card again.
 	 */

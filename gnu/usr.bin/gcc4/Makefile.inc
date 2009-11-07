@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2006/05/13 01:18:37 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.5 2011/05/30 14:41:26 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -58,3 +58,9 @@ CPPFLAGS+=	-DENABLE_SHARED_LIBGCC
 CPPFLAGS+=	-DNO_SHARED_LIBGCC_MULTILIB
 .endif
 .endif
+
+# This depends on the "extern inline" mess, so downgrade to something safe.
+# CPPFLAGS is applied after CFLAGS, which gets the -std=gnu99
+CPPFLAGS+=	-std=gnu89
+
+NOCLANGERROR=	# defined

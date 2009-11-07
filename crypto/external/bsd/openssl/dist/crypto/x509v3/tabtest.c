@@ -66,9 +66,11 @@
 
 #include "ext_dat.h"
 
-main()
+int
+main(void)
 {
-	int i, prev = -1, bad = 0;
+	int prev = -1, bad = 0;
+	unsigned int i;
 	const X509V3_EXT_METHOD **tmp;
 	i = sizeof(standard_exts) / sizeof(X509V3_EXT_METHOD *);
 	if(i != STANDARD_EXTENSION_COUNT)

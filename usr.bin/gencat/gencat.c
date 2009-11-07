@@ -1,4 +1,4 @@
-/*	$NetBSD: gencat.c,v 1.30 2009/07/13 19:05:41 roy Exp $	*/
+/*	$NetBSD: gencat.c,v 1.34 2011/12/29 22:58:27 wiz Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: gencat.c,v 1.30 2009/07/13 19:05:41 roy Exp $");
+__RCSID("$NetBSD: gencat.c,v 1.34 2011/12/29 22:58:27 wiz Exp $");
 #endif
 
 /***********************************************************
@@ -108,7 +108,7 @@ struct _setT {
         LIST_ENTRY(_setT) entries;
 };
 
-LIST_HEAD(sethead, _setT) sethead;
+static LIST_HEAD(sethead, _setT) sethead;
 static struct _setT *curSet;
 
 static const char *curfile;
@@ -116,7 +116,7 @@ static char *curline = NULL;
 static long lineno = 0;
 
 static	char   *cskip(char *);
-static	void	error(const char *);
+__dead static	void	error(const char *);
 static	char   *get_line(int);
 static	char   *getmsg(int, char *, char);
 static	void	warning(const char *, const char *);
@@ -125,23 +125,22 @@ static	char   *xstrdup(const char *);
 static	void   *xmalloc(size_t);
 static	void   *xrealloc(void *, size_t);
 
-void	MCParse(int fd);
-void	MCReadCat(int fd);
-void	MCWriteCat(int fd);
-void	MCDelMsg(int msgId);
-void	MCAddMsg(int msgId, const char *msg);
-void	MCAddSet(int setId);
-void	MCDelSet(int setId);
-int	main(int, char **);
-void	usage(void);
+static void	MCParse(int fd);
+static void	MCReadCat(int fd);
+static void	MCWriteCat(int fd);
+static void	MCDelMsg(int msgId);
+static void	MCAddMsg(int msgId, const char *msg);
+static void	MCAddSet(int setId);
+static void	MCDelSet(int setId);
+__dead static void	usage(void);
 
 #define CORRUPT			"corrupt message catalog"
 #define NOMEMORY		"out of memory"
 
-void
+static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s catfile msgfile ...\n", getprogname());
+	fprintf(stderr, "usage: %s catfile [msgfile|- ...]\n", getprogname());
 	exit(1);
 }
 
@@ -164,7 +163,7 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc < 2) {
+	if (argc < 1) {
 		usage();
 		/* NOTREACHED */
 	}
@@ -187,15 +186,15 @@ main(int argc, char *argv[])
 			curfile = catfile;
 			updatecat = 1;
 			MCReadCat(ofd);
-			if (lseek(ofd, SEEK_SET, 0) < 0) {
+			if (lseek(ofd, (off_t)0, SEEK_SET) == (off_t)-1) {
 				err(1, "Unable to seek on %s", catfile);
 				/* NOTREACHED */
 			}
 		}
 	}
 
-	if (((*argv)[0] == '-') && ((*argv)[1] == '\0')) {
-		if (argc != 2)
+	if (argc < 2 || (((*argv)[0] == '-') && ((*argv)[1] == '\0'))) {
+		if (argc > 2)
 			usage();
 			/* NOTREACHED */
 		MCParse(STDIN_FILENO);
@@ -442,7 +441,7 @@ getmsg(int fd, char *cptr, char quote)
 	return (msg);
 }
 
-void
+static void
 MCParse(int fd)
 {
 	char   *cptr, *str;
@@ -533,7 +532,7 @@ MCParse(int fd)
 	}
 }
 
-void
+static void
 MCReadCat(int fd)
 {
 	void   *msgcat;		/* message catalog data */
@@ -631,7 +630,7 @@ MCReadCat(int fd)
  * avoids additional housekeeping variables and/or a lot of seeks
  * that would otherwise be required.
  */
-void
+static void
 MCWriteCat(int fd)
 {
 	int     nsets;		/* number of sets */
@@ -736,7 +735,7 @@ MCWriteCat(int fd)
 	write(fd, msgcat, msgcat_size);
 }
 
-void
+static void
 MCAddSet(int setId)
 {
 	struct _setT *p, *q;
@@ -773,7 +772,7 @@ MCAddSet(int setId)
 	curSet = p;
 }
 
-void
+static void
 MCAddMsg(int msgId, const char *str)
 {
 	struct _msgT *p, *q;
@@ -811,7 +810,7 @@ MCAddMsg(int msgId, const char *str)
 	p->str = xstrdup(str);
 }
 
-void
+static void
 MCDelSet(int setId)
 {
 	struct _setT *set;
@@ -842,7 +841,7 @@ MCDelSet(int setId)
 	warning(NULL, "specified set doesn't exist");
 }
 
-void
+static void
 MCDelMsg(int msgId)
 {
 	struct _msgT *msg;

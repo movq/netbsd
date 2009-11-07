@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cwd.c,v 1.2 2009/09/24 06:14:22 yamt Exp $	*/
+/*	$NetBSD: vfs_cwd.c,v 1.4 2011/02/15 15:54:28 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cwd.c,v 1.2 2009/09/24 06:14:22 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cwd.c,v 1.4 2011/02/15 15:54:28 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -69,13 +69,13 @@ cwdinit(void)
 	rw_enter(&copy->cwdi_lock, RW_READER);
 	cwdi->cwdi_cdir = copy->cwdi_cdir;
 	if (cwdi->cwdi_cdir)
-		VREF(cwdi->cwdi_cdir);
+		vref(cwdi->cwdi_cdir);
 	cwdi->cwdi_rdir = copy->cwdi_rdir;
 	if (cwdi->cwdi_rdir)
-		VREF(cwdi->cwdi_rdir);
+		vref(cwdi->cwdi_rdir);
 	cwdi->cwdi_edir = copy->cwdi_edir;
 	if (cwdi->cwdi_edir)
-		VREF(cwdi->cwdi_edir);
+		vref(cwdi->cwdi_edir);
 	cwdi->cwdi_cmask = copy->cwdi_cmask;
 	cwdi->cwdi_refcnt = 1;
 	rw_exit(&copy->cwdi_lock);
@@ -147,4 +147,15 @@ cwdfree(struct cwdinfo *cwdi)
 	if (cwdi->cwdi_edir)
 		vrele(cwdi->cwdi_edir);
 	pool_cache_put(cwdi_cache, cwdi);
+}
+
+void
+cwdexec(struct proc *p)
+{
+
+	cwdunshare(p);
+
+	if (p->p_cwdi->cwdi_edir) {
+		vrele(p->p_cwdi->cwdi_edir);
+	}
 }

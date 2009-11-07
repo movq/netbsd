@@ -1,7 +1,7 @@
-/*	$NetBSD: grammar.h,v 1.1.1.2 2009/10/25 00:02:50 christos Exp $	*/
+/*	$NetBSD: grammar.h,v 1.2.6.1 2012/06/05 21:15:37 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2002, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: grammar.h,v 1.19 2009/06/11 23:47:55 tbox Exp */
+/* Id: grammar.h,v 1.24 2011/01/04 23:47:14 tbox Exp  */
 
 #ifndef ISCCFG_GRAMMAR_H
 #define ISCCFG_GRAMMAR_H 1
@@ -55,6 +55,8 @@
 #define CFG_CLAUSEFLAG_CALLBACK		0x00000020
 /*% A option that is only used in testing. */
 #define CFG_CLAUSEFLAG_TESTONLY		0x00000040
+/*% A configuration option that was not configured at compile time. */
+#define CFG_CLAUSEFLAG_NOTCONFIGURED	0x00000080
 
 typedef struct cfg_clausedef cfg_clausedef_t;
 typedef struct cfg_tuplefielddef cfg_tuplefielddef_t;
@@ -159,6 +161,7 @@ struct cfg_obj {
 		isc_sockaddr_t	sockaddr;
 		cfg_netprefix_t netprefix;
 	}               value;
+	isc_refcount_t  references;     /*%< reference counter */
 	const char *	file;
 	unsigned int    line;
 };
@@ -217,6 +220,9 @@ struct cfg_parser {
 	 * from one token to the next.
 	 */
 	unsigned int flags;
+
+	/*%< Reference counter */
+	isc_refcount_t  references;
 
 	cfg_parsecallback_t callback;
 	void *callbackarg;
@@ -324,8 +330,14 @@ cfg_parse_rawport(cfg_parser_t *pctx, unsigned int flags, in_port_t *port);
 isc_result_t
 cfg_parse_sockaddr(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret);
 
+isc_result_t
+cfg_parse_boolean(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret);
+
 void
 cfg_print_sockaddr(cfg_printer_t *pctx, const cfg_obj_t *obj);
+
+void
+cfg_print_boolean(cfg_printer_t *pctx, const cfg_obj_t *obj);
 
 void
 cfg_doc_sockaddr(cfg_printer_t *pctx, const cfg_type_t *type);

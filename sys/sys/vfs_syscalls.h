@@ -1,4 +1,4 @@
-/*     $NetBSD: vfs_syscalls.h,v 1.13 2009/08/09 22:49:00 haad Exp $        */
+/*     $NetBSD: vfs_syscalls.h,v 1.17 2012/02/01 05:39:28 dholland Exp $        */
 
 /*
  * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -34,6 +34,7 @@
 
 struct stat;
 struct statvfs;
+struct quotactl_args;
 
 extern int dovfsusermount;
 
@@ -54,6 +55,8 @@ int do_sys_getvfsstat(struct lwp *, void *, size_t, int, int (*)(const void *, v
 
 int do_sys_utimes(struct lwp *, struct vnode *, const char *, int,
     const struct timeval *, enum uio_seg);
+int do_sys_utimens(struct lwp *, struct vnode *, const char *, int flag,
+    const struct timespec *, enum uio_seg);
 
 int	vfs_copyinfh_alloc(const void *, size_t, fhandle_t **);
 void	vfs_copyinfh_free(fhandle_t *);
@@ -65,6 +68,9 @@ int	do_sys_rename(const char *, const char *, enum uio_seg, int);
 int	do_sys_mknod(struct lwp *, const char *, mode_t, dev_t, register_t *,
     enum uio_seg);
 int	do_sys_mkdir(const char *, mode_t, enum uio_seg);
+int	do_sys_symlink(const char *, const char *, enum uio_seg);
+int	do_sys_quotactl(const char *, const struct quotactl_args *);
+void	do_sys_sync(struct lwp *);
 
 int	chdir_lookup(const char *, int, struct vnode **, struct lwp *);
 void	change_root(struct cwdinfo *, struct vnode *, struct lwp *);

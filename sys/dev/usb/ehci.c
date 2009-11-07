@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci.c,v 1.162 2009/11/01 13:26:50 uebayasi Exp $ */
+/*	$NetBSD: ehci.c,v 1.183 2011/12/23 00:51:43 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2004-2008 The NetBSD Foundation, Inc.
@@ -48,14 +48,15 @@
  *    to assign place in frame where different devices get to go. See chapter
  *    on hubs in USB 2.0 for details.
  *
- * 3) command failures are not recovered correctly
+ * 3) Command failures are not recovered correctly.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.162 2009/11/01 13:26:50 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.183 2011/12/23 00:51:43 jakllsch Exp $");
 
 #include "ohci.h"
 #include "uhci.h"
+#include "opt_usb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -354,6 +355,7 @@ ehci_init(ehci_softc_t *sc)
 			sc->sc_ncomp = ncomp;
 	}
 	if (sc->sc_ncomp > 0) {
+		KASSERT(!(sc->sc_flags & EHCIF_ETTF));
 		aprint_normal("%s: companion controller%s, %d port%s each:",
 		    device_xname(sc->sc_dev), sc->sc_ncomp!=1 ? "s" : "",
 		    EHCI_HCS_N_PCC(sparams),
@@ -391,6 +393,19 @@ ehci_init(ehci_softc_t *sc)
 	if (hcr) {
 		aprint_error("%s: reset timeout\n", device_xname(sc->sc_dev));
 		return (USBD_IOERROR);
+	}
+	if (sc->sc_vendor_init)
+		sc->sc_vendor_init(sc);
+
+	/*
+	 * If we are doing embedded transaction translation function, force
+	 * the controller to host mode.
+	 */
+	if (sc->sc_flags & EHCIF_ETTF) {
+		uint32_t usbmode = EREAD4(sc, EHCI_USBMODE);
+		usbmode &= ~EHCI_USBMODE_CM;
+		usbmode |= EHCI_USBMODE_CM_HOST;
+		EWRITE4(sc, EHCI_USBMODE, usbmode);
 	}
 
 	/* XXX need proper intr scheduling */
@@ -636,7 +651,7 @@ ehci_intr1(ehci_softc_t *sc)
 }
 
 
-void
+Static void
 ehci_pcd(ehci_softc_t *sc, usbd_xfer_handle xfer)
 {
 	usbd_pipe_handle pipe;
@@ -665,7 +680,7 @@ ehci_pcd(ehci_softc_t *sc, usbd_xfer_handle xfer)
 	usb_transfer_complete(xfer);
 }
 
-void
+Static void
 ehci_softintr(void *v)
 {
 	struct usbd_bus *bus = v;
@@ -705,7 +720,7 @@ ehci_softintr(void *v)
 }
 
 /* Check for an interrupt. */
-void
+Static void
 ehci_check_intr(ehci_softc_t *sc, struct ehci_xfer *ex)
 {
 	int attr;
@@ -721,7 +736,7 @@ ehci_check_intr(ehci_softc_t *sc, struct ehci_xfer *ex)
 	return;
 }
 
-void
+Static void
 ehci_check_qh_intr(ehci_softc_t *sc, struct ehci_xfer *ex)
 {
 	ehci_soft_qtd_t *sqtd, *lsqtd;
@@ -778,11 +793,11 @@ ehci_check_qh_intr(ehci_softc_t *sc, struct ehci_xfer *ex)
 	}
  done:
 	DPRINTFN(12, ("ehci_check_intr: ex=%p done\n", ex));
-	callout_stop(&(ex->xfer.timeout_handle));
+	callout_stop(&ex->xfer.timeout_handle);
 	ehci_idone(ex);
 }
 
-void
+Static void
 ehci_check_itd_intr(ehci_softc_t *sc, struct ehci_xfer *ex) {
 	ehci_soft_itd_t *itd;
 	int i;
@@ -811,12 +826,12 @@ ehci_check_itd_intr(ehci_softc_t *sc, struct ehci_xfer *ex) {
 		    sizeof(itd->itd.itd_ctl), BUS_DMASYNC_POSTWRITE |
 		    BUS_DMASYNC_POSTREAD);
 
-	for (i = 0; i < 8; i++) {
+	for (i = 0; i < EHCI_ITD_NUFRAMES; i++) {
 		if (le32toh(itd->itd.itd_ctl[i]) & EHCI_ITD_ACTIVE)
 			break;
 	}
 
-	if (i == 8) {
+	if (i == EHCI_ITD_NUFRAMES) {
 		goto done; /* All 8 descriptors inactive, it's done */
 	}
 
@@ -825,11 +840,11 @@ ehci_check_itd_intr(ehci_softc_t *sc, struct ehci_xfer *ex) {
 	return;
 done:
 	DPRINTFN(12, ("ehci_check_itd_intr: ex=%p done\n", ex));
-	callout_stop(&(ex->xfer.timeout_handle));
+	callout_stop(&ex->xfer.timeout_handle);
 	ehci_idone(ex);
 }
 
-void
+Static void
 ehci_idone(struct ehci_xfer *ex)
 {
 	usbd_xfer_handle xfer = &ex->xfer;
@@ -879,21 +894,15 @@ ehci_idone(struct ehci_xfer *ex)
 		nframes = 0;
 		actlen = 0;
 
-		switch (xfer->pipe->endpoint->edesc->bInterval) {
-		case 0:
-			panic("ehci: isoc xfer suddenly has 0 bInterval, invalid\n");
-		case 1: uframes = 1; break;
-		case 2: uframes = 2; break;
-		case 3: uframes = 4; break;
-		default: uframes = 8; break;
-		}
+		i = xfer->pipe->endpoint->edesc->bInterval;
+		uframes = min(1 << (i - 1), USB_UFRAMES_PER_FRAME);
 
 		for (itd = ex->itdstart; itd != NULL; itd = itd->xfer_next) {
 			usb_syncmem(&itd->dma,itd->offs + offsetof(ehci_itd_t,itd_ctl),
 			    sizeof(itd->itd.itd_ctl), BUS_DMASYNC_POSTWRITE |
 			    BUS_DMASYNC_POSTREAD);
 
-			for (i = 0; i < 8; i += uframes) {
+			for (i = 0; i < EHCI_ITD_NUFRAMES; i += uframes) {
 				/* XXX - driver didn't fill in the frame full
 				 *   of uframes. This leads to scheduling
 				 *   inefficiencies, but working around
@@ -1014,7 +1023,7 @@ ehci_idone(struct ehci_xfer *ex)
  * Then call ehci_intr and return.  Use timeout to avoid waiting
  * too long.
  */
-void
+Static void
 ehci_waitintr(ehci_softc_t *sc, usbd_xfer_handle xfer)
 {
 	int timo;
@@ -1046,7 +1055,7 @@ ehci_waitintr(ehci_softc_t *sc, usbd_xfer_handle xfer)
 	/* XXX should free TD */
 }
 
-void
+Static void
 ehci_poll(struct usbd_bus *bus)
 {
 	ehci_softc_t *sc = bus->hci_private;
@@ -1084,7 +1093,7 @@ ehci_detach(struct ehci_softc *sc, int flags)
 	if (rv != 0)
 		return (rv);
 
-	callout_stop(&(sc->sc_tmo_intrlist));
+	callout_stop(&sc->sc_tmo_intrlist);
 
 	usb_delay_ms(&sc->sc_bus, 300); /* XXX let stray task complete */
 
@@ -1102,19 +1111,14 @@ int
 ehci_activate(device_t self, enum devact act)
 {
 	struct ehci_softc *sc = device_private(self);
-	int rv = 0;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		if (sc->sc_child != NULL)
-			rv = config_deactivate(sc->sc_child);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (rv);
 }
 
 /*
@@ -1128,7 +1132,7 @@ ehci_activate(device_t self, enum devact act)
  * bus glue needs to call out to it.
  */
 bool
-ehci_suspend(device_t dv PMF_FN_ARGS)
+ehci_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	ehci_softc_t *sc = device_private(dv);
 	int i, s;
@@ -1179,7 +1183,7 @@ ehci_suspend(device_t dv PMF_FN_ARGS)
 }
 
 bool
-ehci_resume(device_t dv PMF_FN_ARGS)
+ehci_resume(device_t dv, const pmf_qual_t *qual)
 {
 	ehci_softc_t *sc = device_private(dv);
 	int i;
@@ -1247,7 +1251,7 @@ ehci_shutdown(device_t self, int flags)
 	return true;
 }
 
-usbd_status
+Static usbd_status
 ehci_allocm(struct usbd_bus *bus, usb_dma_t *dma, u_int32_t size)
 {
 	struct ehci_softc *sc = bus->hci_private;
@@ -1263,7 +1267,7 @@ ehci_allocm(struct usbd_bus *bus, usb_dma_t *dma, u_int32_t size)
 	return (err);
 }
 
-void
+Static void
 ehci_freem(struct usbd_bus *bus, usb_dma_t *dma)
 {
 	struct ehci_softc *sc = bus->hci_private;
@@ -1276,7 +1280,7 @@ ehci_freem(struct usbd_bus *bus, usb_dma_t *dma)
 	usb_freemem(&sc->sc_bus, dma);
 }
 
-usbd_xfer_handle
+Static usbd_xfer_handle
 ehci_allocx(struct usbd_bus *bus)
 {
 	struct ehci_softc *sc = bus->hci_private;
@@ -1304,7 +1308,7 @@ ehci_allocx(struct usbd_bus *bus)
 	return (xfer);
 }
 
-void
+Static void
 ehci_freex(struct usbd_bus *bus, usbd_xfer_handle xfer)
 {
 	struct ehci_softc *sc = bus->hci_private;
@@ -1342,7 +1346,7 @@ ehci_noop(usbd_pipe_handle pipe)
 }
 
 #ifdef EHCI_DEBUG
-void
+Static void
 ehci_dump_regs(ehci_softc_t *sc)
 {
 	int i;
@@ -1370,7 +1374,7 @@ ehci_dump(void)
 	ehci_dump_regs(theehci);
 }
 
-void
+Static void
 ehci_dump_link(ehci_link_t link, int type)
 {
 	link = le32toh(link);
@@ -1391,7 +1395,7 @@ ehci_dump_link(ehci_link_t link, int type)
 	}
 }
 
-void
+Static void
 ehci_dump_sqtds(ehci_soft_qtd_t *sqtd)
 {
 	int i;
@@ -1413,7 +1417,7 @@ ehci_dump_sqtds(ehci_soft_qtd_t *sqtd)
 		printf("dump aborted, too many TDs\n");
 }
 
-void
+Static void
 ehci_dump_sqtd(ehci_soft_qtd_t *sqtd)
 {
 	usb_syncmem(&sqtd->dma, sqtd->offs, 
@@ -1424,7 +1428,7 @@ ehci_dump_sqtd(ehci_soft_qtd_t *sqtd)
 	    sizeof(sqtd->qtd), BUS_DMASYNC_PREREAD);
 }
 
-void
+Static void
 ehci_dump_qtd(ehci_qtd_t *qtd)
 {
 	u_int32_t s;
@@ -1446,7 +1450,7 @@ ehci_dump_qtd(ehci_qtd_t *qtd)
 		printf("  buffer[%d]=0x%08x\n", s, le32toh(qtd->qtd_buffer[s]));
 }
 
-void
+Static void
 ehci_dump_sqh(ehci_soft_qh_t *sqh)
 {
 	ehci_qh_t *qh = &sqh->qh;
@@ -1479,7 +1483,7 @@ ehci_dump_sqh(ehci_soft_qh_t *sqh)
 }
 
 #if notyet
-void
+Static void
 ehci_dump_itd(struct ehci_soft_itd *itd)
 {
 	ehci_isoc_trans_t t;
@@ -1488,7 +1492,7 @@ ehci_dump_itd(struct ehci_soft_itd *itd)
 
 	printf("ITD: next phys=%X\n", itd->itd.itd_next);
 
-	for (i = 0; i < 8;i++) {
+	for (i = 0; i < EHCI_ITD_NUFRAMES; i++) {
 		t = le32toh(itd->itd.itd_ctl[i]);
 		printf("ITDctl %d: stat=%X len=%X ioc=%X pg=%X offs=%X\n", i,
 		    EHCI_ITD_GET_STATUS(t), EHCI_ITD_GET_LEN(t),
@@ -1496,7 +1500,7 @@ ehci_dump_itd(struct ehci_soft_itd *itd)
 		    EHCI_ITD_GET_OFFS(t));
 	}
 	printf("ITDbufr: ");
-	for (i = 0; i < 7; i++)
+	for (i = 0; i < EHCI_ITD_NBUFFERS; i++)
 		printf("%X,", EHCI_ITD_GET_BPTR(le32toh(itd->itd.itd_bufr[i])));
 
 	b = le32toh(itd->itd.itd_bufr[0]);
@@ -1507,7 +1511,7 @@ ehci_dump_itd(struct ehci_soft_itd *itd)
 	    EHCI_ITD_GET_MAXPKT(b2), EHCI_ITD_GET_MULTI(b3));
 }
 
-void
+Static void
 ehci_dump_sitd(struct ehci_soft_itd *itd)
 {
 	printf("SITD %p next=%p prev=%p xfernext=%p physaddr=%X slot=%d\n",
@@ -1517,7 +1521,7 @@ ehci_dump_sitd(struct ehci_soft_itd *itd)
 #endif
 
 #ifdef DIAGNOSTIC
-void
+Static void
 ehci_dump_exfer(struct ehci_xfer *ex)
 {
 	printf("ehci_dump_exfer: ex=%p sqtdstart=%p end=%p itdstart=%p end=%p isdone=%d\n", ex, ex->sqtdstart, ex->sqtdend, ex->itdstart, ex->itdend, ex->isdone);
@@ -1525,7 +1529,7 @@ ehci_dump_exfer(struct ehci_xfer *ex)
 #endif
 #endif
 
-usbd_status
+Static usbd_status
 ehci_open(usbd_pipe_handle pipe)
 {
 	usbd_device_handle dev = pipe->device;
@@ -1544,7 +1548,17 @@ ehci_open(usbd_pipe_handle pipe)
 		     pipe, addr, ed->bEndpointAddress, sc->sc_addr));
 
 	if (dev->myhsport) {
-		hshubaddr = dev->myhsport->parent->address;
+		/*
+		 * When directly attached FS/LS device while doing embedded
+		 * transaction translations and we are the hub, set the hub
+		 * adddress to 0 (us).
+		 */
+		if (!(sc->sc_flags & EHCIF_ETTF)
+		    || (dev->myhsport->parent->address != sc->sc_addr)) {
+			hshubaddr = dev->myhsport->parent->address;
+		} else {
+			hshubaddr = 0;
+		}
 		hshubport = dev->myhsport->portno;
 	} else {
 		hshubaddr = 0;
@@ -1554,7 +1568,8 @@ ehci_open(usbd_pipe_handle pipe)
 	if (sc->sc_dying)
 		return (USBD_IOERROR);
 
-	epipe->nexttoggle = 0;
+	/* toggle state needed for bulk endpoints */
+	epipe->nexttoggle = pipe->endpoint->datatoggle;
 
 	if (addr == sc->sc_addr) {
 		switch (ed->bEndpointAddress) {
@@ -1592,7 +1607,13 @@ ehci_open(usbd_pipe_handle pipe)
 		return USBD_INVAL;
 	}
 
-	naks = 8;		/* XXX */
+	/*
+	 * For interrupt transfer, nak throttling must be disabled, but for
+	 * the other transfer type, nak throttling should be enabled from the
+	 * veiwpoint that avoids the memory thrashing.
+	 */
+	naks = (xfertype == UE_INTERRUPT) ? 0
+	    : ((speed == EHCI_QH_SPEED_HIGH) ? 4 : 0);
 
 	/* Allocate sqh for everything, save isoc xfers */
 	if (xfertype != UE_ISOCHRONOUS) {
@@ -1612,11 +1633,14 @@ ehci_open(usbd_pipe_handle pipe)
 		    );
 		sqh->qh.qh_endphub = htole32(
 		    EHCI_QH_SET_MULT(1) |
-		    EHCI_QH_SET_HUBA(hshubaddr) |
-		    EHCI_QH_SET_PORT(hshubport) |
-		    EHCI_QH_SET_CMASK(0x08) | /* XXX */
 		    EHCI_QH_SET_SMASK(xfertype == UE_INTERRUPT ? 0x02 : 0)
 		    );
+		if (speed != EHCI_QH_SPEED_HIGH)
+			sqh->qh.qh_endphub |= htole32(
+			    EHCI_QH_SET_PORT(hshubport) |
+			    EHCI_QH_SET_HUBA(hshubaddr) |
+			    EHCI_QH_SET_CMASK(0x08) /* XXX */
+			);
 		sqh->qh.qh_curqtd = EHCI_NULL;
 		/* Fill the overlay qTD */
 		sqh->qh.qh_qtd.qtd_next = EHCI_NULL;
@@ -1703,7 +1727,7 @@ ehci_open(usbd_pipe_handle pipe)
 /*
  * Add an ED to the schedule.  Called at splusb().
  */
-void
+Static void
 ehci_add_qh(ehci_soft_qh_t *sqh, ehci_soft_qh_t *head)
 {
 	SPLUSBCHECK;
@@ -1730,7 +1754,7 @@ ehci_add_qh(ehci_soft_qh_t *sqh, ehci_soft_qh_t *head)
 /*
  * Remove an ED from the schedule.  Called at splusb().
  */
-void
+Static void
 ehci_rem_qh(ehci_softc_t *sc, ehci_soft_qh_t *sqh, ehci_soft_qh_t *head)
 {
 	ehci_soft_qh_t *p;
@@ -1751,7 +1775,7 @@ ehci_rem_qh(ehci_softc_t *sc, ehci_soft_qh_t *sqh, ehci_soft_qh_t *head)
 	ehci_sync_hc(sc);
 }
 
-void
+Static void
 ehci_set_qh_qtd(ehci_soft_qh_t *sqh, ehci_soft_qtd_t *sqtd)
 {
 	int i;
@@ -1772,7 +1796,7 @@ ehci_set_qh_qtd(ehci_soft_qh_t *sqh, ehci_soft_qtd_t *sqtd)
 	    BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 	sqh->qh.qh_curqtd = 0;
 	sqh->qh.qh_qtd.qtd_next = htole32(sqtd->physaddr);
-	sqh->qh.qh_qtd.qtd_altnext = 0;
+	sqh->qh.qh_qtd.qtd_altnext = EHCI_NULL;
 	for (i = 0; i < EHCI_QTD_NBUFFERS; i++)
 		sqh->qh.qh_qtd.qtd_buffer[i] = 0;
 	sqh->sqtd = sqtd;
@@ -1792,7 +1816,7 @@ ehci_set_qh_qtd(ehci_soft_qh_t *sqh, ehci_soft_qtd_t *sqtd)
  * the interrupt.
  * To make this easier we first obtain exclusive use of the doorbell.
  */
-void
+Static void
 ehci_sync_hc(ehci_softc_t *sc)
 {
 	int s, error;
@@ -1821,7 +1845,7 @@ ehci_sync_hc(ehci_softc_t *sc)
 }
 
 /*Call at splusb*/
-void
+Static void
 ehci_rem_free_itd_chain(ehci_softc_t *sc, struct ehci_xfer *exfer)
 {
 	struct ehci_soft_itd *itd, *prev;
@@ -2218,7 +2242,7 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 		USETW(hubd.wHubCharacteristics,
 		    EHCI_HCS_PPC(v) ? UHD_PWR_INDIVIDUAL : UHD_PWR_NO_SWITCH |
 		    EHCI_HCS_P_INDICATOR(EREAD4(sc, EHCI_HCSPARAMS))
-		        ? UHD_PORT_IND : 0);
+			? UHD_PORT_IND : 0);
 		hubd.bPwrOn2PwrGood = 200; /* XXX can't find out? */
 		for (i = 0, l = sc->sc_noport; l > 0; i++, l -= 8, v >>= 8)
 			hubd.DeviceRemovable[i++] = 0; /* XXX can't find out? */
@@ -2247,15 +2271,28 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 			goto ret;
 		}
 		v = EOREAD4(sc, EHCI_PORTSC(index));
-		DPRINTFN(8,("ehci_root_ctrl_start: port status=0x%04x\n",
-			    v));
+		DPRINTFN(8,("ehci_root_ctrl_start: port status=0x%04x\n", v));
+
 		i = UPS_HIGH_SPEED;
+#if 0
+		if (sc->sc_flags & EHCIF_ETTF) {
+			/*
+			 * If we are doing embedded transaction translation,
+			 * then directly attached LS/FS devices are reset by
+			 * the EHCI controller itself.  PSPD is encoded
+			 * the same way as in USBSTATUS. 
+			 */
+			i = __SHIFTOUT(v, EHCI_PS_PSPD) * UPS_LOW_SPEED;
+		}
+#endif
 		if (v & EHCI_PS_CS)	i |= UPS_CURRENT_CONNECT_STATUS;
 		if (v & EHCI_PS_PE)	i |= UPS_PORT_ENABLED;
 		if (v & EHCI_PS_SUSP)	i |= UPS_SUSPEND;
 		if (v & EHCI_PS_OCA)	i |= UPS_OVERCURRENT_INDICATOR;
 		if (v & EHCI_PS_PR)	i |= UPS_RESET;
 		if (v & EHCI_PS_PP)	i |= UPS_PORT_POWER;
+		if (sc->sc_vendor_port_status)
+			i = sc->sc_vendor_port_status(sc, v, i);
 		USETW(ps.wPortStatus, i);
 		i = 0;
 		if (v & EHCI_PS_CSC)	i |= UPS_C_CONNECT_STATUS;
@@ -2291,8 +2328,13 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 		case UHF_PORT_RESET:
 			DPRINTFN(5,("ehci_root_ctrl_start: reset port %d\n",
 				    index));
-			if (EHCI_PS_IS_LOWSPEED(v)) {
-				/* Low speed device, give up ownership. */
+			if (EHCI_PS_IS_LOWSPEED(v)
+			    && sc->sc_ncomp > 0
+			    && !(sc->sc_flags & EHCIF_ETTF)) {
+				/*
+				 * Low speed device on non-ETTF controller or
+				 * unaccompanied controller, give up ownership.
+				 */
 				ehci_disown(sc, index, 1);
 				break;
 			}
@@ -2305,14 +2347,24 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 				err = USBD_IOERROR;
 				goto ret;
 			}
-			/* Terminate reset sequence. */
-			EOWRITE4(sc, port, v);
-			/* Wait for HC to complete reset. */
-			usb_delay_ms(&sc->sc_bus, EHCI_PORT_RESET_COMPLETE);
-			if (sc->sc_dying) {
-				err = USBD_IOERROR;
-				goto ret;
+			/*
+			 * An embedded transaction translater will automatically
+			 * terminate the reset sequence so there's no need to
+			 * it.
+			 */
+			v = EOREAD4(sc, port);
+			if (v & EHCI_PS_PR) {
+				/* Terminate reset sequence. */
+				EOWRITE4(sc, port, v & ~EHCI_PS_PR);
+				/* Wait for HC to complete reset. */
+				usb_delay_ms(&sc->sc_bus,
+				    EHCI_PORT_RESET_COMPLETE);
+				if (sc->sc_dying) {
+					err = USBD_IOERROR;
+					goto ret;
+				}
 			}
+
 			v = EOREAD4(sc, port);
 			DPRINTF(("ehci after reset, status=0x%08x\n", v));
 			if (v & EHCI_PS_PR) {
@@ -2369,7 +2421,7 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 	return (USBD_IN_PROGRESS);
 }
 
-void
+Static void
 ehci_disown(ehci_softc_t *sc, int index, int lowspeed)
 {
 	int port;
@@ -2412,7 +2464,7 @@ ehci_root_ctrl_close(usbd_pipe_handle pipe)
 	/* Nothing to do. */
 }
 
-void
+Static void
 ehci_root_intr_done(usbd_xfer_handle xfer)
 {
 	xfer->hcpriv = NULL;
@@ -2473,7 +2525,7 @@ ehci_root_intr_close(usbd_pipe_handle pipe)
 	sc->sc_intrxfer = NULL;
 }
 
-void
+Static void
 ehci_root_ctrl_done(usbd_xfer_handle xfer)
 {
 	xfer->hcpriv = NULL;
@@ -2481,7 +2533,7 @@ ehci_root_ctrl_done(usbd_xfer_handle xfer)
 
 /************************/
 
-ehci_soft_qh_t *
+Static ehci_soft_qh_t *
 ehci_alloc_sqh(ehci_softc_t *sc)
 {
 	ehci_soft_qh_t *sqh;
@@ -2516,14 +2568,14 @@ ehci_alloc_sqh(ehci_softc_t *sc)
 	return (sqh);
 }
 
-void
+Static void
 ehci_free_sqh(ehci_softc_t *sc, ehci_soft_qh_t *sqh)
 {
 	sqh->next = sc->sc_freeqhs;
 	sc->sc_freeqhs = sqh;
 }
 
-ehci_soft_qtd_t *
+Static ehci_soft_qtd_t *
 ehci_alloc_sqtd(ehci_softc_t *sc)
 {
 	ehci_soft_qtd_t *sqtd;
@@ -2566,7 +2618,7 @@ ehci_alloc_sqtd(ehci_softc_t *sc)
 	return (sqtd);
 }
 
-void
+Static void
 ehci_free_sqtd(ehci_softc_t *sc, ehci_soft_qtd_t *sqtd)
 {
 	int s;
@@ -2577,7 +2629,7 @@ ehci_free_sqtd(ehci_softc_t *sc, ehci_soft_qtd_t *sqtd)
 	splx(s);
 }
 
-usbd_status
+Static usbd_status
 ehci_alloc_sqtd_chain(struct ehci_pipe *epipe, ehci_softc_t *sc,
 		     int alen, int rd, usbd_xfer_handle xfer,
 		     ehci_soft_qtd_t **sp, ehci_soft_qtd_t **ep)
@@ -2700,7 +2752,8 @@ ehci_alloc_sqtd_chain(struct ehci_pipe *epipe, ehci_softc_t *sc,
 		usb_syncmem(&cur->dma, cur->offs, sizeof(cur->qtd),
 		    BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 		DPRINTFN(10,("ehci_alloc_sqtd_chain: extend chain\n"));
-		dataphys += curlen;
+		if (len)
+			dataphys += curlen;
 		cur = next;
 	}
 	cur->qtd.qtd_status |= htole32(EHCI_QTD_IOC);
@@ -2736,7 +2789,7 @@ ehci_free_sqtd_chain(ehci_softc_t *sc, ehci_soft_qtd_t *sqtd,
 	}
 }
 
-ehci_soft_itd_t *
+Static ehci_soft_itd_t *
 ehci_alloc_itd(ehci_softc_t *sc)
 {
 	struct ehci_soft_itd *itd, *freeitd;
@@ -2800,7 +2853,7 @@ ehci_alloc_itd(ehci_softc_t *sc)
 	return itd;
 }
 
-void
+Static void
 ehci_free_itd(ehci_softc_t *sc, ehci_soft_itd_t *itd)
 {
 	int s;
@@ -2810,15 +2863,13 @@ ehci_free_itd(ehci_softc_t *sc, ehci_soft_itd_t *itd)
 	splx(s);
 }
 
-
-
 /****************/
 
 /*
  * Close a reqular pipe.
  * Assumes that there are no pending transactions.
  */
-void
+Static void
 ehci_close_pipe(usbd_pipe_handle pipe, ehci_soft_qh_t *head)
 {
 	struct ehci_pipe *epipe = (struct ehci_pipe *)pipe;
@@ -2843,7 +2894,7 @@ ehci_close_pipe(usbd_pipe_handle pipe, ehci_soft_qh_t *head)
  * interrupt processing to process it.
  * XXX This is most probably wrong.
  */
-void
+Static void
 ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 {
 #define exfer EXFER(xfer)
@@ -2863,7 +2914,7 @@ ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 		/* If we're dying, just do the software part. */
 		s = splusb();
 		xfer->status = status;	/* make software ignore it */
-		callout_stop(&(xfer->timeout_handle));
+		callout_stop(&xfer->timeout_handle);
 		usb_transfer_complete(xfer);
 		splx(s);
 		return;
@@ -2897,7 +2948,7 @@ ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	 */
 	s = splusb();
 	xfer->status = status;	/* make software ignore it */
-	callout_stop(&(xfer->timeout_handle));
+	callout_stop(&xfer->timeout_handle);
 
 	usb_syncmem(&sqh->dma,
 	    sqh->offs + offsetof(ehci_qh_t, qh_qtd.qtd_status),
@@ -2994,7 +3045,7 @@ ehci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 #undef exfer
 }
 
-void
+Static void
 ehci_abort_isoc_xfer(usbd_xfer_handle xfer, usbd_status status)
 {
 	ehci_isoc_trans_t trans_status;
@@ -3013,7 +3064,7 @@ ehci_abort_isoc_xfer(usbd_xfer_handle xfer, usbd_status status)
 	if (sc->sc_dying) {
 		s = splusb();
 		xfer->status = status;
-		callout_stop(&(xfer->timeout_handle));
+		callout_stop(&xfer->timeout_handle);
 		usb_transfer_complete(xfer);
 		splx(s);
 		return;
@@ -3037,7 +3088,7 @@ ehci_abort_isoc_xfer(usbd_xfer_handle xfer, usbd_status status)
 	xfer->hcflags |= UXFER_ABORTING;
 
 	xfer->status = status;
-	callout_stop(&(xfer->timeout_handle));
+	callout_stop(&xfer->timeout_handle);
 
 	s = splusb();
 	for (itd = exfer->itdstart; itd != NULL; itd = itd->xfer_next) {
@@ -3081,7 +3132,7 @@ ehci_abort_isoc_xfer(usbd_xfer_handle xfer, usbd_status status)
 	return;
 }
 
-void
+Static void
 ehci_timeout(void *addr)
 {
 	struct ehci_xfer *exfer = addr;
@@ -3105,7 +3156,7 @@ ehci_timeout(void *addr)
 	    USB_TASKQ_HC);
 }
 
-void
+Static void
 ehci_timeout_task(void *addr)
 {
 	usbd_xfer_handle xfer = addr;
@@ -3160,7 +3211,7 @@ ehci_device_ctrl_start(usbd_xfer_handle xfer)
 	return (USBD_IN_PROGRESS);
 }
 
-void
+Static void
 ehci_device_ctrl_done(usbd_xfer_handle xfer)
 {
 	struct ehci_xfer *ex = EXFER(xfer);
@@ -3212,7 +3263,7 @@ ehci_device_ctrl_close(usbd_pipe_handle pipe)
 	ehci_close_pipe(pipe, sc->sc_async_head);
 }
 
-usbd_status
+Static usbd_status
 ehci_device_request(usbd_xfer_handle xfer)
 {
 #define exfer EXFER(xfer)
@@ -3385,7 +3436,7 @@ ehci_device_request(usbd_xfer_handle xfer)
  * that completes with transactions still pending, giving us another chance to
  * check for completion after the writeback has taken place.
  */
-void
+Static void
 ehci_intrlist_timeout(void *arg)
 {
 	ehci_softc_t *sc = arg;
@@ -3413,7 +3464,7 @@ ehci_device_bulk_transfer(usbd_xfer_handle xfer)
 	return (ehci_device_bulk_start(SIMPLEQ_FIRST(&xfer->pipe->queue)));
 }
 
-usbd_status
+Static usbd_status
 ehci_device_bulk_start(usbd_xfer_handle xfer)
 {
 #define exfer EXFER(xfer)
@@ -3520,12 +3571,14 @@ Static void
 ehci_device_bulk_close(usbd_pipe_handle pipe)
 {
 	ehci_softc_t *sc = pipe->device->bus->hci_private;
+	struct ehci_pipe *epipe = (struct ehci_pipe *)pipe;
 
 	DPRINTF(("ehci_device_bulk_close: pipe=%p\n", pipe));
+	pipe->endpoint->datatoggle = epipe->nexttoggle;
 	ehci_close_pipe(pipe, sc->sc_async_head);
 }
 
-void
+Static void
 ehci_device_bulk_done(usbd_xfer_handle xfer)
 {
 	struct ehci_xfer *ex = EXFER(xfer);
@@ -3690,7 +3743,7 @@ ehci_device_intr_abort(usbd_xfer_handle xfer)
 	}
 	/*
 	 * XXX - abort_xfer uses ehci_sync_hc, which syncs via the advance
-	 *       async doorbell. That's dependant on the async list, wheras
+	 *       async doorbell. That's dependent on the async list, wheras
 	 *       intr xfers are periodic, should not use this?
 	 */
 	ehci_abort_xfer(xfer, USBD_CANCELLED);
@@ -3861,22 +3914,9 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 		return USBD_INVAL;
 	}
 
-	switch (i) {
-	case 1:
-		ufrperframe = 8;
-		break;
-	case 2:
-		ufrperframe = 4;
-		break;
-	case 3:
-		ufrperframe = 2;
-		break;
-	default:
-		ufrperframe = 1;
-		break;
-	}
+	ufrperframe = max(1, USB_UFRAMES_PER_FRAME / (1 << (i - 1)));
 	frames = (xfer->nframes + (ufrperframe - 1)) / ufrperframe;
-	uframes = 8 / ufrperframe;
+	uframes = USB_UFRAMES_PER_FRAME / ufrperframe;
 
 	if (frames == 0) {
 		DPRINTF(("ehci_device_isoc_start: frames == 0\n"));
@@ -3905,7 +3945,7 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 		/*
 		 * Step 1.5, initialize uframes
 		 */
-		for (j = 0; j < 8; j += uframes) {
+		for (j = 0; j < EHCI_ITD_NUFRAMES; j += uframes) {
 			/* Calculate which page in the list this starts in */
 			int addr = DMAADDR(dma_buf, froffs);
 			addr = EHCI_PAGE_OFFSET(addr);
@@ -3939,7 +3979,7 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 		 * and what to not.
 		 */
 
-		for (j=0; j < 7; j++) {
+		for (j = 0; j < EHCI_ITD_NBUFFERS; j++) {
 			/*
 			 * Don't try to lookup a page that's past the end
 			 * of buffer
@@ -3948,7 +3988,7 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 			if (page_offs >= dma_buf->block->size)
 				break;
 
-			long long page = DMAADDR(dma_buf, page_offs);
+			unsigned long long page = DMAADDR(dma_buf, page_offs);
 			page = EHCI_PAGE(page);
 			itd->itd.itd_bufr[j] =
 			    htole32(EHCI_ITD_SET_BPTR(page));
@@ -4010,12 +4050,12 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 	if (frindex >= sc->sc_flsize)
 		frindex &= (sc->sc_flsize - 1);
 
-	/* Whats the frame interval? */
-	i = (1 << epipe->pipe.endpoint->edesc->bInterval);
-	if (i / 8 == 0)
+	/* What's the frame interval? */
+	i = (1 << (epipe->pipe.endpoint->edesc->bInterval - 1));
+	if (i / USB_UFRAMES_PER_FRAME == 0)
 		i = 1;
 	else
-		i /= 8;
+		i /= USB_UFRAMES_PER_FRAME;
 
 	itd = start;
 	for (j = 0; j < frames; j++) {

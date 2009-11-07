@@ -1,4 +1,4 @@
-/*	$NetBSD: strptime.c,v 1.33 2009/05/24 02:25:43 ginsbach Exp $	*/
+/*	$NetBSD: strptime.c,v 1.35 2009/12/14 20:45:02 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2005, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: strptime.c,v 1.33 2009/05/24 02:25:43 ginsbach Exp $");
+__RCSID("$NetBSD: strptime.c,v 1.35 2009/12/14 20:45:02 matt Exp $");
 #endif
 
 #include "namespace.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: ftpd.c,v 1.194 2009/07/13 19:05:40 roy Exp $	*/
+/*	$NetBSD: ftpd.c,v 1.197 2011/09/16 16:13:17 plunky Exp $	*/
 
 /*
  * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@ __COPYRIGHT("@(#) Copyright (c) 1985, 1988, 1990, 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)ftpd.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ftpd.c,v 1.194 2009/07/13 19:05:40 roy Exp $");
+__RCSID("$NetBSD: ftpd.c,v 1.197 2011/09/16 16:13:17 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -249,9 +249,9 @@ static char	*gunique(const char *);
 static void	 login_utmp(const char *, const char *, const char *,
 		     struct sockinet *);
 static void	 logremotehost(struct sockinet *);
-static void	 lostconn(int);
-static void	 toolong(int);
-static void	 sigquit(int);
+__dead static void	 lostconn(int);
+__dead static void	 toolong(int);
+__dead static void	 sigquit(int);
 static void	 sigurg(int);
 static int	 handleoobcmd(void);
 static int	 receive_data(FILE *, FILE *);
@@ -601,7 +601,8 @@ main(int argc, char *argv[])
 	memset((char *)&his_addr, 0, sizeof(his_addr));
 	addrlen = sizeof(his_addr.si_su);
 	if (getpeername(0, (struct sockaddr *)&his_addr.si_su, &addrlen) < 0) {
-		syslog(LOG_ERR, "getpeername (%s): %m",argv[0]);
+		syslog((errno == ENOTCONN) ? LOG_NOTICE : LOG_ERR,
+		    "getpeername (%s): %m",argv[0]);
 		exit(1);
 	}
 	his_addr.su_len = addrlen;
@@ -2546,7 +2547,7 @@ statcmd(void)
 	int ispassive, af;
 	off_t otbi, otbo, otb;
 
-	a = p = (unsigned char *)NULL;
+	a = p = NULL;
 
 	reply(-211, "%s FTP server status:", hostname);
 	reply(0, "Version: %s", EMPTYSTR(version) ? "<suppressed>" : version);

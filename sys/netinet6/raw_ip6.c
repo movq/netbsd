@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip6.c,v 1.105 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: raw_ip6.c,v 1.109 2011/12/19 11:59:58 drochner Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.82 2001/07/23 18:57:56 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.105 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.109 2011/12/19 11:59:58 drochner Exp $");
 
 #include "opt_ipsec.h"
 
@@ -97,10 +97,10 @@ __KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.105 2009/09/16 15:23:05 pooka Exp $");
 #include <netinet6/scope6_var.h>
 #include <netinet6/raw_ip6.h>
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netinet6/ipsec_private.h>
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -206,7 +206,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		if (last) {
 			struct	mbuf *n;
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 			/*
 			 * Check AH/ESP integrity.
 			 */
@@ -214,7 +214,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 				IPSEC6_STATINC(IPSEC_STAT_IN_INVAL);
 				/* do not inject data into pcb */
 			} else
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 #ifdef FAST_IPSEC
 			/*
 			 * Check AH/ESP integrity
@@ -240,7 +240,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		}
 		last = in6p;
 	}
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	/*
 	 * Check AH/ESP integrity.
 	 */
@@ -250,7 +250,7 @@ rip6_input(struct mbuf **mp, int *offp, int proto)
 		IP6_STATDEC(IP6_STAT_DELIVERED);
 		/* do not inject data into pcb */
 	} else
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 #ifdef FAST_IPSEC
 	if (last && ipsec6_in_reject(m, last)) {
 		m_freem(m);
@@ -349,7 +349,7 @@ rip6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 		 */
 		in6p = NULL;
 		in6p = in6_pcblookup_connect(&raw6cbtable, &sa6->sin6_addr, 0,
-		    (const struct in6_addr *)&sa6_src->sin6_addr, 0, 0);
+					     (const struct in6_addr *)&sa6_src->sin6_addr, 0, 0, 0);
 #if 0
 		if (!in6p) {
 			/*
@@ -396,8 +396,8 @@ rip6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
  * Tack on options user may have setup with control call.
  */
 int
-rip6_output(struct mbuf *m, struct socket *so, struct sockaddr_in6 *dstsock,
-    struct mbuf *control)
+rip6_output(struct mbuf *m, struct socket * const so,
+    struct sockaddr_in6 * const dstsock, struct mbuf * const control)
 {
 	struct in6_addr *dst;
 	struct ip6_hdr *ip6;
@@ -469,7 +469,7 @@ rip6_output(struct mbuf *m, struct socket *so, struct sockaddr_in6 *dstsock,
 	 * Source address selection.
 	 */
 	if ((in6a = in6_selectsrc(dstsock, optp, in6p->in6p_moptions,
-	    (struct route *)&in6p->in6p_route, &in6p->in6p_laddr, &oifp,
+	    &in6p->in6p_route, &in6p->in6p_laddr, &oifp,
 	    &error)) == 0) {
 		if (error == 0)
 			error = EADDRNOTAVAIL;
@@ -634,7 +634,9 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 	case PRU_ATTACH:
 		error = kauth_authorize_network(l->l_cred,
 		    KAUTH_NETWORK_SOCKET, KAUTH_REQ_NETWORK_SOCKET_RAWSOCK,
-		    NULL, NULL, NULL);
+		    KAUTH_ARG(AF_INET6),
+		    KAUTH_ARG(SOCK_RAW),
+		    KAUTH_ARG(so->so_proto->pr_protocol));
 		sosetlock(so);
 		if (in6p != NULL)
 			panic("rip6_attach");
@@ -765,7 +767,7 @@ rip6_usrreq(struct socket *so, int req, struct mbuf *m,
 
 		/* Source address selection. XXX: need pcblookup? */
 		in6a = in6_selectsrc(addr, in6p->in6p_outputopts,
-		    in6p->in6p_moptions, (struct route *)&in6p->in6p_route,
+		    in6p->in6p_moptions, &in6p->in6p_route,
 		    &in6p->in6p_laddr, &ifp, &error);
 		if (in6a == NULL) {
 			if (error == 0)

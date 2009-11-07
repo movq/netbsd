@@ -1,4 +1,4 @@
-#	$NetBSD: majors.ia64,v 1.5 2008/11/12 12:36:02 ad Exp $
+#	$NetBSD: majors.ia64,v 1.8 2011/06/30 20:09:31 wiz Exp $
 #
 # Device majors for ia64
 #
@@ -106,6 +106,6 @@ device-major	rd		char 105 block 22	rd
 device-major	ct		char 106 block 23	ct
 device-major	mt		char 107 block 24	mt
 
-# Majors up to 143 are reserved for machine-dependant drivers.
+# Majors up to 143 are reserved for machine-dependent drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

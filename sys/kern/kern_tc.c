@@ -1,4 +1,4 @@
-/* $NetBSD: kern_tc.c,v 1.40 2009/06/14 13:16:32 kardel Exp $ */
+/* $NetBSD: kern_tc.c,v 1.42 2010/04/13 22:46:10 pooka Exp $ */
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -40,9 +40,11 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.166 2005/09/19 22:16:31 andre Exp $"); */
-__KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.40 2009/06/14 13:16:32 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.42 2010/04/13 22:46:10 pooka Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_ntp.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -297,7 +299,7 @@ static void tc_windup(void);
  * Return the difference between the timehands' counter value now and what
  * was when we copied it to the timehands' offset_count.
  */
-static __inline u_int
+static inline u_int
 tc_delta(struct timehands *th)
 {
 	struct timecounter *tc;

@@ -1,4 +1,4 @@
-/*	$NetBSD: component.c,v 1.1 2009/05/28 00:02:17 pooka Exp $	*/
+/*	$NetBSD: component.c,v 1.3 2010/10/19 19:19:41 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -28,19 +28,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.1 2009/05/28 00:02:17 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.3 2010/10/19 19:19:41 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
 #include <sys/protosw.h>
 
-#include <net/route.h>
+#include <net/if.h>
 
+#include "rump_private.h"
 #include "rump_net_private.h"
 
-void
-rump_net_virtif_init()
+RUMP_COMPONENT(RUMP_COMPONENT_NET_IF)
 {
+	extern struct if_clone virtif_cloner; /* XXX */
 
-	rump_dummyif_create();
+	if_clone_attach(&virtif_cloner);
 }

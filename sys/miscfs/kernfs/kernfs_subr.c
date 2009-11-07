@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_subr.c,v 1.20 2009/03/15 17:22:38 cegger Exp $	*/
+/*	$NetBSD: kernfs_subr.c,v 1.24 2011/06/12 03:35:58 rmind Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_subr.c,v 1.20 2009/03/15 17:22:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_subr.c,v 1.24 2011/06/12 03:35:58 rmind Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -143,7 +143,8 @@ static kmutex_t kfs_ihash_lock;
  * the vnode free list.
  */
 int
-kernfs_allocvp(struct mount *mp, struct vnode **vpp, kfstype kfs_type, const struct kern_target *kt, u_int32_t value)
+kernfs_allocvp(struct mount *mp, struct vnode **vpp, kfstype kfs_type,
+    const struct kern_target *kt, u_int32_t value)
 {
 	struct kernfs_node *kfs = NULL, *kfsp;
 	struct vnode *vp = NULL;
@@ -176,14 +177,17 @@ kernfs_allocvp(struct mount *mp, struct vnode **vpp, kfstype kfs_type, const str
 			return (ENOENT);
 		}
 		vp = fvp;
-		if (vget(fvp, LK_EXCLUSIVE))
+		if (vn_lock(fvp, LK_EXCLUSIVE)) {
+			vrele(fvp);
 			goto loop;
+		}
 		*vpp = vp;
 		mutex_exit(&kfs_hashlock);
 		return (0);
 	}
 
-	if ((error = getnewvnode(VT_KERNFS, mp, kernfs_vnodeop_p, &vp)) != 0) {
+	error = getnewvnode(VT_KERNFS, mp, kernfs_vnodeop_p, NULL, &vp);
+	if (error) {
 		*vpp = NULL;
 		mutex_exit(&kfs_hashlock);
 		return (error);
@@ -313,9 +317,9 @@ kernfs_hashget(kfstype type, struct mount *mp, const struct kern_target *kt, u_i
 		vp = KERNFSTOV(pp);
 		if (pp->kfs_type == type && vp->v_mount == mp &&
 		    pp->kfs_kt == kt && pp->kfs_value == value) {
-			mutex_enter(&vp->v_interlock);
+			mutex_enter(vp->v_interlock);
 			mutex_exit(&kfs_ihash_lock);
-			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
+			if (vget(vp, LK_EXCLUSIVE))
 				goto loop;
 			return (vp);
 		}
@@ -333,7 +337,7 @@ kernfs_hashins(struct kernfs_node *pp)
 	struct kfs_hashhead *ppp;
 
 	/* lock the kfsnode, then put it on the appropriate hash list */
-	vlockmgr(&pp->kfs_vnode->v_lock, LK_EXCLUSIVE);
+	VOP_LOCK(KERNFSTOV(pp), LK_EXCLUSIVE);
 
 	mutex_enter(&kfs_ihash_lock);
 	ppp = &kfs_hashtbl[KFSVALUEHASH(pp->kfs_value)];

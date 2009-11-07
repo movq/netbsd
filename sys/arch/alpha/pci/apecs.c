@@ -1,4 +1,4 @@
-/* $NetBSD: apecs.c,v 1.49 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: apecs.c,v 1.54 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,17 +34,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -63,15 +63,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: apecs.c,v 1.49 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apecs.c,v 1.54 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -97,23 +95,22 @@ __KERNEL_RCSID(0, "$NetBSD: apecs.c,v 1.49 2009/03/14 21:04:02 dsl Exp $");
 #include <alpha/pci/pci_1000.h>
 #endif
 
-int	apecsmatch(struct device *, struct cfdata *, void *);
-void	apecsattach(struct device *, struct device *, void *);
+static int apecsmatch(device_t, cfdata_t, void *);
+static void apecsattach(device_t, device_t, void *);
 
-CFATTACH_DECL(apecs, sizeof(struct apecs_softc),
-    apecsmatch, apecsattach, NULL, NULL);
+CFATTACH_DECL_NEW(apecs, 0, apecsmatch, apecsattach, NULL, NULL);
 
 extern struct cfdriver apecs_cd;
 
-int	apecs_bus_get_window(int, int,
-	    struct alpha_bus_space_translation *);
+static int apecs_bus_get_window(int, int,
+    struct alpha_bus_space_translation *);
 
 /* There can be only one. */
 int apecsfound;
 struct apecs_config apecs_configuration;
 
-int
-apecsmatch(struct device *parent, struct cfdata *match, void *aux)
+static int
+apecsmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -163,10 +160,9 @@ apecs_init(struct apecs_config *acp, int mallocsafe)
 	acp->ac_initted = 1;
 }
 
-void
-apecsattach(struct device *parent, struct device *self, void *aux)
+static void
+apecsattach(device_t parent, device_t self, void *aux)
 {
-	struct apecs_softc *sc = (struct apecs_softc *)self;
 	struct apecs_config *acp;
 	struct pcibus_attach_args pba;
 
@@ -177,16 +173,16 @@ apecsattach(struct device *parent, struct device *self, void *aux)
 	 * set up the chipset's info; done once at console init time
 	 * (maybe), but doesn't hurt to do twice.
 	 */
-	acp = sc->sc_acp = &apecs_configuration;
+	acp = &apecs_configuration;
 	apecs_init(acp, 1);
 
 	apecs_dma_init(acp);
 
-	printf(": DECchip %s Core Logic chipset\n",
+	aprint_normal(": DECchip %s Core Logic chipset\n",
 	    acp->ac_memwidth == 128 ? "21072" : "21071");
-	printf("%s: DC21071-CA pass %d, %d-bit memory bus\n",
-	    self->dv_xname, acp->ac_comanche_pass2 ? 2 : 1, acp->ac_memwidth);
-	printf("%s: DC21071-DA pass %d\n", self->dv_xname,
+	aprint_normal_dev(self, "DC21071-CA pass %d, %d-bit memory bus\n",
+	    acp->ac_comanche_pass2 ? 2 : 1, acp->ac_memwidth);
+	aprint_normal_dev(self, "DC21071-DA pass %d\n",
 	    acp->ac_epic_pass2 ? 2 : 1);
 	/* XXX print bcache size */
 
@@ -232,12 +228,12 @@ apecsattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_pc = &acp->ac_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
-int
+static int
 apecs_bus_get_window(int type, int window, struct alpha_bus_space_translation *abst)
 {
 	struct apecs_config *acp = &apecs_configuration;

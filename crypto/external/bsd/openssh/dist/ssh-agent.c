@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-agent.c,v 1.2 2009/06/07 22:38:47 christos Exp $	*/
-/* $OpenBSD: ssh-agent.c,v 1.159 2008/06/28 14:05:15 djm Exp $ */
+/*	$NetBSD: ssh-agent.c,v 1.9 2011/09/16 15:36:18 joerg Exp $	*/
+/* $OpenBSD: ssh-agent.c,v 1.172 2011/06/03 01:37:40 dtucker Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,7 +36,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ssh-agent.c,v 1.2 2009/06/07 22:38:47 christos Exp $");
+__RCSID("$NetBSD: ssh-agent.c,v 1.9 2011/09/16 15:36:18 joerg Exp $");
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/queue.h>
@@ -70,8 +70,8 @@ __RCSID("$NetBSD: ssh-agent.c,v 1.2 2009/06/07 22:38:47 christos Exp $");
 #include "misc.h"
 #include "getpeereid.h"
 
-#ifdef SMARTCARD
-#include "scard.h"
+#ifdef ENABLE_PKCS11
+#include "ssh-pkcs11.h"
 #endif
 
 typedef enum {
@@ -95,6 +95,7 @@ typedef struct identity {
 	TAILQ_ENTRY(identity) next;
 	Key *key;
 	char *comment;
+	char *provider;
 	u_int death;
 	u_int confirm;
 } Identity;
@@ -161,6 +162,8 @@ static void
 free_identity(Identity *id)
 {
 	key_free(id->key);
+	if (id->provider != NULL)
+		xfree(id->provider);
 	xfree(id->comment);
 	xfree(id);
 }
@@ -307,13 +310,13 @@ process_sign_request2(SocketEntry *e)
 	Buffer msg;
 	Key *key;
 
+	odatafellows = datafellows;
 	datafellows = 0;
 
 	blob = buffer_get_string(&e->request, &blen);
 	data = buffer_get_string(&e->request, &dlen);
 
 	flags = buffer_get_int(&e->request);
-	odatafellows = datafellows;
 	if (flags & SSH_AGENT_OLD_SIGNATURE)
 		datafellows = SSH_BUG_SIGBLOB;
 
@@ -452,8 +455,12 @@ process_add_identity(SocketEntry *e, int version)
 	Idtab *tab = idtab_lookup(version);
 	Identity *id;
 	int type, success = 0, death = 0, confirm = 0;
-	char *type_name, *comment;
+	char *type_name, *comment, *curve;
 	Key *k = NULL;
+	BIGNUM *exponent;
+	EC_POINT *q;
+	u_char *cert;
+	u_int len;
 
 	switch (version) {
 	case 1:
@@ -474,7 +481,6 @@ process_add_identity(SocketEntry *e, int version)
 	case 2:
 		type_name = buffer_get_string(&e->request, NULL);
 		type = key_type_from_name(type_name);
-		xfree(type_name);
 		switch (type) {
 		case KEY_DSA:
 			k = key_new_private(type);
@@ -483,6 +489,66 @@ process_add_identity(SocketEntry *e, int version)
 			buffer_get_bignum2(&e->request, k->dsa->g);
 			buffer_get_bignum2(&e->request, k->dsa->pub_key);
 			buffer_get_bignum2(&e->request, k->dsa->priv_key);
+			break;
+		case KEY_DSA_CERT_V00:
+		case KEY_DSA_CERT:
+			cert = buffer_get_string(&e->request, &len);
+			if ((k = key_from_blob(cert, len)) == NULL)
+				fatal("Certificate parse failed");
+			xfree(cert);
+			key_add_private(k);
+			buffer_get_bignum2(&e->request, k->dsa->priv_key);
+			break;
+		case KEY_ECDSA:
+			k = key_new_private(type);
+			k->ecdsa_nid = key_ecdsa_nid_from_name(type_name);
+			curve = buffer_get_string(&e->request, NULL);
+			if (k->ecdsa_nid != key_curve_name_to_nid(curve))
+				fatal("%s: curve names mismatch", __func__);
+			xfree(curve);
+			k->ecdsa = EC_KEY_new_by_curve_name(k->ecdsa_nid);
+			if (k->ecdsa == NULL)
+				fatal("%s: EC_KEY_new_by_curve_name failed",
+				    __func__);
+			q = EC_POINT_new(EC_KEY_get0_group(k->ecdsa));
+			if (q == NULL)
+				fatal("%s: BN_new failed", __func__);
+			if ((exponent = BN_new()) == NULL)
+				fatal("%s: BN_new failed", __func__);
+			buffer_get_ecpoint(&e->request,
+				EC_KEY_get0_group(k->ecdsa), q);
+			buffer_get_bignum2(&e->request, exponent);
+			if (EC_KEY_set_public_key(k->ecdsa, q) != 1)
+				fatal("%s: EC_KEY_set_public_key failed",
+				    __func__);
+			if (EC_KEY_set_private_key(k->ecdsa, exponent) != 1)
+				fatal("%s: EC_KEY_set_private_key failed",
+				    __func__);
+			if (key_ec_validate_public(EC_KEY_get0_group(k->ecdsa),
+			    EC_KEY_get0_public_key(k->ecdsa)) != 0)
+				fatal("%s: bad ECDSA public key", __func__);
+			if (key_ec_validate_private(k->ecdsa) != 0)
+				fatal("%s: bad ECDSA private key", __func__);
+			BN_clear_free(exponent);
+			EC_POINT_free(q);
+			break;
+		case KEY_ECDSA_CERT:
+			cert = buffer_get_string(&e->request, &len);
+			if ((k = key_from_blob(cert, len)) == NULL)
+				fatal("Certificate parse failed");
+			xfree(cert);
+			key_add_private(k);
+			if ((exponent = BN_new()) == NULL)
+				fatal("%s: BN_new failed", __func__);
+			buffer_get_bignum2(&e->request, exponent);
+			if (EC_KEY_set_private_key(k->ecdsa, exponent) != 1)
+				fatal("%s: EC_KEY_set_private_key failed",
+				    __func__);
+			if (key_ec_validate_public(EC_KEY_get0_group(k->ecdsa),
+			    EC_KEY_get0_public_key(k->ecdsa)) != 0 ||
+			    key_ec_validate_private(k->ecdsa) != 0)
+				fatal("%s: bad ECDSA key", __func__);
+			BN_clear_free(exponent);
 			break;
 		case KEY_RSA:
 			k = key_new_private(type);
@@ -496,15 +562,31 @@ process_add_identity(SocketEntry *e, int version)
 			/* Generate additional parameters */
 			rsa_generate_additional_parameters(k->rsa);
 			break;
+		case KEY_RSA_CERT_V00:
+		case KEY_RSA_CERT:
+			cert = buffer_get_string(&e->request, &len);
+			if ((k = key_from_blob(cert, len)) == NULL)
+				fatal("Certificate parse failed");
+			xfree(cert);
+			key_add_private(k);
+			buffer_get_bignum2(&e->request, k->rsa->d);
+			buffer_get_bignum2(&e->request, k->rsa->iqmp);
+			buffer_get_bignum2(&e->request, k->rsa->p);
+			buffer_get_bignum2(&e->request, k->rsa->q);
+			break;
 		default:
+			xfree(type_name);
 			buffer_clear(&e->request);
 			goto send;
 		}
+		xfree(type_name);
 		break;
 	}
 	/* enable blinding */
 	switch (k->type) {
 	case KEY_RSA:
+	case KEY_RSA_CERT_V00:
+	case KEY_RSA_CERT:
 	case KEY_RSA1:
 		if (RSA_blinding_on(k->rsa, NULL) != 1) {
 			error("process_add_identity: RSA_blinding_on failed");
@@ -538,7 +620,7 @@ process_add_identity(SocketEntry *e, int version)
 	if (lifetime && !death)
 		death = time(NULL) + lifetime;
 	if ((id = lookup_identity(k, version)) == NULL) {
-		id = xmalloc(sizeof(Identity));
+		id = xcalloc(1, sizeof(Identity));
 		id->key = k;
 		TAILQ_INSERT_TAIL(&tab->idlist, id, next);
 		/* Increment the number of identities. */
@@ -598,17 +680,17 @@ no_identities(SocketEntry *e, u_int type)
 	buffer_free(&msg);
 }
 
-#ifdef SMARTCARD
+#ifdef ENABLE_PKCS11
 static void
 process_add_smartcard_key(SocketEntry *e)
 {
-	char *sc_reader_id = NULL, *pin;
-	int i, type, version, success = 0, death = 0, confirm = 0;
-	Key **keys, *k;
+	char *provider = NULL, *pin;
+	int i, type, version, count = 0, success = 0, death = 0, confirm = 0;
+	Key **keys = NULL, *k;
 	Identity *id;
 	Idtab *tab;
 
-	sc_reader_id = buffer_get_string(&e->request, NULL);
+	provider = buffer_get_string(&e->request, NULL);
 	pin = buffer_get_string(&e->request, NULL);
 
 	while (buffer_len(&e->request)) {
@@ -622,30 +704,22 @@ process_add_smartcard_key(SocketEntry *e)
 		default:
 			error("process_add_smartcard_key: "
 			    "Unknown constraint type %d", type);
-			xfree(sc_reader_id);
-			xfree(pin);
 			goto send;
 		}
 	}
 	if (lifetime && !death)
 		death = time(NULL) + lifetime;
 
-	keys = sc_get_keys(sc_reader_id, pin);
-	xfree(sc_reader_id);
-	xfree(pin);
-
-	if (keys == NULL || keys[0] == NULL) {
-		error("sc_get_keys failed");
-		goto send;
-	}
-	for (i = 0; keys[i] != NULL; i++) {
+	count = pkcs11_add_provider(provider, pin, &keys);
+	for (i = 0; i < count; i++) {
 		k = keys[i];
 		version = k->type == KEY_RSA1 ? 1 : 2;
 		tab = idtab_lookup(version);
 		if (lookup_identity(k, version) == NULL) {
-			id = xmalloc(sizeof(Identity));
+			id = xcalloc(1, sizeof(Identity));
 			id->key = k;
-			id->comment = sc_get_key_label(k);
+			id->provider = xstrdup(provider);
+			id->comment = xstrdup(provider); /* XXX */
 			id->death = death;
 			id->confirm = confirm;
 			TAILQ_INSERT_TAIL(&tab->idlist, id, next);
@@ -656,8 +730,13 @@ process_add_smartcard_key(SocketEntry *e)
 		}
 		keys[i] = NULL;
 	}
-	xfree(keys);
 send:
+	if (pin)
+		xfree(pin);
+	if (provider)
+		xfree(provider);
+	if (keys)
+		xfree(keys);
 	buffer_put_int(&e->output, 1);
 	buffer_put_char(&e->output,
 	    success ? SSH_AGENT_SUCCESS : SSH_AGENT_FAILURE);
@@ -666,42 +745,37 @@ send:
 static void
 process_remove_smartcard_key(SocketEntry *e)
 {
-	char *sc_reader_id = NULL, *pin;
-	int i, version, success = 0;
-	Key **keys, *k = NULL;
-	Identity *id;
+	char *provider = NULL, *pin = NULL;
+	int version, success = 0;
+	Identity *id, *nxt;
 	Idtab *tab;
 
-	sc_reader_id = buffer_get_string(&e->request, NULL);
+	provider = buffer_get_string(&e->request, NULL);
 	pin = buffer_get_string(&e->request, NULL);
-	keys = sc_get_keys(sc_reader_id, pin);
-	xfree(sc_reader_id);
 	xfree(pin);
 
-	if (keys == NULL || keys[0] == NULL) {
-		error("sc_get_keys failed");
-		goto send;
-	}
-	for (i = 0; keys[i] != NULL; i++) {
-		k = keys[i];
-		version = k->type == KEY_RSA1 ? 1 : 2;
-		if ((id = lookup_identity(k, version)) != NULL) {
-			tab = idtab_lookup(version);
-			TAILQ_REMOVE(&tab->idlist, id, next);
-			tab->nentries--;
-			free_identity(id);
-			success = 1;
+	for (version = 1; version < 3; version++) {
+		tab = idtab_lookup(version);
+		for (id = TAILQ_FIRST(&tab->idlist); id; id = nxt) {
+			nxt = TAILQ_NEXT(id, next);
+			if (!strcmp(provider, id->provider)) {
+				TAILQ_REMOVE(&tab->idlist, id, next);
+				free_identity(id);
+				tab->nentries--;
+			}
 		}
-		key_free(k);
-		keys[i] = NULL;
 	}
-	xfree(keys);
-send:
+	if (pkcs11_del_provider(provider) == 0)
+		success = 1;
+	else
+		error("process_remove_smartcard_key:"
+		    " pkcs11_del_provider failed");
+	xfree(provider);
 	buffer_put_int(&e->output, 1);
 	buffer_put_char(&e->output,
 	    success ? SSH_AGENT_SUCCESS : SSH_AGENT_FAILURE);
 }
-#endif /* SMARTCARD */
+#endif /* ENABLE_PKCS11 */
 
 /* dispatch incoming messages */
 
@@ -786,7 +860,7 @@ process_message(SocketEntry *e)
 	case SSH2_AGENTC_REMOVE_ALL_IDENTITIES:
 		process_remove_all_identities(e, 2);
 		break;
-#ifdef SMARTCARD
+#ifdef ENABLE_PKCS11
 	case SSH_AGENTC_ADD_SMARTCARD_KEY:
 	case SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED:
 		process_add_smartcard_key(e);
@@ -794,7 +868,7 @@ process_message(SocketEntry *e)
 	case SSH_AGENTC_REMOVE_SMARTCARD_KEY:
 		process_remove_smartcard_key(e);
 		break;
-#endif /* SMARTCARD */
+#endif /* ENABLE_PKCS11 */
 	default:
 		/* Unknown message.  Respond with failure. */
 		error("Unknown message %d", type);
@@ -908,11 +982,11 @@ after_select(fd_set *readset, fd_set *writeset)
 	socklen_t slen;
 	char buf[1024];
 	int len, sock;
-	u_int i;
+	u_int i, orig_alloc;
 	uid_t euid;
 	gid_t egid;
 
-	for (i = 0; i < sockets_alloc; i++)
+	for (i = 0, orig_alloc = sockets_alloc; i < orig_alloc; i++)
 		switch (sockets[i].type) {
 		case AUTH_UNUSED:
 			break;
@@ -945,15 +1019,12 @@ after_select(fd_set *readset, fd_set *writeset)
 		case AUTH_CONNECTION:
 			if (buffer_len(&sockets[i].output) > 0 &&
 			    FD_ISSET(sockets[i].fd, writeset)) {
-				do {
-					len = write(sockets[i].fd,
-					    buffer_ptr(&sockets[i].output),
-					    buffer_len(&sockets[i].output));
-					if (len == -1 && (errno == EAGAIN ||
-					    errno == EINTR))
-						continue;
-					break;
-				} while (1);
+				len = write(sockets[i].fd,
+				    buffer_ptr(&sockets[i].output),
+				    buffer_len(&sockets[i].output));
+				if (len == -1 && (errno == EAGAIN ||
+				    errno == EINTR))
+					continue;
 				if (len <= 0) {
 					close_socket(&sockets[i]);
 					break;
@@ -961,13 +1032,10 @@ after_select(fd_set *readset, fd_set *writeset)
 				buffer_consume(&sockets[i].output, len);
 			}
 			if (FD_ISSET(sockets[i].fd, readset)) {
-				do {
-					len = read(sockets[i].fd, buf, sizeof(buf));
-					if (len == -1 && (errno == EAGAIN ||
-					    errno == EINTR))
-						continue;
-					break;
-				} while (1);
+				len = read(sockets[i].fd, buf, sizeof(buf));
+				if (len == -1 && (errno == EAGAIN ||
+				    errno == EINTR))
+					continue;
 				if (len <= 0) {
 					close_socket(&sockets[i]);
 					break;
@@ -998,24 +1066,31 @@ cleanup_exit(int i)
 }
 
 /*ARGSUSED*/
-static void
+__dead static void
 cleanup_handler(int sig)
 {
 	cleanup_socket();
+#ifdef ENABLE_PKCS11
+	pkcs11_terminate();
+#endif
 	_exit(2);
 }
 
 static void
 check_parent_exists(void)
 {
-	if (parent_pid != -1 && kill(parent_pid, 0) < 0) {
+	/*
+	 * If our parent has exited then getppid() will return (pid_t)1,
+	 * so testing for that should be safe.
+	 */
+	if (parent_pid != -1 && getppid() != parent_pid) {
 		/* printf("Parent has died - Authentication agent exiting.\n"); */
 		cleanup_socket();
 		_exit(2);
 	}
 }
 
-static void
+__dead static void
 usage(void)
 {
 	fprintf(stderr, "usage: %s [options] [command [arg ...]]\n",
@@ -1030,13 +1105,36 @@ usage(void)
 	exit(1);
 }
 
+static void
+csh_setenv(const char *name, const char *value)
+{
+	printf("setenv %s %s;\n", name, value);
+}
+
+static void
+csh_unsetenv(const char *name)
+{
+	printf("unsetenv %s;\n", name);
+}
+
+static void
+sh_setenv(const char *name, const char *value)
+{
+	printf("%s=%s; export %s;\n", name, value, name);
+}
+
+static void
+sh_unsetenv(const char *name)
+{
+	printf("unset %s;\n", name);
+}
 int
 main(int ac, char **av)
 {
 	int c_flag = 0, d_flag = 0, k_flag = 0, s_flag = 0;
 	int sock, fd, ch, result, saved_errno;
 	u_int nalloc;
-	char *shell, *format, *pidstr, *agentsocket = NULL;
+	char *shell, *pidstr, *agentsocket = NULL;
 	fd_set *readsetp = NULL, *writesetp = NULL;
 	struct sockaddr_un sunaddr;
 	struct rlimit rlim;
@@ -1045,6 +1143,9 @@ main(int ac, char **av)
 	pid_t pid;
 	char pidstrbuf[1 + 3 * sizeof pid];
 	struct timeval *tvp = NULL;
+	size_t len;
+	void (*f_setenv)(const char *, const char *);
+	void (*f_unsetenv)(const char *);
 
 	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
 	sanitise_stdfd();
@@ -1053,7 +1154,7 @@ main(int ac, char **av)
 	setegid(getgid());
 	setgid(getgid());
 
-	SSLeay_add_all_algorithms();
+	OpenSSL_add_all_algorithms();
 
 	while ((ch = getopt(ac, av, "cdksa:t:")) != -1) {
 		switch (ch) {
@@ -1096,9 +1197,16 @@ main(int ac, char **av)
 
 	if (ac == 0 && !c_flag && !s_flag) {
 		shell = getenv("SHELL");
-		if (shell != NULL &&
-		    strncmp(shell + strlen(shell) - 3, "csh", 3) == 0)
+		if (shell != NULL && (len = strlen(shell)) > 2 &&
+		    strncmp(shell + len - 3, "csh", 3) == 0)
 			c_flag = 1;
+	}
+	if (c_flag) {
+		f_setenv = csh_setenv;
+		f_unsetenv = csh_unsetenv;
+	} else {
+		f_setenv = sh_setenv;
+		f_unsetenv = sh_unsetenv;
 	}
 	if (k_flag) {
 		const char *errstr = NULL;
@@ -1120,9 +1228,8 @@ main(int ac, char **av)
 			perror("kill");
 			exit(1);
 		}
-		format = c_flag ? "unsetenv %s;\n" : "unset %s;\n";
-		printf(format, SSH_AUTHSOCKET_ENV_NAME);
-		printf(format, SSH_AGENTPID_ENV_NAME);
+		(*f_unsetenv)(SSH_AUTHSOCKET_ENV_NAME);
+		(*f_unsetenv)(SSH_AGENTPID_ENV_NAME);
 		printf("echo Agent pid %ld killed;\n", (long)pid);
 		exit(0);
 	}
@@ -1130,7 +1237,7 @@ main(int ac, char **av)
 
 	if (agentsocket == NULL) {
 		/* Create private directory for agent socket */
-		strlcpy(socket_dir, "/tmp/ssh-XXXXXXXXXX", sizeof socket_dir);
+		mktemp_proto(socket_dir, sizeof(socket_dir));
 		if (mkdtemp(socket_dir) == NULL) {
 			perror("mkdtemp: private socket dir");
 			exit(1);
@@ -1172,9 +1279,7 @@ main(int ac, char **av)
 	 */
 	if (d_flag) {
 		log_init(__progname, SYSLOG_LEVEL_DEBUG1, SYSLOG_FACILITY_AUTH, 1);
-		format = c_flag ? "setenv %s %s;\n" : "%s=%s; export %s;\n";
-		printf(format, SSH_AUTHSOCKET_ENV_NAME, socket_name,
-		    SSH_AUTHSOCKET_ENV_NAME);
+		(*f_setenv)(SSH_AUTHSOCKET_ENV_NAME, socket_name);
 		printf("echo Agent pid %ld;\n", (long)parent_pid);
 		goto skip;
 	}
@@ -1187,11 +1292,8 @@ main(int ac, char **av)
 		close(sock);
 		snprintf(pidstrbuf, sizeof pidstrbuf, "%ld", (long)pid);
 		if (ac == 0) {
-			format = c_flag ? "setenv %s %s;\n" : "%s=%s; export %s;\n";
-			printf(format, SSH_AUTHSOCKET_ENV_NAME, socket_name,
-			    SSH_AUTHSOCKET_ENV_NAME);
-			printf(format, SSH_AGENTPID_ENV_NAME, pidstrbuf,
-			    SSH_AGENTPID_ENV_NAME);
+			(*f_setenv)(SSH_AUTHSOCKET_ENV_NAME, socket_name);
+			(*f_setenv)(SSH_AGENTPID_ENV_NAME, pidstrbuf);
 			printf("echo Agent pid %ld;\n", (long)pid);
 			exit(0);
 		}
@@ -1230,6 +1332,10 @@ main(int ac, char **av)
 	}
 
 skip:
+
+#ifdef ENABLE_PKCS11
+	pkcs11_init(0);
+#endif
 	new_socket(AUTH_SOCKET, sock);
 	if (ac > 0)
 		parent_alive_interval = 10;

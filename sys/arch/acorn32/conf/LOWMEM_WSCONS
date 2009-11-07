@@ -1,4 +1,4 @@
-#	$NetBSD: LOWMEM_WSCONS,v 1.52 2009/04/19 03:07:04 tsutsui Exp $
+#	$NetBSD: LOWMEM_WSCONS,v 1.57 2011/11/22 21:24:52 tls Exp $
 #
 #	LOWMEM_WSCONS -- RiscPC config with wscons for SMALL machines
 #
@@ -47,14 +47,14 @@ file-system	NFS		# Network file system
 file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	NFSSERVER
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -282,9 +282,8 @@ pseudo-device	ppp			# PPP
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	fss	4		# file system snapshot device
-pseudo-device	md	1		# Ramdisk driver
-pseudo-device	rnd			# /dev/random and /dev/urandom
+#pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# Ramdisk driver
 pseudo-device	clockctl		# user control of clock subsystem
 
 # If the standard modes don't work for your monitor, you can specify

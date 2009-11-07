@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_session.c,v 1.15 2009/09/13 18:45:11 pooka Exp $	*/
+/*	$NetBSD: rfcomm_session.c,v 1.18 2011/07/27 10:25:09 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.15 2009/09/13 18:45:11 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.18 2011/07/27 10:25:09 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -389,6 +389,13 @@ rfcomm_session_disconnected(void *arg, int err)
 
 	DPRINTF("Disconnected\n");
 
+	/*
+	 * If we have any DLCs outstanding in the unlikely case that the
+	 * L2CAP channel disconnected normally, close them with an error
+	 */
+	if (err == 0)
+		err = ECONNRESET;
+
 	rs->rs_state = RFCOMM_SESSION_CLOSED;
 
 	while (!LIST_EMPTY(&rs->rs_dlcs)) {
@@ -449,12 +456,11 @@ rfcomm_session_complete(void *arg, int count)
 	 */
 	while (count-- > 0) {
 		credit = SIMPLEQ_FIRST(&rs->rs_credits);
-#ifdef DIAGNOSTIC
 		if (credit == NULL) {
 			printf("%s: too many packets completed!\n", __func__);
 			break;
 		}
-#endif
+
 		dlc = credit->rc_dlc;
 		if (dlc != NULL) {
 			dlc->rd_pending--;
@@ -816,7 +822,7 @@ rfcomm_session_recv_disc(struct rfcomm_session *rs, int dlci)
 		return;
 	}
 
-	rfcomm_dlc_close(dlc, ECONNRESET);
+	rfcomm_dlc_close(dlc, 0);
 	rfcomm_session_send_frame(rs, RFCOMM_FRAME_UA, dlci);
 }
 
@@ -1372,7 +1378,8 @@ rfcomm_session_recv_mcc_pn(struct rfcomm_session *rs, int cr, struct mbuf *m)
 
 		callout_stop(&dlc->rd_timeout);
 
-		if (pn.mtu > RFCOMM_MTU_MAX || pn.mtu > dlc->rd_mtu) {
+		/* reject invalid or unacceptable MTU */
+		if (pn.mtu < RFCOMM_MTU_MIN || pn.mtu > dlc->rd_mtu) {
 			dlc->rd_state = RFCOMM_DLC_WAIT_DISCONNECT;
 			err = rfcomm_session_send_frame(rs, RFCOMM_FRAME_DISC,
 							pn.dlci);

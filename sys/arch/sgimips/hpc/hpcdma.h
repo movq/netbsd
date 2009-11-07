@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcdma.h,v 1.8 2008/05/10 15:31:05 martin Exp $	*/
+/*	$NetBSD: hpcdma.h,v 1.11 2011/07/01 18:53:46 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2001 Wayne Knowles
@@ -39,22 +39,22 @@
 #ifndef _SGIMIPS_HPC_DMA_H
 #define _SGIMIPS_HPC_DMA_H
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct hpc_dma_softc {
 	bus_space_tag_t		sc_bst;
 	bus_space_handle_t	sc_bsh;
 	bus_dma_tag_t		sc_dmat;
 
-	u_int32_t		sc_flags;
+	uint32_t		sc_flags;
 #define	HPCDMA_READ	0x20		/* direction of transfer */
 #define	HPCDMA_LOADED	0x40		/* bus_dmamap loaded */
 #define	HPCDMA_ACTIVE	0x80		/* DMA engine is busy */
-	u_int32_t		sc_dmacmd;
+	uint32_t		sc_dmacmd;
 	int			sc_ndesc;
 	bus_dmamap_t		sc_dmamap;
 	struct hpc_dma_desc    *sc_desc_kva;	/* Virtual address */
-	struct hpc_dma_desc    *sc_desc_pa;	/* Physical address */
+	bus_addr_t		sc_desc_pa;	/* DMA address */
 	ssize_t			sc_dlen;	/* number of bytes transfered */
 	struct hpc_values       *hpc;		/* constants for HPC1/3 */
 };
@@ -62,7 +62,7 @@ struct hpc_dma_softc {
 
 void hpcdma_init(struct hpc_attach_args *, struct hpc_dma_softc *, int);
 void hpcdma_sglist_create(struct hpc_dma_softc *, bus_dmamap_t);
-void hpcdma_cntl(struct hpc_dma_softc *, u_int32_t);
+void hpcdma_cntl(struct hpc_dma_softc *, uint32_t);
 void hpcdma_reset(struct hpc_dma_softc *);
 void hpcdma_flush(struct hpc_dma_softc *);
 

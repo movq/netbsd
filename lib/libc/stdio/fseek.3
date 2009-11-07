@@ -1,4 +1,4 @@
-.\"	$NetBSD: fseek.3,v 1.24 2003/08/07 16:43:25 agc Exp $
+.\"	$NetBSD: fseek.3,v 1.27 2012/01/22 19:13:42 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     @(#)fseek.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd July 8, 2000
+.Dd January 21, 2012
 .Dt FSEEK 3
 .Os
 .Sh NAME
@@ -127,26 +127,18 @@ except that the error indicator for the stream is also cleared
 (see
 .Xr clearerr 3 ) .
 .Pp
-In this implementation, the
-.Fn fgetpos
-and
-.Fn fsetpos
-functions
-are alternative interfaces equivalent to
-.Fn ftell ,
-.Fn ftello ,
-.Fn fseek
-and
-.Fn fseeko
-(with whence set to
-.Dv SEEK_SET ) ,
-setting and storing the current value of
-the file offset into or from the object referenced by
-.Fa pos .
-In others implementations, an
+In this implementations, an
 .Dq Fa fpos_t
-object may be a complex object
-and these routines may be the only way to portably reposition a text stream.
+object is a complex object that represents both the position and the parse
+state of the stream making these routines are the only way to portably
+reposition a text stream.
+The
+.Ar pos
+argument of
+.Fn fsetpos
+must always be initialized by
+a call to
+.Fn fgetpos .
 .Sh RETURN VALUES
 The
 .Fn rewind
@@ -155,20 +147,34 @@ returns no value.
 Upon successful completion,
 .Fn fgetpos ,
 .Fn fseek ,
+.Fn fseeko ,
+and
 .Fn fsetpos
-return 0,
-and
+return 0.
+The functions
 .Fn ftell
-returns the current offset.
+and
+.Fn ftello
+return the current offset.
 Otherwise,
-.Fn fseek
+.Fn fseek ,
+.Fn fseeko ,
+.Fn ftell ,
 and
-.Fn ftell
-return \-1 and
-the others
-return a nonzero value and the global variable
+.Fn ftello
+return \-1 while
+.Fn fgetpos
+and
+.Fn fsetpos
+return a nonzero value.
+On error all functions the global variable
 .Va errno
 is set to indicate the error.
+Since the
+.Fn rewind
+function does not return an error code, applications need to clear
+.Va errno
+before calling it in order to detect errors.
 .Sh ERRORS
 .Bl -tag -width Er
 .It Bq Er EBADF
@@ -186,17 +192,11 @@ was not
 .Dv SEEK_END ,
 or
 .Dv SEEK_CUR .
-.\" .It Bq Er EOVERFLOW
-.\" For
-.\" .Fn ftell ,
-.\" the current file offset cannot be represented correctly in an object of type
-.\" .Fa long .
-.\" .Pp
-.\" For
-.\" .Fn fseek ,
-.\" the resulting file offset would be a value which cannot be represented
-.\" correctly in an object of type
-.\" .Fa long.
+.It Bq Er EOVERFLOW
+For
+.Fn ftell ,
+the current file offset cannot be represented correctly in an object of type
+.Fa long .
 .El
 .Pp
 The function

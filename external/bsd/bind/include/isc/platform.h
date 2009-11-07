@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2010  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: platform.h.in,v 1.53 2009/09/29 15:06:07 fdupont Exp */
+/* Id: platform.h.in,v 1.56 2010/12/18 01:56:23 each Exp */
 
 #ifndef ISC_PLATFORM_H
 #define ISC_PLATFORM_H 1
@@ -25,7 +25,6 @@
 /*****
  ***** Platform-dependent defines.
  *****/
-#include <sys/atomic.h>
 
 /***
  *** Network.
@@ -204,10 +203,12 @@
  *** Miscellaneous.
  ***/
 
+#if 0 /* In the Makefile */
 /*
  * Defined if we are using threads.
  */
 #define ISC_PLATFORM_USETHREADS 1
+#endif
 
 /*
  * Defined if unistd.h does not cause fd_set to be delared.
@@ -218,7 +219,19 @@
  * Defined to <gssapi.h> or <gssapi/gssapi.h> for how to include
  * the GSSAPI header.
  */
+#define ISC_PLATFORM_GSSAPIHEADER <gssapi/gssapi.h>
 
+/*
+ * Defined to <gssapi_krb5.h> or <gssapi/gssapi_krb5.h> for how to
+ * include the GSSAPI KRB5 header.
+ */
+#define ISC_PLATFORM_GSSAPI_KRB5_HEADER <gssapi/gssapi_krb5.h>
+
+/*
+ * Defined to <krb5.h> or <krb5/krb5.h> for how to include
+ * the KRB5 header.
+ */
+#define ISC_PLATFORM_KRB5HEADER <krb5/krb5.h>
 
 /*
  * Type used for resource limits.
@@ -250,7 +263,9 @@
  * If the "xadd" operation is available on this architecture,
  * ISC_PLATFORM_HAVEXADD will be defined.
  */
+#ifdef __HAVE_ATOMIC64_OPS
 #define ISC_PLATFORM_HAVEXADD 1
+#endif
 
 /*
  * If the "xaddq" operation (64bit xadd) is available on this architecture,

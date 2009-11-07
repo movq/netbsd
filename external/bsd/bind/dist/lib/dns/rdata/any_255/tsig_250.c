@@ -1,7 +1,7 @@
-/*	$NetBSD: tsig_250.c,v 1.1.1.1 2009/03/22 15:01:50 christos Exp $	*/
+/*	$NetBSD: tsig_250.c,v 1.3.4.1 2012/06/05 21:15:45 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: tsig_250.c,v 1.63 2007/06/19 23:47:17 tbox Exp */
+/* Id */
 
 /* Reviewed: Thu Mar 16 13:39:43 PST 2000 by gson */
 
@@ -204,8 +204,11 @@ totext_any_tsig(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" (", target));
 	RETERR(str_totext(tctx->linebreak, target));
-	RETERR(isc_base64_totext(&sigr, tctx->width - 2,
-				 tctx->linebreak, target));
+	if (tctx->width == 0)   /* No splitting */
+		RETERR(isc_base64_totext(&sigr, 60, "", target));
+	else
+		RETERR(isc_base64_totext(&sigr, tctx->width - 2,
+					 tctx->linebreak, target));
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" ) ", target));
 	else
@@ -243,7 +246,10 @@ totext_any_tsig(ARGS_TOTEXT) {
 	/*
 	 * Other.
 	 */
-	return (isc_base64_totext(&sr, 60, " ", target));
+	if (tctx->width == 0)   /* No splitting */
+		return (isc_base64_totext(&sr, 60, "", target));
+	else
+		return (isc_base64_totext(&sr, 60, " ", target));
 }
 
 static inline isc_result_t
@@ -594,6 +600,11 @@ checknames_any_tsig(ARGS_CHECKNAMES) {
 	UNUSED(bad);
 
 	return (ISC_TRUE);
+}
+
+static inline int
+casecompare_any_tsig(ARGS_COMPARE) {
+	return (compare_any_tsig(rdata1, rdata2));
 }
 
 #endif	/* RDATA_ANY_255_TSIG_250_C */

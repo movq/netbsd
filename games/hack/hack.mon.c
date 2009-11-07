@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.mon.c,v 1.10 2009/08/12 07:28:41 dholland Exp $	*/
+/*	$NetBSD: hack.mon.c,v 1.14 2011/08/07 06:03:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,17 +63,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.mon.c,v 1.10 2009/08/12 07:28:41 dholland Exp $");
+__RCSID("$NetBSD: hack.mon.c,v 1.14 2011/08/07 06:03:45 dholland Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
 #include "hack.h"
 #include "extern.h"
 #include "hack.mfndpos.h"
-
-#ifndef NULL
-#define	NULL	(char *) 0
-#endif
 
 static int warnlevel;	/* used by movemon and dochugw */
 static long lastwarntime;
@@ -196,7 +192,7 @@ justswld(struct monst *mtmp, const char *name)
 }
 
 void
-youswld(struct monst *mtmp, int dam, int die, const char *name)
+youswld(struct monst *mtmp, int dam, unsigned int die, const char *name)
 {
 	if (mtmp != u.ustuck)
 		return;
@@ -769,7 +765,7 @@ dmonsfree(void)
 	struct monst   *mtmp;
 	while ((mtmp = fdmon) != NULL) {
 		fdmon = mtmp->nmon;
-		free((char *) mtmp);
+		free(mtmp);
 	}
 }
 
@@ -852,6 +848,7 @@ killed(struct monst *mtmp)
 	{
 		int             ul = u.ulevel;
 		int             ml = mdat->mlevel;
+		int tmp2;
 
 		if (ul < 14)	/* points are given based on present and
 				 * future level */

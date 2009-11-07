@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.7 2009/09/19 14:57:28 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.10 2011/11/04 11:27:02 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -61,9 +57,9 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	(void)flags;
 }
 
 int
@@ -97,7 +93,7 @@ md_get_info(void)
 
 	/*
 	 * Compute whole disk size. Take max of (dlcyl*dlhead*dlsec)
-	 * and secperunit,  just in case the disk is already labelled.  
+	 * and secperunit,  just in case the disk is already labelled.
 	 * (If our new label's RAW_PART size ends up smaller than the
 	 * in-core RAW_PART size  value, updating the label will fail.)
 	 */
@@ -228,4 +224,10 @@ int
 ews4800mips_sysvbfs_size(void)
 {
 	return (8 * 1024 * 1024) / 512;	/* 8MB */
+}
+
+int
+md_pre_mount()
+{
+	return 0;
 }

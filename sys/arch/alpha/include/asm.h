@@ -1,26 +1,26 @@
-/* $NetBSD: asm.h,v 1.30 2007/02/09 21:55:01 ad Exp $ */
+/* $NetBSD: asm.h,v 1.33 2012/02/06 02:14:13 matt Exp $ */
 
-/* 
+/*
  * Copyright (c) 1991,1990,1989,1994,1995,1996 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  */
@@ -628,11 +628,15 @@ label:	ASCIZ msg;						\
  * WARN_REFERENCES: create a warning if the specified symbol is referenced.
  */
 #ifdef __STDC__
-#define	WARN_REFERENCES(_sym,_msg)				\
-	.section .gnu.warning. ## _sym ; .ascii _msg ; .text
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
-#define	WARN_REFERENCES(_sym,_msg)				\
-	.section .gnu.warning./**/_sym ; .ascii _msg ; .text
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
 
 /*
@@ -642,7 +646,7 @@ label:	ASCIZ msg;						\
 #ifdef _KERNEL
 
 #define	__KERNEL_SECTIONSTRING(_sec, _str)				\
-	.section _sec ; .asciz _str ; .text
+	.pushsection _sec ; .asciz _str ; .popsection
 
 #define	__KERNEL_RCSID(_n, _s)		__KERNEL_SECTIONSTRING(.ident, _s)
 #define	__KERNEL_COPYRIGHT(_n, _s)	__KERNEL_SECTIONSTRING(.copyright, _s)

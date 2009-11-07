@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.c,v 1.89 2009/05/04 11:41:48 yamt Exp $	*/
+/*	$NetBSD: mount.c,v 1.93 2011/08/29 14:35:00 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993, 1994
@@ -39,13 +39,15 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount.c	8.25 (Berkeley) 5/8/95";
 #else
-__RCSID("$NetBSD: mount.c,v 1.89 2009/05/04 11:41:48 yamt Exp $");
+__RCSID("$NetBSD: mount.c,v 1.93 2011/08/29 14:35:00 joerg Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
+
+#include <fs/puffs/puffs_msgif.h>
 
 #include <err.h>
 #include <errno.h>
@@ -79,7 +81,7 @@ static void	mangle(char *, int *, const char ** volatile *, int *);
 static int	mountfs(const char *, const char *, const char *,
 		    int, const char *, const char *, int, char *, size_t);
 static void	prmount(struct statvfs *);
-static void	usage(void);
+__dead static void	usage(void);
 
 
 /* Map from mount otions to printable formats. */
@@ -390,7 +392,7 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 	if (!mntopts && !options)
 		catopt(&optbuf, "rw");
 
-	if (getargs == 0 && strcmp(name, "/") == 0)
+	if (getargs == 0 && strcmp(name, "/") == 0 && !hasopt(optbuf, "union"))
 		flags |= MNT_UPDATE;
 	else if (skipmounted) {
 		if ((numfs = getmntinfo(&sfp, MNT_WAIT)) == 0) {
@@ -398,13 +400,23 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 			return (1);
 		}
 		for(i = 0; i < numfs; i++) {
+			const char *mountedtype = sfp[i].f_fstypename;
+			size_t cmplen = sizeof(sfp[i].f_fstypename);
+
+			/* remove "puffs|" from comparisons, if present */
+#define TYPESIZE (sizeof(PUFFS_TYPEPREFIX)-1)
+			if (strncmp(mountedtype,
+			    PUFFS_TYPEPREFIX, TYPESIZE) == 0) {
+				mountedtype += TYPESIZE;
+				cmplen -= TYPESIZE;
+			}
+
 			/*
 			 * XXX can't check f_mntfromname,
 			 * thanks to mfs, union, etc.
 			 */
 			if (strncmp(name, sfp[i].f_mntonname, MNAMELEN) == 0 &&
-			    strncmp(vfstype, sfp[i].f_fstypename,
-				sizeof(sfp[i].f_fstypename)) == 0) {
+			    strncmp(vfstype, mountedtype, cmplen) == 0) {
 				if (verbose)
 					(void)printf("%s on %s type %.*s: "
 					    "%s\n",
@@ -434,7 +446,10 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 	if (argv == NULL)
 		err(1, "malloc");
 
-	if (hasopt(optbuf, "rump"))
+	if (getargs &&
+	    strncmp(vfstype, PUFFS_TYPEPREFIX, sizeof(PUFFS_TYPEPREFIX)-1) == 0)
+		(void)snprintf(execbase, sizeof(execbase), "mount_puffs");
+	else if (hasopt(optbuf, "rump"))
 		(void)snprintf(execbase, sizeof(execbase), "rump_%s", vfstype);
 	else
 		(void)snprintf(execbase, sizeof(execbase), "mount_%s", vfstype);

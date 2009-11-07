@@ -1,4 +1,4 @@
-/*	$NetBSD: progress.c,v 1.17 2008/05/26 04:53:11 dholland Exp $ */
+/*	$NetBSD: progress.c,v 1.19 2011/09/16 15:39:28 joerg Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: progress.c,v 1.17 2008/05/26 04:53:11 dholland Exp $");
+__RCSID("$NetBSD: progress.c,v 1.19 2011/09/16 15:39:28 joerg Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
@@ -64,8 +64,7 @@ __RCSID("$NetBSD: progress.c,v 1.17 2008/05/26 04:53:11 dholland Exp $");
 #include "progressbar.h"
 
 static void broken_pipe(int unused);
-static void usage(void);
-int main(int, char *[]);
+__dead static void usage(void);
 
 static void
 broken_pipe(int unused)
@@ -112,7 +111,7 @@ main(int argc, char *argv[])
 		switch (ch) {
 		case 'b':
 			buffersize = (size_t) strsuftoll("buffer size", optarg,
-			    0, SIZE_T_MAX);
+			    0, SSIZE_MAX);
 			break;
 		case 'e':
 			eflag++;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mace.c,v 1.15 2008/08/23 17:43:36 tsutsui Exp $	*/
+/*	$NetBSD: mace.c,v 1.18 2011/08/18 03:25:34 macallan Exp $	*/
 
 /*
  * Copyright (c) 2003 Christopher Sekiya
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.15 2008/08/23 17:43:36 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.18 2011/08/18 03:25:34 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.15 2008/08/23 17:43:36 tsutsui Exp $");
 #include <uvm/uvm_extern.h>
 
 #define	_SGIMIPS_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/locore.h>
 #include <machine/autoconf.h>
@@ -87,7 +87,7 @@ struct {
 } maceintrtab[MACE_NINTR];
 
 struct mace_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -105,7 +105,7 @@ static int	mace_print(void *, const char *);
 static int	mace_search(struct device *, struct cfdata *,
 			    const int *, void *);
 
-CFATTACH_DECL(mace, sizeof(struct mace_softc),
+CFATTACH_DECL_NEW(mace, sizeof(struct mace_softc),
     mace_match, mace_attach, NULL, NULL);
 
 #if defined(BLINK)
@@ -114,7 +114,7 @@ static void	mace_blink(void *);
 #endif
 
 static int
-mace_match(struct device *parent, struct cfdata *match, void *aux)
+mace_match(device_t parent, struct cfdata *match, void *aux)
 {
 
 	/*
@@ -127,12 +127,13 @@ mace_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-mace_attach(struct device *parent, struct device *self, void *aux)
+mace_attach(device_t parent, device_t self, void *aux)
 {
-	struct mace_softc *sc = (struct mace_softc *)self;
+	struct mace_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
 	uint32_t scratch;
 
+	sc->sc_dev = self;
 #ifdef BLINK
 	callout_init(&mace_blink_ch, 0);
 #endif
@@ -146,9 +147,9 @@ mace_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_normal("\n");
 
-	aprint_debug("%s: isa sts %llx\n", self->dv_xname,
+	aprint_debug("%s: isa sts %#"PRIx64"\n", self->dv_xname,
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_STATUS));
-	aprint_debug("%s: isa msk %llx\n", self->dv_xname,
+	aprint_debug("%s: isa msk %#"PRIx64"\n", self->dv_xname,
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_MASK));
 
 	/*
@@ -202,10 +203,10 @@ mace_print(void *aux, const char *pnp)
 }
 
 static int
-mace_search(struct device *parent, struct cfdata *cf,
+mace_search(device_t parent, struct cfdata *cf,
 	    const int *ldesc, void *aux)
 {
-	struct mace_softc *sc = (struct mace_softc *)parent;
+	struct mace_softc *sc = device_private(parent);
 	struct mace_attach_args maa;
 	int tryagain;
 
@@ -301,9 +302,9 @@ mace_intr(int irqs)
 
 	/* irq 4 is the ISA cascade interrupt.  Must handle with care. */
 	if (irqs & (1 << 4)) {
-		isa_mask = mips3_ld((uint64_t *)MIPS_PHYS_TO_KSEG1(MACE_BASE
+		isa_mask = mips3_ld((volatile uint64_t *)MIPS_PHYS_TO_KSEG1(MACE_BASE
 		    + MACE_ISA_INT_MASK));
-		isa_irq = mips3_ld((uint64_t *)MIPS_PHYS_TO_KSEG1(MACE_BASE
+		isa_irq = mips3_ld((volatile uint64_t *)MIPS_PHYS_TO_KSEG1(MACE_BASE
 		    + MACE_ISA_INT_STATUS));
 		for (i = 0; i < MACE_NINTR; i++) {
 			if ((maceintrtab[i].irq == (1 << 4)) &&

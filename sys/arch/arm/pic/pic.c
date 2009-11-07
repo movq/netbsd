@@ -1,4 +1,4 @@
-/*	$NetBSD: pic.c,v 1.4 2008/12/30 05:43:14 matt Exp $	*/
+/*	$NetBSD: pic.c,v 1.8 2011/03/11 03:16:14 bsh Exp $	*/
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.4 2008/12/30 05:43:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.8 2011/03/11 03:16:14 bsh Exp $");
 
 #define _INTR_PRIVATE
 #include <sys/param.h>
@@ -158,7 +158,14 @@ pic_find_pending_irqs_by_ipl(struct pic_softc *pic, size_t irq_base,
 			return ipl_irq_mask;
 
 		irq_mask = __BIT(irq);
-		KASSERT(pic->pic_sources[irq_base + irq] != NULL);
+#if 1
+    		KASSERT(pic->pic_sources[irq_base + irq] != NULL);
+#else
+		if (pic->pic_sources[irq_base + irq] == NULL) {
+			aprint_error("stray interrupt? irq_base=%zu irq=%d\n",
+			    irq_base, irq);
+		} else
+#endif
 		if (pic->pic_sources[irq_base + irq]->is_ipl == ipl)
 			ipl_irq_mask |= irq_mask;
 
@@ -193,6 +200,7 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 	size_t irq_base;
 #if PIC_MAXSOURCES > 32
 	size_t irq_count;
+	int poi = 0;		/* Possibility of interrupting */
 #endif
 	uint32_t pending_irqs;
 	uint32_t blocked_irqs;
@@ -214,14 +222,20 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 		if (pending_irqs == 0) {
 #if PIC_MAXSOURCES > 32
 			irq_count += 32;
-			if (__predict_true(irq_count >= pic->pic_maxsources))
-				break;
-			irq_base += 32;
-			ipending++;
-			iblocked++;
-			if (irq_base >= pic->pic_maxsources) {
+			if (__predict_true(irq_count >= pic->pic_maxsources)) {
+				if (!poi)
+					/*Interrupt at this level was handled.*/
+					break;
+				irq_base = 0;
+				irq_count = 0;
+				poi = 0;
 				ipending = pic->pic_pending_irqs;
 				iblocked = pic->pic_blocked_irqs;
+			} else {
+				irq_base += 32;
+				ipending++;
+				iblocked++;
+				KASSERT(irq_base <= pic->pic_maxsources);
 			}
 			continue;
 #else
@@ -229,7 +243,7 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 #endif
 		}
 		progress = true;
-		blocked_irqs = pending_irqs;
+		blocked_irqs = 0;
 		do {
 			irq = ffs(pending_irqs) - 1;
 			KASSERT(irq >= 0);
@@ -240,9 +254,16 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 				cpsie(I32_bit);
 				pic_dispatch(is, frame);
 				cpsid(I32_bit);
+#if PIC_MAXSOURCES > 32
+				/*
+				 * There is a possibility of interrupting
+				 * from cpsie() to cpsid().
+				 */
+				poi = 1;
+#endif
+				blocked_irqs |= __BIT(irq);
 			} else {
 				KASSERT(0);
-				blocked_irqs &= ~__BIT(irq);
 			}
 			pending_irqs = pic_find_pending_irqs_by_ipl(pic,
 			    irq_base, *ipending, ipl);
@@ -505,43 +526,6 @@ pic_disestablish_source(struct intrsource *is)
 	evcnt_detach(&is->is_ev);
 
 	free(is, M_INTRSOURCE);
-}
-
-int
-_splraise(int newipl)
-{
-	struct cpu_info * const ci = curcpu();
-	const int oldipl = ci->ci_cpl;
-	KASSERT(newipl < NIPL);
-	if (newipl > ci->ci_cpl)
-		ci->ci_cpl = newipl;
-	return oldipl;
-}
-int
-_spllower(int newipl)
-{
-	struct cpu_info * const ci = curcpu();
-	const int oldipl = ci->ci_cpl;
-	KASSERT(panicstr || newipl <= ci->ci_cpl);
-	if (newipl < ci->ci_cpl) {
-		register_t psw = disable_interrupts(I32_bit);
-		pic_do_pending_ints(psw, newipl, NULL);
-		restore_interrupts(psw);
-	}
-	return oldipl;
-}
-
-void
-splx(int savedipl)
-{
-	struct cpu_info * const ci = curcpu();
-	KASSERT(savedipl < NIPL);
-	if (savedipl < ci->ci_cpl) {
-		register_t psw = disable_interrupts(I32_bit);
-		pic_do_pending_ints(psw, savedipl, NULL);
-		restore_interrupts(psw);
-	}
-	ci->ci_cpl = savedipl;
 }
 
 void *

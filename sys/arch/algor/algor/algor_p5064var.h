@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p5064var.h,v 1.6 2008/04/28 20:23:10 martin Exp $	*/
+/*	$NetBSD: algor_p5064var.h,v 1.9 2011/07/08 18:48:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -29,19 +29,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pci/pcivar.h>
 #include <dev/isa/isavar.h>
 
 struct p5064_config {
-	struct algor_bus_space ac_iot;
-	struct algor_bus_space ac_memt;
+	struct mips_bus_space ac_iot;
+	struct mips_bus_space ac_memt;
 
-	struct algor_bus_dma_tag ac_pci_dmat;
-	struct algor_bus_dma_tag ac_isa_dmat;
+	struct mips_bus_dma_tag ac_pci_dmat;
+	struct mips_bus_dma_tag ac_isa_dmat;
 
-	struct algor_pci_chipset ac_pc;
-	struct algor_isa_chipset ac_ic;
+	struct mips_pci_chipset ac_pc;
+	struct mips_isa_chipset ac_ic;
 
 	struct extent *ac_io_ex;
 	struct extent *ac_mem_ex;
@@ -75,7 +75,7 @@ void	algor_p5064_dma_init(struct p5064_config *);
 
 void	algor_p5064_intr_init(struct p5064_config *);
 
-void	algor_p5064_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	algor_p5064_iointr(int, vaddr_t, uint32_t);
 
 void	algor_p5064_cal_timer(bus_space_tag_t, bus_space_handle_t);
 #endif /* _KERNEL */

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.48 2009/08/19 06:28:07 nisimura Exp $	*/
+/*	$NetBSD: machdep.c,v 1.62 2012/02/10 12:02:33 phx Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,52 +32,50 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.48 2009/08/19 06:28:07 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.62 2012/02/10 12:02:33 phx Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
-#include "opt_modular.h"
 #include "opt_interrupt.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
+#include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
+#include <sys/module.h>
 #include <sys/mount.h>
 #include <sys/msgbuf.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
-#include <sys/syslog.h>
 #include <sys/sysctl.h>
+#include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/ksyms.h>
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
 #include <machine/bootinfo.h>
+
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
 
 #include <powerpc/oea/bat.h>
 #include <powerpc/openpic.h>
 #include <powerpc/pic/picvar.h>
 
 #ifdef DDB
-#include <machine/db_machdep.h>
+#include <powerpc/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -99,14 +97,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.48 2009/08/19 06:28:07 nisimura Exp $"
 #include "ksyms.h"
 
 char bootinfo[BOOTINFO_MAXSIZE];
+void (*md_reboot)(int);
 
 void initppc(u_int, u_int, u_int, void *);
 void consinit(void);
 void sandpoint_bus_space_init(void);
 size_t mpc107memsize(void);
 
-#define	OFMEMREGIONS	32
-struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
+/* we support single chunk of memory */
+struct mem_region physmemr[2], availmemr[2];
 
 paddr_t avail_end;
 struct pic_ops *isa_pic = NULL;
@@ -123,12 +122,12 @@ extern struct consdev kcomcons;
 void
 initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 {
+	extern u_long ticks_per_sec, ns_per_tick;
 	struct btinfo_magic *bi_magic = btinfo;
 	struct btinfo_memory *meminfo;
 	struct btinfo_clock *clockinfo;
 	size_t memsize;
 	u_long ticks;
-	extern u_long ticks_per_sec, ns_per_tick;
 
 	if ((unsigned)btinfo != 0 && (unsigned)btinfo < startkernel
 	    && bi_magic->magic == BOOTINFO_MAGIC)
@@ -143,8 +142,10 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 		memsize = mpc107memsize();
 	physmemr[0].start = 0;
 	physmemr[0].size = memsize;
+	physmemr[1].size = 0;
 	availmemr[0].start = (endkernel + PGOFSET) & ~PGOFSET;
 	availmemr[0].size = memsize - availmemr[0].start;
+	availmemr[1].size = 0;
 	avail_end = physmemr[0].start + physmemr[0].size; /* XXX */
 
 	clockinfo = lookup_bootinfo(BTINFO_CLOCK);
@@ -172,6 +173,7 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	oea_batinit(
 	    0x80000000, BAT_BL_256M,	/* SANDPOINT_BUS_SPACE_MEM */
 	    0xfc000000, BAT_BL_64M,	/* _EUMB|_IO */
+	    0x70000000, BAT_BL_8M,	/* only for NH230 board control */
 	    0);
 
 	/* Install vectors and interrupt handler */
@@ -181,9 +183,13 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	cn_tab = &kcomcons;
 	(*cn_tab->cn_init)(&kcomcons);
 
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#endif
+#ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
+#endif
 #endif
 
 	/* Initialize bus_space */
@@ -225,13 +231,15 @@ mem_regions(struct mem_region **mem, struct mem_region **avail)
 void
 cpu_startup(void)
 {
-	int msr;
+	struct btinfo_prodfamily *bi_prod;
 	void *baseaddr;
+	int msr;
 
 	/*
 	 * Do common startup.
 	 */
-	oea_startup(NULL);
+	bi_prod = lookup_bootinfo(BTINFO_PRODFAMILY);
+	oea_startup(bi_prod != NULL ? bi_prod->name : NULL);
 
 	/*
 	 * Prepare EPIC and install external interrupt handler.
@@ -351,7 +359,9 @@ consinit(void)
 void
 cpu_reboot(int howto, char *what)
 {
+	extern void jump_to_ppc_reset_entry(void);	/* from locore.S */
 	static int syncing;
+	register_t msr;
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0 && syncing == 0) {
@@ -361,7 +371,7 @@ cpu_reboot(int howto, char *what)
 	}	    
 	
 	/* Disable intr */
-	splhigh();	
+	/* splhigh(); */
 	
 	/* Do dump if requested */
 	if ((howto & (RB_DUMP | RB_HALT)) == RB_DUMP)
@@ -371,26 +381,53 @@ cpu_reboot(int howto, char *what)
 
 	pmf_system_shutdown(boothowto);
 	 
-	if (howto & RB_HALT) {
+	if ((howto & RB_POWERDOWN) == RB_HALT) {
 		printf("\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cnpollc(1);	/* for proper keyboard command handling */
 		cngetc();  
 		cnpollc(0);
+		howto = RB_AUTOBOOT;
 	}
-    
-	printf("rebooting...\n\n");
 
-#if 1
-    {
-	/* XXX reboot scheme is target dependent XXX */
-	extern void jump_to_ppc_reset_entry(void);
+	if (md_reboot != NULL)
+		(*md_reboot)(howto);
+
+	/*
+	 * No reboot method defined. So we disable the MMU and jump
+	 * through the firmware's reset vector.
+	 */
+	msr = mfmsr();
+	msr &= ~PSL_EE;
+	mtmsr(msr);
+	__asm volatile("mtspr %0,%1" : : "K"(81), "r"(0));
+	msr &= ~(PSL_ME | PSL_DR | PSL_IR);
+	mtmsr(msr);
 	jump_to_ppc_reset_entry();
-    }
-#endif
-	while (1);
+	for (;;);
 }
+
+#ifdef MODULAR
+void
+module_init_md(void)
+{
+        struct btinfo_modulelist *module;
+	struct bi_modulelist_entry *bi, *biend;
+
+        module = lookup_bootinfo(BTINFO_MODULELIST);
+        if (module == NULL)
+		return;
+	bi = (struct bi_modulelist_entry *)(module + 1);
+	biend = bi + module->num;
+	while (bi < biend) {
+		printf("module %s at 0x%08x size %x\n", 
+		    bi->kmod, bi->base, bi->len);
+		/* module_prime(bi->kmod, (void *)bi->base, bi->len); */
+		bi += 1;
+	}
+}
+#endif /* MODULAR */
 
 struct powerpc_bus_space sandpoint_io_space_tag = {
 	_BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_IO_TYPE,
@@ -402,7 +439,7 @@ struct powerpc_bus_space genppc_isa_io_space_tag = {
 };
 struct powerpc_bus_space sandpoint_mem_space_tag = {
 	_BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_MEM_TYPE,
-	0x00000000, 0x80000000, 0xfbffffff,
+	0x00000000, 0x80000000, 0xfc000000,
 };
 struct powerpc_bus_space genppc_isa_mem_space_tag = {
 	_BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_MEM_TYPE,
@@ -412,8 +449,16 @@ struct powerpc_bus_space sandpoint_eumb_space_tag = {
 	_BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_MEM_TYPE,
 	0xfc000000, 0x00000000, 0x00100000,
 };
+struct powerpc_bus_space sandpoint_flash_space_tag = {
+	_BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_MEM_TYPE,
+	0x00000000, 0xff000000, 0x00000000,
+};
+struct powerpc_bus_space sandpoint_nhgpio_space_tag = {
+	_BUS_SPACE_BIG_ENDIAN|_BUS_SPACE_MEM_TYPE,
+	0x70000000, 0x00000000, 0x00001000,
+};
 
-static char ex_storage[5][EXTENT_FIXED_STORAGE_SIZE(8)]
+static char ex_storage[7][EXTENT_FIXED_STORAGE_SIZE(8)]
     __attribute__((aligned(8)));
 
 void
@@ -451,6 +496,17 @@ sandpoint_bus_space_init(void)
 	    ex_storage[4], sizeof(ex_storage[4]));
 	if (error)
 		panic("sandpoint_bus_space_init: can't init eumb tag");
+
+	error = bus_space_init(&sandpoint_flash_space_tag, "flash",
+	    ex_storage[5], sizeof(ex_storage[5]));
+	if (error)
+		panic("sandpoint_bus_space_init: can't init flash tag");
+
+	/* NH230/231 only: extended ROM space at 0x70000000 for GPIO */
+	error = bus_space_init(&sandpoint_nhgpio_space_tag, "nh23x-gpio",
+	    ex_storage[6], sizeof(ex_storage[6]));
+	if (error)
+		panic("sandpoint_bus_space_init: can't init nhgpio tag");
 }
 
 #define MPC107_EUMBBAR		0x78	/* Eumb base address */
@@ -491,7 +547,7 @@ mpc107memsize(void)
 	end |= ((val >> bankn) & 0xff) << 20;
 	end |= 0xfffff;					       /* bit 19:00 */
 
-	return (end + 1); /* recongize this as the amount of SDRAM */
+	return (end + 1); /* recognize this as the amount of SDRAM */
 }
 
 /* XXX XXX debug purpose only XXX XXX */
@@ -585,4 +641,23 @@ kcomcnputc(dev_t dev, int c)
 static void
 kcomcnpollc(dev_t dev, int on)
 {
+}
+
+SYSCTL_SETUP(sysctl_machdep_prodfamily, "sysctl machdep prodfamily")
+{
+	const struct sysctlnode *mnode, *node;
+	struct btinfo_prodfamily *pfam;
+
+	pfam = lookup_bootinfo(BTINFO_PRODFAMILY);
+	if (pfam != NULL) {
+		sysctl_createv(NULL, 0, NULL, &mnode,
+		    CTLFLAG_PERMANENT, CTLTYPE_NODE, "machdep", NULL,
+		    NULL, 0, NULL, 0, CTL_MACHDEP, CTL_EOL);
+
+		sysctl_createv(NULL, 0, &mnode, &node,
+		    CTLFLAG_PERMANENT, CTLTYPE_STRING, "prodfamily",
+		    SYSCTL_DESCR("Board family name."),
+		    NULL, 0, pfam->name, 0,
+		    CTL_CREATE, CTL_EOL);
+	}
 }

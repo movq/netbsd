@@ -1,4 +1,4 @@
-/* $NetBSD: prep_machdep.c,v 1.6 2009/02/13 22:41:03 apb Exp $ */
+/* $NetBSD: prep_machdep.c,v 1.10 2012/02/11 13:53:59 kiyohara Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,20 +37,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.6 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.10 2012/02/11 13:53:59 kiyohara Exp $");
 
 #include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/extent.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/reboot.h>
 #include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 #include <machine/powerpc.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pmap.h>
 #include <powerpc/oea/bat.h>
 
@@ -147,7 +146,9 @@ prep_initppc(u_long startkernel, u_long endkernel, u_int args)
 	oea_batinit(
 	    PREP_BUS_SPACE_MEM, BAT_BL_256M,
 	    PREP_BUS_SPACE_IO,  BAT_BL_256M,
-#ifdef prep
+#if defined(bebox)
+	    0x7ffff000, BAT_BL_8M,	/* BeBox Mainboard Registers (4KB) */
+#elif defined(prep)
 	    0xbf800000, BAT_BL_8M,
 #endif
 	    0);

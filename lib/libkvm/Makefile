@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.45 2008/10/25 23:59:42 mrg Exp $
+#	$NetBSD: Makefile,v 1.48 2011/09/12 21:11:31 christos Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
 
 USE_FORT?= yes	# used primarily by setgid programs
@@ -6,10 +6,7 @@ USE_FORT?= yes	# used primarily by setgid programs
 USE_SHLIBDIR=	yes
 
 LIB=	kvm
-CPPFLAGS+=-DLIBC_SCCS -I${NETBSDSRCDIR}/sys
-.if ${MACHINE_ARCH} == "i386"
-LINTFLAGS+=-w
-.endif
+CPPFLAGS+=-DLIBC_SCCS -I${NETBSDSRCDIR}/sys -D_KMEMUSER
 
 SRCS=	kvm.c kvm_file.c kvm_getloadavg.c kvm_proc.c
 
@@ -31,12 +28,18 @@ SRCS+=	kvm_${MACHINE_CPU}.c
 	@false
 .endif
 
+.if ${MACHINE_ARCH} == "i386"
+LINTFLAGS+=-w
+SRCS+=	kvm_i386pae.c # Hook PAE support in the i386 build
+.endif
+
 # Additional modules needed for m68k
 .if (${MACHINE_ARCH} == "m68k" || ${MACHINE_CPU} == "m68k")
 SRCS+=	kvm_m68k_cmn.c kvm_sun2.c kvm_sun3.c kvm_sun3x.c
 .endif
 
 MAN=	kvm.3 kvm_dump.3 kvm_geterr.3 kvm_getfiles.3 kvm_getloadavg.3 \
+	kvm_getkernelname.3 \
 	kvm_getprocs.3 kvm_nlist.3 kvm_open.3 kvm_read.3 kvm_getlwps.3
 
 MLINKS+=kvm_getprocs.3 kvm_getargv.3 kvm_getprocs.3 kvm_getenvv.3

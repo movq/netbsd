@@ -1,4 +1,4 @@
-/*	$NetBSD: if.h,v 1.145 2009/10/05 21:25:05 dyoung Exp $	*/
+/*	$NetBSD: if.h,v 1.154 2011/10/25 22:26:18 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -63,6 +63,10 @@
 #ifndef _NET_IF_H_
 #define _NET_IF_H_
 
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+#include <stdbool.h>
+#endif
+
 #include <sys/featuretest.h>
 
 /*
@@ -73,8 +77,6 @@
 
 #if defined(_NETBSD_SOURCE)
 
-#include <sys/mutex.h>
-#include <sys/condvar.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <net/dlt.h>
@@ -112,7 +114,6 @@
  * routing and gateway routines maintaining information used to locate
  * interfaces.  These routines live in the files if.c and route.c
  */
-/*  XXX fast fix for SNMP, going away soon */
 #include <sys/time.h>
 
 #if defined(_KERNEL_OPT)
@@ -200,6 +201,33 @@ struct ifqueue {
 	int	ifq_drops;
 };
 
+struct ifnet_lock;
+
+#ifdef _KERNEL
+#include <sys/mutex.h>
+#include <sys/condvar.h>
+#include <sys/percpu.h>
+
+struct ifnet_lock {
+	kmutex_t il_lock;	/* Protects the critical section. */
+	uint64_t il_nexit;	/* Counts threads across all CPUs who
+				 * have exited the critical section.
+				 * Access to il_nexit is synchronized
+				 * by il_lock.
+				 */
+	percpu_t *il_nenter;	/* Counts threads on each CPU who have
+				 * entered or who wait to enter the
+				 * critical section protected by il_lock.
+				 * Synchronization is not required.
+				 */
+	kcondvar_t il_emptied;	/* The ifnet_lock user must arrange for
+				 * the last threads in the critical
+				 * section to signal this condition variable
+				 * before they leave.
+				 */
+};
+#endif /* _KERNEL */
+
 /*
  * Structure defining a queue for a network interface.
  *
@@ -207,13 +235,13 @@ struct ifqueue {
  */
 TAILQ_HEAD(ifnet_head, ifnet);		/* the actual queue head */
 
-struct ifnet {				/* and the entries */
+typedef struct ifnet {
 	void	*if_softc;		/* lower-level data for this if */
 	TAILQ_ENTRY(ifnet) if_list;	/* all struct ifnets are chained */
 	TAILQ_HEAD(, ifaddr) if_addrlist; /* linked list of addresses per if */
 	char	if_xname[IFNAMSIZ];	/* external name (name + unit) */
 	int	if_pcount;		/* number of promiscuous listeners */
-	void *	if_bpf;			/* packet filter structure */
+	struct bpf_if *if_bpf;		/* packet filter structure */
 	u_short	if_index;		/* numeric abbreviation for this if */
 	short	if_timer;		/* time 'til if_watchdog called */
 	short	if_flags;		/* up/down, broadcast, etc. */
@@ -297,7 +325,13 @@ struct ifnet {				/* and the entries */
 					 * same, they are the same ifnet.
 					 */
 	struct sysctllog	*if_sysctl_log;
-};
+	int (*if_initaddr)(struct ifnet *, struct ifaddr *, bool);
+	int (*if_mcastop)(struct ifnet *, const unsigned long,
+	    const struct sockaddr *);
+	int (*if_setflags)(struct ifnet *, const short);
+	struct ifnet_lock *if_ioctl_lock;
+} ifnet_t;
+ 
 #define	if_mtu		if_data.ifi_mtu
 #define	if_type		if_data.ifi_type
 #define	if_addrlen	if_data.ifi_addrlen
@@ -471,17 +505,25 @@ struct ifaddr {
 #define	IFA_ROUTE	RTF_UP	/* (0x01) route installed */
 
 /*
- * Message format for use in obtaining information about interfaces
- * from sysctl and the routing socket.
+ * Message format for use in obtaining information about interfaces from
+ * sysctl and the routing socket.  We need to force 64-bit alignment if we
+ * aren't using compatiblity definitons.
  */
+#if !defined(_KERNEL) || !defined(COMPAT_RTSOCK)
+#define	__align64	__aligned(sizeof(uint64_t))
+#else
+#define	__align64
+#endif
 struct if_msghdr {
-	u_short	ifm_msglen;	/* to skip over non-understood messages */
+	u_short	ifm_msglen __align64;
+				/* to skip over non-understood messages */
 	u_char	ifm_version;	/* future binary compatibility */
 	u_char	ifm_type;	/* message type */
 	int	ifm_addrs;	/* like rtm_addrs */
 	int	ifm_flags;	/* value of if_flags */
 	u_short	ifm_index;	/* index for associated ifp */
-	struct	if_data ifm_data;/* statistics and other data about if */
+	struct	if_data ifm_data __align64;
+				/* statistics and other data about if */
 };
 
 /*
@@ -489,20 +531,22 @@ struct if_msghdr {
  * from sysctl and the routing socket.
  */
 struct ifa_msghdr {
-	u_short	ifam_msglen;	/* to skip over non-understood messages */
+	u_short	ifam_msglen __align64;
+				/* to skip over non-understood messages */
 	u_char	ifam_version;	/* future binary compatibility */
 	u_char	ifam_type;	/* message type */
 	int	ifam_addrs;	/* like rtm_addrs */
 	int	ifam_flags;	/* value of ifa_flags */
-	u_short	ifam_index;	/* index for associated ifp */
 	int	ifam_metric;	/* value of ifa_metric */
+	u_short	ifam_index;	/* index for associated ifp */
 };
 
 /*
  * Message format announcing the arrival or departure of a network interface.
  */
 struct if_announcemsghdr {
-	u_short	ifan_msglen;	/* to skip over non-understood messages */
+	u_short	ifan_msglen __align64;
+				/* to skip over non-understood messages */
 	u_char	ifan_version;	/* future binary compatibility */
 	u_char	ifan_type;	/* message type */
 	u_short	ifan_index;	/* index for associated ifp */
@@ -512,6 +556,8 @@ struct if_announcemsghdr {
 
 #define	IFAN_ARRIVAL	0	/* interface arrival */
 #define	IFAN_DEPARTURE	1	/* interface departure */
+
+#undef __align64
 
 /*
  * Interface request structure used for socket
@@ -604,6 +650,8 @@ struct  ifdrv {
 	size_t		ifd_len;
 	void		*ifd_data;
 };
+#define IFLINKSTR_QUERYLEN	0x01
+#define IFLINKSTR_UNSET		0x02
 
 /*
  * Structure used in SIOCGIFCONF request.
@@ -809,6 +857,7 @@ void    ether_input(struct ifnet *, struct mbuf *);
 int ifreq_setaddr(u_long, struct ifreq *, const struct sockaddr *);
 
 struct ifnet *if_alloc(u_char);
+void if_free(struct ifnet *);
 void if_initname(struct ifnet *, const char *, int);
 struct ifaddr *if_dl_create(const struct ifnet *, const struct sockaddr_dl **);
 void if_activate_sadl(struct ifnet *, struct ifaddr *,
@@ -835,6 +884,9 @@ int	ifioctl(struct socket *, u_long, void *, struct lwp *);
 int	ifioctl_common(struct ifnet *, u_long, void *);
 int	ifpromisc(struct ifnet *, int);
 struct	ifnet *ifunit(const char *);
+int	if_addr_init(ifnet_t *, struct ifaddr *, bool);
+int	if_mcast_op(ifnet_t *, const unsigned long, const struct sockaddr *);
+int	if_flags_set(struct ifnet *, const short);
 
 void ifa_insert(struct ifnet *, struct ifaddr *);
 void ifa_remove(struct ifnet *, struct ifaddr *);
@@ -896,6 +948,9 @@ __END_DECLS
 #endif /* _KERNEL */ /* XXX really ALTQ? */
 
 #ifdef _KERNEL
+
+ifnet_t *	if_byindex(u_int);
+
 /*
  * ifq sysctl support
  */

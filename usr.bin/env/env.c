@@ -35,7 +35,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
 
 #ifndef lint
 /*static char sccsid[] = "@(#)env.c	8.3 (Berkeley) 4/2/94";*/
-__RCSID("$NetBSD: env.c,v 1.17 2008/07/21 14:19:22 lukem Exp $");
+__RCSID("$NetBSD: env.c,v 1.20 2010/11/16 02:53:49 christos Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -46,19 +46,19 @@ __RCSID("$NetBSD: env.c,v 1.17 2008/07/21 14:19:22 lukem Exp $");
 #include <locale.h>
 #include <errno.h>
 
-int	main(int, char **);
-static void usage(void);
+static void usage(void) __attribute__((__noreturn__));
 
 extern char **environ;
 
 int
 main(int argc, char **argv)
 {
-	char **ep, *p;
+	char **ep;
 	char *cleanenv[1];
 	int ch;
 
-	setlocale(LC_ALL, "");
+	setprogname(*argv);
+	(void)setlocale(LC_ALL, "");
 
 	while ((ch = getopt(argc, argv, "-i")) != -1)
 		switch((char)ch) {
@@ -72,14 +72,14 @@ main(int argc, char **argv)
 			usage();
 		}
 
-	for (argv += optind; *argv && (p = strchr(*argv, '=')); ++argv)
-		(void)setenv(*argv, ++p, 1);
+	for (argv += optind; *argv && strchr(*argv, '=') != NULL; ++argv)
+		(void)putenv(*argv);
 
 	if (*argv) {
 		/* return 127 if the command to be run could not be found; 126
-		   if the command was was found but could not be invoked */
+		   if the command was found but could not be invoked */
 
-		execvp(*argv, argv);
+		(void)execvp(*argv, argv);
 		err((errno == ENOENT) ? 127 : 126, "%s", *argv);
 		/* NOTREACHED */
 	}
@@ -93,6 +93,7 @@ main(int argc, char **argv)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: env [-i] [name=value ...] [command]\n");
+	(void)fprintf(stderr, "Usage: %s [-i] [name=value ...] [command]\n",
+	    getprogname());
 	exit(1);
 }

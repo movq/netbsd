@@ -1,4 +1,4 @@
-/*	$NetBSD: db_command.c,v 1.133 2009/07/19 02:37:33 rmind Exp $	*/
+/*	$NetBSD: db_command.c,v 1.137 2011/11/13 03:21:51 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1998, 1999, 2002, 2009 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_command.c,v 1.133 2009/07/19 02:37:33 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_command.c,v 1.137 2011/11/13 03:21:51 mrg Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_aio.h"
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_command.c,v 1.133 2009/07/19 02:37:33 rmind Exp $
 #include "opt_kgdb.h"
 #include "opt_mqueue.h"
 #include "opt_inet.h"
-#include "opt_uvmhist.h"
+#include "opt_kernhist.h"
 #include "opt_ddbparam.h"
 #include "opt_multiprocessor.h"
 #include "arp.h"
@@ -90,6 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_command.c,v 1.133 2009/07/19 02:37:33 rmind Exp $
 #include <sys/cpu.h>
 #include <sys/buf.h>
 #include <sys/module.h>
+#include <sys/kernhist.h>
 
 /*include queue macros*/
 #include <sys/queue.h>
@@ -133,7 +134,8 @@ static const struct db_command db_command_table[];
 static const struct db_command db_show_cmds[];
 
 #ifdef DB_MACHINE_COMMANDS
-static const struct db_command db_machine_command_table[];
+/* arch/<arch>/<arch>/db_interface.c */
+extern const struct db_command db_machine_command_table[];
 #endif
 
 /* the global queue of all command tables */
@@ -204,8 +206,8 @@ static void	db_stack_trace_cmd(db_expr_t, bool, db_expr_t, const char *);
 static void	db_sync_cmd(db_expr_t, bool, db_expr_t, const char *);
 static void	db_whatis_cmd(db_expr_t, bool, db_expr_t, const char *);
 static void	db_uvmexp_print_cmd(db_expr_t, bool, db_expr_t, const char *);
-#ifdef UVMHIST
-static void	db_uvmhist_print_cmd(db_expr_t, bool, db_expr_t, const char *);
+#ifdef KERNHIST
+static void	db_kernhist_print_cmd(db_expr_t, bool, db_expr_t, const char *);
 #endif
 static void	db_vnode_print_cmd(db_expr_t, bool, db_expr_t, const char *);
 static void	db_vmem_print_cmd(db_expr_t, bool, db_expr_t, const char *);
@@ -218,10 +220,12 @@ static const struct db_command db_show_cmds[] = {
 #endif
 	{ DDB_ADD_CMD("pages",	db_show_all_pages,
 	    0 ,"List all used memory pages.",NULL,NULL) },
+	{ DDB_ADD_CMD("proc",	db_show_proc,
+	    0 ,"Print process information.",NULL,NULL) },
 	{ DDB_ADD_CMD("procs",	db_show_all_procs,
 	    0 ,"List all processes.",NULL,NULL) },
 	{ DDB_ADD_CMD("pools",	db_show_all_pools,
-	    0 ,"Show all poolS",NULL,NULL) },
+	    0 ,"Show all pools",NULL,NULL) },
 #ifdef AIO
 	/*added from all sub cmds*/
 	{ DDB_ADD_CMD("aio_jobs",	db_show_aio_jobs,	0,
@@ -273,8 +277,8 @@ static const struct db_command db_show_cmds[] = {
 	{ DDB_ADD_CMD("uvmexp",	db_uvmexp_print_cmd, 0,
 	    "Print a selection of UVM counters and statistics.",
 	    NULL,NULL) },
-#ifdef UVMHIST
-	{ DDB_ADD_CMD("uvmhist", db_uvmhist_print_cmd, 0,
+#ifdef KERNHIST
+	{ DDB_ADD_CMD("kernhist", db_kernhist_print_cmd, 0,
 	    "Print the UVM history logs.",
 	    NULL,NULL) },
 #endif
@@ -290,11 +294,6 @@ static const struct db_command db_show_cmds[] = {
 #endif
 	{ DDB_ADD_CMD(NULL,		NULL,			0,NULL,NULL,NULL) }
 };
-
-/* arch/<arch>/<arch>/db_interface.c */
-#ifdef DB_MACHINE_COMMANDS
-extern const struct db_command db_machine_command_table[];
-#endif
 
 static const struct db_command db_command_table[] = {
 	{ DDB_ADD_CMD("b",		db_breakpoint_cmd,	0,
@@ -1199,14 +1198,14 @@ db_uvmexp_print_cmd(db_expr_t addr, bool have_addr,
 #endif
 }
 
-#ifdef UVMHIST
+#ifdef KERNHIST
 /*ARGSUSED*/
 static void
-db_uvmhist_print_cmd(db_expr_t addr, bool have_addr,
+db_kernhist_print_cmd(db_expr_t addr, bool have_addr,
     db_expr_t count, const char *modif)
 {
 
-	uvmhist_print(db_printf);
+	kernhist_print(db_printf);
 }
 #endif
 
@@ -1305,6 +1304,7 @@ db_reboot_cmd(db_expr_t addr, bool have_addr,
 	 * called from cpu_reboot.
 	 */
 	db_recover = 0;
+	panicstr = "reboot forced via kernel debugger";
 	cpu_reboot((int)bootflags, NULL);
 #else	/* _KERNEL */
 	db_printf("This command can only be used in-kernel.\n");

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tokensubr.c,v 1.57 2009/04/18 14:58:05 tsutsui Exp $	*/
+/*	$NetBSD: if_tokensubr.c,v 1.61 2011/07/19 19:42:27 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -92,14 +92,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.57 2009/04/18 14:58:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.61 2011/07/19 19:42:27 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
 #include "opt_gateway.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -121,9 +120,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.57 2009/04/18 14:58:05 tsutsui Ex
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <net/if_ether.h>
 #include <net/if_token.h>
@@ -151,7 +148,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.57 2009/04/18 14:58:05 tsutsui Ex
 #include <netiso/iso_snpac.h>
 #endif
 
-#include "bpfilter.h"
 
 #define senderr(e) { error = (e); goto bad;}
 
@@ -308,10 +304,10 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
 		}
 		else {
-			void *tha = (void *)ar_tha(ah);
-			KASSERT(tha);
-			if (tha)
-				memcpy((void *)edst, tha, sizeof(edst));
+			void *tha = ar_tha(ah);
+			if (tha == NULL)
+				return 0;
+			memcpy(edst, tha, sizeof(edst));
 			trh = (struct token_header *)M_TRHSTART(m);
 			trh->token_ac = TOKEN_AC;
 			trh->token_fc = TOKEN_FC;
@@ -601,10 +597,8 @@ token_input(struct ifnet *ifp, struct mbuf *m)
 			sa.sa_len = sizeof(sa);
 			eh = (struct ether_header *)sa.sa_data;
 			for (i = 0; i < ISO88025_ADDR_LEN; i++) {
-				eh->ether_shost[i] = c = trh->token_dhost[i];
-				eh->ether_dhost[i] =
-				    eh->ether_dhost[i] = trh->token_shost[i];
-				eh->ether_shost[i] = c;
+				eh->ether_shost[i] = trh->token_dhost[i];
+				eh->ether_dhost[i] = trh->token_shost[i];
 			}
 			eh->ether_type = 0;
 			m_adj(m, lan_hdr_len);
@@ -658,18 +652,14 @@ token_ifattach(struct ifnet *ifp, void *lla)
 
 	if_set_sadl(ifp, lla, ISO88025_ADDR_LEN, true);
 
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_IEEE802, sizeof(struct token_header));
-#endif
+	bpf_attach(ifp, DLT_IEEE802, sizeof(struct token_header));
 }
 
 void
 token_ifdetach(struct ifnet *ifp)
 {
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 #if 0	/* done in if_detach() */
 	if_free_sadl(ifp);
 #endif

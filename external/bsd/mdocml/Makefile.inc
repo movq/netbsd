@@ -1,16 +1,20 @@
-# $NetBSD: Makefile.inc,v 1.3 2009/11/05 18:28:10 joerg Exp $
+# $NetBSD: Makefile.inc,v 1.14.4.1 2012/02/18 18:03:26 riz Exp $
 
 .include <bsd.own.mk>
 
-VERSION=	1.9.13
+VERSION!=	cd ${.PARSEDIR}/dist && ${MAKE} -V VERSION
 
-CPPFLAGS+=	-DVERSION=\"${VERSION}\"
+CPPFLAGS+=	-DVERSION=\"${VERSION}\" -DUGLY
+
+.if (${HOSTPROG:U} == "")
+CPPFLAGS+=	-DHAVE_STRLCAT -DHAVE_STRLCPY -DHAVE_STRPTIME -DHAVE_MMAP
+.endif
 
 DISTDIR:=	${.PARSEDIR}/dist
 
 .PATH:	${DISTDIR}
 
-.for _LIB in man mdoc
+.for _LIB in mandoc
 MDOCMLOBJDIR.${_LIB} !=	cd ${.PARSEDIR}/lib/lib${_LIB} && ${PRINTOBJDIR}
 MDOCMLLIB.${_LIB}=	${MDOCMLOBJDIR.${_LIB}}/lib${_LIB}.a
 .endfor

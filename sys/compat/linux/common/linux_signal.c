@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_signal.c,v 1.69 2009/06/08 13:23:16 njoly Exp $	*/
+/*	$NetBSD: linux_signal.c,v 1.75 2011/11/18 17:36:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.69 2009/06/08 13:23:16 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.75 2011/11/18 17:36:06 christos Exp $");
 
 #define COMPAT_LINUX 1
 
@@ -69,14 +69,14 @@ __KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.69 2009/06/08 13:23:16 njoly Exp 
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
-#include <compat/linux/common/linux_exec.h> /* For emul_linux */
-#include <compat/linux/common/linux_machdep.h> /* For LINUX_NPTL */
-#include <compat/linux/common/linux_emuldata.h> /* for linux_emuldata */
+#include <compat/linux/common/linux_emuldata.h>
 #include <compat/linux/common/linux_siginfo.h>
 #include <compat/linux/common/linux_sigevent.h>
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_sem.h>
+#include <compat/linux/common/linux_errno.h>
+#include <compat/linux/common/linux_sched.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
@@ -156,6 +156,69 @@ native_to_linux_sigset(linux_sigset_t *lss, const sigset_t *bss)
 			newsig = native_to_linux_signo[i];
 			if (newsig)
 				linux_sigaddset(lss, newsig);
+		}
+	}
+}
+
+void
+native_to_linux_siginfo(linux_siginfo_t *lsi, const struct _ksiginfo *ksi)
+{
+	memset(lsi, 0, sizeof(*lsi));
+
+	lsi->lsi_signo = native_to_linux_signo[ksi->_signo];
+	lsi->lsi_errno = native_to_linux_errno[ksi->_errno];
+	lsi->lsi_code = native_to_linux_si_code(ksi->_code);
+
+	switch (ksi->_code) {
+	case SI_NOINFO:
+		break;
+
+	case SI_USER:
+		lsi->lsi_pid = ksi->_reason._rt._pid;
+		lsi->lsi_uid = ksi->_reason._rt._uid;
+		if (lsi->lsi_signo == LINUX_SIGALRM ||
+		    lsi->lsi_signo >= LINUX_SIGRTMIN)
+			lsi->lsi_value.sival_ptr =
+			    ksi->_reason._rt._value.sival_ptr;
+		break;
+
+	case SI_TIMER:
+	case SI_QUEUE:
+		lsi->lsi_uid = ksi->_reason._rt._uid;
+		lsi->lsi_uid = ksi->_reason._rt._uid;
+		lsi->lsi_value.sival_ptr = ksi->_reason._rt._value.sival_ptr;
+		break;
+
+	case SI_ASYNCIO:
+	case SI_MESGQ:
+		lsi->lsi_value.sival_ptr = ksi->_reason._rt._value.sival_ptr;
+		break;
+
+	default:
+		switch (ksi->_signo) {
+		case SIGCHLD:
+			lsi->lsi_uid = ksi->_reason._child._uid;
+			lsi->lsi_pid = ksi->_reason._child._pid;
+			lsi->lsi_status = native_to_linux_si_status(
+			    ksi->_code, ksi->_reason._child._status);
+			lsi->lsi_utime = ksi->_reason._child._utime;
+			lsi->lsi_stime = ksi->_reason._child._stime;
+			break;
+
+		case SIGILL:
+		case SIGFPE:
+		case SIGSEGV:
+		case SIGBUS:
+		case SIGTRAP:
+			lsi->lsi_addr = ksi->_reason._fault._addr;
+			break;
+
+		case SIGIO:
+			lsi->lsi_fd = ksi->_reason._poll._fd;
+			lsi->lsi_band = ksi->_reason._poll._band;
+			break;
+		default:
+			break;
 		}
 	}
 }
@@ -295,7 +358,7 @@ linux_sys_rt_sigaction(struct lwp *l, const struct linux_sys_rt_sigaction_args *
 #if defined __amd64__
 		if (nlsa.linux_sa_flags & LINUX_SA_RESTORER) {
 			if ((tramp = nlsa.linux_sa_restorer) != NULL)
-				vers = 2; /* XXX arch dependant */
+				vers = 2; /* XXX arch dependent */
 		}
 #endif
 
@@ -491,6 +554,62 @@ linux_sys_rt_sigsuspend(struct lwp *l, const struct linux_sys_rt_sigsuspend_args
 	return (sigsuspend1(l, &bss));
 }
 
+static int
+fetchss(const void *u, void *s, size_t len)
+{
+	int error;
+	linux_sigset_t lss;
+	
+	if ((error = copyin(u, &lss, sizeof(lss))) != 0)
+		return error;
+
+	linux_to_native_sigset(s, &lss);
+	return 0;
+}
+
+static int
+fetchts(const void *u, void *s, size_t len)
+{
+	int error;
+	struct linux_timespec lts;
+	
+	if ((error = copyin(u, &lts, sizeof(lts))) != 0)
+		return error;
+
+	linux_to_native_timespec(s, &lts);
+	return 0;
+}
+
+static int
+fakestorets(const void *u, void *s, size_t len)
+{
+	/* Do nothing, sigtimedwait does not alter timeout like ours */
+	return 0;
+}
+
+static int
+storeinfo(const void *s, void *u, size_t len)
+{
+	struct linux_siginfo lsi;
+
+	native_to_linux_siginfo(&lsi, &((const siginfo_t *)s)->_info);
+	return copyout(&lsi, u, sizeof(lsi));
+}
+
+int
+linux_sys_rt_sigtimedwait(struct lwp *l,
+    const struct linux_sys_rt_sigtimedwait_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(const linux_sigset_t *) set;
+		syscallarg(linux_siginfo_t *) info);
+		syscallarg(const struct linux_timespec *) timeout;
+	} */
+
+	return sigtimedwait1(l, (const struct sys_____sigtimedwait50_args *)uap,
+	    retval, fetchss, storeinfo, fetchts, fakestorets);
+}
+
 /*
  * Once more: only a signal conversion is needed.
  * Note: also used as sys_rt_queueinfo.  The info field is ignored.
@@ -609,39 +728,41 @@ linux_sys_sigaltstack(struct lwp *l, const struct linux_sys_sigaltstack_args *ua
 }
 #endif /* LINUX_SS_ONSTACK */
 
-#ifdef LINUX_NPTL
 static int
 linux_do_tkill(struct lwp *l, int tgid, int tid, int signum)
 {
 	struct proc *p;
-	int error;
+	struct lwp *t;
 	ksiginfo_t ksi;
-	struct linux_emuldata *led;
+	int error;
 
 	if (signum < 0 || signum >= LINUX__NSIG)
 		return EINVAL;
 	signum = linux_to_native_signo[signum];
+
+	if (tgid == -1) {
+		tgid = tid;
+	}
 
 	KSI_INIT(&ksi);
 	ksi.ksi_signo = signum;
 	ksi.ksi_code = SI_LWP;
 	ksi.ksi_pid = l->l_proc->p_pid;
 	ksi.ksi_uid = kauth_cred_geteuid(l->l_cred);
+	ksi.ksi_lid = tid;
 
 	mutex_enter(proc_lock);
-	if ((p = p_find(tid, PFIND_LOCKED)) == NULL) {
-		mutex_exit(proc_lock);
-		return ESRCH;
-	}
-	led = p->p_emuldata;
-	if (tgid > 0 && led->s->group_pid != tgid) {
+	p = proc_find(tgid);
+	if (p == NULL) {
 		mutex_exit(proc_lock);
 		return ESRCH;
 	}
 	mutex_enter(p->p_lock);
 	error = kauth_authorize_process(l->l_cred,
 	    KAUTH_PROCESS_SIGNAL, p, KAUTH_ARG(signum), NULL, NULL);
-	if (!error && signum)
+	if ((t = lwp_find(p, ksi.ksi_lid)) == NULL)
+		error = ESRCH;
+	else if (signum != 0)
 		kpsignal2(p, &ksi);
 	mutex_exit(p->p_lock);
 	mutex_exit(proc_lock);
@@ -660,7 +781,7 @@ linux_sys_tkill(struct lwp *l, const struct linux_sys_tkill_args *uap, register_
 	if (SCARG(uap, tid) <= 0)
 		return EINVAL;
 
-	return linux_do_tkill(l, 0, SCARG(uap, tid), SCARG(uap, sig));
+	return linux_do_tkill(l, -1, SCARG(uap, tid), SCARG(uap, sig));
 }
 
 int
@@ -672,12 +793,11 @@ linux_sys_tgkill(struct lwp *l, const struct linux_sys_tgkill_args *uap, registe
 		syscallarg(int) sig;
 	} */
 
-	if (SCARG(uap, tid) <= 0 || SCARG(uap, tgid) <= 0)
+	if (SCARG(uap, tid) <= 0 || SCARG(uap, tgid) < -1)
 		return EINVAL;
 
 	return linux_do_tkill(l, SCARG(uap, tgid), SCARG(uap, tid), SCARG(uap, sig));
 }
-#endif /* LINUX_NPTL */
 
 int
 native_to_linux_si_code(int code)

@@ -1,21 +1,19 @@
-#	$NetBSD: Makefile,v 1.17 2009/10/14 07:30:47 skrll Exp $
+#	$NetBSD: Makefile,v 1.21.4.1 2012/05/07 03:08:35 riz Exp $
 
 .include <bsd.own.mk>
 
 MODULE=		binutils
 
-.if $(HAVE_BINUTILS) == "219"
 GNUHOSTDIST=	${.CURDIR}/../../external/gpl3/binutils/dist
 
 BRANDING?=	\
-	--with-pkgversion="NetBSD Binutils" \
-	--with-bugurl="http://www.NetBSD.org/support/send-pr.html"
-.else
-BRANDING?=	
-.endif
+	--with-pkgversion="NetBSD Binutils nb1" \
+	--with-bugurl="http://www.NetBSD.org/support/send-pr.html" \
+	--with-lib-path="=/usr/lib" --with-sysroot
 
 CONFIGURE_ARGS=	--target=${MACHINE_GNU_PLATFORM} --disable-nls \
 		--program-transform-name="s,^,${MACHINE_GNU_PLATFORM}-," \
+		--disable-werror \
 		${BRANDING}
 
 MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q}
@@ -30,6 +28,9 @@ INSTALL_TARGET+=install-gprof
 .include "${.CURDIR}/../Makefile.gnuhost"
 
 CCADDFLAGS=	-I${DESTDIR}/usr/include -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/
+
+# Force avoiding possibly non-executable install-sh.
+CONFIGURE_ENV+= ac_cv_path_mkdir="${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-install -d"
 
 NEWCONFIGDIR?=	${.CURDIR}/../..
 MKNATIVE?=	${.CURDIR}/mknative-binutils

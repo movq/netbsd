@@ -1,11 +1,11 @@
-/*	$NetBSD: kern_rwlock_obj.c,v 1.1 2009/11/04 13:29:45 pooka Exp $	*/
+/*	$NetBSD: kern_rwlock_obj.c,v 1.3 2011/05/13 22:16:43 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe and Andrew Doran.
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_rwlock_obj.c,v 1.1 2009/11/04 13:29:45 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_rwlock_obj.c,v 1.3 2011/05/13 22:16:43 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -47,7 +47,7 @@ struct krwobj {
 
 static int	rw_obj_ctor(void *, void *, int);
 
-static pool_cache_t	rw_obj_cache;
+static pool_cache_t	rw_obj_cache	__read_mostly;
 
 /*
  * rw_obj_init:

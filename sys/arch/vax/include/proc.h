@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.12 2007/12/22 08:29:40 tsutsui Exp $	*/
+/*	$NetBSD: proc.h,v 1.15 2011/07/03 02:18:20 matt Exp $	*/
 
 /*
  * Copyright (c) 1991 Regents of the University of California.
@@ -38,7 +38,7 @@
  * Machine-dependent lwp struct for vax,
  */
 struct mdlwp {
-	int md_dummy;			/* Must be at least one field */
+	struct trapframe *md_utf;	/* pointer to user trapframe */
 };
 
 struct trapframe;

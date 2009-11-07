@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.5 2008/05/04 00:18:16 martin Exp $	*/
+/*	$NetBSD: pcib.c,v 1.7 2011/07/01 18:59:19 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -30,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.5 2008/05/04 00:18:16 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.7 2011/07/01 18:59:19 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -121,12 +121,11 @@ pcibattach(device_t parent, device_t self, void *aux)
 
 	v = pci_conf_read(pa->pa_pc, pa->pa_tag, 0x40);
 	if ((v & 0x20) == 0) {
-		aprint_verbose("%s: PIRQ[0-3] not used\n", self->dv_xname);
+		aprint_verbose_dev(self, "PIRQ[0-3] not used\n");
 	} else {
 		v = pci_conf_read(pa->pa_pc, pa->pa_tag, 0x60);
 		if ((v & 0x80808080) == 0x80808080) {
-			aprint_verbose("%s: PIRQ[0-3] disabled\n",
-			    self->dv_xname);
+			aprint_verbose_dev(self, "PIRQ[0-3] disabled\n");
 		} else {
 			int i;
 			aprint_verbose("%s:", device_xname(self));

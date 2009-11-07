@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.30 2008/11/19 18:35:59 ad Exp $	*/
+/*	$NetBSD: svr4_machdep.c,v 1.33 2011/12/22 15:47:15 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,13 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.30 2008/11/19 18:35:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.33 2011/12/22 15:47:15 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
@@ -61,13 +60,11 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.30 2008/11/19 18:35:59 ad Exp $")
 #include <machine/vmparam.h>
 
 extern short exframesize[];
-extern void	m68881_restore(struct fpframe *);
-extern void	m68881_save(struct fpframe *);
 static void	svr4_getsiginfo(union svr4_siginfo *, int, unsigned long,
 		    void *);
 
 void
-svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+svr4_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 	struct frame *frame = (struct frame *)l->l_md.md_regs;
 

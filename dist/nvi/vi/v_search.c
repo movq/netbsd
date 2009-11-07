@@ -1,4 +1,4 @@
-/*	$NetBSD: v_search.c,v 1.2 2008/12/05 22:51:43 christos Exp $ */
+/*	$NetBSD: v_search.c,v 1.4 2011/03/21 14:53:04 tnozaki Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -227,7 +227,7 @@ v_exaddr(SCR *sp, VICMD *vp, dir_t dir)
 
 		/* No blanks, just like the z command. */
 		for (t = cmd + 1, tlen = len - 1; tlen > 0; ++t, --tlen)
-			if (!isdigit(*t))
+			if (!ISDIGIT((UCHAR_T)*t))
 				break;
 		if (tlen &&
 		    (*t == '-' || *t == '.' || *t == '+' || *t == '^')) {
@@ -324,15 +324,16 @@ int
 v_searchw(SCR *sp, VICMD *vp)
 {
 	size_t blen, len;
+	size_t olen = STRLEN(VIP(sp)->keyw);
 	int rval;
 	CHAR_T *bp, *p;
 
-	len = VIP(sp)->klen + RE_WSTART_LEN + RE_WSTOP_LEN;
+	len = olen + RE_WSTART_LEN + RE_WSTOP_LEN;
 	GET_SPACE_RETW(sp, bp, blen, len);
 	MEMCPY(bp, RE_WSTART, RE_WSTART_LEN); 
 	p = bp + RE_WSTART_LEN;
-	MEMCPY(p, VIP(sp)->keyw, VIP(sp)->klen);
-	p += VIP(sp)->klen;
+	MEMCPY(p, VIP(sp)->keyw, olen);
+	p += olen;
 	MEMCPY(p, RE_WSTOP, RE_WSTOP_LEN); 
 
 	rval = v_search(sp, vp, bp, len, SEARCH_SET, FORWARD);

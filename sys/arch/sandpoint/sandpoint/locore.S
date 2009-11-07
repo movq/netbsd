@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.15 2009/02/13 22:41:03 apb Exp $	*/
+/*	$NetBSD: locore.S,v 1.23 2011/06/20 19:56:13 matt Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,7 +33,6 @@
  */
 
 #include "opt_ddb.h"
-#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_modular.h"
 #include "opt_multiprocessor.h"
@@ -44,14 +43,12 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #include <powerpc/oea/hid.h>
 
 #include "ksyms.h"
@@ -68,8 +65,6 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 /*
@@ -97,7 +92,7 @@ __start:
 	mtspr	1008,8
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(MODULAR) || defined(KERNFS)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	lis	7,_C_LABEL(startsym)@ha
 	addi	7,7,_C_LABEL(startsym)@l
 	stw	3,0(7)
@@ -153,7 +148,8 @@ _C_LABEL(jump_to_ppc_reset_entry):
 	mfmsr	3
 	ori	3,3,PSL_IP@l
 	mtmsr	3
-	b	0xFFF00100
+	isync
+	ba	0xFFF00100
 
 /*
  * Include common switch / setfault code
@@ -161,7 +157,7 @@ _C_LABEL(jump_to_ppc_reset_entry):
 #include <powerpc/powerpc/locore_subr.S>
 
 /*
- * Include common trap / execption code
+ * Include common trap / exception code
  */
 #include <powerpc/powerpc/trap_subr.S>
 

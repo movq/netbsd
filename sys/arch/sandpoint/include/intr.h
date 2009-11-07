@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.16 2008/04/28 20:23:34 martin Exp $	*/
+/*	$NetBSD: intr.h,v 1.19 2011/06/17 23:36:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -35,13 +35,9 @@
 #include <powerpc/intr.h>
 
 #ifndef _LOCORE
-#include <machine/cpu.h>
-#include <sys/device.h>
 
 void enable_intr(void);
 void disable_intr(void);
-
-extern int imask[];
 
 #define	ICU_LEN			64
 #define IRQ_SLAVE		2

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2009/10/29 14:42:54 christos Exp $
+#	$NetBSD: Makefile,v 1.9 2011/08/17 09:03:47 christos Exp $
 
 .include "${.CURDIR}/../Makefile.inc"
 
@@ -44,10 +44,6 @@ LDADD+=	-lssl -lcrypto
 SRCS+=	info_nis.c
 .endif
 
-.if ${HAVE_GCC} == 4
-COPTS.amq_subr.c+=	-fno-strict-aliasing
-.endif
-
 # the following are not supported on NetBSD
 #	info_ldap.c info_nisplus.c ops_cachefs.c ops_efs.c ops_lofs.c ops_xfs.c
 MAN+=	amd.8
@@ -62,6 +58,8 @@ YHEADER=	1
 YPREFIX.sun_map_parse.y =	sun_map_
 LPREFIX.sun_map_tok.l =	sun_map_
 CPPFLAGS.sun_map_tok.c += -Dyylval=sun_map_lval -Dyyerror=sun_map_error
+
+CWARNFLAGS.clang+=	-Wno-unneeded-internal-declaration
 
 YPREFIX.conf_parse.y =	conf_
 LPREFIX.conf_tok.l =	conf_

@@ -1,4 +1,4 @@
-/*	$NetBSD: privsep.c,v 1.19 2008/12/23 14:03:12 tteras Exp $	*/
+/*	$NetBSD: privsep.c,v 1.22 2011/08/12 05:21:50 tteras Exp $	*/
 
 /* Id: privsep.c,v 1.15 2005/08/08 11:23:44 vanhu Exp */
 
@@ -67,6 +67,7 @@
 #include "admin.h"
 #include "sockmisc.h"
 #include "privsep.h"
+#include "session.h"
 
 static int privsep_sock[2] = { -1, -1 };
 
@@ -193,6 +194,13 @@ privsep_recv(sock, bufp, lenp)
 	return 0;
 }
 
+static int
+privsep_do_exit(void *ctx, int fd)
+{
+	kill(getpid(), SIGTERM);
+	return 0;
+}
+
 int
 privsep_init(void)
 {
@@ -273,6 +281,7 @@ privsep_init(void)
 			    strerror(errno));
 			return -1;
 		}
+		monitor_fd(privsep_sock[1], privsep_do_exit, NULL, 0);
 
 		return 0;
 		break;
@@ -1465,7 +1474,7 @@ safety_check(msg, index)
 }
 
 /*
- * Filter unsafe environement variables
+ * Filter unsafe environment variables
  */
 static int
 unsafe_env(envp)
@@ -1486,7 +1495,7 @@ unsafe_env(envp)
 	return 0;
 found:
 	plog(LLV_ERROR, LOCATION, NULL, 
-	    "privsep_script_exec: unsafe environement variable\n");
+	    "privsep_script_exec: unsafe environment variable\n");
 	return -1;
 }
 
@@ -1544,6 +1553,7 @@ rec_fd(s)
 {
 	struct msghdr msg;
 	struct cmsghdr *cmsg;
+	int *fdptr;
 	int fd;
 	char cmsbuf[1024];
 	struct iovec iov;
@@ -1569,7 +1579,8 @@ rec_fd(s)
 		return -1;
 
 	cmsg = CMSG_FIRSTHDR(&msg);
-	return *(int *)CMSG_DATA(cmsg);
+	fdptr = (int *) CMSG_DATA(cmsg);
+	return fdptr[0];
 }
 
 /* Send the file descriptor fd through the argument socket s */
@@ -1582,6 +1593,7 @@ send_fd(s, fd)
 	struct cmsghdr *cmsg;
 	char cmsbuf[1024];
 	struct iovec iov;
+	int *fdptr;
 
 	iov.iov_base = " ";
 	iov.iov_len = 1;
@@ -1604,7 +1616,8 @@ send_fd(s, fd)
 	cmsg->cmsg_level = SOL_SOCKET;
 	cmsg->cmsg_type = SCM_RIGHTS;
 	cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
-	*(int *)CMSG_DATA(cmsg) = fd;
+	fdptr = (int *)CMSG_DATA(cmsg);
+	fdptr[0] = fd;
 	msg.msg_controllen = cmsg->cmsg_len;
 
 	if (sendmsg(s, &msg, 0) == -1)

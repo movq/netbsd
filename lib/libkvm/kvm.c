@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm.c,v 1.94 2009/09/14 19:29:20 apb Exp $	*/
+/*	$NetBSD: kvm.c,v 1.99 2011/10/15 21:08:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm.c	8.2 (Berkeley) 2/13/94";
 #else
-__RCSID("$NetBSD: kvm.c,v 1.94 2009/09/14 19:29:20 apb Exp $");
+__RCSID("$NetBSD: kvm.c,v 1.99 2011/10/15 21:08:53 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,6 +54,7 @@ __RCSID("$NetBSD: kvm.c,v 1.94 2009/09/14 19:29:20 apb Exp $");
 #include <sys/exec.h>
 #include <sys/kcore.h>
 #include <sys/ksyms.h>
+#include <sys/types.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -79,7 +80,6 @@ static kvm_t	*_kvm_open(kvm_t *, const char *, const char *,
 		    const char *, int, char *);
 static int	clear_gap(kvm_t *, bool (*)(void *, const void *, size_t),
 		    void *, size_t);
-static int	open_cloexec(const char *, int, int);
 static off_t	Lseek(kvm_t *, int, off_t, int);
 static ssize_t	Pread(kvm_t *, int, void *, size_t, off_t);
 
@@ -87,6 +87,12 @@ char *
 kvm_geterr(kvm_t *kd)
 {
 	return (kd->errbuf);
+}
+
+const char *
+kvm_getkernelname(kvm_t *kd)
+{
+	return kd->kernelname;
 }
 
 /*
@@ -145,27 +151,6 @@ _kvm_malloc(kvm_t *kd, size_t n)
 }
 
 /*
- * Open a file setting the close on exec bit.
- */
-static int
-open_cloexec(const char *fname, int flags, int mode)
-{
-	int fd;
-
-	if ((fd = open(fname, flags, mode)) == -1)
-		return fd;
-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
-		goto error;
-
-	return fd;
-error:
-	flags = errno;
-	(void)close(fd);
-	errno = flags;
-	return -1;
-}
-
-/*
  * Wrapper around the lseek(2) system call; calls _kvm_syserr() for us
  * in the event of emergency.
  */
@@ -215,7 +200,7 @@ _kvm_pread(kvm_t *kd, int fd, void *buf, size_t size, off_t off)
 		kd->iobufsz = dsize;
 	}
 	rv = pread(fd, kd->iobuf, dsize, doff);
-	if (rv < dsize)
+	if (rv < size + moff)
 		return -1;
 	memcpy(buf, kd->iobuf + moff, size);
 	return size;
@@ -329,13 +314,15 @@ _kvm_open(kvm_t *kd, const char *uf, const char *mf, const char *sf, int flag,
 	 * exist, open the current kernel.
 	 */
 	if (ufgiven == 0)
-		kd->nlfd = open_cloexec(_PATH_KSYMS, O_RDONLY, 0);
+		kd->nlfd = open(_PATH_KSYMS, O_RDONLY | O_CLOEXEC, 0);
 	if (kd->nlfd < 0) {
-		if ((kd->nlfd = open_cloexec(uf, O_RDONLY, 0)) < 0) {
+		if ((kd->nlfd = open(uf, O_RDONLY | O_CLOEXEC, 0)) < 0) {
 			_kvm_syserr(kd, kd->program, "%s", uf);
 			goto failed;
 		}
+		strlcpy(kd->kernelname, uf, sizeof(kd->kernelname));
 	} else {
+		strlcpy(kd->kernelname, _PATH_KSYMS, sizeof(kd->kernelname));
 		/*
 		 * We're here because /dev/ksyms was opened
 		 * successfully.  However, we don't want to keep it
@@ -347,7 +334,7 @@ _kvm_open(kvm_t *kd, const char *uf, const char *mf, const char *sf, int flag,
 		kd->nlfd = -1;
 	}
 
-	if ((kd->pmfd = open_cloexec(mf, flag, 0)) < 0) {
+	if ((kd->pmfd = open(mf, flag | O_CLOEXEC, 0)) < 0) {
 		_kvm_syserr(kd, kd->program, "%s", mf);
 		goto failed;
 	}
@@ -361,12 +348,12 @@ _kvm_open(kvm_t *kd, const char *uf, const char *mf, const char *sf, int flag,
 		 * make it work for either /dev/mem or /dev/kmem -- in either
 		 * case you're working with a live kernel.)
 		 */
-		if ((kd->vmfd = open_cloexec(_PATH_KMEM, flag, 0)) < 0) {
+		if ((kd->vmfd = open(_PATH_KMEM, flag | O_CLOEXEC, 0)) < 0) {
 			_kvm_syserr(kd, kd->program, "%s", _PATH_KMEM);
 			goto failed;
 		}
 		kd->alive = KVM_ALIVE_FILES;
-		if ((kd->swfd = open_cloexec(sf, flag, 0)) < 0) {
+		if ((kd->swfd = open(sf, flag | O_CLOEXEC, 0)) < 0) {
 			if (errno != ENXIO) {
 				_kvm_syserr(kd, kd->program, "%s", sf);
 				goto failed;
@@ -758,7 +745,7 @@ kvm_close(kvm_t *kd)
 		free(kd->iobuf);
 	free(kd);
 
-	return (0);
+	return (error);
 }
 
 int
@@ -772,7 +759,7 @@ kvm_nlist(kvm_t *kd, struct nlist *nl)
 	 * So open it again, just for the time we retrieve the list.
 	 */
 	if (kd->nlfd < 0) {
-		nlfd = open_cloexec(_PATH_KSYMS, O_RDONLY, 0);
+		nlfd = open(_PATH_KSYMS, O_RDONLY | O_CLOEXEC, 0);
 		if (nlfd < 0) {
 			_kvm_err(kd, 0, "failed to open %s", _PATH_KSYMS);
 			return (nlfd);
@@ -798,7 +785,7 @@ int
 kvm_dump_inval(kvm_t *kd)
 {
 	struct nlist	nl[2];
-	u_long		pa;
+	paddr_t		pa;
 	size_t		dsize;
 	off_t		doff;
 	void		*newbuf;
@@ -814,7 +801,7 @@ kvm_dump_inval(kvm_t *kd)
 		_kvm_err(kd, 0, "bad namelist");
 		return (-1);
 	}
-	if (_kvm_kvatop(kd, (u_long)nl[0].n_value, &pa) == 0)
+	if (_kvm_kvatop(kd, (vaddr_t)nl[0].n_value, &pa) == 0)
 		return (-1);
 
 	errno = 0;
@@ -868,10 +855,10 @@ kvm_read(kvm_t *kd, u_long kva, void *buf, size_t len)
 		}
 		cp = buf;
 		while (len > 0) {
-			u_long	pa;
+			paddr_t	pa;
 			off_t	foff;
 
-			cc = _kvm_kvatop(kd, kva, &pa);
+			cc = _kvm_kvatop(kd, (vaddr_t)kva, &pa);
 			if (cc == 0)
 				return (-1);
 			if (cc > len)

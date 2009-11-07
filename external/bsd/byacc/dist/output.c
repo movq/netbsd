@@ -1,10 +1,13 @@
-/*	$NetBSD: output.c,v 1.4 2009/10/29 21:11:57 christos Exp $	*/
-/* Id: output.c,v 1.21 2009/10/27 10:55:05 tom Exp */
+/*	$NetBSD: output.c,v 1.8 2011/09/10 21:29:04 christos Exp $	*/
+/* Id: output.c,v 1.41 2011/09/08 09:25:40 tom Exp */
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: output.c,v 1.4 2009/10/29 21:11:57 christos Exp $");
+__RCSID("$NetBSD: output.c,v 1.8 2011/09/10 21:29:04 christos Exp $");
+
+#define StaticOrR	(rflag ? "" : "static ")
+#define CountLine(fp)   (!rflag || ((fp) == code_file))
 
 static int nvectors;
 static int nentries;
@@ -23,136 +26,101 @@ static int lowzero;
 static int high;
 
 static void
-write_char(FILE * out, int c)
+putc_code(FILE * fp, int c)
 {
-    if (c == '\n')
+    if ((c == '\n') && (fp == code_file))
 	++outline;
-    putc(c, out);
+    putc(c, fp);
 }
 
 static void
-write_code_lineno(FILE * out)
+putl_code(FILE * fp, const char *s)
 {
-    if (!lflag)
-	fprintf(out, line_format, (outline++) + 1, code_file_name);
+    if (fp == code_file)
+	++outline;
+    fputs(s, fp);
 }
 
 static void
-write_input_lineno(FILE * out)
+puts_code(FILE * fp, const char *s)
 {
-    if (!lflag)
+    fputs(s, fp);
+}
+
+static void
+write_code_lineno(FILE * fp)
+{
+    if (!lflag && (fp == code_file))
     {
 	++outline;
-	fprintf(out, line_format, lineno, input_file_name);
+	fprintf(fp, line_format, outline, code_file_name);
     }
 }
 
 static void
-define_prefixed(const char *name)
+write_input_lineno(void)
 {
-    ++outline;
-    fprintf(code_file, "#define %-10s %s%s\n", name, symbol_prefix, name + 2);
+    if (!lflag)
+    {
+	++outline;
+	fprintf(code_file, line_format, lineno, input_file_name);
+    }
 }
 
 static void
-output_yacc_decl(void)
+define_prefixed(FILE * fp, const char *name)
 {
-    param *p;
-    ++outline;
-    fprintf(code_file, "/* compatibility with bison */\n");
-    ++outline;
-    fprintf(code_file, "#ifdef YYPARSE_PARAM\n");
-    ++outline;
-    fprintf(code_file, "/* compatibility with FreeBSD */\n");
-    ++outline;
-    fprintf(code_file, "# ifdef YYPARSE_PARAM_TYPE\n");
-    ++outline;
-    fprintf(code_file, "#  define YYPARSE_DECL() "
-	"yyparse(YYPARSE_PARAM_TYPE YYPARSE_PARAM)\n");
-    ++outline;
-    fprintf(code_file, "# else\n");
-    ++outline;
-    fprintf(code_file, "#  define YYPARSE_DECL() "
-	"yyparse(void *YYPARSE_PARAM)\n");
-    ++outline;
-    fprintf(code_file, "# endif\n");
-    ++outline;
-    fprintf(code_file, "#else\n");
-    ++outline;
-    fprintf(code_file, "# define YYPARSE_DECL() yyparse(");
-    if (!parse_param)
-	fprintf(code_file, "void");
-    else
-	for (p = lex_param; p; p = p->next)
-	    fprintf(code_file, "%s %s%s", p->type, p->name,
-		p->next ? ", " : "");
-    fprintf(code_file, ")\n");
-    outline += 2;
-    fprintf(code_file, "#endif\n\n");
+    int bump_line = CountLine(fp);
+    if (bump_line)
+	++outline;
+    fprintf(fp, "\n");
+
+    if (bump_line)
+	++outline;
+    fprintf(fp, "#ifndef %s\n", name);
+
+    if (bump_line)
+	++outline;
+    fprintf(fp, "#define %-10s %s%s\n", name, symbol_prefix, name + 2);
+
+    if (bump_line)
+	++outline;
+    fprintf(fp, "#endif /* %s */\n", name);
 }
 
 static void
-output_lex_decl(void)
-{
-    param *p;
-    ++outline;
-    fprintf(code_file, "/* Pure parsers. */\n");
-    ++outline;
-    fprintf(code_file, "#define YYPURE %d\n", pure_parser);
-    ++outline;
-    fprintf(code_file, "#ifdef YYLEX_PARAM\n");
-    ++outline;
-    if (pure_parser)
-	fprintf(code_file, "# define YYLEX yylex(&yylval, YYLEX_PARAM)\n");
-    else
-	fprintf(code_file, "# define YYLEX yylex(YYLEX_PARAM)\n");
-    ++outline;
-    fprintf(code_file, "#else\n");
-    ++outline;
-    if (pure_parser)
-	fprintf(code_file, "# define YYLEX yylex(&yylval, ");
-    else
-	fprintf(code_file, "# define YYLEX yylex(");
-    for (p = lex_param; p; p = p->next)
-	fprintf(code_file, "%s%s", p->name, p->next ? ", " : "");
-    fprintf(code_file, ")\n");
-    outline += 2;
-    fprintf(code_file, "#endif\n\n");
-}
-static void
-output_prefix(void)
+output_prefix(FILE * fp)
 {
     if (symbol_prefix == NULL)
+    {
 	symbol_prefix = "yy";
+    }
     else
     {
-	define_prefixed("yyparse");
-	define_prefixed("yylex");
-	define_prefixed("yyerror");
-	define_prefixed("yychar");
-	define_prefixed("yyval");
-	define_prefixed("yylval");
-	define_prefixed("yydebug");
-	define_prefixed("yynerrs");
-	define_prefixed("yyerrflag");
-	define_prefixed("yyss");
-	define_prefixed("yyssp");
-	define_prefixed("yyvs");
-	define_prefixed("yyvsp");
-	define_prefixed("yylhs");
-	define_prefixed("yylen");
-	define_prefixed("yydefred");
-	define_prefixed("yydgoto");
-	define_prefixed("yysindex");
-	define_prefixed("yyrindex");
-	define_prefixed("yygindex");
-	define_prefixed("yytable");
-	define_prefixed("yycheck");
-	define_prefixed("yyname");
-	define_prefixed("yyrule");
+	define_prefixed(fp, "yyparse");
+	define_prefixed(fp, "yylex");
+	define_prefixed(fp, "yyerror");
+	define_prefixed(fp, "yychar");
+	define_prefixed(fp, "yyval");
+	define_prefixed(fp, "yylval");
+	define_prefixed(fp, "yydebug");
+	define_prefixed(fp, "yynerrs");
+	define_prefixed(fp, "yyerrflag");
+	define_prefixed(fp, "yylhs");
+	define_prefixed(fp, "yylen");
+	define_prefixed(fp, "yydefred");
+	define_prefixed(fp, "yydgoto");
+	define_prefixed(fp, "yysindex");
+	define_prefixed(fp, "yyrindex");
+	define_prefixed(fp, "yygindex");
+	define_prefixed(fp, "yytable");
+	define_prefixed(fp, "yycheck");
+	define_prefixed(fp, "yyname");
+	define_prefixed(fp, "yyrule");
     }
-    ++outline;
-    fprintf(code_file, "#define YYPREFIX \"%s\"\n", symbol_prefix);
+    if (CountLine(fp))
+	++outline;
+    fprintf(fp, "#define YYPREFIX \"%s\"\n", symbol_prefix);
 }
 
 static void
@@ -184,16 +152,16 @@ start_int_table(const char *name, int value)
     if (need < 6)
 	need = 6;
     fprintf(output_file,
-	    "static const short %s%s[] = {%*d,",
-	    symbol_prefix, name, need, value);
+	    "%sconst short %s%s[] = {%*d,",
+	    StaticOrR, symbol_prefix, name, need, value);
 }
 
 static void
 start_str_table(const char *name)
 {
     fprintf(output_file,
-	    "static const char *%s%s[] = {",
-	    symbol_prefix, name);
+	    "%sconst char *%s%s[] = {",
+	    StaticOrR, "yy", name);
     output_newline();
 }
 
@@ -592,12 +560,13 @@ pack_vector(int vector)
 		    newmax += 200;
 		}
 		while (newmax <= loc);
+
 		table = (Value_t *) REALLOC(table, (unsigned)newmax * sizeof(Value_t));
-		if (table == 0)
-		    no_space();
+		NO_SPACE(table);
+
 		check = (Value_t *) REALLOC(check, (unsigned)newmax * sizeof(Value_t));
-		if (check == 0)
-		    no_space();
+		NO_SPACE(check);
+
 		for (l = maxtable; l < newmax; ++l)
 		{
 		    table[l] = 0;
@@ -854,7 +823,7 @@ is_C_identifier(char *name)
 }
 
 static void
-output_defines(void)
+output_defines(FILE * fp)
 {
     int c, i;
     char *s;
@@ -864,55 +833,51 @@ output_defines(void)
 	s = symbol_name[i];
 	if (is_C_identifier(s))
 	{
-	    fprintf(code_file, "#define ");
-	    if (dflag)
-		fprintf(defines_file, "#define ");
+	    fprintf(fp, "#define ");
 	    c = *s;
 	    if (c == '"')
 	    {
 		while ((c = *++s) != '"')
 		{
-		    putc(c, code_file);
-		    if (dflag)
-			putc(c, defines_file);
+		    putc(c, fp);
 		}
 	    }
 	    else
 	    {
 		do
 		{
-		    putc(c, code_file);
-		    if (dflag)
-			putc(c, defines_file);
+		    putc(c, fp);
 		}
 		while ((c = *++s) != 0);
 	    }
-	    ++outline;
-	    fprintf(code_file, " %d\n", symbol_value[i]);
-	    if (dflag)
-		fprintf(defines_file, " %d\n", symbol_value[i]);
+	    if (fp == code_file)
+		++outline;
+	    fprintf(fp, " %d\n", symbol_value[i]);
 	}
     }
 
-    ++outline;
-    fprintf(code_file, "#define YYERRCODE %d\n", symbol_value[1]);
+    if (fp == code_file)
+	++outline;
+    if (fp != defines_file || iflag)
+	fprintf(fp, "#define YYERRCODE %d\n", symbol_value[1]);
 
-    if (dflag && unionized)
+    if (fp == defines_file || (iflag && !dflag))
     {
-	rewind(union_file);
-	while ((c = getc(union_file)) != EOF)
-	    putc(c, defines_file);
-	if (!pure_parser)
-	    fprintf(defines_file, " YYSTYPE;\nextern YYSTYPE %slval;\n",
-		symbol_prefix);
+	if (unionized)
+	{
+	    rewind(union_file);
+	    while ((c = getc(union_file)) != EOF)
+		putc(c, fp);
+	    fprintf(fp, "extern YYSTYPE %slval;\n", symbol_prefix);
+	}
     }
 }
 
 static void
-output_stored_text(void)
+output_stored_text(FILE * fp)
 {
     int c;
-    FILE *in, *out;
+    FILE *in;
 
     rewind(text_file);
     if (text_file == NULL)
@@ -920,13 +885,12 @@ output_stored_text(void)
     in = text_file;
     if ((c = getc(in)) == EOF)
 	return;
-    out = code_file;
-    write_char(out, c);
+    putc_code(fp, c);
     while ((c = getc(in)) != EOF)
     {
-	write_char(out, c);
+	putc_code(fp, c);
     }
-    write_code_lineno(out);
+    write_code_lineno(fp);
 }
 
 static void
@@ -939,8 +903,10 @@ output_debug(void)
     ++outline;
     fprintf(code_file, "#define YYFINAL %d\n", final_state);
 
-    outline += 3;
-    fprintf(code_file, "#ifndef YYDEBUG\n#define YYDEBUG %d\n#endif\n", tflag);
+    putl_code(code_file, "#ifndef YYDEBUG\n");
+    ++outline;
+    fprintf(code_file, "#define YYDEBUG %d\n", tflag);
+    putl_code(code_file, "#endif\n");
 
     if (rflag)
     {
@@ -958,8 +924,7 @@ output_debug(void)
     fprintf(code_file, "#define YYMAXTOKEN %d\n", max);
 
     symnam = (const char **)MALLOC((unsigned)(max + 1) * sizeof(char *));
-    if (symnam == 0)
-	no_space();
+    NO_SPACE(symnam);
 
     /* Note that it is  not necessary to initialize the element         */
     /* symnam[max].                                                     */
@@ -1149,12 +1114,25 @@ output_debug(void)
 }
 
 static void
-output_stype(void)
+output_pure_parser(FILE * fp)
+{
+    putc_code(fp, '\n');
+
+    if (fp == code_file)
+	outline += 1;
+    fprintf(fp, "#define YYPURE %d\n", pure_parser);
+    putc_code(fp, '\n');
+}
+
+static void
+output_stype(FILE * fp)
 {
     if (!unionized && ntags == 0)
     {
-	outline += 3;
-	fprintf(code_file, "#ifndef YYSTYPE\ntypedef int YYSTYPE;\n#endif\n");
+	putc_code(fp, '\n');
+	putl_code(fp, "#ifndef YYSTYPE\n");
+	putl_code(fp, "typedef int YYSTYPE;\n");
+	putl_code(fp, "#endif\n");
     }
 }
 
@@ -1162,73 +1140,187 @@ static void
 output_trailing_text(void)
 {
     int c, last;
-    FILE *in, *out;
+    FILE *in;
 
     if (line == 0)
 	return;
 
     in = input_file;
-    out = code_file;
     c = *cptr;
     if (c == '\n')
     {
 	++lineno;
 	if ((c = getc(in)) == EOF)
 	    return;
-	write_input_lineno(out);
-	write_char(out, c);
+	write_input_lineno();
+	putc_code(code_file, c);
 	last = c;
     }
     else
     {
-	write_input_lineno(out);
+	write_input_lineno();
 	do
 	{
-	    putc(c, out);
+	    putc_code(code_file, c);
 	}
 	while ((c = *++cptr) != '\n');
-	write_char(out, c);
+	putc_code(code_file, c);
 	last = '\n';
     }
 
     while ((c = getc(in)) != EOF)
     {
-	write_char(out, c);
+	putc_code(code_file, c);
 	last = c;
     }
 
     if (last != '\n')
     {
-	write_char(out, '\n');
+	putc_code(code_file, '\n');
     }
-    write_code_lineno(out);
+    write_code_lineno(code_file);
 }
 
 static void
 output_semantic_actions(void)
 {
     int c, last;
-    FILE *out;
 
     rewind(action_file);
     if ((c = getc(action_file)) == EOF)
 	return;
 
-    out = code_file;
     last = c;
-    write_char(out, c);
+    putc_code(code_file, c);
     while ((c = getc(action_file)) != EOF)
     {
-	write_char(out, c);
+	putc_code(code_file, c);
 	last = c;
     }
 
     if (last != '\n')
     {
-	write_char(out, '\n');
+	putc_code(code_file, '\n');
     }
 
-    write_code_lineno(out);
+    write_code_lineno(code_file);
+}
+
+static void
+output_parse_decl(FILE * fp)
+{
+    putl_code(fp, "\n");
+    putl_code(fp, "/* compatibility with bison */\n");
+    putl_code(fp, "#ifdef YYPARSE_PARAM\n");
+    putl_code(fp, "/* compatibility with FreeBSD */\n");
+    putl_code(fp, "# ifdef YYPARSE_PARAM_TYPE\n");
+    putl_code(fp,
+	      "#  define YYPARSE_DECL() yyparse(YYPARSE_PARAM_TYPE YYPARSE_PARAM)\n");
+    putl_code(fp, "# else\n");
+    putl_code(fp, "#  define YYPARSE_DECL() yyparse(void *YYPARSE_PARAM)\n");
+    putl_code(fp, "# endif\n");
+    putl_code(fp, "#else\n");
+
+    puts_code(fp, "# define YYPARSE_DECL() yyparse(");
+    if (!parse_param)
+	puts_code(fp, "void");
+    else
+    {
+	param *p;
+	for (p = parse_param; p; p = p->next)
+	    fprintf(fp, "%s %s%s%s", p->type, p->name, p->type2,
+		    p->next ? ", " : "");
+    }
+    putl_code(fp, ")\n");
+
+    putl_code(fp, "#endif\n");
+}
+
+static void
+output_lex_decl(FILE * fp)
+{
+    putl_code(fp, "\n");
+    putl_code(fp, "/* Parameters sent to lex. */\n");
+    putl_code(fp, "#ifdef YYLEX_PARAM\n");
+    if (pure_parser)
+    {
+	putl_code(fp, "# define YYLEX_DECL() yylex(YYSTYPE *yylval, "
+		  "void *YYLEX_PARAM)\n");
+	putl_code(fp, "# define YYLEX yylex(&yylval, YYLEX_PARAM)\n");
+    }
+    else
+    {
+	putl_code(fp, "# define YYLEX_DECL() yylex(void *YYLEX_PARAM)\n");
+	putl_code(fp, "# define YYLEX yylex(YYLEX_PARAM)\n");
+    }
+    putl_code(fp, "#else\n");
+    if (pure_parser && lex_param)
+    {
+	param *p;
+	puts_code(fp, "# define YYLEX_DECL() yylex(YYSTYPE *yylval, ");
+	for (p = lex_param; p; p = p->next)
+	    fprintf(fp, "%s %s%s%s", p->type, p->name, p->type2,
+		    p->next ? ", " : "");
+	putl_code(fp, ")\n");
+
+	puts_code(fp, "# define YYLEX yylex(&yylval, ");
+	for (p = lex_param; p; p = p->next)
+	    fprintf(fp, "%s%s", p->name, p->next ? ", " : "");
+	putl_code(fp, ")\n");
+    }
+    else if (pure_parser)
+    {
+	putl_code(fp, "# define YYLEX_DECL() yylex(YYSTYPE *yylval)\n");
+	putl_code(fp, "# define YYLEX yylex(&yylval)\n");
+    }
+    else if (lex_param)
+    {
+	param *p;
+	puts_code(fp, "# define YYLEX_DECL() yylex(");
+	for (p = lex_param; p; p = p->next)
+	    fprintf(fp, "%s %s%s%s", p->type, p->name, p->type2,
+		    p->next ? ", " : "");
+	putl_code(fp, ")\n");
+
+	puts_code(fp, "# define YYLEX yylex(");
+	for (p = lex_param; p; p = p->next)
+	    fprintf(fp, "%s%s", p->name, p->next ? ", " : "");
+	putl_code(fp, ")\n");
+    }
+    else
+    {
+	putl_code(fp, "# define YYLEX_DECL() yylex(void)\n");
+	putl_code(fp, "# define YYLEX yylex()\n");
+    }
+    putl_code(fp, "#endif\n");
+}
+
+static void
+output_error_decl(FILE * fp)
+{
+    putl_code(fp, "\n");
+    putl_code(fp, "/* Parameters sent to yyerror. */\n");
+    if (parse_param)
+    {
+	param *p;
+
+	fprintf(fp, "#define YYERROR_DECL() yyerror(");
+	for (p = parse_param; p; p = p->next)
+	    fprintf(fp, "%s %s%s, ", p->type, p->name, p->type2);
+	putl_code(fp, "const char *s)\n");
+
+	puts_code(fp, "#define YYERROR_CALL(msg) yyerror(");
+
+	for (p = parse_param; p; p = p->next)
+	    fprintf(fp, "%s, ", p->name);
+
+	putl_code(fp, "msg)\n");
+    }
+    else
+    {
+	putl_code(fp, "#define YYERROR_DECL() yyerror(const char *s)\n");
+	putl_code(fp, "#define YYERROR_CALL(msg) yyerror(msg)\n");
+    }
 }
 
 static void
@@ -1270,31 +1362,129 @@ free_reductions(void)
     }
 }
 
+static void
+output_yyerror_call(const char *msg)
+{
+    FILE *fp = code_file;
+
+    puts_code(fp, "    yyerror(");
+    if (parse_param)
+    {
+	param *p;
+	for (p = parse_param; p; p = p->next)
+	    fprintf(fp, "%s, ", p->name);
+    }
+    puts_code(fp, "\"");
+    puts_code(fp, msg);
+    putl_code(fp, "\");\n");
+}
+
+static void
+output_externs(FILE * fp, const char *const section[])
+{
+    int c;
+    int i;
+    const char *s;
+
+    for (i = 0; (s = section[i]) != 0; ++i)
+    {
+	if (*s && *s != '#')
+	    fputs("extern\t", fp);
+	while ((c = *s) != 0)
+	{
+	    putc(c, fp);
+	    ++s;
+	}
+	if (fp == code_file)
+	    ++outline;
+	putc('\n', fp);
+    }
+}
+
 void
 output(void)
 {
+    FILE *fp;
+
     free_itemsets();
     free_shifts();
     free_reductions();
-    write_section(banner, 0);
-    output_yacc_decl();
-    output_lex_decl();
-    output_prefix();
-    output_stored_text();
-    output_defines();
+
+    if (iflag)
+    {
+	++outline;
+	fprintf(code_file, "#include \"%s\"\n", externs_file_name);
+	fp = externs_file;
+    }
+    else
+	fp = code_file;
+
+    output_prefix(iflag ? externs_file : output_file);
+    output_pure_parser(fp);
+    output_stored_text(fp);
+    output_stype(fp);
+    output_parse_decl(fp);
+    output_lex_decl(fp);
+    output_error_decl(fp);
+    write_section(fp, xdecls);
+
+    if (iflag)
+    {
+	output_externs(externs_file, global_vars);
+	if (!pure_parser)
+	    output_externs(externs_file, impure_vars);
+    }
+
+    if (iflag)
+    {
+	++outline;
+	fprintf(code_file, "#include \"%s\"\n", defines_file_name);
+	if (!dflag)
+	    output_defines(externs_file);
+    }
+    else
+    {
+	putc_code(code_file, '\n');
+	output_defines(code_file);
+    }
+
+    if (dflag)
+	output_defines(defines_file);
+
     output_rule_data();
     output_yydefred();
     output_actions();
     free_parser();
     output_debug();
-    output_stype();
     if (rflag)
-	write_section(tables, 0);
-    write_section(header, !pure_parser);
+    {
+	output_prefix(code_file);
+	write_section(code_file, xdecls);
+	write_section(code_file, tables);
+    }
+    write_section(code_file, global_vars);
+    if (!pure_parser)
+    {
+	write_section(code_file, impure_vars);
+    }
+    write_section(code_file, hdr_defs);
+    if (!pure_parser)
+    {
+	write_section(code_file, hdr_vars);
+    }
     output_trailing_text();
-    write_section(body, pure_parser);
+    write_section(code_file, body_1);
+    if (pure_parser)
+    {
+	write_section(code_file, body_vars);
+    }
+    write_section(code_file, body_2);
+    output_yyerror_call("syntax error");
+    write_section(code_file, body_3);
     output_semantic_actions();
-    write_section(trailer, 0);
+    write_section(code_file, trailer);
+    output_yyerror_call("yacc stack overflow");
+    write_section(code_file, trailer_2);
 }
 
 #ifdef NO_LEAKS

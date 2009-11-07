@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2009/03/15 10:47:59 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.25 2011/07/10 08:42:55 mrg Exp $
 
 NOMAN= # defined
 
@@ -41,7 +41,8 @@ AFLAGS+=	-D_LOCORE -D_KERNEL -DASSEMBLER -mno-abicalls
 
 # -I${.CURDIR}/../.. done by Makefile.inc
 CPPFLAGS+=	-nostdinc -D_STANDALONE -DNO_ABICALLS -D_NO_PROM_DEFINES
-# CPPFLAGS+=	-D_DEBUG
+#CPPFLAGS+=	-D_DEBUG	\
+#		-DLIBSA_PRINTF_LONGLONG_SUPPORT -DLIBSA_PRINTF_WIDTH_SUPPORT
 CPPFLAGS+=	-I${.OBJDIR} -I${S} -I${S}/arch -I${LIBSADIR}
 CPPFLAGS+=	-DCONS_SERIAL -DCOMPORT=${COMPORT}
 CPPFLAGS+=	-DCOMSPEED=${COMSPEED} -DCOMPROBE=${COMPROBE}
@@ -52,7 +53,12 @@ CPPFLAGS+=	-DSUPPORT_DHCP -DSUPPORT_BOOTP
 #CPPFLAGS+=	-DRPC_DEBUG -DRARP_DEBUG -DNET_DEBUG -DDEBUG -DPARANOID
 
 # compiler flags for smallest code size
-CFLAGS=		-Os -mmemcpy -ffreestanding -mno-abicalls -msoft-float -G 128
+CFLAGS=		-O2 -mmemcpy -ffreestanding -mno-abicalls -msoft-float -G 128
+.if ${MACHINE_ARCH} == "mips64el"
+AFLAGS+=	-mips3 -mabi=32
+CFLAGS+=	-mips3 -mabi=32
+LINKFORMAT=	-m elf32ltsmip
+.endif
 
 CFLAGS+=	-Wall -Werror
 CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
@@ -96,17 +102,18 @@ LIBS=		${SALIB} ${ZLIB} ${KERNLIB}
 
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "cobalt"
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/version "cobalt"
 
 ${PROG}: ${LDSCRIPT} ${OBJS} ${LIBS}
-	${LD} -Map ${PROG}.map -N -x -Ttext ${LOAD_ADDRESS} \
+	${LD} ${LINKFORMAT} -Map ${PROG}.map -N -x -Ttext ${LOAD_ADDRESS} \
 	    -T ${LDSCRIPT} -e start -o ${PROG} ${OBJS} ${LIBS}
-	gzip -c9 ${PROG} > ${PROG}.gz
+	${TOOL_GZIP} -c9 ${PROG} > ${PROG}.gz
 	@${SIZE} ${PROG}
 
 CLEANFILES+=	${PROG}.map ${PROG}.elf ${PROG}.gz
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib

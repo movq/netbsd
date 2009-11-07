@@ -1,21 +1,21 @@
-/* $NetBSD: dec_6600.c,v 1.29 2009/09/14 02:46:29 mhitch Exp $ */
+/* $NetBSD: dec_6600.c,v 1.33 2012/02/06 02:14:11 matt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_6600.c,v 1.29 2009/09/14 02:46:29 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_6600.c,v 1.33 2012/02/06 02:14:11 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_6600.c,v 1.29 2009/09/14 02:46:29 mhitch Exp $")
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
 #include <machine/cpuconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
+#include <machine/alpha.h>
+#include <machine/logout.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -82,7 +84,11 @@ static int comcnrate __attribute__((unused)) = CONSPEED;
 
 void dec_6600_init(void);
 static void dec_6600_cons_init(void);
-static void dec_6600_device_register(struct device *, void *);
+static void dec_6600_device_register(device_t, void *);
+static void dec_6600_mcheck(unsigned long, struct ev6_logout_area *);
+static void dec_6600_mcheck_sys(unsigned int, struct ev6_logout_area *);
+static void dec_6600_mcheck_handler(unsigned long, struct trapframe *,
+				    unsigned long, unsigned long);
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -94,7 +100,7 @@ static const char *kgdb_devlist[] = {
 #endif /* KGDB */
 
 void
-dec_6600_init()
+dec_6600_init(void)
 {
 
 	platform.family = "6600";
@@ -107,15 +113,18 @@ dec_6600_init()
 	platform.iobus = "tsc";
 	platform.cons_init = dec_6600_cons_init;
 	platform.device_register = dec_6600_device_register;
-	STQP(TS_C_DIM0) = 0UL;
-	STQP(TS_C_DIM1) = 0UL;
+	platform.mcheck_handler = dec_6600_mcheck_handler;
+
+	/* enable Cchip and Pchip error interrupts */
+	STQP(TS_C_DIM0) = 0xe000000000000000;
+	STQP(TS_C_DIM1) = 0xe000000000000000;
 }
 
 static void
-dec_6600_cons_init()
+dec_6600_cons_init(void)
 {
 	struct ctb *ctb;
-	u_int64_t ctbslot;
+	uint64_t ctbslot;
 	struct tsp_config *tsp;
 
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
@@ -127,7 +136,7 @@ dec_6600_cons_init()
 	tsp = tsp_init(0, tsp_console_hose);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT: 
+	case CTB_PRINTERPORT:
 		/* serial console ... */
 		assert(CTB_TURBOSLOT_HOSE(ctbslot) == 0);
 		/* XXX */
@@ -185,12 +194,12 @@ dec_6600_cons_init()
 }
 
 static void
-dec_6600_device_register(struct device *dev, void *aux)
+dec_6600_device_register(device_t dev, void *aux)
 {
 	static int found, initted, diskboot, netboot;
-	static struct device *primarydev, *pcidev, *ctrlrdev;
+	static device_t primarydev, pcidev, ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -217,7 +226,7 @@ dec_6600_device_register(struct device *dev, void *aux)
 				return;
 			primarydev = dev;
 			DR_VERBOSE(printf("\nprimarydev = %s\n",
-			    dev->dv_xname));
+			    device_xname(dev)));
 			return;
 		}
 	}
@@ -243,7 +252,7 @@ dec_6600_device_register(struct device *dev, void *aux)
 				return;
 	
 			pcidev = dev;
-			DR_VERBOSE(printf("\npcidev = %s\n", dev->dv_xname));
+			DR_VERBOSE(printf("\npcidev = %s\n", device_xname(dev)));
 			return;
 		}
 	}
@@ -263,12 +272,12 @@ dec_6600_device_register(struct device *dev, void *aux)
 			if (netboot) {
 				booted_device = dev;
 				DR_VERBOSE(printf("\nbooted_device = %s\n",
-				    dev->dv_xname));
+				    device_xname(dev)));
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 				DR_VERBOSE(printf("\nctrlrdev = %s\n",
-				    dev->dv_xname));
+				    device_xname(dev)));
 			}
 			return;
 		}
@@ -295,7 +304,7 @@ dec_6600_device_register(struct device *dev, void *aux)
 
 		/* we've found it! */
 		booted_device = dev;
-		DR_VERBOSE(printf("\nbooted_device = %s\n", dev->dv_xname));
+		DR_VERBOSE(printf("\nbooted_device = %s\n", device_xname(dev)));
 		found = 1;
 	}
 
@@ -314,7 +323,7 @@ dec_6600_device_register(struct device *dev, void *aux)
 			return;
 		/* we've found it! */
 		booted_device = dev;
-		DR_VERBOSE(printf("\nbooted_device = %s\n", dev->dv_xname));
+		DR_VERBOSE(printf("\nbooted_device = %s\n", device_xname(dev)));
 		found = 1;
 	}
 
@@ -333,7 +342,7 @@ dec_6600_device_register(struct device *dev, void *aux)
 			return;
 		/* we've found it! */
 		booted_device = dev;
-		DR_VERBOSE(printf("\nbooted_device = %s\n", dev->dv_xname));
+		DR_VERBOSE(printf("\nbooted_device = %s\n", device_xname(dev)));
 		found = 1;
 	}
 
@@ -358,7 +367,89 @@ dec_6600_device_register(struct device *dev, void *aux)
 
 		/* we've found it! */
 		booted_device = dev;
-		DR_VERBOSE(printf("booted_device = %s\n", dev->dv_xname));
+		DR_VERBOSE(printf("booted_device = %s\n", device_xname(dev)));
 		found = 1;
 	}
+}
+
+
+static void
+dec_6600_mcheck(unsigned long vector, struct ev6_logout_area *la)
+{
+	const char *t = "Unknown", *c = "";
+
+	if (vector == ALPHA_SYS_ERROR || vector == ALPHA_PROC_ERROR)
+		c = " Correctable";
+
+	switch (vector) {
+	case ALPHA_SYS_ERROR:
+	case ALPHA_SYS_MCHECK:
+		t = "System";
+		break;
+
+	case ALPHA_PROC_ERROR:
+	case ALPHA_PROC_MCHECK:
+		t = "Processor";
+		break;
+
+	case ALPHA_ENV_MCHECK:
+		t = "Environmental";
+		break;
+	}
+
+	printf("\n%s%s Machine Check (%lx): "
+	       "Rev 0x%x, Code 0x%x, Flags 0x%x\n\n",
+	       t, c, vector, la->mchk_rev, la->mchk_code, la->la.la_flags);
+}
+
+static void
+dec_6600_mcheck_sys(unsigned int indent, struct ev6_logout_area *la)
+{
+	struct ev6_logout_sys *ls =
+		(struct ev6_logout_sys *)ALPHA_LOGOUT_SYSTEM_AREA(&la->la);
+
+#define FMT	"%-30s = 0x%016lx\n"
+
+	IPRINTF(indent, FMT, "Software Error Summary Flags", ls->flags);
+
+	IPRINTF(indent, FMT, "CPU Device Interrupt Requests", ls->dir);
+	tsc_print_dir(indent + 1, ls->dir);
+
+	IPRINTF(indent, FMT, "Cchip Miscellaneous Register", ls->misc);
+	tsc_print_misc(indent + 1, ls->misc);
+
+	IPRINTF(indent, FMT, "Pchip 0 Error Register", ls->p0_error);
+	if (ls->flags & 0x5)
+		tsp_print_error(indent + 1, ls->p0_error);
+
+	IPRINTF(indent, FMT, "Pchip 1 Error Register", ls->p1_error);
+	if (ls->flags & 0x6)
+		tsp_print_error(indent + 1, ls->p1_error);
+}
+
+static void
+dec_6600_mcheck_handler(unsigned long mces, struct trapframe *framep,
+			unsigned long vector, unsigned long param)
+{
+	struct mchkinfo *mcp;
+	struct ev6_logout_area *la = (struct ev6_logout_area *)param;
+
+	/*
+	 * If we expected a machine check, just go handle it in common code.
+	 */
+	mcp = &curcpu()->ci_mcinfo;
+	if (mcp->mc_expected)
+		machine_check(mces, framep, vector, param);
+
+	dec_6600_mcheck(vector, la);
+
+	switch (vector) {
+	case ALPHA_SYS_ERROR:
+	case ALPHA_SYS_MCHECK:
+		dec_6600_mcheck_sys(1, la);
+		break;
+
+	}
+
+	machine_check(mces, framep, vector, param);
 }

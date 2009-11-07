@@ -1,4 +1,4 @@
-/*	$NetBSD: m68k_syscall.c,v 1.37 2009/01/11 20:40:31 martin Exp $	*/
+/*	$NetBSD: m68k_syscall.c,v 1.47 2012/02/11 23:16:15 martin Exp $	*/
 
 /*-
  * Portions Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,6 +27,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -69,48 +63,9 @@
  *
  *	@(#)trap.c	8.5 (Berkeley) 1/4/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: trap.c 1.37 92/12/20$
- *
- *	@(#)trap.c	8.5 (Berkeley) 1/4/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.37 2009/01/11 20:40:31 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.47 2012/02/11 23:16:15 martin Exp $");
 
 #include "opt_execfmt.h"
 #include "opt_compat_netbsd.h"
@@ -120,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.37 2009/01/11 20:40:31 martin Exp
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/pool.h>
+#include <sys/kmem.h>
 #include <sys/acct.h>
 #include <sys/kernel.h>
 #include <sys/sa.h>
@@ -128,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.37 2009/01/11 20:40:31 martin Exp
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 #include <sys/syslog.h>
-#include <sys/user.h>
 #include <sys/ktrace.h>
 
 #include <machine/psl.h>
@@ -145,9 +99,7 @@ extern void machine_userret(struct lwp *, struct frame *, u_quad_t);
 
 void syscall(register_t, struct frame);
 
-#ifdef COMPAT_AOUT_M68K
 void	aoutm68k_syscall_intern(struct proc *);
-#endif
 static void syscall_plain(register_t, struct lwp *, struct frame *);
 static void syscall_fancy(register_t, struct lwp *, struct frame *);
 
@@ -162,7 +114,7 @@ syscall(register_t code, struct frame frame)
 	struct proc *p;
 	u_quad_t sticks;
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	if (!USERMODE(frame.f_sr))
 		panic("syscall");
 
@@ -193,7 +145,6 @@ syscall_intern(struct proc *p)
 		p->p_md.md_syscall = syscall_plain;
 }
 
-#ifdef COMPAT_AOUT_M68K
 /*
  * Not worth the effort of a whole new set of syscall_{plain,fancy} functions
  */
@@ -206,7 +157,6 @@ aoutm68k_syscall_intern(struct proc *p)
 	else
 		p->p_md.md_syscall = syscall_plain;
 }
-#endif
 
 static void
 syscall_plain(register_t code, struct lwp *l, struct frame *frame)
@@ -295,22 +245,15 @@ syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 		 * value there. However, -current binaries post 4.0
 		 * but pre-5.0 might still require this copy, so we
 		 * select this behaviour based on COMPAT_50 as we have
-		 * no equivvalent for the exact in-between version.
+		 * no equivalent for the exact in-between version.
 		 */
-#ifdef COMPAT_AOUT_M68K
-		{
-			extern struct emul emul_netbsd_aoutm68k;
 
-			/*
-			 * Some pre-m68k ELF libc assembler stubs assume
-			 * %a0 is preserved across system calls...
-			 */
-			if (p->p_emul != &emul_netbsd_aoutm68k)
-				frame->f_regs[A0] = rval[0];
-		}
-#else
-		frame->f_regs[A0] = rval[0];
-#endif
+		/*
+		 * Some pre-m68k ELF libc assembler stubs assume
+		 * %a0 is preserved across system calls...
+		 */
+		if (p->p_emul == &emul_netbsd)
+			frame->f_regs[A0] = rval[0];
 #endif
 		break;
 	case ERESTART:
@@ -421,20 +364,13 @@ out:
 		frame->f_sr &= ~PSL_C;	/* carry bit */
 #ifdef COMPAT_50
 		/* see syscall_plain for a comment explaining this */
-#ifdef COMPAT_AOUT_M68K
-		{
-			extern struct emul emul_netbsd_aoutm68k;
 
-			/*
-			 * Some pre-m68k ELF libc assembler stubs assume
-			 * %a0 is preserved across system calls...
-			 */
-			if (p->p_emul != &emul_netbsd_aoutm68k)
-				frame->f_regs[A0] = rval[0];
-		}
-#else
-		frame->f_regs[A0] = rval[0];
-#endif
+		/*
+		 * Some pre-m68k ELF libc assembler stubs assume
+		 * %a0 is preserved across system calls...
+		 */
+		if (p->p_emul == &emul_netbsd)
+			frame->f_regs[A0] = rval[0];
 #endif
 		break;
 	case ERESTART:
@@ -467,7 +403,7 @@ void
 child_return(void *arg)
 {
 	struct lwp *l = arg;
-	/* See cpu_fork() */
+	/* See cpu_lwp_fork() */
 	struct frame *f = (struct frame *)l->l_md.md_regs;
 
 	f->f_regs[D0] = 0;
@@ -484,23 +420,19 @@ child_return(void *arg)
 void
 startlwp(void *arg)
 {
-	int err;
 	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
 	struct frame *f = (struct frame *)l->l_md.md_regs;
+	int error;
 
 	f->f_regs[D0] = 0;
 	f->f_sr &= ~PSL_C;
 	f->f_format = FMT0;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#if DIAGNOSTIC
-	if (err) {
-		printf("Error %d from cpu_setmcontext.", err);
-	}
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
 
+	kmem_free(uc, sizeof(ucontext_t));
 	machine_userret(l, f, 0);
 }
 
@@ -509,6 +441,17 @@ startlwp(void *arg)
  */
 void
 upcallret(struct lwp *l)
+{
+	struct frame *f = (struct frame *)l->l_md.md_regs;
+
+	machine_userret(l, f, 0);
+}
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
 {
 	struct frame *f = (struct frame *)l->l_md.md_regs;
 

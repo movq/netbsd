@@ -1,5 +1,5 @@
-/*	$Id: at91cf.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
-/*	$NetBSD: at91cf.c,v 1.2 2008/07/03 01:15:38 matt Exp $	*/
+/*	$Id: at91cf.c,v 1.4 2011/07/26 22:52:47 dyoung Exp $	*/
+/*	$NetBSD: at91cf.c,v 1.4 2011/07/26 22:52:47 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy. All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91cf.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91cf.c,v 1.4 2011/07/26 22:52:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91cf.c,v 1.2 2008/07/03 01:15:38 matt Exp $");
 #include <sys/device.h>
 #include <sys/kthread.h>
 #include <uvm/uvm_param.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
@@ -228,8 +228,6 @@ at91cf_config_socket(struct at91cf_handle *ph)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t)&at91cf_functions;
 	paa.pch = (pcmcia_chipset_handle_t)ph;
-	paa.iobase = ph->ph_space[IO].base;
-	paa.iosize = ph->ph_space[IO].size;
 	ph->ph_card = config_found_ia(sc->sc_dev, "pcmciabus", &paa,
 				      at91cf_print);
 

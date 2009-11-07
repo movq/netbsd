@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_time.c,v 1.162 2009/10/03 20:48:42 elad Exp $	*/
+/*	$NetBSD: kern_time.c,v 1.171 2011/12/18 22:30:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2005, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.162 2009/10/03 20:48:42 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.171 2011/12/18 22:30:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/resourcevar.h>
@@ -80,8 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.162 2009/10/03 20:48:42 elad Exp $")
 #include <sys/syscallargs.h>
 #include <sys/cpu.h>
 
-#include <uvm/uvm_extern.h>
-
 #include "opt_sa.h"
 
 static void	timer_intr(void *);
@@ -94,6 +92,14 @@ static void	*timer_sih;
 static TAILQ_HEAD(, ptimer) timer_queue;
 
 struct pool ptimer_pool, ptimers_pool;
+
+#define	CLOCK_VIRTUAL_P(clockid)	\
+	((clockid) == CLOCK_VIRTUAL || (clockid) == CLOCK_PROF)
+
+CTASSERT(ITIMER_REAL == CLOCK_REALTIME);
+CTASSERT(ITIMER_VIRTUAL == CLOCK_VIRTUAL);
+CTASSERT(ITIMER_PROF == CLOCK_PROF);
+CTASSERT(ITIMER_MONOTONIC == CLOCK_MONOTONIC);
 
 /*
  * Initialize timekeeping.
@@ -178,22 +184,32 @@ sys___clock_gettime50(struct lwp *l,
 		syscallarg(clockid_t) clock_id;
 		syscallarg(struct timespec *) tp;
 	} */
-	clockid_t clock_id;
+	int error;
 	struct timespec ats;
 
-	clock_id = SCARG(uap, clock_id);
-	switch (clock_id) {
-	case CLOCK_REALTIME:
-		nanotime(&ats);
-		break;
-	case CLOCK_MONOTONIC:
-		nanouptime(&ats);
-		break;
-	default:
-		return (EINVAL);
-	}
+	error = clock_gettime1(SCARG(uap, clock_id), &ats);
+	if (error != 0)
+		return error;
 
 	return copyout(&ats, SCARG(uap, tp), sizeof(ats));
+}
+
+int
+clock_gettime1(clockid_t clock_id, struct timespec *ts)
+{
+
+	switch (clock_id) {
+	case CLOCK_REALTIME:
+		nanotime(ts);
+		break;
+	case CLOCK_MONOTONIC:
+		nanouptime(ts);
+		break;
+	default:
+		return EINVAL;
+	}
+
+	return 0;
 }
 
 /* ARGSUSED */
@@ -243,28 +259,36 @@ sys___clock_getres50(struct lwp *l, const struct sys___clock_getres50_args *uap,
 		syscallarg(clockid_t) clock_id;
 		syscallarg(struct timespec *) tp;
 	} */
-	clockid_t clock_id;
 	struct timespec ts;
 	int error = 0;
 
-	clock_id = SCARG(uap, clock_id);
-	switch (clock_id) {
-	case CLOCK_REALTIME:
-	case CLOCK_MONOTONIC:
-		ts.tv_sec = 0;
-		if (tc_getfrequency() > 1000000000)
-			ts.tv_nsec = 1;
-		else
-			ts.tv_nsec = 1000000000 / tc_getfrequency();
-		break;
-	default:
-		return (EINVAL);
-	}
+	if ((error = clock_getres1(SCARG(uap, clock_id), &ts)) != 0)
+		return error;
 
 	if (SCARG(uap, tp))
 		error = copyout(&ts, SCARG(uap, tp), sizeof(ts));
 
 	return error;
+}
+
+int
+clock_getres1(clockid_t clock_id, struct timespec *ts)
+{
+
+	switch (clock_id) {
+	case CLOCK_REALTIME:
+	case CLOCK_MONOTONIC:
+		ts->tv_sec = 0;
+		if (tc_getfrequency() > 1000000000)
+			ts->tv_nsec = 1;
+		else
+			ts->tv_nsec = 1000000000 / tc_getfrequency();
+		break;
+	default:
+		return EINVAL;
+	}
+
+	return 0;
 }
 
 /* ARGSUSED */
@@ -477,9 +501,9 @@ adjtime1(const struct timeval *delta, struct timeval *olddelta, struct proc *p)
  * All timers are kept in an array pointed to by p_timers, which is
  * allocated on demand - many processes don't use timers at all. The
  * first three elements in this array are reserved for the BSD timers:
- * element 0 is ITIMER_REAL, element 1 is ITIMER_VIRTUAL, and element
- * 2 is ITIMER_PROF. The rest may be allocated by the timer_create()
- * syscall.
+ * element 0 is ITIMER_REAL, element 1 is ITIMER_VIRTUAL, element
+ * 2 is ITIMER_PROF, and element 3 is ITIMER_MONOTONIC. The rest may be
+ * allocated by the timer_create() syscall.
  *
  * Realtime timers are kept in the ptimer structure as an absolute
  * time; virtual time timers are kept as a linked list of deltas.
@@ -520,7 +544,7 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 
 	p = l->l_proc;
 
-	if (id < CLOCK_REALTIME || id > CLOCK_PROF)
+	if ((u_int)id > CLOCK_MONOTONIC)
 		return (EINVAL);
 
 	if ((pts = p->p_timers) == NULL)
@@ -531,7 +555,10 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 		if (((error =
 		    (*fetch_event)(evp, &pt->pt_ev, sizeof(pt->pt_ev))) != 0) ||
 		    ((pt->pt_ev.sigev_notify < SIGEV_NONE) ||
-			(pt->pt_ev.sigev_notify > SIGEV_SA))) {
+			(pt->pt_ev.sigev_notify > SIGEV_SA)) ||
+			(pt->pt_ev.sigev_notify == SIGEV_SIGNAL &&
+			 (pt->pt_ev.sigev_signo <= 0 ||
+			  pt->pt_ev.sigev_signo >= NSIG))) {
 			pool_put(&ptimer_pool, pt);
 			return (error ? error : EINVAL);
 		}
@@ -551,6 +578,7 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 		pt->pt_ev.sigev_notify = SIGEV_SIGNAL;
 		switch (id) {
 		case CLOCK_REALTIME:
+		case CLOCK_MONOTONIC:
 			pt->pt_ev.sigev_signo = SIGALRM;
 			break;
 		case CLOCK_VIRTUAL:
@@ -575,8 +603,8 @@ timer_create1(timer_t *tid, clockid_t id, struct sigevent *evp,
 	pt->pt_entry = timerid;
 	pt->pt_queued = false;
 	timespecclear(&pt->pt_time.it_value);
-	if (id == CLOCK_REALTIME)
-		callout_init(&pt->pt_ch, 0);
+	if (!CLOCK_VIRTUAL_P(id))
+		callout_init(&pt->pt_ch, CALLOUT_MPSAFE);
 	else
 		pt->pt_active = 0;
 
@@ -610,7 +638,7 @@ sys_timer_delete(struct lwp *l, const struct sys_timer_delete_args *uap,
 		mutex_spin_exit(&timer_lock);
 		return (EINVAL);
 	}
-	if (pt->pt_type != CLOCK_REALTIME) {
+	if (CLOCK_VIRTUAL_P(pt->pt_type)) {
 		if (pt->pt_active) {
 			ptn = LIST_NEXT(pt, pt_list);
 			LIST_REMOVE(pt, pt_list);
@@ -628,9 +656,8 @@ sys_timer_delete(struct lwp *l, const struct sys_timer_delete_args *uap,
 
 /*
  * Set up the given timer. The value in pt->pt_time.it_value is taken
- * to be an absolute time for CLOCK_REALTIME timers and a relative
- * time for virtual timers.
- * Must be called at splclock().
+ * to be an absolute time for CLOCK_REALTIME/CLOCK_MONOTONIC timers and
+ * a relative time for CLOCK_VIRTUAL/CLOCK_PROF timers.
  */
 void
 timer_settime(struct ptimer *pt)
@@ -640,14 +667,17 @@ timer_settime(struct ptimer *pt)
 
 	KASSERT(mutex_owned(&timer_lock));
 
-	if (pt->pt_type == CLOCK_REALTIME) {
-		callout_stop(&pt->pt_ch);
+	if (!CLOCK_VIRTUAL_P(pt->pt_type)) {
+		callout_halt(&pt->pt_ch, &timer_lock);
 		if (timespecisset(&pt->pt_time.it_value)) {
 			/*
 			 * Don't need to check tshzto() return value, here.
 			 * callout_reset() does it for us.
 			 */
-			callout_reset(&pt->pt_ch, tshzto(&pt->pt_time.it_value),
+			callout_reset(&pt->pt_ch,
+			    pt->pt_type == CLOCK_MONOTONIC ?
+			    tshztoup(&pt->pt_time.it_value) :
+			    tshzto(&pt->pt_time.it_value),
 			    realtimerexpire, pt);
 		}
 	} else {
@@ -698,7 +728,7 @@ timer_gettime(struct ptimer *pt, struct itimerspec *aits)
 	KASSERT(mutex_owned(&timer_lock));
 
 	*aits = pt->pt_time;
-	if (pt->pt_type == CLOCK_REALTIME) {
+	if (!CLOCK_VIRTUAL_P(pt->pt_type)) {
 		/*
 		 * Convert from absolute to relative time in .it_value
 		 * part of real time timer.  If time for real time
@@ -707,7 +737,11 @@ timer_gettime(struct ptimer *pt, struct itimerspec *aits)
 		 * off.
 		 */
 		if (timespecisset(&aits->it_value)) {
-			getnanotime(&now);
+			if (pt->pt_type == CLOCK_REALTIME) {
+				getnanotime(&now);
+			} else { /* CLOCK_MONOTONIC */
+				getnanouptime(&now);
+			}
 			if (timespeccmp(&aits->it_value, &now, <))
 				timespecclear(&aits->it_value);
 			else
@@ -797,9 +831,13 @@ dotimer_settime(int timerid, struct itimerspec *value,
 	 * negative, which would confuse the comparison tests.
 	 */
 	if (timespecisset(&pt->pt_time.it_value)) {
-		if (pt->pt_type == CLOCK_REALTIME) {
+		if (!CLOCK_VIRTUAL_P(pt->pt_type)) {
 			if ((flags & TIMER_ABSTIME) == 0) {
-				getnanotime(&now);
+				if (pt->pt_type == CLOCK_REALTIME) {
+					getnanotime(&now);
+				} else { /* CLOCK_MONOTONIC */
+					getnanouptime(&now);
+				}
 				timespecadd(&pt->pt_time.it_value, &now,
 				    &pt->pt_time.it_value);
 			}
@@ -953,7 +991,7 @@ timerupcall(struct lwp *l)
 void
 realtimerexpire(void *arg)
 {
-	uint64_t last_val, next_val, interval, now_ms;
+	uint64_t last_val, next_val, interval, now_ns;
 	struct timespec now, next;
 	struct ptimer *pt;
 	int backwards;
@@ -969,24 +1007,28 @@ realtimerexpire(void *arg)
 		return;
 	}
 
-	getnanotime(&now);
+	if (pt->pt_type == CLOCK_MONOTONIC) {
+		getnanouptime(&now);
+	} else {
+		getnanotime(&now);
+	}
 	backwards = (timespeccmp(&pt->pt_time.it_value, &now, >));
 	timespecadd(&pt->pt_time.it_value, &pt->pt_time.it_interval, &next);
 	/* Handle the easy case of non-overflown timers first. */
 	if (!backwards && timespeccmp(&next, &now, >)) {
 		pt->pt_time.it_value = next;
 	} else {
-		now_ms = timespec2ns(&now);
+		now_ns = timespec2ns(&now);
 		last_val = timespec2ns(&pt->pt_time.it_value);
 		interval = timespec2ns(&pt->pt_time.it_interval);
 
-		next_val = now_ms +
-		    (now_ms - last_val + interval - 1) % interval;
+		next_val = now_ns +
+		    (now_ns - last_val + interval - 1) % interval;
 
 		if (backwards)
 			next_val += interval;
 		else
-			pt->pt_overruns += (now_ms - last_val) / interval;
+			pt->pt_overruns += (now_ns - last_val) / interval;
 
 		pt->pt_time.it_value.tv_sec = next_val / 1000000000;
 		pt->pt_time.it_value.tv_nsec = next_val % 1000000000;
@@ -996,7 +1038,8 @@ realtimerexpire(void *arg)
 	 * Don't need to check tshzto() return value, here.
 	 * callout_reset() does it for us.
 	 */
-	callout_reset(&pt->pt_ch, tshzto(&pt->pt_time.it_value),
+	callout_reset(&pt->pt_ch, pt->pt_type == CLOCK_MONOTONIC ?
+	    tshztoup(&pt->pt_time.it_value) : tshzto(&pt->pt_time.it_value),
 	    realtimerexpire, pt);
 	mutex_spin_exit(&timer_lock);
 }
@@ -1028,7 +1071,7 @@ dogetitimer(struct proc *p, int which, struct itimerval *itvp)
 	struct ptimer *pt;
 	struct itimerspec its;
 
-	if ((u_int)which > ITIMER_PROF)
+	if ((u_int)which > ITIMER_MONOTONIC)
 		return (EINVAL);
 
 	mutex_spin_enter(&timer_lock);
@@ -1064,7 +1107,7 @@ sys___setitimer50(struct lwp *l, const struct sys___setitimer50_args *uap,
 	struct itimerval aitv;
 	int error;
 
-	if ((u_int)which > ITIMER_PROF)
+	if ((u_int)which > ITIMER_MONOTONIC)
 		return (EINVAL);
 	itvp = SCARG(uap, itv);
 	if (itvp &&
@@ -1089,6 +1132,7 @@ dosetitimer(struct proc *p, int which, struct itimerval *itvp)
 	struct ptimers *pts;
 	struct ptimer *pt, *spare;
 
+	KASSERT((u_int)which <= CLOCK_MONOTONIC);
 	if (itimerfix(&itvp->it_value) || itimerfix(&itvp->it_interval))
 		return (EINVAL);
 
@@ -1128,6 +1172,7 @@ dosetitimer(struct proc *p, int which, struct itimerval *itvp)
 
 		switch (which) {
 		case ITIMER_REAL:
+		case ITIMER_MONOTONIC:
 			pt->pt_ev.sigev_signo = SIGALRM;
 			break;
 		case ITIMER_VIRTUAL:
@@ -1143,11 +1188,23 @@ dosetitimer(struct proc *p, int which, struct itimerval *itvp)
 	TIMEVAL_TO_TIMESPEC(&itvp->it_value, &pt->pt_time.it_value);
 	TIMEVAL_TO_TIMESPEC(&itvp->it_interval, &pt->pt_time.it_interval);
 
-	if ((which == ITIMER_REAL) && timespecisset(&pt->pt_time.it_value)) {
+	if (timespecisset(&pt->pt_time.it_value)) {
 		/* Convert to absolute time */
 		/* XXX need to wrap in splclock for timecounters case? */
-		getnanotime(&now);
-		timespecadd(&pt->pt_time.it_value, &now, &pt->pt_time.it_value);
+		switch (which) {
+		case ITIMER_REAL:
+			getnanotime(&now);
+			timespecadd(&pt->pt_time.it_value, &now,
+			    &pt->pt_time.it_value);
+			break;
+		case ITIMER_MONOTONIC:
+			getnanouptime(&now);
+			timespecadd(&pt->pt_time.it_value, &now,
+			    &pt->pt_time.it_value);
+			break;
+		default:
+			break;
+		}
 	}
 	timer_settime(pt);
 	mutex_spin_exit(&timer_lock);
@@ -1209,12 +1266,12 @@ timers_free(struct proc *p, int which)
 		for (ptn = LIST_FIRST(&pts->pts_virtual);
 		     ptn && ptn != pts->pts_timers[ITIMER_VIRTUAL];
 		     ptn = LIST_NEXT(ptn, pt_list)) {
-			KASSERT(ptn->pt_type != CLOCK_REALTIME);
+			KASSERT(ptn->pt_type == CLOCK_VIRTUAL);
 			timespecadd(&ts, &ptn->pt_time.it_value, &ts);
 		}
 		LIST_FIRST(&pts->pts_virtual) = NULL;
 		if (ptn) {
-			KASSERT(ptn->pt_type != CLOCK_REALTIME);
+			KASSERT(ptn->pt_type == CLOCK_VIRTUAL);
 			timespecadd(&ts, &ptn->pt_time.it_value,
 			    &ptn->pt_time.it_value);
 			LIST_INSERT_HEAD(&pts->pts_virtual, ptn, pt_list);
@@ -1223,12 +1280,12 @@ timers_free(struct proc *p, int which)
 		for (ptn = LIST_FIRST(&pts->pts_prof);
 		     ptn && ptn != pts->pts_timers[ITIMER_PROF];
 		     ptn = LIST_NEXT(ptn, pt_list)) {
-			KASSERT(ptn->pt_type != CLOCK_REALTIME);
+			KASSERT(ptn->pt_type == CLOCK_PROF);
 			timespecadd(&ts, &ptn->pt_time.it_value, &ts);
 		}
 		LIST_FIRST(&pts->pts_prof) = NULL;
 		if (ptn) {
-			KASSERT(ptn->pt_type != CLOCK_REALTIME);
+			KASSERT(ptn->pt_type == CLOCK_PROF);
 			timespecadd(&ts, &ptn->pt_time.it_value,
 			    &ptn->pt_time.it_value);
 			LIST_INSERT_HEAD(&pts->pts_prof, ptn, pt_list);
@@ -1259,12 +1316,12 @@ itimerfree(struct ptimers *pts, int index)
 
 	pt = pts->pts_timers[index];
 	pts->pts_timers[index] = NULL;
-	if (pt->pt_type == CLOCK_REALTIME)
+	if (!CLOCK_VIRTUAL_P(pt->pt_type))
 		callout_halt(&pt->pt_ch, &timer_lock);
-	else if (pt->pt_queued)
+	if (pt->pt_queued)
 		TAILQ_REMOVE(&timer_queue, pt, pt_chain);
 	mutex_spin_exit(&timer_lock);
-	if (pt->pt_type == CLOCK_REALTIME)
+	if (!CLOCK_VIRTUAL_P(pt->pt_type))
 		callout_destroy(&pt->pt_ch);
 	pool_put(&ptimer_pool, pt);
 }
@@ -1285,6 +1342,7 @@ itimerdecr(struct ptimer *pt, int nsec)
 	struct itimerspec *itp;
 
 	KASSERT(mutex_owned(&timer_lock));
+	KASSERT(CLOCK_VIRTUAL_P(pt->pt_type));
 
 	itp = &pt->pt_time;
 	if (itp->it_value.tv_nsec < nsec) {

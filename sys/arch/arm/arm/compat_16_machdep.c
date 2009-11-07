@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.11 2008/11/21 14:03:41 ad Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.14 2012/01/25 17:38:09 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -35,14 +35,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup
+ * Machine dependent functions for kernel setup
  *
  * Created      : 17/09/94
  */
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2008/11/21 14:03:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.14 2012/01/25 17:38:09 tsutsui Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -55,7 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2008/11/21 14:03:41 ad Ex
 #include <sys/signal.h>
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/ucontext.h>
 
@@ -103,7 +102,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	fp--;
 
 	/* make the stack aligned */
-	fp = (void *)STACKALIGN(fp);
+	fp = (void *)STACK_ALIGN(fp, STACK_ALIGNBYTES);
 
 	/* Save register context. */
 	frame.sf_sc.sc_r0     = tf->tf_r0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_cond.c,v 1.54 2009/01/18 12:14:17 lukem Exp $	*/
+/*	$NetBSD: pthread_cond.c,v 1.56 2010/11/02 20:49:47 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_cond.c,v 1.54 2009/01/18 12:14:17 lukem Exp $");
+__RCSID("$NetBSD: pthread_cond.c,v 1.56 2010/11/02 20:49:47 skrll Exp $");
 
 #include <errno.h>
 #include <sys/time.h>
@@ -55,7 +55,7 @@ __RCSID("$NetBSD: pthread_cond.c,v 1.54 2009/01/18 12:14:17 lukem Exp $");
 #include "pthread.h"
 #include "pthread_int.h"
 
-int	_sys_nanosleep(const struct timespec *, struct timespec *);
+int	_sys___nanosleep50(const struct timespec *, struct timespec *);
 
 extern int pthread__started;
 
@@ -234,7 +234,7 @@ pthread__cond_wake_one(pthread_cond_t *cond)
 	/*
 	 * For all valid uses of pthread_cond_signal(), the caller will
 	 * hold the mutex that the target is using to synchronize with.
-	 * To avoid the target awakening and immediatley blocking on the
+	 * To avoid the target awakening and immediately blocking on the
 	 * mutex, transfer the thread to be awoken to the current thread's
 	 * deferred wakeup list.  The waiter will be set running when the
 	 * caller (this thread) releases the mutex.
@@ -356,7 +356,7 @@ pthread_cond_wait_nothread(pthread_t self, pthread_mutex_t *mutex,
 	do {
 		pthread__testcancel(self);
 		pthread_mutex_unlock(mutex);
-		retval = _sys_nanosleep(&diff, NULL);
+		retval = _sys___nanosleep50(&diff, NULL);
 		pthread_mutex_lock(mutex);
 	} while (abstime == NULL && retval == 0);
 	pthread__testcancel(self);

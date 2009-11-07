@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stge.c,v 1.48 2009/09/14 12:02:48 tsutsui Exp $	*/
+/*	$NetBSD: if_stge.c,v 1.54 2012/01/30 19:41:21 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,9 +35,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.48 2009/09/14 12:02:48 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.54 2012/01/30 19:41:21 drochner Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,16 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.48 2009/09/14 12:02:48 tsutsui Exp $")
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -74,6 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.48 2009/09/14 12:02:48 tsutsui Exp $")
 #include <dev/pci/pcidevs.h>
 
 #include <dev/pci/if_stgereg.h>
+
+#include <prop/proplib.h>
 
 /* #define	STGE_CU_BUG			1 */
 #define	STGE_VLAN_UNTAG			1
@@ -384,6 +381,7 @@ stge_attach(device_t parent, device_t self, void *aux)
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
 	bus_dma_segment_t seg;
+	prop_data_t data;
 	int ioh_valid, memh_valid;
 	int i, rseg, error;
 	const struct stge_product *sp;
@@ -399,7 +397,7 @@ stge_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_rev = PCI_REVISION(pa->pa_class);
 
-	aprint_normal(": %s, rev. %d\n", sp->stge_name, sc->sc_rev);
+	pci_aprint_devinfo_fancy(pa, NULL, sp->stge_name, 1);
 
 	/*
 	 * Map the device.
@@ -562,13 +560,27 @@ stge_attach(device_t parent, device_t self, void *aux)
 		    STGE_StationAddress2) >> 8;
 		sc->sc_stge1023 = 0;
 	} else {
-		uint16_t myaddr[ETHER_ADDR_LEN / 2];
-		for (i = 0; i <ETHER_ADDR_LEN / 2; i++) {
-			stge_read_eeprom(sc, STGE_EEPROM_StationAddress0 + i, 
-			    &myaddr[i]);
-			myaddr[i] = le16toh(myaddr[i]);
+		data = prop_dictionary_get(device_properties(self),
+		    "mac-address");
+		if (data != NULL) {
+			/*
+			 * Try to get the station address from device
+			 * properties first, in case the EEPROM is missing.
+			 */
+			KASSERT(prop_object_type(data) == PROP_TYPE_DATA);
+			KASSERT(prop_data_size(data) == ETHER_ADDR_LEN);
+			(void)memcpy(enaddr, prop_data_data_nocopy(data),
+			    ETHER_ADDR_LEN);
+		} else {
+			uint16_t myaddr[ETHER_ADDR_LEN / 2];
+			for (i = 0; i <ETHER_ADDR_LEN / 2; i++) {
+				stge_read_eeprom(sc, 
+				    STGE_EEPROM_StationAddress0 + i,
+				    &myaddr[i]);
+				myaddr[i] = le16toh(myaddr[i]);
+			}
+			(void)memcpy(enaddr, myaddr, sizeof(enaddr));
 		}
-		(void)memcpy(enaddr, myaddr, sizeof(enaddr));
 		sc->sc_stge1023 = 1;
 	}
 
@@ -742,7 +754,7 @@ stge_shutdown(device_t self, int howto)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	stge_stop(ifp, 1);
-
+	stge_reset(sc);
 	return true;
 }
 
@@ -955,13 +967,10 @@ stge_start(struct ifnet *ifp)
 		sc->sc_txpending++;
 		sc->sc_txlast = nexttx;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txpending == (STGE_NTXDESC - 1)) {
@@ -1341,14 +1350,11 @@ stge_rxintr(struct stge_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass if up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 #ifdef	STGE_VLAN_UNTAG
 		/*
 		 * Check for VLAN tagged packets

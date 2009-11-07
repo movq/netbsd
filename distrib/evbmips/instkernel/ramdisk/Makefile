@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2009/09/20 23:19:52 abs Exp $
+#	$NetBSD: Makefile,v 1.10.8.1 2012/08/15 01:26:20 riz Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -13,7 +13,7 @@ DBG=		-Os
 CRUNCHBIN=	ramdiskbin
 LISTS=		${.CURDIR}/list ${DISTRIBDIR}/common/list.sysinst
 MTREECONF=	${DISTRIBDIR}/common/mtree.common
-.if ${MACHINE_ARCH} == "mipsel"
+.if ${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mips64el"
 IMAGEENDIAN=	le
 .else
 IMAGEENDIAN=	be
@@ -21,12 +21,11 @@ IMAGEENDIAN=	be
 MAKEDEVTARGETS=	ramdisk
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		dot.profile \
-		${DISTRIBDIR}/common/termcap \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
 		${DISTRIBDIR}/common/services
 
-MAKEDEVTARGETS= std md0 wd0 wd1 wd2 wd3 cd0 cd1 sd0 sd1 sd2 sd3 st0 pty0 ttyv0
+MAKEDEVTARGETS= std md0 wd0 wd1 wd2 wd3 cd0 cd1 sd0 sd1 sd2 sd3 st0 ipty ttyv0
 
 # Use stubs to eliminate some large stuff from libc
 HACKSRC=	${DISTRIBDIR}/utils/libhack

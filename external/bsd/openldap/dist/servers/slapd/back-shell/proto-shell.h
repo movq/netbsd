@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/servers/slapd/back-shell/proto-shell.h,v 1.4.2.3 2008/02/11 23:26:47 kurt Exp $ */
+/*	$NetBSD: proto-shell.h,v 1.1.1.3 2010/12/12 15:23:22 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/servers/slapd/back-shell/proto-shell.h,v 1.4.2.5 2010/04/13 20:23:39 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2008 The OpenLDAP Foundation.
+ * Copyright 1998-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

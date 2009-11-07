@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2008/10/19 22:05:21 apb Exp $
+#	$NetBSD: Makefile,v 1.9 2010/07/06 06:09:57 mrg Exp $
 
 ### what we need:
 
@@ -13,7 +13,7 @@ DIR_BOOT=	${.CURDIR}/../boot
 # prefer our assembler versions over assembler, and assembler over C:
 
 .SUFFIXES:
-.SUFFIXES: .out .o .po .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
+.SUFFIXES: .out .o .po .pico .so .s .S .c .cc .C .f .y .l .ln .m4 .sh
 
 FILES= xxppcboot fdppcboot
 BINDIR=/usr/mdec
@@ -28,7 +28,7 @@ SOBJS += libstubs.o
 
 OBJS=	$(SOBJS) $(COBJS)
 
-DEFS = -DPPCBOOTER -D_STANDALONE -DINSECURE -DDEBUG_MEMORY_LIST
+DEFS = -DPPCBOOTER -D_STANDALONE -DSA_EXEC_ANYOWNER -DDEBUG_MEMORY_LIST
 
 ### main target: ###
 
@@ -38,7 +38,7 @@ all: ${FILES}
 
 ### special  rules for bootblocks ###
 
-INCPATH = -I${DIR_TOP} -I${DIR_TOP}/lib/libsa -I${DIR_BOOT} -I${.CURDIR} -I${.CURDIR}/../../.. -I${.CURDIR}/../aout2bb -I${.OBJDIR}
+INCPATH = -I${DIR_TOP} -I${DIR_TOP}/lib/libsa -I${DIR_BOOT} -I${.CURDIR} -I${.CURDIR}/../../.. -I${.CURDIR}/../elf2bb -I${.OBJDIR}
 
 AFLAGS += -m68030 -l
 CAFLAGS += -Wa,-l -Wa,-m68030 ${INCPATH}

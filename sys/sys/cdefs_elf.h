@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs_elf.h,v 1.30 2008/07/21 15:22:19 lukem Exp $	*/
+/*	$NetBSD: cdefs_elf.h,v 1.37 2011/03/24 07:28:28 plunky Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -65,9 +65,15 @@
     __asm(".weak " _C_LABEL_STRING(#sym));
 
 #if __GNUC_PREREQ__(4, 0)
-#define	__weak_reference(sym)	__attribute__((__weakref__))
+#define	__weak_reference(sym)	__attribute__((__weakref__(#sym)))
 #else
 #define	__weak_reference(sym)	; __asm(".weak " _C_LABEL_STRING(#sym))
+#endif
+
+#if __GNUC_PREREQ__(4, 2)
+#define	__weakref_visible	static
+#else
+#define	__weakref_visible	extern
 #endif
 
 #define	__warn_references(sym,msg)					\
@@ -155,5 +161,44 @@
 
 #define	__link_set_count(set)						\
 	(__link_set_end(set) - __link_set_start(set))
+
+
+#ifdef _KERNEL
+
+/*
+ * On multiprocessor systems we can gain an improvement in performance
+ * by being mindful of which cachelines data is placed in.
+ *
+ * __read_mostly:
+ *
+ *	It makes sense to ensure that rarely modified data is not
+ *	placed in the same cacheline as frequently modified data.
+ *	To mitigate the phenomenon known as "false-sharing" we
+ *	can annotate rarely modified variables with __read_mostly.
+ *	All such variables are placed into the .data.read_mostly
+ *	section in the kernel ELF.
+ *
+ *	Prime candidates for __read_mostly annotation are variables
+ *	which are hardly ever modified and which are used in code
+ *	hot-paths, e.g. pmap_initialized.
+ *
+ * __cacheline_aligned:
+ *
+ *	Some data structures (mainly locks) benefit from being aligned
+ *	on a cacheline boundary, and having a cacheline to themselves.
+ *	This way, the modification of other data items cannot adversely
+ *	affect the lock and vice versa.
+ *
+ *	Any variables annotated with __cacheline_aligned will be
+ *	placed into the .data.cacheline_aligned ELF section.
+ */
+#define	__read_mostly						\
+    __attribute__((__section__(".data.read_mostly")))
+
+#define	__cacheline_aligned					\
+    __attribute__((__aligned__(COHERENCY_UNIT),			\
+		 __section__(".data.cacheline_aligned")))
+
+#endif /* _KERNEL */
 
 #endif /* !_SYS_CDEFS_ELF_H_ */

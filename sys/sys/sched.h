@@ -1,4 +1,4 @@
-/*	$NetBSD: sched.h,v 1.71 2009/10/03 22:32:56 elad Exp $	*/
+/*	$NetBSD: sched.h,v 1.75 2011/11/21 04:36:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -96,25 +96,8 @@ __BEGIN_DECLS
  * Interface of CPU-sets.
  */
 typedef struct _cpuset cpuset_t;
-typedef struct _kcpuset kcpuset_t;	/* XXX: lwp.h included from userland */
 
-#ifdef _KERNEL
-
-kcpuset_t *kcpuset_create(void);
-void	kcpuset_destroy(kcpuset_t *);
-void	kcpuset_copy(kcpuset_t *, const kcpuset_t *);
-void	kcpuset_use(kcpuset_t *);
-void	kcpuset_unuse(kcpuset_t *, kcpuset_t **);
-int	kcpuset_copyin(const cpuset_t *, kcpuset_t *, size_t);
-int	kcpuset_copyout(const kcpuset_t *, cpuset_t *, size_t);
-void	kcpuset_zero(kcpuset_t *);
-void	kcpuset_fill(kcpuset_t *);
-void	kcpuset_set(cpuid_t, kcpuset_t *);
-int	kcpuset_isset(cpuid_t, const kcpuset_t *);
-bool	kcpuset_iszero(const kcpuset_t *);
-bool	kcpuset_match(const kcpuset_t *, const kcpuset_t *);
-
-#else
+#ifndef _KERNEL
 
 #define	cpuset_create()		_cpuset_create()
 #define	cpuset_destroy(c)	_cpuset_destroy(c)
@@ -237,7 +220,7 @@ void		sched_cpuattach(struct cpu_info *);
 void		sched_tick(struct cpu_info *);
 void		schedclock(struct lwp *);
 void		sched_schedclock(struct lwp *);
-void		sched_pstats(void *);
+void		sched_pstats(void);
 void		sched_lwp_stats(struct lwp *);
 void		sched_pstats_hook(struct lwp *, int);
 
@@ -265,7 +248,8 @@ void		setrunnable(struct lwp *);
 void		sched_setrunnable(struct lwp *);
 
 struct cpu_info *sched_takecpu(struct lwp *);
-void		sched_print_runqueue(void (*pr)(const char *, ...));
+void		sched_print_runqueue(void (*pr)(const char *, ...)
+    __printflike(1, 2));
 
 /* Dispatching */
 bool		kpreempt(uintptr_t);

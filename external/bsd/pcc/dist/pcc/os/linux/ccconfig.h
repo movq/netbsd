@@ -1,4 +1,5 @@
-/*	$Id: ccconfig.h,v 1.1.1.2 2009/09/04 00:27:35 gmcgarry Exp $	*/
+/*	Id: ccconfig.h,v 1.21 2011/06/04 19:27:25 plunky Exp 	*/	
+/*	$NetBSD: ccconfig.h,v 1.1.1.4 2011/09/01 12:47:17 plunky Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
@@ -31,36 +32,42 @@
  * Various settings that controls how the C compiler works.
  */
 
-#ifndef LIBDIR
-#define LIBDIR "/usr/lib/"
-#endif
-
 /* common cpp predefines */
-#define	CPPADD	{ "-D__linux__", "-D__ELF__", NULL, }
+#define CPPADD	{ "-D__linux__", "-D__ELF__", NULL, }
 
 #define CRT0FILE LIBDIR "crt1.o"
 #define CRT0FILE_PROFILE LIBDIR "gcrt1.o"
 
-#define	LIBCLIBS { "-lc", "-lpcc", NULL }
-#define	LIBCLIBS_PROFILE LIBCLIBS
+#define LIBCLIBS { "-lc", "-lpcc", NULL }
+#define LIBCLIBS_PROFILE LIBCLIBS
 
 #define STARTFILES { LIBDIR "crti.o", PCCLIBDIR "crtbegin.o", NULL }
-#define	ENDFILES { PCCLIBDIR "crtend.o", LIBDIR "crtn.o", NULL }
+#define ENDFILES { PCCLIBDIR "crtend.o", LIBDIR "crtn.o", NULL }
+
+#define STARTFILES_S { LIBDIR "crti.o", PCCLIBDIR "crtbegin.o", NULL }
+#define ENDFILES_S { PCCLIBDIR "crtend.o", LIBDIR "crtn.o", NULL }
 
 #define STARTLABEL "_start"
 
 #if defined(mach_i386)
-#define	CPPMDADD { "-D__i386__", NULL, }
-#define	DYNLINKER { "-dynamic-linker", "/lib/ld-linux.so.2", NULL }
+#define CPPMDADD { "-D__i386__", NULL, }
+#define DYNLINKER { "-dynamic-linker", "/lib/ld-linux.so.2", NULL }
 #elif defined(mach_powerpc)
-#define	CPPMDADD { "-D__ppc__", NULL, }
-#define	DYNLINKER { "-dynamic-linker", "/lib/ld-linux.so.2", NULL }
+#define CPPMDADD { "-D__ppc__", NULL, }
+#define DYNLINKER { "-dynamic-linker", "/lib/ld-linux.so.2", NULL }
 #elif defined(mach_amd64)
 #define CPPMDADD { "-D__x86_64__", NULL, }
 #define	DYNLINKER { "-dynamic-linker", "/lib64/ld-linux-x86-64.so.2", NULL }
+#ifndef LIBDIR
+#define	LIBDIR "/usr/lib64/"
+#endif
+#elif defined(mach_mips)
+#define CPPMDADD { "-D__mips__", NULL, }
+#define DYNLINKER { "-dynamic-linker", "/lib/ld.so.1", NULL }
 #else
 #error defines for arch missing
 #endif
 
-#define	STABS
-#define ELFABI
+#ifndef LIBDIR
+#define LIBDIR "/usr/lib/"
+#endif

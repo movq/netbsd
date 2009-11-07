@@ -1,7 +1,7 @@
-/*	$NetBSD: host.c,v 1.1.1.3 2009/10/25 00:01:30 christos Exp $	*/
+/*	$NetBSD: host.c,v 1.3.4.1 2012/06/05 21:15:40 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: host.c,v 1.120 2009/09/29 15:06:05 fdupont Exp */
+/* Id: host.c,v 1.127 2011/03/11 06:11:20 marka Exp  */
 
 /*! \file */
 
@@ -523,6 +523,7 @@ printmessage(dig_query_t *query, dns_message_t *msg, isc_boolean_t headers) {
 		if ((msg->flags & DNS_MESSAGEFLAG_CD) != 0) {
 			printf("%scd", did_flag ? " " : "");
 			did_flag = ISC_TRUE;
+			POST(did_flag);
 		}
 		printf("; QUERY: %u, ANSWER: %u, "
 		       "AUTHORITY: %u, ADDITIONAL: %u\n",
@@ -630,7 +631,9 @@ pre_parse_args(int argc, char **argv) {
 		case 'v': break;
 		case 'w': break;
 		case 'C': break;
-		case 'D': break;
+		case 'D':
+			debugging = ISC_TRUE;
+			break;
 		case 'N': break;
 		case 'R': break;
 		case 'T': break;
@@ -797,7 +800,7 @@ parse_args(isc_boolean_t is_batchfile, int argc, char **argv) {
 			ndots = atoi(isc_commandline_argument);
 			break;
 		case 'D':
-			debugging = ISC_TRUE;
+			/* Handled by pre_parse_args(). */
 			break;
 		case '4':
 			if (have_ipv4) {
@@ -824,8 +827,8 @@ parse_args(isc_boolean_t is_batchfile, int argc, char **argv) {
 	if (isc_commandline_index >= argc)
 		show_usage();
 
-	strncpy(hostname, argv[isc_commandline_index], sizeof(hostname));
-	hostname[sizeof(hostname)-1]=0;
+	strlcpy(hostname, argv[isc_commandline_index], sizeof(hostname));
+
 	if (argc > isc_commandline_index + 1) {
 		set_nameserver(argv[isc_commandline_index+1]);
 		debug("server is %s", argv[isc_commandline_index+1]);

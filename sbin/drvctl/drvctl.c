@@ -1,4 +1,4 @@
-/* $NetBSD: drvctl.c,v 1.10 2009/04/20 21:41:50 dyoung Exp $ */
+/* $NetBSD: drvctl.c,v 1.16 2012/01/17 08:22:09 wiz Exp $ */
 
 /*
  * Copyright (c) 2004
@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  */
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,13 +37,16 @@
 #include <sys/ioctl.h>
 #include <sys/drvctlio.h>
 
-#define OPTS "QRSa:dlnpr"
+#define OPTS "QRSa:dlnprt"
 
 #define	OPEN_MODE(mode)							\
 	(((mode) == 'd' || (mode) == 'r') ? O_RDWR			\
 					  : O_RDONLY)
 
-static void usage(void);
+__dead static void usage(void);
+static void extract_property(prop_dictionary_t, const char *, bool);
+static void display_object(prop_object_t, bool);
+static void list_children(int, char *, bool, bool, int);
 
 static void
 usage(void)
@@ -50,8 +54,8 @@ usage(void)
 
 	fprintf(stderr, "Usage: %s -r [-a attribute] busdevice [locator ...]\n"
 	    "       %s -d device\n"
-	    "       %s [-n] -l [device]\n"
-	    "       %s -p device\n"
+	    "       %s [-nt] -l [device]\n"
+	    "       %s [-n] -p device [prop]\n"
 	    "       %s -Q device\n"
 	    "       %s -R device\n"
 	    "       %s -S device\n",
@@ -63,16 +67,13 @@ usage(void)
 int
 main(int argc, char **argv)
 {
-	bool nflag = false;
+	bool nflag = false, tflag = false;
 	int c, mode;
 	char *attr = 0;
 	extern char *optarg;
 	extern int optind;
 	int fd, res;
-	size_t children;
 	struct devpmargs paa = {.devname = "", .flags = 0};
-	struct devlistargs laa = {.l_devname = "", .l_childname = NULL,
-				  .l_children = 0};
 	struct devdetachargs daa;
 	struct devrescanargs raa;
 	int *locs, i;
@@ -99,6 +100,9 @@ main(int argc, char **argv)
 			break;
 		case 'n':
 			nflag = true;
+			break;
+		case 't':
+			tflag = nflag = true;
 			break;
 		case '?':
 		default:
@@ -139,31 +143,7 @@ main(int argc, char **argv)
 			err(3, "DRVDETACHDEV");
 		break;
 	case 'l':
-		if (argc == 0)
-			*laa.l_devname = '\0';
-		else
-			strlcpy(laa.l_devname, argv[0], sizeof(laa.l_devname));
-
-		if (ioctl(fd, DRVLISTDEV, &laa) == -1)
-			err(3, "DRVLISTDEV");
-
-		children = laa.l_children;
-
-		laa.l_childname = malloc(children * sizeof(laa.l_childname[0]));
-		if (laa.l_childname == NULL)
-			err(5, "DRVLISTDEV");
-		if (ioctl(fd, DRVLISTDEV, &laa) == -1)
-			err(3, "DRVLISTDEV");
-		if (laa.l_children > children)
-			err(6, "DRVLISTDEV: number of children grew");
-
-		for (i = 0; i < (int)laa.l_children; i++) {
-			if (!nflag) {
-				printf("%s ",
-				    (argc == 0) ? "root" : laa.l_devname);
-			}
-			printf("%s\n", laa.l_childname[i]);
-		}
+		list_children(fd, argc ? argv[0] : NULL, nflag, tflag, 0);
 		break;
 	case 'r':
 		memset(&raa, 0, sizeof(raa));
@@ -219,16 +199,130 @@ main(int argc, char **argv)
 			errx(3, "get-properties: failed to return result data");
 		}
 
-		xml = prop_dictionary_externalize(data_dict);
-		prop_object_release(results_dict);
+		if (argc == 1) {
+			xml = prop_dictionary_externalize(data_dict);
+			if (!nflag) {
+				printf("Properties for device `%s':\n",
+				    argv[0]);
+			}
+			printf("%s", xml);
+			free(xml);
+		} else {
+			for (i = 1; i < argc; i++)
+				extract_property(data_dict, argv[i], nflag);
+		}
 
-		printf("Properties for device `%s':\n%s",
-		       argv[0], xml);
-		free(xml);
+		prop_object_release(results_dict);
 		break;
 	default:
 		errx(4, "unknown command");
 	}
 
 	return (0);
+}
+
+static void
+extract_property(prop_dictionary_t dict, const char *prop, bool nflag)
+{
+	char *s, *p, *cur, *ep = NULL;
+	prop_object_t obj;
+
+	s = strdup(prop);
+	p = strtok_r(s, "/", &ep);
+	while (p) {
+		cur = p;
+		p = strtok_r(NULL, "/", &ep);
+		if (p) {
+			if (prop_dictionary_get_dict(dict, cur, &dict) == false)
+				exit(EXIT_FAILURE);
+		} else {
+			obj = prop_dictionary_get(dict, cur);
+			display_object(obj, nflag);
+		}
+	}
+
+	free(s);
+}
+
+static void
+display_object(prop_object_t obj, bool nflag)
+{
+	char *xml;
+	prop_object_t next_obj;
+	prop_object_iterator_t iter;
+
+	if (obj == NULL)
+		exit(EXIT_FAILURE);
+	switch (prop_object_type(obj)) {
+	case PROP_TYPE_BOOL:
+		printf("%s\n", prop_bool_true(obj) ? "true" : "false");
+		break;
+	case PROP_TYPE_NUMBER:
+		printf("%" PRId64 "\n", prop_number_integer_value(obj));
+		break;
+	case PROP_TYPE_STRING:
+		printf("%s\n", prop_string_cstring_nocopy(obj));
+		break;
+	case PROP_TYPE_DICTIONARY:
+		xml = prop_dictionary_externalize(obj);
+		printf("%s", xml);
+		free(xml);
+		break;
+	case PROP_TYPE_ARRAY:
+		iter = prop_array_iterator(obj);
+		if (!nflag)
+			printf("Array:\n");
+		while ((next_obj = prop_object_iterator_next(iter)) != NULL)
+			display_object(next_obj, nflag);
+		break;
+	default:
+		fprintf(stderr, "unhandled type %d\n", prop_object_type(obj));
+		exit(EXIT_FAILURE);
+	}
+}
+
+static void
+list_children(int fd, char *dvname, bool nflag, bool tflag, int depth)
+{
+	struct devlistargs laa = {.l_devname = "", .l_childname = NULL,
+				  .l_children = 0};
+	size_t children;
+	int i, n;
+
+	if (dvname == NULL) {
+		if (depth > 0)
+			return;
+		*laa.l_devname = '\0';
+	} else {
+		strlcpy(laa.l_devname, dvname, sizeof(laa.l_devname));
+	}
+
+	if (ioctl(fd, DRVLISTDEV, &laa) == -1)
+		err(3, "DRVLISTDEV");
+
+	children = laa.l_children;
+
+	laa.l_childname = malloc(children * sizeof(laa.l_childname[0]));
+	if (laa.l_childname == NULL)
+		err(5, "DRVLISTDEV");
+	if (ioctl(fd, DRVLISTDEV, &laa) == -1)
+		err(3, "DRVLISTDEV");
+	if (laa.l_children > children)
+		err(6, "DRVLISTDEV: number of children grew");
+
+	for (i = 0; i < (int)laa.l_children; i++) {
+		for (n = 0; n < depth; n++)
+			printf("  ");
+		if (!nflag) {
+			printf("%s ",
+			    (dvname == NULL) ? "root" : laa.l_devname);
+		}
+		printf("%s\n", laa.l_childname[i]);
+		if (tflag) {
+			list_children(fd, laa.l_childname[i], nflag,
+			    tflag, depth + 1);
+		}
+	}
+
+	free(laa.l_childname);
 }

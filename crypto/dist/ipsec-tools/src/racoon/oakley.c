@@ -1,4 +1,4 @@
-/*	$NetBSD: oakley.c,v 1.17 2009/08/24 09:33:03 vanhu Exp $	*/
+/*	$NetBSD: oakley.c,v 1.22 2011/03/17 14:42:58 vanhu Exp $	*/
 
 /* Id: oakley.c,v 1.32 2006/05/26 12:19:46 manubsd Exp */
 
@@ -1524,6 +1524,8 @@ oakley_validate_auth(iph1)
 			iph1->rsa_p = rsa_try_check_rsasign(my_hash,
 					iph1->sig_p, iph1->rsa_candidates);
 			error = iph1->rsa_p ? 0 : -1;
+			genlist_free(iph1->rsa_candidates, NULL);
+			iph1->rsa_candidates = NULL;
 			break;
 		default:
 			plog(LLV_ERROR, LOCATION, NULL,
@@ -1789,7 +1791,7 @@ oakley_check_certid(iph1)
 		return 0;
 
 	if (iph1->id_p == NULL || iph1->cert_p == NULL) {
-		plog(LLV_ERROR, LOCATION, NULL, "no ID nor CERT found.\n");
+		plog(LLV_ERROR, LOCATION, iph1->remote, "no ID nor CERT found.\n");
 		return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
 	}
 
@@ -1800,25 +1802,28 @@ oakley_check_certid(iph1)
 	case IPSECDOI_ID_DER_ASN1_DN:
 		name = eay_get_x509asn1subjectname(iph1->cert_p);
 		if (!name) {
-			plog(LLV_ERROR, LOCATION, NULL,
+			plog(LLV_ERROR, LOCATION, iph1->remote,
 				"failed to get subjectName\n");
 			return ISAKMP_NTYPE_INVALID_CERTIFICATE;
 		}
 		if (idlen != name->l) {
-			plog(LLV_ERROR, LOCATION, NULL,
+			plog(LLV_ERROR, LOCATION, iph1->remote,
 				"Invalid ID length in phase 1.\n");
 			vfree(name);
 			return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
 		}
 		error = memcmp(id_b + 1, name->v, idlen);
-		vfree(name);
 		if (error != 0) {
-			plog(LLV_ERROR, LOCATION, NULL,
+			plog(LLV_ERROR, LOCATION, iph1->remote,
 				"ID mismatched with ASN1 SubjectName.\n");
 			plogdump(LLV_DEBUG, id_b + 1, idlen);
 			plogdump(LLV_DEBUG, name->v, idlen);
-			return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
+			if (iph1->rmconf->verify_identifier) {
+				vfree(name);
+				return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
+			}
 		}
+		vfree(name);
 		return 0;
 	case IPSECDOI_ID_IPV4_ADDR:
 	case IPSECDOI_ID_IPV6_ADDR:
@@ -1859,10 +1864,11 @@ oakley_check_certid(iph1)
 		hints.ai_socktype = SOCK_RAW;
 		hints.ai_flags = AI_NUMERICHOST;
 		error = getaddrinfo(altname, NULL, &hints, &res);
+		racoon_free(altname);
+		altname = NULL;
 		if (error != 0) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"no proper subjectAltName.\n");
-			racoon_free(altname);
 			return ISAKMP_NTYPE_INVALID_CERTIFICATE;
 		}
 		switch (res->ai_family) {
@@ -1877,7 +1883,6 @@ oakley_check_certid(iph1)
 		default:
 			plog(LLV_ERROR, LOCATION, NULL,
 				"family not supported: %d.\n", res->ai_family);
-			racoon_free(altname);
 			freeaddrinfo(res);
 			return ISAKMP_NTYPE_INVALID_CERTIFICATE;
 		}
@@ -1889,7 +1894,8 @@ oakley_check_certid(iph1)
 				"ID mismatched with subjectAltName.\n");
 			plogdump(LLV_DEBUG, id_b + 1, idlen);
 			plogdump(LLV_DEBUG, a, idlen);
-			return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
+			if (iph1->rmconf->verify_identifier)
+				return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
 		}
 		return 0;
 	}
@@ -2282,7 +2288,7 @@ oakley_append_rmconf_cr(rmconf, ctx)
 	     s_isakmp_certtype(buf->v[0]));
 	plogdump(LLV_DEBUG, buf->v, buf->l);
 
-	actx->plist = isakmp_plist_append(actx->plist, buf, ISAKMP_NPTYPE_CR);
+	actx->plist = isakmp_plist_append_full(actx->plist, buf, ISAKMP_NPTYPE_CR, 1);
 
 err:
 	vfree(asn1dn);

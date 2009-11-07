@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: readfile.c,v 1.17 2009/04/15 00:23:29 lukem Exp $");
+__RCSID("$NetBSD: readfile.c,v 1.19 2011/10/07 10:06:39 joerg Exp $");
 #endif
 
 
@@ -681,8 +681,10 @@ process_entry(struct host *host, char *src)
 			break;
 		case E_BAD_PATHNAME:
 			msg = "bad pathname (need leading '/')";
+			break;
 		case E_BAD_VALUE:
 			msg = "bad value";
+			break;
 		default:
 			msg = "unknown error";
 			break;
@@ -1206,9 +1208,9 @@ get_shared_string(char **src)
 	(void) get_string(src, retstring, &length);
 
 	s = (struct shared_string *) smalloc(sizeof(struct shared_string) +
-	    length);
+	    length + 1);
 	s->linkcount = 1;
-	strlcpy(s->string, retstring, sizeof(retstring));
+	memcpy(s->string, retstring, length + 1);
 
 	return s;
 }

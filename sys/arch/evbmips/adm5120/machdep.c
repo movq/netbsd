@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.11 2009/08/11 17:04:17 matt Exp $ */
+/* $NetBSD: machdep.c,v 1.21 2011/07/10 00:03:52 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -30,7 +30,9 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
  * OF SUCH DAMAGE.
  */
+
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -66,48 +68,9 @@
  *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
  * 	from: Utah Hdr: machdep.c 1.63 91/04/24
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
- * 	from: Utah Hdr: machdep.c 1.63 91/04/24
- */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2009/08/11 17:04:17 matt Exp $");
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.21 2011/07/10 00:03:52 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -120,17 +83,16 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2009/08/11 17:04:17 matt Exp $");
 #include "pci.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/buf.h>
-#include <sys/reboot.h>
-#include <sys/user.h>
-#include <sys/mount.h>
-#include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/termios.h>
-#include <sys/ksyms.h>
+#include <sys/buf.h>
 #include <sys/device.h>
+#include <sys/kcore.h>
+#include <sys/kernel.h>
+#include <sys/ksyms.h>
+#include <sys/mount.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
+#include <sys/termios.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -142,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2009/08/11 17:04:17 matt Exp $");
 #include "ksyms.h"
 
 #if NKSYMS || defined(DDB) || defined(MODULAR)
-#include <machine/db_machdep.h>
+#include <mips/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -161,15 +123,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2009/08/11 17:04:17 matt Exp $");
 #define	MEMSIZE 4 * 1024 * 1024
 #endif /* !MEMSIZE */
 
-struct	user *proc0paddr;
-
-/* Our exported CPU info; we can have only one. */  
-struct cpu_info cpu_info_store;
-
 /* Maps for VM objects. */
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
+int physmem;			/* # pages of physical memory */
 int maxmem;			/* max memory per process */
 
 int mem_cluster_cnt;
@@ -285,7 +242,7 @@ parse_args(prop_dictionary_t properties, int argc, char **argv,
 		} else if (strcmp(key, "kmac") == 0) {
 			prop_data_t pd;
 
-			ether_nonstatic_aton(enaddr, val);
+			(void)ether_aton_r(enaddr, sizeof(enaddr), val);
 			if (properties == NULL)
 				continue;
 			pd = prop_data_create_data(enaddr, sizeof(enaddr));
@@ -293,7 +250,7 @@ parse_args(prop_dictionary_t properties, int argc, char **argv,
 				printf("%s: prop_data_create_data\n", __func__);
 				continue;
 			}
-			if (!prop_dictionary_set(properties, "mac-addr", pd)) {
+			if (!prop_dictionary_set(properties, "mac-address", pd)) {
 				printf("%s: prop_dictionary_set(mac)\n",
 				    __func__);
 			}
@@ -314,8 +271,6 @@ mach_init(int argc, char **argv, void *a2, void *a3)
 	struct adm5120_config *admc = &adm5120_configuration;
 	uint32_t memsize;
 	vaddr_t kernend;
-	u_long first, last;
-	vaddr_t v;
 
 	extern char edata[], end[];	/* XXX */
 
@@ -335,7 +290,7 @@ mach_init(int argc, char **argv, void *a2, void *a3)
 	 * functions called during startup.
 	 * Also clears the I+D caches.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
 	/*
 	 * Set the VM page size.
@@ -420,10 +375,8 @@ mach_init(int argc, char **argv, void *a2, void *a3)
 	/*
 	 * Load the rest of the available pages into the VM system.
 	 */
-	first = round_page(MIPS_KSEG0_TO_PHYS(kernend));
-	last = mem_clusters[0].start + mem_clusters[0].size;
-	uvm_page_physload(atop(first), atop(last), atop(first), atop(last),
-	    VM_FREELIST_DEFAULT);
+	mips_page_physload(MIPS_KSEG0_START, (vaddr_t) kernend,
+	   mem_clusters, mem_cluster_cnt, NULL, 0);
 
 	/*
 	 * Initialize message buffer (at end of core).
@@ -436,13 +389,9 @@ mach_init(int argc, char **argv, void *a2, void *a3)
 	pmap_bootstrap();
 
 	/*
-	 * Init mapping for u page(s) for proc0.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = uvm_pageboot_alloc(USPACE);
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
@@ -517,8 +466,7 @@ cpu_reboot(int howto, char *bootstr)
 	static int waittime = -1;
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curproc)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	/* If "always halt" was specified as a boot flag, obey. */
 	if (boothowto & RB_HALT)

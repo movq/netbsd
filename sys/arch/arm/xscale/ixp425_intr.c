@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_intr.c,v 1.20 2009/10/21 14:15:50 rmind Exp $ */
+/*	$NetBSD: ixp425_intr.c,v 1.23 2011/07/01 20:32:51 dyoung Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_intr.c,v 1.20 2009/10/21 14:15:50 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_intr.c,v 1.23 2011/07/01 20:32:51 dyoung Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -76,9 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_intr.c,v 1.20 2009/10/21 14:15:50 rmind Exp $
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -226,6 +224,11 @@ ixp425_intr_calculate_masks(void)
 	ixp425_imask[IPL_SOFTBIO] = SI_TO_IRQBIT(SI_SOFTBIO);
 	ixp425_imask[IPL_SOFTNET] = SI_TO_IRQBIT(SI_SOFTNET);
 	ixp425_imask[IPL_SOFTSERIAL] = SI_TO_IRQBIT(SI_SOFTSERIAL);
+#else
+	KASSERT(ixp425_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(ixp425_imask[IPL_SOFTBIO] == 0);
+	KASSERT(ixp425_imask[IPL_SOFTNET] == 0);
+	KASSERT(ixp425_imask[IPL_SOFTSERIAL] == 0);
 #endif
 
 	/*
@@ -233,10 +236,6 @@ ixp425_intr_calculate_masks(void)
 	 * limited input buffer space/"real-time" requirements) a better
 	 * chance at not dropping data.
 	 */
-	ixp425_imask[IPL_SOFTBIO] |= ixp425_imask[IPL_SOFTCLOCK];
-	ixp425_imask[IPL_SOFTNET] |= ixp425_imask[IPL_SOFTBIO];
-	ixp425_imask[IPL_SOFTSERIAL] |= ixp425_imask[IPL_SOFTNET];
-	ixp425_imask[IPL_VM] |= ixp425_imask[IPL_SOFTSERIAL];
 	ixp425_imask[IPL_SCHED] |= ixp425_imask[IPL_VM];
 	ixp425_imask[IPL_HIGH] |= ixp425_imask[IPL_SCHED];
 
@@ -412,7 +411,7 @@ ixp425_intr_dispatch(struct clockframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
+		ci->ci_data.cpu_nintr++;
 
 		/* Clear down non-level triggered GPIO interrupts now */
 		if ((ibit & IXP425_INT_GPIOMASK) && iq->iq_ist != IST_LEVEL) {

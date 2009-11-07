@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.28 2008/04/28 20:23:36 martin Exp $ */
+/*	$NetBSD: autoconf.h,v 1.30 2011/07/01 20:59:38 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -73,9 +73,8 @@
  * Autoconfiguration information.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/promlib.h>
-#include <dev/sbus/sbusvar.h>
 
 /* This is used to map device classes to IPLs */
 struct intrmap {

@@ -1,4 +1,4 @@
-# $NetBSD: rescue.mi,v 1.28 2008/11/12 12:35:50 ad Exp $
+# $NetBSD: rescue.mi,v 1.32.8.1 2012/06/05 15:38:02 jdc Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -46,6 +46,7 @@
 ./rescue/fsdb					base-rescue-root
 ./rescue/fsirand				base-rescue-root
 ./rescue/ftp					base-rescue-root
+./rescue/gpt					base-rescue-root
 ./rescue/grep					base-rescue-root
 ./rescue/gunzip					base-rescue-root
 ./rescue/gzcat					base-rescue-root
@@ -65,7 +66,7 @@
 ./rescue/ldd					base-rescue-root
 ./rescue/less					base-rescue-root
 ./rescue/lfs_cleanerd				base-rescue-root
-./rescue/lmcctl					base-rescue-root	obsolete
+./rescue/lmcctl					base-obsolete	obsolete
 ./rescue/lmcconfig				base-rescue-root
 ./rescue/ln					base-rescue-root
 ./rescue/ls					base-rescue-root
@@ -92,7 +93,7 @@
 ./rescue/mount_ntfs				base-rescue-root
 ./rescue/mount_null				base-rescue-root
 ./rescue/mount_overlay				base-rescue-root
-./rescue/mount_portal				base-rescue-root
+./rescue/mount_portal				base-obsolete		obsolete
 ./rescue/mount_procfs				base-rescue-root
 ./rescue/mount_smbfs				base-rescue-root
 ./rescue/mount_tmpfs				base-rescue-root
@@ -141,8 +142,9 @@
 ./rescue/swapon					base-rescue-root
 ./rescue/sync					base-rescue-root
 ./rescue/sysctl					base-rescue-root
-./rescue/systrace				base-rescue-root	obsolete
+./rescue/systrace				base-obsolete		obsolete
 ./rescue/tar					base-rescue-root
+./rescue/terminfo.db				base-obsolete		obsolete
 ./rescue/test					base-rescue-root
 ./rescue/tetris					base-rescue-root
 ./rescue/ttyflags				base-rescue-root

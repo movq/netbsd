@@ -1,4 +1,4 @@
-/*	$NetBSD: ukfs.c,v 1.41 2009/10/15 16:41:08 pooka Exp $	*/
+/*	$NetBSD: ukfs.c,v 1.57 2011/02/22 15:42:15 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008, 2009  Antti Kantee.  All Rights Reserved.
@@ -68,16 +68,19 @@
 #define UKFS_MODE_DEFAULT 0555
 
 struct ukfs {
+	pthread_spinlock_t ukfs_spin;
+
 	struct mount *ukfs_mp;
-	struct vnode *ukfs_rvp;
+	struct lwp *ukfs_lwp;
 	void *ukfs_specific;
 
-	pthread_spinlock_t ukfs_spin;
-	pid_t ukfs_nextpid;
-	struct vnode *ukfs_cdir;
 	int ukfs_devfd;
+
 	char *ukfs_devpath;
 	char *ukfs_mountpath;
+	char *ukfs_cwd;
+
+	struct ukfs_part *ukfs_part;
 };
 
 static int builddirs(const char *, mode_t,
@@ -88,17 +91,6 @@ ukfs_getmp(struct ukfs *ukfs)
 {
 
 	return ukfs->ukfs_mp;
-}
-
-struct vnode *
-ukfs_getrvp(struct ukfs *ukfs)
-{
-	struct vnode *rvp;
-
-	rvp = ukfs->ukfs_rvp;
-	rump_pub_vp_incref(rvp);
-
-	return rvp;
 }
 
 void
@@ -122,44 +114,67 @@ ukfs_getspecific(struct ukfs *ukfs)
 #define pthread_spin_destroy(a)
 #endif
 
-static pid_t
-nextpid(struct ukfs *ukfs)
+static int
+precall(struct ukfs *ukfs, struct lwp **curlwp)
 {
-	pid_t npid;
 
-	pthread_spin_lock(&ukfs->ukfs_spin);
-	if (ukfs->ukfs_nextpid == 0)
-		ukfs->ukfs_nextpid++;
-	npid = ukfs->ukfs_nextpid++;
-	pthread_spin_unlock(&ukfs->ukfs_spin);
+	/* save previous.  ensure start from pristine context */
+	*curlwp = rump_pub_lwproc_curlwp();
+	if (*curlwp)
+		rump_pub_lwproc_switch(ukfs->ukfs_lwp);
+	rump_pub_lwproc_rfork(RUMP_RFCFDG);
 
-	return npid;
+	if (rump_sys_chroot(ukfs->ukfs_mountpath) == -1)
+		return errno;
+	if (rump_sys_chdir(ukfs->ukfs_cwd) == -1)
+		return errno;
+
+	return 0;
 }
 
 static void
-precall(struct ukfs *ukfs)
+postcall(struct lwp *curlwp)
 {
-	struct vnode *rvp, *cvp;
 
-	rump_pub_lwp_alloc_and_switch(nextpid(ukfs), 1);
-	rvp = ukfs_getrvp(ukfs);
-	pthread_spin_lock(&ukfs->ukfs_spin);
-	cvp = ukfs->ukfs_cdir;
-	pthread_spin_unlock(&ukfs->ukfs_spin);
-	rump_pub_rcvp_set(rvp, cvp); /* takes refs */
-	rump_pub_vp_rele(rvp);
+	rump_pub_lwproc_releaselwp();
+	if (curlwp)
+		rump_pub_lwproc_switch(curlwp);
 }
 
-static void
-postcall(struct ukfs *ukfs)
-{
-	struct vnode *rvp;
+#define PRECALL()							\
+struct lwp *ukfs_curlwp;						\
+do {									\
+	int ukfs_rv;							\
+	if ((ukfs_rv = precall(ukfs, &ukfs_curlwp)) != 0) {		\
+		errno = ukfs_rv;					\
+		return -1;						\
+	}								\
+} while (/*CONSTCOND*/0)
 
-	rvp = ukfs_getrvp(ukfs);
-	rump_pub_rcvp_set(NULL, rvp);
-	rump_pub_vp_rele(rvp);
-	rump_pub_lwp_release(rump_pub_lwp_curlwp());
-}
+#define POSTCALL() postcall(ukfs_curlwp);
+
+struct ukfs_part {
+	pthread_spinlock_t part_lck;
+	int part_refcount;
+
+	int part_type;
+	char part_labelchar;
+	off_t part_devoff;
+	off_t part_devsize;
+};
+
+enum ukfs_parttype { UKFS_PART_NONE, UKFS_PART_DISKLABEL, UKFS_PART_OFFSET };
+
+static struct ukfs_part ukfs__part_none = {
+	.part_type = UKFS_PART_NONE,
+	.part_devoff = 0,
+	.part_devsize = RUMP_ETFS_SIZE_ENDOFF,
+};
+static struct ukfs_part ukfs__part_na;
+struct ukfs_part *ukfs_part_none = &ukfs__part_none;
+struct ukfs_part *ukfs_part_na = &ukfs__part_na;
+
+#define PART2LOCKSIZE(len) ((len) == RUMP_ETFS_SIZE_ENDOFF ? 0 : (len))
 
 int
 _ukfs_init(int version)
@@ -190,31 +205,216 @@ rumpmkdir(struct ukfs *dummy, const char *path, mode_t mode)
 }
 
 int
-ukfs_partition_probe(char *devpath, int *partition)
+ukfs_part_probe(char *devpath, struct ukfs_part **partp)
 {
+	struct ukfs_part *part;
 	char *p;
-	int rv = 0;
+	int error = 0;
+	int devfd = -1;
+
+	if ((p = strstr(devpath, UKFS_PARTITION_SCANMAGIC)) != NULL) {
+		fprintf(stderr, "ukfs: %%PART is deprecated.  use "
+		    "%%DISKLABEL instead\n");
+		errno = ENODEV;
+		return -1;
+	}
+
+	part = malloc(sizeof(*part));
+	if (part == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
+	if (pthread_spin_init(&part->part_lck, PTHREAD_PROCESS_PRIVATE) == -1) {
+		error = errno;
+		free(part);
+		errno = error;
+		return -1;
+	}
+	part->part_type = UKFS_PART_NONE;
+	part->part_refcount = 1;
 
 	/*
-	 * Check for disklabel magic in pathname:
-	 * /regularpath%PART:<char>%\0
+	 * Check for magic in pathname:
+	 *   disklabel: /regularpath%DISKLABEL:labelchar%\0
+	 *     offsets: /regularpath%OFFSET:start,end%\0
 	 */
-#define MAGICADJ(p, n) (p+sizeof(UKFS_PARTITION_SCANMAGIC)-1+n)
-	if ((p = strstr(devpath, UKFS_PARTITION_SCANMAGIC)) != NULL
-	    && strlen(p) == UKFS_PARTITION_MAGICLEN
-	    && *(MAGICADJ(p,1)) == '%') {
-		if (*(MAGICADJ(p,0)) >= 'a' &&
-		    *(MAGICADJ(p,0)) < 'a' + UKFS_MAXPARTITIONS) {
-			*partition = *(MAGICADJ(p,0)) - 'a';
+#define MAGICADJ_DISKLABEL(p, n) (p+sizeof(UKFS_DISKLABEL_SCANMAGIC)-1+n)
+	if ((p = strstr(devpath, UKFS_DISKLABEL_SCANMAGIC)) != NULL
+	    && strlen(p) == UKFS_DISKLABEL_MAGICLEN
+	    && *(MAGICADJ_DISKLABEL(p,1)) == '%') {
+		if (*(MAGICADJ_DISKLABEL(p,0)) >= 'a' &&
+		    *(MAGICADJ_DISKLABEL(p,0)) < 'a' + UKFS_MAXPARTITIONS) {
+			struct ukfs__disklabel dl;
+			struct ukfs__partition *pp;
+			int imswapped;
+			char buf[65536];
+			char labelchar = *(MAGICADJ_DISKLABEL(p,0));
+			int partition = labelchar - 'a';
+			uint32_t poffset, psize;
+
 			*p = '\0';
+			devfd = open(devpath, O_RDONLY);
+			if (devfd == -1) {
+				error = errno;
+				goto out;
+			}
+
+			/* Locate the disklabel and find the partition. */
+			if (pread(devfd, buf, sizeof(buf), 0) == -1) {
+				error = errno;
+				goto out;
+			}
+
+			if (ukfs__disklabel_scan(&dl, &imswapped,
+			    buf, sizeof(buf)) != 0) {
+				error = ENOENT;
+				goto out;
+			}
+
+			if (dl.d_npartitions < partition) {
+				error = ENOENT;
+				goto out;
+			}
+
+			pp = &dl.d_partitions[partition];
+			part->part_type = UKFS_PART_DISKLABEL;
+			part->part_labelchar = labelchar;
+			if (imswapped) {
+				poffset = bswap32(pp->p_offset);
+				psize = bswap32(pp->p_size);
+			} else {
+				poffset = pp->p_offset;
+				psize = pp->p_size;
+			}
+			part->part_devoff = poffset << DEV_BSHIFT;
+			part->part_devsize = psize << DEV_BSHIFT;
 		} else {
-			rv = EINVAL;
+			error = EINVAL;
 		}
+#define MAGICADJ_OFFSET(p, n) (p+sizeof(UKFS_OFFSET_SCANMAGIC)-1+n)
+	} else if (((p = strstr(devpath, UKFS_OFFSET_SCANMAGIC)) != NULL)
+	    && (strlen(p) >= UKFS_OFFSET_MINLEN)) {
+		char *comma, *pers, *ep, *nptr;
+		u_quad_t val;
+
+		comma = strchr(p, ',');
+		if (comma == NULL) {
+			error = EINVAL;
+			goto out;
+		}
+		pers = strchr(comma, '%');
+		if (pers == NULL) {
+			error = EINVAL;
+			goto out;
+		}
+		*comma = '\0';
+		*pers = '\0';
+		*p = '\0';
+
+		nptr = MAGICADJ_OFFSET(p,0);
+		/* check if string is negative */
+		if (*nptr == '-') {
+			error = ERANGE;
+			goto out;
+		}
+		val = strtouq(nptr, &ep, 10);
+		if (val == UQUAD_MAX) {
+			error = ERANGE;
+			goto out;
+		}
+		if (*ep != '\0') {
+			error = EADDRNOTAVAIL; /* creative ;) */
+			goto out;
+		}
+		part->part_devoff = val;
+
+		/* omstart */
+
+		nptr = comma+1;
+		/* check if string is negative */
+		if (*nptr == '-') {
+			error = ERANGE;
+			goto out;
+		}
+		val = strtouq(nptr, &ep, 10);
+		if (val == UQUAD_MAX) {
+			error = ERANGE;
+			goto out;
+		}
+		if (*ep != '\0') {
+			error = EADDRNOTAVAIL; /* creative ;) */
+			goto out;
+		}
+		part->part_devsize = val;
+		part->part_type = UKFS_PART_OFFSET;
 	} else {
-		*partition = UKFS_PARTITION_NONE;
+		ukfs_part_release(part);
+		part = ukfs_part_none;
+	}
+
+ out:
+	if (devfd != -1)
+		close(devfd);
+	if (error) {
+		free(part);
+		errno = error;
+	} else {
+		*partp = part;
+	}
+
+	return error ? -1 : 0;
+}
+
+int
+ukfs_part_tostring(struct ukfs_part *part, char *str, size_t strsize)
+{
+	int rv;
+
+	*str = '\0';
+	/* "pseudo" values */
+	if (part == ukfs_part_na) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (part == ukfs_part_none)
+		return 0;
+
+	rv = 0;
+	switch (part->part_type) {
+	case UKFS_PART_NONE:
+		break;
+
+	case UKFS_PART_DISKLABEL:
+		snprintf(str, strsize, "%%DISKLABEL:%c%%",part->part_labelchar);
+		rv = 1;
+		break;
+
+	case UKFS_PART_OFFSET:
+		snprintf(str, strsize, "[%llu,%llu]",
+		    (unsigned long long)part->part_devoff,
+		    (unsigned long long)(part->part_devoff+part->part_devsize));
+		rv = 1;
+		break;
 	}
 
 	return rv;
+}
+
+static void
+unlockdev(int fd, struct ukfs_part *part)
+{
+	struct flock flarg;
+
+	if (part == ukfs_part_na)
+		return;
+
+	memset(&flarg, 0, sizeof(flarg));
+	flarg.l_type = F_UNLCK;
+	flarg.l_whence = SEEK_SET;
+	flarg.l_start = part->part_devoff;
+	flarg.l_len = PART2LOCKSIZE(part->part_devsize);
+	if (fcntl(fd, F_SETLK, &flarg) == -1)
+		warn("ukfs: cannot unlock device file");
 }
 
 /*
@@ -225,12 +425,12 @@ ukfs_partition_probe(char *devpath, int *partition)
  * We hard-fail only in two cases:
  *  1) we failed to get the partition info out (don't know what offset
  *     to mount from)
- *  2) we failed to flock the source device (i.e. flock() fails,
+ *  2) we failed to flock the source device (i.e. fcntl() fails,
  *     not e.g. open() before it)
  *
  * Otherwise we let the code proceed to mount and let the file system
  * throw the proper error.  The only questionable bit is that if we
- * soft-fail before flock() and mount does succeed...
+ * soft-fail before flock and mount does succeed...
  *
  * Returns: -1 error (errno reports error code)
  *           0 success
@@ -239,49 +439,19 @@ ukfs_partition_probe(char *devpath, int *partition)
  *        n  device is open
  */
 static int
-process_diskdevice(const char *devpath, int partition, int rdonly,
-	int *dfdp, uint64_t *devoff, uint64_t *devsize)
+process_diskdevice(const char *devpath, struct ukfs_part *part, int rdonly,
+	int *dfdp)
 {
-	char buf[65536];
 	struct stat sb;
-	struct ukfs_disklabel dl;
-	struct ukfs_partition *pp;
 	int rv = 0, devfd;
 
 	/* defaults */
-	*devoff = 0;
-	*devsize = RUMP_ETFS_SIZE_ENDOFF;
 	*dfdp = -1;
 
 	devfd = open(devpath, rdonly ? O_RDONLY : O_RDWR);
 	if (devfd == -1) {
-		if (UKFS_USEPARTITION(partition))
-			rv = errno;
+		rv = errno;
 		goto out;
-	}
-
-	/*
-	 * Locate the disklabel and find the partition in question.
-	 */
-	if (UKFS_USEPARTITION(partition)) {
-		if (pread(devfd, buf, sizeof(buf), 0) == -1) {
-			rv = errno;
-			goto out;
-		}
-
-		if (ukfs_disklabel_scan(&dl, buf, sizeof(buf)) != 0) {
-			rv = ENOENT;
-			goto out;
-		}
-
-		if (dl.d_npartitions < partition) {
-			rv = ENOENT;
-			goto out;
-		}
-
-		pp = &dl.d_partitions[partition];
-		*devoff = pp->p_offset << DEV_BSHIFT;
-		*devsize = pp->p_size << DEV_BSHIFT;
 	}
 
 	if (fstat(devfd, &sb) == -1) {
@@ -295,10 +465,25 @@ process_diskdevice(const char *devpath, int partition, int rdonly,
 	 * We also need to close the device for fairly obvious reasons.
 	 */
 	if (!S_ISBLK(sb.st_mode)) {
-		if (flock(devfd, LOCK_NB | (rdonly ? LOCK_SH:LOCK_EX)) == -1) {
-			warnx("ukfs_mount: cannot get %s lock on "
-			    "device", rdonly ? "shared" : "exclusive");
-			rv = errno;
+		struct flock flarg;
+
+		memset(&flarg, 0, sizeof(flarg));
+		flarg.l_type = rdonly ? F_RDLCK : F_WRLCK;
+		flarg.l_whence = SEEK_SET;
+		flarg.l_start = part->part_devoff;
+		flarg.l_len = PART2LOCKSIZE(part->part_devsize);
+		if (fcntl(devfd, F_SETLK, &flarg) == -1) {
+			pid_t holder;
+			int sverrno;
+
+			sverrno = errno;
+			if (fcntl(devfd, F_GETLK, &flarg) != 1)
+				holder = flarg.l_pid;
+			else
+				holder = -1;
+			warnx("ukfs_mount: cannot lock device.  held by pid %d",
+			    holder);
+			rv = sverrno;
 			goto out;
 		}
 	} else {
@@ -311,30 +496,53 @@ process_diskdevice(const char *devpath, int partition, int rdonly,
 	if (rv) {
 		if (devfd != -1)
 			close(devfd);
-		errno = rv;
-		rv = -1;
 	}
 
 	return rv;
 }
 
+struct mountinfo {
+	const char *mi_vfsname;
+	const char *mi_mountpath;
+	int mi_mntflags;
+	void *mi_arg;
+	size_t mi_alen;
+	int *mi_error;
+};
+static void *
+mfs_mounter(void *arg)
+{
+	struct mountinfo *mi = arg;
+	int rv;
+
+	rv = rump_sys_mount(mi->mi_vfsname, mi->mi_mountpath, mi->mi_mntflags,
+	    mi->mi_arg, mi->mi_alen);
+	if (rv) {
+		warn("mfs mount failed.  fix me.");
+		abort(); /* XXX */
+	}
+
+	return NULL;
+}
+
 static struct ukfs *
-doukfsmount(const char *vfsname, const char *devpath, int partition,
+doukfsmount(const char *vfsname, const char *devpath, struct ukfs_part *part,
 	const char *mountpath, int mntflags, void *arg, size_t alen)
 {
 	struct ukfs *fs = NULL;
+	struct lwp *curlwp;
 	int rv = 0, devfd = -1;
-	uint64_t devoff, devsize;
 	int mounted = 0;
 	int regged = 0;
 
-	/* XXX: gcc whine */
-	devoff = 0;
-	devsize = 0;
-
-	if (partition != UKFS_PARTITION_NA)
-		process_diskdevice(devpath, partition, mntflags & MNT_RDONLY,
-		    &devfd, &devoff, &devsize);
+	pthread_spin_lock(&part->part_lck);
+	part->part_refcount++;
+	pthread_spin_unlock(&part->part_lck);
+	if (part != ukfs_part_na) {
+		if ((rv = process_diskdevice(devpath, part,
+		    mntflags & MNT_RDONLY, &devfd)) != 0)
+			goto out;
+	}
 
 	fs = malloc(sizeof(struct ukfs));
 	if (fs == NULL) {
@@ -351,26 +559,62 @@ doukfsmount(const char *vfsname, const char *devpath, int partition,
 		}
 	}
 
-	if (partition != UKFS_PARTITION_NA) {
+	if (part != ukfs_part_na) {
+		/* LINTED */
 		rv = rump_pub_etfs_register_withsize(devpath, devpath,
-		    RUMP_ETFS_BLK, devoff, devsize);
+		    RUMP_ETFS_BLK, part->part_devoff, part->part_devsize);
 		if (rv) {
 			goto out;
 		}
 		regged = 1;
 	}
 
-	rv = rump_sys_mount(vfsname, mountpath, mntflags, arg, alen);
-	if (rv) {
-		rv = errno;
-		goto out;
+	/*
+	 * MFS is special since mount(2) doesn't return.  Hence, we
+	 * create a thread here.  Could fix mfs to return, but there's
+	 * too much history for me to bother.
+	 */
+	if (strcmp(vfsname, MOUNT_MFS) == 0) {
+		pthread_t pt;
+		struct mountinfo mi;
+		int i;
+
+		mi.mi_vfsname = vfsname;
+		mi.mi_mountpath = mountpath;
+		mi.mi_mntflags = mntflags;
+		mi.mi_arg = arg;
+		mi.mi_alen = alen;
+
+		if (pthread_create(&pt, NULL, mfs_mounter, &mi) == -1) {
+			rv = errno;
+			goto out;
+		}
+
+		for (i = 0;i < 100000; i++) {
+			struct statvfs svfsb;
+
+			rv = rump_sys_statvfs1(mountpath, &svfsb, ST_WAIT);
+			if (rv == -1) {
+				rv = errno;
+				goto out;
+			}
+
+			if (strcmp(svfsb.f_mntonname, mountpath) == 0 && 
+			    strcmp(svfsb.f_fstypename, MOUNT_MFS) == 0) {
+				break;
+			}
+			usleep(1);
+		}
+	} else {
+		rv = rump_sys_mount(vfsname, mountpath, mntflags, arg, alen);
+		if (rv) {
+			rv = errno;
+			goto out;
+		}
 	}
+
 	mounted = 1;
 	rv = rump_pub_vfs_getmp(mountpath, &fs->ukfs_mp);
-	if (rv) {
-		goto out;
-	}
-	rv = rump_pub_vfs_root(fs->ukfs_mp, &fs->ukfs_rvp, 0);
 	if (rv) {
 		goto out;
 	}
@@ -379,16 +623,20 @@ doukfsmount(const char *vfsname, const char *devpath, int partition,
 		fs->ukfs_devpath = strdup(devpath);
 	}
 	fs->ukfs_mountpath = strdup(mountpath);
-	fs->ukfs_cdir = ukfs_getrvp(fs);
 	pthread_spin_init(&fs->ukfs_spin, PTHREAD_PROCESS_SHARED);
 	fs->ukfs_devfd = devfd;
+	fs->ukfs_part = part;
 	assert(rv == 0);
+
+	curlwp = rump_pub_lwproc_curlwp();
+	rump_pub_lwproc_newlwp(0);
+	fs->ukfs_lwp = rump_pub_lwproc_curlwp();
+	fs->ukfs_cwd = strdup("/");
+	rump_pub_lwproc_switch(curlwp);
 
  out:
 	if (rv) {
 		if (fs) {
-			if (fs->ukfs_rvp)
-				rump_pub_vp_rele(fs->ukfs_rvp);
 			free(fs);
 			fs = NULL;
 		}
@@ -397,9 +645,10 @@ doukfsmount(const char *vfsname, const char *devpath, int partition,
 		if (regged)
 			rump_pub_etfs_remove(devpath);
 		if (devfd != -1) {
-			flock(devfd, LOCK_UN);
+			unlockdev(devfd, part);
 			close(devfd);
 		}
+		ukfs_part_release(part);
 		errno = rv;
 	}
 
@@ -411,43 +660,45 @@ ukfs_mount(const char *vfsname, const char *devpath,
 	const char *mountpath, int mntflags, void *arg, size_t alen)
 {
 
-	return doukfsmount(vfsname, devpath, UKFS_PARTITION_NA,
+	return doukfsmount(vfsname, devpath, ukfs_part_na,
 	    mountpath, mntflags, arg, alen);
 }
 
 struct ukfs *
-ukfs_mount_disk(const char *vfsname, const char *devpath, int partition,
-	const char *mountpath, int mntflags, void *arg, size_t alen)
+ukfs_mount_disk(const char *vfsname, const char *devpath,
+	struct ukfs_part *part, const char *mountpath, int mntflags,
+	void *arg, size_t alen)
 {
 
-	return doukfsmount(vfsname, devpath, partition,
+	return doukfsmount(vfsname, devpath, part,
 	    mountpath, mntflags, arg, alen);
 }
 
 int
 ukfs_release(struct ukfs *fs, int flags)
 {
+	struct lwp *curlwp = rump_pub_lwproc_curlwp();
+
+	/* get root lwp */
+	rump_pub_lwproc_switch(fs->ukfs_lwp);
+	rump_pub_lwproc_rfork(RUMP_RFCFDG);
 
 	if ((flags & UKFS_RELFLAG_NOUNMOUNT) == 0) {
 		int rv, mntflag, error;
 
-		ukfs_chdir(fs, "/");
 		mntflag = 0;
 		if (flags & UKFS_RELFLAG_FORCE)
 			mntflag = MNT_FORCE;
-		rump_pub_lwp_alloc_and_switch(nextpid(fs), 1);
-		rump_pub_vp_rele(fs->ukfs_rvp);
-		fs->ukfs_rvp = NULL;
+
 		rv = rump_sys_unmount(fs->ukfs_mountpath, mntflag);
 		if (rv == -1) {
 			error = errno;
-			rump_pub_vfs_root(fs->ukfs_mp, &fs->ukfs_rvp, 0);
-			rump_pub_lwp_release(rump_pub_lwp_curlwp());
-			ukfs_chdir(fs, fs->ukfs_mountpath);
+			rump_pub_lwproc_releaselwp();
+			if (curlwp)
+				rump_pub_lwproc_switch(curlwp);
 			errno = error;
 			return -1;
 		}
-		rump_pub_lwp_release(rump_pub_lwp_curlwp());
 	}
 
 	if (fs->ukfs_devpath) {
@@ -455,23 +706,49 @@ ukfs_release(struct ukfs *fs, int flags)
 		free(fs->ukfs_devpath);
 	}
 	free(fs->ukfs_mountpath);
+	free(fs->ukfs_cwd);
+
+	/* release this routine's lwp and ukfs base lwp */
+	rump_pub_lwproc_releaselwp();
+	rump_pub_lwproc_switch(fs->ukfs_lwp);
+	rump_pub_lwproc_releaselwp();
 
 	pthread_spin_destroy(&fs->ukfs_spin);
 	if (fs->ukfs_devfd != -1) {
-		flock(fs->ukfs_devfd, LOCK_UN);
+		unlockdev(fs->ukfs_devfd, fs->ukfs_part);
 		close(fs->ukfs_devfd);
 	}
+	ukfs_part_release(fs->ukfs_part);
 	free(fs);
 
+	if (curlwp)
+		rump_pub_lwproc_switch(curlwp);
+
 	return 0;
+}
+
+void
+ukfs_part_release(struct ukfs_part *part)
+{
+	int release;
+
+	if (part != ukfs_part_none && part != ukfs_part_na) {
+		pthread_spin_lock(&part->part_lck);
+		release = --part->part_refcount == 0;
+		pthread_spin_unlock(&part->part_lck);
+		if (release) {
+			pthread_spin_destroy(&part->part_lck);
+			free(part);
+		}
+	}
 }
 
 #define STDCALL(ukfs, thecall)						\
 	int rv = 0;							\
 									\
-	precall(ukfs);							\
+	PRECALL();							\
 	rv = thecall;							\
-	postcall(ukfs);							\
+	POSTCALL();							\
 	return rv;
 
 int
@@ -480,13 +757,13 @@ ukfs_opendir(struct ukfs *ukfs, const char *dirname, struct ukfs_dircookie **c)
 	struct vnode *vp;
 	int rv;
 
-	precall(ukfs);
+	PRECALL();
 	rv = rump_pub_namei(RUMP_NAMEI_LOOKUP, RUMP_NAMEI_LOCKLEAF, dirname,
 	    NULL, &vp, NULL);
-	postcall(ukfs);
+	POSTCALL();
 
 	if (rv == 0) {
-		RUMP_VOP_UNLOCK(vp, 0);
+		RUMP_VOP_UNLOCK(vp);
 	} else {
 		errno = rv;
 		rv = -1;
@@ -503,13 +780,13 @@ getmydents(struct vnode *vp, off_t *off, uint8_t *buf, size_t bufsize)
 	struct uio *uio;
 	size_t resid;
 	int rv, eofflag;
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	
 	uio = rump_pub_uio_setup(buf, bufsize, *off, RUMPUIO_READ);
-	cred = rump_pub_cred_suserget();
+	cred = rump_pub_cred_create(0, 0, 0, NULL);
 	rv = RUMP_VOP_READDIR(vp, uio, cred, &eofflag, NULL, NULL);
 	rump_pub_cred_put(cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	*off = rump_pub_uio_getoff(uio);
 	resid = rump_pub_uio_free(uio);
 
@@ -541,17 +818,18 @@ ukfs_getdents(struct ukfs *ukfs, const char *dirname, off_t *off,
 	struct vnode *vp;
 	int rv;
 
-	precall(ukfs);
+	PRECALL();
 	rv = rump_pub_namei(RUMP_NAMEI_LOOKUP, RUMP_NAMEI_LOCKLEAF, dirname,
 	    NULL, &vp, NULL);
-	postcall(ukfs);
 	if (rv) {
+		POSTCALL();
 		errno = rv;
 		return -1;
 	}
 
 	rv = getmydents(vp, off, buf, bufsize);
 	rump_pub_vp_rele(vp);
+	POSTCALL();
 	return rv;
 }
 
@@ -570,9 +848,9 @@ ukfs_open(struct ukfs *ukfs, const char *filename, int flags)
 {
 	int fd;
 
-	precall(ukfs);
+	PRECALL();
 	fd = rump_sys_open(filename, flags, 0);
-	postcall(ukfs);
+	POSTCALL();
 	if (fd == -1)
 		return -1;
 
@@ -586,7 +864,7 @@ ukfs_read(struct ukfs *ukfs, const char *filename, off_t off,
 	int fd;
 	ssize_t xfer = -1; /* XXXgcc */
 
-	precall(ukfs);
+	PRECALL();
 	fd = rump_sys_open(filename, RUMP_O_RDONLY, 0);
 	if (fd == -1)
 		goto out;
@@ -595,7 +873,7 @@ ukfs_read(struct ukfs *ukfs, const char *filename, off_t off,
 	rump_sys_close(fd);
 
  out:
-	postcall(ukfs);
+	POSTCALL();
 	if (fd == -1) {
 		return -1;
 	}
@@ -617,7 +895,7 @@ ukfs_write(struct ukfs *ukfs, const char *filename, off_t off,
 	int fd;
 	ssize_t xfer = -1; /* XXXgcc */
 
-	precall(ukfs);
+	PRECALL();
 	fd = rump_sys_open(filename, RUMP_O_WRONLY, 0);
 	if (fd == -1)
 		goto out;
@@ -630,7 +908,7 @@ ukfs_write(struct ukfs *ukfs, const char *filename, off_t off,
 	rump_sys_close(fd);
 
  out:
-	postcall(ukfs);
+	POSTCALL();
 	if (fd == -1) {
 		return -1;
 	}
@@ -665,13 +943,13 @@ ukfs_create(struct ukfs *ukfs, const char *filename, mode_t mode)
 {
 	int fd;
 
-	precall(ukfs);
+	PRECALL();
 	fd = rump_sys_open(filename, RUMP_O_WRONLY | RUMP_O_CREAT, mode);
 	if (fd == -1)
 		return -1;
 	rump_sys_close(fd);
 
-	postcall(ukfs);
+	POSTCALL();
 	return 0;
 }
 
@@ -730,9 +1008,9 @@ ukfs_readlink(struct ukfs *ukfs, const char *filename,
 {
 	ssize_t rv;
 
-	precall(ukfs);
+	PRECALL();
 	rv = rump_sys_readlink(filename, linkbuf, buflen);
-	postcall(ukfs);
+	POSTCALL();
 	return rv;
 }
 
@@ -746,49 +1024,28 @@ ukfs_rename(struct ukfs *ukfs, const char *from, const char *to)
 int
 ukfs_chdir(struct ukfs *ukfs, const char *path)
 {
-	struct vnode *newvp, *oldvp;
+	char *newpath, *oldpath;
 	int rv;
 
-	precall(ukfs);
+	PRECALL();
 	rv = rump_sys_chdir(path);
 	if (rv == -1)
 		goto out;
 
-	newvp = rump_pub_cdir_get();
+	newpath = malloc(MAXPATHLEN);
+	if (rump_sys___getcwd(newpath, MAXPATHLEN) == -1) {
+		goto out;
+	}
+
 	pthread_spin_lock(&ukfs->ukfs_spin);
-	oldvp = ukfs->ukfs_cdir;
-	ukfs->ukfs_cdir = newvp;
+	oldpath = ukfs->ukfs_cwd;
+	ukfs->ukfs_cwd = newpath;
 	pthread_spin_unlock(&ukfs->ukfs_spin);
-	if (oldvp)
-		rump_pub_vp_rele(oldvp);
+	free(oldpath);
 
  out:
-	postcall(ukfs);
+	POSTCALL();
 	return rv;
-}
-
-/*
- * If we want to use post-time_t file systems on pre-time_t hosts,
- * we must translate the stat structure.  Since we don't currently
- * have a general method for making compat calls in rump, special-case
- * this one.
- *
- * Note that this does not allow making system calls to older rump
- * kernels from newer hosts.
- */
-#define VERS_TIMECHANGE 599000700
-
-static int
-needcompat(void)
-{
-
-#ifdef __NetBSD__
-	/*LINTED*/
-	return __NetBSD_Version__ < VERS_TIMECHANGE
-	    && rump_pub_getversion() >= VERS_TIMECHANGE;
-#else
-	return 0;
-#endif
 }
 
 int
@@ -796,12 +1053,9 @@ ukfs_stat(struct ukfs *ukfs, const char *filename, struct stat *file_stat)
 {
 	int rv;
 
-	precall(ukfs);
-	if (needcompat())
-		rv = rump_pub_sys___stat30(filename, file_stat);
-	else
-		rv = rump_sys_stat(filename, file_stat);
-	postcall(ukfs);
+	PRECALL();
+	rv = rump_sys_stat(filename, file_stat);
+	POSTCALL();
 
 	return rv;
 }
@@ -811,12 +1065,9 @@ ukfs_lstat(struct ukfs *ukfs, const char *filename, struct stat *file_stat)
 {
 	int rv;
 
-	precall(ukfs);
-	if (needcompat())
-		rv = rump_pub_sys___lstat30(filename, file_stat);
-	else
-		rv = rump_sys_lstat(filename, file_stat);
-	postcall(ukfs);
+	PRECALL();
+	rv = rump_sys_lstat(filename, file_stat);
+	POSTCALL();
 
 	return rv;
 }
@@ -893,10 +1144,10 @@ int
 ukfs_modload(const char *fname)
 {
 	void *handle;
-	struct modinfo **mi;
+	const struct modinfo *const *mi_start, *const *mi_end;
 	int error;
 
-	handle = dlopen(fname, RTLD_GLOBAL);
+	handle = dlopen(fname, RTLD_LAZY|RTLD_GLOBAL);
 	if (handle == NULL) {
 		const char *dlmsg = dlerror();
 		if (strstr(dlmsg, "Undefined symbol"))
@@ -906,9 +1157,11 @@ ukfs_modload(const char *fname)
 		return -1;
 	}
 
-	mi = dlsym(handle, "__start_link_set_modules");
-	if (mi) {
-		error = rump_pub_module_init(*mi, NULL);
+	mi_start = dlsym(handle, "__start_link_set_modules");
+	mi_end = dlsym(handle, "__stop_link_set_modules");
+	if (mi_start && mi_end) {
+		error = rump_pub_module_init(mi_start,
+		    (size_t)(mi_end-mi_start));
 		if (error)
 			goto errclose;
 		return 1;

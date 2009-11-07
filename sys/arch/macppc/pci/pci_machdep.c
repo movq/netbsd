@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.37 2009/03/14 21:04:12 dsl Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.40 2011/07/01 18:43:05 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2009/03/14 21:04:12 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.40 2011/07/01 18:43:05 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,10 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2009/03/14 21:04:12 dsl Exp $")
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/autoconf.h>
 #include <machine/intr.h>
@@ -83,7 +81,7 @@ pcitag_t genppc_pci_indirect_make_tag(void *, int, int, int);
 void genppc_pci_indirect_decompose_tag(void *, pcitag_t, int *, int *, int *);
 
 void
-macppc_pci_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
+macppc_pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 	pci_chipset_tag_t pc = pba->pba_pc;
 	int bus = pba->pba_bus;

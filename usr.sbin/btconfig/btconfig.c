@@ -1,4 +1,4 @@
-/* $NetBSD: btconfig.c,v 1.22 2009/10/09 12:58:28 plunky Exp $ */
+/* $NetBSD: btconfig.c,v 1.26 2011/10/17 16:37:50 mbalmer Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.  All rights reserved.");
-__RCSID("$NetBSD: btconfig.c,v 1.22 2009/10/09 12:58:28 plunky Exp $");
+__RCSID("$NetBSD: btconfig.c,v 1.26 2011/10/17 16:37:50 mbalmer Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/param.h>
@@ -45,51 +45,50 @@ __RCSID("$NetBSD: btconfig.c,v 1.22 2009/10/09 12:58:28 plunky Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <util.h>
 
-int main(int, char *[]);
-void badarg(const char *);
-void badparam(const char *);
-void badval(const char *, const char *);
-void usage(void);
-int set_unit(unsigned long);
-void config_unit(void);
-void print_val(const char *, const char **, int);
-void print_info(int);
-void print_stats(void);
-void print_class(const char *, uint8_t *);
-void print_class0(void);
-void print_voice(int);
-void tag(const char *);
-void print_features(const char *, uint8_t, uint8_t *);
-void print_features0(uint8_t *);
-void print_features1(uint8_t *);
-void print_result(int, struct bt_devinquiry *);
-void do_inquiry(void);
+__dead static void badarg(const char *);
+__dead static void badparam(const char *);
+__dead static void badval(const char *, const char *);
+__dead static void usage(void);
+static int set_unit(unsigned long);
+static void config_unit(void);
+static void print_val(const char *, const char **, int);
+static void print_info(int);
+static void print_stats(void);
+static void print_class(const char *, uint8_t *);
+static void print_class0(void);
+static void print_voice(int);
+static void tag(const char *);
+static void print_features0(uint8_t *);
+static void print_features1(uint8_t *);
+static void print_result(int, struct bt_devinquiry *);
+static void do_inquiry(void);
 
-void hci_req(uint16_t, uint8_t , void *, size_t, void *, size_t);
-void save_value(uint16_t, void *, size_t);
-void load_value(uint16_t, void *, size_t);
+static void hci_req(uint16_t, uint8_t , void *, size_t, void *, size_t);
+static void save_value(uint16_t, void *, size_t);
+static void load_value(uint16_t, void *, size_t);
 
 #define MAX_STR_SIZE	0xff
 
 /* print width */
-int width = 0;
+static int width = 0;
 #define MAX_WIDTH	70
 
 /* global variables */
-int hci;
-struct btreq btr;
+static int hci;
+static struct btreq btr;
 
 /* command line flags */
-int verbose = 0;	/* more info */
-int lflag = 0;		/* list devices */
-int sflag = 0;		/* get/zero stats */
+static int verbose = 0;	/* more info */
+static int lflag = 0;		/* list devices */
+static int sflag = 0;		/* get/zero stats */
 
 /* device up/down (flag) */
-int opt_enable = 0;
-int opt_reset = 0;
+static int opt_enable = 0;
+static int opt_reset = 0;
 #define FLAGS_FMT	"\20"			\
 			"\001UP"		\
 			"\002RUNNING"		\
@@ -105,60 +104,60 @@ int opt_reset = 0;
 			""
 
 /* authorisation (flag) */
-int opt_auth = 0;
+static int opt_auth = 0;
 
 /* encryption (flag) */
-int opt_encrypt = 0;
+static int opt_encrypt = 0;
 
 /* scan enable options (flags) */
-int opt_pscan = 0;
-int opt_iscan = 0;
+static int opt_pscan = 0;
+static int opt_iscan = 0;
 
 /* master role option */
-int opt_master = 0;
+static int opt_master = 0;
 
 /* link policy options (flags) */
-int opt_switch = 0;
-int opt_hold = 0;
-int opt_sniff = 0;
-int opt_park = 0;
+static int opt_switch = 0;
+static int opt_hold = 0;
+static int opt_sniff = 0;
+static int opt_park = 0;
 
 /* class of device (hex value) */
-int opt_class = 0;
-uint32_t class;
+static int opt_class = 0;
+static uint32_t class;
 
 /* packet type mask (hex value) */
-int opt_ptype = 0;
-uint32_t ptype;
+static int opt_ptype = 0;
+static uint32_t ptype;
 
 /* unit name (string) */
-int opt_name = 0;
-char name[MAX_STR_SIZE];
+static int opt_name = 0;
+static char name[MAX_STR_SIZE];
 
 /* pin type */
-int opt_pin = 0;
+static int opt_pin = 0;
 
 /* Inquiry */
-int opt_rssi = 0;			/* inquiry_with_rssi (obsolete flag) */
-int opt_imode = 0;			/* inquiry mode */
-int opt_inquiry = 0;
+static int opt_rssi = 0;			/* inquiry_with_rssi (obsolete flag) */
+static int opt_imode = 0;			/* inquiry mode */
+static int opt_inquiry = 0;
 #define INQUIRY_LENGTH		10	/* seconds */
 #define INQUIRY_MAX_RESPONSES	10
-const char *imodes[] = { "std", "rssi", "ext", NULL };
+static const char *imodes[] = { "std", "rssi", "ext", NULL };
 
 /* Voice Settings */
-int opt_voice = 0;
-uint32_t voice;
+static int opt_voice = 0;
+static uint32_t voice;
 
 /* Page Timeout */
-int opt_pto = 0;
-uint32_t pto;
+static int opt_pto = 0;
+static uint32_t pto;
 
 /* set SCO mtu */
-int opt_scomtu;
-uint32_t scomtu;
+static int opt_scomtu;
+static uint32_t scomtu;
 
-struct parameter {
+static struct parameter {
 	const char	*name;
 	enum { P_SET, P_CLR, P_STR, P_HEX, P_NUM, P_VAL } type;
 	int		*opt;
@@ -323,7 +322,7 @@ main(int ac, char *av[])
 	return EXIT_SUCCESS;
 }
 
-void
+static void
 badparam(const char *param)
 {
 
@@ -331,7 +330,7 @@ badparam(const char *param)
 	exit(EXIT_FAILURE);
 }
 
-void
+static void
 badarg(const char *param)
 {
 
@@ -339,7 +338,7 @@ badarg(const char *param)
 	exit(EXIT_FAILURE);
 }
 
-void
+static void
 badval(const char *param, const char *value)
 {
 
@@ -347,7 +346,7 @@ badval(const char *param, const char *value)
 	exit(EXIT_FAILURE);
 }
 
-void
+static void
 usage(void)
 {
 
@@ -359,7 +358,7 @@ usage(void)
 /*
  * pretty printing feature
  */
-void
+static void
 tag(const char *f)
 {
 
@@ -383,7 +382,7 @@ tag(const char *f)
 /*
  * basic HCI request wrapper with error check
  */
-void
+static void
 hci_req(uint16_t opcode, uint8_t event, void *cbuf, size_t clen,
     void *rbuf, size_t rlen)
 {
@@ -409,7 +408,7 @@ hci_req(uint16_t opcode, uint8_t event, void *cbuf, size_t clen,
  * write value to device with opcode.
  * provide a small response buffer so that the status can be checked
  */
-void
+static void
 save_value(uint16_t opcode, void *cbuf, size_t clen)
 {
 	uint8_t buf[1];
@@ -421,7 +420,7 @@ save_value(uint16_t opcode, void *cbuf, size_t clen)
  * read value from device with opcode.
  * use our own buffer and only return the value from the response packet
  */
-void
+static void
 load_value(uint16_t opcode, void *rbuf, size_t rlen)
 {
 	uint8_t buf[UINT8_MAX];
@@ -430,7 +429,7 @@ load_value(uint16_t opcode, void *rbuf, size_t rlen)
 	memcpy(rbuf, buf + 1, rlen);
 }
 
-int
+static int
 set_unit(unsigned long cmd)
 {
 
@@ -457,7 +456,7 @@ set_unit(unsigned long cmd)
 /*
  * apply configuration parameters to unit
  */
-void
+static void
 config_unit(void)
 {
 
@@ -475,23 +474,19 @@ config_unit(void)
 	}
 
 	if (opt_reset) {
-		hci_req(HCI_CMD_RESET, 0, NULL, 0, NULL, 0);
+		static const struct timespec ts = { 0, 100000000 }; /* 100ms */
 
 		btr.btr_flags |= BTF_INIT;
 		if (ioctl(hci, SIOCSBTFLAGS, &btr) < 0)
 			err(EXIT_FAILURE, "SIOCSBTFLAGS");
 
-		/*
-		 * although the reset command will automatically
-		 * carry out these commands, we do them manually
-		 * just so we can wait for completion.
-		 */
-		hci_req(HCI_CMD_READ_BDADDR, 0, NULL, 0, NULL, 0);
-		hci_req(HCI_CMD_READ_BUFFER_SIZE, 0, NULL, 0, NULL, 0);
-		hci_req(HCI_CMD_READ_LOCAL_FEATURES, 0, NULL, 0, NULL, 0);
+		hci_req(HCI_CMD_RESET, 0, NULL, 0, NULL, 0);
 
-		if (set_unit(SIOCGBTINFO) < 0)
-			err(EXIT_FAILURE, "%s", btr.btr_name);
+		do {
+			nanosleep(&ts, NULL);
+			if (ioctl(hci, SIOCGBTINFO, &btr) < 0)
+				err(EXIT_FAILURE, "%s", btr.btr_name);
+		} while ((btr.btr_flags & BTF_INIT) != 0);
 	}
 
 	if (opt_master) {
@@ -610,7 +605,7 @@ config_unit(void)
 /*
  * print value from NULL terminated array given index
  */
-void
+static void
 print_val(const char *hdr, const char **argv, int idx)
 {
 	int i = 0;
@@ -624,7 +619,7 @@ print_val(const char *hdr, const char **argv, int idx)
 /*
  * Print info for Bluetooth Device with varying verbosity levels
  */
-void
+static void
 print_info(int level)
 {
 	uint8_t version, val, buf[MAX_STR_SIZE];
@@ -646,11 +641,11 @@ print_info(int level)
 		return;
 
 	printf("\tnum_cmd = %d\n"
-	       "\tnum_acl = %d, acl_mtu = %d\n"
-	       "\tnum_sco = %d, sco_mtu = %d\n",
+	       "\tnum_acl = %d (max %d), acl_mtu = %d\n"
+	       "\tnum_sco = %d (max %d), sco_mtu = %d\n",
 	       btr.btr_num_cmd,
-	       btr.btr_num_acl, btr.btr_acl_mtu,
-	       btr.btr_num_sco, btr.btr_sco_mtu);
+	       btr.btr_num_acl, btr.btr_max_acl, btr.btr_acl_mtu,
+	       btr.btr_num_sco, btr.btr_max_sco, btr.btr_sco_mtu);
 
 	if (level-- < 1 || (btr.btr_flags & BTF_UP) == 0)
 		return;
@@ -740,25 +735,16 @@ print_info(int level)
 	if (level-- < 1)
 		return;
 
-	load_value(HCI_CMD_READ_LOCAL_FEATURES, buf, HCI_FEATURES_SIZE);
-	if ((buf[7] & HCI_LMP_EXTENDED_FEATURES) == 0) {
-		print_features("\tfeatures:", 0, buf);
-	} else {
-		hci_read_local_extended_features_rp rp;
+	if (ioctl(hci, SIOCGBTFEAT, &btr) < 0)
+		err(EXIT_FAILURE, "SIOCGBTFEAT");
 
-		rp.page = 0;
-
-		do {
-			hci_req(HCI_CMD_READ_LOCAL_EXTENDED_FEATURES, 0,
-			    &rp.page, sizeof(rp.page), &rp, sizeof(rp));
-
-			print_features("\tfeatures (page %d):",
-			    rp.page, rp.features);
-		} while (rp.page++ < rp.max_page);
-	}
+	width = printf("\tfeatures:");
+	print_features0(btr.btr_features0);
+	print_features1(btr.btr_features1);
+	tag(NULL);
 }
 
-void
+static void
 print_stats(void)
 {
 
@@ -773,7 +759,7 @@ print_stats(void)
 			err(EXIT_FAILURE, "SIOCZBTSTATS");
 	}
 
-	printf( "\tTotal bytes sent %d, recieved %d\n"
+	printf( "\tTotal bytes sent %d, received %d\n"
 		"\tCommands sent %d, Events received %d\n"
 		"\tACL data packets sent %d, received %d\n"
 		"\tSCO data packets sent %d, received %d\n"
@@ -785,22 +771,7 @@ print_stats(void)
 		btr.btr_stats.err_rx, btr.btr_stats.err_tx);
 }
 
-void
-print_features(const char *fmt, uint8_t page, uint8_t *f)
-{
-
-	width = printf(fmt, page);
-
-	switch(page) {
-	case 0:	print_features0(f);	break;
-	case 1:	print_features1(f);	break;
-	default:			break;
-	}
-
-	tag(NULL);
-}
-
-void
+static void
 print_features0(uint8_t *f)
 {
 
@@ -881,7 +852,7 @@ print_features0(uint8_t *f)
 	if (*f & HCI_LMP_EXTENDED_FEATURES) tag("<extended features>");
 }
 
-void
+static void
 print_features1(uint8_t *f)
 {
 
@@ -889,7 +860,7 @@ print_features1(uint8_t *f)
 	if (*f & HCI_LMP_SSP)		    tag("<secure simple pairing>");
 }
 
-void
+static void
 print_class(const char *str, uint8_t *uclass)
 {
 
@@ -904,7 +875,7 @@ print_class(const char *str, uint8_t *uclass)
 	tag(NULL);
 }
 
-void
+static void
 print_class0(void)
 {
 
@@ -1041,7 +1012,7 @@ print_class0(void)
 	if (class & __BIT(23))	tag("<Information>");
 }
 
-void
+static void
 print_voice(int level)
 {
 	printf("\tvoice: [0x%4.4x]\n", voice);
@@ -1077,7 +1048,7 @@ print_voice(int level)
 	printf("\n");
 }
 
-void
+static void
 print_result(int num, struct bt_devinquiry *r)
 {
 	hci_remote_name_req_cp ncp;
@@ -1110,7 +1081,7 @@ print_result(int num, struct bt_devinquiry *r)
 	printf("\n");
 }
 
-void
+static void
 do_inquiry(void)
 {
 	struct bt_devinquiry *result;

@@ -1,7 +1,7 @@
-/*	$NetBSD: mutex.c,v 1.1.1.1 2009/03/22 15:02:17 christos Exp $	*/
+/*	$NetBSD: mutex.c,v 1.2.6.1 2012/06/05 21:15:10 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2008, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: mutex.c,v 1.16 2008/04/04 23:47:01 tbox Exp */
+/* Id: mutex.c,v 1.18 2011/01/04 23:47:14 tbox Exp  */
 
 /*! \file */
 
@@ -45,7 +45,7 @@
 			(vvp)->tv_sec++;                                \
 			(vvp)->tv_usec -= 1000000;                      \
 		}                                                       \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #define timevalsub(vvp, uvp)                                            \
 	do {                                                            \
 		(vvp)->tv_sec -= (uvp)->tv_sec;                         \
@@ -54,7 +54,7 @@
 			(vvp)->tv_sec--;                                \
 			(vvp)->tv_usec += 1000000;                      \
 		}                                                       \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 /*@}*/
 
@@ -80,7 +80,7 @@ struct isc_mutexstats {
 };
 
 #ifndef ISC_MUTEX_PROFTABLESIZE
-#define ISC_MUTEX_PROFTABLESIZE (16 * 1024)
+#define ISC_MUTEX_PROFTABLESIZE (1024 * 1024)
 #endif
 static isc_mutexstats_t stats[ISC_MUTEX_PROFTABLESIZE];
 static int stats_next = 0;
@@ -202,24 +202,24 @@ isc_mutex_statsprofile(FILE *fp) {
 
 	fprintf(fp, "Mutex stats (in us)\n");
 	for (i = 0; i < stats_next; i++) {
-		fprintf(fp, "%-12s %4d: %10u  %lu.%06lu %lu.%06lu\n",
+		fprintf(fp, "%-12s %4d: %10u  %lu.%06lu %lu.%06lu %5d\n",
 			stats[i].file, stats[i].line, stats[i].count,
 			stats[i].locked_total.tv_sec,
 			stats[i].locked_total.tv_usec,
 			stats[i].wait_total.tv_sec,
-			stats[i].wait_total.tv_usec
-			);
+			stats[i].wait_total.tv_usec,
+			i);
 		for (j = 0; j < ISC_MUTEX_MAX_LOCKERS; j++) {
 			locker = &stats[i].lockers[j];
 			if (locker->file == NULL)
 				continue;
-			fprintf(fp, " %-11s %4d: %10u  %lu.%06lu %lu.%06lu\n",
+			fprintf(fp, " %-11s %4d: %10u  %lu.%06lu %lu.%06lu %5d\n",
 				locker->file, locker->line, locker->count,
 				locker->locked_total.tv_sec,
 				locker->locked_total.tv_usec,
 				locker->wait_total.tv_sec,
-				locker->wait_total.tv_usec
-				);
+				locker->wait_total.tv_usec,
+				i);
 		}
 	}
 }
@@ -236,10 +236,13 @@ isc_mutex_init_errcheck(isc_mutex_t *mp)
 	if (pthread_mutexattr_init(&attr) != 0)
 		return (ISC_R_UNEXPECTED);
 
-	if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK) != 0)
+	if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK) != 0) {
+		pthread_mutexattr_destroy(&attr);
 		return (ISC_R_UNEXPECTED);
+	}
 
 	err = pthread_mutex_init(mp, &attr) != 0)
+	pthread_mutexattr_destroy(&attr);
 	if (err == ENOMEM)
 		return (ISC_R_NOMEMORY);
 	return ((err == 0) ? ISC_R_SUCCESS : ISC_R_UNEXPECTED);

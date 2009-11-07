@@ -1,4 +1,4 @@
-.\"	$NetBSD: funopen.3,v 1.14 2003/08/07 16:43:26 agc Exp $
+.\"	$NetBSD: funopen.3,v 1.18 2012/01/22 19:13:48 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
 .\"
 .\"     @(#)funopen.3	8.1 (Berkeley) 6/9/93
 .\"
-.Dd June 9, 1993
+.Dd January 22, 2012
 .Dt FUNOPEN 3
 .Os
 .Sh NAME
@@ -44,7 +44,7 @@
 .Sh SYNOPSIS
 .In stdio.h
 .Ft FILE *
-.Fn funopen "void  *cookie" "int  (*readfn)(void *, char *, int)" "int (*writefn)(void *, const char *, int)" "fpos_t (*seekfn)(void *, fpos_t, int)" "int (*closefn)(void *)"
+.Fn funopen "void  *cookie" "int  (*readfn)(void *, char *, int)" "int (*writefn)(void *, const char *, int)" "off_t (*seekfn)(void *, off_t, int)" "int (*closefn)(void *)"
 .Ft FILE *
 .Fn fropen "void  *cookie" "int  (*readfn)(void *, char *, int)"
 .Ft FILE *
@@ -89,13 +89,7 @@ except that they are passed the
 .Fa cookie
 argument specified to
 .Fn funopen
-in place of the traditional file descriptor argument,
-and
-.Fa seekfn
-uses
-.Li fpos_t
-instead of
-.Li off_t .
+in place of the traditional file descriptor argument.
 .Pp
 Read and write
 .Tn I/O
@@ -120,7 +114,7 @@ An error on
 does not keep the stream open.
 .Pp
 As a convenience, the include file
-.Aq Pa stdio.h
+.In stdio.h
 defines the macros
 .Fn fropen
 and
@@ -167,9 +161,7 @@ The
 .Fn funopen
 functions first appeared in
 .Bx 4.4 .
-.Sh BUGS
-The
-.Fn funopen
-function
-may not be portable to systems other than
-.Bx .
+.Sh CAVEATS
+All three functions are specific to
+.Nx
+and thus unportable.

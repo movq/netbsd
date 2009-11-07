@@ -1,4 +1,4 @@
-/*	$NetBSD: timer.c,v 1.24 2009/03/18 10:22:36 cegger Exp $ */
+/*	$NetBSD: timer.c,v 1.29 2011/07/17 23:18:23 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.24 2009/03/18 10:22:36 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.29 2011/07/17 23:18:23 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.24 2009/03/18 10:22:36 cegger Exp $");
 #include <sys/timetc.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sparc/sparc/timerreg.h>
 #include <sparc/sparc/timervar.h>
@@ -153,6 +153,7 @@ void
 timerattach(volatile int *cntreg, volatile int *limreg)
 {
 	u_int prec = 0, t0;
+	void    (*sched_intr_fn)(void *);
 
 	/*
 	 * Calibrate delay() by tweaking the magic constant
@@ -192,11 +193,13 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 	cntr.mask = (1 << (31-t0))-1;
 	counter_timecounter.tc_frequency = 1000000 * (TMR_SHIFT - t0 + 1);
 	
-	printf(": delay constant %d, frequency = %" PRIu64 " Hz\n", timerblurb, counter_timecounter.tc_frequency);
+	printf(": delay constant %d, frequency = %" PRIu64 " Hz\n",
+	       timerblurb, counter_timecounter.tc_frequency);
 
 #if defined(SUN4) || defined(SUN4C)
 	if (CPU_ISSUN4 || CPU_ISSUN4C) {
 		timer_init = timer_init_4;
+		sched_intr_fn = schedintr;
 		level10.ih_fun = clockintr_4;
 		level14.ih_fun = statintr_4;
 		cntr.limit = tmr_ustolim(tick);
@@ -205,17 +208,23 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 #if defined(SUN4M)
 	if (CPU_ISSUN4M) {
 		timer_init = timer_init_4m;
+#if defined(MULTIPROCESSOR)
+		if (sparc_ncpus > 1)
+			sched_intr_fn = schedintr_4m;
+		else
+#endif
+			sched_intr_fn = schedintr;
 		level10.ih_fun = clockintr_4m;
 		level14.ih_fun = statintr_4m;
 		cntr.limit = tmr_ustolim4m(tick);
 	}
 #endif
 	/* link interrupt handlers */
-	intr_establish(10, 0, &level10, NULL);
-	intr_establish(14, 0, &level14, NULL);
+	intr_establish(10, 0, &level10, NULL, true);
+	intr_establish(14, 0, &level14, NULL, true);
 
 	/* Establish a soft interrupt at a lower level for schedclock */
-	sched_cookie = sparc_softintr_establish(IPL_SCHED, schedintr, NULL);
+	sched_cookie = sparc_softintr_establish(IPL_SCHED, sched_intr_fn, NULL);
 	if (sched_cookie == NULL)
 		panic("timerattach: cannot establish schedintr");
 
@@ -231,7 +240,7 @@ timerattach(volatile int *cntreg, volatile int *limreg)
  * The sun4 timer must be probed.
  */
 static int
-timermatch_obio(struct device *parent, struct cfdata *cf, void *aux)
+timermatch_obio(device_t parent, cfdata_t cf, void *aux)
 {
 #if defined(SUN4) || defined(SUN4M)
 	union obio_attach_args *uoba = aux;
@@ -268,7 +277,7 @@ timermatch_obio(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-timerattach_obio(struct device *parent, struct device *self, void *aux)
+timerattach_obio(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -288,14 +297,14 @@ timerattach_obio(struct device *parent, struct device *self, void *aux)
 	}
 }
 
-CFATTACH_DECL(timer_obio, sizeof(struct device),
+CFATTACH_DECL_NEW(timer_obio, 0,
     timermatch_obio, timerattach_obio, NULL, NULL);
 
 /*
  * Only sun4c attaches a timer at mainbus
  */
 static int
-timermatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
+timermatch_mainbus(device_t parent, cfdata_t cf, void *aux)
 {
 #if defined(SUN4C)
 	struct mainbus_attach_args *ma = aux;
@@ -307,7 +316,7 @@ timermatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-timerattach_mainbus(struct device *parent, struct device *self, void *aux)
+timerattach_mainbus(device_t parent, device_t self, void *aux)
 {
 
 #if defined(SUN4C)
@@ -315,5 +324,5 @@ timerattach_mainbus(struct device *parent, struct device *self, void *aux)
 #endif /* SUN4C */
 }
 
-CFATTACH_DECL(timer_mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(timer_mainbus, 0,
     timermatch_mainbus, timerattach_mainbus, NULL, NULL);

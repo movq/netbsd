@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.7 2005/12/11 12:17:24 christos Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.9 2011/08/30 12:39:55 bouyer Exp $	*/
 
 /*	$OpenBSD: disklabel.h,v 1.5 2000/07/05 22:37:22 mickey Exp $	*/
 
@@ -35,6 +35,7 @@
 #ifndef _MACHINE_DISKLABEL_H_
 #define _MACHINE_DISKLABEL_H_
 
+#define LABELUSESMBR		0		/* no MBR partitionning */
 #define	LABELSECTOR		1		/* sector containing label */
 #define	LABELOFFSET		0		/* offset of label in sector */
 
@@ -55,6 +56,7 @@
 struct cpu_disklabel {
 	struct hp700_lifvol lifvol;
 	struct hp700_lifdir lifdir[HP700_LIF_NUMDIR];
+#define __HAVE_DISKLABEL_DKBAD
 	struct dkbad bad;			/* To make wd(4) happy */
 };
 

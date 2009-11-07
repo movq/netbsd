@@ -1,5 +1,5 @@
-/*	$NetBSD: auth2-jpake.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: auth2-jpake.c,v 1.2 2008/11/07 23:34:48 dtucker Exp $ */
+/*	$NetBSD: auth2-jpake.c,v 1.4 2011/07/25 03:03:10 christos Exp $	*/
+/* $OpenBSD: auth2-jpake.c,v 1.4 2010/08/31 11:54:45 djm Exp $ */
 /*
  * Copyright (c) 2008 Damien Miller.  All rights reserved.
  *
@@ -56,6 +56,7 @@
 #endif
 #include "monitor_wrap.h"
 
+#include "schnorr.h"
 #include "jpake.h"
 
 /*
@@ -161,6 +162,11 @@ derive_rawsalt(const char *username, u_char *rawsalt, u_int len)
 		if (k->dsa->priv_key == NULL)
 			fatal("%s: DSA key missing priv_key", __func__);
 		buffer_put_bignum2(&b, k->dsa->priv_key);
+		break;
+	case KEY_ECDSA:
+		if (EC_KEY_get0_private_key(k->ecdsa) == NULL)
+			fatal("%s: ECDSA key missing priv_key", __func__);
+		buffer_put_bignum2(&b, EC_KEY_get0_private_key(k->ecdsa));
 		break;
 	default:
 		fatal("%s: unknown key type %d", __func__, k->type);
@@ -360,7 +366,7 @@ auth2_jpake_get_pwdata(Authctxt *authctxt, BIGNUM **s,
 }
 
 /*
- * Being authentication attempt.
+ * Begin authentication attempt.
  * Note, sets authctxt->postponed while in subprotocol
  */
 static int

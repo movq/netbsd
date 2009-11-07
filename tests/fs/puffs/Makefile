@@ -1,18 +1,28 @@
-# $NetBSD: Makefile,v 1.2 2007/12/26 22:33:54 jmmv Exp $
+#	$NetBSD: Makefile,v 1.13 2010/11/12 17:35:34 pooka Exp $
+#
+
+.include <bsd.own.mk>
+
+SUBDIR+=	h_dtfs
 
 TESTSDIR=	${TESTSBASE}/fs/puffs
 
-PROGS=			h_have_puffs
-SRCS.h_have_puffs=	h_have_puffs.c
-MAN.h_have_puffs=	# empty
-BINDIR.h_have_puffs=	${TESTSDIR}
+TESTS_C=	t_basic
+TESTS_C+=	t_fuzz
+TESTS_C+=	t_io
 
-TESTS_SH=	t_psshfs
+VFSTESTDIR != cd ${.CURDIR}/../common && ${PRINTOBJDIR}
+LDADD+=-L${VFSTESTDIR} -lvfstest
 
-FILESDIR=	${TESTSDIR}
-FILES=		ssh_config.in
-FILES+=		ssh_host_key
-FILES+=		ssh_host_key.pub
-FILES+=		sshd_config.in
+LDADD+=		-lrumpdev_putter -lrumpdev
+LDADD+=		-lrumpfs_syspuffs -lrumpvfs_fifofs
+LDADD+=		-lrumpnet_local -lrumpnet_net -lrumpnet
+LDADD+=		-lrumpvfs
+LDADD+=		-lrump -lrumpuser -lpthread
+
+# required by -DPUFFSDUMP
+#LDADD+= 	-lpuffs -lutil
+
+WARNS=2
 
 .include <bsd.test.mk>

@@ -1,7 +1,11 @@
+/*	$NetBSD: proxyOld.c,v 1.1.1.3 2010/12/12 15:19:14 adam Exp $	*/
+
 /* proxyOld.c - module for supporting obsolete (rev 05) proxyAuthz control */
-/* $OpenLDAP: pkg/ldap/contrib/slapd-modules/proxyOld/proxyOld.c,v 1.1 2006/03/30 06:22:39 hyc Exp $ */
-/*
- * Copyright 2005 by Howard Chu, Symas Corp.
+/* OpenLDAP: pkg/ldap/contrib/slapd-modules/proxyOld/proxyOld.c,v 1.1.2.2 2010/04/13 20:22:30 kurt Exp */
+/* This work is part of OpenLDAP Software <http://www.openldap.org/>.
+ *
+ * Copyright 2005-2010 The OpenLDAP Foundation.
+ * Portions Copyright 2005 by Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

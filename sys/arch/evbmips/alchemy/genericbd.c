@@ -1,4 +1,4 @@
-/* $NetBSD: genericbd.c,v 1.1 2006/02/08 09:04:01 gdamore Exp $ */
+/* $NetBSD: genericbd.c,v 1.4 2011/07/10 00:03:52 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,11 +32,13 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genericbd.c,v 1.1 2006/02/08 09:04:01 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genericbd.c,v 1.4 2011/07/10 00:03:52 matt Exp $");
 
 #include <sys/param.h>
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/bus.h>
+
+#include <mips/locore.h>
+
 #include <evbmips/alchemy/obiovar.h>
 #include <evbmips/alchemy/board.h>
 
@@ -74,6 +76,8 @@ static struct {
 const struct alchemy_board *
 board_info(void)
 {
+	const mips_prid_t cpu_id = mips_options.mips_cpu_id;
+
 	/* at least try to report the correct processor name */
 	if (genericbd_info.ab_name == NULL) {
 		int	i;

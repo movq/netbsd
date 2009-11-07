@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.43 2009/04/13 00:27:38 lukem Exp $ */
+/*	$NetBSD: pmap.c,v 1.48 2012/01/27 19:48:42 para Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pmap.c,v 1.43 2009/04/13 00:27:38 lukem Exp $");
+__RCSID("$NetBSD: pmap.c,v 1.48 2012/01/27 19:48:42 para Exp $");
 #endif
 
 #include <string.h>
@@ -136,7 +136,7 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 		printf("%*s    lock = <struct lock>,", indent(2), "");
 		printf(" header = <struct vm_map_entry>,");
 		printf(" nentries = %d,\n", D(vm_map, vm_map)->nentries);
-		printf("%*s    size = %lx,", indent(2), "",
+		printf("%*s    size = %#"PRIxVSIZE",", indent(2), "",
 		       D(vm_map, vm_map)->size);
 		printf(" ref_count = %d,", D(vm_map, vm_map)->ref_count);
 		printf("%*s    hint = %p,", indent(2), "",
@@ -161,11 +161,11 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 	if (print_ddb) {
 		const char *name = mapname(P(vm_map));
 
-		printf("%*s%s %p: [0x%lx->0x%lx]\n", indent(2), "",
+		printf("%*s%s %p: [%#"PRIxVADDR"->%#"PRIxVADDR"]\n", indent(2), "",
 		       recurse < 2 ? "MAP" : "SUBMAP", P(vm_map),
 		       vm_map_min(D(vm_map, vm_map)),
 		       vm_map_max(D(vm_map, vm_map)));
-		printf("\t%*s#ent=%d, sz=%ld, ref=%d, version=%d, flags=0x%x\n",
+		printf("\t%*s#ent=%d, sz=%"PRIxVSIZE", ref=%d, version=%d, flags=0x%x\n",
 		       indent(2), "", D(vm_map, vm_map)->nentries,
 		       D(vm_map, vm_map)->size, D(vm_map, vm_map)->ref_count,
 		       D(vm_map, vm_map)->timestamp, D(vm_map, vm_map)->flags);
@@ -284,8 +284,8 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		       P(vm_map_entry));
 		printf(" prev = %p,", vme->prev);
 		printf(" next = %p,\n", vme->next);
-		printf("%*s    start = %lx,", indent(2), "", vme->start);
-		printf(" end = %lx,", vme->end);
+		printf("%*s    start = %#"PRIxVADDR",", indent(2), "", vme->start);
+		printf(" end = %#"PRIxVADDR",", vme->end);
 		printf(" object.uvm_obj/sub_map = %p,\n", vme->object.uvm_obj);
 		printf("%*s    offset = %" PRIx64 ",", indent(2), "",
 		       vme->offset);
@@ -302,12 +302,11 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		printf("%*s    aref = { ar_pageoff = %x, ar_amap = %p },",
 		       indent(2), "", vme->aref.ar_pageoff, vme->aref.ar_amap);
 		printf(" advice = %d,\n", vme->advice);
-		printf("%*s    flags = %x <%s%s%s%s%s > }\n", indent(2), "",
+		printf("%*s    flags = %x <%s%s%s%s > }\n", indent(2), "",
 		       vme->flags,
 		       vme->flags & UVM_MAP_KERNEL ? " KERNEL" : "",
 		       vme->flags & UVM_MAP_KMAPENT ? " KMAPENT" : "",
-		       vme->flags & UVM_MAP_FIRST ? " FIRST" : "",
-		       vme->flags & UVM_MAP_QUANTUM ? " QUANTUM" : "",
+		       vme->flags & UVM_MAP_STATIC ? " STATIC" : "",
 		       vme->flags & UVM_MAP_NOMERGE ? " NOMERGE" : "");
 	}
 
@@ -384,7 +383,7 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	name = findname(kd, vmspace, vm_map_entry, vp, vfs, uvm_obj);
 
 	if (print_map) {
-		printf("%*s0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d",
+		printf("%*s%#"PRIxVADDR" %#"PRIxVADDR" %c%c%c %c%c%c %s %s %d %d %d",
 		       indent(2), "",
 		       vme->start, vme->end,
 		       (vme->protection & VM_PROT_READ) ? 'r' : '-',
@@ -410,7 +409,7 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	}
 
 	if (print_maps) {
-		printf("%*s%0*lx-%0*lx %c%c%c%c %0*" PRIx64 " %02llx:%02llx %llu     %s\n",
+		printf("%*s%0*"PRIxVADDR"-%0*"PRIxVADDR" %c%c%c%c %0*" PRIx64 " %02llx:%02llx %llu     %s\n",
 		       indent(2), "",
 		       (int)sizeof(void *) * 2, vme->start,
 		       (int)sizeof(void *) * 2, vme->end,
@@ -427,7 +426,7 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	}
 
 	if (print_ddb) {
-		printf("%*s - %p: 0x%lx->0x%lx: obj=%p/0x%" PRIx64 ", amap=%p/%d\n",
+		printf("%*s - %p: %#"PRIxVADDR"->%#"PRIxVADDR": obj=%p/0x%" PRIx64 ", amap=%p/%d\n",
 		       indent(2), "",
 		       P(vm_map_entry), vme->start, vme->end,
 		       vme->object.uvm_obj, vme->offset,
@@ -480,8 +479,8 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	if (print_all) {
 		sz = (size_t)((vme->end - vme->start) / 1024);
 		printf(A(vp) ?
-		       "%*s%0*lx-%0*lx %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02llu:%02llu %7llu - %s [%p]\n" :
-		       "%*s%0*lx-%0*lx %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02llu:%02llu %7llu - %s\n",
+		       "%*s%0*"PRIxVADDR"-%0*"PRIxVADDR" %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02llu:%02llu %7llu - %s [%p]\n" :
+		       "%*s%0*"PRIxVADDR"-%0*"PRIxVADDR" %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02llu:%02llu %7llu - %s\n",
 		       indent(2), "",
 		       (int)sizeof(void *) * 2,
 		       vme->start,
@@ -659,7 +658,7 @@ dump_vm_anon(kvm_t *kd, struct vm_anon **alist, int i)
 		else
 			KDEREF(kd, anon);
 
-		printf(" = { an_ref = %d, an_page = %p, an_swslot = %d }",
+		printf(" = { an_ref = %"PRIuPTR", an_page = %p, an_swslot = %d }",
 		    D(anon, anon)->an_ref, D(anon, anon)->an_page,
 		    D(anon, anon)->an_swslot);
 	}

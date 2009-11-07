@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2008 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2011 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -78,10 +78,18 @@ send_arp(const struct interface *iface, int op, in_addr_t sip, in_addr_t tip)
 static void
 handle_arp_failure(struct interface *iface)
 {
-	if (IN_LINKLOCAL(htonl(iface->state->fail.s_addr))) {
+
+	/* If we failed without a magic cookie then we need to try
+	 * and defend our IPv4LL address. */
+	if ((iface->state->offer != NULL &&
+		iface->state->offer->cookie != htonl(MAGIC_COOKIE)) ||
+	    (iface->state->new != NULL &&
+		iface->state->new->cookie != htonl(MAGIC_COOKIE)))
+	{
 		handle_ipv4ll_failure(iface);
 		return;
 	}
+
 	unlink(iface->leasefile);
 	if (!iface->state->lease.frominfo)
 		send_decline(iface);
@@ -111,7 +119,7 @@ handle_arp_packet(void *arg)
 	state->fail.s_addr = 0;
 	for(;;) {
 		bytes = get_raw_packet(iface, ETHERTYPE_ARP,
-		    arp_buffer, sizeof(arp_buffer));
+		    arp_buffer, sizeof(arp_buffer), NULL);
 		if (bytes == 0 || bytes == -1)
 			return;
 		/* We must have a full ARP header */
@@ -196,6 +204,8 @@ send_arp_announce(void *arg)
 	struct if_state *state = iface->state;
 	struct timeval tv;
 
+	if (state->new == NULL)
+		return;
 	if (iface->arp_fd == -1) {
 		open_socket(iface, ETHERTYPE_ARP);
 		add_event(iface->arp_fd, handle_arp_packet, iface);
@@ -216,7 +226,7 @@ send_arp_announce(void *arg)
 		add_timeout_sec(ANNOUNCE_WAIT, send_arp_announce, iface);
 		return;
 	}
-	if (IN_LINKLOCAL(htonl(state->new->yiaddr))) {
+	if (state->new->cookie != htonl(MAGIC_COOKIE)) {
 		/* We should pretend to be at the end
 		 * of the DHCP negotation cycle unless we rebooted */
 		if (state->interval != 0)

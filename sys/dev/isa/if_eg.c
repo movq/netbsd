@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eg.c,v 1.80 2009/05/12 09:10:15 cegger Exp $	*/
+/*	$NetBSD: if_eg.c,v 1.84 2012/02/02 19:43:04 tls Exp $	*/
 
 /*
  * Copyright (c) 1993 Dean Huxley <dean@fsa.ca>
@@ -40,11 +40,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.80 2009/05/12 09:10:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.84 2012/02/02 19:43:04 tls Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,9 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.80 2009/05/12 09:10:15 cegger Exp $");
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -74,10 +70,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_eg.c,v 1.80 2009/05/12 09:10:15 cegger Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/cpu.h>
 #include <sys/intr.h>
@@ -116,9 +110,7 @@ struct eg_softc {
 	void *	eg_inbuf;		/* Incoming packet buffer */
 	void *	eg_outbuf;		/* Outgoing packet buffer */
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 int egprobe(device_t, cfdata_t, void *);
@@ -485,10 +477,8 @@ egattach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, egintr, sc);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 }
 
 void
@@ -600,10 +590,7 @@ loop:
 	}
 	len = max(m0->m_pkthdr.len, ETHER_MIN_LEN - ETHER_CRC_LEN);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	sc->eg_pcb[0] = EG_CMD_SENDPACKET;
 	sc->eg_pcb[1] = 0x06;
@@ -719,9 +706,7 @@ egintr(void *arg)
 			break;
 		}
 
-#if NRND > 0
 		rnd_add_uint32(&sc->rnd_source, sc->eg_pcb[0]);
-#endif
 	}
 
 	return serviced;
@@ -752,14 +737,11 @@ egread(struct eg_softc *sc, void *buf, int len)
 
 	ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 }

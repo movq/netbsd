@@ -1,4 +1,4 @@
-# Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2009-2012  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -12,10 +12,11 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: Makefile.in,v 1.3 2009/09/02 23:48:02 tbox Exp
+# Id
 
 top_srcdir =	@top_srcdir@
 srcdir =	@top_srcdir@/lib/dns
+export_srcdir =	@top_srcdir@/lib/export
 
 # Attempt to disable parallel processing.
 .NOTPARALLEL:
@@ -27,7 +28,7 @@ srcdir =	@top_srcdir@/lib/dns
 
 @BIND9_MAKE_INCLUDES@
 
-CINCLUDES =	-I. -Iinclude ${DNS_INCLUDES} \
+CINCLUDES =	-I. -Iinclude ${DNS_INCLUDES} -I${export_srcdir}/isc/include \
 		${ISC_INCLUDES} @DST_OPENSSL_INC@ @DST_GSSAPI_INC@
 
 CDEFINES =	-DUSE_MD5 @USE_OPENSSL@ @USE_GSSAPI@
@@ -41,10 +42,13 @@ ISCDEPLIBS =	../isc/libisc.@A@
 LIBS =		@LIBS@
 
 # Alphabetically
-DSTOBJS =	dst_api.@O@ dst_lib.@O@ dst_parse.@O@ dst_result.@O@ \
-		gssapi_link.@O@ gssapictx.@O@ hmac_link.@O@ key.@O@ \
-		openssl_link.@O@ openssldh_link.@O@ openssldsa_link.@O@ \
-		opensslrsa_link.@O@
+
+OPENSSLLINKOBJS = openssl_link.@O@ openssldh_link.@O@ openssldsa_link.@O@ \
+		opensslgost_link.@O@ opensslrsa_link.@O@
+
+DSTOBJS =	@OPENSSLLINKOBJS@ \
+		dst_api.@O@ dst_lib.@O@ dst_parse.@O@ dst_result.@O@ \
+		gssapi_link.@O@ gssapictx.@O@ hmac_link.@O@ key.@O@
 
 DNSOBJS =	acl.@O@ adb.@O@ byaddr.@O@ \
 		cache.@O@ callbacks.@O@ client.@O@ compress.@O@ \
@@ -66,11 +70,14 @@ PORTDNSOBJS =	ecdb.@O@
 OBJS=		${DNSOBJS} ${OTHEROBJS} ${DSTOBJS} ${PORTDNSOBJS}
 
 # Alphabetically
-DSTSRCS =	dst_api.c dst_lib.c dst_parse.c \
+
+OPENSSLLINKSRCS = openssl_link.c openssldh_link.c openssldsa_link.c \
+		opensslgost_link.c opensslrsa_link.c
+
+DSTSRCS =	@OPENSSLLINKSRCS@ \
+		dst_api.c dst_lib.c dst_parse.c \
 		dst_result.c gssapi_link.c gssapictx.c \
-		hmac_link.c key.c \
-		openssl_link.c openssldh_link.c \
-		openssldsa_link.c opensslrsa_link.c
+		hmac_link.c key.c 
 
 DNSSRCS =	acl.c adb.c byaddr.c \
 		cache.c callbacks.c client.c compress.c \
@@ -126,7 +133,7 @@ installdirs:
 
 install:: timestamp installdirs
 	${LIBTOOL_MODE_INSTALL} ${INSTALL_DATA} libdns.@A@ \
-	${DESTDIR}${export_libdir}
+	${DESTDIR}${export_libdir}/
 
 clean distclean::
 	rm -f libdns.@A@ timestamp

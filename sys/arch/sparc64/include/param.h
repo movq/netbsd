@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.43 2008/08/26 11:37:56 rjs Exp $ */
+/*	$NetBSD: param.h,v 1.48.2.1 2012/03/17 17:54:22 bouyer Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -87,27 +87,9 @@
 #endif					/* XXX */
 #endif					/* XXX */
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value for
- * the machine's strictest data type.  The result is u_int and must be
- * cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
 #define ALIGNBYTES32		0x7
 #define ALIGNBYTES64		0xf
-#ifdef __arch64__
-#define	ALIGNBYTES		ALIGNBYTES64
-#else
-#define	ALIGNBYTES		ALIGNBYTES32
-#endif
-#define	ALIGN(p)		(((u_long)(p) + ALIGNBYTES) & ~ALIGNBYTES)
 #define ALIGN32(p)		(((u_long)(p) + ALIGNBYTES32) & ~ALIGNBYTES32)
-#define ALIGNED_POINTER(p,t)	((((u_long)(p)) & (sizeof(t)-1)) == 0)
 
 
 /*
@@ -208,26 +190,17 @@ extern int nbpg, pgofset, pgshift;
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
-
 #define MSGBUFSIZE	NBPG
 
 /*
- * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
+ * Minimum size of the kernel kmem_arena in PAGE_SIZE-sized
  * logical pages.
+ * Maximum of 2.5GB on sparc64 (it must fit into KERNEND - KERNBASE, and also
+ * leave space in the kernel_map for other allocations).
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((6 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((64 * 1024 * 1024) >> PAGE_SHIFT)
+#undef	NKMEMPAGES_MAX_UNLIMITED
+#define	NKMEMPAGES_MAX_DEFAULT	((2048UL * 1024 * 1024) >> PAGE_SHIFT)
 
 #ifdef _KERNEL
 #ifndef _LOCORE
@@ -242,6 +215,10 @@ extern void	delay(unsigned int);
 
 extern int cputyp;
 
+#define CPU_ISSUN4U     (cputyp == CPU_SUN4U)
+#define CPU_ISSUN4US    (cputyp == CPU_SUN4US)
+#define CPU_ISSUN4V     (cputyp == CPU_SUN4V)
+
 #endif /* _LOCORE */
 #endif /* _KERNEL */
 
@@ -252,6 +229,8 @@ extern int cputyp;
 #define CPU_SUN4C	1
 #define CPU_SUN4M	2
 #define CPU_SUN4U	3
+#define CPU_SUN4US	4
+#define CPU_SUN4V	5
 
 /*
  * Shorthand CPU-type macros. Enumerate all eight cases.
@@ -267,7 +246,6 @@ extern int cputyp;
  * extra memory references they'll generate.
  */
 
-#define CPU_ISSUN4U	(1)
 #define CPU_ISSUN4M	(0)
 #define CPU_ISSUN4C	(0)
 #define CPU_ISSUN4	(0)

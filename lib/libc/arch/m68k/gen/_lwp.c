@@ -1,4 +1,4 @@
-/*	$NetBSD: _lwp.c,v 1.5 2008/04/28 20:22:56 martin Exp $	*/
+/*	$NetBSD: _lwp.c,v 1.7 2011/11/22 15:25:28 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,18 +31,19 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _lwp.c,v 1.5 2008/04/28 20:22:56 martin Exp $");
+__RCSID("$NetBSD: _lwp.c,v 1.7 2011/11/22 15:25:28 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <sys/types.h>
+#include <sys/tls.h>
 #include <ucontext.h>
 #include <lwp.h>
 #include <stdlib.h>
 
 void
 _lwp_makecontext(ucontext_t *u, void (*start)(void *),
-    void *arg, void *private, caddr_t stack_base, size_t stack_size)
+    void *arg, void *tcb, caddr_t stack_base, size_t stack_size)
 {
 	void **sp;
 
@@ -60,4 +61,7 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *),
 	*--sp = (void *) _lwp_exit;
 
 	u->uc_mcontext.__gregs[_REG_A7] = (int) sp;
+	u->uc_mcontext._mc_tlsbase = (uintptr_t)tcb + TLS_TP_OFFSET +
+	    sizeof(struct tls_tcb);
+	u->uc_flags |= _UC_TLSBASE;
 }

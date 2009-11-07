@@ -92,6 +92,7 @@
 #undef COMPILE_HW_AESNI
 #if (defined(__x86_64) || defined(__x86_64__) || \
      defined(_M_AMD64) || defined(_M_X64) || \
+     defined(__i386__) || defined(__i386) || \
      defined(OPENSSL_IA32_SSE2)) && !defined(OPENSSL_NO_ASM)
 #define COMPILE_HW_AESNI
 static ENGINE *ENGINE_aesni (void);
@@ -104,7 +105,8 @@ void ENGINE_load_aesni (void)
 	ENGINE *toadd = ENGINE_aesni();
 	if (!toadd)
 		return;
-	ENGINE_add (toadd);
+	if (ENGINE_add (toadd))
+		ENGINE_register_complete (toadd);
 	ENGINE_free (toadd);
 	ERR_clear_error ();
 #endif
@@ -150,11 +152,23 @@ static const char   aesni_id[] = "aesni",
 
 /* ===== Engine "management" functions ===== */
 
+#if defined(_WIN32)
+typedef unsigned __int64 IA32CAP;
+#else
+typedef unsigned long long IA32CAP;
+#endif
+
 /* Prepare the ENGINE structure for registration */
 static int
 aesni_bind_helper(ENGINE *e)
 {
-	int engage = (OPENSSL_ia32cap_P[1] & (1 << (57-32))) != 0;
+	int engage;
+	if (sizeof(OPENSSL_ia32cap_P) > 4) {
+		engage = (int)((OPENSSL_ia32cap_P[0] >> 30) >> 27) & 1;
+	} else {
+		IA32CAP OPENSSL_ia32_cpuid(void);
+		engage = (int)(OPENSSL_ia32_cpuid() >> 57) & 1;
+	}
 
 	/* Register everything or return with an error */
 	if (!ENGINE_set_id(e, aesni_id) ||
@@ -245,7 +259,7 @@ typedef struct
 } AESNI_KEY;
 
 static int
-aesni_init_key (EVP_CIPHER_CTX *ctx, const unsigned char *user_key,
+aesni_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *user_key,
 		    const unsigned char *iv, int enc)
 {
 	int ret;
@@ -259,7 +273,7 @@ aesni_init_key (EVP_CIPHER_CTX *ctx, const unsigned char *user_key,
 		ret=aesni_set_decrypt_key(user_key, ctx->key_len * 8, key);
 
 	if(ret < 0) {
-		EVPerr(EVP_F_AES_INIT_KEY,EVP_R_AES_KEY_SETUP_FAILED);
+		EVPerr(EVP_F_AESNI_INIT_KEY,EVP_R_AES_KEY_SETUP_FAILED);
 		return 0;
 	}
 

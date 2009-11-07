@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2008/09/13 21:37:07 hubertf Exp $
+#	$NetBSD: Makefile,v 1.5.4.1 2012/03/02 18:27:47 riz Exp $
 
 NOMAN=		1
 
@@ -8,7 +8,7 @@ HOSTPROG=	fc-cache
 
 FONTCONFIG=	${X11SRCDIR.fontconfig}
 FREETYPE=	${X11SRCDIR.freetype}
-EXPAT=		${X11SRCDIR.expat}/
+EXPAT=		${NETBSDSRCDIR}/external/mit/expat/dist
 
 .PATH:	${FONTCONFIG}/fc-cache
 SRCS.fc-cache=	fc-cache.c
@@ -38,6 +38,9 @@ SRCS.freetype+=	type1cid.c
 
 .PATH:	${FREETYPE}/src/gzip
 SRCS.freetype+=	ftgzip.c
+
+#.PATH:	${FREETYPE}/src/bzip2
+#SRCS.freetype+=	ftbzip2.c
 
 .PATH:	${FREETYPE}/src/lzw
 SRCS.freetype+=	ftlzw.c
@@ -97,10 +100,14 @@ HOST_CPPFLAGS=	-DFONTCONFIG_PATH='"${DESTDIR}/etc/X11/fonts"' \
 		-DFT2_BUILD_LIBRARY \
 		-DXML_BYTE_ORDER=0 -DHAVE_MEMMOVE=1 \
 		-DHAVE_STDINT_H -DHAVE_RANDOM -DDARWIN_NO_CARBON
+HOST_CPPFLAGS+=	-DFT_CONFIG_OPTION_DISABLE_BZIP2
 HOST_CPPFLAGS+=	-I${FONTCONFIG} -I${FREETYPE} \
 		-I${FREETYPE}/include -I${EXPAT}/lib \
 		-I${FONTCONFIG}/../include \
 		-I${DESTDIR}${X11INCDIR} -I.
+
+LDADD=	-lz
+#LDADD+=	-lbz2
 
 FCARCH_DEPFILE=	fc-cache.c
 .include "../../lib/fontconfig/src/Makefile.fcarch"

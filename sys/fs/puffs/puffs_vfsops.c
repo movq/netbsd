@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_vfsops.c,v 1.83 2009/11/05 19:42:44 pooka Exp $	*/
+/*	$NetBSD: puffs_vfsops.c,v 1.100.8.2 2012/08/12 13:13:21 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.
@@ -30,9 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_vfsops.c,v 1.83 2009/11/05 19:42:44 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_vfsops.c,v 1.100.8.2 2012/08/12 13:13:21 martin Exp $");
 
 #include <sys/param.h>
+#include <sys/kernel.h>
 #include <sys/mount.h>
 #include <sys/malloc.h>
 #include <sys/extattr.h>
@@ -42,6 +43,9 @@ __KERNEL_RCSID(0, "$NetBSD: puffs_vfsops.c,v 1.83 2009/11/05 19:42:44 pooka Exp 
 #include <sys/kauth.h>
 #include <sys/proc.h>
 #include <sys/module.h>
+#include <sys/kthread.h>
+
+#include <uvm/uvm.h>
 
 #include <dev/putter/putter_sys.h>
 
@@ -77,6 +81,16 @@ static struct putter_ops puffs_putter = {
 	.pop_close	= puffs_msgif_close,
 };
 
+/*
+ * Try to ensure data structures used by the puffs protocol
+ * do not unexpectedly change.
+ */
+#ifdef __i386__
+CTASSERT(sizeof(struct puffs_kargs) == 3928);
+CTASSERT(sizeof(struct vattr) == 136);
+CTASSERT(sizeof(struct puffs_req) == 44);
+#endif
+
 int
 puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	size_t *data_len)
@@ -110,11 +124,9 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 
 	args = (struct puffs_kargs *)data;
 
-	/* devel phase */
-	if (args->pa_vers != (PUFFSVERSION | PUFFSDEVELVERS)) {
+	if (args->pa_vers != PUFFSVERSION) {
 		printf("puffs_mount: development version mismatch: "
-		    "kernel %d, lib %d\n",
-		    PUFFSVERSION, args->pa_vers & ~PUFFSDEVELVERS);
+		    "kernel %d, lib %d\n", PUFFSVERSION, args->pa_vers);
 		error = EINVAL;
 		goto out;
 	}
@@ -128,6 +140,15 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 		printf("puffs_mount: invalid FHFLAGs 0x%x\n", args->pa_fhflags);
 		error = EINVAL;
 		goto out;
+	}
+
+	for (i = 0; i < __arraycount(args->pa_spare); i++) {
+		if (args->pa_spare[i] != 0) {
+			printf("puffs_mount: pa_spare[%d] = 0x%x\n",
+			    i, args->pa_spare[i]);
+			error = EINVAL;
+			goto out;
+		}
 	}
 
 	/* use dummy value for passthrough */
@@ -205,6 +226,7 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	if (error)
 		goto out;
 	mp->mnt_stat.f_iosize = DEV_BSIZE;
+	mp->mnt_stat.f_namemax = args->pa_svfsb.f_namemax;
 
 	/*
 	 * We can't handle the VFS_STATVFS() mount_domount() does
@@ -214,6 +236,7 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	copy_statvfs_info(&args->pa_svfsb, mp);
 	(void)memcpy(&mp->mnt_stat, &args->pa_svfsb, sizeof(mp->mnt_stat));
 
+	KASSERT(curlwp != uvm.pagedaemon_lwp);
 	pmp = kmem_zalloc(sizeof(struct puffs_mount), KM_SLEEP);
 
 	mp->mnt_fs_bshift = DEV_BSHIFT;
@@ -221,13 +244,39 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	mp->mnt_flag &= ~MNT_LOCAL; /* we don't really know, so ... */
 	mp->mnt_data = pmp;
 
+#if 0
+	/*
+	 * XXX: puffs code is MPSAFE.  However, VFS really isn't.
+	 * Currently, there is nothing which protects an inode from
+	 * reclaim while there are threads inside the file system.
+	 * This means that in the event of a server crash, an MPSAFE
+	 * mount is likely to end up accessing invalid memory.  For the
+	 * non-mpsafe case, the kernel lock, general structure of
+	 * puffs and pmp_refcount protect the threads during escape.
+	 *
+	 * Fixing this will require:
+	 *  a) fixing vfs
+	 * OR
+	 *  b) adding a small sleep to puffs_msgif_close() between
+	 *     userdead() and dounmount().
+	 *     (well, this isn't really a fix, but would solve
+	 *     99.999% of the race conditions).
+	 *
+	 * Also, in the event of "b", unmount -f should be used,
+	 * like with any other file system, sparingly and only when
+	 * it is "known" to be safe.
+	 */
+	mp->mnt_iflags |= IMNT_MPSAFE;
+#endif
+
 	pmp->pmp_status = PUFFSTAT_MOUNTING;
 	pmp->pmp_mp = mp;
 	pmp->pmp_msg_maxsize = args->pa_maxmsglen;
 	pmp->pmp_args = *args;
 
 	pmp->pmp_npnodehash = args->pa_nhashbuckets;
-	pmp->pmp_pnodehash = kmem_alloc(BUCKETALLOC(pmp->pmp_npnodehash), KM_SLEEP);
+	pmp->pmp_pnodehash = kmem_alloc(BUCKETALLOC(pmp->pmp_npnodehash),
+	    KM_SLEEP);
 	for (i = 0; i < pmp->pmp_npnodehash; i++)
 		LIST_INIT(&pmp->pmp_pnodehash[i]);
 	LIST_INIT(&pmp->pmp_newcookie);
@@ -248,13 +297,23 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	pmp->pmp_root_vtype = args->pa_root_vtype;
 	pmp->pmp_root_vsize = args->pa_root_vsize;
 	pmp->pmp_root_rdev = args->pa_root_rdev;
+	pmp->pmp_docompat = args->pa_time32;
 
 	mutex_init(&pmp->pmp_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&pmp->pmp_sopmtx, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&pmp->pmp_msg_waiter_cv, "puffsget");
 	cv_init(&pmp->pmp_refcount_cv, "puffsref");
 	cv_init(&pmp->pmp_unmounting_cv, "puffsum");
+	cv_init(&pmp->pmp_sopcv, "puffsop");
 	TAILQ_INIT(&pmp->pmp_msg_touser);
 	TAILQ_INIT(&pmp->pmp_msg_replywait);
+	TAILQ_INIT(&pmp->pmp_sopfastreqs);
+	TAILQ_INIT(&pmp->pmp_sopnodereqs);
+
+	if ((error = kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL,
+	    puffs_sop_thread, pmp, NULL, "puffsop")) != 0)
+		goto out;
+	pmp->pmp_sopthrcount = 1;
 
 	DPRINTF(("puffs_mount: mount point at %p, puffs specific at %p\n",
 	    mp, MPTOPUFFSMP(mp)));
@@ -262,6 +321,8 @@ puffs_vfsop_mount(struct mount *mp, const char *path, void *data,
 	vfs_getnewfsid(mp);
 
  out:
+	if (error && pmp && pmp->pmp_pi)
+		putter_detach(pmp->pmp_pi);
 	if (error && pmp && pmp->pmp_pnodehash)
 		kmem_free(pmp->pmp_pnodehash, BUCKETALLOC(pmp->pmp_npnodehash));
 	if (error && pmp)
@@ -336,6 +397,8 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 	 * screw what userland thinks and just die.
 	 */
 	if (error == 0 || force) {
+		struct puffs_sopreq *psopr;
+
 		/* tell waiters & other resources to go unwait themselves */
 		puffs_userdead(pmp);
 		putter_detach(pmp->pmp_pi);
@@ -352,11 +415,35 @@ puffs_vfsop_unmount(struct mount *mp, int mntflags)
 			cv_wait(&pmp->pmp_refcount_cv, &pmp->pmp_lock);
 		mutex_exit(&pmp->pmp_lock);
 
+		/*
+		 * Release kernel thread now that there is nothing
+		 * it would be wanting to lock.
+		 */
+		KASSERT(curlwp != uvm.pagedaemon_lwp);
+		psopr = kmem_alloc(sizeof(*psopr), KM_SLEEP);
+		psopr->psopr_sopreq = PUFFS_SOPREQSYS_EXIT;
+		mutex_enter(&pmp->pmp_sopmtx);
+		if (pmp->pmp_sopthrcount == 0) {
+			mutex_exit(&pmp->pmp_sopmtx);
+			kmem_free(psopr, sizeof(*psopr));
+			mutex_enter(&pmp->pmp_sopmtx);
+			KASSERT(pmp->pmp_sopthrcount == 0);
+		} else {
+			TAILQ_INSERT_TAIL(&pmp->pmp_sopfastreqs,
+			    psopr, psopr_entries);
+			cv_signal(&pmp->pmp_sopcv);
+		}
+		while (pmp->pmp_sopthrcount > 0)
+			cv_wait(&pmp->pmp_sopcv, &pmp->pmp_sopmtx);
+		mutex_exit(&pmp->pmp_sopmtx);
+
 		/* free resources now that we hopefully have no waiters left */
 		cv_destroy(&pmp->pmp_unmounting_cv);
 		cv_destroy(&pmp->pmp_refcount_cv);
 		cv_destroy(&pmp->pmp_msg_waiter_cv);
+		cv_destroy(&pmp->pmp_sopcv);
 		mutex_destroy(&pmp->pmp_lock);
+		mutex_destroy(&pmp->pmp_sopmtx);
 
 		kmem_free(pmp->pmp_pnodehash, BUCKETALLOC(pmp->pmp_npnodehash));
 		kmem_free(pmp, sizeof(struct puffs_mount));
@@ -399,7 +486,7 @@ puffs_vfsop_statvfs(struct mount *mp, struct statvfs *sbp)
 	 * requesting statvfs from userspace would mean a deadlock.
 	 * Compensate.
 	 */
-	if (pmp->pmp_status == PUFFSTAT_MOUNTING)
+	if (__predict_false(pmp->pmp_status == PUFFSTAT_MOUNTING))
 		return EINPROGRESS;
 
 	PUFFS_MSG_ALLOC(vfs, statvfs);
@@ -432,13 +519,13 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 {
 	struct puffs_node *pn;
 	struct vnode *vp, *mvp;
-	int error, rv;
+	int error, rv, fsyncwait;
 
 	error = 0;
+	fsyncwait = (waitfor == MNT_WAIT) ? FSYNC_WAIT : 0;
 
 	/* Allocate a marker vnode. */
-	if ((mvp = vnalloc(mp)) == NULL)
-		return ENOMEM;
+	mvp = vnalloc(mp);
 
 	/*
 	 * Sync all cached data from regular vnodes (which are not
@@ -453,10 +540,10 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 		if (vp->v_mount != mp || vismarker(vp))
 			continue;
 
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		pn = VPTOPP(vp);
 		if (vp->v_type != VREG || UVM_OBJ_IS_CLEAN(&vp->v_uobj)) {
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 			continue;
 		}
 
@@ -477,7 +564,7 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 		 * vnodes through other routes in any case.  So there,
 		 * sync() doesn't actually sync.  Happy now?
 		 */
-		rv = vget(vp, LK_EXCLUSIVE | LK_NOWAIT | LK_INTERLOCK);
+		rv = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
 		if (rv) {
 			mutex_enter(&mntvnode_lock);
 			if (rv == ENOENT) {
@@ -489,15 +576,15 @@ pageflush(struct mount *mp, kauth_cred_t cred, int waitfor)
 
 		/* hmm.. is the FAF thing entirely sensible? */
 		if (waitfor == MNT_LAZY) {
-			mutex_enter(&vp->v_interlock);
+			mutex_enter(vp->v_interlock);
 			pn->pn_stat |= PNODE_FAF;
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 		}
-		rv = VOP_FSYNC(vp, cred, waitfor, 0, 0);
+		rv = VOP_FSYNC(vp, cred, fsyncwait, 0, 0);
 		if (waitfor == MNT_LAZY) {
-			mutex_enter(&vp->v_interlock);
+			mutex_enter(vp->v_interlock);
 			pn->pn_stat &= ~PNODE_FAF;
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 		}
 		if (rv)
 			error = rv;
@@ -678,6 +765,8 @@ puffs_vfsop_init(void)
 
 	pool_init(&puffs_pnpool, sizeof(struct puffs_node), 0, 0, 0,
 	    "puffpnpl", &pool_allocator_nointr, IPL_NONE);
+	pool_init(&puffs_vapool, sizeof(struct vattr), 0, 0, 0,
+	    "puffvapl", &pool_allocator_nointr, IPL_NONE);
 	puffs_msgif_init();
 }
 
@@ -687,6 +776,7 @@ puffs_vfsop_done(void)
 
 	puffs_msgif_destroy();
 	pool_destroy(&puffs_pnpool);
+	pool_destroy(&puffs_vapool);
 }
 
 int
@@ -694,6 +784,56 @@ puffs_vfsop_snapshot(struct mount *mp, struct vnode *vp, struct timespec *ts)
 {
 
 	return EOPNOTSUPP;
+}
+
+int
+puffs_vfsop_extattrctl(struct mount *mp, int cmd, struct vnode *vp,
+	int attrnamespace, const char *attrname)
+{
+	PUFFS_MSG_VARS(vfs, extattrctl);
+	struct puffs_mount *pmp = MPTOPUFFSMP(mp);
+	struct puffs_node *pnp;
+	puffs_cookie_t pnc;
+	int error, flags;
+
+	if (vp) {
+		/* doesn't make sense for puffs servers */
+		if (vp->v_mount != mp)
+			return EXDEV;
+		pnp = vp->v_data;
+		pnc = pnp->pn_cookie;
+		flags = PUFFS_EXTATTRCTL_HASNODE;
+	} else {
+		pnp = pnc = NULL;
+		flags = 0;
+	}
+
+	PUFFS_MSG_ALLOC(vfs, extattrctl);
+	extattrctl_msg->pvfsr_cmd = cmd;
+	extattrctl_msg->pvfsr_attrnamespace = attrnamespace;
+	extattrctl_msg->pvfsr_flags = flags;
+	if (attrname) {
+		strlcpy(extattrctl_msg->pvfsr_attrname, attrname,
+		    sizeof(extattrctl_msg->pvfsr_attrname));
+		extattrctl_msg->pvfsr_flags |= PUFFS_EXTATTRCTL_HASATTRNAME;
+	}
+	puffs_msg_setinfo(park_extattrctl,
+	    PUFFSOP_VFS, PUFFS_VFS_EXTATTRCTL, pnc);
+
+	puffs_msg_enqueue(pmp, park_extattrctl);
+	if (vp) {
+		mutex_enter(&pnp->pn_mtx);
+		puffs_referencenode(pnp);
+		mutex_exit(&pnp->pn_mtx);
+		VOP_UNLOCK(vp);
+	}
+	error = puffs_msg_wait2(pmp, park_extattrctl, pnp, NULL);
+	PUFFS_MSG_RELEASE(extattrctl);
+	if (vp) {
+		puffs_releasenode(pnp);
+	}
+
+	return checkerr(pmp, error, __func__);
 }
 
 const struct vnodeopv_desc * const puffs_vnodeopv_descs[] = {
@@ -722,7 +862,7 @@ struct vfsops puffs_vfsops = {
 	puffs_vfsop_done,		/* done		*/
 	NULL,				/* mountroot	*/
 	puffs_vfsop_snapshot,		/* snapshot	*/
-	vfs_stdextattrctl,		/* extattrctl	*/
+	puffs_vfsop_extattrctl,		/* extattrctl	*/
 	(void *)eopnotsupp,		/* suspendctl	*/
 	genfs_renamelock_enter,
 	genfs_renamelock_exit,

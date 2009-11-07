@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.29 2009/01/17 14:00:36 tsutsui Exp $	 */
+/*	$NetBSD: tftp.c,v 1.34 2011/12/25 06:09:08 tsutsui Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -73,7 +73,7 @@ struct tftp_handle {
 	int             off;
 	const char     *path;	/* saved for re-requests */
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 		u_char space[RSPACE];
 	} lastdata;
@@ -153,7 +153,7 @@ static int
 tftp_makereq(struct tftp_handle *h)
 {
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 		u_char space[FNAME_SIZE + 6];
 	} wbuf;
@@ -196,7 +196,7 @@ static int
 tftp_getnextblock(struct tftp_handle *h)
 {
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 	} wbuf;
 	char           *wtail;
@@ -229,25 +229,26 @@ static void
 tftp_terminate(struct tftp_handle *h)
 {
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 	} wbuf;
 	char           *wtail;
 
+	wtail = (char *)&wbuf.t.th_data;
 	if (h->islastblock) {
 		wbuf.t.th_opcode = htons((u_short)ACK);
 		wbuf.t.th_block = htons((u_short)h->currblock);
 	} else {
 		wbuf.t.th_opcode = htons((u_short)ERROR);
 		wbuf.t.th_code = htons((u_short)ENOSPACE); /* ??? */
+		*wtail++ = '\0'; /* empty error string */
 	}
-	wtail = (char *)&wbuf.t.th_data;
 
 	(void)sendudp(h->iodesc, &wbuf.t, wtail - (char *)&wbuf.t);
 }
 #endif
 
-int
+__compactcall int
 tftp_open(const char *path, struct open_file *f)
 {
 	struct tftp_handle *tftpfile;
@@ -274,7 +275,7 @@ tftp_open(const char *path, struct open_file *f)
 	return 0;
 }
 
-int
+__compactcall int
 tftp_read(struct open_file *f, void *addr, size_t size, size_t *resid)
 {
 	struct tftp_handle *tftpfile;
@@ -355,7 +356,7 @@ tftp_read(struct open_file *f, void *addr, size_t size, size_t *resid)
 	return 0;
 }
 
-int
+__compactcall int
 tftp_close(struct open_file *f)
 {
 	struct tftp_handle *tftpfile;
@@ -371,7 +372,7 @@ tftp_close(struct open_file *f)
 	return 0;
 }
 
-int
+__compactcall int
 tftp_write(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 
@@ -409,12 +410,12 @@ tftp_size_of_file(struct tftp_handle *tftpfile)
 		filesize += tftpfile->validsize;
 	}
 #ifdef DEBUG
-	printf("tftp_size_of_file: file is %d bytes\n", filesize);
+	printf("tftp_size_of_file: file is %zu bytes\n", filesize);
 #endif
 	return filesize;
 }
 
-int
+__compactcall int
 tftp_stat(struct open_file *f, struct stat *sb)
 {
 	struct tftp_handle *tftpfile;
@@ -428,7 +429,16 @@ tftp_stat(struct open_file *f, struct stat *sb)
 	return 0;
 }
 
-off_t
+#if defined(LIBSA_ENABLE_LS_OP)
+__compactcall void
+tftp_ls(struct open_file *f, const char *pattern)
+{
+	printf("Currently ls command is unsupported by tftp\n");
+	return;
+}
+#endif
+
+__compactcall off_t
 tftp_seek(struct open_file *f, off_t offset, int where)
 {
 	struct tftp_handle *tftpfile;

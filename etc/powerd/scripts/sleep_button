@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: sleep_button,v 1.5 2008/06/06 23:13:58 jmcneill Exp $
+#	$NetBSD: sleep_button,v 1.10 2011/10/17 23:27:41 jmcneill Exp $
 #
 # Generic script for sleep button events.
 #
@@ -10,17 +10,20 @@
 
 case "${2}" in
 pressed)
-	/etc/rc.d/btdevctl stop
-	/etc/rc.d/btconfig stop
+
+	/etc/rc.d/bluetooth stop
 	/etc/rc.d/ntpd stop
 	/etc/rc.d/dhclient stop
 	/etc/rc.d/network stop
 	/etc/rc.d/wpa_supplicant stop
-	if /sbin/sysctl machdep.sleep_state >/dev/null 2>&1; then
-		/sbin/sysctl -w machdep.sleep_state=3
+
+	if /sbin/sysctl -q hw.acpi.sleep.state; then
+		/sbin/sysctl -w hw.acpi.sleep.state=3
+	elif /sbin/sysctl -q machdep.xen.suspend; then
+		/sbin/sysctl -w machdep.xen.suspend=1
 	else
 		sleep 1
-		if /etc/rc.d/apmd status >/dev/null ; then
+		if /etc/rc.d/apmd onestatus >/dev/null ; then
 			/usr/sbin/apm -z
 		else
 			/usr/sbin/apm -d -z
@@ -28,17 +31,22 @@ pressed)
 		# ... waking up
 		sleep 1
 	fi
+
 	/etc/rc.d/wpa_supplicant start
 	/etc/rc.d/network start
 	/etc/rc.d/dhclient start
 	/etc/rc.d/ntpdate start
 	/etc/rc.d/ntpd start
-	/etc/rc.d/btconfig start
-	/etc/rc.d/btdevctl start
+	/etc/rc.d/bluetooth start
 	;;
+
 released)
-	# Note that we don't really need to handle a released event here,
-	# so we can gracefully exit.
+	case "${1}" in
+	vmt0)
+		# Virtual machine is resuming, restart the network
+		/etc/rc.d/dhcpcd restart
+		;;
+	esac
 	;;
 *)
 	logger -p warning "${0}: unsupported event ${2} on device ${1}" >&1

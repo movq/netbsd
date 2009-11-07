@@ -1,4 +1,4 @@
-/*	$NetBSD: gscbus.c,v 1.18 2009/11/03 05:07:25 snj Exp $	*/
+/*	$NetBSD: gscbus.c,v 1.22 2011/02/01 18:33:24 skrll Exp $	*/
 
 /*	$OpenBSD: gscbus.c,v 1.13 2001/08/01 20:32:04 miod Exp $	*/
 
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.18 2009/11/03 05:07:25 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.22 2011/02/01 18:33:24 skrll Exp $");
 
 #define GSCDEBUG
 
@@ -78,7 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: gscbus.c,v 1.18 2009/11/03 05:07:25 snj Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/user.h>
 #include <sys/mbuf.h>
 #include <sys/reboot.h>
 
@@ -107,8 +106,8 @@ CFATTACH_DECL_NEW(gsc, sizeof(struct gsc_softc),
  * to fix up the module's attach arguments, then we match
  * and attach it.
  */
-static void gsc_module_callback(device_t, struct confargs *);
-static void
+static device_t gsc_module_callback(device_t, struct confargs *);
+static device_t
 gsc_module_callback(device_t self, struct confargs *ca)
 {
 	struct gsc_softc *sc = device_private(self);
@@ -121,7 +120,7 @@ gsc_module_callback(device_t self, struct confargs *ca)
 	ga.ga_dmatag = sc->sc_ga.ga_dmatag;
 	(*sc->sc_ga.ga_fix_args)(sc->sc_ga.ga_fix_args_cookie, &ga);
 
-	config_found_sm_loc(self, "gsc", NULL, &ga, mbprint, mbsubmatch);
+	return config_found_sm_loc(self, "gsc", NULL, &ga, mbprint, mbsubmatch);
 }
 
 int
@@ -149,9 +148,9 @@ gscattach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 
 	/* Add the I/O subsystem's interrupt register. */
-	ga->ga_int_reg->int_reg_dev = device_xname(parent);
-	sc->sc_ih = hp700_intr_establish(sc->sc_dev, IPL_NONE, NULL,
-	    ga->ga_int_reg, &int_reg_cpu, ga->ga_irq);
+	ga->ga_ir->ir_name = device_xname(self);
+	sc->sc_ih = hp700_intr_establish(IPL_NONE, NULL, ga->ga_ir,
+	    &ir_cpu, ga->ga_irq);
 
 	ga->ga_ca.ca_nmodules = MAXMODBUS;
 	ga->ga_ca.ca_hpabase = 0;

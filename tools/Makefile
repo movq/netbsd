@@ -1,12 +1,15 @@
-#	$NetBSD: Makefile,v 1.129 2009/10/29 13:07:12 christos Exp $
+#	$NetBSD: Makefile,v 1.155 2011/11/03 07:42:56 joerg Exp $
 
 .include <bsd.own.mk>
 
 .if defined(HAVE_GCC)
-.if ${HAVE_GCC} == "4"
 TOOLCHAIN_BITS= gmake .WAIT
-.endif
 .if ${TOOLCHAIN_MISSING} == "no"
+.if ${HAVE_GCC} >= 45
+TOOLCHAIN_BITS+= gmp .WAIT
+TOOLCHAIN_BITS+= mpfr .WAIT
+TOOLCHAIN_BITS+= mpc .WAIT
+.endif
 TOOLCHAIN_BITS+= binutils .WAIT
 TOOLCHAIN_BITS+= gcc
 .  if ${MKCROSSGDB:Uno} != "no"
@@ -27,6 +30,14 @@ TOOLCHAIN_BITS+= pcc
 TOOLCHAIN_BITS+= .WAIT dbsym mdsetimage
 .endif
 
+DTRACE_BITS=
+.if ${MKDTRACE} != "no"
+DTRACE_BITS+= .WAIT libelf
+DTRACE_BITS+= .WAIT libdwarf
+DTRACE_BITS+= .WAIT libctf 
+DTRACE_BITS+= .WAIT ctfconvert ctfmerge
+.endif
+
 LINT_BITS=
 .if ${MKLINT} != "no"
 LINT_BITS= lint lint2
@@ -37,32 +48,50 @@ SUBDIR=	host-mkdep .WAIT compat .WAIT \
 	binstall .WAIT mktemp .WAIT sed .WAIT \
 		cap_mkdb crunchgen ctags genassym gencat hexdump join \
 		${LINT_BITS} \
-		lorder makewhatis mkdep mtree rpcgen tsort uudecode \
-	m4 .WAIT \
-	texinfo .WAIT \
-	yacc .WAIT \
-	awk .WAIT \
-	lex .WAIT \
-	${TOOLCHAIN_BITS} \
-		asn1_compile atf-compile cat cksum compile_et config db \
-		file lint1 \
-		makefs menuc mkcsmapper mkesdb mklocale mknod msgc \
-		pax .WAIT \
-		disklabel .WAIT \
-		paxctl .WAIT \
-		fdisk .WAIT \
-		installboot .WAIT \
+		lorder makewhatis mkdep mtree nbperf .WAIT rpcgen tsort \
+		uudecode m4 \
+	.WAIT texinfo \
+	.WAIT yacc \
+	.WAIT awk \
+	.WAIT tic \
+	.WAIT lex \
+	.WAIT pax \
+	.WAIT ${TOOLCHAIN_BITS} \
+	${DTRACE_BITS} \
+		asn1_compile cat cksum compile_et config db \
+		file lint1 slc \
+		makefs .WAIT menuc mkcsmapper mkesdb mklocale mknod msgc \
+		.WAIT disklabel \
+		.WAIT paxctl \
+		.WAIT fdisk \
+		.WAIT installboot \
 		pwd_mkdb stat strfile sunlabel zic
 
+.if ${MKLLVM} != "no"
+# .WAIT between llvm-tblgen and llvm-clang-tblgen ensures install
+# rules works correctly
+SUBDIR+= \
+	llvm .WAIT \
+	llvm-lib/libLLVMSupport llvm-lib/libLLVMTableGen .WAIT \
+	llvm-tblgen .WAIT llvm-clang-tblgen .WAIT \
+	llvm-include .WAIT \
+	llvm-lib .WAIT \
+	llvm-clang
+.endif
+
 .if ${MKMAN} != "no" || ${MKDOC} != "no" || ${MKHTML} != "no"
+.  if ${MKGROFF} != "no"
 SUBDIR+=	groff
-.  if ${MKMANDOC} == "yes"
-SUBDIR+=	mandoc
 .  endif
+SUBDIR+=	mandoc
 .endif
 
 .if ${MKMAINTAINERTOOLS:Uno} != "no"
 SUBDIR+=	autoconf .WAIT gettext
+.endif
+
+.if ${USE_PIGZGZIP} != "no"
+SUBDIR+=	pigz
 .endif
 
 .if ${MACHINE} == "hp700"
@@ -81,7 +110,12 @@ SUBDIR+=	macppc-fixcoff
 SUBDIR+=	powerpc-mkbootimage
 .endif
 
-.if (${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb")
+.if ${MACHINE_ARCH} == "m68k"
+SUBDIR+=	m68k-elf2aout
+.endif
+
+.if (${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb" || \
+     ${MACHINE_ARCH} == "mips64el" || ${MACHINE_ARCH} == "mips64eb")
 SUBDIR+=	mips-elf2ecoff
 .endif
 
@@ -104,6 +138,11 @@ SUBDIR+=	amiga-txlt
 
 .if ${MACHINE} == "hp300"
 SUBDIR+=	hp300-mkboot
+.endif
+
+.if ${MACHINE} == "evbarm" || ${MACHINE} == "evbmips" || \
+    ${MACHINE} == "evbppc" || ${MACHINE} == "sandpoint"
+SUBDIR+=	mkubootimage
 .endif
 
 check_MKTOOLS: .PHONY .NOTMAIN

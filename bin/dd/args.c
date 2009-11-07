@@ -1,4 +1,4 @@
-/*	$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $	*/
+/*	$NetBSD: args.c,v 1.37 2011/11/07 22:24:23 jym Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)args.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $");
+__RCSID("$NetBSD: args.c,v 1.37 2011/11/07 22:24:23 jym Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,12 +56,22 @@ __RCSID("$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $");
 #include "extern.h"
 
 static int	c_arg(const void *, const void *);
-#ifndef	NO_CONV
+
+#ifdef NO_MSGFMT
+static void	f_msgfmt(char *) __dead;
+#else
+static void	f_msgfmt(char *);
+#endif /* NO_MSGFMT */
+
+#ifdef NO_CONV
+static void	f_conv(char *) __dead;
+#else
+static void	f_conv(char *);
 static int	c_conv(const void *, const void *);
-#endif
+#endif /* NO_CONV */
+
 static void	f_bs(char *);
 static void	f_cbs(char *);
-static void	f_conv(char *);
 static void	f_count(char *);
 static void	f_files(char *);
 static void	f_ibs(char *);
@@ -86,8 +96,11 @@ static const struct arg {
 	{ "files",	f_files,	C_FILES, C_FILES },
 	{ "ibs",	f_ibs,		C_IBS,	 C_BS|C_IBS },
 	{ "if",		f_if,		C_IF,	 C_IF },
+	{ "iseek",	f_skip,		C_SKIP,	 C_SKIP },
+	{ "msgfmt",	f_msgfmt,	C_SKIP,	 C_SKIP },
 	{ "obs",	f_obs,		C_OBS,	 C_BS|C_OBS },
 	{ "of",		f_of,		C_OF,	 C_OF },
+	{ "oseek",	f_seek,		C_SEEK,	 C_SEEK },
 	{ "progress",	f_progress,	0,	 0 },
 	{ "seek",	f_seek,		C_SEEK,	 C_SEEK },
 	{ "skip",	f_skip,		C_SKIP,	 C_SKIP },
@@ -105,6 +118,12 @@ jcl(char **argv)
 	in.dbsz = out.dbsz = 512;
 
 	while ((oper = *++argv) != NULL) {
+		if ((oper = strdup(oper)) == NULL) {
+			errx(EXIT_FAILURE,
+			    "unable to allocate space for the argument %s",
+			    *argv);
+			/* NOTREACHED */
+		}
 		if ((arg = strchr(oper, '=')) == NULL) {
 			errx(EXIT_FAILURE, "unknown operand %s", oper);
 			/* NOTREACHED */
@@ -115,9 +134,8 @@ jcl(char **argv)
 			/* NOTREACHED */
 		}
 		tmp.name = oper;
-		if (!(ap = (struct arg *)bsearch(&tmp, args,
-		    sizeof(args)/sizeof(struct arg), sizeof(struct arg),
-		    c_arg))) {
+		if (!(ap = bsearch(&tmp, args,
+		    __arraycount(args), sizeof(*args), c_arg))) {
 			errx(EXIT_FAILURE, "unknown operand %s", tmp.name);
 			/* NOTREACHED */
 		}
@@ -242,6 +260,30 @@ f_if(char *arg)
 	in.name = arg;
 }
 
+#ifdef NO_MSGFMT
+/* Build a small version (i.e. for a ramdisk root) */
+static void
+f_msgfmt(char *arg)
+{
+
+	errx(EXIT_FAILURE, "msgfmt option disabled");
+	/* NOTREACHED */
+}
+#else	/* NO_MSGFMT */
+static void
+f_msgfmt(char *arg)
+{
+
+	/*
+	 * If the format string is not valid, dd_write_msg() will print
+	 * an error and exit.
+	 */
+	dd_write_msg(arg, 0);
+
+	msgfmt = arg;
+}
+#endif	/* NO_MSGFMT */
+
 static void
 f_obs(char *arg)
 {
@@ -322,14 +364,14 @@ f_conv(char *arg)
 
 	while (arg != NULL) {
 		tmp.name = strsep(&arg, ",");
-		if (!(cp = (struct conv *)bsearch(&tmp, clist,
-		    sizeof(clist)/sizeof(struct conv), sizeof(struct conv),
-		    c_conv))) {
+		if (!(cp = bsearch(&tmp, clist,
+		    __arraycount(clist), sizeof(*clist), c_conv))) {
 			errx(EXIT_FAILURE, "unknown conversion %s", tmp.name);
 			/* NOTREACHED */
 		}
 		if (ddflags & cp->noset) {
-			errx(EXIT_FAILURE, "%s: illegal conversion combination", tmp.name);
+			errx(EXIT_FAILURE,
+			    "%s: illegal conversion combination", tmp.name);
 			/* NOTREACHED */
 		}
 		ddflags |= cp->set;

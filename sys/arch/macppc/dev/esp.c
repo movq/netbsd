@@ -1,4 +1,4 @@
-/*	$NetBSD: esp.c,v 1.28 2009/09/26 15:49:45 tsutsui Exp $	*/
+/*	$NetBSD: esp.c,v 1.31 2011/06/30 00:52:57 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.28 2009/09/26 15:49:45 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.31 2011/06/30 00:52:57 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -81,11 +81,8 @@ __KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.28 2009/09/26 15:49:45 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -183,8 +180,8 @@ espattach(device_t parent, device_t self, void *aux)
 	 * Map my registers in.
 	 */
 	reg = ca->ca_reg;
-	esc->sc_reg =    mapiodev(ca->ca_baseaddr + reg[0], reg[1]);
-	esc->sc_dmareg = mapiodev(ca->ca_baseaddr + reg[2], reg[3]);
+	esc->sc_reg =    mapiodev(ca->ca_baseaddr + reg[0], reg[1], false);
+	esc->sc_dmareg = mapiodev(ca->ca_baseaddr + reg[2], reg[3], false);
 
 	/* Allocate 16-byte aligned DMA command space */
 	esc->sc_dmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 20);

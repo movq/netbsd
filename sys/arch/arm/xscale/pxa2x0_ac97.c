@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_ac97.c,v 1.7 2007/10/17 19:53:44 garbled Exp $	*/
+/*	$NetBSD: pxa2x0_ac97.c,v 1.11 2011/11/24 03:35:56 mrg Exp $	*/
 
 /*
  * Copyright (c) 2003, 2005 Wasabi Systems, Inc.
@@ -42,9 +42,10 @@
 #include <sys/malloc.h>
 #include <sys/select.h>
 #include <sys/audioio.h>
+#include <sys/kmem.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/audio_if.h>
 #include <dev/audiovar.h>
@@ -75,7 +76,7 @@ struct acu_dma {
 #define KERNADDR(ad) ((void *)((ad)->ad_addr))
 
 struct acu_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_bust;
 	bus_dma_tag_t sc_dmat;
 	bus_space_handle_t sc_bush;
@@ -111,12 +112,16 @@ struct acu_softc {
 
 	/* auconv encodings */
 	struct audio_encoding_set *sc_encodings;
+
+	/* MPSAFE interfaces */
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 };
 
-static int	pxaacu_match(struct device *, struct cfdata *, void *);
-static void	pxaacu_attach(struct device *, struct device *, void *);
+static int	pxaacu_match(device_t, cfdata_t, void *);
+static void	pxaacu_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pxaacu, sizeof(struct acu_softc),
+CFATTACH_DECL_NEW(pxaacu, sizeof(struct acu_softc),
     pxaacu_match, pxaacu_attach, NULL, NULL);
 
 static int acu_codec_attach(void *, struct ac97_codec_if *);
@@ -143,11 +148,12 @@ static int acu_getdev(void *, struct audio_device *);
 static int acu_mixer_set_port(void *, mixer_ctrl_t *);
 static int acu_mixer_get_port(void *, mixer_ctrl_t *);
 static int acu_query_devinfo(void *, mixer_devinfo_t *);
-static void *acu_malloc(void *, int, size_t, struct malloc_type *, int);
-static void acu_free(void *, void *, struct malloc_type *);
+static void *acu_malloc(void *, int, size_t);
+static void acu_free(void *, void *, size_t);
 static size_t acu_round_buffersize(void *, int, size_t);
 static paddr_t acu_mappage(void *, void *, off_t, int);
 static int acu_get_props(void *);
+static void acu_get_locks(void *, kmutex_t **, kmutex_t **);
 
 struct audio_hw_if acu_hw_if = {
 	acu_open,
@@ -177,6 +183,7 @@ struct audio_hw_if acu_hw_if = {
 	acu_trigger_output,
 	acu_trigger_input,
 	NULL,
+	acu_get_locks,
 };
 
 struct audio_device acu_device = {
@@ -230,7 +237,7 @@ acu_wait_gsr(struct acu_softc *sc, u_int32_t bit)
 }
 
 static int
-pxaacu_match(struct device *parent, struct cfdata *cf, void *aux)
+pxaacu_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 	struct pxa2x0_gpioconf *gpioconf;
@@ -256,11 +263,12 @@ pxaacu_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pxaacu_attach(struct device *parent, struct device *self, void *aux)
+pxaacu_attach(device_t parent, device_t self, void *aux)
 {
-	struct acu_softc *sc = (struct acu_softc *)self;
+	struct acu_softc *sc = device_private(self);
 	struct pxaip_attach_args *pxa = aux;
 
+	sc->sc_dev = self;
 	sc->sc_bust = pxa->pxa_iot;
 	sc->sc_dmat = pxa->pxa_dmat;
 
@@ -269,7 +277,7 @@ pxaacu_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_bust, pxa->pxa_addr, pxa->pxa_size, 0,
 	    &sc->sc_bush)) {
-		aprint_error("%s: Can't map registers!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Can't map registers!\n");
 		return;
 	}
 
@@ -293,8 +301,7 @@ pxaacu_attach(struct device *parent, struct device *self, void *aux)
 		delay(100);
 		pxa2x0_clkman_config(CKEN_AC97, false);
 		bus_space_unmap(sc->sc_bust, sc->sc_bush, pxa->pxa_size);
-		aprint_error("%s: Primary codec not ready\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Primary codec not ready\n");
 		return;
 	}
 
@@ -311,9 +318,8 @@ pxaacu_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_in_reset = 0;
 	sc->sc_dac_rate = sc->sc_adc_rate = 0;
 
-	if (ac97_attach(&sc->sc_host_if, &sc->sc_dev)) {
-		aprint_error("%s: Failed to attach primary codec\n",
-		    sc->sc_dev.dv_xname);
+	if (ac97_attach(&sc->sc_host_if, sc->sc_dev, &sc->sc_lock)) {
+		aprint_error_dev(self, "Failed to attach primary codec\n");
  fail:
 		acu_reg_write(sc, AC97_GCR, 0);
 		delay(100);
@@ -324,14 +330,13 @@ pxaacu_attach(struct device *parent, struct device *self, void *aux)
 
 	if (auconv_create_encodings(acu_formats, ACU_NFORMATS,
 	    &sc->sc_encodings)) {
-		aprint_error("%s: Failed to create encodings\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Failed to create encodings\n");
 		if (sc->sc_codec_if != NULL)
 			(sc->sc_codec_if->vtbl->detach)(sc->sc_codec_if);
 		goto fail;
 	}
 
-	sc->sc_audiodev = audio_attach_mi(&acu_hw_if, sc, &sc->sc_dev);
+	sc->sc_audiodev = audio_attach_mi(&acu_hw_if, sc, sc->sc_dev);
 
 	/*
 	 * As a work-around for braindamage in the PXA250's AC97 controller
@@ -361,7 +366,7 @@ acu_codec_read(void *arg, u_int8_t codec_reg, u_int16_t *valp)
 {
 	struct acu_softc *sc = arg;
 	u_int32_t val;
-	int s, reg, rv = 1;
+	int reg, rv = 1;
 
 	/*
 	 * If we're currently closed, return non-zero. The ac97 frontend
@@ -372,7 +377,7 @@ acu_codec_read(void *arg, u_int8_t codec_reg, u_int16_t *valp)
 
 	reg = AC97_CODEC_BASE(0) + codec_reg * 2;
 
-	s = splaudio();
+	mutex_spin_enter(&sc->sc_intr_lock);
 
 	if (!acu_codec_ready(sc) || (acu_reg_read(sc, AC97_CAR) & CAR_CAIP))
 		goto out_nocar;
@@ -405,7 +410,7 @@ acu_codec_read(void *arg, u_int8_t codec_reg, u_int16_t *valp)
 out:
 	acu_reg_write(sc, AC97_CAR, 0);
 out_nocar:
-	splx(s);
+	mutex_spin_exit(&sc->sc_intr_lock);
 	delay(10);
 	return (rv);
 }
@@ -415,7 +420,6 @@ acu_codec_write(void *arg, u_int8_t codec_reg, u_int16_t val)
 {
 	struct acu_softc *sc = arg;
 	u_int16_t rv;
-	int s;
 
 	/*
 	 * If we're currently closed, chances are the user is just
@@ -426,10 +430,10 @@ acu_codec_write(void *arg, u_int8_t codec_reg, u_int16_t val)
 	if (sc->sc_in_reset)
 		return (0);
 
-	s = splaudio();
+	mutex_spin_enter(&sc->sc_intr_lock);
 
 	if (!acu_codec_ready(sc) || (acu_reg_read(sc, AC97_CAR) & CAR_CAIP)) {
-		splx(s);
+		mutex_spin_exit(&sc->sc_intr_lock);
 		return (1);
 	}
 
@@ -445,7 +449,7 @@ acu_codec_write(void *arg, u_int8_t codec_reg, u_int16_t val)
 	(void) acu_wait_gsr(sc, GSR_CDONE);
 	acu_reg_write(sc, AC97_CAR, 0);
 
-	splx(s);
+	mutex_spin_exit(&sc->sc_intr_lock);
 	delay(10);
 	return (0);
 }
@@ -463,8 +467,8 @@ acu_codec_reset(void *arg)
 	delay(100);
 
 	if (acu_wait_gsr(sc, GSR_PCR)) {
-		printf("%s: acu_codec_reset: failed to ready after reset\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "acu_codec_reset: failed to ready after reset\n");
 		return (ETIMEDOUT);
 	}
 
@@ -477,6 +481,7 @@ acu_intr(void *arg)
 	struct acu_softc *sc = arg;
 	u_int32_t gsr, reg;
 
+	mutex_spin_enter(&sc->sc_intr_lock);
 	gsr = acu_reg_read(sc, AC97_GSR);
 
 	/*
@@ -488,7 +493,7 @@ acu_intr(void *arg)
 		acu_reg_write(sc, AC97_POCR, 0);
 		reg = acu_reg_read(sc, AC97_POSR);
 		acu_reg_write(sc, AC97_POSR, reg);
-		printf("%s: Tx PCM Fifo underrun\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "Tx PCM Fifo underrun\n");
 	}
 
 	/*
@@ -502,8 +507,10 @@ acu_intr(void *arg)
 		acu_reg_write(sc, AC97_PICR, 0);
 		reg = acu_reg_read(sc, AC97_PISR);
 		acu_reg_write(sc, AC97_PISR, reg);
-		printf("%s: Rx PCM Fifo overrun\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "Rx PCM Fifo overrun\n");
 	}
+
+	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return (1);
 }
@@ -661,44 +668,44 @@ acu_query_devinfo(void *arg, mixer_devinfo_t *dip)
 }
 
 static void *
-acu_malloc(void *arg, int direction, size_t size,
-    struct malloc_type *pool, int flags)
+acu_malloc(void *arg, int direction, size_t size)
 {
 	struct acu_softc *sc = arg;
 	struct acu_dma *ad;
 	int error;
 
-	if ((ad = malloc(sizeof(*ad), pool, flags)) == NULL)
+	if ((ad = kmem_alloc(sizeof(*ad), KM_SLEEP)) == NULL)
 		return (NULL);
 
-	if ((ad->ad_dx = pxa2x0_dmac_allocate_xfer(M_NOWAIT)) == NULL)
+	/* XXX */
+	if ((ad->ad_dx = pxa2x0_dmac_allocate_xfer()) == NULL)
 		goto error;
 
 	ad->ad_size = size;
 
 	error = bus_dmamem_alloc(sc->sc_dmat, size, 16, 0, ad->ad_segs,
-	    ACU_N_SEGS, &ad->ad_nsegs, BUS_DMA_NOWAIT);
+	    ACU_N_SEGS, &ad->ad_nsegs, BUS_DMA_WAITOK);
 	if (error)
 		goto free_xfer;
 
 	error = bus_dmamem_map(sc->sc_dmat, ad->ad_segs, ad->ad_nsegs, size,
-	    &ad->ad_addr, BUS_DMA_NOWAIT | BUS_DMA_COHERENT | BUS_DMA_NOCACHE);
+	    &ad->ad_addr, BUS_DMA_WAITOK | BUS_DMA_COHERENT | BUS_DMA_NOCACHE);
 	if (error)
 		goto free_dmamem;
 
 	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
-	    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &ad->ad_map);
+	    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW, &ad->ad_map);
 	if (error)
 		goto unmap_dmamem;
 
 	error = bus_dmamap_load(sc->sc_dmat, ad->ad_map, ad->ad_addr, size,
-	    NULL, BUS_DMA_NOWAIT);
+	    NULL, BUS_DMA_WAITOK);
 	if (error) {
 		bus_dmamap_destroy(sc->sc_dmat, ad->ad_map);
 unmap_dmamem:	bus_dmamem_unmap(sc->sc_dmat, ad->ad_addr, size);
 free_dmamem:	bus_dmamem_free(sc->sc_dmat, ad->ad_segs, ad->ad_nsegs);
 free_xfer:	pxa2x0_dmac_free_xfer(ad->ad_dx);
-error:		free(ad, pool);
+error:		kmem_free(ad, sizeof(*ad));
 		return (NULL);
 	}
 
@@ -713,7 +720,7 @@ error:		free(ad, pool);
 }
 
 static void
-acu_free(void *arg, void *ptr, struct malloc_type *pool)
+acu_free(void *arg, void *ptr, size_t size)
 {
 	struct acu_softc *sc = arg;
 	struct acu_dma *ad, **adp;
@@ -728,7 +735,7 @@ acu_free(void *arg, void *ptr, struct malloc_type *pool)
 			bus_dmamem_unmap(sc->sc_dmat, ad->ad_addr, ad->ad_size);
 			bus_dmamem_free(sc->sc_dmat, ad->ad_segs, ad->ad_nsegs);
 			*adp = ad->ad_next;
-			free(ad, pool);
+			kmem_free(ad, sizeof(*ad));
 			return;
 		}
 	}
@@ -764,20 +771,28 @@ acu_get_props(void *arg)
 	return (AUDIO_PROP_MMAP|AUDIO_PROP_INDEPENDENT|AUDIO_PROP_FULLDUPLEX);
 }
 
+static void
+acu_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
+{
+	struct acu_softc *sc = opaque;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
+}
+
 static int
 acu_halt_output(void *arg)
 {
 	struct acu_softc *sc = arg;
-	int s;
 
-	s = splaudio();
+	mutex_spin_enter(&sc->sc_intr_lock);
 	if (sc->sc_txdma) {
 		acu_reg_write(sc, AC97_POCR, 0);
 		acu_reg_write(sc, AC97_POSR, AC97_FIFOE);
 		pxa2x0_dmac_abort_xfer(sc->sc_txdma->ad_dx);
 		sc->sc_txdma = NULL;
 	}
-	splx(s);
+	mutex_spin_exit(&sc->sc_intr_lock);
 	return (0);
 }
 
@@ -785,16 +800,15 @@ static int
 acu_halt_input(void *arg)
 {
 	struct acu_softc *sc = arg;
-	int s;
 
-	s = splaudio();
+	mutex_spin_enter(&sc->sc_intr_lock);
 	if (sc->sc_rxdma) {
 		acu_reg_write(sc, AC97_PICR, 0);
 		acu_reg_write(sc, AC97_PISR, AC97_FIFOE);
 		pxa2x0_dmac_abort_xfer(sc->sc_rxdma->ad_dx);
 		sc->sc_rxdma = NULL;
 	}
-	splx(s);
+	mutex_spin_exit(&sc->sc_intr_lock);
 	return (0);
 }
 
@@ -916,7 +930,6 @@ acu_tx_loop_segment(struct dmac_xfer *dx, int status)
 {
 	struct acu_softc *sc = dx->dx_cookie;
 	struct acu_dma *ad;
-	int s;
 
 	if ((ad = sc->sc_txdma) == NULL)
 		panic("acu_tx_loop_segment: bad TX dma descriptor!");
@@ -925,14 +938,14 @@ acu_tx_loop_segment(struct dmac_xfer *dx, int status)
 		panic("acu_tx_loop_segment: xfer mismatch!");
 
 	if (status) {
-		printf(
-		    "%s: acu_tx_loop_segment: non-zero completion status %d\n",
-		    sc->sc_dev.dv_xname, status);
+		aprint_error_dev(sc->sc_dev,
+		    "acu_tx_loop_segment: non-zero completion status %d\n",
+		    status);
 	}
 
-	s = splaudio();
+	mutex_spin_enter(&sc->sc_intr_lock);
 	(sc->sc_txfunc)(sc->sc_txarg);
-	splx(s);
+	mutex_spin_exit(&sc->sc_intr_lock);
 }
 
 static void
@@ -940,7 +953,6 @@ acu_rx_loop_segment(struct dmac_xfer *dx, int status)
 {
 	struct acu_softc *sc = dx->dx_cookie;
 	struct acu_dma *ad;
-	int s;
 
 	if ((ad = sc->sc_rxdma) == NULL)
 		panic("acu_rx_loop_segment: bad RX dma descriptor!");
@@ -949,12 +961,12 @@ acu_rx_loop_segment(struct dmac_xfer *dx, int status)
 		panic("acu_rx_loop_segment: xfer mismatch!");
 
 	if (status) {
-		printf(
-		    "%s: acu_rx_loop_segment: non-zero completion status %d\n",
-		    sc->sc_dev.dv_xname, status);
+		aprint_error_dev(sc->sc_dev,
+		    "acu_rx_loop_segment: non-zero completion status %d\n",
+		    status);
 	}
 
-	s = splaudio();
+	mutex_spin_enter(&sc->sc_intr_lock);
 	(sc->sc_rxfunc)(sc->sc_rxarg);
-	splx(s);
+	mutex_spin_exit(&sc->sc_intr_lock);
 }

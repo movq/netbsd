@@ -1,4 +1,4 @@
-/*	$NetBSD: wss.c,v 1.68 2007/10/19 12:00:24 ad Exp $	*/
+/*	$NetBSD: wss.c,v 1.71 2011/11/24 03:35:58 mrg Exp $	*/
 
 /*
  * Copyright (c) 1994 John Brezak
@@ -36,18 +36,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss.c,v 1.68 2007/10/19 12:00:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss.c,v 1.71 2011/11/24 03:35:58 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/errno.h>
-
 #include <sys/cpu.h>
 #include <sys/intr.h>
 #include <sys/bus.h>
-
 #include <sys/audioio.h>
+
 #include <dev/audio_if.h>
 
 #include <dev/isa/isavar.h>
@@ -74,6 +73,7 @@ struct audio_device wss_device = {
 	"WSS"
 };
 
+int	wss_intr(void *);
 int	wss_getdev(void *, struct audio_device *);
 
 int	wss_mixer_set_port(void *, mixer_ctrl_t *);
@@ -112,7 +112,7 @@ const struct audio_hw_if wss_hw_if = {
 	ad1848_isa_trigger_output,
 	ad1848_isa_trigger_input,
 	NULL,
-	NULL,	/* powerstate */
+	ad1848_get_locks,
 };
 
 /*
@@ -128,10 +128,13 @@ wssattach(struct wss_softc *sc)
 #endif
 
 	ac = &sc->sc_ad1848.sc_ad1848;
+
+	ad1848_init_locks(ac, IPL_AUDIO);
+
 	madattach(sc);
 
 	sc->sc_ad1848.sc_ih = isa_intr_establish(sc->wss_ic, sc->wss_irq,
-	    IST_EDGE, IPL_AUDIO, ad1848_isa_intr, &sc->sc_ad1848);
+	    IST_EDGE, IPL_AUDIO, wss_intr, &sc->sc_ad1848);
 
 	ad1848_isa_attach(&sc->sc_ad1848);
 
@@ -161,15 +164,32 @@ wssattach(struct wss_softc *sc)
 
 	ac->parent = sc;
 
-	audio_attach_mi(&wss_hw_if, &sc->sc_ad1848, &ac->sc_dev);
+	audio_attach_mi(&wss_hw_if, &sc->sc_ad1848, ac->sc_dev);
 
 	if (sc->mad_chip_type != MAD_NONE) {
 		struct audio_attach_args arg;
 		arg.type = AUDIODEV_TYPE_OPL;
 		arg.hwif = 0;
 		arg.hdl = 0;
-		(void)config_found(&ac->sc_dev, &arg, audioprint);
+		(void)config_found(ac->sc_dev, &arg, audioprint);
 	}
+}
+
+int
+wss_intr(void *addr)
+{
+	struct ad1848_isa_softc *sc;
+	int handled;
+
+	sc = addr;
+
+	mutex_spin_enter(&sc->sc_ad1848.sc_intr_lock);
+
+	handled = ad1848_isa_intr(sc);
+
+	mutex_spin_exit(&sc->sc_ad1848.sc_intr_lock);
+
+	return handled;
 }
 
 int
@@ -388,7 +408,6 @@ mad_read(struct wss_softc *sc, int port)
 {
 	u_int tmp;
 	int pwd;
-	int s;
 
 	switch (sc->mad_chip_type) {	/* Output password */
 	case MAD_82C928:
@@ -404,10 +423,8 @@ mad_read(struct wss_softc *sc, int port)
 	default:
 		panic("mad_read: Bad chip type=%d", sc->mad_chip_type);
 	}
-	s = splaudio();		/* don't want an interrupt between outb&inb */
 	bus_space_write_1(sc->sc_iot, sc->mad_ioh, MC_PASSWD_REG, pwd);
 	tmp = bus_space_read_1(sc->sc_iot, sc->mad_ioh, port);
-	splx(s);
 	return tmp;
 }
 
@@ -415,7 +432,6 @@ void
 mad_write(struct wss_softc *sc, int port, int value)
 {
 	int pwd;
-	int s;
 
 	switch (sc->mad_chip_type) {	/* Output password */
 	case MAD_82C928:
@@ -431,10 +447,8 @@ mad_write(struct wss_softc *sc, int port, int value)
 	default:
 		panic("mad_write: Bad chip type=%d", sc->mad_chip_type);
 	}
-	s = splaudio();
 	bus_space_write_1(sc->sc_iot, sc->mad_ioh, MC_PASSWD_REG, pwd);
 	bus_space_write_1(sc->sc_iot, sc->mad_ioh, port, value & 0xff);
-	splx(s);
 }
 
 void
@@ -449,7 +463,7 @@ madattach(struct wss_softc *sc)
 		return;
 
 	/* Do we want the joystick disabled? */
-	joy = device_cfdata(&ac->sc_dev)->cf_flags & 2 ? MC1_JOYDISABLE : 0;
+	joy = device_cfdata(ac->sc_dev)->cf_flags & 2 ? MC1_JOYDISABLE : 0;
 
 	/* enable WSS emulation at the I/O port */
 	mad_write(sc, MC1_PORT, M_WSS_PORT_SELECT(sc->mad_ioindex) | joy);

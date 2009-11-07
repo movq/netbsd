@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.50 2009/10/26 19:16:58 cegger Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.52.14.1 2012/07/04 20:41:46 jdc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,28 +32,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.50 2009/10/26 19:16:58 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.52.14.1 2012/07/04 20:41:46 jdc Exp $");
+
+#include "opt_compat_ultrix.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cpu.h>
 #include <sys/dkbad.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/syslog.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/macros.h>
-#include <machine/pte.h>
-#include <machine/pcb.h>
-#include <machine/cpu.h>
 
 #include <dev/mscp/mscp.h> /* For disk encoding scheme */
 
-#include "opt_compat_ultrix.h"
 #ifdef COMPAT_ULTRIX
 #include <dev/dec/dec_boot.h>
 #include <ufs/ufs/dinode.h>	/* XXX for fs.h */
@@ -159,7 +157,8 @@ compat_label(dev_t dev, void (*strat)(struct buf *bp), struct disklabel *lp,
 		int part;
 
 		if (dlp->magic != DEC_LABEL_MAGIC) {
-			printf("label: %x\n",dlp->magic);
+			if (dlp->magic != 0)
+				printf("label: %x\n",dlp->magic);
 			msg = ((msg != NULL) ? msg: "no disk label");
 			goto done;
 		}

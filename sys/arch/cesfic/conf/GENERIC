@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.52 2009/01/24 05:06:05 mrg Exp $
+# $NetBSD: GENERIC,v 1.55 2011/11/22 21:25:03 tls Exp $
 #
 # GENERIC machine description file
 # 
@@ -78,12 +78,13 @@ file-system	PTYFS		# /dev/pts/N support
 
 # Filesystem options
 options 	FIFO		# POSIX fifo support (in all filesystems)
-#options 	QUOTA		# User and group quotas in FFS
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	NFSSERVER	# Network filesystem server
 
 # Networking options
 options 	INET		# Internet protocols
-#options 	GATEWAY		# IP forwarding + larger mb_map
+#options 	GATEWAY		# IP forwarding
 #options 	MROUTING	# Multicast routing
 #options 	PIM		# Protocol Independent Multicast
 #options 	PFIL_HOOKS	# packet filter hooks
@@ -146,7 +147,6 @@ pseudo-device	pty		64	# pseudo ptys
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	loop			# loopback network interface
 #pseudo-device	ipfilter 		# IP Filter package
-pseudo-device	rnd
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter

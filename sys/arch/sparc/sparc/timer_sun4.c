@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_sun4.c,v 1.16 2007/12/03 15:34:22 ad Exp $	*/
+/*	$NetBSD: timer_sun4.c,v 1.19 2011/07/17 23:18:23 mrg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_sun4.c,v 1.16 2007/12/03 15:34:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_sun4.c,v 1.19 2011/07/17 23:18:23 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -66,7 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: timer_sun4.c,v 1.16 2007/12/03 15:34:22 ad Exp $");
 #include <sys/systm.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sparc/sparc/vaddrs.h>
 #include <sparc/sparc/timerreg.h>
@@ -134,7 +134,7 @@ statintr_4(void *cap)
 	 * The factor 8 is only valid for stathz==100.
 	 * See also clock.c
 	 */
-	if (curlwp && (++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0) {
+	if ((++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0) {
 		if (CLKF_LOPRI(frame, IPL_SCHED)) {
 			/* No need to schedule a soft interrupt */
 			spllowerschedclock();
@@ -153,7 +153,7 @@ statintr_4(void *cap)
 
 #if defined(SUN4)
 void
-timerattach_obio_4(struct device *parent, struct device *self, void *aux)
+timerattach_obio_4(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba = &uoba->uoba_oba4;
@@ -175,7 +175,7 @@ timerattach_obio_4(struct device *parent, struct device *self, void *aux)
 
 #if defined(SUN4C)
 void
-timerattach_mainbus_4c(struct device *parent, struct device *self, void *aux)
+timerattach_mainbus_4c(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	bus_space_handle_t bh;

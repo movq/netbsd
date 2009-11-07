@@ -1,4 +1,4 @@
-/*	$NetBSD: syslogd.c,v 1.99 2009/02/06 21:09:46 mschuett Exp $	*/
+/*	$NetBSD: syslogd.c,v 1.105 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)syslogd.c	8.3 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: syslogd.c,v 1.99 2009/02/06 21:09:46 mschuett Exp $");
+__RCSID("$NetBSD: syslogd.c,v 1.105 2011/08/31 16:25:00 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -273,10 +273,11 @@ char timestamp[TIMESTAMPBUFSIZE];
 
 /*
  * Global line buffer.	Since we only process one event at a time,
- * a global one will do.
+ * a global one will do.  But for klog, we use own buffer so that
+ * partial line at the end of buffer can be deferred.
  */
-char *linebuf;
-size_t linebufsize;
+char *linebuf, *klog_linebuf;
+size_t linebufsize, klog_linebufoff;
 
 static const char *bindhostname = NULL;
 
@@ -457,6 +458,11 @@ getgroup:
 		logerror("Couldn't allocate buffer");
 		die(0, 0, NULL);
 	}
+	if (!(klog_linebuf = malloc(linebufsize))) {
+		logerror("Couldn't allocate buffer for klog");
+		die(0, 0, NULL);
+	}
+
 
 #ifndef SUN_LEN
 #define SUN_LEN(unp) (strlen((unp)->sun_path) + 2)
@@ -662,15 +668,16 @@ static void
 dispatch_read_klog(int fd, short event, void *ev)
 {
 	ssize_t rv;
+	size_t resid = linebufsize - klog_linebufoff;
 
 	DPRINTF((D_CALL|D_EVENT), "Kernel log active (%d, %d, %p)"
 		" with linebuf@%p, length %zu)\n", fd, event, ev,
-		linebuf, linebufsize);
+		klog_linebuf, linebufsize);
 
-	rv = read(fd, linebuf, linebufsize - 1);
+	rv = read(fd, &klog_linebuf[klog_linebufoff], resid - 1);
 	if (rv > 0) {
-		linebuf[rv] = '\0';
-		printsys(linebuf);
+		klog_linebuf[klog_linebufoff + rv] = '\0';
+		printsys(klog_linebuf);
 	} else if (rv < 0 && errno != EINTR) {
 		/*
 		 * /dev/klog has croaked.  Disable the event
@@ -1503,6 +1510,7 @@ printsys(char *msg)
 	char *p, *q;
 	struct buf_msg *buffer;
 
+	klog_linebufoff = 0;
 	for (p = msg; *p != '\0'; ) {
 		bool bsdsyslog = true;
 
@@ -1534,6 +1542,10 @@ printsys(char *msg)
 			 * trust the kernel to send ASCII only */;
 		if (*q != '\0')
 			*q++ = '\0';
+		else {
+			memcpy(linebuf, p, klog_linebufoff = q - p);
+			break;
+		}
 
 		if (pri &~ (LOG_FACMASK|LOG_PRIMASK))
 			pri = DEFSPRI;
@@ -2114,7 +2126,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 	int e = 0, len = 0;
 	size_t msglen, linelen, tlsprefixlen, prilen;
 	char *p, *line = NULL, *lineptr = NULL;
-#ifndef DISABLE_TLS
+#ifndef DISABLE_SIGN
 	bool newhash = false;
 #endif
 #define REPBUFSIZE 80
@@ -2129,7 +2141,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 	 * this enables the buffer in the else branch to be freed
 	 * --> every branch needs one NEWREF() or buf_msg_new()! */
 	if (buffer) {
-		NEWREF(buffer);
+		(void)NEWREF(buffer);
 	} else {
 		if (f->f_prevcount > 1) {
 			/* possible syslog-sign incompatibility:
@@ -2320,7 +2332,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 			    &f->f_un.f_pipe.f_pid)) < 0) {
 				f->f_type = F_UNUSED;
 				message_queue_freeall(f);
-				logerror(f->f_un.f_pipe.f_pname);
+				logerror("%s", f->f_un.f_pipe.f_pname);
 				break;
 			} else if (!qentry) /* prevent recursion */
 				SEND_QUEUE(f);
@@ -2350,7 +2362,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				     &f->f_un.f_pipe.f_pid)) < 0) {
 					f->f_type = F_UNUSED;
 					message_queue_freeall(f);
-					logerror(f->f_un.f_pipe.f_pname);
+					logerror("%s", f->f_un.f_pipe.f_pname);
 					break;
 				}
 				if (writev(f->f_file, iov, v - iov) < 0) {
@@ -2367,7 +2379,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 			}
 			if (e != 0 && !error) {
 				errno = e;
-				logerror(f->f_un.f_pipe.f_pname);
+				logerror("%s", f->f_un.f_pipe.f_pname);
 			}
 		}
 		if (e == 0 && qentry) { /* sent buffered msg */
@@ -2394,7 +2406,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				int lasterror = f->f_lasterror;
 				f->f_lasterror = e;
 				if (lasterror != e)
-					logerror(f->f_un.f_fname);
+					logerror("%s", f->f_un.f_fname);
 				error = true;	/* enqueue on return */
 			}
 			(void)close(f->f_file);
@@ -2406,7 +2418,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				    O_WRONLY|O_APPEND, 0);
 				if (f->f_file < 0) {
 					f->f_type = F_UNUSED;
-					logerror(f->f_un.f_fname);
+					logerror("%s", f->f_un.f_fname);
 					message_queue_freeall(f);
 				} else
 					goto again;
@@ -2414,7 +2426,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				f->f_type = F_UNUSED;
 				errno = e;
 				f->f_lasterror = e;
-				logerror(f->f_un.f_fname);
+				logerror("%s", f->f_un.f_fname);
 				message_queue_freeall(f);
 			}
 		} else {
@@ -2534,7 +2546,7 @@ wallmsg(struct filed *f, struct iovec *iov, size_t iovcnt)
 			if ((p = ttymsg(iov, iovcnt, ep->line, TTYMSGTIME))
 			    != NULL) {
 				errno = 0;	/* already in msg */
-				logerror(p);
+				logerror("%s", p);
 			}
 			continue;
 		}
@@ -2546,7 +2558,7 @@ wallmsg(struct filed *f, struct iovec *iov, size_t iovcnt)
 				if ((p = ttymsg(iov, iovcnt, ep->line,
 				    TTYMSGTIME)) != NULL) {
 					errno = 0;	/* already in msg */
-					logerror(p);
+					logerror("%s", p);
 				}
 				break;
 			}
@@ -2659,7 +2671,7 @@ domark(int fd, short event, void *ev)
 	DPRINTF((D_CALL|D_EVENT), "domark()\n");
 
 	BLOCK_SIGNALS(omask, newmask);
-	now = time((time_t *)NULL);
+	now = time(NULL);
 	MarkSeq += TIMERINTVL;
 	if (MarkSeq >= MarkInterval) {
 		logmsg_async(LOG_INFO, NULL, "-- MARK --", ADDDATE|MARK);
@@ -3248,8 +3260,8 @@ init(int fd, short event, void *ev)
 	struct filed *f, *newf, **nextp, *f2;
 	char *p;
 	sigset_t newmask, omask;
-	char *tls_status_msg = NULL;
 #ifndef DISABLE_TLS
+	char *tls_status_msg = NULL;
 	struct peer_cred *cred = NULL;
 #endif /* !DISABLE_TLS */
 
@@ -3548,7 +3560,7 @@ init(int fd, short event, void *ev)
 
 #ifndef DISABLE_TLS
 	if (tls_status_msg) {
-		loginfo(tls_status_msg);
+		loginfo("%s", tls_status_msg);
 		free(tls_status_msg);
 	}
 	DPRINTF((D_NET|D_TLS), "Preparing sockets for TLS\n");
@@ -3788,7 +3800,7 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		error = getaddrinfo(f->f_un.f_forw.f_hname, "syslog", &hints,
 		    &res);
 		if (error) {
-			logerror(gai_strerror(error));
+			logerror("%s", gai_strerror(error));
 			break;
 		}
 		f->f_un.f_forw.f_addr = res;
@@ -3804,7 +3816,7 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		(void)strlcpy(f->f_un.f_fname, p, sizeof(f->f_un.f_fname));
 		if ((f->f_file = open(p, O_WRONLY|O_APPEND, 0)) < 0) {
 			f->f_type = F_UNUSED;
-			logerror(p);
+			logerror("%s", p);
 			break;
 		}
 		if (syncfile)
@@ -3818,8 +3830,10 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		break;
 
 	case '|':
+#ifndef DISABLE_SIGN
 		if (GlobalSign.sg == 3)
 			f->f_flags |= FFLAG_SIGN;
+#endif
 		f->f_un.f_pipe.f_pid = 0;
 		(void) strlcpy(f->f_un.f_pipe.f_pname, p + 1,
 		    sizeof(f->f_un.f_pipe.f_pname));
@@ -3939,7 +3953,7 @@ socksetup(int af, const char *hostname)
 	hints.ai_socktype = SOCK_DGRAM;
 	error = getaddrinfo(hostname, "syslog", &hints, &res);
 	if (error) {
-		logerror(gai_strerror(error));
+		logerror("%s", gai_strerror(error));
 		errno = 0;
 		die(0, 0, NULL);
 	}
@@ -4072,7 +4086,7 @@ p_open(char *prog, pid_t *rpid)
 		(void) snprintf(errmsg, sizeof(errmsg),
 		    "Warning: cannot change pipe to pid %d to "
 		    "non-blocking.", (int) pid);
-		logerror(errmsg);
+		logerror("%s", errmsg);
 	}
 	*rpid = pid;
 	return pfd[1];
@@ -4144,7 +4158,7 @@ log_deadchild(pid_t pid, int status, const char *name)
 	(void) snprintf(buf, sizeof(buf),
 	    "Logging subprocess %d (%s) exited %s %d.",
 	    pid, name, reason, code);
-	logerror(buf);
+	logerror("%s", buf);
 }
 
 struct event *
@@ -4200,6 +4214,7 @@ send_queue(int fd, short event, void *arg)
 #define SQ_CHUNK_SIZE 250
 	size_t cnt = 0;
 
+#ifndef DISABLE_TLS
 	if (f->f_type == F_TLS) {
 		/* use a flag to prevent recursive calls to send_queue() */
 		if (f->f_un.f_tls.tls_conn->send_queue)
@@ -4209,6 +4224,7 @@ send_queue(int fd, short event, void *arg)
 	}
 	DPRINTF((D_DATA|D_CALL), "send_queue(f@%p with %zu msgs, "
 		"cnt@%p = %zu)\n", f, f->f_qelements, &cnt, cnt);
+#endif /* !DISABLE_TLS */
 
 	while ((qentry = STAILQ_FIRST(&f->f_qhead))) {
 #ifndef DISABLE_TLS
@@ -4246,8 +4262,11 @@ send_queue(int fd, short event, void *arg)
 			break;
 		}
 	}
+#ifndef DISABLE_TLS
 	if (f->f_type == F_TLS)
 		f->f_un.f_tls.tls_conn->send_queue = false;
+#endif
+
 }
 
 /*

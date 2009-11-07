@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.50 2009/01/11 06:02:19 tsutsui Exp $	*/
+/*	$NetBSD: locore.s,v 1.61 2011/12/22 15:33:30 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1998 Darrin B. Jewell
@@ -93,6 +93,7 @@
 #include "opt_lockdebug.h"
 #include "opt_fpu_emulate.h"
 #include "opt_useleds.h"
+#include "opt_m68k_arch.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -330,9 +331,8 @@ Lstart3:
  *
  * Is this all really necessary, or am I paranoid??
  */
-	RELOC(Sysseg, %a0)		| system segment table addr
-	movl	%a0@,%d1		| read value (a KVA)
-	addl	%a5,%d1			| convert to PA
+	RELOC(Sysseg_pa, %a0)		| system segment table addr
+	movl	%a0@,%d1		| read value (a PA)
 
 	RELOC(mmutype, %a0)
 #if defined(ENABLE_HP_CODE)
@@ -430,6 +430,7 @@ Lmotommu2:
 	movl	#MMU_IEN+MMU_FPE,INTIOBASE+MMUBASE+MMUCMD
 					| enable 68881 and i-cache
 #endif
+	pflusha
 	RELOC(prototc, %a2)
 	movl	#0x82c0aa00,%a2@	| value to load TC with
 	pmove	%a2@,%tc		| load it
@@ -452,22 +453,17 @@ Lehighcode:
  * Should be running mapped from this point on
  */
 Lenab1:
-/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-	jbsr	_C_LABEL(uvm_setpagesize) | select software page size
 	bsr     Lpushpc			| Push the PC on the stack.
 Lpushpc:
 
-
-/* set kernel stack, user %SP, and initial pcb */
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
-	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
+/* call final pmap setup */
+	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+/* set kernel stack, user SP */
+	movl	_C_LABEL(lwp0uarea),%a1	| get lwp0 uarea
+	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area 
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 
 	tstl	_C_LABEL(fputype)	| Have an FPU?
 	jeq	Lenab2			| No, skip.
@@ -490,7 +486,7 @@ Lenab3:
 
 /* Final setup for call to main(). */
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -955,12 +951,11 @@ Lbrkpt3:
  * intrhand_vectored is the entry point for vectored interrupts.
  */
 
-#define INTERRUPT_SAVEREG	moveml  #0xC0C0,%sp@-
-#define INTERRUPT_RESTOREREG	moveml  %sp@+,#0x0303
-
 ENTRY_NOPROFILE(spurintr)	/* Level 0 */
 	addql	#1,_C_LABEL(intrcnt)+0
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	INTERRUPT_SAVEREG
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 ENTRY_NOPROFILE(intrhand_autovec)	/* Levels 1 through 6 */
@@ -1161,14 +1156,6 @@ Lnocache8:
 	rts
 #endif
 
-ENTRY_NOPROFILE(getsfc)
-	movc	%sfc,%d0
-	rts
-
-ENTRY_NOPROFILE(getdfc)
-	movc	%dfc,%d0
-	rts
-
 /*
  * Load a new user segment table pointer.
  */
@@ -1254,7 +1241,7 @@ ENTRY(getsr)
 /*
  * _delay(u_int N)
  *
- * Delay for at least (N/256) microsecends.
+ * Delay for at least (N/256) microseconds.
  * This routine depends on the variable:  delay_divisor
  * which should be set based on the CPU clock rate.
  */
@@ -1276,29 +1263,6 @@ ENTRY_NOPROFILE(_delay)
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
-	rts
-
-/*
- * Save and restore 68881 state.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS) | save FP general registers
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR)	| save FP control registers
-Lm68881sdone:
-	rts
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi	| restore FP control registers
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7 | restore FP general registers
-Lm68881rdone:
-	frestore %a0@			| restore state
 	rts
 
 /*
@@ -1383,9 +1347,6 @@ GLOBAL(protorp)
 
 GLOBAL(prototc)
 	.long	0		| prototype translation control
-
-GLOBAL(proc0paddr)
-	.long	0		| KVA of lwp0 u-area
 
 GLOBAL(intiobase)
 	.long	INTIOBASE	| KVA of base of internal IO space

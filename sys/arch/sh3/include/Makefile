@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.24 2007/02/09 21:55:12 ad Exp $
+#	$NetBSD: Makefile,v 1.26 2011/07/17 23:52:12 dyoung Exp $
 
 INCSDIR= /usr/include/sh3
 
 INCS=	ansi.h aout_machdep.h asm.h \
-	bswap.h bus.h byte_swap.h \
+	bswap.h byte_swap.h \
 	cdefs.h coff_machdep.h cpu.h cputypes.h \
 	disklabel.h \
 	elf_machdep.h endian.h endian_machdep.h \
@@ -17,9 +17,9 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	pte.h ptrace.h \
 	reg.h rwlock.h \
 	setjmp.h sh_opcode.h \
-	signal.h stdarg.h \
+	signal.h \
 	types.h \
-	varargs.h vmparam.h \
+	vmparam.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

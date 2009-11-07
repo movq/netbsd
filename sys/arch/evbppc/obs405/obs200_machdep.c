@@ -1,4 +1,4 @@
-/*	$NetBSD: obs200_machdep.c,v 1.9 2009/02/13 22:41:01 apb Exp $	*/
+/*	$NetBSD: obs200_machdep.c,v 1.19 2011/06/22 18:06:32 matt Exp $	*/
 /*	Original: machdep.c,v 1.3 2005/01/17 17:24:09 shige Exp	*/
 
 /*
@@ -68,12 +68,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.9 2009/02/13 22:41:01 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.19 2011/06/22 18:06:32 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -82,23 +81,45 @@ __KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.9 2009/02/13 22:41:01 apb Exp $
 #include <sys/reboot.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/module.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
 #include <machine/obs200.h>
 #include <machine/century_bios.h>
-#include <powerpc/spr.h>
 
+#include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
+
+#include <powerpc/ibm4xx/cpu.h>
+#include <powerpc/ibm4xx/dcr4xx.h>
+#include <powerpc/ibm4xx/ibm405gp.h>
+#include <powerpc/ibm4xx/pci_machdep.h>
+#include <powerpc/ibm4xx/dev/comopbvar.h>
+
+#include <dev/ic/comreg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciconf.h>
 
-#include <powerpc/ibm4xx/dcr405gp.h>
-
 #include "ksyms.h"
 
+#include "com.h"
+#if (NCOM > 0)
+#include <sys/termios.h>
+
+#ifndef CONADDR
+#define CONADDR		IBM405GP_UART0_BASE
+#endif
+#ifndef CONSPEED
+#define CONSPEED	B9600
+#endif
+#ifndef CONMODE
+			/* 8N1 */
+#define CONMODE		((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)
+#endif
+#endif	/* NCOM */
 
 #define	TLB_PG_SIZE 	(16*1024*1024)
 
@@ -109,16 +130,10 @@ char bootpath[256];
 
 extern paddr_t msgbuf_paddr;
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-void *startsym, *endsym;
-#endif
-
-void initppc(u_int, u_int, char *, void *);
-int lcsplx(int);
-
+void initppc(vaddr_t, vaddr_t, char *, void *);
 
 void
-initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
+initppc(vaddr_t startkernel, vaddr_t endkernel, char *args, void *info_block)
 {
 	u_int32_t pllmode;
 	u_int32_t psr;
@@ -126,7 +141,7 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	u_int memsize;
 
 	/* Disable all external interrupts */
-	mtdcr(DCR_UIC0_ER, 0);
+	mtdcr(DCR_UIC0_BASE + DCR_UIC_ER, 0);
 	pllmode = mfdcr(DCR_CPC0_PLLMR);
 	psr = mfdcr(DCR_CPC0_PSR);
 
@@ -139,22 +154,12 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 		ppc4xx_tlb_reserve(va, va, TLB_PG_SIZE, TLB_EX);
 
 	/* Map console after physmem (see pmap_tlbmiss()). */
-	ppc4xx_tlb_reserve(OBS405_CONADDR, roundup(memsize, TLB_PG_SIZE),
-	    TLB_PG_SIZE, TLB_I | TLB_G);
+	ppc4xx_tlb_reserve(CONADDR, roundup(memsize, TLB_PG_SIZE), TLB_PG_SIZE,
+	    TLB_I | TLB_G);
 
 	/* Initialize IBM405GPr CPU */
 	ibm40x_memsize_init(memsize, startkernel);
-	ibm4xx_init((void (*)(void))ext_intr);
-
-	/*
-	 * Set the page size.
-	 */
-	uvm_setpagesize();
-
-	/*
-	 * Initialize pmap module.
-	 */
-	pmap_bootstrap(startkernel, endkernel);
+	ibm4xx_init(startkernel, endkernel, pic_ext_intr);
 
 #ifdef DEBUG
 	bios_board_print();
@@ -162,9 +167,6 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	printf("  Chip Pin Strapping Register = 0x%08x\n", psr);
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
-#endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
@@ -177,22 +179,21 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	if (boothowto & RB_KDB)
 		ipkdb_connect(0);
 #endif
+
+	/*
+	 * Look for the ibm4xx modules in the right place.
+	 */
+	module_machine = module_machine_ibm4xx;
 }
 
 void
 consinit(void)
 {
 
-	obs405_consinit(OBS200_COM_FREQ);
+#if (NCOM > 0)
+	com_opb_cnattach(OBS200_COM_FREQ, CONADDR, CONSPEED, CONMODE);
+#endif
 }
-
-int
-lcsplx(int ipl)
-{
-
-	return spllower(ipl); 	/* XXX */
-}
-
 
 /*
  * Machine dependent startup code.
@@ -304,7 +305,18 @@ cpu_reboot(int howto, char *what)
 }
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+ibm4xx_pci_bus_maxdevs(void *v, int busno)
+{
+
+	/*
+	 * Bus number is irrelevant.  Configuration Mechanism 1 is in
+	 * use, can have devices 0-32 (i.e. the `normal' range).
+	 */
+	return 31;
+}
+
+int
+ibm4xx_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	/*
 	 * We need to map the interrupt pin to the interrupt bit
@@ -366,8 +378,8 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 void
-pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
-			int swiz, int *iline)
+ibm4xx_pci_conf_interrupt(void *v, int bus, int dev, int pin, int swiz,
+    int *iline)
 {
 	static const int ilinemap[15/*device*/] = {
 		-1, -1, -1, -1,		/* device  1 -  4 */
@@ -383,7 +395,6 @@ pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
 			return;
 		}
 		*iline = ilinemap[dev - 1];
-        } else {
+	} else
 		*iline = 19 + ((swiz + dev + 1) & 3);
-        }
 }

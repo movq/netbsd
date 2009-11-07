@@ -1,4 +1,4 @@
-/*	$NetBSD: paud_isa.c,v 1.12 2008/04/28 20:23:33 martin Exp $	*/
+/*	$NetBSD: paud_isa.c,v 1.16 2011/11/24 03:35:57 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: paud_isa.c,v 1.12 2008/04/28 20:23:33 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: paud_isa.c,v 1.16 2011/11/24 03:35:57 mrg Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -39,9 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: paud_isa.c,v 1.12 2008/04/28 20:23:33 martin Exp $")
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <sys/audioio.h>
@@ -72,10 +72,10 @@ __KERNEL_RCSID(0, "$NetBSD: paud_isa.c,v 1.12 2008/04/28 20:23:33 martin Exp $")
 
 
 /* autoconfiguration driver */
-static void paud_attach_isa(struct device *, struct device *, void *);
-static int  paud_match_isa(struct device *, struct cfdata *, void *);
+static void paud_attach_isa(device_t, device_t, void *);
+static int  paud_match_isa(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(paud_isa, sizeof(struct ad1848_isa_softc),
+CFATTACH_DECL_NEW(paud_isa, sizeof(struct ad1848_isa_softc),
     paud_match_isa, paud_attach_isa, NULL, NULL);
 
 /*
@@ -87,6 +87,7 @@ static struct audio_device paud_device = {
 	""
 };
 
+static int paud_intr(void *);
 static int paud_getdev(void *, struct audio_device *);
 static int paud_mixer_set_port(void *, mixer_ctrl_t *);
 static int paud_mixer_get_port(void *, mixer_ctrl_t *);
@@ -120,12 +121,13 @@ static const struct audio_hw_if paud_hw_if = {
 	ad1848_isa_trigger_output,
 	ad1848_isa_trigger_input,
 	NULL,
+	ad1848_get_locks,
 };
 
 /* autoconfig routines */
 
 static int
-paud_match_isa(struct device *parent, struct cfdata *cf, void *aux)
+paud_match_isa(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ad1848_isa_softc probesc, *sc = &probesc;
 	struct isa_attach_args *ia = aux;
@@ -147,15 +149,19 @@ paud_match_isa(struct device *parent, struct cfdata *cf, void *aux)
  * Audio chip found.
  */
 static void
-paud_attach_isa(struct device *parent, struct device *self, void *aux)
+paud_attach_isa(device_t parent, device_t self, void *aux)
 {
 	struct ad1848_isa_softc *sc;
 	struct isa_attach_args *ia;
 
-	sc = (struct ad1848_isa_softc *)self;
+	sc = device_private(self);
+	sc->sc_ad1848.sc_dev = self;
 	ia = aux;
 	sc->sc_ad1848.sc_iot = ia->ia_iot;
 	sc->sc_ic = ia->ia_ic;
+
+	mutex_init(&sc->sc_ad1848.sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_ad1848.sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	if (ad1848_isa_mapprobe(sc, ia->ia_io[0].ir_addr) == 0) {
 		aprint_error(": attach failed\n");
@@ -164,11 +170,24 @@ paud_attach_isa(struct device *parent, struct device *self, void *aux)
 	sc->sc_playdrq = ia->ia_drq[0].ir_drq;
 	sc->sc_recdrq = ia->ia_drq[1].ir_drq;
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
-	    IST_EDGE, IPL_AUDIO, ad1848_isa_intr, sc);
+	    IST_EDGE, IPL_AUDIO, paud_intr, sc);
 	ad1848_isa_attach(sc);
 	aprint_normal("\n");
-	audio_attach_mi(&paud_hw_if, &sc->sc_ad1848, &sc->sc_ad1848.sc_dev);
+	audio_attach_mi(&paud_hw_if, &sc->sc_ad1848, self);
 
+}
+
+static int
+paud_intr(void *addr)
+{
+	struct ad1848_isa_softc *sc = addr;
+	int ret;
+
+	mutex_spin_enter(&sc->sc_ad1848.sc_intr_lock);
+	ret = ad1848_isa_intr(sc);
+	mutex_spin_exit(&sc->sc_ad1848.sc_intr_lock);
+
+	return ret;
 }
 
 static int

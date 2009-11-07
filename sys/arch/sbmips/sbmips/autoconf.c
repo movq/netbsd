@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.6 2005/12/11 12:18:51 christos Exp $ */
+/* $NetBSD: autoconf.c,v 1.7.10.1 2012/08/08 15:51:14 martin Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,14 +33,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.6 2005/12/11 12:18:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7.10.1 2012/08/08 15:51:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
 
 void
 cpu_configure(void)
@@ -51,7 +51,7 @@ cpu_configure(void)
 	if (config_rootfound("zbbus", NULL) == NULL)
 		panic("no zbbus found");
 
-	_splnone();
+	spl0();
 }
 
 void
@@ -61,9 +61,9 @@ cpu_rootconf(void)
 	/* XXXCGD don't know how to find the root device */
 
 	printf("boot device: %s\n",
-		booted_device ? booted_device->dv_xname : "<unknown>");
+		booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 void

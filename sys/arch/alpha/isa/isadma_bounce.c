@@ -1,4 +1,4 @@
-/* $NetBSD: isadma_bounce.c,v 1.9 2009/03/14 14:45:52 dsl Exp $ */
+/* $NetBSD: isadma_bounce.c,v 1.12 2012/02/06 02:14:13 matt Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.9 2009/03/14 14:45:52 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.12 2012/02/06 02:14:13 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,12 +43,10 @@ __KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.9 2009/03/14 14:45:52 dsl Exp $"
 #include <sys/mbuf.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
-
-#include <uvm/uvm_extern.h>
 
 extern	paddr_t avail_end;
 
@@ -262,7 +260,7 @@ isadma_bounce_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
  */
 int
 isadma_bounce_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map,
-    struct mbuf *m0, int flags)  
+    struct mbuf *m0, int flags)
 {
 	struct isadma_bounce_cookie *cookie = map->_dm_cookie;
 	int error;

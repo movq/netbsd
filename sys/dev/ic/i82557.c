@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557.c,v 1.130 2009/09/15 19:20:30 dyoung Exp $	*/
+/*	$NetBSD: i82557.c,v 1.139 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
@@ -66,10 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.130 2009/09/15 19:20:30 dyoung Exp $");
-
-#include "bpfilter.h"
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.139 2012/02/02 19:43:03 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,14 +79,11 @@ __KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.130 2009/09/15 19:20:30 dyoung Exp $");
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
+#include <sys/proc.h>
 
 #include <machine/endian.h>
 
-#include <uvm/uvm_extern.h>
-
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -102,9 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.130 2009/09/15 19:20:30 dyoung Exp $");
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -416,10 +408,8 @@ fxp_attach(struct fxp_softc *sc)
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
 
 #ifdef FXP_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_ev_txstall, EVCNT_TYPE_MISC,
@@ -1007,13 +997,10 @@ fxp_start(struct ifnet *ifp)
 		sc->sc_txpending++;
 		sc->sc_txlast = nexttx;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txpending == FXP_NTXCB - 1) {
@@ -1156,10 +1143,8 @@ fxp_intr(void *arg)
 		}
 	}
 
-#if NRND > 0
 	if (claimed)
 		rnd_add_uint32(&sc->rnd_source, statack);
-#endif
 	return (claimed);
 }
 
@@ -1468,14 +1453,11 @@ fxp_rxintr(struct fxp_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass it up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -2247,7 +2229,13 @@ fxp_mc_setup(struct fxp_softc *sc)
 		panic("fxp_mc_setup: pending transmissions");
 #endif
 
-	ifp->if_flags &= ~IFF_ALLMULTI;
+
+	if (ifp->if_flags & IFF_PROMISC) {
+		ifp->if_flags |= IFF_ALLMULTI;
+		return;
+	} else {
+		ifp->if_flags &= ~IFF_ALLMULTI;
+	}
 
 	/*
 	 * Initialize multicast setup descriptor.
@@ -2333,6 +2321,7 @@ static const uint32_t fxp_ucode_d101ma[] = D101M_B_RCVBUNDLE_UCODE;
 static const uint32_t fxp_ucode_d101s[] = D101S_RCVBUNDLE_UCODE;
 static const uint32_t fxp_ucode_d102[] = D102_B_RCVBUNDLE_UCODE;
 static const uint32_t fxp_ucode_d102c[] = D102_C_RCVBUNDLE_UCODE;
+static const uint32_t fxp_ucode_d102e[] = D102_E_RCVBUNDLE_UCODE;
 
 #define	UCODE(x)	x, sizeof(x)/sizeof(uint32_t)
 
@@ -2360,6 +2349,12 @@ static const struct ucode {
 
 	{ FXP_REV_82550_C, UCODE(fxp_ucode_d102c),
 	  D102_C_CPUSAVER_DWORD, D102_C_CPUSAVER_BUNDLE_MAX_DWORD },
+
+	{ FXP_REV_82551_F, UCODE(fxp_ucode_d102e),
+	    D102_E_CPUSAVER_DWORD, D102_E_CPUSAVER_BUNDLE_MAX_DWORD },
+
+	{ FXP_REV_82551_10, UCODE(fxp_ucode_d102e),
+	    D102_E_CPUSAVER_DWORD, D102_E_CPUSAVER_BUNDLE_MAX_DWORD },
 
 	{ 0, NULL, 0, 0, 0 }
 };
@@ -2498,17 +2493,22 @@ fxp_activate(device_t self, enum devact act)
  *	Detach an i82557 interface.
  */
 int
-fxp_detach(struct fxp_softc *sc)
+fxp_detach(struct fxp_softc *sc, int flags)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	int i;
+	int i, s;
 
 	/* Succeed now if there's no work to do. */
 	if ((sc->sc_flags & FXPF_ATTACHED) == 0)
 		return (0);
 
-	/* Unhook our tick handler. */
-	callout_stop(&sc->sc_callout);
+	s = splnet();
+	/* Stop the interface. Callouts are stopped in it. */
+	fxp_stop(ifp, 1);
+	splx(s);
+
+	/* Destroy our callout. */
+	callout_destroy(&sc->sc_callout);
 
 	if (sc->sc_flags & FXPF_MII) {
 		/* Detach all PHYs */
@@ -2518,9 +2518,7 @@ fxp_detach(struct fxp_softc *sc)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: uninorth.c,v 1.12 2007/10/17 19:55:35 garbled Exp $	*/
+/*	$NetBSD: uninorth.c,v 1.16 2011/10/26 04:56:23 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uninorth.c,v 1.12 2007/10/17 19:55:35 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uninorth.c,v 1.16 2011/10/26 04:56:23 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -41,23 +41,23 @@ __KERNEL_RCSID(0, "$NetBSD: uninorth.c,v 1.12 2007/10/17 19:55:35 garbled Exp $"
 #include <machine/pio.h>
 
 struct uninorth_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct genppc_pci_chipset sc_pc;
 	struct powerpc_bus_space sc_iot;
 	struct powerpc_bus_space sc_memt;
 };
 
-static void uninorth_attach(struct device *, struct device *, void *);
-static int uninorth_match(struct device *, struct cfdata *, void *);
+static void uninorth_attach(device_t, device_t, void *);
+static int uninorth_match(device_t, cfdata_t, void *);
 
 static pcireg_t uninorth_conf_read(void *, pcitag_t, int);
 static void uninorth_conf_write(void *, pcitag_t, int, pcireg_t);
 
-CFATTACH_DECL(uninorth, sizeof(struct uninorth_softc),
+CFATTACH_DECL_NEW(uninorth, sizeof(struct uninorth_softc),
     uninorth_match, uninorth_attach, NULL, NULL);
 
 static int
-uninorth_match(struct device *parent, struct cfdata *cf, void *aux)
+uninorth_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	char compat[32];
@@ -74,9 +74,9 @@ uninorth_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-uninorth_attach(struct device *parent, struct device *self, void *aux)
+uninorth_attach(device_t parent, device_t self, void *aux)
 {
-	struct uninorth_softc *sc = (void *)self;
+	struct uninorth_softc *sc = device_private(self);
 	pci_chipset_tag_t pc = &sc->sc_pc;
 	struct confargs *ca = aux;
 	struct pcibus_attach_args pba;
@@ -89,6 +89,7 @@ uninorth_attach(struct device *parent, struct device *self, void *aux)
 	} ranges[6], *rp = ranges;
 
 	printf("\n");
+	sc->sc_dev = self;
 
 	/* UniNorth address */
 	if (OF_getprop(node, "reg", reg, sizeof(reg)) < 8)
@@ -138,8 +139,8 @@ uninorth_attach(struct device *parent, struct device *self, void *aux)
 
 	macppc_pci_get_chipset_tag(pc);
 	pc->pc_node = node;
-	pc->pc_addr = mapiodev(reg[0] + 0x800000, 4);
-	pc->pc_data = mapiodev(reg[0] + 0xc00000, 8);
+	pc->pc_addr = mapiodev(reg[0] + 0x800000, 4, false);
+	pc->pc_data = mapiodev(reg[0] + 0xc00000, 8, false);
 	pc->pc_bus = busrange[0];
 	pc->pc_conf_read = uninorth_conf_read;
 	pc->pc_conf_write = uninorth_conf_write;
@@ -154,7 +155,7 @@ uninorth_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_bus = pc->pc_bus;
 	pba.pba_bridgetag = NULL;
 	pba.pba_pc = pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

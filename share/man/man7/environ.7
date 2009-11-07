@@ -1,4 +1,4 @@
-.\"	$NetBSD: environ.7,v 1.21 2005/07/05 19:46:02 kleink Exp $
+.\"	$NetBSD: environ.7,v 1.25 2011/01/21 10:03:27 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,14 +29,14 @@
 .\"
 .\"	@(#)environ.7	8.3 (Berkeley) 4/19/94
 .\"
-.Dd July 5, 2005
+.Dd January 21, 2011
 .Dt ENVIRON 7
 .Os
 .Sh NAME
 .Nm environ
 .Nd user process environment
 .Sh SYNOPSIS
-.Ar extern char **environ ;
+.Vt extern char ** Ns Dv environ ;
 .Sh DESCRIPTION
 An array of strings called the
 .Em environment
@@ -46,7 +46,7 @@ when a process begins.
 By convention these strings have the form
 .Dq Ar name=value .
 The following names are used by various commands:
-.Bl -tag -width LIBC_DIAGASSERT
+.Bl -tag -width ".Ev LIBC_DIAGASSERT"
 .It Ev AUDIOCTLDEVICE
 The name of the audio control device to be used by
 .Xr audioctl 1 ,
@@ -67,18 +67,18 @@ and
 .Ev BLOCKSIZE
 may be specified in units of a byte by specifying a number,
 in units of a kilobyte by specifying a number followed by
-.Dq K
+.Ql K
 or
-.Dq k ,
+.Ql k ,
 in units of a megabyte by specifying a number followed by
-.Dq M
+.Ql M
 or
-.Dq m
+.Ql m
 and in units of a gigabyte by specifying a number followed
 by
-.Dq G
+.Ql G
 or
-.Dq g .
+.Ql g .
 Sizes less than 512 bytes or greater than a gigabyte are ignored.
 .It Ev EXINIT
 A startup list of commands read by
@@ -129,7 +129,7 @@ NLS rules and symbols for formatting time and date information.
 Control how the
 .Fn _DIAGASSERT
 macro (from
-.Aq Pa assert.h )
+.In assert.h )
 behaves once the assertion is raised.
 Refer to
 .Xr _DIAGASSERT 3
@@ -160,8 +160,11 @@ The sequence of directories, separated by colons, searched by
 .Xr system 3 ,
 .Xr execvp 3 ,
 etc, when looking for an executable file.
-PATH is set to
-.Dq /usr/bin:/bin:/usr/pkg/bin:/usr/local/bin
+.Ev PATH
+is set to
+.Pp
+.Dl /usr/bin:/bin:/usr/pkg/bin:/usr/local/bin
+.Pp
 initially by
 .Xr login 1 .
 .It Ev PRINTER
@@ -185,31 +188,24 @@ This information is used by commands, such as
 .\" .Xr plot 1
 which may exploit special terminal capabilities.
 See
-.Pa /usr/share/misc/termcap
-.Pq Xr termcap 5
+.Pa /usr/share/misc/terminfo
+.Pq Xr terminfo 5
 for a list of terminal types.
 .It Ev TERMCAP
-The string describing the terminal in TERM, or, if
-it begins with a '/', the name of the termcap file.
-See
-.Ev TERMPATH
-below,
-.Xr termcap 5 ,
-and
-.Xr termcap 3 .
-.It Ev TERMPATH
-A sequence of pathnames of termcap files, separated by colons or spaces,
-which are searched for terminal descriptions in the order listed.
-Having no
-.Ev TERMPATH
-is equivalent to a
-.Ev TERMPATH
-of
-.Dq Pa $HOME/.termcap:/usr/share/misc/termcap .
-.Ev TERMPATH
-is ignored if
-.Ev TERMCAP
-contains a full pathname.
+The string describing the terminal in
+.Ev TERM ,
+or, if it begins with a
+.Ql / ,
+the name of the termcap file.
+This is only checked if
+.Ev TERMINFO
+is not set.
+.It Ev TERMINFO
+The string describing the terminal in
+.Ev TERM ,
+or, if it begins with a
+.Ql / ,
+the name of the terminfo file.
 .It Ev TIMEFORMAT
 A
 .Xr strftime 3
@@ -228,7 +224,9 @@ The timezone to use when displaying dates.
 The normal format is a pathname relative to
 .Pa /usr/share/zoneinfo .
 For example, the command
-.Ic env TZ=US/Pacific date
+.Pp
+.Dl env TZ=US/Pacific date
+.Pp
 displays the current time in California.
 See
 .Xr tzset 3
@@ -278,8 +276,9 @@ unless you know what you are doing.
 .Xr rcmd 3 ,
 .Xr system 3 ,
 .Xr termcap 3 ,
+.Xr terminfo 3 ,
 .Xr audio 4 ,
-.Xr termcap 5 ,
+.Xr terminfo 5 ,
 .Xr nls 7 ,
 .Xr dump 8
 .Sh HISTORY

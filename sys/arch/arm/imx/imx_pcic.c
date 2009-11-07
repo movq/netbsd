@@ -1,4 +1,4 @@
-/*	$Id: imx_pcic.c,v 1.3 2008/06/30 00:46:41 perry Exp $	*/
+/*	$Id: imx_pcic.c,v 1.5 2011/07/26 22:52:47 dyoung Exp $	*/
 
 /*
  * IMX CF interface to pcic/pcmcia
@@ -6,7 +6,7 @@
  * Sun Apr  1 21:42:37 PDT 2007
  */
 
-/*	$NetBSD: imx_pcic.c,v 1.3 2008/06/30 00:46:41 perry Exp $	*/
+/*	$NetBSD: imx_pcic.c,v 1.5 2011/07/26 22:52:47 dyoung Exp $	*/
 /*	$OpenBSD: pxa2x0_pcic.c,v 1.17 2005/12/14 15:08:51 uwe Exp $	*/
 
 /*
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$Id: imx_pcic.c,v 1.3 2008/06/30 00:46:41 perry Exp $");
+__KERNEL_RCSID(0, "$Id: imx_pcic.c,v 1.5 2011/07/26 22:52:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$Id: imx_pcic.c,v 1.3 2008/06/30 00:46:41 perry Exp $");
 
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
         
 #include <dev/pcmcia/pcmciareg.h>
@@ -407,8 +407,6 @@ imx_pcic_attach_common(struct imx_pcic_softc *sc,
 		paa.pct = (pcmcia_chipset_tag_t)&imx_pcic_pcmcia_functions;
 		paa.pch = (pcmcia_chipset_handle_t)so;
 printf("%s: sc_pa %lx\n", __func__, sc->sc_pa);
-		paa.iobase = sc->sc_pa;
-		paa.iosize = 0x2000;
 
 		so->pcmcia = config_found_ia(&sc->sc_dev, "pcmciabus", &paa,
 		    imx_pcic_print);

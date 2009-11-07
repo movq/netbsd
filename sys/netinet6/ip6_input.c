@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_input.c,v 1.128 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: ip6_input.c,v 1.136 2012/01/10 20:01:56 drochner Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -62,8 +62,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.128 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.136 2012/01/10 20:01:56 drochner Exp $");
 
+#include "opt_gateway.h"
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
@@ -84,6 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.128 2009/09/16 15:23:05 pooka Exp $"
 #include <sys/syslog.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -110,7 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.128 2009/09/16 15:23:05 pooka Exp $"
 #include <netinet6/in6_ifattach.h>
 #include <netinet6/nd6.h>
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netinet6/ipsec_private.h>
 #endif
@@ -159,7 +161,8 @@ percpu_t *ip6stat_percpu;
 static void ip6_init2(void *);
 static struct m_tag *ip6_setdstifaddr(struct mbuf *, const struct in6_ifaddr *);
 
-static int ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
+static int ip6_process_hopopts(struct mbuf *, u_int8_t *, int, u_int32_t *,
+	u_int32_t *);
 static struct mbuf *ip6_pullexthdr(struct mbuf *, size_t, int);
 static void sysctl_net_inet6_ip6_setup(struct sysctllog **);
 
@@ -189,9 +192,9 @@ ip6_init(void)
 	addrsel_policy_init();
 	nd6_init();
 	frag6_init();
-	ip6_desync_factor = arc4random() % MAX_TEMP_DESYNC_FACTOR;
+	ip6_desync_factor = cprng_fast32() % MAX_TEMP_DESYNC_FACTOR;
 
-	ip6_init2((void *)0);
+	ip6_init2(NULL);
 #ifdef GATEWAY
 	ip6flow_init(ip6_hashsize);
 #endif
@@ -277,7 +280,7 @@ ip6_input(struct mbuf *m)
 	int s, error;
 #endif
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	/*
 	 * should the inner packet be considered authentic?
 	 * see comment in ah4_input().
@@ -349,7 +352,7 @@ ip6_input(struct mbuf *m)
 		goto bad;
 	}
 
-#if defined(IPSEC)
+#if defined(KAME_IPSEC)
 	/* IPv6 fast forwarding is not compatible with IPsec. */
 	m->m_flags &= ~M_CANFASTFWD;
 #else
@@ -372,7 +375,7 @@ ip6_input(struct mbuf *m)
 	 * let ipfilter look at packet on the wire,
 	 * not the decapsulated packet.
 	 */
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	if (!ipsec_getnhist(m))
 #elif defined(FAST_IPSEC)
 	if (!ipsec_indone(m))
@@ -783,7 +786,7 @@ ip6_input(struct mbuf *m)
 			}
 		}
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 		/*
 		 * enforce IPsec policy checking if we are seeing last header.
 		 * note that we do not visit this with protocols with pcb layer
@@ -880,7 +883,7 @@ ip6_getdstifaddr(struct mbuf *m)
  *
  * rtalertp - XXX: should be stored more smart way
  */
-static int
+int
 ip6_hopopts_input(u_int32_t *plenp, u_int32_t *rtalertp, 
 	struct mbuf **mp, int *offp)
 {
@@ -925,7 +928,7 @@ ip6_hopopts_input(u_int32_t *plenp, u_int32_t *rtalertp,
  * (RFC2460 p7), opthead is pointer into data content in m, and opthead to
  * opthead + hbhlen is located in continuous memory region.
  */
-int
+static int
 ip6_process_hopopts(struct mbuf *m, u_int8_t *opthead, int hbhlen, 
 	u_int32_t *rtalertp, u_int32_t *plenp)
 {
@@ -1790,6 +1793,20 @@ sysctl_net_inet6_ip6_setup(struct sysctllog **clog)
 		       NULL, 0, &ip6_accept_rtadv, 0,
 		       CTL_NET, PF_INET6, IPPROTO_IPV6,
 		       IPV6CTL_ACCEPT_RTADV, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "rtadv_maxroutes",
+		       SYSCTL_DESCR("Maximum number of routes accepted via router advertisements"),
+		       NULL, 0, &ip6_rtadv_maxroutes, 0,
+		       CTL_NET, PF_INET6, IPPROTO_IPV6,
+		       IPV6CTL_RTADV_MAXROUTES, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_INT, "rtadv_numroutes",
+		       SYSCTL_DESCR("Current number of routes accepted via router advertisements"),
+		       NULL, 0, &nd6_numroutes, 0,
+		       CTL_NET, PF_INET6, IPPROTO_IPV6,
+		       IPV6CTL_RTADV_NUMROUTES, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "keepfaith",

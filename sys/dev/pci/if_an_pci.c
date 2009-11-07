@@ -1,4 +1,4 @@
-/*	$NetBSD: if_an_pci.c,v 1.30 2009/09/05 14:13:50 tsutsui Exp $	*/
+/*	$NetBSD: if_an_pci.c,v 1.33 2012/01/30 19:41:19 drochner Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.30 2009/09/05 14:13:50 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.33 2012/01/30 19:41:19 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.30 2009/09/05 14:13:50 tsutsui Exp $
 #include <dev/pci/pcidevs.h>
 
 #define	AN_PCI_PLX_IOBA		0x14	/* i/o base for PLX chip */
-#define	AN_PCI_IOBA		0x18	/* i/o base */
+#define AN_PCI_IOBA PCI_BAR(2)	/* i/o base */
 
 struct an_pci_softc {
 	struct an_softc sc_an;		/* real "an" softc */
@@ -118,7 +118,6 @@ an_pci_attach(device_t parent, device_t self, void *aux)
         struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	struct an_pci_softc *psc = device_private(self);
 	struct an_softc *sc = &psc->sc_an;
-        char devinfo[256];
 	char const *intrstr;
 	pci_intr_handle_t ih;
 	bus_size_t iosize;
@@ -128,10 +127,7 @@ an_pci_attach(device_t parent, device_t self, void *aux)
 	psc->sc_pct = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
 
-	aprint_naive(": 802.11 controller\n");
-
-        pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-        aprint_normal(": %s\n", devinfo);
+	pci_aprint_devinfo(pa, "802.11 controller");
 
         /* Map I/O registers */
         if (pci_mapreg_map(pa, AN_PCI_IOBA, PCI_MAPREG_TYPE_IO, 0,
@@ -155,8 +151,8 @@ an_pci_attach(device_t parent, device_t self, void *aux)
 	if (psc->sc_ih == NULL) {
 		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);

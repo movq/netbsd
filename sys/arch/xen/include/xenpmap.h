@@ -1,4 +1,4 @@
-/*	$NetBSD: xenpmap.h,v 1.24 2009/10/23 02:32:33 snj Exp $	*/
+/*	$NetBSD: xenpmap.h,v 1.33.2.2 2012/07/02 21:01:48 jdc Exp $	*/
 
 /*
  *
@@ -29,7 +29,13 @@
 
 #ifndef _XEN_XENPMAP_H_
 #define _XEN_XENPMAP_H_
+
+#ifdef _KERNEL_OPT
 #include "opt_xen.h"
+#endif
+
+#include <sys/types.h>
+#include <sys/kcpuset.h>
 
 #define	INVALID_P2M_ENTRY	(~0UL)
 
@@ -40,9 +46,33 @@ void xpq_queue_pt_switch(paddr_t);
 void xpq_flush_queue(void);
 void xpq_queue_set_ldt(vaddr_t, uint32_t);
 void xpq_queue_tlb_flush(void);
-void xpq_queue_pin_table(paddr_t);
+void xpq_queue_pin_table(paddr_t, int);
 void xpq_queue_unpin_table(paddr_t);
 int  xpq_update_foreign(paddr_t, pt_entry_t, int);
+void xen_vcpu_mcast_invlpg(vaddr_t, vaddr_t, kcpuset_t *);
+void xen_vcpu_bcast_invlpg(vaddr_t, vaddr_t);
+void xen_mcast_tlbflush(kcpuset_t *);
+void xen_bcast_tlbflush(void);
+void xen_mcast_invlpg(vaddr_t, kcpuset_t *);
+void xen_bcast_invlpg(vaddr_t);
+
+void pmap_xen_resume(void);
+void pmap_xen_suspend(void);
+void pmap_map_recursive_entries(void);
+void pmap_unmap_recursive_entries(void);
+
+#if defined(PAE) || defined(__x86_64__)
+void xen_kpm_sync(struct pmap *, int);
+#endif /* PAE || __x86_64__ */
+
+#define xpq_queue_pin_l1_table(pa)	\
+	xpq_queue_pin_table(pa, MMUEXT_PIN_L1_TABLE)
+#define xpq_queue_pin_l2_table(pa)	\
+	xpq_queue_pin_table(pa, MMUEXT_PIN_L2_TABLE)
+#define xpq_queue_pin_l3_table(pa)	\
+	xpq_queue_pin_table(pa, MMUEXT_PIN_L3_TABLE)
+#define xpq_queue_pin_l4_table(pa)	\
+	xpq_queue_pin_table(pa, MMUEXT_PIN_L4_TABLE)
 
 extern unsigned long *xpmap_phys_to_machine_mapping;
 
@@ -64,14 +94,6 @@ extern unsigned long *xpmap_phys_to_machine_mapping;
 #define pfn_to_mfn(pfn) (xpmap_phys_to_machine_mapping[(pfn)])
 
 static __inline paddr_t
-xpmap_mtop(paddr_t mpa)
-{
-	return (
-	    ((paddr_t)machine_to_phys_mapping[mpa >> PAGE_SHIFT] << PAGE_SHIFT)
-	    + XPMAP_OFFSET) | (mpa & ~PG_FRAME);
-}
-
-static __inline paddr_t
 xpmap_mtop_masked(paddr_t mpa)
 {
 	return (
@@ -80,11 +102,9 @@ xpmap_mtop_masked(paddr_t mpa)
 }
 
 static __inline paddr_t
-xpmap_ptom(paddr_t ppa)
+xpmap_mtop(paddr_t mpa)
 {
-	return (((paddr_t)xpmap_phys_to_machine_mapping[(ppa -
-	    XPMAP_OFFSET) >> PAGE_SHIFT]) << PAGE_SHIFT)
-		| (ppa & ~PG_FRAME);
+	return (xpmap_mtop_masked(mpa) | (mpa & ~PG_FRAME));
 }
 
 static __inline paddr_t
@@ -92,6 +112,12 @@ xpmap_ptom_masked(paddr_t ppa)
 {
 	return (((paddr_t)xpmap_phys_to_machine_mapping[(ppa -
 	    XPMAP_OFFSET) >> PAGE_SHIFT]) << PAGE_SHIFT);
+}
+
+static __inline paddr_t
+xpmap_ptom(paddr_t ppa)
+{
+	return (xpmap_ptom_masked(ppa) | (ppa & ~PG_FRAME));
 }
 
 static inline void

@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.23 2006/08/26 15:26:02 matt Exp $
+#	$NetBSD: Makefile,v 1.25 2010/12/13 17:39:47 pooka Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 .include <bsd.own.mk>
 
-PROG=	route
+RUMPPRG=route
 MAN=	route.8
 SRCS=	route.c show.c keywords.c
 

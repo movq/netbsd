@@ -1,4 +1,4 @@
-/*	$NetBSD: wchar.h,v 1.27 2008/04/28 20:22:54 martin Exp $	*/
+/*	$NetBSD: wchar.h,v 1.30 2011/07/17 20:54:34 joerg Exp $	*/
 
 /*-
  * Copyright (c)1999 Citrus Project,
@@ -60,13 +60,13 @@
 
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
-#include <machine/ansi.h>
 #include <machine/wchar_limits.h>
+#include <sys/ansi.h>
 #include <sys/null.h>
 
 #include <stdio.h> /* for FILE* */
 
-#ifdef	_BSD_WCHAR_T_
+#if defined(_BSD_WCHAR_T_) && !defined(__cplusplus)
 typedef	_BSD_WCHAR_T_	wchar_t;
 #undef	_BSD_WCHAR_T_
 #endif
@@ -84,6 +84,13 @@ typedef	_BSD_WINT_T_	wint_t;
 #ifdef	_BSD_SIZE_T_
 typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
+#endif
+
+#if defined(_POSIX_C_SOURCE)
+#ifndef __VA_LIST_DECLARED
+typedef __va_list va_list;
+#define __VA_LIST_DECLARED
+#endif
 #endif
 
 struct tm;
@@ -167,18 +174,18 @@ int fwprintf(FILE * __restrict, const wchar_t * __restrict, ...);
 int fwscanf(FILE * __restrict, const wchar_t * __restrict, ...);
 int swprintf(wchar_t * __restrict, size_t n, const wchar_t * __restrict, ...);
 int swscanf(const wchar_t * __restrict, const wchar_t * __restrict, ...);
-int vfwprintf(FILE * __restrict, const wchar_t * __restrict, _BSD_VA_LIST_);
+int vfwprintf(FILE * __restrict, const wchar_t * __restrict, __va_list);
 int vswprintf(wchar_t * __restrict, size_t, const wchar_t * __restrict,
-    _BSD_VA_LIST_);
-int vwprintf(const wchar_t * __restrict, _BSD_VA_LIST_);
+    __va_list);
+int vwprintf(const wchar_t * __restrict, __va_list);
 int wprintf(const wchar_t * __restrict, ...);
 int wscanf(const wchar_t * __restrict, ...);
 #if defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) > 199901L || \
     defined(_NETBSD_SOURCE)
-int vfwscanf(FILE * __restrict, const wchar_t * __restrict, _BSD_VA_LIST_);
+int vfwscanf(FILE * __restrict, const wchar_t * __restrict, __va_list);
 int vswscanf(const wchar_t * __restrict, const wchar_t * __restrict,
-    _BSD_VA_LIST_);
-int vwscanf(const wchar_t * __restrict, _BSD_VA_LIST_);
+    __va_list);
+int vwscanf(const wchar_t * __restrict, __va_list);
 #endif
 #if defined(_NETBSD_SOURCE)
 struct tinfo;

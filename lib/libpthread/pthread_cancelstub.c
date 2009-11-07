@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_cancelstub.c,v 1.27 2009/08/12 23:51:23 enami Exp $	*/
+/*	$NetBSD: pthread_cancelstub.c,v 1.35.6.1 2012/04/09 18:15:27 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007 The NetBSD Foundation, Inc.
@@ -29,8 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Disable namespace mangling, Fortification is useless here anyway. */
+#undef _FORTIFY_SOURCE
+
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_cancelstub.c,v 1.27 2009/08/12 23:51:23 enami Exp $");
+__RCSID("$NetBSD: pthread_cancelstub.c,v 1.35.6.1 2012/04/09 18:15:27 riz Exp $");
 
 #ifndef lint
 
@@ -55,6 +58,7 @@ __RCSID("$NetBSD: pthread_cancelstub.c,v 1.27 2009/08/12 23:51:23 enami Exp $");
 #include <sys/uio.h>
 #include <sys/wait.h>
 #include <aio.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <mqueue.h>
 #include <poll.h>
@@ -65,10 +69,12 @@ __RCSID("$NetBSD: pthread_cancelstub.c,v 1.27 2009/08/12 23:51:23 enami Exp $");
 #include <sys/mman.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/event.h>
 
 #include <compat/sys/mman.h>
 #include <compat/sys/poll.h>
 #include <compat/sys/select.h>
+#include <compat/sys/event.h>
 #include <compat/sys/wait.h>
 #include <compat/include/mqueue.h>
 #include <compat/include/signal.h>
@@ -89,6 +95,8 @@ int	_sys_fcntl(int, int, ...);
 int	_sys_fdatasync(int);
 int	_sys_fsync(int);
 int	_sys_fsync_range(int, int, off_t, off_t);
+int	_sys___kevent50(int, const struct kevent *, size_t, struct kevent *,
+	    size_t, const struct timespec *);
 int	_sys_mq_send(mqd_t, const char *, size_t, unsigned);
 ssize_t	_sys_mq_receive(mqd_t, char *, size_t, unsigned *);
 int	_sys___mq_timedsend50(mqd_t, const char *, size_t, unsigned,
@@ -149,6 +157,21 @@ __aio_suspend50(const struct aiocb * const list[], int nent,
 	self = pthread__self();
 	TESTCANCEL(self);
 	retval = _sys___aio_suspend50(list, nent, timeout);
+	TESTCANCEL(self);
+
+	return retval;
+}
+
+int
+__kevent50(int fd, const struct kevent *ev, size_t nev, struct kevent *rev,
+    size_t nrev, const struct timespec *ts)
+{
+	int retval;
+	pthread_t self;
+
+	self = pthread__self();
+	TESTCANCEL(self);
+	retval = _sys___kevent50(fd, ev, nev, rev, nrev, ts);
 	TESTCANCEL(self);
 
 	return retval;
@@ -449,10 +472,6 @@ pwrite(int d, const void *buf, size_t nbytes, off_t offset)
 	return retval;
 }
 
-#ifdef _FORTIFY_SOURCE
-#undef read
-#endif
-
 ssize_t
 read(int d, void *buf, size_t nbytes)
 {
@@ -559,6 +578,7 @@ __sigtimedwait50(const sigset_t * __restrict set, siginfo_t * __restrict info,
 	pthread_t self;
 	int retval;
 	struct timespec tout, *tp;
+
 	if (timeout) {
 		tout = *timeout;
 		tp = &tout;
@@ -571,6 +591,28 @@ __sigtimedwait50(const sigset_t * __restrict set, siginfo_t * __restrict info,
 	TESTCANCEL(self);
 
 	return retval;
+}
+
+int                                                                                                                  
+sigwait(const sigset_t * __restrict set, int * __restrict sig)
+{
+	pthread_t	self;
+	int		saved_errno;
+	int		new_errno;
+	int		retval;
+
+	self = pthread__self();
+	saved_errno = errno;
+	TESTCANCEL(self);
+	retval = ____sigtimedwait50(set, NULL, NULL);
+	TESTCANCEL(self);
+	new_errno = errno;
+	errno = saved_errno;
+	if (retval < 0) {
+		return new_errno;
+	}
+	*sig = retval;
+	return 0;
 }
 
 __strong_alias(_close, close)
@@ -590,6 +632,7 @@ __strong_alias(_pread, pread)
 __strong_alias(_pwrite, pwrite)
 __strong_alias(_read, read)
 __strong_alias(_readv, readv)
+__strong_alias(_sigwait, sigwait)
 __strong_alias(_write, write)
 __strong_alias(_writev, writev)
 

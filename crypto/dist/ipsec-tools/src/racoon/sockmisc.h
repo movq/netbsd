@@ -1,4 +1,4 @@
-/*	$NetBSD: sockmisc.h,v 1.11 2009/07/03 06:41:47 tteras Exp $	*/
+/*	$NetBSD: sockmisc.h,v 1.13 2011/03/14 17:18:13 tteras Exp $	*/
 
 /* Id: sockmisc.h,v 1.9 2005/10/05 16:55:41 manubsd Exp */
 
@@ -57,8 +57,9 @@ struct netaddr {
 extern const int niflags;
 
 #define CMPSADDR_MATCH		0
-#define CMPSADDR_WOP_MATCH	1
-#define CMPSADDR_MISMATCH	2
+#define CMPSADDR_WILDPORT_MATCH	1
+#define CMPSADDR_WOP_MATCH	2
+#define CMPSADDR_MISMATCH	3
 
 extern int cmpsaddr __P((const struct sockaddr *, const struct sockaddr *));
 
@@ -88,7 +89,7 @@ extern char *naddrwop2str_fromto __P((const char *format, const struct netaddr *
 				      const struct netaddr *daddr));
 extern int naddr_score(const struct netaddr *naddr, const struct sockaddr *saddr);
 
-/* Some usefull functions for sockaddr port manipulations. */
+/* Some useful functions for sockaddr port manipulations. */
 extern u_int16_t extract_port __P((const struct sockaddr *addr));
 extern u_int16_t *set_port __P((struct sockaddr *addr, u_int16_t new_port));
 extern u_int16_t *get_port_ptr __P((struct sockaddr *addr));

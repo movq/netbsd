@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.13 2008/11/11 06:46:42 dyoung Exp $	*/
+/*	$NetBSD: machdep.c,v 1.16 2011/06/30 00:52:56 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,16 +32,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13 2008/11/11 06:46:42 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2011/06/30 00:52:56 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -50,26 +52,22 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13 2008/11/11 06:46:42 dyoung Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
+#include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/sysctl.h>
-
-#include <net/netisr.h>
-
 #include <machine/autoconf.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
+
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
 
 #include <powerpc/oea/bat.h>
-#include <arch/powerpc/pic/picvar.h>
-#include <arch/powerpc/include/pio.h>
+#include <powerpc/pic/picvar.h>
+#include <powerpc/include/pio.h>
+
 #include <dev/pci/pcivar.h>
 #include <dev/ic/ibm82660reg.h>
 
@@ -162,7 +160,7 @@ cpu_startup(void)
 	/*
 	 * Mapping PReP interrput vector register.
 	 */
-	prep_intr_reg = (vaddr_t) mapiodev(PREP_INTR_REG, PAGE_SIZE);
+	prep_intr_reg = (vaddr_t) mapiodev(PREP_INTR_REG, PAGE_SIZE, false);
 	if (!prep_intr_reg)
 		panic("startup: no room for interrupt register");
 	prep_intr_reg_off = INTR_VECTOR_REG;

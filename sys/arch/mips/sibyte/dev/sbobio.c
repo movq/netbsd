@@ -1,4 +1,4 @@
-/* $NetBSD: sbobio.c,v 1.17 2009/08/12 12:56:29 simonb Exp $ */
+/* $NetBSD: sbobio.c,v 1.22 2011/07/10 23:32:03 matt Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,13 +33,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbobio.c,v 1.17 2009/08/12 12:56:29 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbobio.c,v 1.22 2011/07/10 23:32:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <machine/locore.h>
+#include <mips/locore.h>
+
 #include <mips/sibyte/include/sb1250_int.h>
 #include <mips/sibyte/include/sb1250_regs.h>
 #include <mips/sibyte/include/sb1250_scd.h>
@@ -48,10 +49,10 @@ __KERNEL_RCSID(0, "$NetBSD: sbobio.c,v 1.17 2009/08/12 12:56:29 simonb Exp $");
 
 #include "locators.h"
 
-static int	sbobio_match(struct device *, struct cfdata *, void *);
-static void	sbobio_attach(struct device *, struct device *, void *);
+static int	sbobio_match(device_t, cfdata_t, void *);
+static void	sbobio_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(sbobio, sizeof(struct device),
+CFATTACH_DECL_NEW(sbobio, 0,
     sbobio_match, sbobio_attach, NULL, NULL);
 
 static int	sbobio_print(void *, const char *);
@@ -171,7 +172,7 @@ static const int sb112x_sbobio_dev_count =
     sizeof sb112x_sbobio_devs / sizeof sb112x_sbobio_devs[0];
 
 static int
-sbobio_match(struct device *parent, struct cfdata *match, void *aux)
+sbobio_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct zbbus_attach_args *zap = aux;
 	uint64_t sysrev;
@@ -179,7 +180,7 @@ sbobio_match(struct device *parent, struct cfdata *match, void *aux)
 	if (zap->za_locs.za_type != ZBBUS_ENTTYPE_OBIO)
 		return (0);
 
-	sysrev = mips3_ld((u_int64_t *)MIPS_PHYS_TO_KSEG1(A_SCD_SYSTEM_REVISION));
+	sysrev = mips3_ld((volatile uint64_t *)MIPS_PHYS_TO_KSEG1(A_SCD_SYSTEM_REVISION));
 	switch (SYS_SOC_TYPE(sysrev)) {
 	case K_SYS_SOC_TYPE_BCM1120:
 	case K_SYS_SOC_TYPE_BCM1125:
@@ -195,7 +196,7 @@ sbobio_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-sbobio_attach(struct device *parent, struct device *self, void *aux)
+sbobio_attach(device_t parent, device_t self, void *aux)
 {
 	struct sbobio_attach_args sa;
 	const char *dscr;
@@ -204,7 +205,7 @@ sbobio_attach(struct device *parent, struct device *self, void *aux)
 	int i, devcount;
 	int locs[SBOBIOCF_NLOCS];
 
-	sysrev = mips3_ld((u_int64_t *)MIPS_PHYS_TO_KSEG1(A_SCD_SYSTEM_REVISION));
+	sysrev = mips3_ld((volatile uint64_t *)MIPS_PHYS_TO_KSEG1(A_SCD_SYSTEM_REVISION));
 	switch (SYS_SOC_TYPE(sysrev)) {
 	case K_SYS_SOC_TYPE_BCM1120:
 	case K_SYS_SOC_TYPE_BCM1125:
@@ -230,13 +231,13 @@ sbobio_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	}
 
-	printf(": %s peripherals\n", dscr);
+	aprint_normal(": %s peripherals\n", dscr);
 
 	for (i = 0; i < devcount; i++) {
 		memset(&sa, 0, sizeof sa);
 		sa.sa_locs = devs[i];
 
-		locs[SBOBIOCF_ADDR] = devs[i].sa_addr;
+		locs[SBOBIOCF_OFFSET] = devs[i].sa_offset;
 		locs[SBOBIOCF_INTR + 0] = devs[i].sa_intr[0];
 		locs[SBOBIOCF_INTR + 1] = devs[i].sa_intr[1];
 
@@ -255,7 +256,7 @@ sbobio_print(void *aux, const char *pnp)
 	if (pnp)
 		aprint_normal("%s at %s",
 		    sbobio_device_type_name(sap->sa_locs.sa_type), pnp);
-	aprint_normal(" addr 0x%x", sap->sa_locs.sa_addr);
+	aprint_normal(" offset 0x%lx", sap->sa_locs.sa_offset);
 	for (i = 0; i < 2; i++) {
 		if (sap->sa_locs.sa_intr[i] != SBOBIOCF_INTR_DEFAULT)
 			aprint_normal("%s%d", i == 0 ? " intr " : ",",

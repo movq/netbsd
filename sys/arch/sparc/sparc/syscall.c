@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.21 2008/10/21 12:16:59 ad Exp $ */
+/*	$NetBSD: syscall.c,v 1.26 2012/02/11 23:16:16 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.21 2008/10/21 12:16:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.26 2012/02/11 23:16:16 martin Exp $");
 
 #include "opt_sparc_arch.h"
 #include "opt_multiprocessor.h"
@@ -108,8 +108,8 @@ void syscall_fancy(register_t, struct trapframe *, register_t);
 static inline int
 handle_new(struct trapframe *tf, register_t *code)
 {
-	int new = *code & (SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
-	*code &= ~(SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
+	int new = *code & (SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
+	*code &= ~(SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
 	return new;
 }
 
@@ -216,7 +216,7 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 	register_t i;
 	u_quad_t sticks;
 
-	uvmexp.syscalls++;	/* XXXSMP */
+	curcpu()->ci_data.cpu_nsyscall++;	/* XXXSMP */
 	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
@@ -249,8 +249,14 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 		tf->tf_out[0] = rval.o[0];
 		tf->tf_out[1] = rval.o[1];
 		if (new) {
-			/* jmp %g2 (or %g7, deprecated) on success */
-			i = tf->tf_global[new & SYSCALL_G2RFLAG ? 2 : 7];
+			/* jmp %g5, (or %g2 or %g7, deprecated) on success */
+			if (__predict_true((new & SYSCALL_G5RFLAG)
+						== SYSCALL_G5RFLAG))
+				i = tf->tf_global[5];
+			else if (new & SYSCALL_G2RFLAG)
+				i = tf->tf_global[2];
+			else
+				i = tf->tf_global[7];
 			if (i & 3) {
 				error = EINVAL;
 				goto bad;
@@ -297,7 +303,7 @@ syscall_fancy(register_t code, struct trapframe *tf, register_t pc)
 	register_t i;
 	u_quad_t sticks;
 
-	uvmexp.syscalls++;	/* XXXSMP */
+	curcpu()->ci_data.cpu_nsyscall++;	/* XXXSMP */
 	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
@@ -334,8 +340,14 @@ out:
 		tf->tf_out[0] = rval.o[0];
 		tf->tf_out[1] = rval.o[1];
 		if (new) {
-			/* jmp %g2 (or %g7, deprecated) on success */
-			i = tf->tf_global[new & SYSCALL_G2RFLAG ? 2 : 7];
+			/* jmp %g5, (or %g2 or %g7, deprecated) on success */
+			if (__predict_true((new & SYSCALL_G5RFLAG) ==
+					SYSCALL_G5RFLAG))
+				i = tf->tf_global[5];
+			else if (new & SYSCALL_G2RFLAG)
+				i = tf->tf_global[2];
+			else
+				i = tf->tf_global[7];
 			if (i & 3) {
 				error = EINVAL;
 				goto bad;
@@ -381,9 +393,20 @@ child_return(void *arg)
 	struct lwp *l = arg;
 
 	/*
-	 * Return values in the frame set by cpu_fork().
+	 * Return values in the frame set by cpu_lwp_fork().
 	 */
 	userret(l, l->l_md.md_tf->tf_pc, 0);
 	ktrsysret((l->l_proc->p_lflag & PL_PPWAIT) ? SYS_vfork : SYS_fork,
 	    0, 0);
 }
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l, l->l_md.md_tf->tf_pc, 0);
+}
+

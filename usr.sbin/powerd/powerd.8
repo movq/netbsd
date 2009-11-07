@@ -1,4 +1,4 @@
-.\"	$NetBSD: powerd.8,v 1.19 2009/05/04 19:11:49 wiz Exp $
+.\"	$NetBSD: powerd.8,v 1.24 2010/12/15 18:11:01 wiz Exp $
 .\"
 .\" Copyright (c) 2003 Wasabi Systems, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 22, 2007
+.Dd December 15, 2010
 .Dt POWERD 8
 .Os
 .Sh NAME
@@ -41,7 +41,7 @@
 .Nd power management daemon for sysmon
 .Sh SYNOPSIS
 .Nm
-.Op Fl d
+.Op Fl dn
 .Sh DESCRIPTION
 .Nm
 acts upon power management events posted by the kernel's power management
@@ -58,32 +58,22 @@ supports the following option:
 .Bl -tag -width xxxx
 .It Fl d
 Enable debugging mode.
-Verbose messages will be sent to stderr and
+Verbose messages and all messages intended for
+.Xr syslog 8
+will be sent to stderr, and
 .Nm
 will stay in the foreground of the controlling terminal.
+.It Fl n
+Prevent execution of power management scripts.
 .El
 .Sh CONFIGURATION SCRIPTS
-All of
+All configuration of
 .Nm
-configuration is encapsulated into scripts that are run when power
-management events occur.
-.Nm
-will look for these scripts in two locations.
-The first location is
-.Pa /etc/powerd/scripts/\*[Lt]power_type\*[Gt] ,
-where
-.Aq Pa power_type
-is defined by the power management mechanism supported by the system,
-e.g.,
-.Dq apm
-or
-.Dq acpi .
-If the script is not found in the first location,
-.Nm
-looks in
+is encapsulated into scripts that are run when power management events occur.
+The daemon will look for the scripts from the directory
 .Pa /etc/powerd/scripts .
 .Pp
-Configuration scripts are run synchronously, i.e.,
+Configuration scripts are run synchronously;
 .Nm
 will start the script and wait for its completion before it handles
 the next event.
@@ -95,31 +85,33 @@ These classes are described in the following sections.
 Power switch scripts are called when a state change event occurs on
 a power switch device.
 Power switch scripts are called with two arguments: the device with which
-the device is associated, and the event type.
+the event is associated, and the event type.
 .Pp
 The following power switch script names are defined:
-.Bl -tag -width "power_button"
-.It power_button
+.Bl -tag -width "hotkey_button"
+.It Em power_button
 This script is called when an event occurs on a power button device.
-.It reset_button
+.It Em reset_button
 This script is called when an event occurs on a reset button device.
-.It sleep_button
+.It Em sleep_button
 This script is called when an event occurs on a sleep button device.
-.It lid_switch
+.It Em lid_switch
 This script is called when an event occurs on a lid switch device.
-.It acadapter
+.It Em acadapter
 This script is called when an online or offline event occurs on an
 AC adapter device.
-.It hotkey_button
+.It Em hotkey_button
 This script is called when an event occurs on a hotkey button device.
 .El
 .Pp
 The following events are defined for power switch devices:
-.Bl -tag -width "released"
-.It pressed
-The button was pressed, the lid closed, or the AC adapter connected.
-.It released
-The button was released, the lid opened, or the AC adapter disconnected.
+.Bl -tag -width "hotkey_button"
+.It Em pressed
+The button was pressed, the lid was closed,
+or the AC adapter was connected.
+.It Em released
+The button was released, the lid was opened,
+or the AC adapter was disconnected.
 Note that power and sleep button devices usually do not
 post this type of event.
 .El
@@ -127,13 +119,13 @@ post this type of event.
 The following is an example of how a power button script might be invoked
 when a power button is pressed by the operator:
 .Bd -literal -offset indent
-/etc/powerd/scripts/power_button acpi0 pressed
+/etc/powerd/scripts/power_button acpibut0 pressed
 .Ed
 .Ss ENVSYS SCRIPTS
 .Xr envsys 4
 scripts are called when a condition was triggered in a sensor.
 These scripts are called with three arguments: the
-device associated, the event type and sensor's name.
+device associated, the event type, and the sensor's name.
 The
 .Sy sensor_drive
 and the
@@ -142,64 +134,62 @@ scripts uses a fourth argument: state description.
 .Pp
 The following envsys script names are defined:
 .Bl -tag -width "sensor_temperature"
-.It sensor_battery
+.It Em sensor_battery
 This script is called when an event occurs on a battery sensor
 (Wh/Ah/Battery state).
-.It sensor_drive
+.It Em sensor_drive
 This script is called when an event occurs on a drive sensor.
-.It sensor_fan
+.It Em sensor_fan
 This script is called when an event occurs on a fan sensor.
-.It sensor_indicator
+.It Em sensor_indicator
 This script is called when an event ocurrs on a indicator/integer sensor.
-.It sensor_power
+.It Em sensor_power
 This script is called when an event occurs on a power sensor (W/Ampere).
-.It sensor_resistance
+.It Em sensor_resistance
 This script is called when an event occurs on a resistance sensor (Ohm).
-.It sensor_temperature
+.It Em sensor_temperature
 This script is called when an event occurs on a temperature sensor.
-.It sensor_voltage
+.It Em sensor_voltage
 This script is called when an event occurs on a voltage sensor.
 .El
 .Pp
-The following event is defined for all scripts but is only sent if
-a critical/warning or any other event was previously sent:
+The following events are defined for fan, indicator, power,
+resistance, temperature, and voltage sensors:
 .Bl -tag -width "sensor_temperature"
-.It normal
-A normal state/capacity/condition was triggered.
+.It Em critical
+A critical condition was triggered.
+.It Em critical-under
+A critical under condition was triggered.
+.It Em critical-over
+A critical over condition was triggered.
+.It Em warning-under
+A warning under condition was triggered.
+.It Em warning-over
+A warning over condition was triggered.
 .El
 .Pp
-The following events are defined for fan, indicator, power,
-resistance, temperature and voltage sensors:
+The following event is defined for all scripts, but it is only sent if
+any of the previous events has been previously sent:
 .Bl -tag -width "sensor_temperature"
-.It critical
-A critical condition was triggered.
-.It critical-under
-A critical under condition was triggered.
-.It critical-over
-A critical over condition was triggered.
-.It warning-under
-A warning under condition was triggered.
-.It warning-over
-A warning over condition was triggered.
+.It Em normal
+A normal state/capacity/condition was triggered.
 .El
 .Pp
 The following events are defined only for battery sensors:
 .Bl -tag -width "sensor_temperature"
-.It user-capacity
+.It Em user-capacity
 Capacity dropped below the limit set by the user.
-.It low-power
-System is running in low power, that means that there is not
-any AC Adapter connected and all batteries are in critical or
-low capacity.
-When this event is received there's no much time so you should only
-suspend or shutdown the system.
+.It Em low-power
+System is running in low power.
+This implies that the AC adapter is disconnected and
+all batteries are in critical or low capacity.
 The script shutdowns the system gracefully by default.
 .El
 .Pp
 The following events are defined for drive and battery sensors:
 .Bl -tag -width "sensor_temperature"
-.It state-changed
-The state on the sensor has been changed and it's not in normal state.
+.It Em state-changed
+The state of the sensor has been changed and it is not in the normal state.
 .El
 .Pp
 The following is an example of how a temperature sensor script might be

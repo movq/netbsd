@@ -1,4 +1,4 @@
-/*	$NetBSD: clean_exit.c,v 1.4 1999/07/03 12:30:40 simonb Exp $	*/
+/*	$NetBSD: clean_exit.c,v 1.4.66.2 2012/04/23 23:40:41 riz Exp $	*/
 
  /*
   * clean_exit() cleans up and terminates the program. It should be called
@@ -15,7 +15,7 @@
 #if 0
 static char sccsid[] = "@(#) clean_exit.c 1.4 94/12/28 17:42:19";
 #else
-__RCSID("$NetBSD: clean_exit.c,v 1.4 1999/07/03 12:30:40 simonb Exp $");
+__RCSID("$NetBSD: clean_exit.c,v 1.4.66.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif
 

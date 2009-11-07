@@ -1,4 +1,4 @@
-/*	$NetBSD: jazzdmatlb.c,v 1.14 2006/03/01 12:38:10 yamt Exp $	*/
+/*	$NetBSD: jazzdmatlb.c,v 1.16 2012/01/27 18:52:50 para Exp $	*/
 /*	$OpenBSD: dma.c,v 1.5 1998/03/01 16:49:57 niklas Exp $	*/
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jazzdmatlb.c,v 1.14 2006/03/01 12:38:10 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jazzdmatlb.c,v 1.16 2012/01/27 18:52:50 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: jazzdmatlb.c,v 1.14 2006/03/01 12:38:10 yamt Exp $")
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arc/jazz/jazzdmatlbreg.h>
 #include <arc/jazz/jazzdmatlbvar.h>
@@ -85,8 +85,7 @@ jazz_dmatlb_init(bus_space_tag_t iot, bus_addr_t ioaddr)
 	mips_dcache_wbinv_all();/* Make sure no map entries are cached */
 	memset((char *)dma_tlb, 0, JAZZ_DMATLB_SIZE);
 
-	dmatlbmap = extent_create("dmatlb", 0, NDMATLB, M_DEVBUF, NULL, 0,
-	    EX_NOWAIT);
+	dmatlbmap = extent_create("dmatlb", 0, NDMATLB, NULL, 0, EX_NOWAIT);
 	if (dmatlbmap == NULL)
 		panic("jazz_dmatlb_init: cannot create extent map");
 

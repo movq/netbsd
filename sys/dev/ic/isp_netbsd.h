@@ -1,4 +1,4 @@
-/* $NetBSD: isp_netbsd.h,v 1.68 2009/09/07 13:39:19 tsutsui Exp $ */
+/* $NetBSD: isp_netbsd.h,v 1.74 2011/07/17 20:54:51 joerg Exp $ */
 /*
  * NetBSD Specific definitions for the Qlogic ISP Host Adapter
  */
@@ -44,7 +44,6 @@
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kthread.h>
 
 #include <sys/bus.h>
@@ -55,8 +54,6 @@
 
 #include <dev/scsipi/scsi_message.h>
 #include <dev/scsipi/scsipi_debug.h>
-
-#include <machine/stdarg.h>
 
 #include "opt_isp.h"
 
@@ -79,7 +76,8 @@ struct isposinfo {
 	bus_dma_tag_t		dmatag;
 	bus_dmamap_t		rqdmap;
 	bus_dmamap_t		rsdmap;
-	bus_dmamap_t		scdmap;	/* FC only */
+	bus_dmamap_t		scdmap;		/* FC only */
+	uint64_t 		wwns[256];	/* FC only */
 	int			splsaved;
 	int			mboxwaiting;
 	uint32_t		islocked;
@@ -129,6 +127,7 @@ struct isposinfo {
 	if (!ISP_MUSTPOLL(isp))		\
 		ISP_LOCK(isp)
 
+#define	ISP_MIN	imin
 #define	ISP_INLINE
 
 #define	NANOTIME_T		struct timeval
@@ -139,7 +138,7 @@ struct isposinfo {
 #define	MAXISPREQUEST(isp)	256
 
 
-#define	MEMORYBARRIER(isp, type, offset, size)			\
+#define	MEMORYBARRIER(isp, type, offset, size, c)		\
 switch (type) {							\
 case SYNC_REQUEST:						\
 {								\
@@ -231,7 +230,9 @@ default:							\
 #define	XS_STSP(xs)		(&(xs)->status)
 #define	XS_SNSP(xs)		(&(xs)->sense.scsi_sense)
 #define	XS_SNSLEN(xs)		(sizeof (xs)->sense)
-#define	XS_SNSKEY(xs)		((xs)->sense.scsi_sense.flags)
+#define	XS_SNSKEY(xs)		SSD_SENSE_KEY((xs)->sense.scsi_sense.flags)
+#define	XS_SNSASC(xs)		((xs)->sense.scsi_sense.asc)
+#define	XS_SNSASCQ(xs)		((xs)->sense.scsi_sense.ascq)
 /* PORTING NOTES: check to see if there's a better way of checking for tagged */
 #define	XS_TAG_P(ccb)		(((xs)->xs_control & XS_CTL_POLL) != 0)
 /* PORTING NOTES: We elimited OTAG option for performance */
@@ -260,6 +261,8 @@ default:							\
 	}							\
 	memcpy(&(xs)->sense, ptr, imin(XS_SNSLEN(xs), len))
 
+#define	XS_SENSE_VALID(xs)		(xs)->error == XS_SENSE
+
 #define	DEFAULT_FRAMESIZE(isp)		(isp)->isp_osinfo.framesize
 #define	DEFAULT_EXEC_THROTTLE(isp)	(isp)->isp_osinfo.exec_throttle
 #define	GET_DEFAULT_ROLE(isp, chan)	ISP_ROLE_INITIATOR
@@ -269,11 +272,13 @@ default:							\
 #define	DEFAULT_NODEWWN(isp, chan)	(isp)->isp_osinfo.wwn
 #define	DEFAULT_PORTWWN(isp, chan)	(isp)->isp_osinfo.wwn
 #define	ACTIVE_NODEWWN(isp, chan)				\
-	(isp)->isp_osinfo.wwn? (isp)->isp_osinfo.wwn :	\
-	FCPARAM(isp, chan)->isp_wwnn_nvram
+	((isp)->isp_osinfo.wwn? (isp)->isp_osinfo.wwn :	\
+	(FCPARAM(isp, chan)->isp_wwnn_nvram?		\
+	 FCPARAM(isp, chan)->isp_wwnn_nvram : 0x400000007F000008ull))
 #define	ACTIVE_PORTWWN(isp, chan)				\
-	(isp)->isp_osinfo.wwn? (isp)->isp_osinfo.wwn :	\
-	FCPARAM(isp, chan)->isp_wwpn_nvram
+	((isp)->isp_osinfo.wwn? (isp)->isp_osinfo.wwn :	\
+	(FCPARAM(isp, chan)->isp_wwpn_nvram?		\
+	 FCPARAM(isp, chan)->isp_wwpn_nvram : 0x400000007F000008ull))
 
 #if	_BYTE_ORDER == _BIG_ENDIAN
 #ifdef	ISP_SBUS_SUPPORTED
@@ -390,6 +395,7 @@ void isp_uninit(ispsoftc_t *);
  * Platform Library Functionw
  */
 void isp_prt(ispsoftc_t *, int level, const char *, ...);
+void isp_xs_prt(ispsoftc_t *, XS_T *, int level, const char *, ...);
 void isp_lock(ispsoftc_t *);
 void isp_unlock(ispsoftc_t *);
 uint64_t isp_microtime_sub(struct timeval *, struct timeval *);

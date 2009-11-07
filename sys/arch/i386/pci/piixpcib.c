@@ -1,4 +1,4 @@
-/* $NetBSD: piixpcib.c,v 1.16 2008/07/20 16:52:33 martin Exp $ */
+/* $NetBSD: piixpcib.c,v 1.21 2011/07/01 17:37:27 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2004, 2006 The NetBSD Foundation, Inc.
@@ -36,14 +36,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixpcib.c,v 1.16 2008/07/20 16:52:33 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixpcib.c,v 1.21 2011/07/01 17:37:27 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/sysctl.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/frame.h>
 #include <machine/bioscall.h>
@@ -79,11 +79,11 @@ struct piixpcib_softc {
 static int piixpcibmatch(device_t, cfdata_t, void *);
 static void piixpcibattach(device_t, device_t, void *);
 
-static bool piixpcib_suspend(device_t PMF_FN_PROTO);
-static bool piixpcib_resume(device_t PMF_FN_PROTO);
+static bool piixpcib_suspend(device_t, const pmf_qual_t *);
+static bool piixpcib_resume(device_t, const pmf_qual_t *);
 
 static void speedstep_configure(struct piixpcib_softc *,
-				struct pci_attach_args *);
+				const struct pci_attach_args *);
 static int speedstep_sysctl_helper(SYSCTLFN_ARGS);
 
 static struct piixpcib_softc *speedstep_cookie;	/* XXX */
@@ -144,7 +144,7 @@ piixpcibattach(device_t parent, device_t self, void *aux)
 }
 
 static bool
-piixpcib_suspend(device_t dv PMF_FN_ARGS)
+piixpcib_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct piixpcib_softc *sc = device_private(dv);
 
@@ -160,7 +160,7 @@ piixpcib_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-piixpcib_resume(device_t dv PMF_FN_ARGS)
+piixpcib_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct piixpcib_softc *sc = device_private(dv);
 
@@ -214,7 +214,7 @@ static int
 piixpcib_set_ownership(struct piixpcib_softc *sc)
 {
 	int rv;
-	paddr_t pmagic;
+	u_long pmagic;
 	static char magic[] = "Copyright (c) 1999 Intel Corporation";
 
 	pmagic = vtophys((vaddr_t)magic);
@@ -322,7 +322,7 @@ piixpcib_set(struct piixpcib_softc *sc, int state)
 
 static void
 speedstep_configure(struct piixpcib_softc *sc,
-    struct pci_attach_args *pa)
+    const struct pci_attach_args *pa)
 {
 	const struct sysctlnode	*node, *ssnode;
 	int sig, smicmd, cmd, smidata, flags;

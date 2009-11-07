@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eon.c,v 1.69 2008/11/07 00:20:18 dyoung Exp $	*/
+/*	$NetBSD: if_eon.c,v 1.71 2011/07/17 20:54:54 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -67,7 +67,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.69 2008/11/07 00:20:18 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.71 2011/07/17 20:54:54 joerg Exp $");
 
 #include "opt_eon.h"
 
@@ -106,8 +106,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.69 2008/11/07 00:20:18 dyoung Exp $");
 #include <netiso/argo_debug.h>
 #include <netiso/iso_errno.h>
 #include <netiso/eonvar.h>
-
-#include <machine/stdarg.h>
 
 #define EOK 0
 
@@ -191,8 +189,6 @@ eonioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCINITIFADDR:
-		if (ifa == NULL)
-			break;
 		ifp->if_flags |= IFF_UP;
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			ifa->ifa_rtrequest = eonrtrequest;

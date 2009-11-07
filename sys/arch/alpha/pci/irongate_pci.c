@@ -1,4 +1,4 @@
-/* $NetBSD: irongate_pci.c,v 1.6 2009/03/14 14:45:53 dsl Exp $ */
+/* $NetBSD: irongate_pci.c,v 1.9 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,21 +36,19 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: irongate_pci.c,v 1.6 2009/03/14 14:45:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irongate_pci.c,v 1.9 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/irongatereg.h>
 #include <alpha/pci/irongatevar.h>
 
-void		irongate_attach_hook(struct device *, struct device *,
+void		irongate_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		irongate_bus_maxdevs(void *, int);
 pcitag_t	irongate_make_tag(void *, int, int, int);
@@ -66,7 +64,7 @@ void		irongate_conf_write(void *, pcitag_t, int, pcireg_t);
 #define	PCI_CONF_ADDR	(IRONGATE_IO_BASE|IRONGATE_CONFADDR)
 #define	PCI_CONF_DATA	(IRONGATE_IO_BASE|IRONGATE_CONFDATA)
 
-#define	REGVAL(r)	(*(volatile u_int32_t *)ALPHA_PHYS_TO_K0SEG(r))
+#define	REGVAL(r)	(*(volatile uint32_t *)ALPHA_PHYS_TO_K0SEG(r))
 
 void
 irongate_pci_init(pci_chipset_tag_t pc, void *v)
@@ -82,7 +80,7 @@ irongate_pci_init(pci_chipset_tag_t pc, void *v)
 }
 
 void
-irongate_attach_hook(struct device *parent, struct device *self,
+irongate_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_machdep.c,v 1.217 2009/08/09 22:22:51 matt Exp $	*/
+/*	$NetBSD: mips_machdep.c,v 1.252 2012/02/11 23:16:15 martin Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -112,42 +112,53 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.217 2009/08/09 22:22:51 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.252 2012/02/11 23:16:15 martin Exp $");
 
+#define __INTR_PRIVATE
 #include "opt_cputype.h"
+#include "opt_compat_netbsd32.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/intr.h>
 #include <sys/exec.h>
 #include <sys/reboot.h>
 #include <sys/mount.h>			/* fsid_t for syscallargs */
 #include <sys/lwp.h>
 #include <sys/sysctl.h>
-#include <sys/user.h>
 #include <sys/msgbuf.h>
 #include <sys/conf.h>
 #include <sys/core.h>
 #include <sys/device.h>
 #include <sys/kcore.h>
-#include <sys/pool.h>
+#include <sys/kmem.h>
 #include <sys/ras.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
 #include <sys/cpu.h>
+#include <sys/atomic.h>
 #include <sys/ucontext.h>
+#include <sys/bitops.h>
 
-#include <machine/kcore.h>
-#include <machine/cpu.h>
+#include <mips/kcore.h>
 
-#include <uvm/uvm_extern.h>
+#ifdef COMPAT_NETBSD32
+#include <compat/netbsd32/netbsd32.h>
+#endif
+
+#include <uvm/uvm.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
+#include <mips/pcb.h>
 #include <mips/cache.h>
 #include <mips/frame.h>
 #include <mips/regnum.h>
+#include <mips/mips_opcode.h>
 
+#include <mips/cpu.h>
 #include <mips/locore.h>
 #include <mips/psl.h>
 #include <mips/pte.h>
@@ -157,8 +168,20 @@ __KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.217 2009/08/09 22:22:51 matt Exp 
 #include <machine/bootinfo.h>
 #endif
 
-#if defined(MIPS32) || defined(MIPS64)
+#if (MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0
 #include <mips/mipsNN.h>		/* MIPS32/MIPS64 registers */
+
+#define	_MKINSN(a,b,c,d,e) ((uint32_t)(((a) << 26)|((b) << 21)|((c) << 16)|((d) << 11)|(e)))
+
+#ifdef _LP64
+#define	_LOAD_V0_L_PRIVATE_A0	_MKINSN(OP_LD, _R_A0, _R_V0, 0, offsetof(lwp_t, l_private))
+#define	_MTC0_V0_USERLOCAL	_MKINSN(OP_COP0, OP_DMT, _R_V0, MIPS_COP_0_TLB_CONTEXT, 2)
+#else
+#define	_LOAD_V0_L_PRIVATE_A0	_MKINSN(OP_LW, _R_A0, _R_V0, 0, offsetof(lwp_t, l_private))
+#define	_MTC0_V0_USERLOCAL	_MKINSN(OP_COP0, OP_MT, _R_V0, MIPS_COP_0_TLB_CONTEXT, 2)
+#endif
+#define	JR_RA			_MKINSN(OP_SPECIAL, _R_RA, 0, 0, OP_JR)
+
 #endif
 
 /* Internal routines. */
@@ -166,46 +189,88 @@ int	cpu_dumpsize(void);
 u_long	cpu_dump_mempagecnt(void);
 int	cpu_dump(void);
 
+#if (MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0
+static void mips_watchpoint_init(void);
+#endif
+
+#if defined(_LP64) && defined(ENABLE_MIPS_16KB_PAGE)
+vaddr_t mips_vm_maxuser_address = MIPS_VM_MAXUSER_ADDRESS;
+#endif
+
+#if defined(MIPS3_PLUS)
+uint32_t mips3_cp0_tlb_page_mask_probe(void);
+uint64_t mips3_cp0_tlb_entry_hi_probe(void);
+uint64_t mips3_cp0_tlb_entry_lo_probe(void);
+
+static void mips3_tlb_probe(void);
+#endif
+
+/*
+ * safepri is a safe priority for sleepq to set for a spin-wait during
+ * autoconfiguration or after a panic which will allows interrupts to
+ * be delivered.  Used as an argument to splx().
+ */
+int safepri = IPL_SOFTSERIAL;
+
 #if defined(MIPS1)
-static void	mips1_vector_init(void);
-extern long	*mips1_locoresw[];
+static void	mips1_vector_init(const struct splsw *);
+extern const struct locoresw mips1_locoresw;
+extern const mips_locore_jumpvec_t mips1_locore_vec;
 #endif
 
 #if defined(MIPS3)
-#if defined(MIPS3_5900)
-static void	r5900_vector_init(void);
-extern long	*mips5900_locoresw[];
-#else
-static void	mips3_vector_init(void);
-extern long	*mips3_locoresw[];
+static void	mips3_vector_init(const struct splsw *);
+extern const struct locoresw mips3_locoresw;
+extern const mips_locore_jumpvec_t mips3_locore_vec;
 #endif
+
+#if defined(MIPS3_LOONGSON2)
+static void	loongson2_vector_init(const struct splsw *);
+extern const struct locoresw loongson2_locoresw;
+extern const mips_locore_jumpvec_t loongson2_locore_vec;
 #endif
 
 #if defined(MIPS32)
-static void	mips32_vector_init(void);
-extern long	*mips32_locoresw[];
+static void	mips32_vector_init(const struct splsw *);
+extern const struct locoresw mips32_locoresw;
+extern const mips_locore_jumpvec_t mips32_locore_vec;
+#endif
+
+#if defined(MIPS32R2)
+static void	mips32r2_vector_init(const struct splsw *);
+extern const struct locoresw mips32r2_locoresw;
+extern const mips_locore_jumpvec_t mips32r2_locore_vec;
 #endif
 
 #if defined(MIPS64)
-static void	mips64_vector_init(void);
-extern long	*mips64_locoresw[];
+static void	mips64_vector_init(const struct splsw *);
+extern const struct locoresw mips64_locoresw;
+extern const mips_locore_jumpvec_t mips64_locore_vec;
+#endif
+
+#if defined(MIPS64R2)
+static void	mips64r2_vector_init(const struct splsw *);
+extern const struct locoresw mips64r2_locoresw;
+extern const mips_locore_jumpvec_t mips64r2_locore_vec;
+#endif
+
+#if defined(PARANOIA)
+void std_splsw_test(void);
 #endif
 
 mips_locore_jumpvec_t mips_locore_jumpvec;
 
-long *mips_locoresw[4];
+struct locoresw mips_locoresw;
 
-int cpu_arch;
-int cpu_mhz;
-int mips_num_tlb_entries;
-int mips_cpu_flags;
-int mips_has_llsc;
-int mips_has_r4k_mmu;
-int mips3_pg_cached;
-u_int mips3_pg_shift;
+extern const struct splsw std_splsw;
+struct splsw mips_splsw;
+
+struct mips_options mips_options = {
+	.mips_cpu_id = 0xffffffff,
+	.mips_fpu_id = 0xffffffff,
+};
 
 struct	user *proc0paddr;
-struct	segtab *segbase;
 
 void *	msgbufaddr;
 
@@ -214,16 +279,6 @@ char	machine[] = MACHINE;		/* from <machine/param.h> */
 char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 char	cpu_model[128];
 
-struct pridtab {
-	int	cpu_cid;
-	int	cpu_pid;
-	int	cpu_rev;	/* -1 == wildcard */
-	int	cpu_copts;	/* -1 == wildcard */
-	int	cpu_isa;	/* -1 == probed (mips32/mips64) */
-	int	cpu_ntlb;	/* -1 == unknown, 0 == probed */
-	int	cpu_flags;
-	const char	*cpu_name;
-};
 
 /*
  * Assumptions:
@@ -239,19 +294,17 @@ struct pridtab {
 #define	MIPS32_FLAGS	CPU_MIPS_R4K_MMU | CPU_MIPS_CAUSE_IV | CPU_MIPS_USE_WAIT
 #define	MIPS64_FLAGS	MIPS32_FLAGS	/* same as MIPS32 flags (for now) */
 
-static const struct pridtab *mycpu;
-
 static const struct pridtab cputab[] = {
 	{ 0, MIPS_R2000, -1, -1,		CPU_ARCH_MIPS1, 64,
-	  CPU_MIPS_NO_LLSC,			"MIPS R2000 CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"MIPS R2000 CPU"	},
 	{ 0, MIPS_R3000, MIPS_REV_R2000A, -1,	CPU_ARCH_MIPS1, 64,
-	  CPU_MIPS_NO_LLSC,			"MIPS R2000A CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"MIPS R2000A CPU"	},
 	{ 0, MIPS_R3000, MIPS_REV_R3000, -1,	CPU_ARCH_MIPS1, 64,
-	  CPU_MIPS_NO_LLSC,			"MIPS R3000 CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"MIPS R3000 CPU"	},
 	{ 0, MIPS_R3000, MIPS_REV_R3000A, -1,	CPU_ARCH_MIPS1, 64,
-	  CPU_MIPS_NO_LLSC,			"MIPS R3000A CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"MIPS R3000A CPU"	},
 	{ 0, MIPS_R6000, -1, -1,		CPU_ARCH_MIPS2, 32,
-	  MIPS_NOT_SUPP,			"MIPS R6000 CPU"	},
+	  MIPS_NOT_SUPP, 0, 0,			"MIPS R6000 CPU"	},
 
 	/*
 	 * rev 0x00, 0x22 and 0x30 are R4000, 0x40, 0x50 and 0x60 are R4400.
@@ -259,52 +312,55 @@ static const struct pridtab cputab[] = {
 	 * 0x40 - 0xff for R4400?
 	 */
 	{ 0, MIPS_R4000, MIPS_REV_R4000_A, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R4000 CPU"	},
 	{ 0, MIPS_R4000, MIPS_REV_R4000_B, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R4000 CPU"	},
 	{ 0, MIPS_R4000, MIPS_REV_R4000_C, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R4000 CPU"	},
 	{ 0, MIPS_R4000, MIPS_REV_R4400_A, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R4400 CPU"	},
 	{ 0, MIPS_R4000, MIPS_REV_R4400_B, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R4400 CPU"	},
 	{ 0, MIPS_R4000, MIPS_REV_R4400_C, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R4400 CPU"	},
 
 	{ 0, MIPS_R3LSI, -1, -1,		CPU_ARCH_MIPS1, -1,
-	  MIPS_NOT_SUPP,			"LSI Logic R3000 derivative" },
+	  MIPS_NOT_SUPP, 0, 0,			"LSI Logic R3000 derivative" },
 	{ 0, MIPS_R6000A, -1, -1,		CPU_ARCH_MIPS2, 32,
-	  MIPS_NOT_SUPP,			"MIPS R6000A CPU"	},
+	  MIPS_NOT_SUPP, 0, 0,			"MIPS R6000A CPU"	},
 	{ 0, MIPS_R3IDT, -1, -1,		CPU_ARCH_MIPS1, -1,
-	  MIPS_NOT_SUPP,			"IDT R3041 or RC36100 CPU" },
+	  MIPS_NOT_SUPP, 0, 0,			"IDT R3041 or RC36100 CPU" },
 	{ 0, MIPS_R4100, -1, -1,		CPU_ARCH_MIPS3, 32,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_NO_LLSC,	"NEC VR4100 CPU"	},
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_NO_LLSC, 0, 0,
+						"NEC VR4100 CPU"	},
 	{ 0, MIPS_R4200, -1, -1,		CPU_ARCH_MIPS3, -1,
-	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU,	"NEC VR4200 CPU"	},
+	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU, 0, 0,
+						"NEC VR4200 CPU"	},
 	{ 0, MIPS_R4300, -1, -1,		CPU_ARCH_MIPS3, 32,
-	  CPU_MIPS_R4K_MMU,			"NEC VR4300 CPU"	},
+	  CPU_MIPS_R4K_MMU, 0, 0,		"NEC VR4300 CPU"	},
 	{ 0, MIPS_R4600, -1, -1,		CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,			
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"QED R4600 Orion CPU"	},
 	{ 0, MIPS_R4700, -1, -1,		CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU,			"QED R4700 Orion CPU"	},
+	  CPU_MIPS_R4K_MMU, 0, 0,		"QED R4700 Orion CPU"	},
 
 	{ 0, MIPS_R8000, -1, -1,		CPU_ARCH_MIPS4, 384,
-	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU,	"MIPS R8000 Blackbird/TFP CPU" },
+	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU, 0, 0,
+					 "MIPS R8000 Blackbird/TFP CPU" },
 	{ 0, MIPS_R10000, -1, -1,		CPU_ARCH_MIPS4, 64,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R10000 CPU"	},
 	{ 0, MIPS_R12000, -1, -1,		CPU_ARCH_MIPS4, 64,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R12000 CPU"	},
 	{ 0, MIPS_R14000, -1, -1,		CPU_ARCH_MIPS4, 64,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"MIPS R14000 CPU"	},
 
 	/* XXX
@@ -315,19 +371,19 @@ static const struct pridtab cputab[] = {
 	 * the 4650...
 	 */
 	{ 0, MIPS_R4650, 0, -1,			CPU_ARCH_MIPS3, -1,
-	  MIPS_NOT_SUPP /* no MMU! */,		"QED R4650 CPU"	},
+	  MIPS_NOT_SUPP /* no MMU! */, 0, 0,	"QED R4650 CPU"	},
 	{ 0, MIPS_TX3900, MIPS_REV_TX3912, -1,	CPU_ARCH_MIPS1, 32,
-	  CPU_MIPS_NO_LLSC,			"Toshiba TX3912 CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"Toshiba TX3912 CPU"	},
 	{ 0, MIPS_TX3900, MIPS_REV_TX3922, -1,	CPU_ARCH_MIPS1, 64,
-	  CPU_MIPS_NO_LLSC,			"Toshiba TX3922 CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"Toshiba TX3922 CPU"	},
 	{ 0, MIPS_TX3900, MIPS_REV_TX3927, -1,	CPU_ARCH_MIPS1, 64,
-	  CPU_MIPS_NO_LLSC,			"Toshiba TX3927 CPU"	},
+	  CPU_MIPS_NO_LLSC, 0, 0,		"Toshiba TX3927 CPU"	},
 	{ 0, MIPS_R5000, -1, -1,		CPU_ARCH_MIPS4, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,			
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,			
 						"MIPS R5000 CPU"	},
 	{ 0, MIPS_RM5200, -1, -1,		CPU_ARCH_MIPS4, 48,
 	  CPU_MIPS_R4K_MMU | CPU_MIPS_CAUSE_IV | CPU_MIPS_DOUBLE_COUNT |
-	  CPU_MIPS_USE_WAIT,			"QED RM5200 CPU"	},
+	  CPU_MIPS_USE_WAIT, 0, 0,		"QED RM5200 CPU"	},
 
 	/* XXX
 	 * The rm7000 rev 2.0 can have 64 tlbs, and has 6 extra interrupts.  See
@@ -336,7 +392,7 @@ static const struct pridtab cputab[] = {
 	 */
 	{ 0, MIPS_RM7000, -1, -1,		CPU_ARCH_MIPS4, 48,
 	  MIPS_NOT_SUPP | CPU_MIPS_CAUSE_IV | CPU_MIPS_DOUBLE_COUNT |
-	  CPU_MIPS_USE_WAIT,			"QED RM7000 CPU"	},
+	  CPU_MIPS_USE_WAIT, 0, 0,		"QED RM7000 CPU"	},
 
 	/* 
 	 * IDT RC32300 core is a 32 bit MIPS2 processor with
@@ -349,20 +405,30 @@ static const struct pridtab cputab[] = {
 	 *
 	 */
 	{ 0, MIPS_RC32300, -1, -1,		CPU_ARCH_MIPS3, 16,
-	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU,	"IDT RC32300 CPU"	},
+	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU, 0, 0,
+						"IDT RC32300 CPU"	},
 	{ 0, MIPS_RC32364, -1, -1,		CPU_ARCH_MIPS3, 16,
-	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU,	"IDT RC32364 CPU"	},
+	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU, 0, 0,
+						"IDT RC32364 CPU"	},
 	{ 0, MIPS_RC64470, -1, -1,		CPU_ARCH_MIPSx, -1,
-	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU,	"IDT RC64474/RC64475 CPU" },
+	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU, 0, 0,
+						"IDT RC64474/RC64475 CPU" },
 
 	{ 0, MIPS_R5400, -1, -1,		CPU_ARCH_MIPSx, -1,
-	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU,	"NEC VR5400 CPU"	},
+	  MIPS_NOT_SUPP | CPU_MIPS_R4K_MMU, 0, 0,
+						"NEC VR5400 CPU"	},
 	{ 0, MIPS_R5900, -1, -1,		CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_NO_LLSC | CPU_MIPS_R4K_MMU,	"Toshiba R5900 CPU"	},
+	  CPU_MIPS_NO_LLSC | CPU_MIPS_R4K_MMU, 0, 0,
+						"Toshiba R5900 CPU"	},
 
 	{ 0, MIPS_TX4900, MIPS_REV_TX4927, -1,	CPU_ARCH_MIPS3, 48,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
 						"Toshiba TX4927 CPU"	},
+
+	{ 0, MIPS_TX4900, -1, -1,		CPU_ARCH_MIPS3, 48,
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT, 0, 0,
+						"Toshiba TX4900 CPU"	},
+
 	/* 
 	 * ICT Loongson2 is a MIPS64 CPU with a few quirks.  For some reason
 	 * the virtual aliases present with 4KB pages make the caches misbehave
@@ -376,82 +442,216 @@ static const struct pridtab cputab[] = {
 				(2 << CPU_MIPS_CACHED_CCA_SHIFT))
 #endif
 	{ 0, MIPS_LOONGSON2, MIPS_REV_LOONGSON2E, -1, CPU_ARCH_MIPS3, 64,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT | MIPS_LOONGSON2_CCA,
-						"ICT Loongson 2E CPU"	},
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT | CPU_MIPS_LOONGSON2
+	  | MIPS_LOONGSON2_CCA, 0, 0, "ICT Loongson 2E CPU"	},
 	{ 0, MIPS_LOONGSON2, MIPS_REV_LOONGSON2F, -1, CPU_ARCH_MIPS3, 64,
-	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT | MIPS_LOONGSON2_CCA,
-						"ICT Loongson 2F CPU"	},
+	  CPU_MIPS_R4K_MMU | CPU_MIPS_DOUBLE_COUNT | CPU_MIPS_LOONGSON2
+	  | MIPS_LOONGSON2_CCA, 0, 0, "ICT Loongson 2F CPU"	},
 
 #if 0 /* ID collisions : can we use a CU1 test or similar? */
 	{ 0, MIPS_R3SONY, -1, -1,		CPU_ARCH_MIPS1, -1,
-	  MIPS_NOT_SUPP,			"SONY R3000 derivative"	},	/* 0x21; crash R4700? */
+	  MIPS_NOT_SUPP, 0, 0,			"SONY R3000 derivative"	},	/* 0x21; crash R4700? */
 	{ 0, MIPS_R3NKK, -1, -1,		CPU_ARCH_MIPS1, -1,
-	  MIPS_NOT_SUPP,			"NKK R3000 derivative"	},	/* 0x23; crash R5000? */
+	  MIPS_NOT_SUPP, 0, 0,			"NKK R3000 derivative"	},	/* 0x23; crash R5000? */
 #endif
 
 	{ MIPS_PRID_CID_MTI, MIPS_4Kc, -1, -1,	-1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4Kc"			},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "4Kc"		},
 	{ MIPS_PRID_CID_MTI, MIPS_4KEc, -1, -1,	-1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4KEc"			},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "4KEc"		},
 	{ MIPS_PRID_CID_MTI, MIPS_4KEc_R2, -1, -1, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4KEc (Rev 2)"		},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "4KEc (Rev 2)"	},
 	{ MIPS_PRID_CID_MTI, MIPS_4KSc, -1, -1,	-1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4KSc"			},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "4KSc"		},
 	{ MIPS_PRID_CID_MTI, MIPS_5Kc, -1, -1,	-1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"5Kc"			},
+	  MIPS64_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "5Kc"		},
 	{ MIPS_PRID_CID_MTI, MIPS_20Kc, -1, -1,	-1, 0,
-	  MIPS64_FLAGS,				"20Kc"			},
+	  MIPS64_FLAGS,				0, 0, "20Kc"		},
 	{ MIPS_PRID_CID_MTI, MIPS_24K, -1, -1,	-1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"24K"			},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EBASE | MIPS_CP0FL_USERLOCAL | MIPS_CP0FL_HWRENA |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
+	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG7,
+	  0, "24K" },
 	{ MIPS_PRID_CID_MTI, MIPS_24KE, -1, -1,	-1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"24KE"			},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EBASE | MIPS_CP0FL_USERLOCAL | MIPS_CP0FL_HWRENA |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
+	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG7,
+	  0, "24KE" },
 	{ MIPS_PRID_CID_MTI, MIPS_34K, -1, -1,	-1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"34K"			},
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EBASE | MIPS_CP0FL_USERLOCAL | MIPS_CP0FL_HWRENA |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
+	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG7,
+	  0, "34K" },
 	{ MIPS_PRID_CID_MTI, MIPS_74K, -1, -1,	-1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"74K"			},
+	  CPU_MIPS_HAVE_SPECIAL_CCA | (0 << CPU_MIPS_CACHED_CCA_SHIFT) |
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EBASE | MIPS_CP0FL_USERLOCAL | MIPS_CP0FL_HWRENA |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
+	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG6 | MIPS_CP0FL_CONFIG7,
+	  0, "74K" },
+	{ MIPS_PRID_CID_MTI, MIPS_1004K, -1, -1,	-1, 0,
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EBASE | MIPS_CP0FL_USERLOCAL | MIPS_CP0FL_HWRENA |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
+	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG6 | MIPS_CP0FL_CONFIG7,
+	  0, "1004K" },
+
+	{ MIPS_PRID_CID_BROADCOM, MIPS_BCM3302, -1, -1, -1, 0,
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "BCM3302"	},
 
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV1, -1, MIPS_AU1000, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1000 (Rev 1 core)"	},
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1000, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1000 (Rev 2 core)" 	},
 
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV1, -1, MIPS_AU1100, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1100 (Rev 1 core)"	},
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1100, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1100 (Rev 2 core)" 	},
 
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV1, -1, MIPS_AU1500, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1500 (Rev 1 core)"	},
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1500, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1500 (Rev 2 core)" 	},
 
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1550, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT, 0, 0,
 						"Au1550 (Rev 2 core)" 	},
 
 	/* The SB-1 CPU uses a CCA of 5 - "Cacheable Coherent Shareable" */
 	{ MIPS_PRID_CID_SIBYTE, MIPS_SB1, -1,	-1, -1, 0,
 	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT |
-	  CPU_MIPS_HAVE_SPECIAL_CCA | (5 << CPU_MIPS_CACHED_CCA_SHIFT),
+	  CPU_MIPS_HAVE_SPECIAL_CCA | (5 << CPU_MIPS_CACHED_CCA_SHIFT), 0, 0,
 						"SB-1"			},
 
+	{ MIPS_PRID_CID_RMI, MIPS_XLR732B, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLR|MIPS_CIDFL_RMI_CPUS(8,4)|MIPS_CIDFL_RMI_L2(2MB),
+	  "XLR732B"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLR732C, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLR|MIPS_CIDFL_RMI_CPUS(8,4)|MIPS_CIDFL_RMI_L2(2MB),
+	  "XLR732C"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS616, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(4,4)|MIPS_CIDFL_RMI_L2(1MB),
+	  "XLS616"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS416, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(4,4)|MIPS_CIDFL_RMI_L2(1MB),
+	  "XLS416"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS408, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(2,4)|MIPS_CIDFL_RMI_L2(1MB),
+	  "XLS408"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS408LITE, -1, -1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(2,4)|MIPS_CIDFL_RMI_L2(1MB),
+	  "XLS408lite"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS404LITE, -1, -1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(1,4)|MIPS_CIDFL_RMI_L2(512KB),
+	  "XLS404lite"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS208, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(2,4)|MIPS_CIDFL_RMI_L2(512KB),
+	  "XLS208"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS204, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(1,4)|MIPS_CIDFL_RMI_L2(256KB),
+	  "XLS204"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS108, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(2,4)|MIPS_CIDFL_RMI_L2(512KB),
+	  "XLS108"		},
+
+	{ MIPS_PRID_CID_RMI, MIPS_XLS104, -1,	-1, -1, 0,
+	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR |
+	  CPU_MIPS_I_D_CACHE_COHERENT | CPU_MIPS_HAVE_MxCR,
+	  MIPS_CP0FL_USE |
+	  MIPS_CP0FL_EIRR | MIPS_CP0FL_EIMR | MIPS_CP0FL_EBASE |
+	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG7,
+	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(1,4)|MIPS_CIDFL_RMI_L2(256KB),
+	  "XLS104"		},
+
+	/* Microsoft Research' extensible MIPS */
+	{ MIPS_PRID_CID_MICROSOFT, MIPS_eMIPS, 1, -1, CPU_ARCH_MIPS1, 64,
+	  CPU_MIPS_NO_WAIT, 0, 0,		"eMIPS CPU"		},
+
 	{ 0, 0, 0,				0, 0, 0,
-	  0,					NULL			}
+	  0, 0, 0,				NULL			}
 };
 
 static const struct pridtab fputab[] = {
-	{ 0, MIPS_SOFT,	  -1, 0, 0, 0, 0, "software emulated floating point" },
-	{ 0, MIPS_R2360,  -1, 0, 0, 0, 0, "MIPS R2360 Floating Point Board" },
-	{ 0, MIPS_R2010,  -1, 0, 0, 0, 0, "MIPS R2010 FPC" },
-	{ 0, MIPS_R3010,  -1, 0, 0, 0, 0, "MIPS R3010 FPC" },
-	{ 0, MIPS_R6010,  -1, 0, 0, 0, 0, "MIPS R6010 FPC" },
-	{ 0, MIPS_R4010,  -1, 0, 0, 0, 0, "MIPS R4010 FPC" },
+    { 0, MIPS_SOFT,  -1, 0, 0, 0, 0, 0, 0, "software emulated floating point" },
+    { 0, MIPS_R2360, -1, 0, 0, 0, 0, 0, 0, "MIPS R2360 Floating Point Board" },
+    { 0, MIPS_R2010, -1, 0, 0, 0, 0, 0, 0, "MIPS R2010 FPC" },
+    { 0, MIPS_R3010, -1, 0, 0, 0, 0, 0, 0, "MIPS R3010 FPC" },
+    { 0, MIPS_R6010, -1, 0, 0, 0, 0, 0, 0, "MIPS R6010 FPC" },
+    { 0, MIPS_R4010, -1, 0, 0, 0, 0, 0, 0, "MIPS R4010 FPC" },
 };
 
 /*
@@ -465,46 +665,41 @@ static const char * const cidnames[] = {
 	"Alchemy",	/* or "Alchemy Semiconductor"	*/
 	"SiByte",	/* or "Broadcom Corp. (SiByte)"	*/
 	"SandCraft",
+	"Phillips",
+	"Toshiba or Microsoft",
+	"LSI",
+	"(unannounced)",
+	"(unannounced)",
+	"Lexra",
+	"RMI",
 };
-#define	ncidnames (sizeof(cidnames) / sizeof(cidnames[0]))
+#define	ncidnames __arraycount(cidnames)
 
 #if defined(MIPS1)
 /*
  * MIPS-I locore function vector
  */
-static const mips_locore_jumpvec_t mips1_locore_vec =
-{
-	mips1_SetPID,
-	mips1_TBIAP,
-	mips1_TBIS,
-	mips1_TLBUpdate,
-	mips1_wbflush,
-};
 
 static void
-mips1_vector_init(void)
+mips1_vector_init(const struct splsw *splsw)
 {
-	extern char mips1_UTLBMiss[], mips1_UTLBMissEnd[];
-	extern char mips1_exception[], mips1_exceptionEnd[];
+	extern char mips1_utlb_miss[], mips1_utlb_miss_end[];
+	extern char mips1_exception[], mips1_exception_end[];
 
 	/*
 	 * Copy down exception vector code.
 	 */
-	if (mips1_UTLBMissEnd - mips1_UTLBMiss > 0x80)
+	if (mips1_utlb_miss_end - mips1_utlb_miss > 0x80)
 		panic("startup: UTLB vector code too large");
-	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips1_UTLBMiss,
-		mips1_UTLBMissEnd - mips1_UTLBMiss);
-
-	if (mips1_exceptionEnd - mips1_exception > 0x80)
+	if (mips1_exception_end - mips1_exception > 0x80)
 		panic("startup: general exception vector code too large");
-	memcpy((void *)MIPS1_GEN_EXC_VEC, mips1_exception,
-		mips1_exceptionEnd - mips1_exception);
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips1_utlb_miss,
+		mips1_exception_end - mips1_utlb_miss);
 
 	/*
 	 * Copy locore-function vector.
 	 */
-	memcpy(&mips_locore_jumpvec, &mips1_locore_vec,
-		sizeof(mips_locore_jumpvec_t));
+	mips_locore_jumpvec = mips1_locore_vec;
 
 	/*
 	 * Clear out the I and D caches.
@@ -515,61 +710,42 @@ mips1_vector_init(void)
 #endif /* MIPS1 */
 
 #if defined(MIPS3)
-#ifndef MIPS3_5900	/* XXX */
-/*
- * MIPS III locore function vector
- */
-static const mips_locore_jumpvec_t mips3_locore_vec =
-{
-	mips3_SetPID,
-	mips3_TBIAP,
-	mips3_TBIS,
-	mips3_TLBUpdate,
-	mips3_wbflush,
-};
-
 static void
-mips3_vector_init(void)
+mips3_vector_init(const struct splsw *splsw)
 {
 	/* r4000 exception handler address and end */
-	extern char mips3_exception[], mips3_exceptionEnd[];
+	extern char mips3_exception[], mips3_exception_end[];
 
 	/* TLB miss handler address and end */
-	extern char mips3_TLBMiss[], mips3_TLBMissEnd[];
-	extern char mips3_XTLBMiss[], mips3_XTLBMissEnd[];
+	extern char mips3_tlb_miss[];
+	extern char mips3_xtlb_miss[];
 
 	/* Cache error handler */
-	extern char mips3_cache[], mips3_cacheEnd[];
-
+	extern char mips3_cache[];
 	/*
 	 * Copy down exception vector code.
 	 */
 
-	if (mips3_TLBMissEnd - mips3_TLBMiss > 0x80)
-		panic("startup: UTLB vector code too large");
-	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips3_TLBMiss,
-	      mips3_TLBMissEnd - mips3_TLBMiss);
+	if (mips3_xtlb_miss - mips3_tlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "UTLB");
+	if (mips3_cache - mips3_xtlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "XTLB");
+	if (mips3_exception - mips3_cache != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "Cache error");
+	if (mips3_exception_end - mips3_exception > 0x80)
+		panic("startup: %s vector code too large",
+		    "General exception");
 
-	if (mips3_XTLBMissEnd - mips3_XTLBMiss > 0x80)
-		panic("startup: XTLB vector code too large");
-	memcpy((void *)MIPS3_XTLB_MISS_EXC_VEC, mips3_XTLBMiss,
-	      mips3_XTLBMissEnd - mips3_XTLBMiss);
-
-	if (mips3_cacheEnd - mips3_cache > 0x80)
-		panic("startup: Cache error vector code too large");
-	memcpy((void *)MIPS3_CACHE_ERR_EXC_VEC, mips3_cache,
-	      mips3_cacheEnd - mips3_cache);
-
-	if (mips3_exceptionEnd - mips3_exception > 0x80)
-		panic("startup: General exception vector code too large");
-	memcpy((void *)MIPS3_GEN_EXC_VEC, mips3_exception,
-	      mips3_exceptionEnd - mips3_exception);
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips3_tlb_miss,
+	      mips3_exception_end - mips3_tlb_miss);
 
 	/*
 	 * Copy locore-function vector.
 	 */
-	memcpy(&mips_locore_jumpvec, &mips3_locore_vec,
-	      sizeof(mips_locore_jumpvec_t));
+	mips_locore_jumpvec = mips3_locore_vec;
 
 	mips_icache_sync_all();
 	mips_dcache_wbinv_all();
@@ -577,205 +753,326 @@ mips3_vector_init(void)
 	/* Clear BEV in SR so we start handling our own exceptions */
 	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
 }
-#endif /* !MIPS3_5900 */
-
-#if defined(MIPS3_5900)	/* XXX */
-/*
- * MIPS R5900 locore function vector.
- * Same as MIPS32 - all MMU registers are 32bit.
- */
-static const mips_locore_jumpvec_t r5900_locore_vec =
-{
-	mips5900_SetPID,
-	mips5900_TBIAP,
-	mips5900_TBIS,
-	mips5900_TLBUpdate,
-	mips5900_wbflush,
-};
-
-static void
-r5900_vector_init(void)
-{
-	extern char mips5900_exception[], mips5900_exceptionEnd[];
-	extern char mips5900_TLBMiss[], mips5900_TLBMissEnd[];
-	size_t esz = mips5900_exceptionEnd - mips5900_exception;
-	size_t tsz = mips5900_TLBMissEnd - mips5900_TLBMiss;
-
-	KDASSERT(tsz <= 0x80);
-	KDASSERT(esz <= 0x80);
-
-	if (tsz > 0x80)
-		panic("startup: UTLB vector code too large");
-	if (esz > 0x80)
-		panic("startup: General exception vector code too large");
-
-	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips5900_TLBMiss, tsz);
-	memcpy((void *)MIPS_R5900_COUNTER_EXC_VEC, mips5900_exception, esz);
-	memcpy((void *)MIPS_R5900_DEBUG_EXC_VEC, mips5900_exception, esz);
-	memcpy((void *)MIPS3_GEN_EXC_VEC, mips5900_exception, esz);
-	memcpy((void *)MIPS3_INTR_EXC_VEC, mips5900_exception, esz);
-
-	memcpy(&mips_locore_jumpvec, &r5900_locore_vec,
-	    sizeof(mips_locore_jumpvec_t));
-
-	mips_config_cache();
-
-	mips_icache_sync_all();
-	mips_dcache_wbinv_all();
-
-	/* Clear BEV in SR so we start handling our own exceptions */
-	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
-}
-#endif /* MIPS3_5900 */
 #endif /* MIPS3 */
 
-#if defined(MIPS32)
-/*
- * MIPS32 locore function vector
- */
-static const mips_locore_jumpvec_t mips32_locore_vec =
-{
-	mips32_SetPID,
-	mips32_TBIAP,
-	mips32_TBIS,
-	mips32_TLBUpdate,
-	mips32_wbflush,
-};
-
+#if defined(MIPS3_LOONGSON2)
 static void
-mips32_vector_init(void)
+loongson2_vector_init(const struct splsw *splsw)
 {
 	/* r4000 exception handler address and end */
-	extern char mips32_exception[], mips32_exceptionEnd[];
+	extern char loongson2_exception[], loongson2_exception_end[];
 
 	/* TLB miss handler address and end */
-	extern char mips32_TLBMiss[], mips32_TLBMissEnd[];
+	extern char loongson2_tlb_miss[];
+	extern char loongson2_xtlb_miss[];
 
 	/* Cache error handler */
-	extern char mips32_cache[], mips32_cacheEnd[];
-
-	/* MIPS32/MIPS64 interrupt exception handler */
-	extern char mips32_intr[], mips32_intrEnd[];
+	extern char loongson2_cache[];
 
 	/*
 	 * Copy down exception vector code.
 	 */
 
-	if (mips32_TLBMissEnd - mips32_TLBMiss > 0x80)
-		panic("startup: UTLB vector code too large");
-	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips32_TLBMiss,
-		      mips32_TLBMissEnd - mips32_TLBMiss);
+	if (loongson2_xtlb_miss - loongson2_tlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "UTLB");
+	if (loongson2_cache - loongson2_xtlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "XTLB");
+	if (loongson2_exception - loongson2_cache != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "Cache error");
+	if (loongson2_exception_end - loongson2_exception > 0x80)
+		panic("startup: %s vector code too large",
+		    "General exception");
 
-	if (mips32_cacheEnd - mips32_cache > 0x80)
-		panic("startup: Cache error vector code too large");
-	memcpy((void *)MIPS3_CACHE_ERR_EXC_VEC, mips32_cache,
-	      mips32_cacheEnd - mips32_cache);
-
-	if (mips32_exceptionEnd - mips32_exception > 0x80)
-		panic("startup: General exception vector code too large");
-	memcpy((void *)MIPS3_GEN_EXC_VEC, mips32_exception,
-	      mips32_exceptionEnd - mips32_exception);
-
-	if (mips32_intrEnd - mips32_intr > 0x80)
-		panic("startup: interrupt exception vector code too large");
-#if 0	/* XXX - why doesn't mipsNN_intr() work? */
-	memcpy((void *)MIPS3_INTR_EXC_VEC, mips32_intr,
-	      mips32_intrEnd - mips32_intr);
-#else
-	memcpy((void *)MIPS3_INTR_EXC_VEC, mips32_exception,
-	      mips32_exceptionEnd - mips32_exception);
-#endif
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, loongson2_tlb_miss,
+	      loongson2_exception_end - loongson2_tlb_miss);
 
 	/*
 	 * Copy locore-function vector.
 	 */
-	memcpy(&mips_locore_jumpvec, &mips32_locore_vec,
-		      sizeof(mips_locore_jumpvec_t));
+	mips_locore_jumpvec = loongson2_locore_vec;
 
 	mips_icache_sync_all();
 	mips_dcache_wbinv_all();
 
 	/* Clear BEV in SR so we start handling our own exceptions */
 	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
+}
+#endif /* MIPS3_LOONGSON2 */
+
+#if defined(MIPS32)
+static void
+mips32_vector_init(const struct splsw *splsw)
+{
+	/* r4000 exception handler address */
+	extern char mips32_exception[];
+
+	/* TLB miss handler addresses */
+	extern char mips32_tlb_miss[];
+
+	/* Cache error handler */
+	extern char mips32_cache[];
+
+	/* MIPS32 interrupt exception handler */
+	extern char mips32_intr[], mips32_intr_end[];
+
+	/*
+	 * Copy down exception vector code.
+	 */
+
+	if (mips32_cache - mips32_tlb_miss != 0x100)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "UTLB");
+	if (mips32_exception - mips32_cache != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "Cache error");
+	if (mips32_intr - mips32_exception != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "General exception");
+	if (mips32_intr_end - mips32_intr > 0x80)
+		panic("startup: %s vector code too large",
+		    "interrupt exception");
+
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips32_tlb_miss,
+	      mips32_intr_end - mips32_tlb_miss);
+
+	/*
+	 * Copy locore-function vector.
+	 */
+	mips_locore_jumpvec = mips32_locore_vec;
+
+	mips_icache_sync_all();
+	mips_dcache_wbinv_all();
+
+	/* Clear BEV in SR so we start handling our own exceptions */
+	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
+
+	mips_watchpoint_init();
 }
 #endif /* MIPS32 */
 
-#if defined(MIPS64)
-/*
- * MIPS64 locore function vector
- */
-const mips_locore_jumpvec_t mips64_locore_vec =
-{
-	mips64_SetPID,
-	mips64_TBIAP,
-	mips64_TBIS,
-	mips64_TLBUpdate,
-	mips64_wbflush,
-};
-
+#if defined(MIPS32R2)
 static void
-mips64_vector_init(void)
+mips32r2_vector_init(const struct splsw *splsw)
 {
-	/* r4000 exception handler address and end */
-	extern char mips64_exception[], mips64_exceptionEnd[];
+	/* r4000 exception handler address */
+	extern char mips32r2_exception[];
 
-	/* TLB miss handler address and end */
-	extern char mips64_TLBMiss[], mips64_TLBMissEnd[];
-	extern char mips64_XTLBMiss[], mips64_XTLBMissEnd[];
+	/* TLB miss handler addresses */
+	extern char mips32r2_tlb_miss[];
 
 	/* Cache error handler */
-	extern char mips64_cache[], mips64_cacheEnd[];
+	extern char mips32r2_cache[];
 
-	/* MIPS32/MIPS64 interrupt exception handler */
-	extern char mips64_intr[], mips64_intrEnd[];
+	/* MIPS32 interrupt exception handler */
+	extern char mips32r2_intr[], mips32r2_intr_end[];
 
 	/*
 	 * Copy down exception vector code.
 	 */
+	if (mips32r2_cache - mips32r2_tlb_miss != 0x100)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "UTLB");
+	if (mips32r2_exception - mips32r2_cache != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "Cache error");
+	if (mips32r2_intr - mips32r2_exception != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "General exception");
+	if (mips32r2_intr_end - mips32r2_intr > 0x80)
+		panic("startup: %s vector code too large",
+		    "interrupt exception");
 
-	if (mips64_TLBMissEnd - mips64_TLBMiss > 0x80)
-		panic("startup: UTLB vector code too large");
-	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips64_TLBMiss,
-	      mips64_TLBMissEnd - mips64_TLBMiss);
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips32r2_tlb_miss,
+	      mips32r2_intr_end - mips32r2_tlb_miss);
 
-	if (mips64_XTLBMissEnd - mips64_XTLBMiss > 0x80)
-		panic("startup: XTLB vector code too large");
-	memcpy((void *)MIPS3_XTLB_MISS_EXC_VEC, mips64_XTLBMiss,
-	      mips64_XTLBMissEnd - mips64_XTLBMiss);
-
-	if (mips64_cacheEnd - mips64_cache > 0x80)
-		panic("startup: Cache error vector code too large");
-	memcpy((void *)MIPS3_CACHE_ERR_EXC_VEC, mips64_cache,
-	      mips64_cacheEnd - mips64_cache);
-
-	if (mips64_exceptionEnd - mips64_exception > 0x80)
-		panic("startup: General exception vector code too large");
-	memcpy((void *)MIPS3_GEN_EXC_VEC, mips64_exception,
-	      mips64_exceptionEnd - mips64_exception);
-
-	if (mips64_intrEnd - mips64_intr > 0x80)
-		panic("startup: interrupt exception vector code too large");
-#if 0	/* XXX - why doesn't mipsNN_intr() work? */
-	memcpy((void *)MIPS3_INTR_EXC_VEC, mips64_intr,
-	      mips64_intrEnd - mips64_intr);
-#else
-	memcpy((void *)MIPS3_INTR_EXC_VEC, mips64_exception,
-	      mips64_exceptionEnd - mips64_exception);
-#endif
+	/*
+	 * Let see if this cpu has DSP V2 ASE...
+	 */
+	uint32_t cp0flags = mips_options.mips_cpu->cpu_cp0flags;
+	if (mipsNN_cp0_config2_read() & MIPSNN_CFG2_M) {
+		const uint32_t cfg3 = mipsNN_cp0_config3_read();
+		if (cfg3 & MIPSNN_CFG3_ULRP) {
+			cp0flags |= MIPS_CP0FL_USERLOCAL;
+		}
+		if (cfg3 & MIPSNN_CFG3_DSP2P) {
+			mips_options.mips_cpu_flags |= CPU_MIPS_HAVE_DSP;
+		}
+	}
+	/*
+	 * If this CPU doesn't have a COP0 USERLOCAL register, at the end
+	 * of cpu_switch resume overwrite the instructions which update it.
+	 */
+	if (!(cp0flags & MIPS_CP0FL_USERLOCAL)) {
+		extern uint32_t mips32r2_cpu_switch_resume[];
+		for (uint32_t *insnp = mips32r2_cpu_switch_resume;; insnp++) {
+			KASSERT(insnp[0] != JR_RA);
+			if (insnp[0] == _LOAD_V0_L_PRIVATE_A0
+			    && insnp[1] == _MTC0_V0_USERLOCAL) {
+				insnp[0] = JR_RA;
+				insnp[1] = 0;		/* NOP */
+				break;
+			}
+		}
+	}
 
 	/*
 	 * Copy locore-function vector.
 	 */
-	memcpy(&mips_locore_jumpvec, &mips64_locore_vec,
-	      sizeof(mips_locore_jumpvec_t));
+	mips_locore_jumpvec = mips32r2_locore_vec;
 
 	mips_icache_sync_all();
 	mips_dcache_wbinv_all();
 
 	/* Clear BEV in SR so we start handling our own exceptions */
 	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
+
+	mips_watchpoint_init();
+}
+#endif /* MIPS32R2 */
+
+#if defined(MIPS64)
+static void
+mips64_vector_init(const struct splsw *splsw)
+{
+	/* r4000 exception handler address */
+	extern char mips64_exception[];
+
+	/* TLB miss handler addresses */
+	extern char mips64_tlb_miss[];
+	extern char mips64_xtlb_miss[];
+
+	/* Cache error handler */
+	extern char mips64_cache[];
+
+	/* MIPS64 interrupt exception handler */
+	extern char mips64_intr[], mips64_intr_end[];
+
+	/*
+	 * Copy down exception vector code.
+	 */
+
+	if (mips64_xtlb_miss - mips64_tlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "UTLB");
+	if (mips64_cache - mips64_xtlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "XTLB");
+	if (mips64_exception - mips64_cache != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "Cache error");
+	if (mips64_intr - mips64_exception != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "General exception");
+	if (mips64_intr_end - mips64_intr > 0x80)
+		panic("startup: %s vector code too large",
+		    "interrupt exception");
+
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips64_tlb_miss,
+	      mips64_intr_end - mips64_tlb_miss);
+
+	/*
+	 * Copy locore-function vector.
+	 */
+	mips_locore_jumpvec = mips64_locore_vec;
+
+	mips_icache_sync_all();
+	mips_dcache_wbinv_all();
+
+	/* Clear BEV in SR so we start handling our own exceptions */
+	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
+
+	mips_watchpoint_init();
 }
 #endif /* MIPS64 */
+
+#if defined(MIPS64R2)
+static void
+mips64r2_vector_init(const struct splsw *splsw)
+{
+	/* r4000 exception handler address */
+	extern char mips64r2_exception[];
+
+	/* TLB miss handler addresses */
+	extern char mips64r2_tlb_miss[];
+	extern char mips64r2_xtlb_miss[];
+
+	/* Cache error handler */
+	extern char mips64r2_cache[];
+
+	/* MIPS64 interrupt exception handler */
+	extern char mips64r2_intr[], mips64r2_intr_end[];
+
+	/*
+	 * Copy down exception vector code.
+	 */
+
+	if (mips64r2_xtlb_miss - mips64r2_tlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "UTLB");
+	if (mips64r2_cache - mips64r2_xtlb_miss != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "XTLB");
+	if (mips64r2_exception - mips64r2_cache != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "Cache error");
+	if (mips64r2_intr - mips64r2_exception != 0x80)
+		panic("startup: %s vector code not 128 bytes in length",
+		    "General exception");
+	if (mips64r2_intr_end - mips64r2_intr > 0x80)
+		panic("startup: %s vector code too large",
+		    "interrupt exception");
+
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips64r2_tlb_miss,
+	      mips64r2_intr_end - mips64r2_tlb_miss);
+
+	/*
+	 * Let see if this cpu has DSP V2 ASE...
+	 */
+	uint32_t cp0flags = mips_options.mips_cpu->cpu_cp0flags;
+	if (mipsNN_cp0_config2_read() & MIPSNN_CFG2_M) {
+		const uint32_t cfg3 = mipsNN_cp0_config3_read();
+		if (cfg3 & MIPSNN_CFG3_ULRP) {
+			cp0flags |= MIPS_CP0FL_USERLOCAL;
+		}
+		if (cfg3 & MIPSNN_CFG3_DSP2P) {
+			mips_options.mips_cpu_flags |= CPU_MIPS_HAVE_DSP;
+		}
+	}
+
+	/*
+	 * If this CPU doesn't have a COP0 USERLOCAL register, at the end
+	 * of cpu_switch resume overwrite the instructions which update it.
+	 */
+	if (!(cp0flags & MIPS_CP0FL_USERLOCAL)) {
+		extern uint32_t mips64r2_cpu_switch_resume[];
+		for (uint32_t *insnp = mips64r2_cpu_switch_resume;; insnp++) {
+			KASSERT(insnp[0] != JR_RA);
+			if (insnp[0] == _LOAD_V0_L_PRIVATE_A0
+			    && insnp[1] == _MTC0_V0_USERLOCAL) {
+				insnp[0] = JR_RA;
+				insnp[1] = 0;		/* NOP */
+				break;
+			}
+		}
+	}
+
+	/*
+	 * Copy locore-function vector.
+	 */
+	mips_locore_jumpvec = mips64r2_locore_vec;
+
+	mips_icache_sync_all();
+	mips_dcache_wbinv_all();
+
+	/* Clear BEV in SR so we start handling our own exceptions */
+	mips_cp0_status_write(mips_cp0_status_read() & ~MIPS_SR_BEV);
+
+	mips_watchpoint_init();
+}
+#endif /* MIPS64R2 */
 
 /*
  * Do all the stuff that locore normally does before calling main(),
@@ -798,19 +1095,12 @@ mips64_vector_init(void)
  * of CPU the kernel is running on.
  */
 void
-mips_vector_init(void)
+mips_vector_init(const struct splsw *splsw, bool multicpu_p)
 {
+	struct mips_options * const opts = &mips_options;
 	const struct pridtab *ct;
+	const mips_prid_t cpu_id = opts->mips_cpu_id;
 
-	/*
-	 * XXX Set-up curlwp/curcpu again.  They may have been clobbered
-	 * beween verylocore and here.
-	 */
-	lwp0.l_cpu = &cpu_info_store;
-	cpu_info_store.ci_curlwp = &lwp0;
-	curlwp = &lwp0;
-
-	mycpu = NULL;
 	for (ct = cputab; ct->cpu_name != NULL; ct++) {
 		if (MIPS_PRID_CID(cpu_id) != ct->cpu_cid ||
 		    MIPS_PRID_IMPL(cpu_id) != ct->cpu_pid)
@@ -822,16 +1112,16 @@ mips_vector_init(void)
 		    MIPS_PRID_COPTS(cpu_id) != ct->cpu_copts)
 			continue;
 
-		mycpu = ct;
-		cpu_arch = ct->cpu_isa;
-		mips_num_tlb_entries = ct->cpu_ntlb;
+		opts->mips_cpu = ct;
+		opts->mips_cpu_arch = ct->cpu_isa;
+		opts->mips_num_tlb_entries = ct->cpu_ntlb;
 		break;
 	}
 
-	if (mycpu == NULL)
+	if (opts->mips_cpu == NULL)
 		panic("CPU type (0x%x) not supported", cpu_id);
 
-#if defined(MIPS32) || defined(MIPS64)
+#if (MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0
 	if (MIPS_PRID_CID(cpu_id) != 0) {
 		/* MIPS32/MIPS64, use coprocessor 0 config registers */
 		uint32_t cfg, cfg1;
@@ -842,10 +1132,10 @@ mips_vector_init(void)
 		/* pick CPU type */
 		switch (MIPSNN_GET(CFG_AT, cfg)) {
 		case MIPSNN_CFG_AT_MIPS32:
-			cpu_arch = CPU_ARCH_MIPS32;
+			opts->mips_cpu_arch = CPU_ARCH_MIPS32;
 			break;
 		case MIPSNN_CFG_AT_MIPS64:
-			cpu_arch = CPU_ARCH_MIPS64;
+			opts->mips_cpu_arch = CPU_ARCH_MIPS64;
 			break;
 		case MIPSNN_CFG_AT_MIPS64S:
 		default:
@@ -855,7 +1145,9 @@ mips_vector_init(void)
 
 		switch (MIPSNN_GET(CFG_AR, cfg)) {
 		case MIPSNN_CFG_AR_REV1:
+			break;
 		case MIPSNN_CFG_AR_REV2:
+			opts->mips_cpu_arch += CPU_ARCH_MIPS32R2 - CPU_ARCH_MIPS32;
 			break;
 		default:
 			printf("WARNING: MIPS32/64 arch revision %d "
@@ -866,7 +1158,7 @@ mips_vector_init(void)
 		/* figure out MMU type (and number of TLB entries) */
 		switch (MIPSNN_GET(CFG_MT, cfg)) {
 		case MIPSNN_CFG_MT_TLB:
-			mips_num_tlb_entries = MIPSNN_CFG1_MS(cfg1);
+			opts->mips_num_tlb_entries = MIPSNN_CFG1_MS(cfg1);
 			break;
 		case MIPSNN_CFG_MT_NONE:
 		case MIPSNN_CFG_MT_BAT:
@@ -876,46 +1168,59 @@ mips_vector_init(void)
 			    MIPSNN_GET(CFG_MT, cfg));
 		}
 	}
-#endif /* defined(MIPS32) || defined(MIPS64) */
+#endif /* (MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0 */
 
-	if (cpu_arch < 1)
+	if (opts->mips_cpu_arch < 1)
 		panic("Unknown CPU ISA for CPU type 0x%x", cpu_id);
-	if (mips_num_tlb_entries < 1)
+	if (opts->mips_num_tlb_entries < 1)
 		panic("Unknown number of TLBs for CPU type 0x%x", cpu_id);
 
 	/*
 	 * Check CPU-specific flags.
 	 */
-	mips_cpu_flags = mycpu->cpu_flags;
-	mips_has_r4k_mmu = mips_cpu_flags & CPU_MIPS_R4K_MMU;
-	mips_has_llsc = (mips_cpu_flags & CPU_MIPS_NO_LLSC) == 0;
+	opts->mips_cpu_flags = opts->mips_cpu->cpu_flags;
+	opts->mips_has_r4k_mmu = (opts->mips_cpu_flags & CPU_MIPS_R4K_MMU) != 0;
+	opts->mips_has_llsc = (opts->mips_cpu_flags & CPU_MIPS_NO_LLSC) == 0;
 #if defined(MIPS3_4100)
 	if (MIPS_PRID_IMPL(cpu_id) == MIPS_R4100)
-		mips3_pg_shift = MIPS3_4100_PG_SHIFT;
+		opts->mips3_pg_shift = MIPS3_4100_PG_SHIFT;
 	else
 #endif
-		mips3_pg_shift = MIPS3_DEFAULT_PG_SHIFT;
+		opts->mips3_pg_shift = MIPS3_DEFAULT_PG_SHIFT;
 
-	if (mycpu->cpu_flags & CPU_MIPS_HAVE_SPECIAL_CCA) {
+	opts->mips3_cca_devmem = CCA_UNCACHED;
+	if (opts->mips_cpu_flags & CPU_MIPS_HAVE_SPECIAL_CCA) {
 		uint32_t cca;
 
-		cca = (ct->cpu_flags & CPU_MIPS_CACHED_CCA_MASK) >>
+		cca = (opts->mips_cpu_flags & CPU_MIPS_CACHED_CCA_MASK) >>
 		    CPU_MIPS_CACHED_CCA_SHIFT;
-		mips3_pg_cached = MIPS3_CCA_TO_PG(cca);
-#ifdef notyet /* MIPS3_PLUS */
-		{
-			uint32_t cfg;
-			cfg = mips3_cp0_config_read();
-			cfg = cca | (cfg & ~MIPS3_CONFIG_K0_MASK);
-			mips3_cp0_config_write(cfg);
-		}
+		opts->mips3_pg_cached = MIPS3_CCA_TO_PG(cca);
+#ifdef _LP64
+		opts->mips3_xkphys_cached = MIPS_PHYS_TO_XKPHYS(cca, 0);
 #endif
-	} else
-		mips3_pg_cached = MIPS3_DEFAULT_PG_CACHED;
+	} else {
+		opts->mips3_pg_cached = MIPS3_DEFAULT_PG_CACHED;
+#ifdef _LP64
+		opts->mips3_xkphys_cached = MIPS3_DEFAULT_XKPHYS_CACHED;
+#endif
+	}
 
 #ifdef __HAVE_MIPS_MACHDEP_CACHE_CONFIG
 	mips_machdep_cache_config();
 #endif
+
+	/*
+	 * if 'splsw' is NULL, use standard SPL with COP0 status/cause
+	 * otherwise use chip-specific splsw
+	 */
+	if (splsw == NULL) {
+		mips_splsw = std_splsw;
+#ifdef PARANOIA
+		std_splsw_test();	/* only works with std_splsw */
+#endif
+	} else {
+		mips_splsw = *splsw;
+	}
 
 	/*
 	 * Determine cache configuration and initialize our cache
@@ -924,27 +1229,32 @@ mips_vector_init(void)
 	mips_config_cache();
 
 	/*
+	 * We default to RAS atomic ops since they are the lowest overhead.
+	 */
+#ifdef MULTIPROCESSOR
+	if (multicpu_p) {
+		/*
+		 * If we could have multiple CPUs active,
+		 * use the ll/sc variants.
+		 */
+		mips_locore_atomicvec = mips_llsc_locore_atomicvec;
+	}
+#endif
+	/*
 	 * Now initialize our ISA-dependent function vector.
 	 */
-	switch (cpu_arch) {
+	switch (opts->mips_cpu_arch) {
 #if defined(MIPS1)
 	case CPU_ARCH_MIPS1:
-		mips1_TBIA(mips_num_tlb_entries);
-		mips1_vector_init();
-		memcpy(mips_locoresw, mips1_locoresw, sizeof(mips_locoresw));
+		(*mips1_locore_vec.ljv_tlb_invalidate_all)();
+		mips1_vector_init(splsw);
+		mips_locoresw = mips1_locoresw;
 		break;
 #endif
 #if defined(MIPS3)
 	case CPU_ARCH_MIPS3:
 	case CPU_ARCH_MIPS4:
-#if defined(MIPS3_5900)	/* XXX */
-		mips3_cp0_pg_mask_write(MIPS3_PG_SIZE_TO_MASK(PAGE_SIZE));
-		mips3_cp0_wired_write(0);
-		mips5900_TBIA(mips_num_tlb_entries);
-		mips3_cp0_wired_write(MIPS3_TLB_WIRED_UPAGES);
-		r5900_vector_init();
-		memcpy(mips_locoresw, mips5900_locoresw, sizeof(mips_locoresw));
-#else /* MIPS3_5900 */
+		mips3_tlb_probe();
 #if defined(MIPS3_4100)
 		if (MIPS_PRID_IMPL(cpu_id) == MIPS_R4100)
 			mips3_cp0_pg_mask_write(MIPS4100_PG_SIZE_TO_MASK(PAGE_SIZE));
@@ -952,80 +1262,155 @@ mips_vector_init(void)
 #endif
 		mips3_cp0_pg_mask_write(MIPS3_PG_SIZE_TO_MASK(PAGE_SIZE));
 		mips3_cp0_wired_write(0);
-		mips3_TBIA(mips_num_tlb_entries);
-		mips3_cp0_wired_write(MIPS3_TLB_WIRED_UPAGES);
-		mips3_vector_init();
-		memcpy(mips_locoresw, mips3_locoresw, sizeof(mips_locoresw));
-#endif /* MIPS3_5900 */
+#if defined(MIPS3_LOONGSON2)
+		if (opts->mips_cpu_flags & CPU_MIPS_LOONGSON2) {
+			(*loongson2_locore_vec.ljv_tlb_invalidate_all)();
+			mips3_cp0_wired_write(pmap_tlb0_info.ti_wired);
+			loongson2_vector_init(splsw);
+			mips_locoresw = loongson2_locoresw;
+			opts->mips3_cca_devmem = CCA_ACCEL;
+			break;
+		}
+#endif /* MIPS3_LOONGSON2 */
+		(*mips3_locore_vec.ljv_tlb_invalidate_all)();
+		mips3_cp0_wired_write(pmap_tlb0_info.ti_wired);
+		mips3_vector_init(splsw);
+		mips_locoresw = mips3_locoresw;
 		break;
-#endif
+	
+#endif /* MIPS3 */
 #if defined(MIPS32)
 	case CPU_ARCH_MIPS32:
+		mips3_tlb_probe();
 		mips3_cp0_pg_mask_write(MIPS3_PG_SIZE_TO_MASK(PAGE_SIZE));
 		mips3_cp0_wired_write(0);
-		mips32_TBIA(mips_num_tlb_entries);
-		mips3_cp0_wired_write(MIPS3_TLB_WIRED_UPAGES);
-		mips32_vector_init();
-		memcpy(mips_locoresw, mips32_locoresw, sizeof(mips_locoresw));
+		(*mips32_locore_vec.ljv_tlb_invalidate_all)();
+		mips3_cp0_wired_write(pmap_tlb0_info.ti_wired);
+		mips32_vector_init(splsw);
+		mips_locoresw = mips32_locoresw;
+		break;
+#endif
+#if defined(MIPS32R2)
+	case CPU_ARCH_MIPS32R2:
+		mips3_tlb_probe();
+		mips3_cp0_pg_mask_write(MIPS3_PG_SIZE_TO_MASK(PAGE_SIZE));
+		mips3_cp0_wired_write(0);
+		(*mips32r2_locore_vec.ljv_tlb_invalidate_all)();
+		mips3_cp0_wired_write(pmap_tlb0_info.ti_wired);
+		mips32r2_vector_init(splsw);
+		mips_locoresw = mips32r2_locoresw;
 		break;
 #endif
 #if defined(MIPS64)
-	case CPU_ARCH_MIPS64:
+	case CPU_ARCH_MIPS64: {
+		mips3_tlb_probe();
 		mips3_cp0_pg_mask_write(MIPS3_PG_SIZE_TO_MASK(PAGE_SIZE));
 		mips3_cp0_wired_write(0);
-		mips64_TBIA(mips_num_tlb_entries);
-		mips3_cp0_wired_write(MIPS3_TLB_WIRED_UPAGES);
-		mips64_vector_init();
-		memcpy(mips_locoresw, mips64_locoresw, sizeof(mips_locoresw));
+		(*mips64_locore_vec.ljv_tlb_invalidate_all)();
+		mips3_cp0_wired_write(pmap_tlb0_info.ti_wired);
+		mips64_vector_init(splsw);
+		mips_locoresw = mips64_locoresw;
 		break;
+	}
+#endif
+#if defined(MIPS64R2)
+	case CPU_ARCH_MIPS64R2: {
+		mips3_tlb_probe();
+		mips3_cp0_pg_mask_write(MIPS3_PG_SIZE_TO_MASK(PAGE_SIZE));
+		mips3_cp0_wired_write(0);
+		(*mips64r2_locore_vec.ljv_tlb_invalidate_all)();
+		mips3_cp0_wired_write(pmap_tlb0_info.ti_wired);
+		mips64r2_vector_init(splsw);
+		mips_locoresw = mips64r2_locoresw;
+		break;
+	}
 #endif
 	default:
-		printf("cpu_arch 0x%x: not supported\n", cpu_arch);
+		printf("cpu_arch 0x%x: not supported\n", opts->mips_cpu_arch);
 		cpu_reboot(RB_HALT, NULL);
 	}
 
-/* XXX simonb: ugg, another ugly #ifdef check... */
-#if (defined(MIPS3) && !defined(MIPS3_5900)) || defined(MIPS32) || defined(MIPS64)
+	/*
+	 * Now that the splsw and locoresw have been filled in, fixup the
+	 * jumps to any stubs to actually jump to the real routines.
+	 */
+	extern uint32_t _ftext[];
+	extern uint32_t _etext[];
+	mips_fixup_stubs(_ftext, _etext);
+
+#if (MIPS3 + MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0
 	/*
 	 * Install power-saving idle routines.
 	 */
-	if ((mips_cpu_flags & CPU_MIPS_USE_WAIT) &&
-	    !(mips_cpu_flags & CPU_MIPS_NO_WAIT))
-		CPU_IDLE = (long *)mips_wait_idle;
-#endif /* (MIPS3 && !MIPS3_5900) || MIPS32 || MIPS64 */
+	if ((opts->mips_cpu_flags & CPU_MIPS_USE_WAIT) &&
+	    !(opts->mips_cpu_flags & CPU_MIPS_NO_WAIT))
+		mips_locoresw.lsw_cpu_idle = mips_wait_idle;
+#endif /* (MIPS3 + MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0 */
 }
 
 void
 mips_set_wbflush(void (*flush_fn)(void))
 {
-#undef wbflush
-	mips_locore_jumpvec.wbflush = flush_fn;
+	mips_locoresw.lsw_wbflush = flush_fn;
 	(*flush_fn)();
 }
+
+#if defined(MIPS3_PLUS)
+static void
+mips3_tlb_probe(void)
+{
+	struct mips_options * const opts = &mips_options;
+	opts->mips3_tlb_pg_mask = mips3_cp0_tlb_page_mask_probe();
+	if (CPUIS64BITS) {
+		opts->mips3_tlb_vpn_mask = mips3_cp0_tlb_entry_hi_probe();
+		opts->mips3_tlb_vpn_mask |= PAGE_MASK;
+		opts->mips3_tlb_vpn_mask <<= 2;
+		opts->mips3_tlb_vpn_mask >>= 2;
+		opts->mips3_tlb_pfn_mask = mips3_cp0_tlb_entry_lo_probe();
+#if defined(_LP64) && defined(ENABLE_MIPS_16KB_PAGE)
+		/*
+		 * 16KB pages could cause our page table being able to address
+		 * a larger address space than the actual chip supports.  So
+		 * we need to limit the address space to what it can really
+		 * address.
+		 */
+		if (mips_vm_maxuser_address > opts->mips3_tlb_vpn_mask + 1)
+			mips_vm_maxuser_address = opts->mips3_tlb_vpn_mask + 1;
+#endif
+	}
+}
+#endif
 
 /*
  * Identify product revision IDs of CPU and FPU.
  */
 void
-cpu_identify(void)
+cpu_identify(device_t dev)
 {
+	const struct mips_options * const opts = &mips_options;
+	const struct mips_cache_info * const mci = &mips_cache_info;
+	const mips_prid_t cpu_id = opts->mips_cpu_id;
+	const mips_prid_t fpu_id = opts->mips_fpu_id;
 	static const char * const waynames[] = {
 		"fully set-associative",	/* 0 */
 		"direct-mapped",		/* 1 */
 		"2-way set-associative",	/* 2 */
 		NULL,				/* 3 */
 		"4-way set-associative",	/* 4 */
+		"5-way set-associative",	/* 5 */
+		"6-way set-associative",	/* 6 */
+		"7-way set-associative",	/* 7 */
+		"8-way set-associative",	/* 8 */
 	};
 #define	nwaynames (sizeof(waynames) / sizeof(waynames[0]))
 	static const char * const wtnames[] = {
 		"write-back",
 		"write-through",
 	};
-	static const char * const label = "cpu0";	/* XXX */
 	const char *cpuname, *fpuname;
 	int i;
 
-	cpuname = mycpu->cpu_name;
+	cpuname = opts->mips_cpu->cpu_name;
 
 	fpuname = NULL;
 	for (i = 0; i < sizeof(fputab)/sizeof(fputab[0]); i++) {
@@ -1042,93 +1427,128 @@ cpu_identify(void)
 	if (MIPS_PRID_IMPL(cpu_id) == MIPS_RC64470)	/* FPU PRid is 0x21 */
 		fpuname = "built-in FPU";
 
-	if (mycpu->cpu_cid != 0) {
-		if (mycpu->cpu_cid <= ncidnames)
-			printf("%s ", cidnames[mycpu->cpu_cid]);
+	if (opts->mips_cpu->cpu_cid != 0) {
+		if (opts->mips_cpu->cpu_cid <= ncidnames)
+			aprint_normal("%s ", cidnames[opts->mips_cpu->cpu_cid]);
 		else {
-			printf("Unknown Company ID - 0x%x", mycpu->cpu_cid);
-			printf("%s: ", label);
+			aprint_normal("Unknown Company ID - 0x%x", opts->mips_cpu->cpu_cid);
+			aprint_normal_dev(dev, "");
 		}
 	}
 	if (cpuname != NULL)
-		printf("%s (0x%x)", cpuname, cpu_id);
+		aprint_normal("%s (0x%x)", cpuname, cpu_id);
 	else
-		printf("unknown CPU type (0x%x)", cpu_id);
+		aprint_normal("unknown CPU type (0x%x)", cpu_id);
 	if (MIPS_PRID_CID(cpu_id) == MIPS_PRID_CID_PREHISTORIC)
-		printf(" Rev. %d.%d", MIPS_PRID_REV_MAJ(cpu_id),
+		aprint_normal(" Rev. %d.%d", MIPS_PRID_REV_MAJ(cpu_id),
 		    MIPS_PRID_REV_MIN(cpu_id));
 	else
-		printf(" Rev. %d", MIPS_PRID_REV(cpu_id));
+		aprint_normal(" Rev. %d", MIPS_PRID_REV(cpu_id));
 
 	if (fpuname != NULL)
-		printf(" with %s", fpuname);
+		aprint_normal(" with %s", fpuname);
 	else
-		printf(" with unknown FPC type (0x%x)", fpu_id);
-	if (fpu_id != 0) {
+		aprint_normal(" with unknown FPC type (0x%x)", fpu_id);
+	if (opts->mips_fpu_id != 0) {
 		if (MIPS_PRID_CID(cpu_id) == MIPS_PRID_CID_PREHISTORIC)
-			printf(" Rev. %d.%d", MIPS_PRID_REV_MAJ(fpu_id),
+			aprint_normal(" Rev. %d.%d", MIPS_PRID_REV_MAJ(fpu_id),
 			    MIPS_PRID_REV_MIN(fpu_id));
 		else
-			printf(" Rev. %d", MIPS_PRID_REV(fpu_id));
+			aprint_normal(" Rev. %d", MIPS_PRID_REV(fpu_id));
 	}
-	printf("\n");
+	if (opts->mips_cpu_flags & MIPS_HAS_DSP) {
+		aprint_normal(" and DSPv2");
+	}
+	aprint_normal("\n");
 
 	if (MIPS_PRID_CID(cpu_id) == MIPS_PRID_CID_PREHISTORIC &&
 	    MIPS_PRID_RSVD(cpu_id) != 0) {
-		printf("%s: NOTE: top 8 bits of prehistoric PRID not 0!\n",
-		    label);
-		printf("%s: Please mail port-mips@NetBSD.org with cpu0 "
-		    "dmesg lines.\n", label);
+		aprint_normal_dev(dev, "NOTE: top 8 bits of prehistoric PRID not 0!\n");
+		aprint_normal_dev(dev, "Please mail port-mips@NetBSD.org with %s "
+		    "dmesg lines.\n", device_xname(dev));
 	}
 
-	KASSERT(mips_picache_ways < nwaynames);
-	KASSERT(mips_pdcache_ways < nwaynames);
-	KASSERT(mips_sicache_ways < nwaynames);
-	KASSERT(mips_sdcache_ways < nwaynames);
+	KASSERT(mci->mci_picache_ways < nwaynames);
+	KASSERT(mci->mci_pdcache_ways < nwaynames);
+	KASSERT(mci->mci_sicache_ways < nwaynames);
+	KASSERT(mci->mci_sdcache_ways < nwaynames);
 
-	switch (cpu_arch) {
+	switch (opts->mips_cpu_arch) {
 #if defined(MIPS1)
 	case CPU_ARCH_MIPS1:
-		if (mips_picache_size)
-			printf("%s: %dKB/%dB %s Instruction cache, "
-			    "%d TLB entries\n", label, mips_picache_size / 1024,
-			    mips_picache_line_size, waynames[mips_picache_ways],
-			    mips_num_tlb_entries);
+		if (mci->mci_picache_size)
+			aprint_normal_dev(dev, "%dKB/%dB %s Instruction cache, "
+			    "%d TLB entries\n", mci->mci_picache_size / 1024,
+			    mci->mci_picache_line_size, waynames[mci->mci_picache_ways],
+			    opts->mips_num_tlb_entries);
 		else
-			printf("%s: %d TLB entries\n", label,
-			    mips_num_tlb_entries);
-		if (mips_pdcache_size)
-			printf("%s: %dKB/%dB %s %s Data cache\n", label,
-			    mips_pdcache_size / 1024, mips_pdcache_line_size,
-			    waynames[mips_pdcache_ways],
-			    wtnames[mips_pdcache_write_through]);
+			aprint_normal_dev(dev, "%d TLB entries\n", 
+			    opts->mips_num_tlb_entries);
+		if (mci->mci_pdcache_size)
+			aprint_normal_dev(dev, "%dKB/%dB %s %s Data cache\n",
+			    mci->mci_pdcache_size / 1024, mci->mci_pdcache_line_size,
+			    waynames[mci->mci_pdcache_ways],
+			    wtnames[mci->mci_pdcache_write_through]);
 		break;
 #endif /* MIPS1 */
-#if defined(MIPS3) || defined(MIPS32) || defined(MIPS64)
+#if (MIPS3 + MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0
 	case CPU_ARCH_MIPS3:
 	case CPU_ARCH_MIPS4:
 	case CPU_ARCH_MIPS32:
+	case CPU_ARCH_MIPS32R2:
 	case CPU_ARCH_MIPS64:
-		if (mips_picache_size)
-			printf("%s: %dKB/%dB %s L1 Instruction cache, "
-			    "%d TLB entries\n", label, mips_picache_size / 1024,
-			    mips_picache_line_size, waynames[mips_picache_ways],
-			    mips_num_tlb_entries);
-		else
-			printf("%s: %d TLB entries\n", label, mips_num_tlb_entries);
-		if (mips_pdcache_size)
-			printf("%s: %dKB/%dB %s %s L1 Data cache\n", label,
-			    mips_pdcache_size / 1024, mips_pdcache_line_size,
-			    waynames[mips_pdcache_ways],
-			    wtnames[mips_pdcache_write_through]);
-		if (mips_sdcache_line_size)
-			printf("%s: %dKB/%dB %s %s L2 %s cache\n", label,
-			    mips_sdcache_size / 1024, mips_sdcache_line_size,
-			    waynames[mips_sdcache_ways],
-			    wtnames[mips_sdcache_write_through],
-			    mips_scache_unified ? "Unified" : "Data");
+	case CPU_ARCH_MIPS64R2: {
+		const char *sufx = "KMGTPE";
+		uint32_t pg_mask;
+		aprint_normal_dev(dev, "%d TLB entries", opts->mips_num_tlb_entries);
+#if !defined(__mips_o32)
+		if (CPUIS64BITS) {
+			int64_t pfn_mask;
+			i = ffs(~(opts->mips3_tlb_vpn_mask >> 31)) + 30;
+			aprint_normal(", %d%cB (%d-bit) VAs",
+			    1 << (i % 10), sufx[(i / 10) - 1], i);
+			for (i = 64, pfn_mask = opts->mips3_tlb_pfn_mask << 6;
+			     pfn_mask > 0; i--, pfn_mask <<= 1)
+				;
+			aprint_normal(", %d%cB (%d-bit) PAs",
+			      1 << (i % 10), sufx[(i / 10) - 1], i);
+		}
+#endif
+		for (i = 4, pg_mask = opts->mips3_tlb_pg_mask >> 13;
+		     pg_mask != 0; ) {
+			if ((pg_mask & 3) != 3)
+				break;
+			pg_mask >>= 2;
+			i *= 4;
+			if (i == 1024) {
+				i = 1;
+				sufx++;
+			}
+		}
+		aprint_normal(", %d%cB max page size\n", i, sufx[0]);
+		if (mci->mci_picache_size)
+			aprint_normal_dev(dev,
+			    "%dKB/%dB %s L1 instruction cache\n",
+			    mci->mci_picache_size / 1024,
+			    mci->mci_picache_line_size, waynames[mci->mci_picache_ways]);
+		if (mci->mci_pdcache_size)
+			aprint_normal_dev(dev,
+			    "%dKB/%dB %s %s %sL1 data cache\n",
+			    mci->mci_pdcache_size / 1024, mci->mci_pdcache_line_size,
+			    waynames[mci->mci_pdcache_ways],
+			    wtnames[mci->mci_pdcache_write_through],
+			    ((opts->mips_cpu_flags & CPU_MIPS_D_CACHE_COHERENT)
+				? "coherent " : ""));
+		if (mci->mci_sdcache_line_size)
+			aprint_normal_dev(dev,
+			    "%dKB/%dB %s %s L2 %s cache\n",
+			    mci->mci_sdcache_size / 1024, mci->mci_sdcache_line_size,
+			    waynames[mci->mci_sdcache_ways],
+			    wtnames[mci->mci_sdcache_write_through],
+			    mci->mci_scache_unified ? "unified" : "data");
 		break;
-#endif /* MIPS3 */
+	}
+#endif /* (MIPS3 + MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0 */
 	default:
 		panic("cpu_identify: impossible");
 	}
@@ -1142,15 +1562,41 @@ cpu_identify(void)
  * code by the MIPS elf abi).
  */
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
-	struct frame *f = (struct frame *)l->l_md.md_regs;
+	struct trapframe * const tf = l->l_md.md_utf;
+	struct proc * const p = l->l_proc;
 
-	memset(f, 0, sizeof(struct frame));
-	f->f_regs[_R_SP] = (int)stack;
-	f->f_regs[_R_PC] = (int)pack->ep_entry & ~3;
-	f->f_regs[_R_T9] = (int)pack->ep_entry & ~3; /* abicall requirement */
-	f->f_regs[_R_SR] = PSL_USERSET;
+	memset(tf, 0, sizeof(struct trapframe));
+	tf->tf_regs[_R_SP] = (intptr_t)stack;
+	tf->tf_regs[_R_PC] = (intptr_t)pack->ep_entry & ~3;
+	tf->tf_regs[_R_T9] = (intptr_t)pack->ep_entry & ~3; /* abicall requirement */
+	tf->tf_regs[_R_SR] = PSL_USERSET;
+#if !defined(__mips_o32)
+	/*
+	 * allow 64bit ops in userland for non-O32 ABIs
+	 */
+	if (p->p_md.md_abi == _MIPS_BSD_API_N32
+	    && (CPUISMIPS64 || CPUISMIPS64R2)) {
+		tf->tf_regs[_R_SR] |= MIPS_SR_PX;
+	} else if (p->p_md.md_abi != _MIPS_BSD_API_O32) {
+		tf->tf_regs[_R_SR] |= MIPS_SR_UX;
+	}
+	if (_MIPS_SIM_NEWABI_P(p->p_md.md_abi))
+		tf->tf_regs[_R_SR] |= MIPS3_SR_FR;
+#endif
+#ifdef _LP64
+	/*
+	 * If we are using a 32-bit ABI on a 64-bit kernel, mark the process
+	 * that way.  If we aren't, clear it.
+	 */
+	if (p->p_md.md_abi == _MIPS_BSD_API_N32
+	    || p->p_md.md_abi == _MIPS_BSD_API_O32) {
+		p->p_flag |= PK_32;
+	} else {
+		p->p_flag &= ~PK_32;
+	}
+#endif
 	/*
 	 * Set up arguments for _start():
 	 *	_start(stack, obj, cleanup, ps_strings);
@@ -1160,15 +1606,11 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	 *	  vectors.  They are fixed up by ld.elf_so.
 	 *	- ps_strings is a NetBSD extension.
 	 */
-	f->f_regs[_R_A0] = (uintptr_t)stack;
-	f->f_regs[_R_A1] = 0;
-	f->f_regs[_R_A2] = 0;
-	f->f_regs[_R_A3] = (intptr_t)l->l_proc->p_psstr;
+	tf->tf_regs[_R_A0] = (intptr_t)stack;
+	tf->tf_regs[_R_A1] = 0;
+	tf->tf_regs[_R_A2] = 0;
+	tf->tf_regs[_R_A3] = p->p_psstrp;
 
-	if ((l->l_md.md_flags & MDP_FPUSED) && l == fpcurlwp)
-		fpcurlwp = NULL;
-	memset(&l->l_addr->u_pcb.pcb_fpregs, 0, sizeof(struct fpreg));
-	l->l_md.md_flags &= ~MDP_FPUSED;
 	l->l_md.md_ss_addr = 0;
 }
 
@@ -1240,7 +1682,9 @@ u_int32_t dumpmag = 0x8fca0101;	/* magic number */
 int	dumpsize = 0;		/* pages */
 long	dumplo = 0;		/* blocks */
 
-struct user dumppcb;		/* Actually, struct pcb would do. */
+#if 0
+struct pcb dumppcb;
+#endif
 
 /*
  * cpu_dumpsize: calculate size of machine-dependent kernel core dump headers.
@@ -1343,19 +1787,11 @@ cpu_dump(void)
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks, dumpblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		goto bad;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		goto bad;
-	}
-	if (bdev->d_psize == NULL)
-		goto bad;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	if (nblks <= ctod(1))
 		goto bad;
 
@@ -1395,8 +1831,10 @@ dumpsys(void)
 	int (*dump)(dev_t, daddr_t, void *, size_t);
 	int error;
 
+#if 0
 	/* Save registers. */
 	savectx(&dumppcb);
+#endif
 
 	if (dumpdev == NODEV)
 		return;
@@ -1418,7 +1856,7 @@ dumpsys(void)
 	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
 	    minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -1440,6 +1878,8 @@ dumpsys(void)
 		bytes = mem_clusters[memcl].size;
 
 		for (i = 0; i < bytes; i += n, totalbytesleft -= n) {
+			void *maddr_va;
+
 			/* Print out how many MBs we have left to go. */
 			if ((totalbytesleft % (1024*1024)) == 0)
 				printf_nolog("%ld ",
@@ -1450,8 +1890,12 @@ dumpsys(void)
 			if (n > BYTES_PER_DUMP)
 				n = BYTES_PER_DUMP;
 
-			error = (*dump)(dumpdev, blkno,
-			    (void *)MIPS_PHYS_TO_KSEG0(maddr), n);
+#ifdef _LP64
+			maddr_va = (void *)MIPS_PHYS_TO_XKPHYS_CACHED(maddr);
+#else
+			maddr_va = (void *)MIPS_PHYS_TO_KSEG0(maddr);
+#endif
+			error = (*dump)(dumpdev, blkno, maddr_va, n);
 			if (error)
 				goto err;
 			maddr += n;
@@ -1501,9 +1945,17 @@ mips_init_msgbuf(void)
 {
 	vsize_t sz = (vsize_t)round_page(MSGBUFSIZE);
 	vsize_t reqsz = sz;
-	struct vm_physseg *vps;
-
-	vps = &vm_physmem[vm_nphysseg - 1];
+	u_int bank = vm_nphysseg - 1;
+	struct vm_physseg *vps = VM_PHYSMEM_PTR(bank);
+#ifndef _LP64
+	/*
+	 * Fist the physical segment that can be mapped to KSEG0
+	 */
+	for (; vps >= vm_physmem; vps--, bank--) {
+		if (vps->avail_start + atop(sz) <= atop(MIPS_PHYS_MASK))
+			break;
+	}
+#endif
 
 	/* shrink so that it'll fit in the last segment */
 	if ((vps->avail_end - vps->avail_start) < atop(sz))
@@ -1511,172 +1963,212 @@ mips_init_msgbuf(void)
 
 	vps->end -= atop(sz);
 	vps->avail_end -= atop(sz);
+#ifdef _LP64
+	msgbufaddr = (void *) MIPS_PHYS_TO_XKPHYS_CACHED(ptoa(vps->end));
+#else
 	msgbufaddr = (void *) MIPS_PHYS_TO_KSEG0(ptoa(vps->end));
+#endif
 	initmsgbuf(msgbufaddr, sz);
 
-	/* Remove the last segment if it now has no pages. */
-	if (vps->start == vps->end)
-		vm_nphysseg--;
+	/* Remove the [last] segment if it now has no pages. */
+	if (vps->start == vps->end) {
+		for (vm_nphysseg--; bank < vm_nphysseg - 1; bank++) {
+			VM_PHYSMEM_PTR_SWAP(bank, bank + 1);
+		}
+	}
 
 	/* warn if the message buffer had to be shrunk */
 	if (sz != reqsz)
-		printf("WARNING: %ld bytes not available for msgbuf "
-		    "in last cluster (%ld used)\n", reqsz, sz);
+		printf("WARNING: %"PRIdVSIZE" bytes not available for msgbuf "
+		    "in last cluster (%"PRIdVSIZE" used)\n", reqsz, sz);
 }
 
 void
-savefpregs(struct lwp *l)
+mips_init_lwp0_uarea(void)
 {
-#ifndef NOFPU
-	u_int32_t status, fpcsr, *fp;
-	struct frame *f;
+	struct lwp * const l = &lwp0;
+	vaddr_t v;
 
-	if (l == NULL)
-		return;
-	/*
-	 * turnoff interrupts enabling CP1 to read FPCSR register.
-	 */
-	__asm volatile (
-		".set noreorder					\n\t"
-		".set noat					\n\t"
-		"mfc0	%0, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
-		"li	$1, %2					\n\t"
-		"mtc0	$1, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
-		___STRING(COP0_HAZARD_FPUENABLE)
-		"cfc1	%1, $31					\n\t"
-		"cfc1	%1, $31					\n\t"
-		".set reorder					\n\t"
-		".set at" 
-		: "=r" (status), "=r"(fpcsr) : "i"(MIPS_SR_COP_1_BIT));
-	/*
-	 * this process yielded FPA.
-	 */
-	f = (struct frame *)l->l_md.md_regs;
-	f->f_regs[_R_SR] &= ~MIPS_SR_COP_1_BIT;
+	if (l->l_addr == NULL) {
+		v = uvm_pageboot_alloc(USPACE);
+		uvm_lwp_setuarea(&lwp0, v);
+	} else {
+		v = (vaddr_t)l->l_addr;
+	}
 
+	l->l_md.md_utf = (struct trapframe *)(v + USPACE) - 1;
+	struct pcb * const pcb = lwp_getpcb(l);
 	/*
-	 * save FPCSR and 32bit FP register values.
+	 * Now zero out the only two areas of the uarea that we care about.
 	 */
-	fp = (int *)l->l_addr->u_pcb.pcb_fpregs.r_regs;
-	fp[32] = fpcsr;
-	__asm volatile (
-		".set noreorder		;"
-		"swc1	$f0, 0(%0)	;"
-		"swc1	$f1, 4(%0)	;"
-		"swc1	$f2, 8(%0)	;"
-		"swc1	$f3, 12(%0)	;"
-		"swc1	$f4, 16(%0)	;"
-		"swc1	$f5, 20(%0)	;"
-		"swc1	$f6, 24(%0)	;"
-		"swc1	$f7, 28(%0)	;"
-		"swc1	$f8, 32(%0)	;"
-		"swc1	$f9, 36(%0)	;"
-		"swc1	$f10, 40(%0)	;"
-		"swc1	$f11, 44(%0)	;"
-		"swc1	$f12, 48(%0)	;"
-		"swc1	$f13, 52(%0)	;"
-		"swc1	$f14, 56(%0)	;"
-		"swc1	$f15, 60(%0)	;"
-		"swc1	$f16, 64(%0)	;"
-		"swc1	$f17, 68(%0)	;"
-		"swc1	$f18, 72(%0)	;"
-		"swc1	$f19, 76(%0)	;"
-		"swc1	$f20, 80(%0)	;"
-		"swc1	$f21, 84(%0)	;"
-		"swc1	$f22, 88(%0)	;"
-		"swc1	$f23, 92(%0)	;"
-		"swc1	$f24, 96(%0)	;"
-		"swc1	$f25, 100(%0)	;"
-		"swc1	$f26, 104(%0)	;"
-		"swc1	$f27, 108(%0)	;"
-		"swc1	$f28, 112(%0)	;"
-		"swc1	$f29, 116(%0)	;"
-		"swc1	$f30, 120(%0)	;"
-		"swc1	$f31, 124(%0)	;"
-		".set reorder" :: "r"(fp));
-	/*
-	 * stop CP1, enable interrupts.
-	 */
-	__asm volatile ("mtc0 %0, $" ___STRING(MIPS_COP_0_STATUS)
-	    :: "r"(status));
+	memset(l->l_md.md_utf, 0, sizeof(*l->l_md.md_utf));
+	memset(pcb, 0, sizeof(*pcb));
+
+	pcb->pcb_context.val[_L_SR] = MIPS_SR_INT_IE
+	    | (ipl_sr_map.sr_bits[IPL_SCHED] ^ MIPS_INT_MASK);
+#ifdef _LP64
+	pcb->pcb_context.val[_L_SR] |= MIPS_SR_KX | MIPS_SR_UX;
+	l->l_md.md_utf->tf_regs[_R_SR] = MIPS_SR_KX | MIPS_SR_UX;
 #endif
 }
 
+int mips_poolpage_vmfreelist = VM_FREELIST_DEFAULT;
+
+#define	HALFGIG		((paddr_t)512 * 1024 * 1024)
+#define	FOURGIG		((paddr_t)4 * 1024 * 1024 * 1024)
+
 void
-loadfpregs(struct lwp *l)
+mips_page_physload(vaddr_t vkernstart, vaddr_t vkernend,
+	const phys_ram_seg_t *segs, size_t nseg,
+	const struct mips_vmfreelist *flp, size_t nfl)
 {
-#ifndef NOFPU
-	u_int32_t status, *fp;
-	struct frame *f;
-
-	if (l == NULL)
-		panic("loading fpregs for NULL proc");
-
-	/*
-	 * turnoff interrupts enabling CP1 to load FP registers.
-	 */
-	__asm volatile(
-		".set noreorder					\n\t"
-		".set noat					\n\t"
-		"mfc0	%0, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
-		"li	$1, %1					\n\t"
-		"mtc0	$1, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
-		___STRING(COP0_HAZARD_FPUENABLE)
-		".set reorder					\n\t"
-		".set at" : "=r"(status) : "i"(MIPS_SR_COP_1_BIT));
-
-	f = (struct frame *)l->l_md.md_regs;
-	fp = (int *)l->l_addr->u_pcb.pcb_fpregs.r_regs;
-	/*
-	 * load 32bit FP registers and establish processes' FP context.
-	 */
-	__asm volatile(
-		".set noreorder		;"
-		"lwc1	$f0, 0(%0)	;"
-		"lwc1	$f1, 4(%0)	;"
-		"lwc1	$f2, 8(%0)	;"
-		"lwc1	$f3, 12(%0)	;"
-		"lwc1	$f4, 16(%0)	;"
-		"lwc1	$f5, 20(%0)	;"
-		"lwc1	$f6, 24(%0)	;"
-		"lwc1	$f7, 28(%0)	;"
-		"lwc1	$f8, 32(%0)	;"
-		"lwc1	$f9, 36(%0)	;"
-		"lwc1	$f10, 40(%0)	;"
-		"lwc1	$f11, 44(%0)	;"
-		"lwc1	$f12, 48(%0)	;"
-		"lwc1	$f13, 52(%0)	;"
-		"lwc1	$f14, 56(%0)	;"
-		"lwc1	$f15, 60(%0)	;"
-		"lwc1	$f16, 64(%0)	;"
-		"lwc1	$f17, 68(%0)	;"
-		"lwc1	$f18, 72(%0)	;"
-		"lwc1	$f19, 76(%0)	;"
-		"lwc1	$f20, 80(%0)	;"
-		"lwc1	$f21, 84(%0)	;"
-		"lwc1	$f22, 88(%0)	;"
-		"lwc1	$f23, 92(%0)	;"
-		"lwc1	$f24, 96(%0)	;"
-		"lwc1	$f25, 100(%0)	;"
-		"lwc1	$f26, 104(%0)	;"
-		"lwc1	$f27, 108(%0)	;"
-		"lwc1	$f28, 112(%0)	;"
-		"lwc1	$f29, 116(%0)	;"
-		"lwc1	$f30, 120(%0)	;"
-		"lwc1	$f31, 124(%0)	;"
-		".set reorder" :: "r"(fp));
-	/*
-	 * load FPCSR and stop CP1 again while enabling interrupts.
-	 */
-	__asm volatile(
-		".set noreorder					\n\t"
-		".set noat					\n\t"
-		"ctc1	%0, $31					\n\t"
-		"mtc0	%1, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
-		".set reorder					\n\t"
-		".set at"
-		:: "r"(fp[32] &~ MIPS_FPU_EXCEPTION_BITS), "r"(status));
+	const paddr_t kernstart = MIPS_KSEG0_TO_PHYS(trunc_page(vkernstart));
+	const paddr_t kernend = MIPS_KSEG0_TO_PHYS(round_page(vkernend));
+#if defined(VM_FREELIST_FIRST4G) || defined(VM_FREELIST_FIRST512M)
+#ifdef VM_FREELIST_FIRST512M
+	bool need512m = false;
 #endif
+#ifdef VM_FREELIST_FIRST4G
+	bool need4g = false;
+#endif
+
+	/*
+	 * Do a first pass and see what ranges memory we have to deal with.
+	 */
+	for (size_t i = 0; i < nseg; i++) {
+#ifdef VM_FREELIST_FIRST4G
+		if (round_page(segs[i].start + segs[i].size) > FOURGIG) {
+			need4g = true;
+			mips_poolpage_vmfreelist = VM_FREELIST_FIRST4G;
+		}
+#endif
+#ifdef VM_FREELIST_FIRST512M
+		if (round_page(segs[i].start + segs[i].size) > HALFGIG) {
+			need512m = true;
+			mips_poolpage_vmfreelist = VM_FREELIST_FIRST512M;
+		}
+#endif
+	}
+#endif /* VM_FREELIST_FIRST512M || VM_FREELIST_FIRST4G */
+
+	for (; nseg-- > 0; segs++) {
+		/*
+		 * Make sure everything is in page units.
+		 */
+		paddr_t segstart = round_page(segs->start);
+		const paddr_t segfinish = trunc_page(segs->start + segs->size);
+
+		printf("phys segment: %#"PRIxPADDR" @ %#"PRIxPADDR"\n",
+		    segfinish - segstart, segstart);
+
+		/*
+		 * Page 0 is reserved for exception vectors.
+		 */
+		if (segstart == 0) {
+			segstart = PAGE_SIZE;
+		}
+		while (segstart < segfinish) {
+			int freelist = -1;	/* unknown freelist */
+			paddr_t segend = segfinish;
+			for (size_t i = 0; i < nfl; i++) {
+				/*
+				 * If this segment doesn't overlap the freelist
+				 * at all, skip it.
+				 */ 
+				if (segstart >= flp[i].fl_end
+				    || segend <= flp[i].fl_start)
+					continue;
+				/*
+				 * If the start of this segment starts before
+				 * the start of the freelist, then limit the
+				 * segment to loaded to the part that doesn't
+				 * match this freelist and fall back to normal
+				 * freelist matching.
+				 */
+				if (segstart < flp[i].fl_start) {
+					segstart = flp[i].fl_start;
+					break;
+				}
+
+				/*
+				 * We've matched this freelist so remember it.
+				 */
+				freelist = flp->fl_freelist;
+
+				/*
+				 * If this segment extends past the end of this
+				 * freelist, bound to segment to the freelist.
+				 */
+				if (segend > flp[i].fl_end)
+					segend = flp[i].fl_end;
+				break;
+			}
+			/*
+			 * If we didn't match one of the port dependent
+			 * freelists, let's try the common ones.
+			 */
+			if (freelist == -1) {
+#ifdef VM_FREELIST_FIRST512M
+				if (need512m && segstart < HALFGIG) {
+					freelist = VM_FREELIST_FIRST512M;
+					if (segend > HALFGIG)
+						segend = HALFGIG;
+				} else
+#endif
+#ifdef VM_FREELIST_FIRST4G
+				if (need4g && segstart < FOURGIG) {
+					freelist = VM_FREELIST_FIRST4G;
+					if (segend > FOURGIG)
+						segend = FOURGIG;
+				} else
+#endif
+					freelist = VM_FREELIST_DEFAULT;
+			}
+
+			/*
+			 * Make sure the memory we provide to uvm doesn't
+			 * include the kernel.
+			 */
+			if (segstart < kernend && segend > kernstart) {
+				if (segstart < kernstart) {
+					/*
+					 * Only add the memory before the
+					 * kernel.
+					 */
+					segend = kernstart;
+				} else if (segend > kernend) {
+					/*
+					 * Only add the memory after the
+					 * kernel.
+					 */
+					segstart = kernend;
+				} else {
+					/*
+					 * Just skip the segment entirely since
+					 * it's completely inside the kernel.
+					 */
+					printf("skipping %#"PRIxPADDR" @ %#"PRIxPADDR" (kernel)\n",
+					    segend - segstart, segstart);
+					break;
+				}
+			}
+			
+			/*
+			 * Now we give this segment to uvm.
+			 */
+			printf("adding %#"PRIxPADDR" @ %#"PRIxPADDR" to freelist %d\n",
+			
+			    segend - segstart, segstart, freelist);
+			paddr_t first = atop(segstart);
+			paddr_t last = atop(segend);
+			uvm_page_physload(first, last, first, last, freelist);
+
+			/*
+			 * Start where we finished.
+			 */
+			segstart = segend;
+		}
+	}
 }
 
 /* 
@@ -1685,178 +2177,217 @@ loadfpregs(struct lwp *l)
 void
 startlwp(void *arg)
 {
-	int err;
-	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	ucontext_t * const uc = arg;
+	lwp_t * const l = curlwp;
+	int error;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#if DIAGNOSTIC
-	if (err) {
-		printf("Error %d from cpu_setmcontext.", err);
-	}
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
 
+	kmem_free(uc, sizeof(ucontext_t));
 	userret(l);
 }
 
-/*
- * XXX This is a terrible name.
+#ifdef COMPAT_NETBSD32
+/* 
+ * Start a new LWP
  */
 void
-upcallret(struct lwp *l)
+startlwp32(void *arg)
 {
+	ucontext32_t * const uc = arg;
+	lwp_t * const l = curlwp;
+	int error;
+
+	error = cpu_setmcontext32(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
+
+	/* Note: we are freeing ucontext_t, not ucontext32_t. */
+	kmem_free(uc, sizeof(ucontext_t));
 	userret(l);
 }
+#endif /* COMPAT_NETBSD32 */
 
-void 
-cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
-    void *sas, void *ap, void *sp, sa_upcall_t upcall)
+#ifdef PARANOIA
+void
+std_splsw_test(void)
 {
-	struct saframe *sf, frame;
-	struct frame *f;
+	struct cpu_info * const ci = curcpu();
+	const uint32_t * const sr_map = ipl_sr_map.sr_bits;
+	uint32_t status = mips_cp0_status_read();
+	uint32_t sr_bits;
+	int s;
 
-	f = (struct frame *)l->l_md.md_regs;
+	KASSERT((status & MIPS_SR_INT_IE) == 0);
 
-#if 0 /* First 4 args in regs (see below). */
-	frame.sa_type = type;
-	frame.sa_sas = sas;
-	frame.sa_events = nevents;
-	frame.sa_interrupted = ninterrupted;
-#endif
-	frame.sa_arg = ap;
-	frame.sa_upcall = upcall;
+	sr_bits = sr_map[IPL_NONE];
 
-	sf = (struct saframe *)sp - 1;
-	if (copyout(&frame, sf, sizeof(frame)) != 0) {
-		/* Copying onto the stack didn't work. Die. */
-		mutex_enter(l->l_proc->p_lock);
-		sigexit(l, SIGILL);
-		/* NOTREACHED */
+	splx(IPL_NONE);
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT(status == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_NONE);
+
+	s = splsoftclock();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_SOFTCLOCK]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_SOFTCLOCK);
+	KASSERT(s == IPL_NONE);
+
+	s = splsoftbio();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_SOFTBIO]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_SOFTBIO);
+	KASSERT(s == IPL_SOFTCLOCK);
+
+	s = splsoftnet();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_SOFTNET]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_SOFTNET);
+	KASSERT(s == IPL_SOFTBIO);
+
+	s = splsoftserial();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_SOFTSERIAL]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_SOFTSERIAL);
+	KASSERT(s == IPL_SOFTNET);
+
+	s = splvm();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_VM]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_VM);
+	KASSERT(s == IPL_SOFTSERIAL);
+
+	s = splsched();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_SCHED]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_SCHED);
+	KASSERT(s == IPL_VM);
+
+	s = splhigh();
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT((status ^ sr_map[IPL_HIGH]) == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_HIGH);
+	KASSERT(s == IPL_SCHED);
+
+	splx(IPL_NONE);
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT(status == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_NONE);
+
+	for (int r = IPL_SOFTCLOCK; r <= IPL_HIGH; r++) {
+		/*
+		 * As IPL increases, more intrs may be masked but no intrs
+		 * may become unmasked.
+		 */
+		KASSERT((sr_map[r] & sr_bits) == sr_bits);
+		sr_bits |= sr_map[r];
+		s = splraise(r);
+		KASSERT(s == IPL_NONE);
+
+		for (int t = r; t <= IPL_HIGH; t++) {
+			int o = splraise(t);
+			status = mips_cp0_status_read() & MIPS_INT_MASK;
+			KASSERT((status ^ sr_map[t]) == MIPS_INT_MASK);
+			KASSERT(ci->ci_cpl == t);
+			KASSERT(o == r);
+
+			splx(o);
+			status = mips_cp0_status_read() & MIPS_INT_MASK;
+			KASSERT((status ^ sr_map[r]) == MIPS_INT_MASK);
+			KASSERT(ci->ci_cpl == r);
+		}
+
+		splx(s);
+		status = mips_cp0_status_read() & MIPS_INT_MASK;
+		KASSERT((status ^ sr_map[s]) == MIPS_INT_MASK);
+		KASSERT(ci->ci_cpl == s);
 	}
 
-	f->f_regs[_R_PC] = (uintptr_t)upcall;
-	f->f_regs[_R_SP] = (uintptr_t)sf;
-	f->f_regs[_R_A0] = type;
-	f->f_regs[_R_A1] = (uintptr_t)sas;
-	f->f_regs[_R_A2] = nevents;
-	f->f_regs[_R_A3] = ninterrupted;
-	f->f_regs[_R_S8] = 0;
-	f->f_regs[_R_RA] = 0;
-	f->f_regs[_R_T9] = (uintptr_t)upcall;  /* t9=Upcall function*/
+	status = mips_cp0_status_read() & MIPS_INT_MASK;
+	KASSERT(status == MIPS_INT_MASK);
+	KASSERT(ci->ci_cpl == IPL_NONE);
 }
 
+#endif /* PARANOIA */
 
-void
-cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
+bool
+mm_md_direct_mapped_phys(paddr_t pa, vaddr_t *vap)
 {
-	const struct frame *f = (struct frame *)l->l_md.md_regs;
-	__greg_t *gr = mcp->__gregs;
-	__greg_t ras_pc;
-
-	/* Save register context. Dont copy R0 - it is always 0 */
-	memcpy(&gr[_REG_AT], &f->f_regs[_R_AST], sizeof(mips_reg_t) * 31);
-
-	gr[_REG_MDLO]  = f->f_regs[_R_MULLO];
-	gr[_REG_MDHI]  = f->f_regs[_R_MULHI];
-	gr[_REG_CAUSE] = f->f_regs[_R_CAUSE];
-	gr[_REG_EPC]   = f->f_regs[_R_PC];
-	gr[_REG_SR]    = f->f_regs[_R_SR];
-
-	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (void *) gr[_REG_EPC])) != -1)
-		gr[_REG_EPC] = ras_pc;
-
-	*flags |= _UC_CPU;
-
-	/* Save floating point register context, if any. */
-	if (l->l_md.md_flags & MDP_FPUSED) {
-		/*
-		 * If this process is the current FP owner, dump its
-		 * context to the PCB first.
-		 */
-		if (l == fpcurlwp)
-			savefpregs(l);
-
-		/*
-		 * The PCB FP regs struct includes the FP CSR, so use the
-		 * size of __fpregs.__fp_r when copying.
-		 */
-		memcpy(&mcp->__fpregs.__fp_r,
-		    &l->l_addr->u_pcb.pcb_fpregs.r_regs,
-		    sizeof(mcp->__fpregs.__fp_r));
-		mcp->__fpregs.__fp_csr = l->l_addr->u_pcb.pcb_fpregs.r_regs[32];
-		*flags |= _UC_FPU;
+#ifdef _LP64
+	if (MIPS_XKSEG_P(pa)) {
+		*vap = MIPS_PHYS_TO_XKPHYS_CACHED(pa);
+		return true;
 	}
+#endif
+	if (MIPS_KSEG0_P(pa)) {
+		*vap = MIPS_PHYS_TO_KSEG0(pa);
+		return true;
+	}
+	return false;
 }
 
 int
-cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
 {
-	struct frame *f = (struct frame *)l->l_md.md_regs;
-	const __greg_t *gr = mcp->__gregs;
-	struct proc *p = l->l_proc;
 
-	/* Restore register context, if any. */
-	if (flags & _UC_CPU) {
-		/* Save register context. */
-		/* XXX:  Do we validate the addresses?? */
-		memcpy(&f->f_regs[_R_AST], &gr[_REG_AT],
-		       sizeof(mips_reg_t) * 31);
+	return (pa < ctob(physmem)) ? 0 : EFAULT;
+}
 
-		f->f_regs[_R_MULLO] = gr[_REG_MDLO];
-		f->f_regs[_R_MULHI] = gr[_REG_MDHI];
-		f->f_regs[_R_CAUSE] = gr[_REG_CAUSE];
-		f->f_regs[_R_PC]    = gr[_REG_EPC];
-		/* Do not restore SR. */
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+	const vaddr_t v = (vaddr_t)ptr;
+
+#ifdef _LP64
+	if (v < MIPS_XKPHYS_START) {
+		return EFAULT;
 	}
-
-	/* Restore floating point register context, if any. */
-	if (flags & _UC_FPU) {
-		/* Disable the FPU to fault in FP registers. */
-		f->f_regs[_R_SR] &= ~MIPS_SR_COP_1_BIT;
-		if (l == fpcurlwp)
-			fpcurlwp = NULL;
-
-		/*
-		 * The PCB FP regs struct includes the FP CSR, so use the
-		 * size of __fpregs.__fp_r when copying.
-		 */
-		memcpy(&l->l_addr->u_pcb.pcb_fpregs.r_regs,
-		    &mcp->__fpregs.__fp_r, sizeof(mcp->__fpregs.__fp_r));
-		l->l_addr->u_pcb.pcb_fpregs.r_regs[32] = mcp->__fpregs.__fp_csr;
+	if (MIPS_XKPHYS_P(v) && v > MIPS_PHYS_TO_XKPHYS_CACHED(mips_avail_end +
+	    mips_round_page(MSGBUFSIZE))) {
+		return EFAULT;
 	}
-
-	mutex_enter(p->p_lock);
-	if (flags & _UC_SETSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
-	if (flags & _UC_CLRSTACK)
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(p->p_lock);
-
-	return (0);
+	if (MIPS_XKSEG_P(v) && v < MIPS_KSEG0_START) {
+		*handled = true;
+		return 0;
+	}
+	if (MIPS_KSEG1_P(v) || MIPS_KSEG2_P(v)) {
+		return EFAULT;
+	}
+#else
+	if (v < MIPS_KSEG0_START) {
+		return EFAULT;
+	}
+	if (v < MIPS_PHYS_TO_KSEG0(mips_avail_end +
+	    mips_round_page(MSGBUFSIZE))) {
+		*handled = true;
+		return 0;
+	}
+	if (v < MIPS_KSEG2_START) {
+		return EFAULT;
+	}
+#endif
+	*handled = false;
+	return 0;
 }
 
+#if (MIPS32 + MIPS32R2 + MIPS64 + MIPS64R2) > 0
+static void
+mips_watchpoint_init(void)
+{
+	/*
+	 * determine number of CPU watchpoints
+	 */
+	curcpu()->ci_cpuwatch_count = cpuwatch_discover();
+}
+#endif
+
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
 void
-cpu_need_resched(struct cpu_info *ci, int flags)
+cpu_spawn_return(struct lwp *l)
 {
-
-	aston(ci->ci_data.cpu_onproc);
-	ci->ci_want_resched = 1;
+	userret(l);
 }
 
-void
-cpu_idle(void)
-{
-	void (*mach_idle)(void) = (void (*)(void))CPU_IDLE;
-
-	while (!curcpu()->ci_want_resched)
-		(*mach_idle)();
-}
-
-bool
-cpu_intr_p(void)
-{
-
-	return curcpu()->ci_idepth != 0;
-}

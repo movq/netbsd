@@ -1,4 +1,4 @@
-/* $NetBSD: if_ie.c,v 1.27 2009/05/16 16:40:58 cegger Exp $ */
+/* $NetBSD: if_ie.c,v 1.30 2011/06/03 07:35:37 matt Exp $ */
 
 /*
  * Copyright (c) 1995 Melvin Tang-Richardson.
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.27 2009/05/16 16:40:58 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.30 2011/06/03 07:35:37 matt Exp $");
 
 #define IGNORE_ETHER1_IDROM_CHECKSUM
 
@@ -106,11 +106,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.27 2009/05/16 16:40:58 cegger Exp $");
 
 /* BPF support */
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 /* Some useful defines and macros */
 
@@ -176,8 +173,8 @@ static int command_and_wait( struct ie_softc *sc, u_short cmd,
 			      struct ie_sys_ctl_block *pscb,
 			      void *pcmd, int ocmd, int scmd, int mask );
 
-int ieprobe(struct device *, struct cfdata *, void *);
-void ieattach(struct device *, struct device *, void *);
+int ieprobe(device_t, cfdata_t, void *);
+void ieattach(device_t, device_t, void *);
 
 static inline void ie_cli(struct ie_softc *);
 static inline void ieattn(struct ie_softc *);
@@ -295,9 +292,9 @@ crc32(u_char *p, int l)
  */
 
 int
-ieprobe(struct device *parent, struct cfdata *cf, void *aux)
+ieprobe(device_t parent, cfdata_t cf, void *aux)
 {
-	struct podule_attach_args *pa = (void *)aux;
+	struct podule_attach_args *pa = aux;
 
 /* Look for a network slot interface */
 
@@ -308,10 +305,10 @@ ieprobe(struct device *parent, struct cfdata *cf, void *aux)
  * Attach our driver to the interfaces it uses
  */
   
-void ieattach ( struct device *parent, struct device *self, void *aux )
+void ieattach ( device_t parent, device_t self, void *aux )
 {
-	struct ie_softc *sc = (void *)self;
-	struct podule_attach_args *pa = (void *)aux;
+	struct ie_softc *sc = device_private(self);
+	struct podule_attach_args *pa = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int i;
 	char idrom[32];
@@ -1287,11 +1284,7 @@ ie_read_frame(struct ie_softc *sc, int num)
 
     ifp->if_ipackets++;
 
-#if NBPFILTER > 0
-    if ( ifp->if_bpf ) {
-	bpf_mtap(ifp->if_bpf, m );
-    };
-#endif
+    bpf_mtap(ifp, m);
 
     (*ifp->if_input)(ifp, m);
 }
@@ -1498,10 +1491,7 @@ iestart(struct ifnet *ifp)
 			len += m->m_len;
 		}
 
-#if NBPFILTER > 0
-		if ( ifp->if_bpf )
-		    bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		m_freem(m0);
 		if (len < ETHER_MIN_LEN - ETHER_CRC_LEN) {

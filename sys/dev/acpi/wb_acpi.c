@@ -1,4 +1,4 @@
-/* $NetBSD: wb_acpi.c,v 1.1 2009/09/30 20:44:50 jmcneill Exp $ */
+/* $NetBSD: wb_acpi.c,v 1.5 2010/08/19 18:37:38 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2009 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,38 +26,39 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wb_acpi.c,v 1.1 2009/09/30 20:44:50 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wb_acpi.c,v 1.5 2010/08/19 18:37:38 jmcneill Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/proc.h>
+#include <sys/systm.h>
 
-#include <sys/bus.h>
-
-#include <dev/isa/isavar.h>
-#include <dev/isa/isadmavar.h>
-
-#include <dev/acpi/acpica.h>
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
-#include <dev/sdmmc/sdmmcvar.h>
 #include <dev/ic/w83l518dvar.h>
 #include <dev/ic/w83l518dreg.h>
+
+#include <dev/isa/isadmavar.h>
+
+#include <dev/sdmmc/sdmmcvar.h>
+
+#define _COMPONENT	ACPI_RESOURCE_COMPONENT
+ACPI_MODULE_NAME	("wb_acpi")
 
 static int	wb_acpi_match(device_t, cfdata_t, void *);
 static void	wb_acpi_attach(device_t, device_t, void *);
 static int	wb_acpi_detach(device_t, int);
+static bool	wb_acpi_suspend(device_t, const pmf_qual_t *);
+static bool	wb_acpi_resume(device_t, const pmf_qual_t *);
 
 struct wb_acpi_softc {
 	struct wb_softc sc_wb;
 	isa_chipset_tag_t sc_ic;
 	void *sc_ih;
 	int sc_ioh_length;
+
+	ACPI_HANDLE sc_crs, sc_srs;
+	ACPI_BUFFER sc_crs_buffer;
 };
 
 CFATTACH_DECL_NEW(wb_acpi, sizeof(struct wb_acpi_softc),
@@ -104,6 +105,16 @@ wb_acpi_attach(device_t parent, device_t self, void *opaque)
 	if (ACPI_FAILURE(rv))
 		return;
 
+	AcpiGetHandle(aa->aa_node->ad_handle, "_CRS", &sc->sc_crs);
+	AcpiGetHandle(aa->aa_node->ad_handle, "_SRS", &sc->sc_srs);
+	if (sc->sc_crs && sc->sc_srs) {
+		sc->sc_crs_buffer.Pointer = NULL;
+		sc->sc_crs_buffer.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
+		rv = AcpiGetCurrentResources(sc->sc_crs, &sc->sc_crs_buffer);
+		if (ACPI_FAILURE(rv))
+			sc->sc_crs = sc->sc_srs = NULL;
+	}
+
 	io = acpi_res_io(&res, 0);
 	irq = acpi_res_irq(&res, 0);
 	if (io == NULL || irq == NULL) {
@@ -133,6 +144,8 @@ wb_acpi_attach(device_t parent, device_t self, void *opaque)
 	sc->sc_wb.wb_irq = irq->ar_irq;
 	sc->sc_wb.wb_base = io->ar_base;
 	wb_attach(&sc->sc_wb);
+
+	pmf_device_register(self, wb_acpi_suspend, wb_acpi_resume);
 	
 cleanup:
 	acpi_resource_cleanup(&res);
@@ -143,6 +156,11 @@ wb_acpi_detach(device_t self, int flags)
 {
 	struct wb_acpi_softc *sc = device_private(self);
 	int rv;
+
+	pmf_device_deregister(self);
+
+	if (sc->sc_crs_buffer.Pointer)
+		ACPI_FREE(sc->sc_crs_buffer.Pointer);
 
 	rv = wb_detach(&sc->sc_wb, flags);
 	if (rv)
@@ -156,4 +174,28 @@ wb_acpi_detach(device_t self, int flags)
 		    sc->sc_ioh_length);
 
 	return 0;
+}
+
+static bool
+wb_acpi_suspend(device_t self, const pmf_qual_t *qual)
+{
+	struct wb_acpi_softc *sc = device_private(self);
+
+	return wb_suspend(&sc->sc_wb);
+}
+
+static bool
+wb_acpi_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct wb_acpi_softc *sc = device_private(self);
+	ACPI_STATUS rv;
+
+	if (sc->sc_crs && sc->sc_srs) {
+		rv = AcpiSetCurrentResources(sc->sc_srs, &sc->sc_crs_buffer);
+		if (ACPI_FAILURE(rv))
+			printf("%s: _SRS failed: %s\n",
+			    device_xname(self), AcpiFormatException(rv));
+	}
+
+	return wb_resume(&sc->sc_wb);
 }

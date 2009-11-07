@@ -1,25 +1,33 @@
-#	$NetBSD: Makefile,v 1.1 2008/08/24 05:47:05 gmcgarry Exp $
+#	$NetBSD: Makefile,v 1.8 2011/09/01 13:00:15 plunky Exp $
 
-.include <bsd.own.mk>
+WARNS?=	2
 
-USE_FORT?= yes
+.include <bsd.init.mk>
 
-DIST=	${NETBSDSRCDIR}/external/bsd/pcc/dist/pcc
-SUBDIST=${DIST}/cc/cc
-.PATH:	${SUBDIST}
+.PATH: ${PCC_DIST}/cc/cc
 
-CPPFLAGS+=-I${.CURDIR}/../..
-CPPFLAGS+=-I${DIST}/mip
+#
+# we build PCC cc(1) as pcc(1) to avoid conflicts with GCC
+#
 
 PROG=	pcc
 SRCS=	cc.c
+MAN=	pcc.1
 
-BINDIR= /usr/bin
+CPPFLAGS+=	-DTARGOS=\"${TARGOS}\"
+CPPFLAGS+=	-DTARGMACH=\"${TARGMACH}\"
+CPPFLAGS+=	-DLIBEXECDIR=\"/usr/libexec/\"
+CPPFLAGS+=	-DINCLUDEDIR=\"/usr/include/\"
+CPPFLAGS+=	-I${PCC_DIST}/mip
+CPPFLAGS+=	-I${PCC_DIST}/os/${TARGOS}
+CPPFLAGS+=	-I${PCC_DIST}/arch/${TARGMACH}
 
-MAN=	cc.1
+pcc.1:	cc.1
+	${TOOL_SED} -e "s,Nm cc,Nm pcc,"	\
+		    -e "s,Dt CC,Dt PCC,"	\
+		    -e "s,Xr cpp,Xr pcpp,"	\
+		    ${.ALLSRC} > ${.TARGET}
 
-CLEANFILES+=	cc.cat1
-
-.include "../../Makefile.inc"
+CLEANFILES+=	pcc.1
 
 .include <bsd.prog.mk>

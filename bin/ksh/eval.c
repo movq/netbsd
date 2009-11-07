@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.11 2009/04/25 05:11:37 lukem Exp $	*/
+/*	$NetBSD: eval.c,v 1.14 2011/08/21 21:24:34 dholland Exp $	*/
 
 /*
  * Expansion - quoting, separation, substitution, globbing
@@ -6,12 +6,13 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: eval.c,v 1.11 2009/04/25 05:11:37 lukem Exp $");
+__RCSID("$NetBSD: eval.c,v 1.14 2011/08/21 21:24:34 dholland Exp $");
 #endif
 
+#include <stdint.h>
+#include <pwd.h>
 
 #include "sh.h"
-#include <pwd.h>
 #include "ksh_dir.h"
 #include "ksh_stat.h"
 
@@ -185,6 +186,7 @@ expand(cp, wp, f)
 
 	x.split = 0;	/* XXX gcc */
 	x.str = NULL;	/* XXX gcc */
+	x.u.strv = NULL;/* XXX gcc */
 	if (cp == NULL)
 		internal_errorf(1, "expand(NULL)");
 	/* for alias, readonly, set, typeset commands */
@@ -605,21 +607,6 @@ expand(cp, wp, f)
 			if (!quote)
 				switch (c) {
 				  case '[':
-					{
-						const char *p = sp;
-						bool_t special = FALSE;
-						while (*p != EOS) {
-							if (p[0] == CHAR &&
-								p[1] == ']') {
-								special = TRUE;
-								break;
-							}
-								
-							p += 2;
-						}
-						if (!special)
-							break;
-					}
 				  case NOT:
 				  case '-':
 				  case ']':
@@ -729,7 +716,7 @@ varsub(xp, sp, word, stypep, slenp)
 	if (sp[0] == '\0')	/* Bad variable name */
 		return -1;
 
-	xp->var = (struct tbl *) 0;
+	xp->var = NULL;
 
 	/* ${#var}, string length or array size */
 	if (sp[0] == '#' && (c = sp[1]) != '\0') {
@@ -800,10 +787,12 @@ varsub(xp, sp, word, stypep, slenp)
 			return -1;
 		}
 		if (e->loc->argc == 0) {
+			xp->u.strv = NULL;
 			xp->str = null;
 			state = c == '@' ? XNULLSUB : XSUB;
 		} else {
-			xp->u.strv = (const char **) e->loc->argv + 1;
+			char **t = &e->loc->argv[1];
+			xp->u.strv = (void *)(uintptr_t)t;
 			xp->str = *xp->u.strv++;
 			xp->split = c == '@'; /* $@ */
 			state = XARG;

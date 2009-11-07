@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.62 2009/10/02 02:45:29 tsarna Exp $	*/
+/*	$NetBSD: netdb.h,v 1.64.8.1 2012/06/03 21:41:34 jdc Exp $	*/
 
 /*
  * ++Copyright++ 1980, 1983, 1988, 1993
@@ -124,6 +124,9 @@ typedef _BSD_SIZE_T_	size_t;
 #endif
 #ifndef _PATH_SERVICES
 #define	_PATH_SERVICES	"/etc/services"
+#endif
+#ifndef _PATH_SERVICES_CDB
+#define	_PATH_SERVICES_CDB "/var/db/services.cdb"
 #endif
 #ifndef _PATH_SERVICES_DB
 #define	_PATH_SERVICES_DB "/var/db/services.db"
@@ -266,7 +269,9 @@ struct addrinfo {
 #define	AI_NUMERICSERV	0x00000008 /* prevent service name resolution */
 /* valid flags for addrinfo (not a standard def, apps should not use it) */
 #define	AI_MASK	\
-    (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV)
+    (AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV | \
+    AI_ADDRCONFIG)
+#define	AI_ADDRCONFIG	0x00000400 /* only if any address is assigned */
 #endif
 
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
@@ -334,9 +339,9 @@ void		sethostent(int);
 #endif
 void		setnetent(int);
 void		setprotoent(int);
+void		setservent(int);
 #if (_POSIX_C_SOURCE - 0) >= 200112L || (_XOPEN_SOURCE - 0) >= 520 || \
     defined(_NETBSD_SOURCE)
-void		setservent(int);
 int		getaddrinfo(const char * __restrict, const char * __restrict,
 				 const struct addrinfo * __restrict,
 				 struct addrinfo ** __restrict);
@@ -347,7 +352,6 @@ struct addrinfo *allocaddrinfo(socklen_t);
 void		freeaddrinfo(struct addrinfo *);
 const char	*gai_strerror(int);
 #endif
-void		setservent(int);
 __END_DECLS
 
 #endif /* !_NETDB_H_ */

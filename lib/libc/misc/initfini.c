@@ -1,4 +1,4 @@
-/* 	$NetBSD: initfini.c,v 1.5 2008/04/28 20:23:00 martin Exp $	 */
+/* 	$NetBSD: initfini.c,v 1.9 2011/03/09 23:10:06 joerg Exp $	 */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,23 +30,52 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: initfini.c,v 1.5 2008/04/28 20:23:00 martin Exp $");
+__RCSID("$NetBSD: initfini.c,v 1.9 2011/03/09 23:10:06 joerg Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
 #endif
 
-static void	__libc_init(void) __attribute__((__constructor__, __used__));
+#include <sys/param.h>
+#include <sys/exec.h>
+#include <sys/tls.h>
+#include <stdbool.h>
+
+void	_libc_init(void) __attribute__((__constructor__, __used__));
 
 void	__guard_setup(void);
 void	__libc_thr_init(void);
 void	__libc_atomic_init(void);
 void	__libc_atexit_init(void);
+void	__libc_env_init(void);
 
-/* LINTED used */
-static void
-__libc_init(void)
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+__dso_hidden void	__libc_static_tls_setup(void);
+#endif
+
+static bool libc_initialised;
+
+void _libc_init(void);
+
+__dso_hidden void	*__auxinfo;
+struct ps_strings *__ps_strings;
+
+/*
+ * _libc_init is called twice.  The first time explicitly by crt0.o
+ * (for newer versions) and the second time as indirectly via _init().
+ */
+void
+_libc_init(void)
 {
+
+	if (libc_initialised)
+		return;
+
+	libc_initialised = 1;
+
+	if (__ps_strings != NULL)
+		__auxinfo = __ps_strings->ps_argvstr +
+		    __ps_strings->ps_nargvstr + __ps_strings->ps_nenvstr + 2;
 
 	/* For -fstack-protector */
 	__guard_setup();
@@ -54,9 +83,17 @@ __libc_init(void)
 	/* Atomic operations */
 	__libc_atomic_init();
 
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	/* Initialize TLS for statically linked programs. */
+	__libc_static_tls_setup();
+#endif
+
 	/* Threads */
 	__libc_thr_init();
 
 	/* Initialize the atexit mutexes */
 	__libc_atexit_init();
+
+	/* Initialize environment memory RB tree. */
+	__libc_env_init();
 }

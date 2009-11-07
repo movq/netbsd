@@ -1,7 +1,7 @@
-/*	$NetBSD: ncache.h,v 1.1.1.1 2009/03/22 15:01:45 christos Exp $	*/
+/*	$NetBSD: ncache.h,v 1.2.6.1 2012/06/05 21:14:58 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2010  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: ncache.h,v 1.25 2008/09/25 04:02:39 tbox Exp */
+/* Id: ncache.h,v 1.29 2010/05/14 23:50:40 tbox Exp  */
 
 #ifndef DNS_NCACHE_H
 #define DNS_NCACHE_H 1
@@ -78,7 +78,7 @@ dns_ncache_addoptout(dns_message_t *message, dns_db_t *cache,
  * The 'covers' argument is the RR type whose nonexistence we are caching,
  * or dns_rdatatype_any when caching a NXDOMAIN response.
  *
- * 'optout' indicates a DNS_RATASETATTR_OPTOUT should be set.
+ * 'optout' indicates a DNS_RDATASETATTR_OPTOUT should be set.
  *
  * Note:
  *\li	If 'addedrdataset' is not NULL, then it will be attached to the added
@@ -161,6 +161,13 @@ dns_ncache_getrdataset(dns_rdataset_t *ncacherdataset, dns_name_t *name,
  *\li	#ISC_R_SUCCESS		- the rdataset was found.
  *\li	#ISC_R_NOTFOUND		- the rdataset was not found.
  *
+ */
+
+isc_result_t
+dns_ncache_getsigrdataset(dns_rdataset_t *ncacherdataset, dns_name_t *name,
+			  dns_rdatatype_t covers, dns_rdataset_t *rdataset);
+/*%<
+ * Similar to dns_ncache_getrdataset() but get the rrsig that matches.
  */
 
 void

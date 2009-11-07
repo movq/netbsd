@@ -1,4 +1,4 @@
-/* $NetBSD: bt485.c,v 1.14 2009/03/14 15:36:17 dsl Exp $ */
+/* $NetBSD: bt485.c,v 1.16 2012/02/12 16:34:11 matt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -32,7 +32,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt485.c,v 1.14 2009/03/14 15:36:17 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt485.c,v 1.16 2012/02/12 16:34:11 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: bt485.c,v 1.14 2009/03/14 15:36:17 dsl Exp $");
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/ic/bt485reg.h>
@@ -137,11 +135,11 @@ bt485_funcs(void)
 }
 
 struct ramdac_cookie *
-bt485_register(v, sched_update, wr, rd)
-	void *v;
-	int (*sched_update)(void *, void (*)(void *));
-	void (*wr)(void *, u_int, u_int8_t);
-	u_int8_t (*rd)(void *, u_int);
+bt485_register(
+	void *v,
+	int (*sched_update)(void *, void (*)(void *)),
+	void (*wr)(void *, u_int, u_int8_t),
+	u_int8_t (*rd)(void *, u_int))
 {
 	struct bt485data *data;
 	/*
@@ -165,11 +163,11 @@ bt485_register(v, sched_update, wr, rd)
  * initializing the console early on.
  */
 void
-bt485_cninit(v, sched_update, wr, rd)
-	void *v;
-	int (*sched_update)(void *, void (*)(void *));
-	void (*wr)(void *, u_int, u_int8_t);
-	u_int8_t (*rd)(void *, u_int);
+bt485_cninit(
+	void *v,
+	int (*sched_update)(void *, void (*)(void *)),
+	void (*wr)(void *, u_int, u_int8_t),
+	u_int8_t (*rd)(void *, u_int))
 {
 	struct bt485data tmp, *data = &tmp;
 	data->cookie = v;

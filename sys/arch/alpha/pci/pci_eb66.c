@@ -1,4 +1,4 @@
-/* $NetBSD: pci_eb66.c,v 1.20 2009/03/16 23:11:09 dsl Exp $ */
+/* $NetBSD: pci_eb66.c,v 1.23 2012/02/06 02:14:15 matt Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -59,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.20 2009/03/16 23:11:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.23 2012/02/06 02:14:15 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -69,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.20 2009/03/16 23:11:09 dsl Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -87,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_eb66.c,v 1.20 2009/03/16 23:11:09 dsl Exp $");
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_eb66_intr_map(struct pci_attach_args *,
+int	dec_eb66_intr_map(const struct pci_attach_args *,
 	    pci_intr_handle_t *);
 const char *dec_eb66_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *dec_eb66_intr_evcnt(void *, pci_intr_handle_t);
@@ -115,12 +113,12 @@ pci_eb66_pickintr(struct lca_config *lcp)
 	char *cp;
 	int i;
 
-        pc->pc_intr_v = lcp;
-        pc->pc_intr_map = dec_eb66_intr_map;
-        pc->pc_intr_string = dec_eb66_intr_string;
+	pc->pc_intr_v = lcp;
+	pc->pc_intr_map = dec_eb66_intr_map;
+	pc->pc_intr_string = dec_eb66_intr_string;
 	pc->pc_intr_evcnt = dec_eb66_intr_evcnt;
-        pc->pc_intr_establish = dec_eb66_intr_establish;
-        pc->pc_intr_disestablish = dec_eb66_intr_disestablish;
+	pc->pc_intr_establish = dec_eb66_intr_establish;
+	pc->pc_intr_disestablish = dec_eb66_intr_disestablish;
 
 	/* Not supported on the EB66. */
 	pc->pc_pciide_compat_intr_establish = NULL;
@@ -149,8 +147,8 @@ pci_eb66_pickintr(struct lca_config *lcp)
 #endif
 }
 
-int     
-dec_eb66_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+int
+dec_eb66_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin, line = pa->pa_intrline;
@@ -189,7 +187,7 @@ dec_eb66_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 const char *
 dec_eb66_intr_string(void *lcv, pci_intr_handle_t ih)
 {
-        static char irqstr[15];          /* 11 + 2 + NULL + sanity */
+	static char irqstr[15];          /* 11 + 2 + NULL + sanity */
 
 	if (ih >= EB66_MAX_IRQ)
 		panic("dec_eb66_intr_string: bogus eb66 IRQ 0x%lx", ih);
@@ -232,7 +230,7 @@ dec_eb66_intr_disestablish(void *lcv, void *cookie)
 	struct alpha_shared_intrhand *ih = cookie;
 	unsigned int irq = ih->ih_num;
 	int s;
- 
+
 	s = splhigh();
 
 	alpha_shared_intr_disestablish(eb66_pci_intr, cookie,
@@ -243,14 +241,14 @@ dec_eb66_intr_disestablish(void *lcv, void *cookie)
 		    IST_NONE);
 		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
- 
+
 	splx(s);
 }
 
 void
 eb66_iointr(void *arg, unsigned long vec)
 {
-	int irq; 
+	int irq;
 
 	irq = SCB_VECTOIDX(vec - 0x900);
 
@@ -264,7 +262,7 @@ eb66_iointr(void *arg, unsigned long vec)
 }
 
 #if 0		/* THIS DOES NOT WORK!  see pci_eb66_intr.S. */
-u_int8_t eb66_intr_mask[3] = { 0xff, 0xff, 0xff };
+uint8_t eb66_intr_mask[3] = { 0xff, 0xff, 0xff };
 
 void
 eb66_intr_enable(int irq)

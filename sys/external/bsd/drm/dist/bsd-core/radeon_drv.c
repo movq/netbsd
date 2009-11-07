@@ -134,6 +134,38 @@ MODULE_DEPEND(radeon, drm, 1, 1, 1);
 
 #elif   defined(__NetBSD__)
 
+static bool
+radeondrm_suspend(device_t self, const pmf_qual_t *qual)
+{
+	struct drm_device *dev = device_private(self);
+	drm_radeon_cp_stop_t stop_args;
+	bool rv = true;
+
+	stop_args.flush = stop_args.idle = 0;
+	DRM_LOCK();
+	if (drm_find_file_by_proc(dev, curlwp->l_proc) &&
+	    radeon_cp_stop(dev, &stop_args, dev->lock.file_priv) != 0)
+		rv = false;
+	DRM_UNLOCK();
+
+	return rv;
+}
+
+static bool
+radeondrm_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct drm_device *dev = device_private(self);
+	bool rv = true;
+
+	DRM_LOCK();
+	if (drm_find_file_by_proc(dev, curlwp->l_proc) &&
+	    radeon_cp_resume(dev, NULL, NULL) != 0)
+		rv =  false;
+	DRM_UNLOCK();
+	
+	return rv;
+}
+
 static int
 radeondrm_probe(device_t parent, cfdata_t match, void *aux)
 {
@@ -152,68 +184,85 @@ radeondrm_attach(device_t parent, device_t self, void *aux)
 
 	radeon_configure(dev);
 
+	if (!pmf_device_register(self, radeondrm_suspend, radeondrm_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	drm_attach(self, pa, radeon_pciidlist);
 }
 
+static int
+radeondrm_detach(device_t self, int flags)
+{
+	pmf_device_deregister(self);
+
+	return drm_detach(self, flags);
+}
+
 CFATTACH_DECL_NEW(radeondrm, sizeof(struct drm_device),
-    radeondrm_probe, radeondrm_attach, drm_detach, drm_activate);
+    radeondrm_probe, radeondrm_attach, radeondrm_detach, NULL);
+
+MODULE(MODULE_CLASS_DRIVER, radeondrm, "drm,ati_pcigart");
 
 #ifdef _MODULE
-
-MODULE(MODULE_CLASS_DRIVER, radeondrm, NULL);
-
-CFDRIVER_DECL(radeondrm, DV_DULL, NULL);
-extern struct cfattach radeondrm_ca;
-static int drmloc[] = { -1 };
-static struct cfparent drmparent = {
-	"drm", "vga", DVUNIT_ANY
-};
-static struct cfdata radeondrm_cfdata[] = {
-	{
-		.cf_name = "radeondrm",
-		.cf_atname = "radeondrm",
-		.cf_unit = 0,
-		.cf_fstate = FSTATE_STAR,
-		.cf_loc = drmloc,
-		.cf_flags = 0,
-		.cf_pspec = &drmparent,
-	},
-	{ NULL }
-};
+#include "ioconf.c"
+#endif
 
 static int
 radeondrm_modcmd(modcmd_t cmd, void *arg)
 {
-	int err;
+	int error = 0;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		err = config_cfdriver_attach(&radeondrm_cd);
-		if (err)
-			return err;
-		err = config_cfattach_attach("radeondrm", &radeondrm_ca);
-		if (err) {
-			config_cfdriver_detach(&radeondrm_cd);
-			return err;
-		}
-		err = config_cfdata_attach(radeondrm_cfdata, 1);
-		if (err) {
-			config_cfattach_detach("radeondrm", &radeondrm_ca);
-			config_cfdriver_detach(&radeondrm_cd);
-			return err;
-		}
-		return 0;
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_radeondrm,
+		    cfattach_ioconf_radeondrm, cfdata_ioconf_radeondrm);
+#endif
+		break;
 	case MODULE_CMD_FINI:
-		err = config_cfdata_detach(radeondrm_cfdata);
-		if (err)
-			return err;
-		config_cfattach_detach("radeondrm", &radeondrm_ca);
-		config_cfdriver_detach(&radeondrm_cd);
-		return 0;
+#ifdef _MODULE
+		error = config_fini_component(cfdriver_ioconf_radeondrm,
+		    cfattach_ioconf_radeondrm, cfdata_ioconf_radeondrm);
+#endif
+		break;
 	default:
 		return ENOTTY;
 	}
+
+	return error;
 }
-#endif /* _MODULE */
+
+#include <dev/firmload.h>
+
+int radeon_load_a_microcode(const char *fmt, const char *chip_name, void **codep, size_t *sizep)
+{
+	firmware_handle_t fh;
+	char fw_name[30];
+	int error;
+
+	snprintf(fw_name, sizeof(fw_name), fmt, chip_name);
+	if ((error = firmware_open("radeon", fw_name, &fh)) != 0) {
+		DRM_ERROR("Cannot open radeon/%s firmware: %d\n", fw_name, error);
+		return error;
+	}
+	*sizep = firmware_get_size(fh);
+	if ((*codep = firmware_malloc(*sizep)) == NULL) {
+		DRM_ERROR("Cannot alloc memory for radeon/%s firmware\n", chip_name);
+		firmware_close(fh);
+		return ENOMEM;
+	}
+	if ((error = firmware_read(fh, 0, *codep, *sizep)) != 0) {
+		DRM_ERROR("Cannot read radeon/%s firmware: %d\n", chip_name, error);
+		firmware_free(*codep, *sizep);
+	}
+	firmware_close(fh);
+
+	return error;
+}
+
+void radeon_free_a_microcode(void *code, size_t size)
+{
+	firmware_free(code, size);
+}
 
 #endif

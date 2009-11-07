@@ -1,4 +1,4 @@
-/*	$NetBSD: nslm7xvar.h,v 1.26 2008/10/12 13:17:28 pgoyette Exp $ */
+/*	$NetBSD: nslm7xvar.h,v 1.28 2012/01/17 16:14:47 jakllsch Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,6 +31,8 @@
 
 #ifndef _DEV_ISA_NSLM7XVAR_H_
 #define _DEV_ISA_NSLM7XVAR_H_
+
+#include <dev/sysmon/sysmonvar.h>
 
 /*
  * National Semiconductor LM78/79/81 registers.
@@ -87,6 +89,7 @@
 
 /* Bank 0 regs */
 #define WB_BANK0_CHIPID	0x58	/* Chip ID */
+#define WB_BANK0_RESVD1	0x59	/* Resvd, bits 6-4 select temp sensor mode */
 #define WB_BANK0_FAN45	0x5c	/* Fan 4/5 Divisor Control (W83791D only) */
 #define WB_BANK0_VBAT	0x5d	/* VBAT Monitor Control */
 #define WB_BANK0_FAN4	0xba	/* Fan 4 reading (W83791D only) */

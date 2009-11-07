@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2007/02/19 18:26:22 chs Exp $
+#	$NetBSD: Makefile,v 1.9 2011/04/10 16:47:04 joerg Exp $
 
 .include "../Makefile.inc"
 
@@ -10,7 +10,7 @@ DIST=		${TOP}/dist/gdb6
 PROG=		gdb
 
 SRCS=		gdb.c
-CPPFLAGS=	-I${.CURDIR} \
+CPPFLAGS+=	-I${.CURDIR} \
 		-I${.CURDIR}/../arch/${MACHINE_ARCH} \
 		-I${DIST}/gdb \
 		-I${DIST}/gdb/config \
@@ -60,13 +60,13 @@ DPADD+=		${SIMOBJ}/libsim.a
 LDADD+= -L${LIBOPCODESDIR} -lopcodes \
 	-L${LIBBFDDIR} -lbfd \
 	${LIBRL} \
-	-ltermcap \
+	-lterminfo \
 	-L${LIBIBERTYDIR} -liberty
 
 DPADD+=	${LIBOPCODESDIR}/libopcodes.a \
 	${LIBBFDDIR}/libbfd.a \
 	${LIBRLDP} \
-	${LIBTERMCAP} \
+	${LIBTERMINFO} \
 	${LIBIBERTYDIR}/libiberty.a
 
 LDADD+=		-lcurses -lintl -lm -lkvm

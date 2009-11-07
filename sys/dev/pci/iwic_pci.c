@@ -1,4 +1,4 @@
-/*	$NetBSD: iwic_pci.c,v 1.15 2009/05/12 08:23:01 cegger Exp $	*/
+/*	$NetBSD: iwic_pci.c,v 1.17 2011/05/22 08:13:17 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Dave Boyce. All rights reserved.
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwic_pci.c,v 1.15 2009/05/12 08:23:01 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iwic_pci.c,v 1.17 2011/05/22 08:13:17 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -122,6 +122,9 @@ static struct winids {
 		"ASUSCOM P-IN100-ST-D"
 	},
 	{
+#ifndef PCI_VENDOR_CITICORP
+#define PCI_VENDOR_CITICORP	PCI_VENDOR_FUJITSU4
+#endif
 		PCI_ID_CODE(PCI_VENDOR_CITICORP,0x105E),
 		-1,
 		-1,
@@ -253,12 +256,12 @@ iwic_pci_attach(device_t  parent, device_t  dev, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	sc->sc_pc = pc;
-	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/* disable interrupts */
 	IWIC_WRITE(sc, IWIC_IMASK, 0xff);

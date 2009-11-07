@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.c,v 1.30 2009/11/07 07:27:40 cegger Exp $ */
+/* $NetBSD: pmap.c,v 1.35 2012/02/12 16:34:06 matt Exp $ */
 /*-
  * Copyright (c) 1997, 1998, 2000 Ben Harris
  * All rights reserved.
@@ -102,14 +102,16 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.30 2009/11/07 07:27:40 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.35 2012/02/12 16:34:06 matt Exp $");
 
 #include <sys/kernel.h> /* for cold */
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/pool.h>
 #include <sys/systm.h>
+#include <sys/lwp.h>
+#include <sys/proc.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 #include <uvm/uvm_stat.h>
 
 #include <arm/cpuconf.h>
@@ -299,11 +301,11 @@ pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
 	addr = 0;
 	size = round_page(size);
 	for (i = 0; i < vm_nphysseg; i++) {
-		if (vm_physmem[i].avail_start < vm_physmem[i].avail_end) {
+		if (VM_PHYSMEM_PTR(i)->avail_start < VM_PHYSMEM_PTR(i)->avail_end) {
 			addr = (vaddr_t)
 			    ((char*)MEMC_PHYS_BASE +
-				ptoa(vm_physmem[i].avail_start));
-			vm_physmem[i].avail_start++;
+				ptoa(VM_PHYSMEM_PTR(i)->avail_start));
+			VM_PHYSMEM_PTR(i)->avail_start++;
 			break;
 		}
 	}
@@ -334,7 +336,7 @@ pmap_init(void)
  * for allocating user pmaps, and frees some unnecessary memory.
  */
 void
-pmap_init2()
+pmap_init2(void)
 {
 	struct pmap *pmap;
 	struct pv_entry *new_pv_table, *old_pv_table;
@@ -345,7 +347,7 @@ pmap_init2()
 	UVMHIST_CALLED(pmaphist);
 	/* We can now call malloc().  Rationalise our memory usage. */
 	pv_table_size = physmem * sizeof(struct pv_entry);
-	new_pv_table = malloc(pv_table_size, M_VMPMAP, M_WAITOK);
+	new_pv_table = kmem_alloc(pv_table_size, KM_SLEEP);
 	memcpy(new_pv_table, pv_table, pv_table_size);
 	old_pv_table = pv_table;
 	pv_table = new_pv_table;
@@ -378,9 +380,9 @@ pmap_create(void)
 		pmap_init2();
 	pmap = pool_get(&pmap_pool, PR_WAITOK);
 	memset(pmap, 0, sizeof(*pmap));
-	pmap->pm_entries = (struct pv_entry **)malloc(
-		sizeof(struct pv_entry *) * PM_NENTRIES, M_VMPMAP,
-		M_WAITOK | M_ZERO);
+	pmap->pm_entries = (struct pv_entry **)kmem_zalloc(
+		sizeof(struct pv_entry *) * PM_NENTRIES,
+		KM_SLEEP);
 	pmap->pm_count = 1;
 	return pmap;
 }
@@ -404,7 +406,8 @@ pmap_destroy(pmap_t pmap)
 		if (pmap->pm_entries[i] != NULL)
 			panic("pmap_destroy: pmap isn't empty");
 #endif
-	free((void *)pmap->pm_entries, M_VMPMAP);
+	kmem_free((void *)pmap->pm_entries,
+		sizeof(struct pv_entry *) * PM_NENTRIES);
 	pool_put(&pmap_pool, pmap);
 }
 
@@ -529,14 +532,14 @@ pv_update(struct pv_entry *pv)
 static struct pv_entry *
 pv_alloc(void)
 {
-	return malloc(sizeof(struct pv_entry), M_VMPMAP, M_NOWAIT | M_ZERO);
+	return kmem_intr_zalloc(sizeof(struct pv_entry), KM_NOSLEEP);
 }
 
 static void
 pv_free(struct pv_entry *pv)
 {
 
-	free(pv, M_VMPMAP);
+	kmem_intr_free(pv, sizeof(struct pv_entry));
 }
 
 static struct pv_entry *

@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.14 2009/07/28 18:21:06 dyoung Exp $	*/
+/*	$NetBSD: parse.c,v 1.16 2010/07/01 16:44:05 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2008 David Young.  All rights reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: parse.c,v 1.14 2009/07/28 18:21:06 dyoung Exp $");
+__RCSID("$NetBSD: parse.c,v 1.16 2010/07/01 16:44:05 dyoung Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -155,7 +155,7 @@ pstr_match(const struct parser *p, const struct match *im, struct match *om,
 	}
 
 	len = (int)sizeof(buf);
-	if (get_string(arg, NULL, buf, &len) == NULL) {
+	if (get_string(arg, NULL, buf, &len, ps->ps_hexok) == NULL) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -252,8 +252,8 @@ parse_linkaddr(const char *addr, struct sockaddr_storage *ss)
 				return -1;
 			dbg_warnx("%s.%d", __func__, __LINE__);
 			sdl->sdl_data[i++] = octet;
-			sdl->sdl_len =
-			    offsetof(struct sockaddr_dl, sdl_data[i]);
+			sdl->sdl_len = offsetof(struct sockaddr_dl, sdl_data)
+			    + i * sizeof(sdl->sdl_data[0]);
 			sdl->sdl_alen = i;
 			return 0;
 		}

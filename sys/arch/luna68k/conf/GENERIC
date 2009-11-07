@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.87 2009/01/24 05:06:06 mrg Exp $
+# $NetBSD: GENERIC,v 1.97.2.1 2012/07/25 21:30:34 martin Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,22 +22,22 @@ include		"arch/luna68k/conf/std.luna68k"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.87 $"
+#ident 		"GENERIC-$Revision: 1.97.2.1 $"
 
 maxusers	8
 
 options 	M68030
-#options 	M68040
-#options 	FPSP	# on m68040 to emulate some missing FP instructions
+options 	M68040
+options 	FPSP	# on m68040 to emulate some missing FP instructions
 
 # Needs to be set per system.  i.e change these as you see fit
 
 # Standard system options
 options 	NTP			# NTP phase/frequency locked loop
 options 	KTRACE
-#options 	SYSVMSG			# System V message queues
-#options 	SYSVSEM			# System V semaphores
-#options 	SYSVSHM			# System V shared memory
+options 	SYSVMSG			# System V message queues
+options 	SYSVSEM			# System V semaphores
+options 	SYSVSHM			# System V shared memory
 #options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 options 	USERCONF		# userconf(4) support
 #options	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -51,7 +51,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 # Debugging options
 options 	DDB
 #options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
-#options 	SYMTAB_SPACE=72000	# place DDB symbols in data segment
+#options 	SYMTAB_SPACE=448000	# place DDB symbols in data segment
 #options 	DEBUG			# extra kernel debugging support
 #options 	DIAGNOSTIC		# extra kernel sanity checking
 #options 	SCSIVERBOSE		# Verbose SCSI errors
@@ -85,18 +85,18 @@ file-system 	KERNFS		# /kern
 file-system 	PROCFS		# /proc
 #file-system 	FDESC		# /dev/fd/*
 file-system 	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcode (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 #options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# ffs quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# ffs endian independent support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 
@@ -138,6 +138,7 @@ options 	NFS_BOOT_DHCP	# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
+options 	FONT_OMRON12x20
 
 config		netbsd root on ? type ?
 
@@ -153,7 +154,7 @@ ws0	at sio0			# port for keyboard and mouse
 le0	at mainbus0
 # MB89532 SPC
 spc0	at mainbus0
-#spc1	at mainbus0		# 2nd SCSI on LUNA-II
+spc1	at mainbus0		# 2nd SCSI on LUNA-II
 # framebuffer
 fb0	at mainbus0		# 16 or 256 pseudo color
 
@@ -185,12 +186,12 @@ pseudo-device	bpfilter		# Berkeley Packet Filter
 #pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	ipfilter	1	# ip filter
 pseudo-device	loop		1	# loopback interface; required
-pseudo-device	md		1	# memory disk device
+pseudo-device	md			# memory disk device
 #pseudo-device	ppp			# PPP interfaces
 #pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	raid		2	# RAIDframe disk driver
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 #pseudo-device	sl			# SLIP interfaces
 #pseudo-device	tun			# Network "tunnel" device
 #pseudo-device	tap			# virtual Ethernet
@@ -200,7 +201,6 @@ pseudo-device	bridge			# simple inter-network bridging
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 #pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter

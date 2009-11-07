@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.35 2009/02/14 13:52:51 abs Exp $
+#	$NetBSD: Makefile,v 1.38 2011/08/28 08:03:49 mrg Exp $
 
 STRIPFLAG=
 PROGSOURCE=	boot.c net.c netif_sun.c conf.c openfirm.c bootinfo.c \
@@ -16,7 +16,7 @@ SAMISCMAKEFLAGS= SA_USE_CREAD=yes
 
 .include "../Makefile.buildboot"
 
-.if ${MACHINE_ARCH} == sparc64
+.if ${MACHINE} == sparc64
 CFLAGS+=	-m32
 LDFLAGS+=	-m elf32_sparc
 AFLAGS+=	-Wa,-32
@@ -26,14 +26,15 @@ AFLAGS+=	-Wa,-32
 
 OBJS=${SRCS:N*.h:N*.sh:N*.fth:R:S/$/.o/g}
 
-LINKFLAGS=-N -e start
+LINKFLAGS=-N -e start -Map $@.map
 
 .MAIN: all
 realall: ${FILES}
 
 .PHONY: vers.c
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "sparc" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/version "sparc" ${NEWVERSWHAT}
 
 .for RELOC in ${RELOCS}
 boot.${RELOC}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
@@ -42,6 +43,7 @@ boot.${RELOC}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${SIZE} ${.TARGET}.tmp
 	${OBJCOPY} -O binary ${.TARGET}.tmp ${.TARGET}
 	rm -f ${.TARGET}.tmp
+CLEANFILES+=	boot.${RELOC}.map
 .endfor
 
 # conjure up a magic header that is accepted by all Sun PROMS;
@@ -56,5 +58,6 @@ bootjs.net: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${LD} -o ${.TARGET} ${LINKFLAGS} -Ttext 300000 ${OBJS} \
 	    ${LIBSA} ${LIBZ} ${LIBKERN}
 	${SIZE} ${.TARGET}
+CLEANFILES+=	bootjs.net.map
 
 .include <bsd.prog.mk>

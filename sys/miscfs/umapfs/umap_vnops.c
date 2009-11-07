@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vnops.c,v 1.47 2009/03/14 21:04:25 dsl Exp $	*/
+/*	$NetBSD: umap_vnops.c,v 1.53 2011/07/11 08:27:39 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vnops.c,v 1.47 2009/03/14 21:04:25 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vnops.c,v 1.53 2011/07/11 08:27:39 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,9 +86,6 @@ const struct vnodeopv_entry_desc umap_vnodeop_entries[] = {
 	{ &vop_print_desc,	umap_print },
 	{ &vop_rename_desc,	umap_rename },
 
-	{ &vop_lock_desc,	layer_lock },
-	{ &vop_unlock_desc,	layer_unlock },
-	{ &vop_islocked_desc,	layer_islocked },
 	{ &vop_fsync_desc,	layer_fsync },
 	{ &vop_inactive_desc,	layer_inactive },
 	{ &vop_reclaim_desc,	layer_reclaim },
@@ -96,9 +93,9 @@ const struct vnodeopv_entry_desc umap_vnodeop_entries[] = {
 	{ &vop_setattr_desc,	layer_setattr },
 	{ &vop_access_desc,	layer_access },
 	{ &vop_remove_desc,	layer_remove },
+	{ &vop_revoke_desc,	layer_revoke },
 	{ &vop_rmdir_desc,	layer_rmdir },
 
-	{ &vop_bwrite_desc,	layer_bwrite },
 	{ &vop_bmap_desc,	layer_bmap },
 	{ &vop_getpages_desc,	layer_getpages },
 	{ &vop_putpages_desc,	layer_putpages },
@@ -124,7 +121,7 @@ umap_bypass(void *v)
 	kauth_cred_t savecredp = 0, savecompcredp = 0;
 	kauth_cred_t compcredp = 0;
 	struct vnode **this_vp_p;
-	int error, error1;
+	int error;
 	struct vnode *old_vps[VDESC_MAX_VPS], *vp0;
 	struct vnode **vps_p[VDESC_MAX_VPS];
 	struct vnode ***vppp;
@@ -179,7 +176,7 @@ umap_bypass(void *v)
 			 * that.  (This should go away in the future.)
 			 */
 			if (reles & VDESC_VP0_WILLRELE)
-				VREF(*this_vp_p);
+				vref(*this_vp_p);
 		}
 
 	}
@@ -261,8 +258,6 @@ umap_bypass(void *v)
 			break;   /* bail out at end of list */
 		if (old_vps[i]) {
 			*(vps_p[i]) = old_vps[i];
-			if (reles & VDESC_VP0_WILLUNLOCK)
-				LAYERFS_UPPERUNLOCK(*(vps_p[i]), 0, error1);
 			if (reles & VDESC_VP0_WILLRELE)
 				vrele(*(vps_p[i]));
 		}
@@ -273,17 +268,7 @@ umap_bypass(void *v)
 	 * (Assumes that the lower layer always returns
 	 * a VREF'ed vpp unless it gets an error.)
 	 */
-	if (descp->vdesc_vpp_offset != VDESC_NO_OFFSET &&
-	    !(descp->vdesc_flags & VDESC_NOMAP_VPP) &&
-	    !error) {
-		/*
-		 * XXX - even though some ops have vpp returned vp's,
-		 * several ops actually vrele this before returning.
-		 * We must avoid these ops.
-		 * (This should go away when these ops are regularized.)
-		 */
-		if (descp->vdesc_flags & VDESC_VPP_WILLRELE)
-			goto out;
+	if (descp->vdesc_vpp_offset != VDESC_NO_OFFSET && !error) {
 		vppp = VOPARG_OFFSETTO(struct vnode***,
 				 descp->vdesc_vpp_offset, ap);
 		/*
@@ -301,7 +286,6 @@ umap_bypass(void *v)
 		}
 	}
 
- out:
 	/*
 	 * Free duplicate cred structure and restore old one.
 	 */
@@ -412,7 +396,7 @@ umap_lookup(void *v)
 	/* Do locking fixup as appropriate. See layer_lookup() for info */
 	if (ldvp == vp) {
 		*ap->a_vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		vrele(vp);
 	} else if (vp != NULL) {
 		error = layer_node_create(mp, vp, ap->a_vpp);

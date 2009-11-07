@@ -1,4 +1,4 @@
-/*	$NetBSD: siop2.c,v 1.36 2009/10/26 19:16:54 cegger Exp $ */
+/*	$NetBSD: siop2.c,v 1.40 2010/12/20 00:25:26 matt Exp $ */
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -70,7 +70,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.36 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.40 2010/12/20 00:25:26 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,16 +81,17 @@ __KERNEL_RCSID(0, "$NetBSD: siop2.c,v 1.36 2009/10/26 19:16:54 cegger Exp $");
 #include <sys/buf.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <machine/cpu.h>
 #ifdef __m68k__
 #include <m68k/include/cacheops.h>
+#else
+#define DCIAS(pa) dma_cachectl((void *)(pa), 1)
 #endif
 #include <amiga/amiga/custom.h>
+#include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
 
 #define ARCH_720
@@ -146,7 +147,7 @@ int siopng_cmd_wait = SCSI_CMD_WAIT;
 int siopng_data_wait = SCSI_DATA_WAIT;
 int siopng_init_wait = SCSI_INIT_WAIT;
 
-#define DEBUG_SYNC
+/*#define DEBUG_SYNC*/
 
 #ifdef DEBUG
 /*
@@ -938,8 +939,11 @@ siopng_start(struct siop_softc *sc, int target, int lun, u_char *cbuf,
 #ifndef FIXME
 		rp->siop_scntl3 = sc->sc_sync[target].scntl3;
 #endif
+		amiga_membarrier();
 		rp->siop_dsa = kvtop((void *)&acb->ds);
+		amiga_membarrier();
 		rp->siop_dsp = sc->sc_scriptspa;
+		amiga_membarrier();
 		SIOP_TRACE('s',1,0,0)
 	} else {
 		if ((rp->siop_istat & SIOP_ISTAT_CON) == 0) {
@@ -1084,12 +1088,15 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 				    acb->msg[4]);
 			}
 			rp->siop_scntl3 = sc->sc_sync[target].scntl3;
+			amiga_membarrier();
 			if (sc->sc_sync[target].state == NEG_WAITW) {
 				sc->sc_sync[target].state = NEG_SYNC;
 				rp->siop_dsp = sc->sc_scriptspa + Ent_clear_ack;
+				amiga_membarrier();
 				return(0);
 			}
 			rp->siop_dcntl |= SIOP_DCNTL_STD;
+			amiga_membarrier();
 			sc->sc_sync[target].state = NEG_SYNC;
 			return (0);
 		}
@@ -1137,12 +1144,15 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 			}
 			rp->siop_sxfer = sc->sc_sync[target].sxfer;
 			rp->siop_scntl3 = sc->sc_sync[target].scntl3;
+			amiga_membarrier();
 			if (sc->sc_sync[target].state == NEG_WAITS) {
 				sc->sc_sync[target].state = NEG_DONE;
 				rp->siop_dsp = sc->sc_scriptspa + Ent_clear_ack;
+				amiga_membarrier();
 				return(0);
 			}
 			rp->siop_dcntl |= SIOP_DCNTL_STD;
+			amiga_membarrier();
 			sc->sc_sync[target].state = NEG_DONE;
 			return (0);
 		}
@@ -1210,6 +1220,7 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 		case 6:		/* message in */
 		case 7:		/* message out */
 			rp->siop_dsp = sc->sc_scriptspa + Ent_switch;
+			amiga_membarrier();
 			break;
 		default:
 			goto bad_phase;
@@ -1230,8 +1241,10 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 				printf ("Yikes, it's not busy now!\n");
 #if 0
 				*status = -1;
-				if (sc->nexus_list.tqh_first)
+				if (sc->nexus_list.tqh_first) {
 					rp->siop_dsp = sc->sc_scriptspa + Ent_wait_reselect;
+					amiga_membarrier();
+				}
 				return 1;
 #endif
 			}
@@ -1244,8 +1257,10 @@ siopng_checkintr(struct siop_softc *sc, u_char istat, u_char dstat,
 #endif
 		*status = -1;
 		acb->xs->error = XS_SELTIMEOUT;
-		if (sc->nexus_list.tqh_first)
+		if (sc->nexus_list.tqh_first) {
 			rp->siop_dsp = sc->sc_scriptspa + Ent_wait_reselect;
+			amiga_membarrier();
+		}
 		return 1;
 	}
 	if (acb)
@@ -1266,8 +1281,10 @@ siopng_dump(sc);
 		siopngabort (sc, rp, "siopngchkintr");
 #endif
 		*status = STS_BUSY;
-		if (sc->nexus_list.tqh_first)
+		if (sc->nexus_list.tqh_first) {
 			rp->siop_dsp = sc->sc_scriptspa + Ent_wait_reselect;
+			amiga_membarrier();
+		}
 		return (acb != NULL);
 	}
 	if (dstat & SIOP_DSTAT_SIR && (rp->siop_dsps == 0xff01 ||
@@ -1388,8 +1405,10 @@ siopng_dump(sc);
 		TAILQ_INSERT_HEAD(&sc->nexus_list, acb, chain);
 		sc->sc_nexus = NULL;		/* no current device */
 		/* start script to wait for reselect */
-		if (sc->sc_nexus == NULL)
+		if (sc->sc_nexus == NULL) {
 			rp->siop_dsp = sc->sc_scriptspa + Ent_wait_reselect;
+			amiga_membarrier();
+		}
 /* XXXX start another command ? */
 		if (sc->ready_list.tqh_first)
 			siopng_sched(sc);
@@ -1439,11 +1458,13 @@ siopng_dump(sc);
 			acb->status = 0;
 			DCIAS(kvtop(&acb->stat[0]));
 			rp->siop_dsa = kvtop((void *)&acb->ds);
+			amiga_membarrier();
 			rp->siop_sxfer =
 				sc->sc_sync[acb->xs->xs_periph->periph_target].sxfer;
 #ifndef FIXME
 			rp->siop_scntl3 =
 				sc->sc_sync[acb->xs->xs_periph->periph_target].scntl3;
+			amiga_membarrier();
 #endif
 			break;
 		}
@@ -1456,6 +1477,7 @@ siopng_dump(sc);
 		dma_cachectl ((void *)acb, sizeof(*acb));
 		rp->siop_temp = 0;
 		rp->siop_dcntl |= SIOP_DCNTL_STD;
+		amiga_membarrier();
 		return (0);
 	}
 	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff04) {
@@ -1487,11 +1509,14 @@ siopng_dump(sc);
 		target = sc->sc_nexus->xs->xs_periph->periph_target;
 		rp->siop_temp = 0;
 		rp->siop_dsa = kvtop((void *)&sc->sc_nexus->ds);
+		amiga_membarrier();
 		rp->siop_sxfer = sc->sc_sync[target].sxfer;
 #ifndef FIXME
 		rp->siop_scntl3 = sc->sc_sync[target].scntl3;
+		amiga_membarrier();
 #endif
 		rp->siop_dsp = sc->sc_scriptspa;
+		amiga_membarrier();
 		return (0);
 	}
 	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff06) {
@@ -1505,6 +1530,7 @@ siopng_dump(sc);
 		/* what should be done here? */
 		DCIAS(kvtop(&acb->msg[1]));
 		rp->siop_dsp = sc->sc_scriptspa + Ent_clear_ack;
+		amiga_membarrier();
 		return (0);
 	}
 	if (dstat & SIOP_DSTAT_SIR && rp->siop_dsps == 0xff0a) {

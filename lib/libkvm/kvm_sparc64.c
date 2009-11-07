@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_sparc64.c,v 1.13 2008/01/18 16:26:09 martin Exp $	*/
+/*	$NetBSD: kvm_sparc64.c,v 1.15 2010/09/20 23:23:16 jym Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_sparc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_sparc64.c,v 1.13 2008/01/18 16:26:09 martin Exp $");
+__RCSID("$NetBSD: kvm_sparc64.c,v 1.15 2010/09/20 23:23:16 jym Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,6 +54,8 @@ __RCSID("$NetBSD: kvm_sparc64.c,v 1.13 2008/01/18 16:26:09 martin Exp $");
 #include <sys/stat.h>
 #include <sys/core.h>
 #include <sys/kcore.h>
+#include <sys/types.h>
+
 #include <unistd.h>
 #include <nlist.h>
 #include <kvm.h>
@@ -69,11 +71,8 @@ __RCSID("$NetBSD: kvm_sparc64.c,v 1.13 2008/01/18 16:26:09 martin Exp $");
 
 #include "kvm_private.h"
 
-int _kvm_kvatop __P((kvm_t *, u_long, u_long *));
-
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 	if (kd->vmst != 0) {
 		_kvm_err(kd, kd->program, "_kvm_freevtop: internal error");
@@ -89,8 +88,7 @@ _kvm_freevtop(kd)
  * We should read in and cache the ksegs here to speed up operations...
  */
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 	kd->nbpg = 0x2000;
 
@@ -104,10 +102,7 @@ _kvm_initvtop(kd)
  * physical address.  This routine is used only for crash dumps.
  */
 int
-_kvm_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
 	cpu_kcore_hdr_t *cpup = kd->cpu_data;
 	u_long kernbase = cpup->kernbase;
@@ -175,7 +170,7 @@ _kvm_kvatop(kd, va, pa)
 	 */
 	pseg = (uint64_t *)(u_long)cpup->segmapoffset;
 	if (_kvm_pread(kd, kd->pmfd, &pdir, sizeof(pdir),
-		_kvm_pa2off(kd, (u_long)&pseg[va_to_seg(va)])) 
+		_kvm_pa2off(kd, (paddr_t)&pseg[va_to_seg(va)])) 
 		!= sizeof(pdir)) {
 		_kvm_syserr(kd, 0, "could not read L1 PTE");
 		goto lose;
@@ -187,7 +182,7 @@ _kvm_kvatop(kd, va, pa)
 	}
 
 	if (_kvm_pread(kd, kd->pmfd, &ptbl, sizeof(ptbl),
-		_kvm_pa2off(kd, (u_long)&pdir[va_to_dir(va)])) 
+		_kvm_pa2off(kd, (paddr_t)&pdir[va_to_dir(va)])) 
 		!= sizeof(ptbl)) {
 		_kvm_syserr(kd, 0, "could not read L2 PTE");
 		goto lose;
@@ -199,7 +194,7 @@ _kvm_kvatop(kd, va, pa)
 	}
 
 	if (_kvm_pread(kd, kd->pmfd, &data, sizeof(data),
-		_kvm_pa2off(kd, (u_long)&ptbl[va_to_pte(va)])) 
+		_kvm_pa2off(kd, (paddr_t)&ptbl[va_to_pte(va)])) 
 		!= sizeof(data)) {
 		_kvm_syserr(kd, 0, "could not read TTE");
 		goto lose;
@@ -227,7 +222,7 @@ _kvm_kvatop(kd, va, pa)
 
 lose:
 	*pa = (u_long)-1;
-	_kvm_err(kd, 0, "invalid address (%lx)", va);
+	_kvm_err(kd, 0, "invalid address (%#"PRIxVADDR")", va);
 	return (0);
 }
 
@@ -236,9 +231,7 @@ lose:
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t   *kd;
-	u_long  pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 	cpu_kcore_hdr_t *cpup = kd->cpu_data;
 	phys_ram_seg_t *mp;
@@ -261,7 +254,7 @@ _kvm_pa2off(kd, pa)
 		off += mp->size;
 	}
 	if (nmem < 0) {
-		_kvm_err(kd, 0, "invalid address (%lx)", pa);
+		_kvm_err(kd, 0, "invalid address (%#"PRIxPADDR")", pa);
 		return (-1);
 	}
 
@@ -274,8 +267,7 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 	u_long max_uva;
 	extern struct ps_strings *__ps_strings;

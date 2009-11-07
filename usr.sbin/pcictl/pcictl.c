@@ -1,4 +1,4 @@
-/*	$NetBSD: pcictl.c,v 1.16 2009/07/04 20:34:23 cegger Exp $	*/
+/*	$NetBSD: pcictl.c,v 1.18 2011/08/30 20:08:38 joerg Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -63,21 +63,21 @@ struct command {
 	int open_flags;
 };
 
-static void	usage(void);
+__dead static void	usage(void);
 
-int	pcifd;
+static int	pcifd;
 
-struct pciio_businfo pci_businfo;
+static struct pciio_businfo pci_businfo;
 
-const	char *dvname;
-char	dvname_store[MAXPATHLEN];
-const	char *cmdname;
-int	print_numbers = 0;
+static const	char *dvname;
+static char	dvname_store[MAXPATHLEN];
+static const	char *cmdname;
+static int	print_numbers = 0;
 
 static void	cmd_list(int, char *[]);
 static void	cmd_dump(int, char *[]);
 
-const struct command commands[] = {
+static const struct command commands[] = {
 	{ "list",
 	  "[-n] [-b bus] [-d device] [-f function]",
 	  cmd_list,
@@ -159,7 +159,7 @@ cmd_list(int argc, char *argv[])
 	int bus, dev, func;
 	int ch;
 
-	bus = pci_businfo.busno;
+	bus = -1;
 	dev = func = -1;
 
 	while ((ch = getopt(argc, argv, "nb:d:f:")) != -1) {

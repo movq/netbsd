@@ -82,17 +82,23 @@ CONFIGURATION
    Environment variables
      Several environment variables control the behaviour of NetBSD builds.
 
-     HOST_SH           Path name to a POSIX-compliant shell.  If this is not
-                       set explicitly, then the default is set using heuris-
-                       tics dependent on the host platform, or from the shell
-                       under which build.sh is executed (if that can be deter-
-                       mined), or using the first copy of sh found in PATH.
-                       If the host system's /bin/sh is not POSIX-compliant, we
-                       suggest that you build using commands like
+     HOST_SH           Path name to a shell available on the host system and
+                       suitable for use during the build.  The NetBSD build
+                       system requires a modern Bourne-like shell with POSIX-
+                       compliant features, and also requires support for the
+                       ``local'' keyword to declare local variables in shell
+                       functions (which is a widely-implemented but non-stan-
+                       dardised feature).
 
-                             HOST_SH=/path/to/working/shell
-                             export HOST_SH
-                             ${HOST_SH} build.sh [options]
+                       Depending on the host system, a suitable shell may be
+                       /bin/sh, /usr/xpg4/bin/sh, /bin/ksh (provided it is a
+                       variant of ksh that supports the ``local'' keyword,
+                       such as ksh88, but not ksh93), or /usr/local/bin/bash.
+
+                       Most parts of the build require HOST_SH to be an abso-
+                       lute path; however, build.sh allows it to be a simple
+                       command name, which will be converted to an absolute
+                       path by searching the PATH.
 
      HOST_CC           Path name to C compiler used to create the toolchain.
 
@@ -104,7 +110,9 @@ CONFIGURATION
 
      MAKE              Path name to invoke make(1) as.
 
-     MAKEFLAGS         Flags to invoke make(1) with.
+     MAKEFLAGS         Flags to invoke make(1) with.  Note that build.sh
+                       ignores the value of MAKEFLAGS passed in the environ-
+                       ment, but allows MAKEFLAGS to be set via the -V option.
 
      MAKEOBJDIR        Directory to use as the .OBJDIR for the current direc-
                        tory.  The value is subjected to variable expansion by
@@ -234,6 +242,11 @@ CONFIGURATION
 
                  Default: ``yes''
 
+     MKKMOD      Can be set to ``yes'' or ``no''.  Indicates whether kernel
+                 modules are built and installed.
+
+                 Default: ``yes''
+
      MKLINT      Can be set to ``yes'' or ``no''.  Indicates whether lint(1)
                  will be run against portions of the NetBSD source code during
                  the build, and whether lint libraries will be installed into
@@ -297,18 +310,6 @@ CONFIGURATION
                  Can be set to ``yes'' or ``no''.  Indicates whether program
                  binaries and shared libraries should be built to include RCS
                  IDs for use with ident(1).
-
-                 Default: ``no''
-
-     MKSUBPIXEL  Can be set to ``yes'' or ``no''.  For X builds, decides if
-                 subpixel rendering code in FreeType is turned on.  Turned off
-                 by default because of patent issues.
-
-                 Default: ``no''
-
-     MKTTINTERP  Can be set to ``yes'' or ``no''.  For X builds, decides if
-                 the TrueType bytecode interpreter is turned on.  See
-                 http://www.freetype.org/patents.html for details.
 
                  Default: ``no''
 
@@ -540,10 +541,11 @@ BUILDING
                    INSTALLWORLDDIR is not the root directory if cross compil-
                    ing.
 
-                   The INSTALLSETS environment variable may be set to a list
-                   of distribution sets to be installed.  By default, all sets
-                   except ``etc'' and ``xetc'' are installed, so most files in
-                   INSTALLWORLDDIR/etc will not be installed or modified.
+                   The INSTALLSETS environment variable may be set to a space-
+                   separated list of distribution sets to be installed.  By
+                   default, all sets except ``etc'' and ``xetc'' are
+                   installed, so most files in INSTALLWORLDDIR/etc will not be
+                   installed or modified.
 
                    Note: Before performing this operation with
                    INSTALLWORLDDIR=/, it is highly recommended that you
@@ -625,6 +627,43 @@ BUILDING
                    ity, which is not part of NetBSD, but which can be
                    installed from pkgsrc/sysutils/cdrtools.
 
+     install-image
+                   Create a bootable NetBSD installation disk image in the
+                   RELEASEDIR/RELEASEMACHINEDIR/installation/installimage
+                   directory.  The installation disk image is suitable for
+                   copying to bootable USB flash memory sticks, etc., for
+                   machines which are able to boot from such devices.  The
+                   file system in the bootable disk image will have a layout
+                   as described in release(7).
+
+                   The installation image is bootable, and will automatically
+                   run the sysinst(8) menu-based installation program, which
+                   can be used to install or upgrade a NetBSD system.  The
+                   image also contains tools that may be useful in repairing a
+                   damaged NetBSD installation.
+
+                   Before ``make install-image'' is attempted, RELEASEDIR must
+                   be populated by ``make release'' or equivalent.  The build
+                   must have been performed with MKUNPRIVED=yes because ``make
+                   install-image'' relies on information in DESTDIR/METALOG.
+
+     live-image    Create NetBSD live images in the
+                   RELEASEDIR/RELEASEMACHINEDIR/installation/liveimage direc-
+                   tory.  The live image contains all necessary files to boot
+                   NetBSD up to multi-user mode, including all files which
+                   should be extracted during installation, NetBSD disklabel,
+                   bootloaders, etc.
+
+                   The live image is suitable for use as a disk image in vir-
+                   tual machine environments such as QEMU, and also useful to
+                   boot NetBSD from a USB flash memory stick on a real
+                   machine, without the need for installation.
+
+                   Before ``make live-image'' is attempted, RELEASEDIR must be
+                   populated by ``make release'' or equivalent.  The build
+                   must have been performed with MKUNPRIVED=yes because ``make
+                   install-image'' relies on information in DESTDIR/METALOG.
+
      regression-tests
                    Can only be run after building the regression tests in the
                    directory ``regress''.  Runs those compiled regression
@@ -633,11 +672,31 @@ BUILDING
                    those as well but currently does not.
 
    The "build.sh" script
-     This script file is a Bourne shell script designed to build the entire
-     NetBSD system on any host with a Bourne shell in /bin/sh, including many
-     that are not POSIX compliant.  Note that if a host system's /bin/sh is
-     unusually old and broken, the Korn Shell (/bin/ksh), if available, may be
-     a usable alternative.
+     This script file is a shell script designed to build the entire NetBSD
+     system on any host with a suitable modern shell and some common utili-
+     ties.  The required shell features are described under the HOST_SH vari-
+     able.
+
+     If a host system's default shell does support the required features, then
+     we suggest that you explicitly specify a suitable shell using a command
+     like
+
+           /path/to/suitable/shell build.sh [options]
+
+     The above command will usually enable build.sh to automatically set
+     HOST_SH=/path/to/suitable/shell, but if that fails, then the following
+     set of commands may be used instead:
+
+           HOST_SH=/path/to/suitable/shell
+           export HOST_SH
+           ${HOST_SH} build.sh [options]
+
+     If build.sh detects that it is being executed under an unsuitable shell,
+     it attempts to exec a suitable shell instead, or prints an error message.
+     If HOST_SH is not set explicitly, then build.sh sets a default using
+     heuristics dependent on the host platform, or from the shell under which
+     build.sh is executed (if that can be determined), or using the first copy
+     of sh found in PATH.
 
      All cross-compile builds, and most native builds, of the entire system
      should make use of build.sh rather than just running ``make''.  This way,
@@ -677,7 +736,8 @@ BUILDING
 
      install=idir  Install the contents of DESTDIR to idir, using ``make
                    installworld''.  Note that files that are part of the
-                   ``etc'' or ``xetc'' sets will not be installed.
+                   ``etc'' or ``xetc'' sets will not be installed, unless
+                   overridden by the INSTALLSETS environment variable.
 
      kernel=kconf  Build a new kernel.  The kconf argument is the name of a
                    configuration file suitable for use by config(1).  If kconf
@@ -714,6 +774,11 @@ BUILDING
 
      iso-image-source
                    Perform ``make iso-image-source''.
+
+     install-image
+                   Perform ``make install-image''.
+
+     live-image    Perform ``make live-image''.
 
      The following command line options alter the behaviour of the build.sh
      operations described above:
@@ -932,4 +997,4 @@ HISTORY
      The build.sh based build scheme was introduced for NetBSD 1.6 as
      USE_NEW_TOOLCHAIN, and re-worked to TOOLCHAIN_MISSING after that.
 
-NetBSD                            May 1, 2009                           NetBSD
+NetBSD                         September 9, 2011                        NetBSD

@@ -1,4 +1,4 @@
-/*	$NetBSD: arp.c,v 1.6 2007/04/14 20:34:19 martin Exp $	*/
+/*	$NetBSD: arp.c,v 1.8 2012/02/15 17:55:05 riz Exp $	*/
 
 /*
  * arp.c (C) 1995-1998 Darren Reed

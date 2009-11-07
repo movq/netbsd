@@ -1,4 +1,4 @@
-/*	$NetBSD: vmevar.h,v 1.6 2008/04/28 20:23:15 martin Exp $	*/
+/*	$NetBSD: vmevar.h,v 1.8 2011/07/01 20:34:06 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  * Definitions for VME autoconfiguration.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* 
  * Structures and definitions needed by the machine-dependent header.
@@ -82,7 +82,7 @@ struct vme_attach_args {
  * VME master bus
  */
 struct vme_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	bus_space_tag_t sc_iot;		/* vme io space tag */
 	bus_space_tag_t sc_memt;	/* vme mem space tag */
 

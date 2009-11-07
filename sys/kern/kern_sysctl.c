@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.226 2009/09/16 15:23:04 pooka Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.233.4.1 2012/03/22 22:56:54 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.226 2009/09/16 15:23:04 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.233.4.1 2012/03/22 22:56:54 riz Exp $");
 
 #include "opt_defcorename.h"
 #include "ksyms.h"
@@ -84,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.226 2009/09/16 15:23:04 pooka Exp 
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 #include <sys/ktrace.h>
-#include <machine/stdarg.h>
+#include <sys/cprng.h>
 
 #define	MAXDESCLEN	1024
 MALLOC_DEFINE(M_SYSCTLNODE, "sysctlnode", "sysctl node structures");
@@ -141,6 +141,8 @@ __link_set_decl(sysctl_funcs, sysctl_setup_func);
  */
 krwlock_t sysctl_treelock;
 
+kmutex_t sysctl_file_marker_lock;
+
 /*
  * Attributes stored in the kernel.
  */
@@ -157,6 +159,8 @@ long hostid;
 #endif
 char defcorename[MAXPATHLEN] = DEFCORENAME;
 
+cprng_strong_t *sysctl_prng;
+
 /*
  * ********************************************************************
  * Section 0: Some simple glue
@@ -165,7 +169,7 @@ char defcorename[MAXPATHLEN] = DEFCORENAME;
  * stop caring about who's calling us and simplify some code a bunch.
  * ********************************************************************
  */
-static inline int
+int
 sysctl_copyin(struct lwp *l, const void *uaddr, void *kaddr, size_t len)
 {
 	int error;
@@ -180,7 +184,7 @@ sysctl_copyin(struct lwp *l, const void *uaddr, void *kaddr, size_t len)
 	return error;
 }
 
-static inline int
+int
 sysctl_copyout(struct lwp *l, const void *kaddr, void *uaddr, size_t len)
 {
 	int error;
@@ -195,7 +199,7 @@ sysctl_copyout(struct lwp *l, const void *kaddr, void *uaddr, size_t len)
 	return error;
 }
 
-static inline int
+int
 sysctl_copyinstr(struct lwp *l, const void *uaddr, void *kaddr,
 		 size_t len, size_t *done)
 {
@@ -235,6 +239,8 @@ sysctl_init(void)
 		f = (void*)*sysctl_setup;
 		(*f)(NULL);
 	}
+
+	mutex_init(&sysctl_file_marker_lock, MUTEX_DEFAULT, IPL_NONE);
 }
 
 /*
@@ -242,12 +248,16 @@ sysctl_init(void)
  * trees that claim to be readonly at the root now are, and if
  * the main tree is readonly, *everything* is.
  *
+ * Also starts up the PRNG used for the "random" sysctl: it's
+ * better to start it later than sooner.
+ *
  * Call this at the end of kernel init.
  */
 void
 sysctl_finalize(void)
 {
-
+        sysctl_prng = cprng_strong_create("sysctl", IPL_NONE,
+					  CPRNG_INIT_ANY|CPRNG_REKEY_ANY);
 	sysctl_root.sysctl_flags |= CTLFLAG_PERMANENT;
 }
 
@@ -1172,7 +1182,7 @@ sysctl_create(SYSCTLFN_ARGS)
 	} else if (flags & CTLFLAG_IMMEDIATE) {
 		switch (type) {
 		case CTLTYPE_BOOL:
-			node->sysctl_idata = nnode.sysctl_bdata;
+			node->sysctl_bdata = nnode.sysctl_bdata;
 			break;
 		case CTLTYPE_INT:
 			node->sysctl_idata = nnode.sysctl_idata;
@@ -1518,7 +1528,7 @@ sysctl_lookup(SYSCTLFN_ARGS)
 	sz = rnode->sysctl_size;
 	switch (SYSCTL_TYPE(rnode->sysctl_flags)) {
 	case CTLTYPE_BOOL: {
-		u_char tmp;
+		bool tmp;
 		/*
 		 * these data must be *exactly* the same size coming
 		 * in.  bool may only be true or false.
@@ -1526,6 +1536,8 @@ sysctl_lookup(SYSCTLFN_ARGS)
 		if (newlen != sz)
 			return (EINVAL);
 		error = sysctl_copyin(l, newp, &tmp, sz);
+		if (tmp != true && tmp != false)
+			return EINVAL;
 		if (error)
 			break;
 		*(bool *)d = tmp;
@@ -1569,7 +1581,7 @@ sysctl_lookup(SYSCTLFN_ARGS)
 		}
 
 		/*
-		 * did they null terminate it, or do we have space
+		 * did they NUL terminate it, or do we have space
 		 * left to do it ourselves?
 		 */
 		if (newbuf[len - 1] != '\0' && len == sz) {
@@ -2573,6 +2585,18 @@ sysctl_null(SYSCTLFN_ARGS)
 	*oldlenp = 0;
 
 	return (0);
+}
+
+u_int
+sysctl_map_flags(const u_int *map, u_int word)
+{
+	u_int rv;
+
+	for (rv = 0; *map != 0; map += 2)
+		if ((word & map[0]) != 0)
+			rv |= map[1];
+
+	return rv;
 }
 
 /*

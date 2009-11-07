@@ -1,5 +1,5 @@
-# $NetBSD: Makefile,v 1.1 2009/01/19 07:13:04 jmmv Exp $
+# $NetBSD: Makefile,v 1.4 2010/10/20 09:20:10 jmmv Exp $
 
-SUBDIR= atf-cleanup atf-exec atf-format
+SUBDIR= atf-check
 
 .include <bsd.subdir.mk>

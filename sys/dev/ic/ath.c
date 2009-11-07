@@ -1,4 +1,4 @@
-/*	$NetBSD: ath.c,v 1.107 2009/09/16 16:34:50 dyoung Exp $	*/
+/*	$NetBSD: ath.c,v 1.113 2011/11/28 00:30:17 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -41,7 +41,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/ath/if_ath.c,v 1.104 2005/09/16 10:09:23 ru Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.107 2009/09/16 16:34:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.113 2011/11/28 00:30:17 jmcneill Exp $");
 #endif
 
 /*
@@ -51,11 +51,9 @@ __KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.107 2009/09/16 16:34:50 dyoung Exp $");
  * is greatly appreciated.
  */
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-
-#ifdef __NetBSD__
-#include "bpfilter.h"
-#endif /* __NetBSD__ */
+#endif
 
 #include <sys/param.h>
 #include <sys/reboot.h>
@@ -83,9 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.107 2009/09/16 16:34:50 dyoung Exp $");
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -199,9 +195,7 @@ static void	ath_restore_diversity(struct ath_softc *);
 static int	ath_rate_setup(struct ath_softc *, u_int mode);
 static void	ath_setcurmode(struct ath_softc *, enum ieee80211_phymode);
 
-#if NBPFILTER > 0
 static void	ath_bpfattach(struct ath_softc *);
-#endif
 static void	ath_announce(struct ath_softc *);
 
 int ath_dwelltime = 200;		/* 5 channels/second */
@@ -474,7 +468,8 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 	 */
 	sc->sc_softled = (devid == AR5212_DEVID_IBM || devid == AR5211_DEVID);
 	if (sc->sc_softled) {
-		ath_hal_gpioCfgOutput(ah, sc->sc_ledpin);
+		ath_hal_gpioCfgOutput(ah, sc->sc_ledpin,
+		    HAL_GPIO_MUX_MAC_NETWORK_LED);
 		ath_hal_gpioset(ah, sc->sc_ledpin, !sc->sc_ledon);
 	}
 
@@ -618,9 +613,7 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 	/* complete initialization */
 	ieee80211_media_init(ic, ath_media_change, ieee80211_media_status);
 
-#if NBPFILTER > 0
 	ath_bpfattach(sc);
-#endif
 
 	sc->sc_flags |= ATH_ATTACHED;
 
@@ -658,9 +651,7 @@ ath_detach(struct ath_softc *sc)
 
 	s = splnet();
 	ath_stop(ifp, 1);
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	/*
 	 * NB: the order of these is important:
 	 * o call the 802.11 layer before detaching the hal to
@@ -733,7 +724,8 @@ ath_resume(struct ath_softc *sc)
 			ath_hal_resettxqueue(ah, i);
 
 	if (sc->sc_softled) {
-		ath_hal_gpioCfgOutput(sc->sc_ah, sc->sc_ledpin);
+		ath_hal_gpioCfgOutput(sc->sc_ah, sc->sc_ledpin,
+		    HAL_GPIO_MUX_MAC_NETWORK_LED);
 		ath_hal_gpioset(sc->sc_ah, sc->sc_ledpin, !sc->sc_ledon);
 	}
 	return true;
@@ -748,7 +740,7 @@ ath_intr(void *arg)
 	struct ath_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_if;
 	struct ath_hal *ah = sc->sc_ah;
-	HAL_INT status;
+	HAL_INT status = 0;
 
 	if (!device_activation(sc->sc_dev, DEVACT_LEVEL_DRIVER)) {
 		/*
@@ -987,18 +979,18 @@ ath_init(struct ath_softc *sc)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ath_hal *ah = sc->sc_ah;
 	HAL_STATUS status;
-	int error = 0;
+	int error = 0, s;
 
 	DPRINTF(sc, ATH_DEBUG_ANY, "%s: if_flags 0x%x\n",
 		__func__, ifp->if_flags);
 
 	if (device_is_active(sc->sc_dev)) {
-		ATH_LOCK(sc);
+		s = splnet();
 	} else if (!pmf_device_subtree_resume(sc->sc_dev, &sc->sc_qual) ||
 	           !device_is_active(sc->sc_dev))
 		return 0;
 	else
-		ATH_LOCK(sc);
+		s = splnet();
 
 	/*
 	 * Stop anything previously setup.  This is safe
@@ -1082,7 +1074,7 @@ ath_init(struct ath_softc *sc)
 	} else
 		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
 done:
-	ATH_UNLOCK(sc);
+	splx(s);
 	return error;
 }
 
@@ -1096,7 +1088,7 @@ ath_stop_locked(struct ifnet *ifp, int disable)
 	DPRINTF(sc, ATH_DEBUG_ANY, "%s: invalid %d if_flags 0x%x\n",
 		__func__, !device_is_enabled(sc->sc_dev), ifp->if_flags);
 
-	ATH_LOCK_ASSERT(sc);
+	/* KASSERT() IPL_NET */
 	if (ifp->if_flags & IFF_RUNNING) {
 		/*
 		 * Shutdown the hardware and driver:
@@ -1145,11 +1137,11 @@ ath_stop_locked(struct ifnet *ifp, int disable)
 static void
 ath_stop(struct ifnet *ifp, int disable)
 {
-	struct ath_softc *sc = ifp->if_softc;
+	int s;
 
-	ATH_LOCK(sc);
+	s = splnet();
 	ath_stop_locked(ifp, disable);
-	ATH_UNLOCK(sc);
+	splx(s);
 }
 
 static void
@@ -1367,10 +1359,7 @@ ath_start(struct ifnet *ifp)
 			}
 			ifp->if_opackets++;
 
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
+			bpf_mtap(ifp, m);
 			/*
 			 * Encapsulate the packet in prep for transmission.
 			 */
@@ -3158,7 +3147,6 @@ rx_accept:
 
 		sc->sc_stats.ast_ant_rx[ds->ds_rxstat.rs_antenna]++;
 
-#if NBPFILTER > 0
 		if (sc->sc_drvbpf) {
 			u_int8_t rix;
 
@@ -3187,10 +3175,9 @@ rx_accept:
 			sc->sc_rx_th.wr_antnoise = nf;
 			sc->sc_rx_th.wr_antenna = ds->ds_rxstat.rs_antenna;
 
-			bpf_mtap2(sc->sc_drvbpf,
-				&sc->sc_rx_th, sc->sc_rx_th_len, m);
+			bpf_mtap2(sc->sc_drvbpf, &sc->sc_rx_th,
+			    sc->sc_rx_th_len, m);
 		}
-#endif
 
 		if (ds->ds_rxstat.rs_status & rxerr_tap) {
 			m_freem(m);
@@ -3947,9 +3934,7 @@ ath_tx_start(struct ath_softc *sc, struct ieee80211_node *ni, struct ath_buf *bf
 	if (IFF_DUMPPKTS(sc, ATH_DEBUG_XMIT))
 		ieee80211_dump_pkt(mtod(m0, void *), m0->m_len,
 			sc->sc_hwmap[txrate].ieeerate, -1);
-#if NBPFILTER > 0
-	if (ic->ic_rawbpf)
-		bpf_mtap(ic->ic_rawbpf, m0);
+	bpf_mtap3(ic->ic_rawbpf, m0);
 	if (sc->sc_drvbpf) {
 		u_int64_t tsf = ath_hal_gettsf64(ah);
 
@@ -3963,10 +3948,8 @@ ath_tx_start(struct ath_softc *sc, struct ieee80211_node *ni, struct ath_buf *bf
 		sc->sc_tx_th.wt_txpower = ni->ni_txpower;
 		sc->sc_tx_th.wt_antenna = sc->sc_txantenna;
 
-		bpf_mtap2(sc->sc_drvbpf,
-			&sc->sc_tx_th, sc->sc_tx_th_len, m0);
+		bpf_mtap2(sc->sc_drvbpf, &sc->sc_tx_th, sc->sc_tx_th_len, m0);
 	}
-#endif
 
 	/*
 	 * Determine if a tx interrupt should be generated for
@@ -4616,10 +4599,11 @@ ath_calibrate(void *arg)
 	struct ath_softc *sc = arg;
 	struct ath_hal *ah = sc->sc_ah;
 	HAL_BOOL iqCalDone;
+	int s;
 
 	sc->sc_stats.ast_per_cal++;
 
-	ATH_LOCK(sc);
+	 s = splnet();
 
 	if (ath_hal_getrfgain(ah) == HAL_RFGAIN_NEED_CHANGE) {
 		/*
@@ -4665,7 +4649,7 @@ ath_calibrate(void *arg)
 	sc->sc_caltries++;
 	callout_reset(&sc->sc_cal_ch, sc->sc_calinterval * hz,
 		ath_calibrate, sc);
-	ATH_UNLOCK(sc);
+	splx(s);
 }
 
 static int
@@ -5317,9 +5301,9 @@ ath_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct ath_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifreq *ifr = (struct ifreq *)data;
-	int error = 0;
+	int error = 0, s;
 
-	ATH_LOCK(sc);
+	s = splnet();
 	switch (cmd) {
 	case SIOCSIFFLAGS:
 		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
@@ -5365,7 +5349,7 @@ ath_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		sc->sc_stats.ast_tx_packets = ifp->if_opackets;
 		sc->sc_stats.ast_rx_packets = ifp->if_ipackets;
 		sc->sc_stats.ast_rx_rssi = ieee80211_getrssi(ic);
-		ATH_UNLOCK(sc);
+		splx(s);
 		/*
 		 * NB: Drop the softc lock in case of a page fault;
 		 * we'll accept any potential inconsisentcy in the
@@ -5388,20 +5372,20 @@ ath_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			error = 0;
 		break;
 	}
-	ATH_UNLOCK(sc);
+	splx(s);
 	return error;
 #undef IS_RUNNING
 }
 
-#if NBPFILTER > 0
 static void
 ath_bpfattach(struct ath_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_if;
 
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
-		sizeof(struct ieee80211_frame) + sizeof(sc->sc_tx_th),
-		&sc->sc_drvbpf);
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof(struct ieee80211_frame) + sizeof(sc->sc_tx_th),
+	    &sc->sc_drvbpf);
+
 	/*
 	 * Initialize constant fields.
 	 * XXX make header lengths a multiple of 32-bits so subsequent
@@ -5419,7 +5403,6 @@ ath_bpfattach(struct ath_softc *sc)
 	sc->sc_rx_th.wr_ihdr.it_len = htole16(sc->sc_rx_th_len);
 	sc->sc_rx_th.wr_ihdr.it_present = htole32(ATH_RX_RADIOTAP_PRESENT);
 }
-#endif
 
 /*
  * Announce various information on device/driver attach.

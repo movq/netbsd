@@ -1,5 +1,5 @@
-/*	$NetBSD: clientloop.h,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: clientloop.h,v 1.22 2008/06/12 15:19:17 djm Exp $ */
+/*	$NetBSD: clientloop.h,v 1.5 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: clientloop.h,v 1.28 2011/06/22 22:08:42 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -40,35 +40,40 @@
 
 /* Client side main loop for the interactive session. */
 int	 client_loop(int, int, int);
-void	 client_x11_get_proto(const char *, const char *, u_int,
+void	 client_x11_get_proto(const char *, const char *, u_int, u_int,
 	    char **, char **);
 void	 client_global_request_reply_fwd(int, u_int32_t, void *);
 void	 client_session2_setup(int, int, int, const char *, struct termios *,
 	    int, Buffer *, char **);
 int	 client_request_tun_fwd(int, int, int);
+void	 client_stop_mux(void);
 
 /* Escape filter for protocol 2 sessions */
 void	*client_new_escape_filter_ctx(int);
 void	 client_filter_cleanup(int, void *);
-int	 client_simple_escape_filter(Channel *, char *, int);
+int	 client_simple_escape_filter(Channel *, const char *, int);
 
 /* Global request confirmation callbacks */
 typedef void global_confirm_cb(int, u_int32_t seq, void *);
 void	 client_register_global_confirm(global_confirm_cb *, void *);
 
+/* Channel request confirmation callbacks */
+enum confirm_action { CONFIRM_WARN = 0, CONFIRM_CLOSE, CONFIRM_TTY };
+void client_expect_confirm(int, const char *, enum confirm_action);
+
 /* Multiplexing protocol version */
-#define SSHMUX_VER			2
+#define SSHMUX_VER			4
 
 /* Multiplexing control protocol flags */
 #define SSHMUX_COMMAND_OPEN		1	/* Open new connection */
 #define SSHMUX_COMMAND_ALIVE_CHECK	2	/* Check master is alive */
 #define SSHMUX_COMMAND_TERMINATE	3	/* Ask master to exit */
-
-#define SSHMUX_FLAG_TTY			(1)	/* Request tty on open */
-#define SSHMUX_FLAG_SUBSYS		(1<<1)	/* Subsystem request on open */
-#define SSHMUX_FLAG_X11_FWD		(1<<2)	/* Request X11 forwarding */
-#define SSHMUX_FLAG_AGENT_FWD		(1<<3)	/* Request agent forwarding */
+#define SSHMUX_COMMAND_STDIO_FWD	4	/* Open stdio fwd (ssh -W) */
+#define SSHMUX_COMMAND_FORWARD		5	/* Forward only, no command */
+#define SSHMUX_COMMAND_STOP		6	/* Disable mux but not conn */
 
 void	muxserver_listen(void);
-int	muxserver_accept_control(void);
 void	muxclient(const char *);
+void	mux_exit_message(Channel *, int);
+void	mux_tty_alloc_failed(Channel *);
+

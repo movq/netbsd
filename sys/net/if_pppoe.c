@@ -1,4 +1,4 @@
-/* $NetBSD: if_pppoe.c,v 1.94 2009/02/19 15:17:50 christos Exp $ */
+/* $NetBSD: if_pppoe.c,v 1.98 2011/09/05 12:19:09 rjs Exp $ */
 
 /*-
  * Copyright (c) 2002, 2008 The NetBSD Foundation, Inc.
@@ -30,10 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.94 2009/02/19 15:17:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.98 2011/09/05 12:19:09 rjs Exp $");
 
 #include "pppoe.h"
-#include "bpfilter.h"
 #include "opt_pfil_hooks.h"
 #include "opt_pppoe.h"
 
@@ -57,9 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.94 2009/02/19 15:17:50 christos Exp $
 #include <net/if_spppvar.h>
 #include <net/if_pppoe.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 
 #undef PPPOE_DEBUG		/* XXX - remove this or make it an option */
@@ -88,9 +85,10 @@ struct pppoetag {
 #define	PPPOE_TAG_ACCOOKIE	0x0104		/* AC cookie */
 #define	PPPOE_TAG_VENDOR	0x0105		/* vendor specific */
 #define	PPPOE_TAG_RELAYSID	0x0110		/* relay session id */
+#define	PPPOE_TAG_MAX_PAYLOAD	0x0120		/* max payload */
 #define	PPPOE_TAG_SNAME_ERR	0x0201		/* service name error */
 #define	PPPOE_TAG_ACSYS_ERR	0x0202		/* AC system error */
-#define	PPPOE_TAG_GENERIC_ERR	0x0203		/* gerneric error */
+#define	PPPOE_TAG_GENERIC_ERR	0x0203		/* generic error */
 
 #define	PPPOE_CODE_PADI		0x09		/* Active Discovery Initiation */
 #define	PPPOE_CODE_PADO		0x07		/* Active Discovery Offer */
@@ -250,9 +248,7 @@ pppoe_clone_create(struct if_clone *ifc, int unit)
 	if_attach(&sc->sc_sppp.pp_if);
 	sppp_attach(&sc->sc_sppp.pp_if);
 
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_sppp.pp_if, DLT_PPP_ETHER, 0);
-#endif
+	bpf_attach(&sc->sc_sppp.pp_if, DLT_PPP_ETHER, 0);
 #ifdef PFIL_HOOKS
 	if (LIST_EMPTY(&pppoe_softc_list))
 		pfil_add_hook(pppoe_ifattach_hook, NULL,
@@ -274,9 +270,7 @@ pppoe_clone_destroy(struct ifnet *ifp)
 		pfil_remove_hook(pppoe_ifattach_hook, NULL,
 		    PFIL_IFNET|PFIL_WAITOK, &if_pfil);
 #endif
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	sppp_detach(&sc->sc_sppp.pp_if);
 	if_detach(ifp);
 	if (sc->sc_concentrator_name)
@@ -811,10 +805,7 @@ pppoe_data_input(struct mbuf *m)
 
 	plen = ntohs(ph->plen);
 
-#if NBPFILTER > 0
-	if(sc->sc_sppp.pp_if.if_bpf)
-		bpf_mtap(sc->sc_sppp.pp_if.if_bpf, m);
-#endif
+	bpf_mtap(&sc->sc_sppp.pp_if, m);
 
 	m_adj(m, PPPOE_HEADERLEN);
 
@@ -905,7 +896,7 @@ pppoe_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 				return ENXIO;
 			}
 
-			if (sc->sc_sppp.pp_if.if_mtu >
+			if (sc->sc_sppp.pp_if.if_mtu !=
 			    eth_if->if_mtu - PPPOE_OVERHEAD) {
 				sc->sc_sppp.pp_if.if_mtu = eth_if->if_mtu -
 				    PPPOE_OVERHEAD;
@@ -1051,6 +1042,9 @@ pppoe_send_padi(struct pppoe_softc *sc)
 		l2 = strlen(sc->sc_concentrator_name);
 		len += 2 + 2 + l2;
 	}
+	if (sc->sc_sppp.pp_if.if_mtu > PPPOE_MAXMTU) {
+		len += 2 + 2 + 2;
+	}
 
 	/* allocate a buffer */
 	m0 = pppoe_get_mbuf(len + PPPOE_HEADERLEN);	/* header len + payload len */
@@ -1077,6 +1071,13 @@ pppoe_send_padi(struct pppoe_softc *sc)
 	PPPOE_ADD_16(p, PPPOE_TAG_HUNIQUE);
 	PPPOE_ADD_16(p, sizeof(sc));
 	memcpy(p, &sc, sizeof sc);
+	p += sizeof(sc);
+
+	if (sc->sc_sppp.pp_if.if_mtu > PPPOE_MAXMTU) {
+		PPPOE_ADD_16(p, PPPOE_TAG_MAX_PAYLOAD);
+		PPPOE_ADD_16(p, 2);
+		PPPOE_ADD_16(p, (uint16_t)sc->sc_sppp.pp_if.if_mtu);
+	}
 
 #ifdef PPPOE_DEBUG
 	p += sizeof sc;
@@ -1293,6 +1294,9 @@ pppoe_send_padr(struct pppoe_softc *sc)
 		len += 2 + 2 + sc->sc_ac_cookie_len;	/* AC cookie */
 	if (sc->sc_relay_sid_len > 0)
 		len += 2 + 2 + sc->sc_relay_sid_len;	/* Relay SID */
+	if (sc->sc_sppp.pp_if.if_mtu > PPPOE_MAXMTU) {
+		len += 2 + 2 + 2;
+	}
 	m0 = pppoe_get_mbuf(len + PPPOE_HEADERLEN);
 	if (!m0)
 		return ENOBUFS;
@@ -1321,6 +1325,13 @@ pppoe_send_padr(struct pppoe_softc *sc)
 	PPPOE_ADD_16(p, PPPOE_TAG_HUNIQUE);
 	PPPOE_ADD_16(p, sizeof(sc));
 	memcpy(p, &sc, sizeof sc);
+	p += sizeof(sc);
+
+	if (sc->sc_sppp.pp_if.if_mtu > PPPOE_MAXMTU) {
+		PPPOE_ADD_16(p, PPPOE_TAG_MAX_PAYLOAD);
+		PPPOE_ADD_16(p, 2);
+		PPPOE_ADD_16(p, (uint16_t)sc->sc_sppp.pp_if.if_mtu);
+	}
 
 #ifdef PPPOE_DEBUG
 	p += sizeof sc;
@@ -1496,10 +1507,7 @@ pppoe_start(struct ifnet *ifp)
 		p = mtod(m, uint8_t *);
 		PPPOE_ADD_HEADER(p, 0, sc->sc_session, len);
 
-#if NBPFILTER > 0
-		if(sc->sc_sppp.pp_if.if_bpf)
-			bpf_mtap(sc->sc_sppp.pp_if.if_bpf, m);
-#endif
+		bpf_mtap(&sc->sc_sppp.pp_if, m);
 
 		pppoe_output(sc, m);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: becc_pci.c,v 1.8 2005/12/24 20:06:52 perry Exp $	*/
+/*	$NetBSD: becc_pci.c,v 1.11 2012/01/27 18:52:51 para Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.8 2005/12/24 20:06:52 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.11 2012/01/27 18:52:51 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.8 2005/12/24 20:06:52 perry Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/beccreg.h>
 #include <arm/xscale/beccvar.h>
@@ -71,7 +71,7 @@ void		becc_pci_decompose_tag(void *, pcitag_t, int *, int *,
 pcireg_t	becc_pci_conf_read(void *, pcitag_t, int);
 void		becc_pci_conf_write(void *, pcitag_t, int, pcireg_t);
 
-int		becc_pci_intr_map(struct pci_attach_args *,
+int		becc_pci_intr_map(const struct pci_attach_args *,
 		    pci_intr_handle_t *);
 const char	*becc_pci_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *becc_pci_intr_evcnt(void *, pci_intr_handle_t);
@@ -125,10 +125,10 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 	/* Reserve the bottom 32K of the PCI address space. */
 	ioext  = extent_create("pciio", sc->sc_ioout_xlate + (32 * 1024),
 	    sc->sc_ioout_xlate + (64 * 1024) - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", sc->sc_owin_xlate[0],
 	    sc->sc_owin_xlate[0] + BECC_PCI_MEM1_SIZE - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	aprint_normal("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, 0, arm_dcache_align);
@@ -326,7 +326,7 @@ becc_pci_conf_write(void *v, pcitag_t tag, int offset, pcireg_t val)
 }
 
 int
-becc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+becc_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int irq;
 

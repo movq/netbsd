@@ -1,4 +1,4 @@
-/*	$NetBSD: sleepq.h,v 1.17 2009/10/21 21:12:07 rmind Exp $	*/
+/*	$NetBSD: sleepq.h,v 1.21 2011/11/21 04:36:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -89,7 +89,7 @@ sleepq_dontsleep(lwp_t *l)
 }
 
 /*
- * Find the correct sleep queue for the the specified wait channel.  This
+ * Find the correct sleep queue for the specified wait channel.  This
  * acquires and holds the per-queue interlock.
  */
 static inline sleepq_t *
@@ -120,20 +120,13 @@ sleepq_hashlock(wchan_t wchan)
 static inline void
 sleepq_enter(sleepq_t *sq, lwp_t *l, kmutex_t *mp)
 {
-	kmutex_t *omp;
 
 	/*
-	 * Acquire the per-LWP mutex and lend it ours (the sleep queue
-	 * lock).  Once that's done we're interlocked, and so can release
-	 * the kernel lock.
+	 * Acquire the per-LWP mutex and lend it ours sleep queue lock.
+	 * Once interlocked, we can release the kernel lock.
 	 */
-	omp = l->l_mutex;
-	mutex_spin_enter(omp);
-	if (__predict_false(l->l_mutex != omp)) {
-		omp = lwp_lock_retry(l, omp);
-	}
-	l->l_mutex = mp;
-	mutex_spin_exit(omp);
+	lwp_lock(l);
+	lwp_unlock_to(l, mp);
 	KERNEL_UNLOCK_ALL(NULL, &l->l_biglocks);
 }
 
@@ -178,7 +171,8 @@ turnstile_t	*turnstile_lookup(wchan_t);
 void	turnstile_exit(wchan_t);
 void	turnstile_block(turnstile_t *, int, wchan_t, syncobj_t *);
 void	turnstile_wakeup(turnstile_t *, int, int, lwp_t *);
-void	turnstile_print(volatile void *, void (*)(const char *, ...));
+void	turnstile_print(volatile void *, void (*)(const char *, ...)
+    __printflike(1, 2));
 void	turnstile_unsleep(lwp_t *, bool);
 void	turnstile_changepri(lwp_t *, pri_t);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_com_io.c,v 1.6 2009/03/14 21:04:05 dsl Exp $	*/
+/*	$NetBSD: footbridge_com_io.c,v 1.8 2012/02/12 16:34:07 matt Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -43,11 +43,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_com_io.c,v 1.6 2009/03/14 21:04:05 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_com_io.c,v 1.8 2012/02/12 16:34:07 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -148,14 +148,16 @@ fcomcons_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_spa
 	}
 
 int
-fcomcons_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
-    bpap, bshp)
-	void *t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int cacheable;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+fcomcons_bs_alloc(
+	void *t,
+	bus_addr_t rstart,
+	bus_addr_t rend,
+	bus_size_t size,
+	bus_size_t alignment,
+	bus_size_t boundary,
+	int cacheable,
+	bus_addr_t *bpap,
+	bus_space_handle_t *bshp)
 {
 	panic("fcomcons_alloc(): Help!");
 }

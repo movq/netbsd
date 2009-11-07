@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_proto.c,v 1.87 2009/09/11 22:06:29 dyoung Exp $	*/
+/*	$NetBSD: in6_proto.c,v 1.95 2011/12/31 20:41:59 christos Exp $	*/
 /*	$KAME: in6_proto.c,v 1.66 2000/10/10 15:35:47 itojun Exp $	*/
 
 /*
@@ -62,8 +62,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.87 2009/09/11 22:06:29 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.95 2011/12/31 20:41:59 christos Exp $");
 
+#include "opt_gateway.h"
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_iso.h"
@@ -106,14 +107,14 @@ __KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.87 2009/09/11 22:06:29 dyoung Exp $"
 
 #include <netinet6/nd6.h>
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netinet6/ah.h>
 #ifdef IPSEC_ESP
 #include <netinet6/esp.h>
 #endif
 #include <netinet6/ipcomp.h>
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -128,17 +129,13 @@ __KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.87 2009/09/11 22:06:29 dyoung Exp $"
 #endif
 
 #include "etherip.h"
-#if NETHERIP > 1
+#if NETHERIP > 0
 #include <netinet6/ip6_etherip.h>
 #endif
 
 #include <netinet6/ip6protosw.h>
 
 #include <net/net_osdep.h>
-
-#ifndef offsetof		/* XXX */
-#define	offsetof(type, member)	((size_t)(&((type *)0)->member))
-#endif
 
 /*
  * TCP/IP protocol family: IP6, ICMP6, UDP, TCP.
@@ -167,22 +164,22 @@ PR_WRAP_CTLINPUT(tcp6_ctlinput)
 #define	tcp6_ctlinput	tcp6_ctlinput_wrapper
 
 PR_WRAP_CTLOUTPUT(rip6_ctloutput)
-PR_WRAP_CTLOUTPUT(ip6_ctloutput)
 PR_WRAP_CTLOUTPUT(tcp_ctloutput)
+PR_WRAP_CTLOUTPUT(udp6_ctloutput)
 PR_WRAP_CTLOUTPUT(icmp6_ctloutput)
 
 #define	rip6_ctloutput	rip6_ctloutput_wrapper
-#define	ip6_ctloutput	ip6_ctloutput_wrapper
 #define	tcp_ctloutput	tcp_ctloutput_wrapper
+#define	udp6_ctloutput	udp6_ctloutput_wrapper
 #define	icmp6_ctloutput	icmp6_ctloutput_wrapper
 
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 PR_WRAP_CTLINPUT(ah6_ctlinput)
 
 #define	ah6_ctlinput	ah6_ctlinput_wrapper
 #endif
 
-#if (defined(IPSEC) && defined(IPSEC_ESP)) || defined(FAST_IPSEC)
+#if (defined(KAME_IPSEC) && defined(IPSEC_ESP)) || defined(FAST_IPSEC)
 PR_WRAP_CTLINPUT(esp6_ctlinput)
 
 #define	esp6_ctlinput	esp6_ctlinput_wrapper
@@ -192,8 +189,9 @@ const struct ip6protosw inet6sw[] = {
 {	.pr_domain = &inet6domain,
 	.pr_protocol = IPPROTO_IPV6,
 	.pr_init = ip6_init,
+	.pr_fasttimo = frag6_fasttimo,
 	.pr_slowtimo = frag6_slowtimo,
-	.pr_drain = frag6_drain,
+	.pr_drain = frag6_drainstub,
 },
 {	.pr_type = SOCK_DGRAM,
 	.pr_domain = &inet6domain,
@@ -201,7 +199,7 @@ const struct ip6protosw inet6sw[] = {
 	.pr_flags = PR_ATOMIC|PR_ADDR|PR_PURGEIF,
 	.pr_input = udp6_input,
 	.pr_ctlinput = udp6_ctlinput,
-	.pr_ctloutput = ip6_ctloutput,
+	.pr_ctloutput = udp6_ctloutput,
 	.pr_usrreq = udp6_usrreq,
 	.pr_init = udp6_init,
 },
@@ -215,8 +213,9 @@ const struct ip6protosw inet6sw[] = {
 	.pr_usrreq = tcp_usrreq,
 #ifndef INET	/* don't call initialization and timeout routines twice */
 	.pr_init = tcp_init,
+	.pr_fasttimo = tcp_fasttimo,
 	.pr_slowtimo = tcp_slowtimo,
-	.pr_drain = tcp_drain,
+	.pr_drain = tcp_drainstub,
 #endif
 },
 {	.pr_type = SOCK_RAW,
@@ -265,7 +264,7 @@ const struct ip6protosw inet6sw[] = {
 	.pr_flags = PR_ATOMIC|PR_ADDR,
 	.pr_input = frag6_input,
 },
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inet6domain,
 	.pr_protocol = IPPROTO_AH,
@@ -291,7 +290,7 @@ const struct ip6protosw inet6sw[] = {
 	.pr_input = ipcomp6_input,
 	.pr_init = ipcomp6_init,
 },
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 #ifdef FAST_IPSEC
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inet6domain,
@@ -338,7 +337,7 @@ const struct ip6protosw inet6sw[] = {
 	.pr_usrreq = rip6_usrreq,
 	.pr_init = encap_init,
 },
-#if NETHERIP > 1
+#if NETHERIP > 0
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inet6domain,
 	.pr_protocol = IPPROTO_ETHERIP,
@@ -411,7 +410,7 @@ struct domain inet6domain = {
 	.dom_init = NULL, .dom_externalize = NULL, .dom_dispose = NULL,
 	.dom_protosw = (const struct protosw *)inet6sw,
 	.dom_protoswNPROTOSW = (const struct protosw *)&inet6sw[sizeof(inet6sw)/sizeof(inet6sw[0])],
-	.dom_rtattach = rn_inithead,
+	.dom_rtattach = rt_inithead,
 	.dom_rtoffset = offsetof(struct sockaddr_in6, sin6_addr) << 3,
 	.dom_maxrtkey = sizeof(struct ip_pack6),
 	.dom_ifattach = in6_domifattach, .dom_ifdetach = in6_domifdetach,
@@ -478,7 +477,14 @@ int	ip6_mcast_pmtu = 0;	/* enable pMTU discovery for multicast? */
 int	ip6_v6only = 1;
 
 int	ip6_keepfaith = 0;
-time_t	ip6_log_time = (time_t)0L;
+time_t	ip6_log_time = 0;
+int	ip6_rtadv_maxroutes = 100; /* (arbitrary) initial maximum number of
+                                    * routes via rtadv expected to be
+                                    * significantly larger than common use.
+                                    * if you need to count: 3 extra initial
+                                    * routes, plus 1 per interface after the
+                                    * first one, then one per non-linklocal
+                                    * prefix */
 
 /* icmp6 */
 /*

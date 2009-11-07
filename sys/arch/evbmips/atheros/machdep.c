@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.18 2009/08/11 17:04:18 matt Exp $ */
+/* $NetBSD: machdep.c,v 1.27 2011/07/10 00:03:53 matt Exp $ */
 
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -70,7 +70,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */ 
+
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -106,65 +108,22 @@
  *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
  * 	from: Utah Hdr: machdep.c 1.63 91/04/24
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
- * 	from: Utah Hdr: machdep.c 1.63 91/04/24
- */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.18 2009/08/11 17:04:18 matt Exp $");
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.27 2011/07/10 00:03:53 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_modular.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/buf.h>
-#include <sys/reboot.h>
-#include <sys/user.h>
-#include <sys/mount.h>
-#include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/termios.h>
-#include <sys/ksyms.h>
 #include <sys/device.h>
+#include <sys/kernel.h>
+#include <sys/kcore.h>
+#include <sys/ksyms.h>
+#include <sys/mount.h>
+#include <sys/reboot.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -173,7 +132,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.18 2009/08/11 17:04:18 matt Exp $");
 #include "ksyms.h"
 
 #if NKSYMS || defined(DDB) || defined(MODULAR)
-#include <machine/db_machdep.h>
+#include <mips/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -181,18 +140,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.18 2009/08/11 17:04:18 matt Exp $");
 #include <mips/locore.h>
 #include <mips/cpuregs.h>
 
-#include <mips/atheros/include/ar531xvar.h>
+#include <mips/atheros/include/platform.h>
 #include <mips/atheros/include/arbusvar.h>
 
-struct	user *proc0paddr;
-
-/* Our exported CPU info; we can have only one. */  
-struct cpu_info cpu_info_store;
-
 /* Maps for VM objects. */
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
+int physmem;			/* # pages of physical memory */
 int maxmem;			/* max memory per process */
 
 int mem_cluster_cnt;
@@ -205,12 +159,13 @@ cal_timer(void)
 {
 	uint32_t	cntfreq;
 
-	cntfreq = curcpu()->ci_cpu_freq = ar531x_cpu_freq();
+	cntfreq = curcpu()->ci_cpu_freq = atheros_get_cpu_freq();
 	
 	/* MIPS 4Kc CP0 counts every other clock */
-	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
 		cntfreq /= 2;
 
+	curcpu()->ci_cctr_freq = cntfreq;
 	curcpu()->ci_cycles_per_hz = (cntfreq + hz / 2) / hz;
 
 	/* Compute number of cycles per 1us (1/MHz). 0.5MHz is for roundup. */
@@ -221,9 +176,7 @@ void
 mach_init(void)
 {
 	void *kernend;
-	u_long first, last;
-	void *				v;
-	uint32_t			memsize;
+	uint32_t memsize;
 
 	extern char edata[], end[];	/* XXX */
 
@@ -233,10 +186,10 @@ mach_init(void)
 	memset(edata, 0, (char *)kernend - edata);
 
 	/* setup early console */
-	ar531x_early_console();
+	atheros_set_platformsw();
 
 	/* set CPU model info for sysctl_hw */
-	snprintf(cpu_model, 64, "%s", ar531x_cpuname());
+	snprintf(cpu_model, 64, "Atheros %s", atheros_get_cpuname());
 
 	/*
 	 * Set up the exception vectors and CPU-specific function
@@ -247,7 +200,7 @@ mach_init(void)
 	 * functions called during startup.
 	 * Also clears the I+D caches.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
 	/*
 	 * Calibrate timers.
@@ -279,7 +232,7 @@ mach_init(void)
 	 * Note: Reserve the first page!  That's where the trap
 	 * vectors are located.
 	 */
-	memsize = ar531x_memsize();
+	memsize = atheros_get_memsize();
 
 	printf("Memory size: 0x%08x\n", memsize);
 	physmem = btoc(memsize);
@@ -290,12 +243,10 @@ mach_init(void)
 	mem_cluster_cnt++;
 
 	/*
-	 * Load the rest of the available pages into the VM system.
+	 * Load the available pages into the VM system.
 	 */
-	first = round_page(MIPS_KSEG0_TO_PHYS(kernend));
-	last = mem_clusters[0].start + mem_clusters[0].size;
-	uvm_page_physload(atop(first), atop(last), atop(first), atop(last),
-	    VM_FREELIST_DEFAULT);
+	mips_page_physload(MIPS_KSEG0_START, (vaddr_t)kernend,
+	    mem_clusters, mem_cluster_cnt, NULL, 0);
 
 	/*
 	 * Initialize message buffer (at end of core).
@@ -308,33 +259,29 @@ mach_init(void)
 	pmap_bootstrap();
 
 	/*
-	 * Init mapping for u page(s) for proc0.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = (void *) uvm_pageboot_alloc(USPACE);
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 
 	/*
 	 * Initialize busses.
 	 */
-	ar531x_businit();
+	atheros_bus_init();
 
 	/*
 	 * Turn off (ignore) the hardware watchdog.  If we got this
 	 * far, then we shouldn't need it anymore.
 	 */
-	ar531x_wdog(0);
+	atheros_wdog_reload(0);
 
 	/*
 	 * Turn off watchpoint that may have been enabled by the
 	 * PROM.  VxWorks bootloader seems to leave one set.
 	 */ 
 	__asm volatile (
-		"mtc0	$0, $" ___STRING(MIPS_COP_0_WATCH_LO) " \n\t"
+		"mtc0	$0, $%0\n\t"
 		"nop\n\t"
-		"nop\n\t");
+		"nop\n\t" :: "n"(MIPS_COP_0_WATCH_LO));
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
@@ -353,7 +300,7 @@ consinit(void)
 	 * Everything related to console initialization is done
 	 * in mach_init().
 	 */
-	ar531x_consinit();
+	atheros_consinit();
 }
 
 void
@@ -402,8 +349,7 @@ cpu_reboot(int howto, char *bootstr)
 	static int waittime = -1;
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curproc)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	/* If "always halt" was specified as a boot flag, obey. */
 	if (boothowto & RB_HALT)
@@ -467,6 +413,7 @@ cpu_reboot(int howto, char *bootstr)
 	printf("reseting board...\n\n");
 	mips_icache_sync_all();
 	mips_dcache_wbinv_all();
+	atheros_reset();
 	__asm volatile("jr	%0" :: "r"(MIPS_RESET_EXC_VEC));
 	printf("Oops, back from reset\n\nSpinning...");
 	for (;;)

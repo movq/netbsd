@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vfsops.c,v 1.60 2009/06/29 05:08:17 dholland Exp $	*/
+/*	$NetBSD: filecore_vfsops.c,v 1.68 2011/11/14 18:35:13 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.60 2009/06/29 05:08:17 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.68 2011/11/14 18:35:13 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -84,7 +84,6 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.60 2009/06/29 05:08:17 dhollan
 #include <sys/file.h>
 #include <sys/device.h>
 #include <sys/errno.h>
-#include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/conf.h>
 #include <sys/sysctl.h>
@@ -96,12 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.60 2009/06/29 05:08:17 dhollan
 #include <fs/filecorefs/filecore_node.h>
 #include <fs/filecorefs/filecore_mount.h>
 
-MODULE(MODULE_CLASS_VFS, filecorefs, NULL);
-
-MALLOC_JUSTDEFINE(M_FILECOREMNT,
-    "filecore mount", "Filecore FS mount structures");
-MALLOC_JUSTDEFINE(M_FILECORETMP,
-    "filecore temp", "Filecore FS temporary structures");
+MODULE(MODULE_CLASS_VFS, filecore, NULL);
 
 static struct sysctllog *filecore_sysctl_log;
 
@@ -145,7 +139,7 @@ static const struct genfs_ops filecore_genfsops = {
 };
 
 static int
-filecorefs_modcmd(modcmd_t cmd, void *arg)
+filecore_modcmd(modcmd_t cmd, void *arg)
 {
 	int error;
 
@@ -222,9 +216,9 @@ filecore_mountroot(void)
 		vfs_destroy(mp);
 		return (error);
 	}
-	simple_lock(&mountlist_slock);
+	mutex_enter(&mountlist_lock);
 	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
-	simple_unlock(&mountlist_slock);
+	mutex_exit(&mountlist_lock);
 	(void)filecore_statvfs(mp, &mp->mnt_stat, p);
 	vfs_unbusy(mp, false, NULL);
 	return (0);
@@ -289,7 +283,7 @@ filecore_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = genfs_can_mount(devvp, VREAD, l->l_cred);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);
 		return (error);
@@ -332,7 +326,9 @@ filecore_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct fi
 	if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)) != 0)
 		return (error);
 
+	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_OPEN(devvp, ronly ? FREAD : FREAD|FWRITE, FSCRED);
+	VOP_UNLOCK(devvp);
 	if (error)
 		return error;
 
@@ -373,8 +369,7 @@ filecore_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct fi
 	if (error != 0)
 		goto out;
        	fcdr = (struct filecore_disc_record *)((char *)(bp->b_data) + 4);
-	fcmp = malloc(sizeof *fcmp, M_FILECOREMNT, M_WAITOK);
-	memset(fcmp, 0, sizeof *fcmp);
+	fcmp = kmem_zalloc(sizeof(*fcmp), KM_SLEEP);
 	if (fcdr->log2bpmb > fcdr->log2secsize)
 		fcmp->log2bsize = fcdr->log2bpmb;
 	else	fcmp->log2bsize = fcdr->log2secsize;
@@ -428,7 +423,7 @@ out:
 	}
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	(void)VOP_CLOSE(devvp, ronly ? FREAD : FREAD|FWRITE, NOCRED);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	return error;
 }
 
@@ -464,7 +459,7 @@ filecore_unmount(struct mount *mp, int mntflags)
 	vn_lock(fcmp->fc_devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_CLOSE(fcmp->fc_devvp, FREAD, NOCRED);
 	vput(fcmp->fc_devvp);
-	free(fcmp, M_FILECOREMNT);
+	kmem_free(fcmp, sizeof(*fcmp));
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
@@ -582,8 +577,8 @@ filecore_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		return (0);
 
 	/* Allocate a new vnode/filecore_node. */
-	if ((error = getnewvnode(VT_FILECORE, mp, filecore_vnodeop_p, &vp))
-	    != 0) {
+	error = getnewvnode(VT_FILECORE, mp, filecore_vnodeop_p, NULL, &vp);
+	if (error) {
 		*vpp = NULLVP;
 		return (error);
 	}
@@ -639,7 +634,7 @@ filecore_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	ip->i_mnt = fcmp;
 	ip->i_devvp = fcmp->fc_devvp;
 	ip->i_diroff = 0;
-	VREF(ip->i_devvp);
+	vref(ip->i_devvp);
 
 	/*
 	 * Setup type

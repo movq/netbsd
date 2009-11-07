@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.35 2008/10/21 12:16:59 ad Exp $ */
+/*	$NetBSD: syscall.c,v 1.40 2012/02/11 23:16:16 martin Exp $ */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -79,17 +79,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.35 2008/10/21 12:16:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.40 2012/02/11 23:16:16 martin Exp $");
 
 #include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
 #include <sys/signal.h>
+#include <sys/kmem.h>
 #include <sys/ktrace.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
@@ -127,12 +127,19 @@ void syscall_fancy(struct trapframe64 *, register_t, register_t);
 static inline int
 handle_old(struct trapframe64 *tf, register_t *code)
 {
-	int new = *code & (SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
-	*code &= ~(SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
-	if (new)
-		tf->tf_pc = tf->tf_global[new & SYSCALL_G2RFLAG ? 2 : 7];
-	else
+	int new = *code & (SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
+	*code &= ~(SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
+	if (new) {
+		/* note that G5RFLAG is multiple bits! */
+		if (__predict_true((new & SYSCALL_G5RFLAG) == SYSCALL_G5RFLAG))
+			tf->tf_pc = tf->tf_global[5];
+		else if (new & SYSCALL_G7RFLAG)
+			tf->tf_pc = tf->tf_global[7];
+		else
+			tf->tf_pc = tf->tf_global[2];
+	} else {
 		tf->tf_pc = tf->tf_npc;
+	}
 	return new;
 }
 
@@ -474,7 +481,15 @@ child_return(void *arg)
 	ktrsysret((l->l_proc->p_lflag & PL_PPWAIT) ? SYS_vfork : SYS_fork, 0, 0);
 }
 
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
 
+	userret(l, l->l_md.md_tf->tf_pc, 0);
+}
 
 /* 
  * Start a new LWP
@@ -482,18 +497,14 @@ child_return(void *arg)
 void
 startlwp(void *arg)
 {
-	int err;
 	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
+	int error;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#if DIAGNOSTIC
-	if (err) {
-		printf("Error %d from cpu_setmcontext.", err);
-	}
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
 
+	kmem_free(uc, sizeof(ucontext_t));
 	userret(l, 0, 0);
 }
 

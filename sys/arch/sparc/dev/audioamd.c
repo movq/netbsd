@@ -1,4 +1,4 @@
-/*	$NetBSD: audioamd.c,v 1.24 2009/09/17 12:38:11 tsutsui Exp $	*/
+/*	$NetBSD: audioamd.c,v 1.27 2011/11/23 23:07:30 jmcneill Exp $	*/
 /*	NetBSD: am7930_sparc.c,v 1.44 1999/03/14 22:29:00 jonathan Exp 	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: audioamd.c,v 1.24 2009/09/17 12:38:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: audioamd.c,v 1.27 2011/11/23 23:07:30 jmcneill Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -108,13 +108,13 @@ int	audioamd_sbus_match(device_t, cfdata_t, void *);
 void	audioamd_sbus_attach(device_t, device_t, void *);
 void	audioamd_attach(struct audioamd_softc *, int);
 
-CFATTACH_DECL(audioamd_mainbus, sizeof(struct audioamd_softc),
+CFATTACH_DECL_NEW(audioamd_mainbus, sizeof(struct audioamd_softc),
     audioamd_mainbus_match, audioamd_mainbus_attach, NULL, NULL);
 
-CFATTACH_DECL(audioamd_obio, sizeof(struct audioamd_softc),
+CFATTACH_DECL_NEW(audioamd_obio, sizeof(struct audioamd_softc),
     audioamd_obio_match, audioamd_obio_attach, NULL, NULL);
 
-CFATTACH_DECL(audioamd_sbus, sizeof(struct audioamd_softc),
+CFATTACH_DECL_NEW(audioamd_sbus, sizeof(struct audioamd_softc),
     audioamd_sbus_match, audioamd_sbus_attach, NULL, NULL);
 
 /*
@@ -148,6 +148,7 @@ struct am7930_glue audioamd_glue = {
 int	audioamd_start_output(void *, void *, int, void (*)(void *), void *);
 int	audioamd_start_input(void *, void *, int, void (*)(void *), void *);
 int	audioamd_getdev(void *, struct audio_device *);
+void	audioamd_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread);
 
 const struct audio_hw_if sa_hw_if = {
 	am7930_open,
@@ -177,6 +178,7 @@ const struct audio_hw_if sa_hw_if = {
 	0,
 	0,
 	0,
+	audioamd_get_locks,
 };
 
 struct audio_device audioamd_device = {
@@ -227,6 +229,7 @@ audioamd_mainbus_attach(device_t parent, device_t self, void *aux)
 
 	ma = aux;
 	sc = device_private(self);
+	sc->sc_am7930.sc_dev = self;
 	sc->sc_bt = ma->ma_bustag;
 
 	if (bus_space_map(
@@ -253,6 +256,7 @@ audioamd_obio_attach(device_t parent, device_t self, void *aux)
 	uoba = aux;
 	sa = &uoba->uoba_sbus;
 	sc = device_private(self);
+	sc->sc_am7930.sc_dev = self;
 	sc->sc_bt = sa->sa_bustag;
 
 	if (sbus_bus_map(sa->sa_bustag,
@@ -275,6 +279,7 @@ audioamd_sbus_attach(device_t parent, device_t self, void *aux)
 
 	sa = aux;
 	sc = device_private(self);
+	sc->sc_am7930.sc_dev = self;
 	sc->sc_bt = sa->sa_bustag;
 
 	if (sbus_bus_map(sa->sa_bustag,
@@ -296,7 +301,7 @@ audioamd_attach(struct audioamd_softc *sc, int pri)
 	/*
 	 * Set up glue for MI code early; we use some of it here.
 	 */
-	self = &sc->sc_am7930.sc_dev;
+	self = sc->sc_am7930.sc_dev;
 	sc->sc_am7930.sc_glue = &audioamd_glue;
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_HIGH);
 
@@ -308,7 +313,13 @@ audioamd_attach(struct audioamd_softc *sc, int pri)
 	sc->sc_au.au_bt = sc->sc_bt;
 	sc->sc_au.au_bh = sc->sc_bh;
 	(void)bus_intr_establish2(sc->sc_bt, pri, IPL_HIGH,
-				  am7930hwintr, sc, amd7930_trap);
+				  am7930hwintr, sc,
+#ifdef notyet /* XXX amd7930intr.s needs to be fixed for MI softint(9) */
+				  amd7930_trap
+#else
+				  NULL
+#endif
+				  );
 
 	sc->sc_sicookie = softint_establish(SOFTINT_SERIAL, am7930swintr, sc);
 	if (sc->sc_sicookie == NULL) {
@@ -465,16 +476,16 @@ am7930swintr(void *sc0)
 	DPRINTFN(1, ("audiointr: sc=%p\n", sc););
 
 	au = &sc->sc_au;
-	mutex_spin_enter(&sc->sc_lock);
+
+	mutex_spin_enter(&sc->sc_am7930.sc_lock);
 	if (au->au_rdata > au->au_rend && sc->sc_rintr != NULL) {
-		mutex_spin_exit(&sc->sc_lock);
 		(*sc->sc_rintr)(sc->sc_rarg);
-		mutex_spin_enter(&sc->sc_lock);
 	}
 	pint = (au->au_pdata > au->au_pend && sc->sc_pintr != NULL);
-	mutex_spin_exit(&sc->sc_lock);
 	if (pint)
 		(*sc->sc_pintr)(sc->sc_parg);
+
+	mutex_spin_exit(&sc->sc_am7930.sc_lock);
 }
 
 
@@ -547,6 +558,16 @@ audioamd_getdev(void *addr, struct audio_device *retp)
 
 	*retp = audioamd_device;
 	return 0;
+}
+
+void
+audioamd_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
+{
+	struct audioamd_softc *asc = opaque;
+	struct am7930_softc *sc = &asc->sc_am7930;
+ 
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
 }
 
 #endif /* NAUDIO > 0 */

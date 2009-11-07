@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.24 2009/11/06 18:34:22 joerg Exp $	*/
+/*	$NetBSD: init.c,v 1.28 2010/12/18 23:09:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 
 #include "sort.h"
 
-__RCSID("$NetBSD: init.c,v 1.24 2009/11/06 18:34:22 joerg Exp $");
+__RCSID("$NetBSD: init.c,v 1.28 2010/12/18 23:09:48 christos Exp $");
 
 #include <ctype.h>
 #include <string.h>
@@ -223,43 +223,115 @@ int
 optval(int desc, int tcolflag)
 {
 	switch(desc) {
-		case 'b':
-			if (!tcolflag)
-				return (BI);
-			else
-				return (BT);
-		case 'd': return (D);
-		case 'f': return (F);
-		case 'i': return (I);
-		case 'n': return (N);
-		case 'r': return (R);
-		default:  return (0);
+	case 'b':
+		if (!tcolflag)
+			return BI;
+		else
+			return BT;
+	case 'd': return D;
+	case 'f': return F;
+	case 'i': return I;
+	case 'l': return L;
+	case 'n': return N;
+	case 'r': return R;
+	default:  return 0;
 	}
 }
 
 /*
+ * Return true if the options found in ARG, according to the getopt
+ * spec in OPTS, require an additional argv word as an option
+ * argument.
+ */
+static int
+options_need_argument(const char *arg, const char *opts)
+{
+	size_t pos;
+	const char *s;
+
+	/*assert(arg[0] == '-');*/
+
+	pos = 1;
+	while (arg[pos]) {
+		s = strchr(opts, arg[pos]);
+		if (s == NULL) {
+			/* invalid option */
+			return 0;
+		}
+		if (s[1] == ':') {
+			/* option requires argument */
+			if (arg[pos+1] == '\0') {
+				/* no argument in this arg */
+				return 1;
+			}
+			else {
+				/* argument is in this arg; no more options */
+				return 0;
+			}
+		}
+		pos++;
+	}
+	return 0;
+}
+
+/*
  * Replace historic +SPEC arguments with appropriate -kSPEC.
+ *
+ * The form can be either a single +SPEC or a pair +SPEC -SPEC.
+ * The following -SPEC is not recognized unless it follows
+ * immediately.
  */ 
 void
-fixit(int *argc, char **argv)
+fixit(int *argc, char **argv, const char *opts)
 {
-	int i, j, fplus=0;
+	int i, j, sawplus;
 	char *vpos, *tpos, spec[20];
 	int col, indent;
 	size_t sz;
 
+	sawplus = 0;
 	for (i = 1; i < *argc; i++) {
-		if (argv[i][0] != '+' && !fplus)
-			continue;
+		/*
+		 * This loop must stop exactly where getopt will stop.
+		 * Otherwise it turns e.g. "sort x +3" into "sort x
+		 * -k4.1", which will croak if +3 was in fact really a
+		 * file name. In order to do this reliably we need to
+		 * be able to identify argv words that are option
+		 * arguments.
+		 */
 
-		if (fplus && (argv[i][0] != '-' || !isdigit((unsigned char)argv[i][1]))) {
-			fplus = 0;
-			if (argv[i][0] != '+') {
-				/* not a -POS argument, skip */
-				continue;
-			}
+		if (!strcmp(argv[i], "--")) {
+			/* End of options; stop. */
+			break;
 		}
 
+		if (argv[i][0] == '+') {
+			/* +POS argument */
+			sawplus = 1;
+		} else if (argv[i][0] == '-' && sawplus &&
+			   isdigit((unsigned char)argv[i][1])) {
+			/* -POS argument */
+			sawplus = 0;
+		} else if (argv[i][0] == '-') {
+			/* other option */
+			sawplus = 0;
+			if (options_need_argument(argv[i], opts)) {
+				/* skip over the argument */
+				i++;
+			}
+			continue;
+		} else {
+			/* not an option at all; stop */
+			sawplus = 0;
+			break;
+		}
+
+		/*
+		 * At this point argv[i] is an old-style spec. The
+		 * sawplus flag used by the above loop logic also
+		 * tells us if it's a +SPEC or -SPEC.
+		 */
+		
 		/* parse spec */
 		tpos = argv[i]+1;
 		col = (int)strtol(tpos, &tpos, 10);
@@ -268,14 +340,14 @@ fixit(int *argc, char **argv)
 			indent = (int) strtol(tpos, &tpos, 10);
 		} else
 			indent = 0;
-		/* tpos points to optional flags now */
+		/* tpos now points to the optional flags */
 
 		/*
-		 * For x.y, the obsolescent variant assumed 0 == beginning
-		 * of line, while the new form uses 0 == end of line.
-		 * Convert accordingly.
+		 * In the traditional form, x.0 means beginning of line;
+		 * in the new form, x.0 means end of line. Adjust the
+		 * value of INDENT accordingly.
 		 */
-		if (!fplus) {
+		if (sawplus) {
 			/* +POS */
 			col += 1;
 			indent += 1;
@@ -285,19 +357,19 @@ fixit(int *argc, char **argv)
 				col += 1;
 		}
 
-		/* new style spec */
+		/* make the new style spec */
 		sz = snprintf(spec, sizeof(spec), "%d.%d%s", col, indent,
 		    tpos);
 
-		if (!fplus) {
+		if (sawplus) {
 			/* Replace the +POS argument with new-style -kSPEC */
 			asprintf(&vpos, "-k%s", spec);
 			argv[i] = vpos;
-			fplus = 1;
 		} else {
 			/*
-			 * Append the spec to one previously generated from
-			 * +POS argument, and remove the argv element.
+			 * Append the spec to the one from the
+			 * preceding +POS argument, and remove the
+			 * current argv element entirely.
 			 */
 			asprintf(&vpos, "%s,%s", argv[i-1], spec);
 			free(argv[i-1]);

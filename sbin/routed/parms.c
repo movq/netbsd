@@ -1,4 +1,4 @@
-/*	$NetBSD: parms.c,v 1.24 2009/10/26 02:53:15 christos Exp $	*/
+/*	$NetBSD: parms.c,v 1.26 2012/01/16 17:38:16 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -38,7 +38,7 @@
 #include <sys/stat.h>
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: parms.c,v 1.24 2009/10/26 02:53:15 christos Exp $");
+__RCSID("$NetBSD: parms.c,v 1.26 2012/01/16 17:38:16 christos Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -192,7 +192,7 @@ gwkludge(void)
 	}
 
 	for (lnum = 1; ; lnum++) {
-		if (0 == fgets(lbuf, sizeof(lbuf), fp))
+		if (fgets(lbuf, sizeof(lbuf), fp) == NULL)
 			break;
 		lptr = lbuf;
 		while (*lptr == ' ')
@@ -900,11 +900,11 @@ check_parms(struct parm *new)
 		if ((0 != (new->parm_int_state & GROUP_IS_SOL_OUT)
 		     && 0 != (parmp->parm_int_state & GROUP_IS_SOL_OUT)
 		     && 0 != ((new->parm_int_state ^ parmp->parm_int_state)
-			      && GROUP_IS_SOL_OUT))
+			      & GROUP_IS_SOL_OUT))
 		    || (0 != (new->parm_int_state & GROUP_IS_ADV_OUT)
 			&& 0 != (parmp->parm_int_state & GROUP_IS_ADV_OUT)
 			&& 0 != ((new->parm_int_state ^ parmp->parm_int_state)
-				 && GROUP_IS_ADV_OUT))
+				 & GROUP_IS_ADV_OUT))
 		    || (new->parm_rdisc_pref != 0
 			&& parmp->parm_rdisc_pref != 0
 			&& new->parm_rdisc_pref != parmp->parm_rdisc_pref)

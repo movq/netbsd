@@ -1,4 +1,4 @@
-/*	$NetBSD: udp_usrreq.c,v 1.179 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: udp_usrreq.c,v 1.185 2012/01/09 22:26:44 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.179 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.185 2012/01/09 22:26:44 liamjfoy Exp $");
 
 #include "opt_inet.h"
 #include "opt_compat_netbsd.h"
@@ -96,6 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.179 2009/09/16 15:23:05 pooka Exp $
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 #include <netinet/udp_private.h>
+#include <netinet/rfc6056.h>
 
 #ifdef INET6
 #include <netinet/ip6.h>
@@ -118,8 +119,6 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.179 2009/09/16 15:23:05 pooka Exp $
 #include <net/if_faith.h>
 #endif
 
-#include <machine/stdarg.h>
-
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/ipsec_var.h>
@@ -130,12 +129,12 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.179 2009/09/16 15:23:05 pooka Exp $
 #endif
 #endif	/* FAST_IPSEC */
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netinet6/ipsec_private.h>
 #include <netinet6/esp.h>
 #include <netkey/key.h>
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 
 #ifdef COMPAT_50
 #include <compat/sys/socket.h>
@@ -635,7 +634,7 @@ udp4_sendup(struct mbuf *m, int off /* offset of data portion */,
 		return;
 	}
 
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (so != NULL && ipsec4_in_reject_so(m, so)) {
 		IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -685,7 +684,7 @@ udp6_sendup(struct mbuf *m, int off /* offset of data portion */,
 		return;
 	in6p = sotoin6pcb(so);
 
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (so != NULL && ipsec6_in_reject_so(m, so)) {
 		IPSEC6_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -804,7 +803,8 @@ udp4_realinput(struct sockaddr_in *src, struct sockaddr_in *dst,
 		/*
 		 * Locate pcb for datagram.
 		 */
-		inp = in_pcblookup_connect(&udbtable, *src4, *sport, *dst4, *dport);
+		inp = in_pcblookup_connect(&udbtable, *src4, *sport, *dst4,
+		    *dport, 0);
 		if (inp == 0) {
 			UDP_STATINC(UDP_STAT_PCBHASHMISS);
 			inp = in_pcblookup_bind(&udbtable, *dst4, *dport);
@@ -958,7 +958,7 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 		 * Locate pcb for datagram.
 		 */
 		in6p = in6_pcblookup_connect(&udbtable, &src6, sport, dst6,
-		    dport, 0);
+					     dport, 0, 0);
 		if (in6p == 0) {
 			UDP_STATINC(UDP_STAT_PCBHASHMISS);
 			in6p = in6_pcblookup_bind(&udbtable, dst6, dport, 0);
@@ -1085,6 +1085,15 @@ udp_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 				error = EINVAL;
 				break;
 			}
+			break;
+		
+		case UDP_RFC6056ALGO:
+			error = sockopt_getint(sopt, &optval);
+			if (error)
+				break;
+
+			error = rfc6056_algo_index_select(
+			    (struct inpcb_hdr *)inp, optval);
 			break;
 
 		default:
@@ -1299,6 +1308,7 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	{
 		struct in_addr laddr;			/* XXX */
 
+		memset(&laddr, 0, sizeof laddr);
 		if (nam) {
 			laddr = inp->inp_laddr;		/* XXX */
 			if ((so->so_state & SS_ISCONNECTED) != 0) {
@@ -1374,7 +1384,8 @@ sysctl_net_inet_udp_stats(SYSCTLFN_ARGS)
 static void
 sysctl_net_inet_udp_setup(struct sysctllog **clog)
 {
-
+	const struct sysctlnode *rfc6056_node;
+	
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "net", NULL,
@@ -1434,6 +1445,25 @@ sysctl_net_inet_udp_setup(struct sysctllog **clog)
 		       sysctl_net_inet_udp_stats, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_UDP, UDPCTL_STATS,
 		       CTL_EOL);
+	/* RFC6056 subtree */
+	sysctl_createv(clog, 0, NULL, &rfc6056_node,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "rfc6056",
+		       SYSCTL_DESCR("RFC 6056"),
+	    	       NULL, 0, NULL, 0,
+		       CTL_NET, PF_INET, IPPROTO_UDP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &rfc6056_node, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRING, "available",
+		       SYSCTL_DESCR("RFC 6056 available algorithms"),
+		       sysctl_rfc6056_available, 0, NULL, RFC6056_MAXLEN,
+		       CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &rfc6056_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_STRING, "selected",
+		       SYSCTL_DESCR("RFC 6056 selected algorithm"),
+		       sysctl_rfc6056_selected, 0, NULL, RFC6056_MAXLEN,
+		       CTL_CREATE, CTL_EOL);
 }
 #endif
 
@@ -1581,7 +1611,7 @@ udp4_espinudp(struct mbuf **mp, int off, struct sockaddr *src,
 	esp4_input(n, iphdrlen);
 #endif
 
-	/* We handled it, it shoudln't be handled by UDP */
+	/* We handled it, it shouldn't be handled by UDP */
 	return 1;
 }
 #endif

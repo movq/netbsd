@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_dovecot_server.c,v 1.1.1.1 2009/06/23 10:09:02 tron Exp $	*/
+/*	$NetBSD: xsasl_dovecot_server.c,v 1.1.1.3.6.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME
@@ -325,7 +325,8 @@ static int xsasl_dovecot_server_connect(XSASL_DOVECOT_SERVER_IMPL *xp)
 		sec_props =
 		    name_mask_delim_opt(myname,
 					xsasl_dovecot_serv_sec_props,
-					line, "\t", NAME_MASK_ANY_CASE);
+					line, "\t",
+				     NAME_MASK_ANY_CASE | NAME_MASK_IGNORE);
 		if ((sec_props & SEC_PROPS_PRIVATE) != 0)
 		    continue;
 	    } else
@@ -367,7 +368,7 @@ static void xsasl_dovecot_server_disconnect(XSASL_DOVECOT_SERVER_IMPL *xp)
 
 /* xsasl_dovecot_server_init - create implementation handle */
 
-XSASL_SERVER_IMPL *xsasl_dovecot_server_init(const char *unused_server_type,
+XSASL_SERVER_IMPL *xsasl_dovecot_server_init(const char *server_type,
 					             const char *path_info)
 {
     XSASL_DOVECOT_SERVER_IMPL *xp;

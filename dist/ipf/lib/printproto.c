@@ -1,4 +1,4 @@
-/*	$NetBSD: printproto.c,v 1.1.1.3 2008/05/20 06:45:04 darrenr Exp $	*/
+/*	$NetBSD: printproto.c,v 1.2 2012/02/15 17:55:07 riz Exp $	*/
 
 /*
  * Copyright (C) 2005 by Darren Reed.

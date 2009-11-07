@@ -1,4 +1,4 @@
-/*	$NetBSD: cac.c,v 1.49 2009/05/12 14:25:17 cegger Exp $	*/
+/*	$NetBSD: cac.c,v 1.53 2011/06/20 22:02:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2006, 2007 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.49 2009/05/12 14:25:17 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.53 2011/06/20 22:02:55 pgoyette Exp $");
 
 #include "bio.h"
 
@@ -48,8 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.49 2009/05/12 14:25:17 cegger Exp $");
 #include <sys/endian.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bswap.h>
 #include <sys/bus.h>
@@ -685,7 +683,8 @@ cac_create_sensors(struct cac_softc *sc)
 
 	for (i = 0; i < nsensors; i++) {
 		sc->sc_sensor[i].units = ENVSYS_DRIVE;
-		sc->sc_sensor[i].monitor = true;
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
+		sc->sc_sensor[i].value_cur = ENVSYS_DRIVE_EMPTY;
 		/* Enable monitoring for drive state changes */
 		sc->sc_sensor[i].flags |= ENVSYS_FMONSTCHANGED;
 		/* logical drives */

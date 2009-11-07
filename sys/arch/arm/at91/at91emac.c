@@ -1,5 +1,5 @@
-/*	$Id: at91emac.c,v 1.6 2009/10/23 06:53:13 snj Exp $	*/
-/*	$NetBSD: at91emac.c,v 1.6 2009/10/23 06:53:13 snj Exp $	*/
+/*	$Id: at91emac.c,v 1.10 2011/07/01 19:31:17 dyoung Exp $	*/
+/*	$NetBSD: at91emac.c,v 1.10 2011/07/01 19:31:17 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.6 2009/10/23 06:53:13 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.10 2011/07/01 19:31:17 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.6 2009/10/23 06:53:13 snj Exp $");
 #include <sys/device.h>
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -73,11 +73,8 @@ __KERNEL_RCSID(0, "$NetBSD: at91emac.c,v 1.6 2009/10/23 06:53:13 snj Exp $");
 #include <netns/ns_if.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #ifdef IPKDB_AT91	// @@@
 #include <ipkdb/ipkdb.h>
@@ -174,7 +171,7 @@ emac_attach(device_t parent, device_t self, void *aux)
 	EMAC_WRITE(ETH_RSR, (u & (ETH_RSR_OVR|ETH_RSR_REC|ETH_RSR_BNA)));
 
 	/* Fetch the Ethernet address from property if set. */
-	enaddr = prop_dictionary_get(device_properties(self), "mac-addr");
+	enaddr = prop_dictionary_get(device_properties(self), "mac-address");
 
 	if (enaddr != NULL) {
 		KASSERT(prop_object_type(enaddr) == PROP_TYPE_DATA);
@@ -287,10 +284,7 @@ emac_intr(void *arg)
 				sc->rxq[bi].m->m_pkthdr.rcvif = ifp;
 				sc->rxq[bi].m->m_pkthdr.len = 
 					sc->rxq[bi].m->m_len = fl;
-#if NBPFILTER > 0
-				if (ifp->if_bpf) 
-					bpf_mtap(ifp->if_bpf, sc->rxq[bi].m);
-#endif /* NBPFILTER > 0 */
+				bpf_mtap(ifp, sc->rxq[bi].m);
 				DPRINTFN(2,("received %u bytes packet\n", fl));
                                 (*ifp->if_input)(ifp, sc->rxq[bi].m);
 				if (mtod(m, intptr_t) & 3) {
@@ -681,10 +675,7 @@ start:
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 	}
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf) 
-		bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+	bpf_mtap(ifp, m);
 
 	nsegs = sc->txq[bi].m_dmamap->dm_nsegs;
 	segs = sc->txq[bi].m_dmamap->dm_segs;

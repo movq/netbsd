@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.25 2009/09/19 14:57:30 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.29 2012/01/05 21:32:36 christos Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -57,6 +53,7 @@
 #include "menu_defs.h"
 
 static void install_bootblocks(void);
+static void install_ofwboot(void);
 
 void
 md_init(void)
@@ -64,9 +61,9 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	(void)flags;
 }
 
 int
@@ -80,14 +77,14 @@ md_get_info(void)
 
 	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
-		if (logging)
+		if (logfp)
 			(void)fprintf(logfp, "Can't open %s\n", dev_name);
 		endwin();
 		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
-		if (logging)
+		if (logfp)
 			(void)fprintf(logfp, "Can't read disklabel on %s.\n",
 				dev_name);
 		endwin();
@@ -149,6 +146,7 @@ md_pre_disklabel(void)
 int
 md_post_disklabel(void)
 {
+	install_bootblocks();
 	return 0;
 }
 
@@ -160,7 +158,7 @@ md_post_disklabel(void)
 int
 md_post_newfs(void)
 {
-	install_bootblocks();
+	install_ofwboot();
 	return 0;
 }
 
@@ -196,8 +194,26 @@ md_update(void)
 static void
 install_bootblocks(void)
 {
-	/* Install boot blocks now that we have a full system ... */
+	/* Install boot blocks before mounting the target disk */
 	msg_display(MSG_dobootblks, diskdev);
 	run_program(RUN_DISPLAY, "/sbin/disklabel -W %s", diskdev);
-	run_program(RUN_DISPLAY, "/usr/mdec/binstall ffs %s", targetroot_mnt);
+	run_program(RUN_DISPLAY, "/usr/sbin/installboot /dev/r%sc"
+	    " /usr/mdec/bootblk", diskdev);
+}
+
+/* install/update secondary bootstrap */
+static void
+install_ofwboot(void)
+{
+	/* copy secondary bootstrap now that the target is mounted */
+	msg_display(MSG_doofwboot, targetroot_mnt);
+	run_program(RUN_DISPLAY, "/bin/cp -p /usr/mdec/ofwboot %s",
+	    targetroot_mnt);
+}
+
+int
+md_pre_mount()
+{
+	install_bootblocks();
+	return 0;
 }

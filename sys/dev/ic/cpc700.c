@@ -1,4 +1,4 @@
-/*	$NetBSD: cpc700.c,v 1.16 2009/05/12 14:25:17 cegger Exp $	*/
+/*	$NetBSD: cpc700.c,v 1.19 2012/01/27 18:53:07 para Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpc700.c,v 1.16 2009/05/12 14:25:17 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpc700.c,v 1.19 2012/01/27 18:53:07 para Exp $");
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -173,8 +173,8 @@ cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	aa.pba.pba_iot = pciio;
 	aa.pba.pba_memt = mem;
 	aa.pba.pba_dmat = dma;
-	aa.pba.pba_pc = 0;
-	aa.pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
+	aa.pba.pba_pc = pc;
+	aa.pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY;
 	aa.pba.pba_bus = 0;
 
 	/* Save PCI error condition reg. */
@@ -191,9 +191,9 @@ cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	ioext  = extent_create("pciio",  CPC_PCI_IO_START, CPC_PCI_IO_END,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", CPC_PCI_MEM_BASE, CPC_PCI_MEM_END,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	pci_configure_bus(0, ioext, memext, NULL, 0, 32);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: lex_var.h,v 1.1.1.2 2007/04/14 20:17:34 martin Exp $	*/
+/*	$NetBSD: lex_var.h,v 1.2 2012/02/15 17:55:11 riz Exp $	*/
 
 /*
  * Copyright (C) 2002 by Darren Reed.

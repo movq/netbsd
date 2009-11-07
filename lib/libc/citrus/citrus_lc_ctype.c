@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_lc_ctype.c,v 1.3 2009/01/18 22:03:19 tnozaki Exp $ */
+/* $NetBSD: citrus_lc_ctype.c,v 1.9 2010/06/19 13:26:51 tnozaki Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,14 +28,14 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_lc_ctype.c,v 1.3 2009/01/18 22:03:19 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_lc_ctype.c,v 1.9 2010/06/19 13:26:51 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "reentrant.h"
 #include <sys/types.h>
+#include <sys/ctype_bits.h>
 #include <sys/queue.h>
 #include <assert.h>
-#include <ctype.h>
 #include <errno.h>
 #include <langinfo.h>
 #include <limits.h>
@@ -56,9 +56,9 @@ __RCSID("$NetBSD: citrus_lc_ctype.c,v 1.3 2009/01/18 22:03:19 tnozaki Exp $");
 #include "citrus_aliasname_local.h"
 #include "citrus_module.h"
 #include "citrus_ctype.h"
+#include "citrus_mmap.h"
 
-#include "rune.h"
-#include "rune_local.h"
+#include "runetype_local.h"
 #include "multibyte.h"
 
 /*
@@ -78,9 +78,8 @@ _citrus_LC_CTYPE_create_impl(const char * __restrict root,
     const char * __restrict name, _RuneLocale ** __restrict pdata)
 {
 	char path[PATH_MAX + 1];
-	FILE *fp;
-	_RuneLocale *data;
 	int ret;
+	struct _region r;
 
 	_DIAGASSERT(root != NULL);
 	_DIAGASSERT(name != NULL);
@@ -88,37 +87,12 @@ _citrus_LC_CTYPE_create_impl(const char * __restrict root,
 
 	snprintf(path, sizeof(path),
 	    "%s/%s/LC_CTYPE", root, name);
-	fp = fopen(path, "r");
-	if (fp == NULL)
-		return ENOENT;
-	data = _Read_RuneMagi(fp);
-	if (data == NULL) {
-		data = _Read_CTypeAsRune(fp);
-		if (data == NULL) {
-			fclose(fp);
-			return EFTYPE;
-		}
+	ret = _citrus_map_file(&r, path);
+	if (!ret) {
+		ret = _rune_load((const char *)r.r_head, r.r_size, pdata);
+		_citrus_unmap_file(&r);
 	}
-	fclose(fp);
-	ret = _citrus_ctype_open(&data->rl_citrus_ctype, data->rl_encoding,
-	   data->rl_variable, data->rl_variable_len, _PRIVSIZE);
-	if (!ret)
-		ret = __runetable_to_netbsd_ctype(data);
-	if (ret || __MB_LEN_MAX_RUNTIME <
-	    _citrus_ctype_get_mb_cur_max(data->rl_citrus_ctype)) {
-		_NukeRune(data);
-		return EINVAL;
-	}
-	data->rl_wctrans[_WCTRANS_INDEX_LOWER].te_name = "tolower";
-	data->rl_wctrans[_WCTRANS_INDEX_LOWER].te_cached = &data->rl_maplower[0];
-	data->rl_wctrans[_WCTRANS_INDEX_LOWER].te_extmap = &data->rl_maplower_ext;
-
-	data->rl_wctrans[_WCTRANS_INDEX_UPPER].te_name = "toupper";
-	data->rl_wctrans[_WCTRANS_INDEX_UPPER].te_cached = &data->rl_mapupper[0];
-	data->rl_wctrans[_WCTRANS_INDEX_UPPER].te_extmap = &data->rl_mapupper_ext;
-
-	*pdata = data;
-	return 0;
+	return ret;
 }
 
 static __inline void
@@ -126,6 +100,7 @@ _PREFIX(build_cache)(struct _locale_cache_t * __restrict cache,
     _RuneLocale * __restrict data)
 {
 	_DIAGASSERT(cache != NULL);
+	_DIAGASSERT(cache->items != NULL);
 	_DIAGASSERT(data != NULL);
 
 	cache->ctype_tab = data->rl_ctype_tab;

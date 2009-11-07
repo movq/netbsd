@@ -1,4 +1,4 @@
-/*$NetBSD: dm_target_mirror.c,v 1.6 2009/06/05 19:56:40 haad Exp $*/
+/*$NetBSD: dm_target_mirror.c,v 1.9 2010/05/18 15:10:38 haad Exp $*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -39,6 +39,15 @@
 
 #include "dm.h"
 
+/* dm_target_mirror.c */
+int dm_target_mirror_init(dm_dev_t *, void**, char *);
+char * dm_target_mirror_status(void *);
+int dm_target_mirror_strategy(dm_table_entry_t *, struct buf *);
+int dm_target_mirror_sync(dm_table_entry_t *);
+int dm_target_mirror_deps(dm_table_entry_t *, prop_array_t);
+int dm_target_mirror_destroy(dm_table_entry_t *);
+int dm_target_mirror_upcall(dm_table_entry_t *, struct buf *);
+
 #ifdef DM_TARGET_MODULE
 /*
  * Every target can be compiled directly to dm driver or as a
@@ -58,15 +67,15 @@ dm_target_mirror_modcmd(modcmd_t cmd, void *arg)
 	dm_target_t *dmt;
 	int r;
 	dmt = NULL;
-	
+
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		if ((dmt = dm_target_lookup("mirror")) != NULL){
+		if ((dmt = dm_target_lookup("mirror")) != NULL) {
 			dm_target_unbusy(dmt);
 			return EEXIST;
 		}
 		dmt = dm_target_alloc("mirror");
-		
+
 		dmt->version[0] = 1;
 		dmt->version[1] = 0;
 		dmt->version[2] = 0;
@@ -74,12 +83,13 @@ dm_target_mirror_modcmd(modcmd_t cmd, void *arg)
 		dmt->init = &dm_target_mirror_init;
 		dmt->status = &dm_target_mirror_status;
 		dmt->strategy = &dm_target_mirror_strategy;
+		dmt->sync = &dm_target_mirror_sync;
 		dmt->deps = &dm_target_mirror_deps;
 		dmt->destroy = &dm_target_mirror_destroy;
 		dmt->upcall = &dm_target_mirror_upcall;
 
 		r = dm_target_insert(dmt);
-		
+
 		break;
 
 	case MODULE_CMD_FINI:
@@ -95,7 +105,6 @@ dm_target_mirror_modcmd(modcmd_t cmd, void *arg)
 
 	return r;
 }
-
 #endif
 
 /*
@@ -104,7 +113,7 @@ dm_target_mirror_modcmd(modcmd_t cmd, void *arg)
  * 0 52428800 mirror clustered_disk 4 253:2 1024 UUID block_on_error 3 253:3 0 253:4 0 253:5 0
  */
 int
-dm_target_mirror_init(dm_dev_t *dmv, void **target_config, prop_dictionary_t dict)
+dm_target_mirror_init(dm_dev_t * dmv, void **target_config, char *argv)
 {
 
 	printf("Mirror target init function called!!\n");
@@ -112,20 +121,18 @@ dm_target_mirror_init(dm_dev_t *dmv, void **target_config, prop_dictionary_t dic
 	*target_config = NULL;
 
 	dmv->dev_type = DM_MIRROR_DEV;
-	
+
 	return ENOSYS;
 }
-
 /* Status routine called to get params string. */
 char *
 dm_target_mirror_status(void *target_config)
 {
 	return NULL;
-}	
-
+}
 /* Strategy routine called from dm_strategy. */
 int
-dm_target_mirror_strategy(dm_table_entry_t *table_en, struct buf *bp)
+dm_target_mirror_strategy(dm_table_entry_t * table_en, struct buf * bp)
 {
 
 	printf("Mirror target read function called!!\n");
@@ -134,32 +141,36 @@ dm_target_mirror_strategy(dm_table_entry_t *table_en, struct buf *bp)
 	bp->b_resid = 0;
 
 	biodone(bp);
-	
+
 	return 0;
 }
+/* Sync underlying disk caches. */
+int
+dm_target_mirror_sync(dm_table_entry_t * table_en)
+{
 
+	return 0;
+}
 /* Doesn't do anything here. */
 int
-dm_target_mirror_destroy(dm_table_entry_t *table_en)
+dm_target_mirror_destroy(dm_table_entry_t * table_en)
 {
 	table_en->target_config = NULL;
 
 	/* Unbusy target so we can unload it */
 	dm_target_unbusy(table_en->target);
-	
+
 	return 0;
 }
-
 /* Doesn't not need to do anything here. */
 int
-dm_target_mirror_deps(dm_table_entry_t *table_en, prop_array_t prop_array)
-{	
+dm_target_mirror_deps(dm_table_entry_t * table_en, prop_array_t prop_array)
+{
 	return 0;
 }
-
 /* Unsupported for this target. */
 int
-dm_target_mirror_upcall(dm_table_entry_t *table_en, struct buf *bp)
+dm_target_mirror_upcall(dm_table_entry_t * table_en, struct buf * bp)
 {
 	return 0;
 }

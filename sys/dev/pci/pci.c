@@ -1,4 +1,4 @@
-/*	$NetBSD: pci.c,v 1.124 2009/08/19 21:36:47 dyoung Exp $	*/
+/*	$NetBSD: pci.c,v 1.142 2011/08/29 14:47:08 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 1998
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci.c,v 1.124 2009/08/19 21:36:47 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci.c,v 1.142 2011/08/29 14:47:08 jmcneill Exp $");
 
 #include "opt_pci.h"
 
@@ -44,12 +44,11 @@ __KERNEL_RCSID(0, "$NetBSD: pci.c,v 1.124 2009/08/19 21:36:47 dyoung Exp $");
 #include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/module.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 
@@ -69,7 +68,7 @@ int	pciprint(void *, const char *);
 #define pci_enumerate_bus PCI_MACHDEP_ENUMERATE_BUS
 #else
 int pci_enumerate_bus(struct pci_softc *, const int *,
-    int (*)(struct pci_attach_args *), struct pci_attach_args *);
+    int (*)(const struct pci_attach_args *), struct pci_attach_args *);
 #endif
 
 /*
@@ -107,6 +106,7 @@ pcirescan(device_t self, const char *ifattr, const int *locators)
 	KASSERT(locators);
 
 	pci_enumerate_bus(sc, locators, NULL, NULL);
+
 	return 0;
 }
 
@@ -149,8 +149,8 @@ pciattach(device_t parent, device_t self, void *aux)
 	aprint_naive("\n");
 	aprint_normal("\n");
 
-	io_enabled = (pba->pba_flags & PCI_FLAGS_IO_ENABLED);
-	mem_enabled = (pba->pba_flags & PCI_FLAGS_MEM_ENABLED);
+	io_enabled = (pba->pba_flags & PCI_FLAGS_IO_OKAY);
+	mem_enabled = (pba->pba_flags & PCI_FLAGS_MEM_OKAY);
 	mrl_enabled = (pba->pba_flags & PCI_FLAGS_MRL_OKAY);
 	mrm_enabled = (pba->pba_flags & PCI_FLAGS_MRM_OKAY);
 	mwi_enabled = (pba->pba_flags & PCI_FLAGS_MWI_OKAY);
@@ -248,8 +248,8 @@ pciprint(void *aux, const char *pnp)
 		    (long)pa->pa_intrswiz, (long)pa->pa_intrpin);
 #endif
 		printf(", i/o %s, mem %s,",
-		    pa->pa_flags & PCI_FLAGS_IO_ENABLED ? "on" : "off",
-		    pa->pa_flags & PCI_FLAGS_MEM_ENABLED ? "on" : "off");
+		    pa->pa_flags & PCI_FLAGS_IO_OKAY ? "on" : "off",
+		    pa->pa_flags & PCI_FLAGS_MEM_OKAY ? "on" : "off");
 		qd = pci_lookup_quirkdata(PCI_VENDOR(pa->pa_id),
 		    PCI_PRODUCT(pa->pa_id));
 		if (qd == NULL) {
@@ -269,12 +269,13 @@ pciprint(void *aux, const char *pnp)
 
 int
 pci_probe_device(struct pci_softc *sc, pcitag_t tag,
-    int (*match)(struct pci_attach_args *), struct pci_attach_args *pap)
+    int (*match)(const struct pci_attach_args *),
+    struct pci_attach_args *pap)
 {
 	pci_chipset_tag_t pc = sc->sc_pc;
 	struct pci_attach_args pa;
-	pcireg_t id, csr, class, intr, bhlcr;
-	int ret, pin, bus, device, function;
+	pcireg_t id, csr, class, intr, bhlcr, bar, endbar;
+	int ret, pin, bus, device, function, i, width;
 	int locs[PCICF_NLOCS];
 
 	pci_decompose_tag(pc, tag, &bus, &device, &function);
@@ -298,6 +299,61 @@ pci_probe_device(struct pci_softc *sc, pcitag_t tag,
 	if (PCI_VENDOR(id) == 0)
 		return 0;
 
+	/* Collect memory range info */
+	memset(sc->PCI_SC_DEVICESC(device, function).c_range, 0,
+	    sizeof(sc->PCI_SC_DEVICESC(device, function).c_range));
+	i = 0;
+	switch (PCI_HDRTYPE_TYPE(bhlcr)) {
+	case PCI_HDRTYPE_PPB:
+		endbar = PCI_MAPREG_PPB_END;
+		break;
+	case PCI_HDRTYPE_PCB:
+		endbar = PCI_MAPREG_PCB_END;
+		break;
+	default:
+		endbar = PCI_MAPREG_END;
+		break;
+	}
+	for (bar = PCI_MAPREG_START; bar < endbar; bar += width) {
+		struct pci_range *r;
+		pcireg_t type;
+
+		width = 4;
+		if (pci_mapreg_probe(pc, tag, bar, &type) == 0)
+			continue;
+
+		if (PCI_MAPREG_TYPE(type) == PCI_MAPREG_TYPE_MEM) {
+			if (PCI_MAPREG_MEM_TYPE(type) ==
+			    PCI_MAPREG_MEM_TYPE_64BIT)
+				width = 8;
+
+			r = &sc->PCI_SC_DEVICESC(device, function).c_range[i++];
+			if (pci_mapreg_info(pc, tag, bar, type,
+			    &r->r_offset, &r->r_size, &r->r_flags) != 0)
+				break;
+			if ((PCI_VENDOR(id) == PCI_VENDOR_ATI) && (bar == 0x10)
+			    && (r->r_size == 0x1000000)) {
+				struct pci_range *nr;
+				/*
+				 * this has to be a mach64
+				 * split things up so each half-aperture can
+				 * be mapped PREFETCHABLE except the last page
+				 * which may contain registers
+				 */
+				r->r_size = 0x7ff000;
+				r->r_flags = BUS_SPACE_MAP_LINEAR |
+					     BUS_SPACE_MAP_PREFETCHABLE;
+				nr = &sc->PCI_SC_DEVICESC(device,
+				    function).c_range[i++];
+				nr->r_offset = r->r_offset + 0x800000;
+				nr->r_size = 0x7ff000;
+				nr->r_flags = BUS_SPACE_MAP_LINEAR |
+					      BUS_SPACE_MAP_PREFETCHABLE;
+			}
+			
+		}
+	}
+
 	pa.pa_iot = sc->sc_iot;
 	pa.pa_memt = sc->sc_memt;
 	pa.pa_dmat = sc->sc_dmat;
@@ -315,18 +371,15 @@ pci_probe_device(struct pci_softc *sc, pcitag_t tag,
 	 * as appropriate.
 	 */
 	pa.pa_flags = sc->sc_flags;
-	if ((csr & PCI_COMMAND_IO_ENABLE) == 0)
-		pa.pa_flags &= ~PCI_FLAGS_IO_ENABLED;
-	if ((csr & PCI_COMMAND_MEM_ENABLE) == 0)
-		pa.pa_flags &= ~PCI_FLAGS_MEM_ENABLED;
 
 	/*
 	 * If the cache line size is not configured, then
 	 * clear the MRL/MRM/MWI command-ok flags.
 	 */
-	if (PCI_CACHELINE(bhlcr) == 0)
+	if (PCI_CACHELINE(bhlcr) == 0) {
 		pa.pa_flags &= ~(PCI_FLAGS_MRL_OKAY|
 		    PCI_FLAGS_MRM_OKAY|PCI_FLAGS_MWI_OKAY);
+	}
 
 	if (sc->sc_bridgetag == NULL) {
 		pa.pa_intrswiz = 0;
@@ -456,7 +509,7 @@ pci_get_capability(pci_chipset_tag_t pc, pcitag_t tag, int capid,
 
 int
 pci_find_device(struct pci_attach_args *pa,
-		int (*match)(struct pci_attach_args *))
+		int (*match)(const struct pci_attach_args *))
 {
 	extern struct cfdriver pci_cd;
 	device_t pcidev;
@@ -483,25 +536,20 @@ pci_find_device(struct pci_attach_args *pa,
  */
 int
 pci_enumerate_bus(struct pci_softc *sc, const int *locators,
-    int (*match)(struct pci_attach_args *), struct pci_attach_args *pap)
+    int (*match)(const struct pci_attach_args *), struct pci_attach_args *pap)
 {
 	pci_chipset_tag_t pc = sc->sc_pc;
 	int device, function, nfunctions, ret;
 	const struct pci_quirkdata *qd;
 	pcireg_t id, bhlcr;
 	pcitag_t tag;
-#ifdef __PCI_BUS_DEVORDER
-	char devs[32];
-	int i;
-#endif
+	uint8_t devs[32];
+	int i, n;
 
-#ifdef __PCI_BUS_DEVORDER
-	pci_bus_devorder(sc->sc_pc, sc->sc_bus, devs);
-	for (i = 0; (device = devs[i]) < 32 && device >= 0; i++)
-#else
-	for (device = 0; device < sc->sc_maxndevs; device++)
-#endif
-	{
+	n = pci_bus_devorder(sc->sc_pc, sc->sc_bus, devs, __arraycount(devs));
+	for (i = 0; i < n; i++) {
+		device = devs[i];
+
 		if ((locators[PCICF_DEV] != PCICF_DEV_DEFAULT) &&
 		    (locators[PCICF_DEV] != device))
 			continue;
@@ -629,7 +677,7 @@ pci_vpd_write(pci_chipset_tag_t pc, pcitag_t tag, int offset, int count,
 }
 
 int
-pci_dma64_available(struct pci_attach_args *pa)
+pci_dma64_available(const struct pci_attach_args *pa)
 {
 #ifdef _PCI_HAVE_DMA64
 	if (BUS_DMA_TAG_VALID(pa->pa_dmat64))
@@ -812,54 +860,6 @@ pci_activate_null(pci_chipset_tag_t pc, pcitag_t tag,
 	return 0;
 }
 
-/* I have disabled this code for now. --dyoung
- *
- * Insofar as I understand what the PCI retry timeout is [1],
- * I see no justification for any driver to disable when it
- * attaches/resumes a device.
- *
- * A PCI bus bridge may tell a bus master to retry its transaction
- * at a later time if the resources to complete the transaction
- * are not immediately available.  Taking a guess, PCI bus masters
- * that implement a PCI retry timeout register count down from the
- * retry timeout to 0 while it retries a delayed PCI transaction.
- * When it reaches 0, it stops retrying.  A PCI master is *never*
- * supposed to stop retrying a delayed transaction, though.
- *
- * Incidentally, I initially suspected that writing 0 to the register
- * would not disable *retries*, but would disable the timeout.
- * That is, any device whose retry timeout was set to 0 would
- * *never* timeout.  However, I found out, by using PCI debug
- * facilities on the AMD Elan SC520, that if I write 0 to the retry
- * timeout register on an ath(4) MiniPCI card, the card really does
- * not retry transactions.
- *
- * Some uses of this register have mentioned "interference" with
- * a CPU's "C3 sleep state."  It seems to me that if a bus master
- * is properly put to sleep, it will neither initiate new transactions,
- * nor retry delayed transactions, so disabling retries should not
- * be necessary.
- *
- * [1] The timeout does not appear to be documented in any PCI
- * standard, and we have no documentation of it for the devices by
- * Atheros, and others, that supposedly implement it.
- */
-void
-pci_disable_retry(pci_chipset_tag_t pc, pcitag_t tag)
-{
-#if 0
-	pcireg_t retry;
-
-	/*
-	 * Disable retry timeout to keep PCI Tx retries from
-	 * interfering with ACPI C3 CPU state.
-	 */
-	retry = pci_conf_read(pc, tag, PCI_RETRY_TIMEOUT_REG);
-	retry &= ~PCI_RETRY_TIMEOUT_REG_MASK;
-	pci_conf_write(pc, tag, PCI_RETRY_TIMEOUT_REG, retry);
-#endif
-}
-
 struct pci_child_power {
 	struct pci_conf_state p_pciconf;
 	pci_chipset_tag_t p_pc;
@@ -868,10 +868,11 @@ struct pci_child_power {
 	int p_pm_offset;
 	pcireg_t p_pm_cap;
 	pcireg_t p_class;
+	pcireg_t p_csr;
 };
 
 static bool
-pci_child_suspend(device_t dv PMF_FN_ARGS)
+pci_child_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pci_child_power *priv = device_pmf_bus_private(dv);
 	pcireg_t ocsr, csr;
@@ -899,7 +900,7 @@ pci_child_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-pci_child_resume(device_t dv PMF_FN_ARGS)
+pci_child_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pci_child_power *priv = device_pmf_bus_private(dv);
 
@@ -921,9 +922,10 @@ pci_child_shutdown(device_t dv, int how)
 	struct pci_child_power *priv = device_pmf_bus_private(dv);
 	pcireg_t csr;
 
-	/* disable busmastering */
+	/* restore original bus-mastering state */
 	csr = pci_conf_read(priv->p_pc, priv->p_tag, PCI_COMMAND_STATUS_REG);
 	csr &= ~PCI_COMMAND_MASTER_ENABLE;
+	csr |= priv->p_csr & PCI_COMMAND_MASTER_ENABLE;
 	pci_conf_write(priv->p_pc, priv->p_tag, PCI_COMMAND_STATUS_REG, csr);
 	return true;
 }
@@ -954,6 +956,8 @@ pci_child_register(device_t child)
 	priv->p_tag = pci_make_tag(priv->p_pc, sc->sc_bus, device,
 	    function);
 	priv->p_class = pci_conf_read(priv->p_pc, priv->p_tag, PCI_CLASS_REG);
+	priv->p_csr = pci_conf_read(priv->p_pc, priv->p_tag,
+	    PCI_COMMAND_STATUS_REG);
 
 	if (pci_get_capability(priv->p_pc, priv->p_tag,
 			       PCI_CAP_PWRMGMT, &off, &reg)) {
@@ -969,4 +973,14 @@ pci_child_register(device_t child)
 	    pci_child_resume, pci_child_shutdown, pci_child_deregister);
 
 	return true;
+}
+
+MODULE(MODULE_CLASS_DRIVER, pci, NULL);
+
+static int
+pci_modcmd(modcmd_t cmd, void *priv)
+{
+	if (cmd == MODULE_CMD_INIT || cmd == MODULE_CMD_FINI)
+		return 0;
+	return ENOTTY;
 }

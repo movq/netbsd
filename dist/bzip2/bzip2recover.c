@@ -1,4 +1,4 @@
-/*	$NetBSD: bzip2recover.c,v 1.7 2008/03/18 17:35:36 christos Exp $	*/
+/*	$NetBSD: bzip2recover.c,v 1.9 2011/08/29 20:41:22 joerg Exp $	*/
 
 
 /*-----------------------------------------------------------*/
@@ -23,6 +23,7 @@
 /* This program is a complete hack and should be rewritten properly.
 	 It isn't very complicated. */
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -38,9 +39,9 @@
    This change occurred in version 1.0.2; all prior versions have
    the 512MB limitation.
 */
-#ifdef __GNUC__
-   typedef  unsigned long long int  MaybeUInt64;
-#  define MaybeUInt64_FMT "%Lu"
+#if 1
+   typedef uint64_t  MaybeUInt64;
+#  define MaybeUInt64_FMT "%" PRIu64
 #else
 #ifdef _MSC_VER
    typedef  unsigned __int64  MaybeUInt64;
@@ -111,7 +112,7 @@ static void tooManyBlocks ( Int32 max_handled_blocks );
 /*---------------------------------------------------*/
 
 /*---------------------------------------------*/
-static void readError ( void )
+__dead static void readError ( void )
 {
    fprintf ( stderr,
              "%s: I/O error reading `%s', possible reason follows.\n",
@@ -124,7 +125,7 @@ static void readError ( void )
 
 
 /*---------------------------------------------*/
-static void writeError ( void )
+__dead static void writeError ( void )
 {
    fprintf ( stderr,
              "%s: I/O error reading `%s', possible reason follows.\n",
@@ -137,7 +138,7 @@ static void writeError ( void )
 
 
 /*---------------------------------------------*/
-static void mallocFail ( Int32 n )
+__dead static void mallocFail ( Int32 n )
 {
    fprintf ( stderr,
              "%s: malloc failed on request for %d bytes.\n",
@@ -149,7 +150,7 @@ static void mallocFail ( Int32 n )
 
 
 /*---------------------------------------------*/
-static void tooManyBlocks ( Int32 max_handled_blocks )
+__dead static void tooManyBlocks ( Int32 max_handled_blocks )
 {
    fprintf ( stderr,
              "%s: `%s' appears to contain more than %d blocks\n",

@@ -1,4 +1,4 @@
-.\"	$NetBSD: __builtin_object_size.3,v 1.4 2008/06/06 05:51:46 yamt Exp $
+.\"	$NetBSD: __builtin_object_size.3,v 1.8 2010/12/19 09:33:52 jruoho Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -28,13 +28,13 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd May 23, 2007
+.Dd December 19, 2010
 .Dt __BUILTIN_OBJECT_SIZE 3
 .Os
 .Sh NAME
 .Nm __builtin_object_size
 .Nd return the size of the given object
-.Sh LIBRARY
+.Sh SYNOPSIS
 .Ft size_t
 .Fn __builtin_object_size "void *ptr" "int type"
 .Sh DESCRIPTION
@@ -50,7 +50,7 @@ effects.
 If the size of the object is not known or it has side effects the
 .Fn __builtin_object_size
 function returns:
-.Bl -tag -width (size_t)-1
+.Bl -tag -width (size_t)-1 -offset indent
 .It Dv (size_t)-1
 for
 .Fa type
@@ -78,8 +78,13 @@ and the minimum size when
 .Dv \*[Am] 2 != 0 .
 .Sh SEE ALSO
 .Xr gcc 1 ,
+.Xr __builtin_return_address 3 ,
+.Xr attribute 3 ,
 .Xr ssp 3
 .Sh HISTORY
 The
 .Fn __builtin_object_size
-appeared in gcc 4.1.
+appeared in
+.Tn GCC 4.1 .
+.Sh CAVEATS
+This is a non-standard, compiler-specific extension.

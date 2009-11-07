@@ -1,5 +1,5 @@
-/*	$NetBSD: mac.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: mac.c,v 1.15 2008/06/13 00:51:47 dtucker Exp $ */
+/*	$NetBSD: mac.c,v 1.4 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: mac.c,v 1.16 2011/08/02 01:22:11 djm Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: mac.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
+__RCSID("$NetBSD: mac.c,v 1.4 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 
 #include <openssl/hmac.h>
@@ -50,7 +50,7 @@ __RCSID("$NetBSD: mac.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
 #define SSH_UMAC	2	/* UMAC (not integrated with OpenSSL) */
 
 struct {
-	char		*name;
+	const char	*name;
 	int		type;
 	const EVP_MD *	(*mdfunc)(void);
 	int		truncatebits;	/* truncate digest if != 0 */
@@ -59,6 +59,10 @@ struct {
 } macs[] = {
 	{ "hmac-sha1",			SSH_EVP, EVP_sha1, 0, -1, -1 },
 	{ "hmac-sha1-96",		SSH_EVP, EVP_sha1, 96, -1, -1 },
+	{ "hmac-sha2-256",		SSH_EVP, EVP_sha256, 0, -1, -1 },
+	{ "hmac-sha2-256-96",		SSH_EVP, EVP_sha256, 96, -1, -1 },
+	{ "hmac-sha2-512",		SSH_EVP, EVP_sha512, 0, -1, -1 },
+	{ "hmac-sha2-512-96",		SSH_EVP, EVP_sha512, 96, -1, -1 },
 	{ "hmac-md5",			SSH_EVP, EVP_md5, 0, -1, -1 },
 	{ "hmac-md5-96",		SSH_EVP, EVP_md5, 96, -1, -1 },
 	{ "hmac-ripemd160",		SSH_EVP, EVP_ripemd160, 0, -1, -1 },

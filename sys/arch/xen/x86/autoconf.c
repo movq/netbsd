@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.11 2009/11/06 23:09:10 dyoung Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.13.18.2 2012/08/08 15:51:13 martin Exp $	*/
 /*	NetBSD: autoconf.c,v 1.75 2003/12/30 12:33:22 pk Exp 	*/
 
 /*-
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2009/11/06 23:09:10 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.13.18.2 2012/08/08 15:51:13 martin Exp $");
 
 #include "opt_xen.h"
 #include "opt_compat_oldboot.h"
@@ -66,7 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2009/11/06 23:09:10 dyoung Exp $")
 #include <sys/fcntl.h>
 #include <sys/dkio.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kauth.h>
 
 #ifdef NFS_BOOT_BOOTSTATIC
@@ -89,7 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2009/11/06 23:09:10 dyoung Exp $")
 
 static void findroot(void);
 static int is_valid_disk(device_t);
-static void handle_wedges(device_t, int);
 
 struct disklist *x86_alldisks;
 int x86_ndisks;
@@ -117,6 +115,7 @@ int x86_ndisks;
 void
 cpu_configure(void)
 {
+	struct pcb *pcb;
 
 	startrtclock();
 
@@ -140,7 +139,8 @@ cpu_configure(void)
 #endif
 
 	/* resync cr0 after FPU configuration */
-	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
+	pcb = lwp_getpcb(&lwp0);
+	pcb->pcb_cr0 = rcr0();
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
 	cpu_init_idle_lwps();
@@ -154,16 +154,9 @@ cpu_rootconf(void)
 {
 	findroot();
 
-	if (booted_wedge) {
-		KASSERT(booted_device != NULL);
-		printf("boot device: %s (%s)\n",
-		    device_xname(booted_wedge), device_xname(booted_device));
-		setroot(booted_wedge, 0);
-	} else {
-		printf("boot device: %s\n",
-		    booted_device ? device_xname(booted_device) : "<unknown>");
-		setroot(booted_device, booted_partition);
-	}
+	printf("boot device: %s\n",
+	    booted_device ? device_xname(booted_device) : "<unknown>");
+	rootconf();
 }
 
 
@@ -198,7 +191,7 @@ findroot(void)
 			continue;
 
 		if (is_disk && xcp.xcp_bootdev[0] == 0) {
-			handle_wedges(dv, 0);
+			booted_device = dv;
 			break;
 		}
 
@@ -351,15 +344,6 @@ found:
 		return;
 	}
 	booted_device = dev;
-}
-
-static void
-handle_wedges(device_t dv, int par)
-{
-	if (config_handle_wedges(dv, par) == 0)
-		return;
-	booted_device = dv;
-	booted_partition = par;
 }
 
 static int

@@ -1,7 +1,7 @@
-/*	$NetBSD: result.h,v 1.1.1.2 2009/10/25 00:02:38 christos Exp $	*/
+/*	$NetBSD: result.h,v 1.3.4.1 2012/06/05 21:14:58 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: result.h,v 1.118 2009/10/12 23:48:02 tbox Exp */
+/* Id: result.h,v 1.123 2011/03/21 07:22:14 each Exp  */
 
 #ifndef DNS_RESULT_H
 #define DNS_RESULT_H 1
@@ -151,8 +151,11 @@
 #define DNS_R_DUPLICATE			(ISC_RESULTCLASS_DNS + 103)
 #define DNS_R_INVALIDNSEC3		(ISC_RESULTCLASS_DNS + 104)
 #define DNS_R_NOTMASTER 		(ISC_RESULTCLASS_DNS + 105)
+#define DNS_R_BROKENCHAIN		(ISC_RESULTCLASS_DNS + 106)
+#define DNS_R_EXPIRED			(ISC_RESULTCLASS_DNS + 107)
+#define DNS_R_NOTDYNAMIC 		(ISC_RESULTCLASS_DNS + 108)
 
-#define DNS_R_NRESULTS			106	/*%< Number of results */
+#define DNS_R_NRESULTS			109	/*%< Number of results */
 
 /*
  * DNS wire format rcodes.

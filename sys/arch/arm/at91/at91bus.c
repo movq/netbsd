@@ -1,4 +1,4 @@
-/*	$NetBSD: at91bus.c,v 1.7 2009/10/23 06:53:13 snj Exp $	*/
+/*	$NetBSD: at91bus.c,v 1.12 2011/11/04 17:20:54 aymeric Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91bus.c,v 1.7 2009/10/23 06:53:13 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91bus.c,v 1.12 2011/11/04 17:20:54 aymeric Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91bus.c,v 1.7 2009/10/23 06:53:13 snj Exp $");
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -138,9 +138,6 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
-struct user *proc0paddr;
-
-
 /* prototypes: */
 void		consinit(void);
 static int	at91bus_match(device_t, cfdata_t, void *);
@@ -152,7 +149,8 @@ static int	at91bus_submatch(device_t, cfdata_t,
 				 const int *, void *);
 
 
-CFATTACH_DECL(at91bus, sizeof(struct at91bus_softc), at91bus_match, at91bus_attach, NULL, NULL);
+CFATTACH_DECL_NEW(at91bus, sizeof(struct at91bus_softc),
+	at91bus_match, at91bus_attach, NULL, NULL);
 
 struct at91bus_clocks at91bus_clocks = {0};
 struct at91bus_softc *at91bus_sc = NULL;
@@ -161,6 +159,10 @@ struct at91bus_softc *at91bus_sc = NULL;
 
 #ifdef	AT91RM9200
 #include <arm/at91/at91rm9200busvar.h>
+#endif
+
+#ifdef	AT91SAM9260
+#include <arm/at91/at91sam9260busvar.h>
 #endif
 
 #ifdef	AT91SAM9261
@@ -182,6 +184,9 @@ static const struct {
 	{
 		DBGU_CIDR_AT91SAM9260,
 		"AT91SAM9260"
+#ifdef	AT91SAM9260
+		, &at91sam9260bus
+#endif
 	},
 	{
 		DBGU_CIDR_AT91SAM9260,
@@ -191,7 +196,7 @@ static const struct {
 #endif
 	},
 	{
-		DBGU_CIDR_AT91SAM9260,
+		DBGU_CIDR_AT91SAM9263,
 		"AT91SAM9263"
 	},
 	{
@@ -453,7 +458,7 @@ at91bus_setup(BootConfig *mem)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -461,8 +466,7 @@ at91bus_setup(BootConfig *mem)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -596,7 +600,7 @@ at91bus_found(device_t self, bus_addr_t addr, int pid)
 	locs[AT91BUSCF_ADDR] = addr;
 	locs[AT91BUSCF_PID]  = pid;
 
-	sc = (struct at91bus_softc*) self;
+	sc = device_private(self);
 	sa.sa_iot = sc->sc_iot;
 	sa.sa_dmat = sc->sc_dmat;
 	sa.sa_addr = addr;
@@ -615,7 +619,7 @@ at91bus_attach(device_t parent, device_t self, void *aux)
 	if (at91_chip_ndx < 0)
 		panic("%s: at91bus_init() has not been called!", __FUNCTION__);
 
-	sc = (struct at91bus_softc*) self;
+	sc = device_private(self);
 
         /* initialize bus space and bus dma things... */
 	sc->sc_iot = &at91_bs_tag;

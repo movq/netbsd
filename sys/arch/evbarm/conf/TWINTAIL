@@ -1,4 +1,4 @@
-#	$NetBSD: TWINTAIL,v 1.31 2009/10/11 16:20:23 bsh Exp $
+#	$NetBSD: TWINTAIL,v 1.48 2011/12/18 05:49:26 dholland Exp $
 #
 #	TWINTAIL -- Genetec corp. G4255EB-X002 Evaluation Board Kernel
 #
@@ -43,17 +43,18 @@ file-system	MSDOSFS		# MS-DOS file system
 file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
-file-system	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	NFSSERVER
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -73,6 +74,11 @@ options 	INET6		# IPV6
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
+options 	PFIL_HOOKS	# pfil(9) packet filter hooks
+options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 options 	NFS_BOOT_BOOTP
@@ -135,7 +141,7 @@ options 	DIAGNOSTIC	# internally consistency checks
 #options 	KGDB
 #options  	DEBUG_KGDB
 makeoptions	DEBUG="-g -O2"	# compile full symbol table
-options 	SYMTAB_SPACE=350000
+options 	SYMTAB_SPACE=620000
 #options 	AUDIO_DEBUG=2
 
 config		netbsd		root on ? type ?
@@ -189,7 +195,7 @@ options G4250_LCD_TOSHIBA_LTM035
 kmkbd* at obio?
 wskbd* at kmkbd? # console ?
 
-# GB-225 option board 
+# GB-225 option board
 opio0 	at obio?  intr 2
 
 # USB host
@@ -226,6 +232,9 @@ opio0 	at obio?  intr 2
 # USB Modem
 #umodem*	at uhub? port ? configuration ?
 #ucom*	at umodem?
+
+# Option N.V. Wireless WAN modems
+#uhso*	at uhub? port ? configuration ?
 
 # USB Mass Storage
 #umass*	at uhub? port ? configuration ? interface ?
@@ -350,12 +359,29 @@ mhzc*	at pcmcia? function ?		# Megahertz Ethernet/Modem combo cards
 com*	at mhzc?
 sm*	at mhzc?
 
+# DMAC support
+pxadmac0 at pxaip? addr 0x40000000 intr 25
+options 	PXA2X0_DMAC_DMOVER_CONCURRENCY=4 # Enable dmover(9) backend
+#options 	PXA2X0_DMAC_FIXED_PRIORITY	# Don't want multiple priority
+
+
+# MMC/SD contoller in PXA255
+#  (attached on obio for card detect and write protect signal)
+pxamci0 at obio?
+sdmmc* at pxamci?
+#options 	PXAMCI_DEBUG
+#options 	SDMMC_DEBUG
+#options 	SDMMC_DUMP_CSD
+
+ld* at sdmmc?				# MMC/SD card
+
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-#pseudo-device	md		1	# memory disk device (ramdisk)
+#pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
+pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -381,7 +407,6 @@ pseudo-device	loop			# network loopback
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 
 # wscons pseudo-devices

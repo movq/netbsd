@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gre.c,v 1.141 2009/09/02 14:56:57 tls Exp $ */
+/*	$NetBSD: if_gre.c,v 1.150 2011/11/09 19:43:22 christos Exp $ */
 
 /*
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -45,12 +45,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.141 2009/09/02 14:56:57 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.150 2011/11/09 19:43:22 christos Exp $");
 
 #include "opt_atalk.h"
 #include "opt_gre.h"
 #include "opt_inet.h"
-#include "bpfilter.h"
+#include "opt_mpls.h"
 
 #include <sys/param.h>
 #include <sys/file.h>
@@ -96,16 +96,19 @@ __KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.141 2009/09/02 14:56:57 tls Exp $");
 #include <netinet6/in6_var.h>
 #endif
 
+#ifdef MPLS
+#include <netmpls/mpls.h>
+#include <netmpls/mpls_var.h>
+#endif
+
 #ifdef NETATALK
 #include <netatalk/at.h>
 #include <netatalk/at_var.h>
 #include <netatalk/at_extern.h>
 #endif
 
-#if NBPFILTER > 0
 #include <sys/time.h>
 #include <net/bpf.h>
-#endif
 
 #include <net/if_gre.h>
 
@@ -133,7 +136,6 @@ int gre_debug = 0;
 #endif /* GRE_DEBUG */
 
 int ip_gre_ttl = GRE_TTL;
-MALLOC_DEFINE(M_GRE_BUFQ, "gre_bufq", "gre mbuf queue");
 
 static int gre_clone_create(struct if_clone *, int);
 static int gre_clone_destroy(struct ifnet *);
@@ -160,60 +162,18 @@ static bool gre_fp_send(struct gre_softc *, enum gre_msg, file_t *);
 static bool gre_fp_recv(struct gre_softc *);
 static void gre_fp_recvloop(void *);
 
-static int
-nearest_pow2(size_t len0)
-{
-	size_t len, mid;
-
-	if (len0 == 0)
-		return 1;
-
-	for (len = len0; (len & (len - 1)) != 0; len &= len - 1)
-		;
-
-	mid = len | (len >> 1);
-
-	/* avoid overflow */
-	if ((len << 1) < len)
-		return len;
-	if (len0 >= mid)
-		return len << 1;
-	return len;
-}
-
-static struct gre_bufq *
+static void
 gre_bufq_init(struct gre_bufq *bq, size_t len0)
 {
-	size_t len;
-
-	len = nearest_pow2(len0);
-
 	memset(bq, 0, sizeof(*bq));
-	bq->bq_buf = malloc(len * sizeof(struct mbuf *), M_GRE_BUFQ, M_WAITOK);
-	bq->bq_len = len;
-	bq->bq_lenmask = len - 1;
-
-	return bq;
-}
-
-static bool
-gre_bufq_empty(struct gre_bufq *bq)
-{
-	return bq->bq_prodidx == bq->bq_considx;
+	bq->bq_q = pcq_create(len0, KM_SLEEP);
+	KASSERT(bq->bq_q != NULL);
 }
 
 static struct mbuf *
 gre_bufq_dequeue(struct gre_bufq *bq)
 {
-	struct mbuf *m;
-
-	if (gre_bufq_empty(bq))
-		return NULL;
-
-	m = bq->bq_buf[bq->bq_considx];
-	bq->bq_considx = (bq->bq_considx + 1) & bq->bq_lenmask;
-
-	return m;
+	return pcq_get(bq->bq_q);
 }
 
 static void
@@ -225,20 +185,22 @@ gre_bufq_purge(struct gre_bufq *bq)
 		m_freem(m);
 }
 
+static void
+gre_bufq_destroy(struct gre_bufq *bq)
+{
+	gre_bufq_purge(bq);
+	pcq_destroy(bq->bq_q);
+}
+
 static int
 gre_bufq_enqueue(struct gre_bufq *bq, struct mbuf *m)
 {
-	int next;
+	KASSERT(bq->bq_q != NULL);
 
-	next = (bq->bq_prodidx + 1) & bq->bq_lenmask;
-
-	if (next == bq->bq_considx) {
+	if (!pcq_put(bq->bq_q, m)) {
 		bq->bq_drops++;
 		return ENOBUFS;
 	}
-
-	bq->bq_buf[bq->bq_prodidx] = m;
-	bq->bq_prodidx = next;
 	return 0;
 }
 
@@ -263,14 +225,6 @@ greintr(void *arg)
 
 /* Caller must hold sc->sc_mtx. */
 static void
-gre_wait(struct gre_softc *sc)
-{
-	sc->sc_waiters++;
-	cv_wait(&sc->sc_condvar, &sc->sc_mtx);
-	sc->sc_waiters--;
-}
-
-static void
 gre_fp_wait(struct gre_softc *sc)
 {
 	sc->sc_fp_waiters++;
@@ -281,14 +235,14 @@ gre_fp_wait(struct gre_softc *sc)
 static void
 gre_evcnt_detach(struct gre_softc *sc)
 {
-	evcnt_detach(&sc->sc_unsupp_ev);
-	evcnt_detach(&sc->sc_pullup_ev);
-	evcnt_detach(&sc->sc_error_ev);
-	evcnt_detach(&sc->sc_block_ev);
 	evcnt_detach(&sc->sc_recv_ev);
+	evcnt_detach(&sc->sc_block_ev);
+	evcnt_detach(&sc->sc_error_ev);
+	evcnt_detach(&sc->sc_pullup_ev);
+	evcnt_detach(&sc->sc_unsupp_ev);
 
-	evcnt_detach(&sc->sc_oflow_ev);
 	evcnt_detach(&sc->sc_send_ev);
+	evcnt_detach(&sc->sc_oflow_ev);
 }
 
 static void
@@ -323,7 +277,7 @@ gre_clone_create(struct if_clone *ifc, int unit)
 	    (any = sockaddr_any_by_family(AF_INET6)) == NULL)
 		return -1;
 
-	sc = malloc(sizeof(struct gre_softc), M_DEVBUF, M_WAITOK|M_ZERO);
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	mutex_init(&sc->sc_mtx, MUTEX_DRIVER, IPL_SOFTNET);
 	cv_init(&sc->sc_condvar, "gre wait");
 	cv_init(&sc->sc_fp_condvar, "gre fp");
@@ -347,7 +301,7 @@ gre_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_fd = -1;
 
 	rc = kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL, gre_fp_recvloop, sc,
-	    NULL, sc->sc_if.if_xname);
+	    NULL, "%s", sc->sc_if.if_xname);
 
 	if (rc != 0)
 		return -1;
@@ -358,10 +312,7 @@ gre_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_flags |= IFF_LINK0;
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_NULL, sizeof(uint32_t));
-#endif
-	sc->sc_state = GRE_S_IDLE;
+	bpf_attach(&sc->sc_if, DLT_NULL, sizeof(uint32_t));
 	return 0;
 }
 
@@ -373,29 +324,10 @@ gre_clone_destroy(struct ifnet *ifp)
 
 	GRE_DPRINTF(sc, "\n");
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	s = splnet();
 	if_detach(ifp);
 
-	/* Some LWPs may still wait in gre_ioctl_lock(), however,
-	 * no new LWP will enter gre_ioctl_lock(), because ifunit()
-	 * cannot locate the interface any longer.
-	 */
-	mutex_enter(&sc->sc_mtx);
-	GRE_DPRINTF(sc, "\n");
-	while (sc->sc_state != GRE_S_IDLE)
-		gre_wait(sc);
-	GRE_DPRINTF(sc, "\n");
-	sc->sc_state = GRE_S_DIE;
-	cv_broadcast(&sc->sc_condvar);
-	while (sc->sc_waiters > 0)
-		cv_wait(&sc->sc_condvar, &sc->sc_mtx);
-	/* At this point, no other LWP will access the gre_softc, so
-	 * we can release the mutex.
-	 */
-	mutex_exit(&sc->sc_mtx);
 	GRE_DPRINTF(sc, "\n");
 	/* Note that we must not hold the mutex while we call gre_reconf(). */
 	gre_reconf(sc, NULL);
@@ -412,6 +344,7 @@ gre_clone_destroy(struct ifnet *ifp)
 	cv_destroy(&sc->sc_condvar);
 	cv_destroy(&sc->sc_fp_condvar);
 	mutex_destroy(&sc->sc_mtx);
+	gre_bufq_destroy(&sc->sc_snd);
 	gre_evcnt_detach(sc);
 	free(sc, M_DEVBUF);
 
@@ -906,6 +839,13 @@ gre_input(struct gre_softc *sc, struct mbuf *m, int hlen,
 		af = AF_INET6;
 		break;
 #endif
+#ifdef MPLS
+	case ETHERTYPE_MPLS:
+		ifq = &mplsintrq;
+		isr = NETISR_MPLS;
+		af = AF_MPLS;
+		break;
+#endif
 	default:	   /* others not yet supported */
 		GRE_DPRINTF(sc, "unhandled ethertype 0x%04x\n",
 		    ntohs(gh->ptype));
@@ -920,10 +860,7 @@ gre_input(struct gre_softc *sc, struct mbuf *m, int hlen,
 	}
 	m_adj(m, hlen);
 
-#if NBPFILTER > 0
-	if (sc->sc_if.if_bpf != NULL)
-		bpf_mtap_af(sc->sc_if.if_bpf, af, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(&sc->sc_if, af, m);
 
 	m->m_pkthdr.rcvif = &sc->sc_if;
 
@@ -960,10 +897,7 @@ gre_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		goto end;
 	}
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf != NULL)
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m);
-#endif
+	bpf_mtap_af(ifp, dst->sa_family, m);
 
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
@@ -994,6 +928,15 @@ gre_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		goto end;
 	}
 
+#ifdef MPLS
+		if (rt != NULL && rt_gettag(rt) != NULL) {
+			union mpls_shim msh;
+			msh.s_addr = MPLS_GETSADDR(rt);
+			if (msh.shim.label != MPLS_LABEL_IMPLNULL)
+				etype = htons(ETHERTYPE_MPLS);
+		}
+#endif
+
 	M_PREPEND(m, sizeof(*gh), M_DONTWAIT);
 
 	if (m == NULL) {
@@ -1009,6 +952,10 @@ gre_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 
 	ifp->if_opackets++;
 	ifp->if_obytes += m->m_pkthdr.len;
+
+	/* Clear checksum-offload flags. */
+	m->m_pkthdr.csum_flags = 0;
+	m->m_pkthdr.csum_data = 0;
 
 	/* send it off */
 	if ((error = gre_bufq_enqueue(&sc->sc_snd, m)) != 0) {
@@ -1233,39 +1180,6 @@ gre_clearconf(struct gre_soparm *sp, bool force)
 }
 
 static int
-gre_ioctl_lock(struct gre_softc *sc)
-{
-	mutex_enter(&sc->sc_mtx);
-
-	while (sc->sc_state == GRE_S_IOCTL)
-		gre_wait(sc);
-
-	if (sc->sc_state != GRE_S_IDLE) {
-		cv_signal(&sc->sc_condvar);
-		mutex_exit(&sc->sc_mtx);
-		GRE_DPRINTF(sc, "\n");
-		return ENXIO;
-	}
-
-	sc->sc_state = GRE_S_IOCTL;
-
-	mutex_exit(&sc->sc_mtx);
-	return 0;
-}
-
-static void
-gre_ioctl_unlock(struct gre_softc *sc)
-{
-	mutex_enter(&sc->sc_mtx);
-
-	KASSERT(sc->sc_state == GRE_S_IOCTL);
-	sc->sc_state = GRE_S_IDLE;
-	cv_signal(&sc->sc_condvar);
-
-	mutex_exit(&sc->sc_mtx);
-}
-
-static int
 gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 {
 	struct ifreq *ifr;
@@ -1280,15 +1194,11 @@ gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 	GRE_DPRINTF(sc, "cmd %lu\n", cmd);
 
 	switch (cmd) {
-	case SIOCSIFFLAGS:
-	case SIOCSIFMTU:
 	case GRESPROTO:
 	case GRESADDRD:
 	case GRESADDRS:
 	case GRESSOCK:
 	case GREDSOCK:
-	case SIOCSLIFPHYADDR:
-	case SIOCDIFPHYADDR:
 		if (kauth_authorize_network(curlwp->l_cred,
 		    KAUTH_NETWORK_INTERFACE,
 		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
@@ -1299,10 +1209,6 @@ gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 		break;
 	}
 
-	if ((error = gre_ioctl_lock(sc)) != 0) {
-		GRE_DPRINTF(sc, "\n");
-		return error;
-	}
 	s = splnet();
 
 	sp0 = sc->sc_soparm;
@@ -1319,8 +1225,6 @@ gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 		gre_clearconf(sp, false);
 		ifp->if_flags |= IFF_UP;
 		goto mksocket;
-	case SIOCSIFDSTADDR:
-		break;
 	case SIOCSIFFLAGS:
 		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
 			break;
@@ -1540,7 +1444,6 @@ gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 out:
 	GRE_DPRINTF(sc, "\n");
 	splx(s);
-	gre_ioctl_unlock(sc);
 	return error;
 }
 

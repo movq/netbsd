@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssectool.c,v 1.1.1.3 2009/10/25 00:01:32 christos Exp $	*/
+/*	$NetBSD: dnssectool.c,v 1.2.6.1 2012/06/05 21:15:17 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dnssectool.c,v 1.55 2009/10/12 20:48:11 each Exp */
+/* Id: dnssectool.c,v 1.63 2011/10/21 03:55:33 marka Exp  */
 
 /*! \file */
 
@@ -30,6 +30,7 @@
 #include <stdlib.h>
 
 #include <isc/buffer.h>
+#include <isc/dir.h>
 #include <isc/entropy.h>
 #include <isc/list.h>
 #include <isc/mem.h>
@@ -38,6 +39,8 @@
 #include <isc/util.h>
 #include <isc/print.h>
 
+#include <dns/dnssec.h>
+#include <dns/keyvalues.h>
 #include <dns/log.h>
 #include <dns/name.h>
 #include <dns/rdatastruct.h>
@@ -349,4 +352,120 @@ strtoclass(const char *str) {
 	if (ret != ISC_R_SUCCESS)
 		fatal("unknown class %s", str);
 	return (rdclass);
+}
+
+isc_result_t
+try_dir(const char *dirname) {
+	isc_result_t result;
+	isc_dir_t d;
+
+	isc_dir_init(&d);
+	result = isc_dir_open(&d, dirname);
+	if (result == ISC_R_SUCCESS) {
+		isc_dir_close(&d);
+	}
+	return (result);
+}
+
+/*
+ * Check private key version compatibility.
+ */
+void
+check_keyversion(dst_key_t *key, char *keystr) {
+	int major, minor;
+	dst_key_getprivateformat(key, &major, &minor);
+	INSIST(major <= DST_MAJOR_VERSION); /* invalid private key */
+
+	if (major < DST_MAJOR_VERSION || minor < DST_MINOR_VERSION)
+		fatal("Key %s has incompatible format version %d.%d, "
+		      "use -f to force upgrade to new version.",
+		      keystr, major, minor);
+	if (minor > DST_MINOR_VERSION)
+		fatal("Key %s has incompatible format version %d.%d, "
+		      "use -f to force downgrade to current version.",
+		      keystr, major, minor);
+}
+
+void
+set_keyversion(dst_key_t *key) {
+	int major, minor;
+	dst_key_getprivateformat(key, &major, &minor);
+	INSIST(major <= DST_MAJOR_VERSION);
+
+	if (major != DST_MAJOR_VERSION || minor != DST_MINOR_VERSION)
+		dst_key_setprivateformat(key, DST_MAJOR_VERSION,
+					 DST_MINOR_VERSION);
+
+	/*
+	 * If the key is from a version older than 1.3, set
+	 * set the creation date
+	 */
+	if (major < 1 || (major == 1 && minor <= 2)) {
+		isc_stdtime_t now;
+		isc_stdtime_get(&now);
+		dst_key_settime(key, DST_TIME_CREATED, now);
+	}
+}
+
+isc_boolean_t
+key_collision(dst_key_t *dstkey, dns_name_t *name, const char *dir,
+	      isc_mem_t *mctx, isc_boolean_t *exact)
+{
+	isc_result_t result;
+	isc_boolean_t conflict = ISC_FALSE;
+	dns_dnsseckeylist_t matchkeys;
+	dns_dnsseckey_t *key = NULL;
+	isc_uint16_t id, oldid;
+	isc_uint32_t rid, roldid;
+	dns_secalg_t alg;
+
+	if (exact != NULL)
+		*exact = ISC_FALSE;
+
+	id = dst_key_id(dstkey);
+	rid = dst_key_rid(dstkey);
+	alg = dst_key_alg(dstkey);
+
+	ISC_LIST_INIT(matchkeys);
+	result = dns_dnssec_findmatchingkeys(name, dir, mctx, &matchkeys);
+	if (result == ISC_R_NOTFOUND)
+		return (ISC_FALSE);
+
+	while (!ISC_LIST_EMPTY(matchkeys) && !conflict) {
+		key = ISC_LIST_HEAD(matchkeys);
+		if (dst_key_alg(key->key) != alg)
+			goto next;
+
+		oldid = dst_key_id(key->key);
+		roldid = dst_key_rid(key->key);
+
+		if (oldid == rid || roldid == id || id == oldid) {
+			conflict = ISC_TRUE;
+			if (id != oldid) {
+				if (verbose > 1)
+					fprintf(stderr, "Key ID %d could "
+						"collide with %d\n",
+						id, oldid);
+			} else {
+				if (exact != NULL)
+					*exact = ISC_TRUE;
+				if (verbose > 1)
+					fprintf(stderr, "Key ID %d exists\n",
+						id);
+			}
+		}
+
+ next:
+		ISC_LIST_UNLINK(matchkeys, key, link);
+		dns_dnsseckey_destroy(mctx, &key);
+	}
+
+	/* Finish freeing the list */
+	while (!ISC_LIST_EMPTY(matchkeys)) {
+		key = ISC_LIST_HEAD(matchkeys);
+		ISC_LIST_UNLINK(matchkeys, key, link);
+		dns_dnsseckey_destroy(mctx, &key);
+	}
+
+	return (conflict);
 }

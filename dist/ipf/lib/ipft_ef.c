@@ -1,4 +1,4 @@
-/*	$NetBSD: ipft_ef.c,v 1.3 2007/04/14 20:34:27 martin Exp $	*/
+/*	$NetBSD: ipft_ef.c,v 1.5 2012/02/15 17:55:06 riz Exp $	*/
 
 /*
  * Copyright (C) 2000-2006 by Darren Reed.

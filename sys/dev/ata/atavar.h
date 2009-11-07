@@ -1,4 +1,4 @@
-/*	$NetBSD: atavar.h,v 1.80 2009/10/19 18:41:12 bouyer Exp $	*/
+/*	$NetBSD: atavar.h,v 1.84 2012/01/24 20:04:07 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -107,12 +107,6 @@ struct atabus_initq {
 	TAILQ_ENTRY(atabus_initq) atabus_initq;
 	struct atabus_softc *atabus_sc;
 };
-
-#ifdef _KERNEL
-TAILQ_HEAD(atabus_initq_head, atabus_initq);
-extern struct atabus_initq_head atabus_initq_head;
-extern struct simplelock atabus_interlock;
-#endif /* _KERNEL */
 
 /* High-level functions and structures used by both ATA and ATAPI devices */
 struct ataparams;
@@ -235,27 +229,33 @@ struct ata_bio {
  *
  * This structure defines the interface between the ATA/ATAPI device driver
  * and the controller for short commands. It contains the command's parameter,
- * the len of data's to read/write (if any), and a function to call upon
+ * the length of data to read/write (if any), and a function to call upon
  * completion.
  * If no sleep is allowed, the driver can poll for command completion.
- * Once the command completed, if the error registed is valid, the flag
+ * Once the command completed, if the error registered is valid, the flag
  * AT_ERROR is set and the error register value is copied to r_error .
  * A separate interface is needed for read/write or ATAPI packet commands
  * (which need multiple interrupts per commands).
  */
 struct ata_command {
-	u_int8_t r_command;	/* Parameters to upload to registers */
-	u_int8_t r_head;
-	u_int16_t r_cyl;
-	u_int8_t r_sector;
-	u_int8_t r_count;
-	u_int8_t r_features;
-	u_int8_t r_st_bmask;	/* status register mask to wait for before
+	/* ATA parameters */
+	uint64_t r_lba;		/* before & after */
+	uint16_t r_count;	/* before & after */
+	union {
+		uint16_t r_features; /* before */
+		uint8_t r_error; /* after */
+	};
+	union {
+		uint8_t r_command; /* before */
+		uint8_t r_status; /* after */
+	};
+	uint8_t r_device;	/* before & after */
+
+	uint8_t r_st_bmask;	/* status register mask to wait for before
 				   command */
-	u_int8_t r_st_pmask;	/* status register mask to wait for after
+	uint8_t r_st_pmask;	/* status register mask to wait for after
 				   command */
-	u_int8_t r_error;	/* error register after command done */
-	volatile u_int16_t flags;
+	volatile uint16_t flags;
 
 #define AT_READ     0x0001 /* There is data to read */
 #define AT_WRITE    0x0002 /* There is data to write (excl. with AT_READ) */
@@ -269,6 +269,8 @@ struct ata_command {
 #define AT_RESET    0x0400 /* command terminated by channel reset */
 #define AT_GONE     0x0800 /* command terminated because device is gone */
 #define AT_READREG  0x1000 /* Read registers on completion */
+#define AT_LBA      0x2000 /* LBA28 */
+#define AT_LBA48    0x4000 /* LBA48 */
 
 	int timeout;		/* timeout (in ms) */
 	void *data;		/* Data buffer address */
@@ -337,6 +339,7 @@ struct ata_channel {
 #define	ATACH_DISABLED 0x80	/* channel is disabled */
 #define ATACH_TH_RUN   0x100	/* the kernel thread is working */
 #define ATACH_TH_RESET 0x200	/* someone ask the thread to reset */
+#define ATACH_TH_RESCAN 0x400	/* rescan requested */
 	u_int8_t ch_status;	/* copy of status register */
 	u_int8_t ch_error;	/* copy of error register */
 

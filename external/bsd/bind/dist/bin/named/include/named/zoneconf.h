@@ -1,7 +1,7 @@
-/*	$NetBSD: zoneconf.h,v 1.1.1.1 2009/03/22 14:56:14 christos Exp $	*/
+/*	$NetBSD: zoneconf.h,v 1.2.6.1 2012/06/05 21:15:09 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2010, 2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: zoneconf.h,v 1.26 2007/06/19 23:46:59 tbox Exp */
+/* Id: zoneconf.h,v 1.30 2011/08/30 23:46:51 tbox Exp  */
 
 #ifndef NS_ZONECONF_H
 #define NS_ZONECONF_H 1
@@ -35,7 +35,7 @@ ISC_LANG_BEGINDECLS
 isc_result_t
 ns_zone_configure(const cfg_obj_t *config, const cfg_obj_t *vconfig,
 		  const cfg_obj_t *zconfig, cfg_aclconfctx_t *ac,
-		  dns_zone_t *zone);
+		  dns_zone_t *zone, dns_zone_t *raw);
 /*%<
  * Configure or reconfigure a zone according to the named.conf
  * data in 'cctx' and 'czone'.
@@ -58,6 +58,21 @@ ns_zone_reusable(dns_zone_t *zone, const cfg_obj_t *zconfig);
  * data in 'zconfig', return ISC_TRUE.  If the configuration data is so
  * different from the current zone state that the zone needs to be destroyed
  * and recreated, return ISC_FALSE.
+ */
+
+
+isc_result_t
+ns_zone_configure_writeable_dlz(dns_dlzdb_t *dlzdatabase, dns_zone_t *zone,
+				dns_rdataclass_t rdclass, dns_name_t *name);
+/*%>
+ * configure a DLZ zone, setting up the database methods and calling
+ * postload to load the origin values
+ *
+ * Require:
+ * \li	'dlzdatabase' to be a valid dlz database
+ * \li	'zone' to be initialized.
+ * \li	'rdclass' to be a valid rdataclass
+ * \li	'name' to be a valid zone origin name
  */
 
 ISC_LANG_ENDDECLS

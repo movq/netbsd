@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.1 2009/07/21 09:49:15 phx Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.4 2011/07/18 17:51:17 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2008,2009 Frank Wille.
@@ -58,15 +58,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.1 2009/07/21 09:49:15 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.4 2011/07/18 17:51:17 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
 
 #include <amiga/amiga/cfdev.h>
 #include <amiga/amiga/device.h>
@@ -79,25 +79,22 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.1 2009/07/21 09:49:15 phx Exp $");
 #endif
 #endif
 
-void mbattach(struct device *, struct device *, void *);
+void mbattach(device_t, device_t, void *);
 int mbprint(void *, const char *);
-int mbmatch(struct device *, struct cfdata *, void *);
+int mbmatch(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mbmatch, mbattach, NULL, NULL);
 
-static int mainbus_print (void *, const char *);
-
-
 int
-mbmatch(struct device *parent, struct cfdata *cfp, void *aux)
+mbmatch(device_t parent, cfdata_t cfp, void *aux)
 {
 
-	return (1);
+	return 1;
 }
 
 void
-mbattach(struct device *parent, struct device *self, void *aux)
+mbattach(device_t parent, device_t self, void *aux)
 {
 
 	printf("\n");
@@ -105,7 +102,7 @@ mbattach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Always find the CPU
 	 */
-	config_found_ia(self, "mainbus", __UNCONST("cpu"), mainbus_print);
+	config_found_ia(self, "mainbus", __UNCONST("cpu"), mbprint);
 
 	/*
 	 * "find" all the things that should be there.
@@ -121,10 +118,8 @@ mbattach(struct device *parent, struct device *self, void *aux)
 	config_found(self, __UNCONST("grfcc"), simple_devprint);
 	config_found(self, __UNCONST("amidisplaycc"), simple_devprint);
 	config_found(self, __UNCONST("fdc"), simple_devprint);
-	if (is_a4000() || is_a1200()) {
+	if (is_a4000() || is_a1200())
 		config_found(self, __UNCONST("wdc"), simple_devprint);
-		config_found(self, __UNCONST("idesc"), simple_devprint);
-	}
 	if (is_a4000())			/* Try to configure A4000T SCSI */
 		config_found(self, __UNCONST("afsc"), simple_devprint);
 	if (is_a3000())
@@ -142,14 +137,5 @@ mbprint(void *aux, const char *pnp)
 
 	if (pnp)
 		aprint_normal("%s at %s", (char *)aux, pnp);
-	return (UNCONF);
-}
-
-static int
-mainbus_print(void *aux, const char *pnp)
-{
-
-	if (pnp)
-		aprint_normal("cpu0 at %s", pnp);
-	return (UNCONF);
+	return UNCONF;
 }

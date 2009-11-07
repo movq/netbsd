@@ -1,4 +1,4 @@
-/* $NetBSD: nilfs_vnops.c,v 1.2 2009/08/26 03:40:48 elad Exp $ */
+/* $NetBSD: nilfs_vnops.c,v 1.16.6.1 2012/08/12 12:59:47 martin Exp $ */
 
 /*
  * Copyright (c) 2008, 2009 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.2 2009/08/26 03:40:48 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.16.6.1 2012/08/12 12:59:47 martin Exp $");
 #endif /* not lint */
 
 
@@ -81,7 +81,7 @@ nilfs_inactive(void *v)
 
 	if (nilfs_node == NULL) {
 		DPRINTF(NODE, ("nilfs_inactive: inactive NULL NILFS node\n"));
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		return 0;
 	}
 
@@ -90,7 +90,7 @@ nilfs_inactive(void *v)
 	 * referenced anymore in a directory we ought to free up the resources
 	 * on disc if applicable.
 	 */
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	return 0;
 }
@@ -118,9 +118,6 @@ nilfs_reclaim(void *v)
 	/* update note for closure */
 	nilfs_update(vp, NULL, NULL, NULL, UPDATE_CLOSE);
 
-	/* purge old data from namei */
-	cache_purge(vp);
-
 	/* dispose all node knowledge */
 	nilfs_dispose_node(&nilfs_node);
 
@@ -147,7 +144,6 @@ nilfs_read(void *v)
 	uint64_t file_size;
 	vsize_t len;
 	int error;
-	int flags;
 
 	DPRINTF(READ, ("nilfs_read called\n"));
 
@@ -171,7 +167,6 @@ nilfs_read(void *v)
 
 	/* read contents using buffercache */
 	uobj = &vp->v_uobj;
-	flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
 	error = 0;
 	while (uio->uio_resid > 0) {
 		/* reached end? */
@@ -219,8 +214,7 @@ nilfs_write(void *v)
 	struct nilfs_node      *nilfs_node = VTOI(vp);
 	uint64_t file_size, old_size;
 	vsize_t len;
-	int error;
-	int flags, resid, extended;
+	int error, resid, extended;
 
 	DPRINTF(WRITE, ("nilfs_write called\n"));
 
@@ -266,7 +260,6 @@ return EIO;
 
 	/* write contents using buffercache */
 	uobj = &vp->v_uobj;
-	flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
 	resid = uio->uio_resid;
 	error = 0;
 
@@ -287,6 +280,8 @@ return EIO;
 
 	/* mark node changed and request update */
 	nilfs_node->i_flags |= IN_CHANGE | IN_UPDATE;
+	if (vp->v_mount->mnt_flag & MNT_RELATIME)
+		nilfs_node->i_flags |= IN_ACCESS;
 
 	/*
 	 * XXX TODO FFS has code here to reset setuid & setgid when we're not
@@ -318,9 +313,8 @@ return EIO;
 /* --------------------------------------------------------------------- */
 
 /*
- * `Special' bmap functionality that translates all incomming requests to
- * translate to vop_strategy() calls with the same blocknumbers effectively
- * not translating at all.
+ * bmap functionality that translates logical block numbers to the virtual
+ * block numbers to be stored on the vnode itself.
  */
 
 int
@@ -339,23 +333,51 @@ nilfs_trivial_bmap(void *v)
 	daddr_t  bn   = ap->a_bn;	/* origional	*/
 	int     *runp = ap->a_runp;
 	struct nilfs_node *node = VTOI(vp);
+	uint64_t *l2vmap;
 	uint32_t blocksize;
+	int blks, run, error;
 
 	DPRINTF(TRANSLATE, ("nilfs_bmap() called\n"));
 	/* XXX could return `-1' to indicate holes/zero's */
 
 	blocksize = node->nilfsdev->blocksize;
+	blks = MAXPHYS / blocksize;
 
-	/* translate 1:1 */
-	*bnp = bn;
+	/* get mapping memory */
+	l2vmap = malloc(sizeof(uint64_t) * blks, M_TEMP, M_WAITOK);
+
+	/* get virtual block numbers for the vnode's buffer span */
+	error = nilfs_btree_nlookup(node, bn, blks, l2vmap);
+	if (error) {
+		free(l2vmap, M_TEMP);
+		return error;
+	}
+
+	/* store virtual blocks on our own vp */
 	if (vpp)
 		*vpp = vp;
 
-	/* set runlength to maximum */
+	/* start at virt[0] */
+	*bnp = l2vmap[0];
+
+	/* get runlength */
+	run = 1;
+	while ((run < blks) && (l2vmap[run] == *bnp + run))
+		run++;
+	
+	/* set runlength */
 	if (runp)
-		*runp = MAXPHYS / blocksize;
+		*runp = run;
+
+	DPRINTF(TRANSLATE, ("\tstart %"PRIu64" -> %"PRIu64" run %d\n",
+		bn, *bnp, run));
+
+	/* mark not translated on virtual block number 0 */
+	if (*bnp == 0)
+		*bnp = -1;
 
 	/* return success */
+	free(l2vmap, M_TEMP);
 	return 0;
 }
 
@@ -395,9 +417,8 @@ nilfs_read_filebuf(struct nilfs_node *node, struct buf *bp)
 	v2pmap = malloc(sizeof(uint64_t) * blks, M_TEMP, M_WAITOK);
 
 	/* get virtual block numbers for the vnode's buffer span */
-	error = nilfs_btree_nlookup(node, from, blks, l2vmap);
-	if (error)
-		goto out;
+	for (i = 0; i < blks; i++)
+		l2vmap[i] = from + i;
 
 	/* translate virtual block numbers to physical block numbers */
 	error = nilfs_nvtop(node, blks, l2vmap, v2pmap);
@@ -648,7 +669,7 @@ nilfs_lookup(void *v)
 	if ((cnp->cn_namelen == 1) && (cnp->cn_nameptr[0] == '.')) {
 		DPRINTF(LOOKUP, ("\tlookup '.'\n"));
 		/* special case 1 '.' */
-		VREF(dvp);
+		vref(dvp);
 		*vpp = dvp;
 		/* done */
 	} else if (cnp->cn_flags & ISDOTDOT) {
@@ -666,7 +687,7 @@ nilfs_lookup(void *v)
 			error = ENOENT;
 
 		/* first unlock parent */
-		VOP_UNLOCK(dvp, 0);
+		VOP_UNLOCK(dvp);
 
 		if (error == 0) {
 			DPRINTF(LOOKUP, ("\tfound '..'\n"));
@@ -706,8 +727,6 @@ nilfs_lookup(void *v)
 			if (!error) {
 				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred);
 				if (!error) {
-					/* keep the component name */
-					cnp->cn_flags |= SAVENAME;
 					error = EJUSTRETURN;
 				}
 			}
@@ -741,7 +760,7 @@ out:
 	 * the file might not be found and thus putting it into the namecache
 	 * might be seen as negative caching.
 	 */
-	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
+	if (nameiop != CREATE)
 		cache_enter(dvp, *vpp, cnp);
 
 	DPRINTFIF(LOOKUP, error, ("nilfs_lookup returing error %d\n", error));
@@ -776,7 +795,7 @@ nilfs_getattr(void *v)
 	DPRINTF(VFSCALL, ("nilfs_getattr called\n"));
 
 	/* basic info */
-	VATTR_NULL(vap);
+	vattr_null(vap);
 	vap->va_type      = vp->v_type;
 	vap->va_mode      = nilfs_rw16(inode->i_mode);	/* XXX same? */
 	vap->va_nlink     = nilfs_rw16(inode->i_links_count);
@@ -885,7 +904,7 @@ nilfs_pathconf(void *v)
 		*ap->a_retval = (1<<16)-1;	/* 16 bits */
 		return 0;
 	case _PC_NAME_MAX:
-		*ap->a_retval = NAME_MAX;
+		*ap->a_retval = NILFS_MAXNAMLEN;
 		return 0;
 	case _PC_PATH_MAX:
 		*ap->a_retval = PATH_MAX;
@@ -960,10 +979,10 @@ nilfs_close(void *v)
 	DPRINTF(VFSCALL, ("nilfs_close called\n"));
 	nilfs_node = nilfs_node;	/* shut up gcc */
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 		if (vp->v_usecount > 1)
 			nilfs_itimes(nilfs_node, NULL, NULL, NULL);
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	return 0;
 }
@@ -1073,8 +1092,6 @@ nilfs_create(void *v)
 	DPRINTF(VFSCALL, ("nilfs_create called\n"));
 	error = nilfs_create_node(dvp, vpp, vap, cnp);
 
-	if (error || !(cnp->cn_flags & SAVESTART))
-		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1099,8 +1116,6 @@ nilfs_mknod(void *v)
 	DPRINTF(VFSCALL, ("nilfs_mknod called\n"));
 	error = nilfs_create_node(dvp, vpp, vap, cnp);
 
-	if (error || !(cnp->cn_flags & SAVESTART))
-		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1125,8 +1140,6 @@ nilfs_mkdir(void *v)
 	DPRINTF(VFSCALL, ("nilfs_mkdir called\n"));
 	error = nilfs_create_node(dvp, vpp, vap, cnp);
 
-	if (error || !(cnp->cn_flags & SAVESTART))
-		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1141,15 +1154,9 @@ nilfs_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	int error;
 
 	DPRINTF(VFSCALL, ("nilfs_link called\n"));
-	error = 0;
-
-	/* some quick checks */
-	if (vp->v_type == VDIR)
-		return EPERM;		/* can't link a directory */
-	if (dvp->v_mount != vp->v_mount)
-		return EXDEV;		/* can't link across devices */
-	if (dvp == vp)
-		return EPERM;		/* can't be the same */
+	KASSERT(dvp != vp);
+	KASSERT(vp->v_type != VDIR);
+	KASSERT(dvp->v_mount == vp->v_mount);
 
 	/* lock node */
 	error = vn_lock(vp, LK_EXCLUSIVE);
@@ -1161,14 +1168,22 @@ nilfs_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	nilfs_node = VTOI(vp);
 
 	error = VOP_GETATTR(vp, &vap, FSCRED);
-	if (error)
+	if (error) {
+		VOP_UNLOCK(vp);
 		return error;
+	}
 
 	/* check link count overflow */
-	if (vap.va_nlink >= (1<<16)-1)	/* uint16_t */
+	if (vap.va_nlink >= (1<<16)-1) {	/* uint16_t */
+		VOP_UNLOCK(vp);
 		return EMLINK;
+	}
 
-	return nilfs_dir_attach(dir_node->ump, dir_node, nilfs_node, &vap, cnp);
+	error = nilfs_dir_attach(dir_node->ump, dir_node, nilfs_node,
+	    &vap, cnp);
+	if (error)
+		VOP_UNLOCK(vp);
+	return error;
 }
 
 int
@@ -1187,9 +1202,6 @@ nilfs_link(void *v)
 	error = nilfs_do_link(dvp, vp, cnp);
 	if (error)
 		VOP_ABORTOP(dvp, cnp);
-
-	if ((vp != dvp) && (VOP_ISLOCKED(vp) == LK_EXCLUSIVE))
-		VOP_UNLOCK(vp, 0);
 
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
@@ -1240,8 +1252,6 @@ nilfs_symlink(void *v)
 			nilfs_dir_detach(nilfs_node->ump, dir_node, nilfs_node, cnp);
 		}
 	}
-	if (error || !(cnp->cn_flags & SAVESTART))
-		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return error;
 }
@@ -1322,13 +1332,15 @@ nilfs_rename(void *v)
 	}
 
 	/* get info about the node to be moved */
+	vn_lock(fvp, LK_SHARED | LK_RETRY);
 	error = VOP_GETATTR(fvp, &fvap, FSCRED);
+	VOP_UNLOCK(fvp);
 	KASSERT(error == 0);
 
 	/* check when to delete the old already existing entry */
 	if (tvp) {
 		/* get info about the node to be moved to */
-		error = VOP_GETATTR(fvp, &tvap, FSCRED);
+		error = VOP_GETATTR(tvp, &tvap, FSCRED);
 		KASSERT(error == 0);
 
 		/* if both dirs, make sure the destination is empty */
@@ -1374,7 +1386,7 @@ nilfs_rename(void *v)
 
 out:
         if (fdnode != tdnode)
-                VOP_UNLOCK(fdvp, 0);
+                VOP_UNLOCK(fdvp);
 
 out_unlocked:
 	VOP_ABORTOP(tdvp, tcnp);
@@ -1406,7 +1418,7 @@ nilfs_remove(void *v)
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp  = ap->a_vp;
 	struct componentname *cnp = ap->a_cnp;
-	struct nilfs_node *dir_node = VTOI(dvp);;
+	struct nilfs_node *dir_node = VTOI(dvp);
 	struct nilfs_node *nilfs_node = VTOI(vp);
 	struct nilfs_mount *ump = dir_node->ump;
 	int error;
@@ -1447,7 +1459,7 @@ nilfs_rmdir(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct vnode *dvp = ap->a_dvp;
 	struct componentname *cnp = ap->a_cnp;
-	struct nilfs_node *dir_node = VTOI(dvp);;
+	struct nilfs_node *dir_node = VTOI(dvp);
 	struct nilfs_node *nilfs_node = VTOI(vp);
 	struct nilfs_mount *ump = dir_node->ump;
 	int refcnt, error;

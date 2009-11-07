@@ -1,4 +1,4 @@
-/* $NetBSD: xenbus.h,v 1.11 2008/10/29 13:35:35 cegger Exp $ */
+/* $NetBSD: xenbus.h,v 1.13 2011/12/07 15:47:42 cegger Exp $ */
 /******************************************************************************
  * xenbus.h
  *
@@ -34,10 +34,10 @@
 
 #include <sys/device.h>
 #include <sys/queue.h>
-#include <xen/xen3-public/xen.h>
-#include <xen/xen3-public/io/xenbus.h>
-#include <xen/xen3-public/io/xs_wire.h>
-#include <xen/xen3-public/grant_table.h>	/* for grant_ref_t */
+#include <xen/xen-public/xen.h>
+#include <xen/xen-public/io/xenbus.h>
+#include <xen/xen-public/io/xs_wire.h>
+#include <xen/xen-public/grant_table.h>	/* for grant_ref_t */
 
 /* xenbus to hypervisor attach */
 struct xenbus_attach_args {
@@ -257,6 +257,8 @@ void xenbus_dev_error(struct xenbus_device *dev, int err, const char *fmt,
 void xenbus_dev_fatal(struct xenbus_device *dev, int err, const char *fmt,
 		      ...);
 
+bool xenbus_device_suspend(struct xenbus_device *);
+bool xenbus_device_resume(struct xenbus_device *);
 
 #endif /* _ASM_XEN_XENBUS_H */
 

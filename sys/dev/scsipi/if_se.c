@@ -1,4 +1,4 @@
-/*	$NetBSD: if_se.c,v 1.79 2009/10/21 21:12:05 rmind Exp $	*/
+/*	$NetBSD: if_se.c,v 1.84 2012/02/03 23:39:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Ian W. Dall <ian.dall@dsto.defence.gov.au>
@@ -59,11 +59,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.79 2009/10/21 21:12:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.84 2012/02/03 23:39:59 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,10 +105,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.79 2009/10/21 21:12:05 rmind Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #define SETIMEOUT	1000
 #define	SEOUTSTANDING	4
@@ -354,17 +351,9 @@ seattach(device_t parent, device_t self, void *aux)
 
 
 static inline int
-se_scsipi_cmd(periph, cmd, cmdlen, data_addr, datalen,
-		       retries, timeout, bp, flags)
-	struct scsipi_periph *periph;
-	struct scsipi_generic *cmd;
-	int cmdlen;
-	u_char *data_addr;
-	int datalen;
-	int retries;
-	int timeout;
-	struct buf *bp;
-	int flags;
+se_scsipi_cmd(struct scsipi_periph *periph, struct scsipi_generic *cmd,
+    int cmdlen, u_char *data_addr, int datalen, int retries, int timeout,
+    struct buf *bp, int flags)
 {
 	int error;
 	int s = splbio();
@@ -422,13 +411,10 @@ se_ifstart(struct ifnet *ifp)
 	IFQ_DEQUEUE(&ifp->if_snd, m0);
 	if (m0 == 0)
 		return;
-#if NBPFILTER > 0
 	/* If BPF is listening on this interface, let it see the
 	 * packet before we commit it to the wire.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	/* We need to use m->m_pkthdr.len, so require the header */
 	if ((m0->m_flags & M_PKTHDR) == 0)
@@ -449,7 +435,7 @@ se_ifstart(struct ifnet *ifp)
 	if (len < SEMINSIZE) {
 #ifdef SEDEBUG
 		if (sc->sc_debug)
-			printf("se: packet size %d (%d) < %d\n", len,
+			printf("se: packet size %d (%zu) < %d\n", len,
 			    cp - (u_char *)sc->sc_tbuf, SEMINSIZE);
 #endif
 		memset(cp, 0, SEMINSIZE - len);
@@ -667,14 +653,11 @@ se_read(struct se_softc *sc, char *data, int datalen)
 		}
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 		/*
 		 * Check if there's a BPF listener on this interface.
 		 * If so, hand off the raw packet to BPF.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/* Pass the packet up. */
 		(*ifp->if_input)(ifp, m);
@@ -795,12 +778,10 @@ se_init(struct se_softc *sc)
 	uint8_t enaddr[ETHER_ADDR_LEN];
 	int error;
 
-#if NBPFILTER > 0
 	if (ifp->if_flags & IFF_PROMISC) {
 		error = se_set_mode(sc, MAX_SNAP, 1);
 	}
 	else
-#endif
 		error = se_set_mode(sc, ETHERMTU + sizeof(struct ether_header),
 		    0);
 	if (error != 0)
@@ -957,7 +938,7 @@ se_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 		ifp->if_flags |= IFF_UP;
 
-		if ((error = se_set_media(sc, CMEDIA_AUTOSENSE) != 0))
+		if ((error = se_set_media(sc, CMEDIA_AUTOSENSE)) != 0)
 			break;
 
 		switch (ifa->ifa_addr->sa_family) {

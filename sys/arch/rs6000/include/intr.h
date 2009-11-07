@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.2 2008/04/28 20:23:34 martin Exp $	*/
+/*	$NetBSD: intr.h,v 1.5 2011/06/17 23:36:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,15 +32,12 @@
 #ifndef _RS6000_INTR_H_
 #define _RS6000_INTR_H_
 
-#include <powerpc/intr.h>
-
 #ifndef _LOCORE
-#include <machine/cpu.h>
-#include <sys/device.h>
 
 #define	ICU_LEN			16
-extern int imask[];
 
 #endif /* _LOCORE */
+
+#include <powerpc/intr.h>
 
 #endif /* _RS6000_INTR_H_ */

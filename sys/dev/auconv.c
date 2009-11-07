@@ -1,4 +1,4 @@
-/*	$NetBSD: auconv.c,v 1.22 2009/01/03 03:43:21 yamt Exp $	*/
+/*	$NetBSD: auconv.c,v 1.25 2011/11/23 23:07:31 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auconv.c,v 1.22 2009/01/03 03:43:21 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auconv.c,v 1.25 2011/11/23 23:07:31 jmcneill Exp $");
 
 #include <sys/types.h>
 #include <sys/audioio.h>
@@ -205,7 +205,8 @@ static const char *encoding_dbg_names[] = {
 	AudioEslinear, AudioEulinear,
 	AudioEmpeg_l1_stream, AudioEmpeg_l1_packets,
 	AudioEmpeg_l1_system, AudioEmpeg_l2_stream,
-	AudioEmpeg_l2_packets, AudioEmpeg_l2_system
+	AudioEmpeg_l2_packets, AudioEmpeg_l2_system,
+	AudioEac3
 };
 #endif
 
@@ -223,7 +224,8 @@ stream_filter_set_inputbuffer(stream_filter_t *this, audio_stream_t *stream)
 
 stream_filter_t *
 auconv_nocontext_filter_factory(
-	int (*fetch_to)(stream_fetcher_t *, audio_stream_t *, int))
+	int (*fetch_to)(struct audio_softc *, stream_fetcher_t *,
+			audio_stream_t *, int))
 {
 	stream_filter_t *this;
 
@@ -248,7 +250,7 @@ auconv_nocontext_filter_dtor(struct stream_filter *this)
 
 #define DEFINE_FILTER(name)	\
 static int \
-name##_fetch_to(stream_fetcher_t *, audio_stream_t *, int); \
+name##_fetch_to(struct audio_softc *, stream_fetcher_t *, audio_stream_t *, int); \
 stream_filter_t * \
 name(struct audio_softc *sc, const audio_params_t *from, \
      const audio_params_t *to) \
@@ -256,7 +258,8 @@ name(struct audio_softc *sc, const audio_params_t *from, \
 	return auconv_nocontext_filter_factory(name##_fetch_to); \
 } \
 static int \
-name##_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
+name##_fetch_to(struct audio_softc *sc, stream_fetcher_t *self, \
+    audio_stream_t *dst, int max_used)
 
 DEFINE_FILTER(change_sign8)
 {
@@ -264,7 +267,7 @@ DEFINE_FILTER(change_sign8)
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
@@ -281,7 +284,7 @@ DEFINE_FILTER(change_sign16)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1; /* round up to even */
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -308,7 +311,7 @@ DEFINE_FILTER(swap_bytes)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1; /* round up to even */
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -326,7 +329,7 @@ DEFINE_FILTER(swap_bytes_change_sign16)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1; /* round up to even */
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -353,7 +356,7 @@ DEFINE_FILTER(linear8_to_linear16)
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1; /* round up to even */
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used / 2)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used / 2)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -414,7 +417,7 @@ DEFINE_FILTER(linear16_to_linear8)
 	int m, err, enc_src, enc_dst;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used * 2)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used * 2)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
@@ -827,12 +830,14 @@ auconv_exact_match(const struct audio_format *formats, int nformats,
 		 * XXX	Is to check precision/channels meaningful for
 		 *	MPEG encodings?
 		 */
-		if (formats[i].validbits != param->validbits)
-			continue;
-		if (formats[i].precision != param->precision)
-			continue;
-		if (formats[i].channels != param->channels)
-			continue;
+		if (enc != AUDIO_ENCODING_AC3) {
+			if (formats[i].validbits != param->validbits)
+				continue;
+			if (formats[i].precision != param->precision)
+				continue;
+			if (formats[i].channels != param->channels)
+				continue;
+		}
 		if (!auconv_is_supported_rate(&formats[i],
 					      param->sample_rate))
 			continue;
@@ -1036,6 +1041,7 @@ auconv_create_encodings(const struct audio_format *formats, int nformats,
 		case AUDIO_ENCODING_MPEG_L2_STREAM:
 		case AUDIO_ENCODING_MPEG_L2_PACKETS:
 		case AUDIO_ENCODING_MPEG_L2_SYSTEM:
+		case AUDIO_ENCODING_AC3:
 			ADD_ENCODING(formats[i].encoding,
 				     formats[i].precision, 0);
 			break;
@@ -1075,7 +1081,8 @@ auconv_add_encoding(int enc, int prec, int flags,
 		AudioEslinear, AudioEulinear,
 		AudioEmpeg_l1_stream, AudioEmpeg_l1_packets,
 		AudioEmpeg_l1_system, AudioEmpeg_l2_stream,
-		AudioEmpeg_l2_packets, AudioEmpeg_l2_system
+		AudioEmpeg_l2_packets, AudioEmpeg_l2_system,
+		AudioEac3
 	};
 	struct audio_encoding_set *set;
 	struct audio_encoding_set *new_buf;

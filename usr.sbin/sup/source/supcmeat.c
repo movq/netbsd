@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmeat.c,v 1.37 2009/10/17 20:46:03 christos Exp $	*/
+/*	$NetBSD: supcmeat.c,v 1.40 2011/09/21 19:34:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -140,6 +140,7 @@ static int deleteone(TREE *, void *);
 static int linkone(TREE *, void *);
 static int execone(TREE *, void *);
 static int finishone(TREE *, void *);
+static int canonicalize(const char *);
 
 
 /* The next two routines define the fsm to support multiple fileservers
@@ -210,7 +211,7 @@ getcoll(void)
 		t = getcollhost(&tout, &backoff, &state, &nhosts);
 		if (t == NULL) {
 			finishup(SCMEOF);
-			notify((char *) NULL);
+			notify(NULL);
 			return;
 		}
 		t->Tmode = SCMEOF;
@@ -233,7 +234,7 @@ getcoll(void)
 		thisC->Clockfd = -1;
 	}
 	finishup(x);
-	notify((char *) NULL);
+	notify(NULL);
 }
 /***  Sign on to file server ***/
 
@@ -273,7 +274,7 @@ signon(TREE * t, int nhosts, int *tout)
 	x = msgsignonack();	/* receive signon ack from fileserver */
 	if (x != SCMOK)
 		goaway("Error reading signon reply from fileserver");
-	tloc = time((time_t *) NULL);
+	tloc = time(NULL);
 	vnotify("SUP Fileserver %d.%d (%s) %d on %s at %.8s\n",
 	    protver, pgmver, scmver, fspid, remotehost(), ctime(&tloc) + 11);
 	free(scmver);
@@ -374,7 +375,7 @@ setup(TREE * t)
 		t->Tmode = SCMOK;
 		doneack = FDONESRVERROR;
 		donereason = "Fileserver is busy";
-		(void) netcrypt((char *) NULL);
+		(void) netcrypt(NULL);
 		(void) msgdone();
 		return (TRUE);
 	default:
@@ -429,13 +430,13 @@ suplogin(void)
 		thisC->Clockfd = f;
 		vnotify("SUP Locked collection %s for exclusive access\n", collname);
 	}
-	logcrypt = (char *) NULL;
+	logcrypt = NULL;
 	loguser = thisC->Clogin;
 	logpswd = thisC->Cpswd;
 
 #ifndef	CRYPTING		/* Define CRYPTING for backwards compatibility
 				 * with old supfileservers */
-	if (thisC->Clogin != (char *) NULL)	/* othewise we only encrypt if
+	if (thisC->Clogin != NULL)		/* othewise we only encrypt if
 						 * there is a login id */
 #endif				/* CRYPTING */
 	{
@@ -444,9 +445,9 @@ suplogin(void)
 	}
 	x = msglogin();
 #ifndef CRYPTING
-	if (thisC->Clogin != (char *) NULL)
+	if (thisC->Clogin != NULL)
 #endif
-		(void) netcrypt((char *) NULL);	/* turn off encryption */
+		(void) netcrypt(NULL);		/* turn off encryption */
 	if (x != SCMOK)
 		goaway("Error sending login request to file server");
 	x = msglogack();
@@ -492,6 +493,8 @@ listfiles(void)
 			if ((q = strchr(p, '\n')))
 				*q = '\0';
 			if (strchr("#;:", *p))
+				continue;
+			if (canonicalize(p) != 0)
 				continue;
 			(void) Tinsert(&lastT, p, FALSE);
 		}
@@ -720,6 +723,8 @@ recvfiles(void)
 			goaway("Error sending compression check to server");
 		if (docompress)
 			vnotify("SUP Using compressed file transfer\n");
+		if (thisC->Cflags & CFCANONICALIZE)
+			vnotify("SUP Filename canonicalization is on\n");
 	}
 	recvmore = TRUE;
 	upgradeT = NULL;
@@ -727,7 +732,7 @@ recvfiles(void)
 		x = msgsend();
 		if (x != SCMOK)
 			goaway("Error sending receive file request to file server");
-		(void) Tinsert(&upgradeT, (char *) NULL, FALSE);
+		(void) Tinsert(&upgradeT, NULL, FALSE);
 		x = msgrecv(recvone, &recvmore);
 		if (x != SCMOK)
 			goaway("Error receiving file from file server");
@@ -889,7 +894,7 @@ recvdir(TREE * t, int new, struct stat * statp)
 		(void) chown(t->Tname, t->Tuid, t->Tgid);
 		(void) chmod(t->Tname, t->Tmode & S_IMODE);
 	}
-	tbuf[0].tv_sec = time((time_t *) NULL);
+	tbuf[0].tv_sec = time(NULL);
 	tbuf[0].tv_usec = 0;
 	tbuf[1].tv_sec = t->Tmtime;
 	tbuf[1].tv_usec = 0;
@@ -942,10 +947,22 @@ recvreg(TREE * t, int new, struct stat * statp)
 	char dirpart[STRINGLENGTH], filepart[STRINGLENGTH];
 	char filename[STRINGLENGTH], buf[STRINGLENGTH];
 	struct timeval tbuf[2];
-	int x;
+	int x, noupdate = 0;
 	char *p;
 
-	if (t->Tflags & FUPDATE) {
+	switch (canonicalize(t->Tname)) {
+	case 0:	/* Ok no changes */
+		break;
+	case 1:
+		noupdate = 1;
+		break;
+	case -1:
+		notify("SUP: Can't create path for %s (%s)\n", t->Tname,
+		    strerror(errno));
+		return TRUE;
+	}
+		
+	if ((t->Tflags & FUPDATE) && !noupdate) {
 		if ((t->Tflags & FNOACCT) == 0) {
 			/* convert user and group names to local ids */
 			ugconvert(t->Tuser, t->Tgroup, &t->Tuid, &t->Tgid,
@@ -968,7 +985,7 @@ recvreg(TREE * t, int new, struct stat * statp)
 			(void) chown(t->Tname, t->Tuid, t->Tgid);
 			(void) chmod(t->Tname, t->Tmode & S_IMODE);
 		}
-		tbuf[0].tv_sec = time((time_t *) NULL);
+		tbuf[0].tv_sec = time(NULL);
 		tbuf[0].tv_usec = 0;
 		tbuf[1].tv_sec = t->Tmtime;
 		tbuf[1].tv_usec = 0;
@@ -1021,7 +1038,7 @@ recvreg(TREE * t, int new, struct stat * statp)
 		(void) fclose(fout);
 		vnotify("SUP Backup of %s created\n", t->Tname);
 	}
-	x = copyfile(t->Tname, (char *) NULL);
+	x = copyfile(t->Tname, NULL);
 	if (x)
 		return (TRUE);
 	if ((t->Tflags & FNOACCT) == 0) {
@@ -1030,7 +1047,7 @@ recvreg(TREE * t, int new, struct stat * statp)
 		(void) chown(t->Tname, t->Tuid, t->Tgid);
 		(void) chmod(t->Tname, t->Tmode & S_IMODE);
 	}
-	tbuf[0].tv_sec = time((time_t *) NULL);
+	tbuf[0].tv_sec = time(NULL);
 	tbuf[0].tv_usec = 0;
 	tbuf[1].tv_sec = t->Tmtime;
 	tbuf[1].tv_usec = 0;
@@ -1113,6 +1130,62 @@ execone(TREE * t, void *v __unused)
 		thisC->Cnogood = TRUE;
 	}
 	return (SCMOK);
+}
+
+/*
+ * We know that since "to" is a pathname coming from the server, it must
+ * not contain any symbolic links after the root, because otherwise the
+ * server would send us only the symlink above it. So we hunt for the symlink
+ * above and if found we convert the symlink to a directory, prepare the
+ * path below the symlink, and keep 
+ */
+static int
+canonicalize(const char *to)
+{
+	char absto[STRINGLENGTH], cabsto[STRINGLENGTH * 4];
+	char dir[STRINGLENGTH], file[STRINGLENGTH];
+	char *a;
+	char *c;
+	size_t len;
+	struct stat st;
+	const char *pwd = thisC->Cprefix ? thisC->Cprefix : thisC->Cbase;
+
+	if ((thisC->Cflags & CFCANONICALIZE) == 0)
+		return 0;
+
+	path(to, dir, file);
+
+	len = strlen(pwd);
+	(void)snprintf(absto, sizeof(absto), "%s/%s", pwd, dir);
+
+	len++;
+	if (realpath(absto, cabsto) == NULL)
+		return -1;
+
+	a = absto + len;
+	c = cabsto + len;
+
+	while (*a && *c && *a == *c)
+		a++, c++;
+
+	if (*a == '\0' && *c == '\0')
+		return 0;
+
+	while (*a && *a != '/')
+		a++;
+
+	*a = '\0';
+	if (lstat(absto, &st) == -1 || !S_ISLNK(st.st_mode))
+		return -1;
+
+	if (unlink(absto) == -1)
+		return -1;
+
+	strcpy(c, a);
+	if (estabd(file, cabsto) == -1) {
+		return -1;
+	}
+	return 1;
 }
 
 /* from will be 0 if reading from network */
@@ -1362,14 +1435,14 @@ finishup(int x)
 		(void) strcpy(collrelname, collname);
 	}
 	dontjump = TRUE;	/* once here, no more longjmp */
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 	if (protver < 6) {
 		/* done with server */
 		if (x == SCMOK)
-			goaway((char *) NULL);
+			goaway(NULL);
 		(void) requestend();
 	}
-	tloc = time((time_t *) NULL);
+	tloc = time(NULL);
 	if (x != SCMOK) {
 		notify("SUP: Upgrade of %s aborted at %s",
 		    collrelname, ctime(&tloc) + 4);
@@ -1407,20 +1480,24 @@ finishup(int x)
 	}
 	(void) sprintf(fname, FILEWHEN, collname, relsufix);
 	if (establishdir(fname)) {
+		int oerrno = errno;
 		Tfree(&lastT);
 		if (protver < 6)
 			return;
-		done(FDONEUSRERROR, "Couldn't timestamp");
+		done(FDONEUSRERROR, "Couldn't create directory `%s' (%s)",
+			fname, strerror(oerrno));
 		(void) requestend();
 		return;
 	}
 	if (!putwhen(fname, scantime)) {
+		int oerrno = errno;
 		notify("SUP: Can't record current time in %s (%s)\n",
-		    fname, strerror(errno));
+		    fname, strerror(oerrno));
 		Tfree(&lastT);
 		if (protver < 6)
 			return;
-		done(FDONEUSRERROR, "Couldn't timestamp");
+		done(FDONEUSRERROR, "Couldn't timestamp `%s' (%s)",
+			fname, strerror(oerrno));
 		(void) requestend();
 		return;
 	}
@@ -1463,7 +1540,7 @@ done(int value, const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 
 	if (fmt)
 		vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -1471,11 +1548,11 @@ done(int value, const char *fmt, ...)
 	if (protver < 6) {
 		if (goawayreason)
 			free(goawayreason);
-		goawayreason = (fmt) ? estrdup(buf) : (char *) NULL;
+		goawayreason = (fmt) ? estrdup(buf) : NULL;
 		(void) msggoaway();
 	} else {
 		doneack = value;
-		donereason = (fmt) ? buf : (char *) NULL;
+		donereason = (fmt) ? buf : NULL;
 		(void) msgdone();
 	}
 	if (!dontjump)
@@ -1490,7 +1567,7 @@ goaway(const char *fmt, ...)
 
 	va_start(ap, fmt);
 
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 	if (fmt) {
 		vsnprintf(buf, sizeof(buf), fmt, ap);
 		goawayreason = buf;

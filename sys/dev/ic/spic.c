@@ -1,4 +1,4 @@
-/*	$NetBSD: spic.c,v 1.15 2008/05/04 16:13:35 xtraeme Exp $	*/
+/*	$NetBSD: spic.c,v 1.18 2010/04/21 21:49:53 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spic.c,v 1.15 2008/05/04 16:13:35 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spic.c,v 1.18 2010/04/21 21:49:53 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -257,7 +257,7 @@ spic_attach(struct spic_softc *sc)
 
 #ifdef SPIC_DEBUG
 	if (spicdebug)
-		printf("spic_attach %x %x\n", sc->sc_iot, (uint)sc->sc_ioh);
+		printf("spic_attach %x\n", (uint)sc->sc_ioh);
 #endif
 
 	callout_init(&sc->sc_poll, 0);
@@ -290,7 +290,7 @@ spic_attach(struct spic_softc *sc)
 }
 
 bool
-spic_suspend(device_t dev PMF_FN_ARGS)
+spic_suspend(device_t dev, const pmf_qual_t *qual)
 {
 	struct spic_softc *sc = device_private(dev);
 
@@ -300,7 +300,7 @@ spic_suspend(device_t dev PMF_FN_ARGS)
 }
 
 bool
-spic_resume(device_t dev PMF_FN_ARGS)
+spic_resume(device_t dev, const pmf_qual_t *qual)
 {
 	struct spic_softc *sc = device_private(dev);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.65 2009/10/17 10:29:29 hannken Exp $	*/
+/*	$NetBSD: fss.c,v 1.81.4.1 2012/07/30 08:05:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.65 2009/10/17 10:29:29 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.81.4.1 2012/07/30 08:05:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.65 2009/10/17 10:29:29 hannken Exp $");
 #include <sys/kthread.h>
 #include <sys/fstrans.h>
 #include <sys/simplelock.h>
+#include <sys/vfs_syscalls.h>		/* For do_sys_unlink(). */
 
 #include <miscfs/specfs/specdev.h>
 
@@ -196,8 +197,10 @@ fss_open(dev_t dev, int flags, int mode, struct lwp *l)
 		cf->cf_unit = minor(dev);
 		cf->cf_fstate = FSTATE_STAR;
 		sc = device_private(config_attach_pseudo(cf));
-		if (sc == NULL)
+		if (sc == NULL) {
+			mutex_exit(&fss_device_lock);
 			return ENOMEM;
+		}
 	}
 
 	mutex_enter(&sc->sc_slock);
@@ -297,10 +300,22 @@ fss_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int error;
 	struct fss_softc *sc = device_lookup_private(&fss_cd, minor(dev));
+	struct fss_set _fss;
 	struct fss_set *fss = (struct fss_set *)data;
+	struct fss_set50 *fss50 = (struct fss_set50 *)data;
 	struct fss_get *fsg = (struct fss_get *)data;
+#ifndef _LP64
+	struct fss_get50 *fsg50 = (struct fss_get50 *)data;
+#endif
 
 	switch (cmd) {
+	case FSSIOCSET50:
+		fss = &_fss;
+		fss->fss_mount = fss50->fss_mount;
+		fss->fss_bstore = fss50->fss_bstore;
+		fss->fss_csize = fss50->fss_csize;
+		fss->fss_flags = 0;
+		/* Fall through */
 	case FSSIOCSET:
 		mutex_enter(&sc->sc_lock);
 		if ((flag & FWRITE) == 0)
@@ -309,6 +324,8 @@ fss_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			error = EBUSY;
 		else
 			error = fss_create_snapshot(sc, fss, l);
+		if (error == 0)
+			sc->sc_uflags = fss->fss_flags;
 		mutex_exit(&sc->sc_lock);
 		break;
 
@@ -322,6 +339,34 @@ fss_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			error = fss_delete_snapshot(sc, l);
 		mutex_exit(&sc->sc_lock);
 		break;
+
+#ifndef _LP64
+	case FSSIOCGET50:
+		mutex_enter(&sc->sc_lock);
+		switch (sc->sc_flags & (FSS_PERSISTENT | FSS_ACTIVE)) {
+		case FSS_ACTIVE:
+			memcpy(fsg50->fsg_mount, sc->sc_mntname, MNAMELEN);
+			fsg50->fsg_csize = FSS_CLSIZE(sc);
+			timeval_to_timeval50(&sc->sc_time, &fsg50->fsg_time);
+			fsg50->fsg_mount_size = sc->sc_clcount;
+			fsg50->fsg_bs_size = sc->sc_clnext;
+			error = 0;
+			break;
+		case FSS_PERSISTENT | FSS_ACTIVE:
+			memcpy(fsg50->fsg_mount, sc->sc_mntname, MNAMELEN);
+			fsg50->fsg_csize = 0;
+			timeval_to_timeval50(&sc->sc_time, &fsg50->fsg_time);
+			fsg50->fsg_mount_size = 0;
+			fsg50->fsg_bs_size = 0;
+			error = 0;
+			break;
+		default:
+			error = ENXIO;
+			break;
+		}
+		mutex_exit(&sc->sc_lock);
+		break;
+#endif /* _LP64 */
 
 	case FSSIOCGET:
 		mutex_enter(&sc->sc_lock);
@@ -447,8 +492,9 @@ fss_softc_alloc(struct fss_softc *sc)
 	}
 
 	sc->sc_flags |= FSS_BS_THREAD;
-	if ((error = kthread_create(PRI_BIO, 0, NULL, fss_bs_thread, sc,
-	    &sc->sc_bs_lwp, device_xname(sc->sc_dev))) != 0) {
+	if ((error = kthread_create(PRI_BIO, KTHREAD_MUSTJOIN, NULL,
+	    fss_bs_thread, sc, &sc->sc_bs_lwp,
+	    "%s", device_xname(sc->sc_dev))) != 0) {
 		sc->sc_flags &= ~FSS_BS_THREAD;
 		return error;
 	}
@@ -470,12 +516,11 @@ fss_softc_free(struct fss_softc *sc)
 		mutex_enter(&sc->sc_slock);
 		sc->sc_flags &= ~FSS_BS_THREAD;
 		cv_signal(&sc->sc_work_cv);
-		while (sc->sc_bs_lwp != NULL)
-			kpause("fssdetach", false, 1, &sc->sc_slock);
 		mutex_exit(&sc->sc_slock);
-	}
+		kthread_join(sc->sc_bs_lwp);
 
-	disk_detach(sc->sc_dkdev);
+		disk_detach(sc->sc_dkdev);
+	}
 
 	if (sc->sc_copied != NULL)
 		kmem_free(sc->sc_copied, howmany(sc->sc_clcount, NBBY));
@@ -577,10 +622,11 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
     off_t *bsize, struct lwp *l)
 {
 	int error, bits, fsbsize;
+	uint64_t numsec;
+	unsigned int secsize;
 	struct timespec ts;
-	struct partinfo dpart;
-	struct vattr va;
 	/* nd -> nd2 to reduce mistakes while updating only some namei calls */
+	struct pathbuf *pb2;
 	struct nameidata nd2;
 	struct vnode *vp;
 
@@ -611,11 +657,6 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
 				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error != 0)
 		return error;
-	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	if (error != 0) {
-		vrele(vp);
-		return error;
-	}
 
 	if (vp->v_type == VREG && vp->v_mount == sc->sc_mount) {
 		sc->sc_flags |= FSS_PERSISTENT;
@@ -627,22 +668,28 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
 		    sc->sc_bs_bshift++)
 			if (FSS_FSBSIZE(sc) == fsbsize)
 				break;
-		if (sc->sc_bs_bshift >= bits) {
-			VOP_UNLOCK(sc->sc_bs_vp, 0);
+		if (sc->sc_bs_bshift >= bits)
 			return EINVAL;
-		}
 
 		sc->sc_bs_bmask = FSS_FSBSIZE(sc)-1;
 		sc->sc_clshift = 0;
 
+		if ((fss->fss_flags & FSS_UNLINK_ON_CREATE) != 0) {
+			error = do_sys_unlink(fss->fss_bstore, UIO_USERSPACE);
+			if (error)
+				return error;
+		}
+		error = vn_lock(vp, LK_EXCLUSIVE);
+		if (error != 0)
+			return error;
 		error = VFS_SNAPSHOT(sc->sc_mount, sc->sc_bs_vp, &ts);
 		TIMESPEC_TO_TIMEVAL(&sc->sc_time, &ts);
 
-		VOP_UNLOCK(sc->sc_bs_vp, 0);
+		VOP_UNLOCK(sc->sc_bs_vp);
 
 		return error;
 	}
-	vput(vp);
+	vrele(vp);
 
 	/*
 	 * Get the block device it is mounted on.
@@ -659,37 +706,47 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
 	}
 
 	sc->sc_bdev = vp->v_rdev;
-	vrele(vp);
 
 	/*
 	 * Get the block device size.
 	 */
 
-	error = bdev_ioctl(sc->sc_bdev, DIOCGPART, &dpart, FREAD, l);
+	error = getdisksize(vp, &numsec, &secsize);
+	vrele(vp);
 	if (error)
 		return error;
 
-	*bsize = (off_t)dpart.disklab->d_secsize*dpart.part->p_size;
+	*bsize = (off_t)numsec*secsize;
 
 	/*
 	 * Get the backing store
 	 */
 
-	NDINIT(&nd2, LOOKUP, FOLLOW, UIO_USERSPACE, fss->fss_bstore);
-	if ((error = vn_open(&nd2, FREAD|FWRITE, 0)) != 0)
+	error = pathbuf_copyin(fss->fss_bstore, &pb2);
+	if (error) {
+ 		return error;
+	}
+	NDINIT(&nd2, LOOKUP, FOLLOW, pb2);
+	if ((error = vn_open(&nd2, FREAD|FWRITE, 0)) != 0) {
+		pathbuf_destroy(pb2);
 		return error;
-	VOP_UNLOCK(nd2.ni_vp, 0);
+	}
+	VOP_UNLOCK(nd2.ni_vp);
 
 	sc->sc_bs_vp = nd2.ni_vp;
 
-	if (nd2.ni_vp->v_type != VREG && nd2.ni_vp->v_type != VCHR)
+	if (nd2.ni_vp->v_type != VREG && nd2.ni_vp->v_type != VCHR) {
+		pathbuf_destroy(pb2);
 		return EINVAL;
+	}
+	pathbuf_destroy(pb2);
 
-	if (sc->sc_bs_vp->v_type == VREG) {
-		error = VOP_GETATTR(sc->sc_bs_vp, &va, l->l_cred);
-		if (error != 0)
+	if ((fss->fss_flags & FSS_UNLINK_ON_CREATE) != 0) {
+		error = do_sys_unlink(fss->fss_bstore, UIO_USERSPACE);
+		if (error)
 			return error;
-		sc->sc_bs_size = va.va_size;
+	}
+	if (sc->sc_bs_vp->v_type == VREG) {
 		fsbsize = sc->sc_bs_vp->v_mount->mnt_stat.f_iosize;
 		if (fsbsize & (fsbsize-1))	/* No power of two */
 			return EINVAL;
@@ -789,9 +846,7 @@ fss_create_snapshot(struct fss_softc *sc, struct fss_set *fss, struct lwp *l)
 
 	microtime(&sc->sc_time);
 
-	if (error == 0)
-		error = fscow_establish(sc->sc_mount,
-		    fss_copy_on_write, sc);
+	error = fscow_establish(sc->sc_mount, fss_copy_on_write, sc);
 	if (error == 0)
 		sc->sc_flags |= FSS_ACTIVE;
 
@@ -812,7 +867,7 @@ bad:
 	fss_softc_free(sc);
 	if (sc->sc_bs_vp != NULL) {
 		if (sc->sc_flags & FSS_PERSISTENT)
-			vn_close(sc->sc_bs_vp, FREAD, l->l_cred);
+			vrele(sc->sc_bs_vp);
 		else
 			vn_close(sc->sc_bs_vp, FREAD|FWRITE, l->l_cred);
 	}
@@ -839,7 +894,7 @@ fss_delete_snapshot(struct fss_softc *sc, struct lwp *l)
 
 	fss_softc_free(sc);
 	if (sc->sc_flags & FSS_PERSISTENT)
-		vn_close(sc->sc_bs_vp, FREAD, l->l_cred);
+		vrele(sc->sc_bs_vp);
 	else
 		vn_close(sc->sc_bs_vp, FREAD|FWRITE, l->l_cred);
 	sc->sc_bs_vp = NULL;
@@ -961,15 +1016,16 @@ fss_bs_io(struct fss_softc *sc, fss_io_type rw,
 	vn_lock(sc->sc_bs_vp, LK_EXCLUSIVE|LK_RETRY);
 
 	error = vn_rdwr((rw == FSS_READ ? UIO_READ : UIO_WRITE), sc->sc_bs_vp,
-	    data, len, off, UIO_SYSSPACE, IO_UNIT|IO_NODELOCKED,
+	    data, len, off, UIO_SYSSPACE,
+	    IO_ADV_ENCODE(POSIX_FADV_NOREUSE) | IO_NODELOCKED,
 	    sc->sc_bs_lwp->l_cred, NULL, NULL);
 	if (error == 0) {
-		mutex_enter(&sc->sc_bs_vp->v_interlock);
+		mutex_enter(sc->sc_bs_vp->v_interlock);
 		error = VOP_PUTPAGES(sc->sc_bs_vp, trunc_page(off),
-		    round_page(off+len), PGO_CLEANIT|PGO_SYNCIO|PGO_FREE);
+		    round_page(off+len), PGO_CLEANIT | PGO_FREE | PGO_SYNCIO);
 	}
 
-	VOP_UNLOCK(sc->sc_bs_vp, 0);
+	VOP_UNLOCK(sc->sc_bs_vp);
 
 	return error;
 }
@@ -1038,7 +1094,6 @@ fss_bs_thread(void *arg)
 			cv_wait(&sc->sc_work_cv, &sc->sc_slock);
 		thread_idle = true;
 		if ((sc->sc_flags & FSS_BS_THREAD) == 0) {
-			sc->sc_bs_lwp = NULL;
 			mutex_exit(&sc->sc_slock);
 			kthread_exit(0);
 		}
@@ -1253,6 +1308,8 @@ fss_modcmd(modcmd_t cmd, void *arg)
 		}
 		error = devsw_attach(fss_cd.cd_name,
 		    &fss_bdevsw, &bmajor, &fss_cdevsw, &cmajor);
+		if (error == EEXIST)
+			error = 0;
 		if (error) {
 			config_cfattach_detach(fss_cd.cd_name, &fss_ca);
 			config_cfdriver_detach(&fss_cd);

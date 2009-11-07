@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.16 2009/03/14 14:46:05 dsl Exp $	*/
+/*	$NetBSD: boot.c,v 1.18 2011/01/22 19:19:22 joerg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -40,6 +40,7 @@
 #include <machine/cpu.h>
 #include <machine/residual.h>
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 
 #include "boot.h"
 
@@ -60,7 +61,7 @@ struct btinfo_clock btinfo_clock;
 RESIDUAL residual;
 
 extern u_long ns_per_tick;
-extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
+extern char bootprog_name[], bootprog_rev[];
 
 void boot(void *, u_long);
 static void exec_kernel(char *);
@@ -137,7 +138,6 @@ boot(void *resp, u_long loadaddr)
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	for (;;) {
 		name = names[n++];

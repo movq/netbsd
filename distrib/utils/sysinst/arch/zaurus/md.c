@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.5 2009/09/19 14:57:30 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.11 2012/02/02 16:00:35 tsutsui Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -39,6 +35,7 @@
 /* md.c -- zaurus machine specific routines */
 
 #include <sys/param.h>
+#include <sys/sysctl.h>
 
 #include <stdio.h>
 #include <util.h>
@@ -54,9 +51,22 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	static const int mib[2] = {CTL_KERN, KERN_VERSION};
+	size_t len;
+	char *version;
+
+	/* check INSTALL kernel name to select an appropriate kernel set */
+	/* XXX: hw.cpu_model has a processor name on arm ports */
+	sysctl(mib, 2, NULL, &len, NULL, 0);
+	version = malloc(len);
+	if (version == NULL)
+		return;
+	sysctl(mib, 2, version, &len, NULL, 0);
+	if (strstr(version, "C700") != NULL)
+		set_kernel_set(SET_KERNEL_C700);
+	free(version);
 }
 
 int
@@ -115,6 +125,38 @@ md_post_disklabel(void)
 int
 md_post_newfs(void)
 {
+	struct mbr_sector pbr;
+	char adevname[STRSIZE];
+	ssize_t sz;
+	int fd = -1;
+
+	snprintf(adevname, sizeof(adevname), "/dev/r%sa", diskdev);
+	fd = open(adevname, O_RDWR);
+	if (fd < 0)
+		goto out;
+
+	/* Read partition boot record */
+	sz = pread(fd, &pbr, sizeof(pbr), 0);
+	if (sz != sizeof(pbr))
+		goto out;
+
+	/* Check magic number */
+	if (pbr.mbr_magic != le16toh(MBR_MAGIC))
+		goto out;
+
+#define	OSNAME	"NetBSD60"
+	/* Update oemname */
+	memcpy(&pbr.mbr_oemname, OSNAME, sizeof(OSNAME) - 1);
+
+	/* Clear BPB */
+	memset(&pbr.mbr_bpb, 0, sizeof(pbr.mbr_bpb));
+
+	/* write-backed new patition boot record */
+	(void)pwrite(fd, &pbr, sizeof(pbr), 0);
+
+out:
+	if (fd >= 0)
+		close(fd);
 	return 0;
 }
 
@@ -161,3 +203,9 @@ md_mbr_use_wholedisk(mbr_info_t *mbri)
 	return mbr_use_wholedisk(mbri);
 }
 
+
+int
+md_pre_mount()
+{
+	return 0;
+}

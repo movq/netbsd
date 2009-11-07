@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.9 2009/05/01 09:26:34 cegger Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.11 2011/04/04 20:37:55 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.9 2009/05/01 09:26:34 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.11 2011/04/04 20:37:55 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.9 2009/05/01 09:26:34 cegger Ex
 
 void *
 pciide_machdep_compat_intr_establish(device_t dev,
-    struct pci_attach_args *pa, int chan, int (*func)(void *),
+    const struct pci_attach_args *pa, int chan, int (*func)(void *),
     void *arg)
 {
 	int irq;
@@ -89,4 +89,11 @@ pciide_machdep_compat_intr_establish(device_t dev,
 	aprint_normal_dev(dev, "%s channel interrupting at irq %d\n",
 	    PCIIDE_CHANNEL_NAME(chan), irq);
 	return cookie;
+}
+
+void
+pciide_machdep_compat_intr_disestablish(device_t dev, pci_chipset_tag_t pc, int chan, void *cookie)
+{
+	isa_intr_disestablish(NULL, cookie);
+	return;
 }

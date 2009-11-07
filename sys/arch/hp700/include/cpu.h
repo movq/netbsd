@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.34 2009/06/03 21:08:51 skrll Exp $	*/
+/*	$NetBSD: cpu.h,v 1.68 2012/01/20 06:51:19 skrll Exp $	*/
 
 /*	$OpenBSD: cpu.h,v 1.55 2008/07/23 17:39:35 kettenis Exp $	*/
 
@@ -53,10 +53,13 @@
 #ifndef	_MACHINE_CPU_H_
 #define	_MACHINE_CPU_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_cputype.h"
+#endif
+
 #include <machine/trap.h>
 #include <machine/frame.h>
 #include <machine/reg.h>
-
 
 #ifndef _LOCORE
 
@@ -109,9 +112,8 @@ struct hppa_cpu_info {
 
 #ifdef _KERNEL
 extern const struct hppa_cpu_info *hppa_cpu_info;
-extern int cpu_hvers;
+extern int cpu_modelno;
 extern int cpu_revision;
-extern register_t kpsw;
 #endif
 #endif
 
@@ -152,11 +154,24 @@ extern register_t kpsw;
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
+#if defined(HP8000_CPU) || defined(HP8200_CPU) || \
+    defined(HP8500_CPU) || defined(HP8600_CPU)
 
+/* PA2.0 aliases */
+#define	HPPA_PGALIAS	0x00400000
+#define	HPPA_PGAMASK	0xffc00000	/* PA bits 0-9 not used in index */
+#define	HPPA_PGAOFF	0x003fffff
+
+#else
+
+/* PA1.x aliases */
 #define	HPPA_PGALIAS	0x00100000
-#define	HPPA_PGAMASK	0xfff00000
+#define	HPPA_PGAMASK	0xfff00000	/* PA bits 0-11 not used in index */
 #define	HPPA_PGAOFF	0x000fffff
-#define	HPPA_SPAMASK	0xf0f0f000
+
+#endif
+
+#define	HPPA_SPAMASK	0xf0f0f000	/* PA bits 0-3,8-11,16-19 not used */
 
 #define	HPPA_IOSPACE	0xf0000000
 #define	HPPA_IOLEN      0x10000000
@@ -171,12 +186,28 @@ extern register_t kpsw;
 #define	HPPA_SPA_ENABLE	0x00000020
 #define	HPPA_NMODSPBUS	64
 
+#ifdef MULTIPROCESSOR
+
+#define	GET_CURCPU(r)		mfctl CR_CURCPU, r
+#define	GET_CURCPU_SPACE(s, r)	GET_CURCPU(r)
+#define	GET_CURLWP(r)		mfctl CR_CURCPU, r ! ldw CI_CURLWP(r), r
+#define	GET_CURLWP_SPACE(s, r)	mfctl CR_CURCPU, r ! ldw CI_CURLWP(s, r), r
+
+#define	SET_CURLWP(r,t)		mfctl CR_CURCPU, t ! stw r, CI_CURLWP(t)
+
+#else /*  MULTIPROCESSOR */
+
+#define	GET_CURCPU(r)		mfctl CR_CURLWP, r ! ldw L_CPU(r), r
+#define	GET_CURCPU_SPACE(s, r)	mfctl CR_CURLWP, r ! ldw L_CPU(s, r), r
+#define	GET_CURLWP(r)		mfctl CR_CURLWP, r
+#define	GET_CURLWP_SPACE(s, r)	GET_CURLWP(r)
+
+#define	SET_CURLWP(r,t) mtctl   r, CR_CURLWP
+
+#endif /*  MULTIPROCESSOR */
+
 #ifndef _LOCORE
 #ifdef _KERNEL
-
-#if defined(_KERNEL_OPT)
-#include "opt_lockdebug.h"
-#endif
 
 /*
  * External definitions unique to PA-RISC cpu support.
@@ -200,41 +231,102 @@ struct clockframe {
 #define	CLKF_INTR(framep)	((framep)->cf_flags & TFF_INTR)
 #define	CLKF_USERMODE(framep)	((framep)->cf_flags & T_USER)
 
-#define	cpu_signotify(l)	(setsoftast())
-#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, setsoftast())
+int	clock_intr(void *);
+
+/*
+ * LWP_PC: the program counter for the given lwp.
+ */
+#define	LWP_PC(l)		((l)->l_md.md_regs->tf_iioq_head)
+
+#define	cpu_signotify(l)	(setsoftast(l))
+#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, setsoftast(l))
+
+#endif /* _KERNEL */
+
+#if defined(_KERNEL) || defined(_KMEMUSER)
 
 #include <sys/cpu_data.h>
+
+/*
+ * Note that the alignment of ci_trap_save is important since we want to keep
+ * it within a single cache line.  As a result, it must be kept as the first
+ * entry within the cpu_info struct.
+ */
 struct cpu_info {
+	/* Keep this first to simplify the trap handlers */
+	register_t	ci_trapsave[16];/* the "phys" part of frame */
+
 	struct cpu_data ci_data;	/* MI per-cpu data */
 
-	struct	lwp	*ci_curlwp;	/* CPU owner */
+#ifndef _KMEMUSER
 	int		ci_cpuid;	/* CPU index (see cpus[] array) */
 	int		ci_mtx_count;
 	int		ci_mtx_oldspl;
 	int		ci_want_resched;
-};
 
-#include <machine/intr.h>
+	volatile int	ci_cpl;
+	volatile int	ci_ipending;	/* The pending interrupts. */
+	u_int		ci_intr_depth;	/* Nonzero iff running an interrupt. */
 
-extern struct cpu_info cpu_info_store;
+	hppa_hpa_t	ci_hpa;
+	register_t	ci_psw;		/* Processor Status Word. */
+	paddr_t		ci_fpu_state;	/* LWP FPU state address, or zero. */
+	u_long		ci_itmr;
+
+#if defined(MULTIPROCESSOR)
+	struct lwp	*ci_curlwp;	/* CPU owner */
+	paddr_t		ci_stack;	/* stack for spin up */
+	volatile int	ci_flags;	/* CPU status flags */
+#define	CPUF_PRIMARY	0x0001		/* ... is monarch/primary */
+#define	CPUF_RUNNING	0x0002 		/* ... is running. */
+
+#endif
+
+#endif /* !_KMEMUSER */
+} __aligned(64);
+
+#endif /* _KERNEL || _KMEMUSER */
+
+#if defined(_KERNEL)
 
 /*
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
 
-#define	curcpu()			(&cpu_info_store)
-#define	cpu_number()			0
-
-#define cpu_proc_fork(p1, p2)
+#define	cpu_proc_fork(p1, p2)
 
 #ifdef MULTIPROCESSOR
-#define	CPU_IS_PRIMARY(ci)		1
+
+/* Number of CPUs in the system */
+extern int hppa_ncpu;
+
+#define	HPPA_MAXCPUS	4
+#define	cpu_number()			(curcpu()->ci_cpuid)
+
+#define	CPU_IS_PRIMARY(ci)		((ci)->ci_cpuid == 0)
 #define	CPU_INFO_ITERATOR		int
-#define	CPU_INFO_FOREACH(cii, ci)	cii = 0; ci = curcpu(), cii < 1; cii++
+#define	CPU_INFO_FOREACH(cii, ci)	cii = 0, ci =  &cpus[0]; cii < hppa_ncpu; cii++, ci++
 
 void	cpu_boot_secondary_processors(void);
-#endif
+
+static __inline struct cpu_info *
+hppa_curcpu(void)
+{
+	struct cpu_info *ci;
+
+	__asm volatile("mfctl %1, %0" : "=r" (ci): "i" (CR_CURCPU));
+
+	return ci;
+}
+
+#define	curcpu()			hppa_curcpu()
+
+#else /*  MULTIPROCESSOR */
+
+#define	HPPA_MAXCPUS	1
+#define	curcpu()			(&cpus[0])
+#define	cpu_number()			0
 
 static __inline struct lwp *
 hppa_curlwp(void)
@@ -243,12 +335,16 @@ hppa_curlwp(void)
 
 	__asm volatile("mfctl %1, %0" : "=r" (l): "i" (CR_CURLWP));
 
-	return (struct lwp *)l;
+	return l;
 }
 
 #define	curlwp				hppa_curlwp()
 
-#define DELAY(x) delay(x)
+#endif /* MULTIPROCESSOR */
+
+extern struct cpu_info cpus[HPPA_MAXCPUS];
+
+#define	DELAY(x) delay(x)
 
 static __inline paddr_t
 kvtop(const void *va)
@@ -261,19 +357,38 @@ kvtop(const void *va)
 
 extern int (*cpu_desidhash)(void);
 
+static __inline bool
+hppa_cpu_ispa20_p(void)
+{
+
+	return (hppa_cpu_info->hci_features & HPPA_FTRS_W32B) != 0;
+}
+
+static __inline bool
+hppa_cpu_hastlbu_p(void)
+{
+
+	return (hppa_cpu_info->hci_features & HPPA_FTRS_TLBU) != 0;
+}
+
 void	delay(u_int);
 void	hppa_init(paddr_t, void *);
 void	trap(int, struct trapframe *);
 void	hppa_ras(struct lwp *);
 int	spcopy(pa_space_t, const void *, pa_space_t, void *, size_t);
 int	spstrcpy(pa_space_t, const void *, pa_space_t, void *, size_t,
-		 size_t *);
+    size_t *);
 int	copy_on_fault(void);
 void	lwp_trampoline(void);
-void	setfunc_trampoline(void);
 int	cpu_dumpsize(void);
 int	cpu_dump(void);
+
+#ifdef MULTIPROCESSOR
+void	cpu_boot_secondary_processors(void);
+void	cpu_hw_init(void);
+void	cpu_hatch(void);
 #endif
+#endif	/* _KERNEL */
 
 /*
  * Boot arguments stuff
@@ -287,8 +402,20 @@ int	cpu_dump(void);
  */
 #define	CPU_CONSDEV		1	/* dev_t: console terminal device */
 #define	CPU_BOOTED_KERNEL	2	/* string: booted kernel name */
-#define	CPU_MAXID		3	/* number of valid machdep ids */
+#define	CPU_LCD_BLINK           3	/* int: twiddle heartbeat LED/LCD */
+#define	CPU_MAXID		4	/* number of valid machdep ids */
 
-#endif
+#ifdef _KERNEL
+#include <sys/queue.h>
+
+struct blink_lcd {
+	void (*bl_func)(void *, int);
+	void *bl_arg;
+	SLIST_ENTRY(blink_lcd) bl_next;
+};
+
+extern void blink_lcd_register(struct blink_lcd *);
+#endif	/* _KERNEL */
+#endif	/* !_LOCORE */
 
 #endif /* _MACHINE_CPU_H_ */

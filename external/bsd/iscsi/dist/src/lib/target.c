@@ -43,6 +43,7 @@
 #include <sys/types.h>
 #include <sys/param.h>
 
+#include <assert.h>
 #include <stdlib.h>
 
 #ifdef HAVE_NETINET_TCP_H
@@ -172,12 +173,17 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 	target_cmd_t		cmd;
 	uint32_t		DataSN = 0;
 	uint8_t			rsp_header[ISCSI_HEADER_LEN];
+	struct iovec		*sg_new = NULL;
+	int			result;
 
 	(void) memset(&scsi_cmd, 0x0, sizeof(scsi_cmd));
+	scsi_cmd.ahs = NULL;
+	scsi_cmd.send_buffer = NULL;
 	if (iscsi_scsi_cmd_decap(header, &scsi_cmd) != 0) {
 		iscsi_err(__FILE__, __LINE__,
 				"iscsi_scsi_cmd_decap() failed\n");
-		return -1;
+		result = -1;
+		goto out;
 	}
 	iscsi_trace(TRACE_ISCSI_DEBUG,
 		"session %d: SCSI Command (CmdSN %u, op %#x)\n",
@@ -192,7 +198,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 			"CmdSN(%d) of SCSI Command not valid, "
 			"ExpCmdSN(%d) MaxCmdSN(%d). Ignoring the command\n",
 			scsi_cmd.CmdSN, sess->ExpCmdSN, sess->MaxCmdSN);
-		return 0;
+		result = 0;
+		goto out;
 	}
 	/* Arg check.   */
 	scsi_cmd.attr = 0;	/* Temp fix FIXME */
@@ -226,7 +233,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 			"scsi_cmd.length (%u) > MaxRecvDataSegmentLength "
 			"(%u)\n",
 			scsi_cmd.length, sess->sess_params.max_dataseg_len);
-		return -1;
+		result = -1;
+		goto out;
 	}
 
 #if 0
@@ -246,26 +254,21 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 		uint8_t  *ahs_ptr;
 		uint8_t   ahs_type;
 
-		scsi_cmd.ahs = NULL;
 		iscsi_trace(TRACE_ISCSI_DEBUG,
 				"reading %u bytes AHS\n", scsi_cmd.ahs_len);
 		scsi_cmd.ahs = iscsi_malloc_atomic((unsigned)scsi_cmd.ahs_len);
 		if (scsi_cmd.ahs == NULL) {
 			iscsi_err(__FILE__, __LINE__,
 				"iscsi_malloc_atomic() failed\n");
-			return -1;
+			result = -1;
+			goto out;
 		}
-#define AHS_CLEANUP do {						\
-	if (scsi_cmd.ahs != NULL) {					\
-		iscsi_free_atomic(scsi_cmd.ahs);			\
-	}								\
-} while (/* CONSTCOND */ 0)
 		if (iscsi_sock_msg(sess->sock, 0, (unsigned)scsi_cmd.ahs_len,
 				scsi_cmd.ahs, 0) != scsi_cmd.ahs_len) {
 			iscsi_err(__FILE__, __LINE__,
 				"iscsi_sock_msg() failed\n");
-			AHS_CLEANUP;
-			return -1;
+			result = -1;
+			goto out;
 		}
 		iscsi_trace(TRACE_ISCSI_DEBUG,
 				"read %u bytes AHS\n", scsi_cmd.ahs_len);
@@ -276,8 +279,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 			if (ahs_len == 0) {
 				iscsi_err(__FILE__, __LINE__,
 				 		"Zero ahs_len\n");
-				AHS_CLEANUP;
-				return -1;
+				result = -1;
+				goto out;
 			}
 			switch (ahs_type = *(ahs_ptr + 2)) {
 			case ISCSI_AHS_EXTENDED_CDB:
@@ -300,8 +303,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 			default:
 				iscsi_err(__FILE__, __LINE__,
 					"unknown AHS type %x\n", ahs_type);
-				AHS_CLEANUP;
-				return -1;
+				result = -1;
+				goto out;
 			}
 		}
 		iscsi_trace(TRACE_ISCSI_DEBUG,
@@ -327,24 +330,20 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 	if (device_command(sess, &cmd) != 0) {
 		iscsi_err(__FILE__, __LINE__,
 				"device_command() failed\n");
-		AHS_CLEANUP;
-		return -1;
+		result = -1;
+		goto out;
 	}
 	/* Send any input data */
 
 	scsi_cmd.bytes_sent = 0;
 	if (!scsi_cmd.status && scsi_cmd.input) {
 		struct iovec    sg_singleton;
-		struct iovec   *sg, *sg_orig, *sg_new = NULL;
+		struct iovec   *sg, *sg_orig;
 		int             sg_len_orig, sg_len;
 		uint32_t        offset, trans_len;
 		int             fragment_flag = 0;
 		int             offset_inc;
-#define SG_CLEANUP do {							\
-	if (fragment_flag) {						\
-		iscsi_free_atomic(sg_new);				\
-	}								\
-} while (/* CONSTCOND */ 0)
+
 		if (scsi_cmd.output) {
 			iscsi_trace(TRACE_ISCSI_DEBUG,
 				"sending %u bytes bi-directional input data\n",
@@ -383,8 +382,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 					sg_new = iscsi_malloc_atomic(sizeof(struct iovec) * sg_len_orig);
 					if (sg_new == NULL) {
 						iscsi_err(__FILE__, __LINE__, "iscsi_malloc_atomic() failed\n");
-						AHS_CLEANUP;
-						return -1;
+						result = -1;
+						goto out;
 					}
 					fragment_flag++;
 				}
@@ -393,9 +392,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 				(void) memcpy(sg, sg_orig, sizeof(struct iovec) * sg_len_orig);
 				if (modify_iov(&sg, &sg_len, offset, data.length) != 0) {
 					iscsi_err(__FILE__, __LINE__, "modify_iov() failed\n");
-					SG_CLEANUP;
-					AHS_CLEANUP;
-					return -1;
+					result = -1;
+					goto out;
 				}
 			}
 			iscsi_trace(TRACE_ISCSI_DEBUG, "sending read data PDU (offset %u, len %u)\n", offset, data.length);
@@ -412,9 +410,8 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 				}
 			} else if (offset + data.length > trans_len) {
 				iscsi_err(__FILE__, __LINE__, "offset+data.length > trans_len??\n");
-				SG_CLEANUP;
-				AHS_CLEANUP;
-				return -1;
+				result = -1;
+				goto out;
 			}
 			data.task_tag = scsi_cmd.tag;
 			data.ExpCmdSN = sess->ExpCmdSN;
@@ -423,21 +420,18 @@ scsi_command_t(target_session_t *sess, uint8_t *header)
 			data.offset = offset;
 			if (iscsi_read_data_encap(rsp_header, &data) != 0) {
 				iscsi_err(__FILE__, __LINE__, "iscsi_read_data_encap() failed\n");
-				SG_CLEANUP;
-				AHS_CLEANUP;
-				return -1;
+				result = -1;
+				goto out;
 			}
 			if ((uint32_t)iscsi_sock_send_header_and_data(sess->sock, rsp_header, ISCSI_HEADER_LEN, sg, data.length, sg_len)
 			    != ISCSI_HEADER_LEN + data.length) {
 				iscsi_err(__FILE__, __LINE__, "iscsi_sock_send_header_and_data() failed\n");
-				SG_CLEANUP;
-				AHS_CLEANUP;
-				return -1;
+				result = -1;
+				goto out;
 			}
 			scsi_cmd.bytes_sent += data.length;
 			iscsi_trace(TRACE_ISCSI_DEBUG, "sent read data PDU ok (offset %u, len %u)\n", data.offset, data.length);
 		}
-		SG_CLEANUP;
 		iscsi_trace(TRACE_ISCSI_DEBUG, "successfully sent %u bytes read data\n", trans_len);
 	}
 	/*
@@ -465,55 +459,43 @@ response:
 		scsi_rsp.status = scsi_cmd.status;	/* SCSI status */
 		if (iscsi_scsi_rsp_encap(rsp_header, &scsi_rsp) != 0) {
 			iscsi_err(__FILE__, __LINE__, "iscsi_scsi_rsp_encap() failed\n");
-			AHS_CLEANUP;
-			return -1;
+			result = -1;
+			goto out;
 		}
 		if ((uint32_t)iscsi_sock_send_header_and_data(sess->sock, rsp_header, ISCSI_HEADER_LEN,
 		  scsi_cmd.send_data, scsi_rsp.length, scsi_cmd.send_sg_len)
 		    != ISCSI_HEADER_LEN + scsi_rsp.length) {
 			iscsi_err(__FILE__, __LINE__,
 				"iscsi_sock_send_header_and_data() failed\n");
-			AHS_CLEANUP;
-			return -1;
+			result = -1;
+			goto out;
 		}
 		/* Make sure all data was transferred */
 
 		if (scsi_cmd.output) {
-#if 0
-			RETURN_NOT_EQUAL("scsi_cmd.bytes_recv", scsi_cmd.bytes_recv, scsi_cmd.trans_len, AHS_CLEANUP, -1);
-#else
 			if (scsi_cmd.bytes_recv != scsi_cmd.trans_len) {
 				iscsi_err(__FILE__, __LINE__,
 					"scsi_cmd.bytes_recv");
-				AHS_CLEANUP;
-				return -1;
+				result = -1;
+				goto out;
 			}
-#endif
 			if (scsi_cmd.input) {
-#if 0
-				RETURN_NOT_EQUAL("scsi_cmd.bytes_sent", scsi_cmd.bytes_sent, scsi_cmd.bidi_trans_len, AHS_CLEANUP, -1);
-#else
 				if (scsi_cmd.bytes_sent !=
 						scsi_cmd.bidi_trans_len) {
 					iscsi_err(__FILE__, __LINE__,
 						"scsi_cmd.bytes_sent");
-					AHS_CLEANUP;
-					return -1;
+					result = -1;
+					goto out;
 				}
-#endif
 			}
 		} else {
 			if (scsi_cmd.input) {
-#if 0
-				RETURN_NOT_EQUAL("scsi_cmd.bytes_sent", scsi_cmd.bytes_sent, scsi_cmd.trans_len, AHS_CLEANUP, -1);
-#else
 				if (scsi_cmd.bytes_sent != scsi_cmd.trans_len) {
 					iscsi_err(__FILE__, __LINE__,
 						"scsi_cmd.bytes_sent");
-					AHS_CLEANUP;
-					return -1;
+					result = -1;
+					goto out;
 				}
-#endif
 			}
 		}
 	}
@@ -524,12 +506,20 @@ response:
 		if ((*cmd.callback)(cmd.callback_arg) != 0) {
 			iscsi_err(__FILE__, __LINE__,
 				"device callback failed\n");
-			AHS_CLEANUP;
-			return -1;
+			result = -1;
+			goto out;
 		}
 	}
-	AHS_CLEANUP;
-	return 0;
+	result = 0;
+out:
+	if (scsi_cmd.ahs != NULL) {					\
+		iscsi_free_atomic(scsi_cmd.ahs);			\
+	}								\
+	if (sg_new != NULL) {
+		iscsi_free_atomic(sg_new);
+	}
+	free(scsi_cmd.send_buffer);
+	return result;
 }
 
 static int 
@@ -1545,6 +1535,7 @@ worker_proc_t(void *arg)
 
 	ISCSI_LOCK(&g_session_q_mutex, return -1);
 	(void) memset(sess, 0x0, sizeof(*sess));
+	sess->d = -1;
 	if (iscsi_queue_insert(&g_session_q, sess) != 0) {
 		iscsi_err(__FILE__, __LINE__,
 				"iscsi_queue_insert() failed\n");
@@ -1832,7 +1823,7 @@ target_transfer_data(target_session_t * sess, iscsi_scsi_cmd_args_t * args,
 		RETURN_NOT_EQUAL("Final bit", data.final, 1, TTD_CLEANUP, -1);
 #else
 		if (data.final != 1) {
-			iscsi_err(__FILE__, __LINE__, "Final bit");
+			iscsi_err(__FILE__, __LINE__, "Final bit\n");
 			TTD_CLEANUP;
 			return -1;
 		}
@@ -1841,8 +1832,8 @@ target_transfer_data(target_session_t * sess, iscsi_scsi_cmd_args_t * args,
 #if 0
 		RETURN_NOT_EQUAL("Final bit", args->final, 1, TTD_CLEANUP, -1);
 #else
-		if (data.final != 1) {
-			iscsi_err(__FILE__, __LINE__, "Final bit");
+		if (args->final != 1) {
+			iscsi_err(__FILE__, __LINE__, "Final bit\n");
 			TTD_CLEANUP;
 			return -1;
 		}
@@ -1988,6 +1979,7 @@ iscsi_target_start(iscsi_target_t *tgt)
 	tgt->main_pid = getpid();
 	for (i = 0; i < maxsessions; i++) {
 		g_session[i].id = i;
+		g_session[i].d = -1;
 		if (iscsi_queue_insert(&g_session_q, &g_session[i]) != 0) {
 			iscsi_err(__FILE__, __LINE__,
 				"iscsi_queue_insert() failed\n");
@@ -1995,8 +1987,9 @@ iscsi_target_start(iscsi_target_t *tgt)
 		}
 	}
 	for (j = 0 ; j < lunv->c ; j++) {
-		g_session[j].d = device_init(tgt, lunv, &lunv->v[j]);
-		if (g_session[j].d < 0) {
+		int d = device_init(tgt, lunv, &lunv->v[j]);
+
+		if (d < 0) {
 			iscsi_err(__FILE__, __LINE__,
 				"device_init() failed\n");
 			return -1;
@@ -2131,6 +2124,7 @@ iscsi_target_listen(iscsi_target_t *tgt)
 			goto done;
 		}
 		ISCSI_UNLOCK(&g_session_q_mutex, return -1);
+		assert(sess->d == -1);
 #if 0
 		(void) memset(sess, 0x0, sizeof(*sess));
 #endif

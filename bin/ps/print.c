@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.112 2009/10/21 21:11:57 rmind Exp $	*/
+/*	$NetBSD: print.c,v 1.119 2012/02/13 12:55:28 wiz Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.112 2009/10/21 21:11:57 rmind Exp $");
+__RCSID("$NetBSD: print.c,v 1.119 2012/02/13 12:55:28 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -101,8 +101,6 @@ static void  intprintorsetwidth(VAR *, int, int);
 static void  strprintorsetwidth(VAR *, const char *, int);
 
 static time_t now;
-static int ncpu;
-static u_int64_t *cp_id;
 
 #define	min(a,b)	((a) <= (b) ? (a) : (b))
 
@@ -556,13 +554,12 @@ void
 lstate(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_lwp *k;
-	int flag, is_zombie;
+	int flag;
 	char *cp;
 	VAR *v;
 	char buf[16];
 
 	k = arg;
-	is_zombie = 0;
 	v = ve->var;
 	flag = k->l_flag;
 	cp = buf;
@@ -582,14 +579,16 @@ lstate(void *arg, VARENT *ve, int mode)
 
 	case LSRUN:
 	case LSIDL:
-	case LSONPROC:
 		*cp = 'R';
+		break;
+
+	case LSONPROC:
+		*cp = 'O';
 		break;
 
 	case LSZOMB:
 	case LSDEAD:
 		*cp = 'Z';
-		is_zombie = 1;
 		break;
 
 	case LSSUSPENDED:
@@ -600,6 +599,10 @@ lstate(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
+	if (flag & L_SYSTEM)
+		*cp++ = 'K';
+	if (flag & L_SA)
+		*cp++ = 'a';
 	if (flag & L_DETACHED)
 		*cp++ = '-';
 	*cp = '\0';
@@ -962,7 +965,7 @@ wchan(void *arg, VARENT *ve, int mode)
 	}
 }
 
-#define	pgtok(a)        (((a)*getpagesize())/1024)
+#define	pgtok(a)        (((a)*(size_t)getpagesize())/1024)
 
 void
 vsize(void *arg, VARENT *ve, int mode)
@@ -999,39 +1002,6 @@ p_rssize(void *arg, VARENT *ve, int mode)	/* doesn't account for text */
 }
 
 void
-setncpu(void)
-{
-	int mib[2];
-	size_t size;
-
-	mib[0] = CTL_HW;
-	mib[1] = HW_NCPU;
-	size = sizeof(ncpu);
-	if (sysctl(mib, 2, &ncpu, &size, NULL, 0) == -1) {
-		ncpu = 0;
-		return;
-	}
-	cp_id = malloc(sizeof(cp_id[0]) * ncpu);
-	if (cp_id == NULL)
-		err(1, NULL);
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_CP_ID;
-	size = sizeof(cp_id[0]) * ncpu;
-	if (sysctl(mib, 2, cp_id, &size, NULL, 0) == -1)
-		ncpu = 0;
-}
-
-static int
-get_cpunum(u_int64_t id)
-{
-	int i = 0;
-	for (i = 0; i < ncpu; i++)
-		if (id == cp_id[i])
-			return i;
-	return -1;
-}
-
-void
 cpuid(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_lwp *l;
@@ -1039,7 +1009,7 @@ cpuid(void *arg, VARENT *ve, int mode)
 
 	l = arg;
 	v = ve->var;
-	intprintorsetwidth(v, get_cpunum(l->l_cpuid), mode);
+	intprintorsetwidth(v, l->l_cpuid, mode);
 }
 
 void
@@ -1122,10 +1092,12 @@ pcpu(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_proc2 *k;
 	VAR *v;
+	double dbl;
 
 	k = arg;
 	v = ve->var;
-	doubleprintorsetwidth(v, getpcpu(k), 1, mode);
+	dbl = getpcpu(k);
+	doubleprintorsetwidth(v, dbl, (dbl >= 99.95) ? 0 : 1, mode);
 }
 
 double

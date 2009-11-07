@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.c,v 1.150 2009/10/21 21:12:05 rmind Exp $	*/
+/*	$NetBSD: scsipi_base.c,v 1.155.14.1 2012/04/23 16:28:30 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.150 2009/10/21 21:12:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.155.14.1 2012/04/23 16:28:30 riz Exp $");
 
 #include "opt_scsi.h"
 
@@ -48,8 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.150 2009/10/21 21:12:05 rmind Exp 
 #include <sys/kthread.h>
 #include <sys/hash.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipi_disk.h>
@@ -58,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.150 2009/10/21 21:12:05 rmind Exp 
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsi_message.h>
+
+#include <machine/param.h>
 
 static int	scsipi_complete(struct scsipi_xfer *);
 static void	scsipi_request_sense(struct scsipi_xfer *);
@@ -705,7 +705,7 @@ scsipi_kill_pending(struct scsipi_periph *periph)
 /*
  * scsipi_print_cdb:
  * prints a command descriptor block (for debug purpose, error messages,
- * SCSIPI_VERBOSE, ...)
+ * SCSIVERBOSE, ...)
  */
 void
 scsipi_print_cdb(struct scsipi_generic *cmd)
@@ -766,7 +766,6 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	struct scsipi_periph *periph = xs->xs_periph;
 	u_int8_t key;
 	int error;
-#ifndef	SCSIVERBOSE
 	u_int32_t info;
 	static const char *error_mes[] = {
 		"soft error (corrected)",
@@ -778,7 +777,6 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		"search returned equal", "volume overflow",
 		"verify miscompare", "unknown error key"
 	};
-#endif
 
 	sense = &xs->sense.scsi_sense;
 #ifdef SCSIPI_DEBUG
@@ -855,12 +853,10 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		printf(" DEFERRED ERROR, key = 0x%x\n", key);
 		/* FALLTHROUGH */
 	case 0x70:
-#ifndef	SCSIVERBOSE
 		if ((sense->response_code & SSD_RCODE_VALID) != 0)
 			info = _4btol(sense->info);
 		else
 			info = 0;
-#endif
 		key = SSD_SENSE_KEY(sense->flags);
 
 		switch (key) {
@@ -945,44 +941,44 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			break;
 		}
 
-#ifdef SCSIVERBOSE
-		if (key && (xs->xs_control & XS_CTL_SILENT) == 0)
-			scsipi_print_sense(xs, 0);
-#else
-		if (key) {
-			scsipi_printaddr(periph);
-			printf("%s", error_mes[key - 1]);
-			if ((sense->response_code & SSD_RCODE_VALID) != 0) {
-				switch (key) {
-				case SKEY_NOT_READY:
-				case SKEY_ILLEGAL_REQUEST:
-				case SKEY_UNIT_ATTENTION:
-				case SKEY_DATA_PROTECT:
-					break;
-				case SKEY_BLANK_CHECK:
-					printf(", requested size: %d (decimal)",
-					    info);
-					break;
-				case SKEY_ABORTED_COMMAND:
-					if (xs->xs_retries)
-						printf(", retrying");
-					printf(", cmd 0x%x, info 0x%x",
-					    xs->cmd->opcode, info);
-					break;
-				default:
-					printf(", info = %d (decimal)", info);
-				}
+		/* Print verbose decode if appropriate and possible */
+		if ((key == 0) ||
+		    ((xs->xs_control & XS_CTL_SILENT) != 0) ||
+		    (scsipi_print_sense(xs, 0) != 0))
+			return (error);
+
+		/* Print brief(er) sense information */
+		scsipi_printaddr(periph);
+		printf("%s", error_mes[key - 1]);
+		if ((sense->response_code & SSD_RCODE_VALID) != 0) {
+			switch (key) {
+			case SKEY_NOT_READY:
+			case SKEY_ILLEGAL_REQUEST:
+			case SKEY_UNIT_ATTENTION:
+			case SKEY_DATA_PROTECT:
+				break;
+			case SKEY_BLANK_CHECK:
+				printf(", requested size: %d (decimal)",
+				    info);
+				break;
+			case SKEY_ABORTED_COMMAND:
+				if (xs->xs_retries)
+					printf(", retrying");
+				printf(", cmd 0x%x, info 0x%x",
+				    xs->cmd->opcode, info);
+				break;
+			default:
+				printf(", info = %d (decimal)", info);
 			}
-			if (sense->extra_len != 0) {
-				int n;
-				printf(", data =");
-				for (n = 0; n < sense->extra_len; n++)
-					printf(" %02x",
-					    sense->csi[n]);
-			}
-			printf("\n");
 		}
-#endif
+		if (sense->extra_len != 0) {
+			int n;
+			printf(", data =");
+			for (n = 0; n < sense->extra_len; n++)
+				printf(" %02x",
+				    sense->csi[n]);
+		}
+		printf("\n");
 		return (error);
 
 	/*
@@ -1439,9 +1435,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 			if (xs->resid < xs->datalen) {
 				printf("we read %d bytes of sense anyway:\n",
 				    xs->datalen - xs->resid);
-#ifdef SCSIVERBOSE
 				scsipi_print_sense_data((void *)xs->data, 0);
-#endif
 			}
 			return EINVAL;
 		}
@@ -1517,7 +1511,8 @@ scsipi_complete(struct scsipi_xfer *xs)
 			 */
 			if ((xs->xs_control & XS_CTL_POLL) ||
 			    (chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
-				delay(1000000);
+				/* XXX: quite extreme */
+				kpause("xsbusy", false, hz, NULL);
 			} else if (!callout_pending(&periph->periph_callout)) {
 				scsipi_periph_freeze(periph, 1);
 				callout_reset(&periph->periph_callout,
@@ -2181,42 +2176,63 @@ scsipi_print_xfer_mode(struct scsipi_periph *periph)
 	if ((periph->periph_flags & PERIPH_MODE_VALID) == 0)
 		return;
 
-	aprint_normal_dev(periph->periph_dev, "");
-	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
-		period = scsipi_sync_factor_to_period(periph->periph_period);
-		aprint_normal("sync (%d.%02dns offset %d)",
-		    period / 100, period % 100, periph->periph_offset);
-	} else
-		aprint_normal("async");
+	switch(scsipi_periph_bustype(periph)) {
+	case SCSIPI_BUSTYPE_BUSTYPE(
+	    SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_PSCSI):
+		aprint_normal_dev(periph->periph_dev, "");
+		if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
+			period =
+			    scsipi_sync_factor_to_period(periph->periph_period);
+			aprint_normal("sync (%d.%02dns offset %d)",
+			    period / 100, period % 100, periph->periph_offset);
+		} else
+			aprint_normal("async");
 
-	if (periph->periph_mode & PERIPH_CAP_WIDE32)
-		aprint_normal(", 32-bit");
-	else if (periph->periph_mode & (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
-		aprint_normal(", 16-bit");
-	else
-		aprint_normal(", 8-bit");
-
-	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
-		freq = scsipi_sync_factor_to_freq(periph->periph_period);
-		speed = freq;
 		if (periph->periph_mode & PERIPH_CAP_WIDE32)
-			speed *= 4;
-		else if (periph->periph_mode &
-		    (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
-			speed *= 2;
-		mbs = speed / 1000;
-		if (mbs > 0)
-			aprint_normal(" (%d.%03dMB/s)", mbs, speed % 1000);
+			aprint_normal(", 32-bit");
+		else if (
+		    periph->periph_mode & (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
+			aprint_normal(", 16-bit");
 		else
-			aprint_normal(" (%dKB/s)", speed % 1000);
+			aprint_normal(", 8-bit");
+
+		if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
+			freq =
+			    scsipi_sync_factor_to_freq(periph->periph_period);
+			speed = freq;
+			if (periph->periph_mode & PERIPH_CAP_WIDE32)
+				speed *= 4;
+			else if (periph->periph_mode &
+			    (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
+				speed *= 2;
+			mbs = speed / 1000;
+			if (mbs > 0) {
+				aprint_normal(" (%d.%03dMB/s)", mbs,
+				    speed % 1000);
+			} else
+				aprint_normal(" (%dKB/s)", speed % 1000);
+		}
+
+		aprint_normal(" transfers");
+
+		if (periph->periph_mode & PERIPH_CAP_TQING)
+			aprint_normal(", tagged queueing");
+
+		aprint_normal("\n");
+		break;
+	case SCSIPI_BUSTYPE_BUSTYPE(
+	    SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_FC):
+	case SCSIPI_BUSTYPE_BUSTYPE(
+	    SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_SAS):
+		if (periph->periph_mode & PERIPH_CAP_TQING) {
+			aprint_normal_dev(periph->periph_dev,
+			    "tagged queueing\n");
+		}
+		break;
+	default:
+		/* nothing */
+		break;
 	}
-
-	aprint_normal(" transfers");
-
-	if (periph->periph_mode & PERIPH_CAP_TQING)
-		aprint_normal(", tagged queueing");
-
-	aprint_normal("\n");
 }
 
 /*

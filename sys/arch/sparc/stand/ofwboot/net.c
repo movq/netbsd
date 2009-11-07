@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.5 2009/05/07 00:01:31 roy Exp $	*/
+/*	$NetBSD: net.c,v 1.7.10.1 2012/07/21 00:04:56 riz Exp $	*/
 
 /*
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -60,10 +60,14 @@
 #include <lib/libsa/stand.h>
 #include <lib/libsa/net.h>
 #include <lib/libsa/netif.h>
+#include <lib/libsa/bootp.h>
+#include <lib/libsa/bootparam.h>
+#include <lib/libsa/nfs.h>
 
 #include <lib/libkern/libkern.h>
 
 #include "ofdev.h"
+#include "net.h"
 
 
 static int net_mountroot_bootparams(void);
@@ -114,6 +118,7 @@ net_close(struct of_dev *op)
 			netif_close(netdev_sock);
 			netdev_sock = -1;
 		}
+	return 0;
 }
 
 static void
@@ -174,6 +179,19 @@ net_mountroot_bootp(void)
 
 	return (0);
 }
+
+/*
+ * libsa's tftp_open expects a pointer to netdev_sock, i.e. an (int *),
+ * in f_devdata, a pointer to which gets handed down from devopen().
+ *
+ * Do not expect booting via different methods to have the same
+ * requirements or semantics.
+ *
+ * net_tftp_bootp uses net_mountroot_bootp because that incidentially does
+ * most of what it needs to do. It of course in no manner actually mounts
+ * anything, all that routine actually does is prepare the socket for the
+ * necessary net access, and print info for the user.
+ */
 
 int
 net_tftp_bootp(int **sock)

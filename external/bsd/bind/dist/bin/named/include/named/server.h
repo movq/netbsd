@@ -1,7 +1,7 @@
-/*	$NetBSD: server.h,v 1.1.1.2 2009/10/25 00:01:33 christos Exp $	*/
+/*	$NetBSD: server.h,v 1.3.4.1 2012/06/05 21:15:09 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: server.h,v 1.102 2009/10/12 20:48:11 each Exp */
+/* Id */
 
 #ifndef NAMED_SERVER_H
 #define NAMED_SERVER_H 1
@@ -56,9 +56,8 @@ struct ns_server {
 	dns_acl_t		*blackholeacl;
 	char *			statsfile;	/*%< Statistics file name */
 	char *			dumpfile;	/*%< Dump file name */
+	char *			secrootsfile;	/*%< Secroots file name */
 	char *			bindkeysfile;	/*%< bind.keys file name */
-	isc_boolean_t           managedkeys;    /*%< A managed-keys
-						     statement exists */
 	char *			recfile;	/*%< Recursive file name */
 	isc_boolean_t		version_set;	/*%< User has set version */
 	char *			version;	/*%< User-specified version */
@@ -231,9 +230,10 @@ ns_server_retransfercommand(ns_server_t *server, char *args);
  */
 
 isc_result_t
-ns_server_togglequerylog(ns_server_t *server);
+ns_server_togglequerylog(ns_server_t *server, char *args);
 /*%<
- * Toggle logging of queries, as in BIND 8.
+ * Enable/disable logging of queries.  (Takes "yes" or "no" argument,
+ * but can also be used as a toggle for backward comptibility.)
  */
 
 /*%
@@ -249,6 +249,12 @@ isc_result_t
 ns_server_dumpdb(ns_server_t *server, char *args);
 
 /*%
+ * Dump the current security roots to the secroots file.
+ */
+isc_result_t
+ns_server_dumpsecroots(ns_server_t *server, char *args);
+
+/*%
  * Change or increment the server debug level.
  */
 isc_result_t
@@ -261,10 +267,12 @@ isc_result_t
 ns_server_flushcache(ns_server_t *server, char *args);
 
 /*%
- * Flush a particular name from the server's cache(s)
+ * Flush a particular name from the server's cache.  If 'tree' is false,
+ * also flush the name from the ADB and badcache.  If 'tree' is true, also
+ * flush all the names under the specified name.
  */
 isc_result_t
-ns_server_flushname(ns_server_t *server, char *args);
+ns_server_flushnode(ns_server_t *server, char *args, isc_boolean_t tree);
 
 /*%
  * Report the server's status.
@@ -292,11 +300,20 @@ ns_server_freeze(ns_server_t *server, isc_boolean_t freeze, char *args,
 		 isc_buffer_t *text);
 
 /*%
- * Update a zone's DNSKEY set from the key repository, and re-sign the
- * zone if there were any changes.
+ * Dump zone updates to disk, optionally removing the journal file
  */
 isc_result_t
-ns_server_sign(ns_server_t *server, char *args);
+ns_server_sync(ns_server_t *server, char *args, isc_buffer_t *text);
+
+/*%
+ * Update a zone's DNSKEY set from the key repository.  If
+ * the command that triggered the call to this function was "sign",
+ * then force a full signing of the zone.  If it was "loadkeys",
+ * then don't sign the zone; any needed changes to signatures can
+ * take place incrementally.
+ */
+isc_result_t
+ns_server_rekey(ns_server_t *server, char *args);
 
 /*%
  * Dump the current recursive queries.
@@ -316,4 +333,21 @@ ns_add_reserved_dispatch(ns_server_t *server, const isc_sockaddr_t *addr);
 isc_result_t
 ns_server_validation(ns_server_t *server, char *args);
 
+/*%
+ * Add a zone to a running process
+ */
+isc_result_t
+ns_server_add_zone(ns_server_t *server, char *args);
+
+/*%
+ * Deletes a zone from a running process
+ */
+isc_result_t
+ns_server_del_zone(ns_server_t *server, char *args);
+
+/*%
+ * Lists the status of the signing records for a given zone.
+ */
+isc_result_t
+ns_server_signing(ns_server_t *server, char *args, isc_buffer_t *text);
 #endif /* NAMED_SERVER_H */

@@ -1,4 +1,4 @@
-# $NetBSD: md.mmeye,v 1.25 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.mmeye,v 1.30 2011/07/19 15:17:20 dyoung Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/mmeye				comp-c-include
 ./usr/include/mmeye/_G_config.h			comp-obsolete		obsolete
@@ -7,7 +7,7 @@
 ./usr/include/mmeye/asm.h			comp-c-include
 ./usr/include/mmeye/bootinfo.h			comp-obsolete		obsolete
 ./usr/include/mmeye/bswap.h			comp-c-include
-./usr/include/mmeye/bus.h			comp-c-include
+./usr/include/mmeye/bus.h			comp-obsolete		obsolete
 ./usr/include/mmeye/cdefs.h			comp-c-include
 ./usr/include/mmeye/coff_machdep.h		comp-c-include
 ./usr/include/mmeye/conf.h			comp-obsolete		obsolete
@@ -52,10 +52,12 @@
 ./usr/include/mmeye/setjmp.h			comp-c-include
 ./usr/include/mmeye/shbvar.h			comp-obsolete		obsolete
 ./usr/include/mmeye/signal.h			comp-c-include
-./usr/include/mmeye/stdarg.h			comp-c-include
+./usr/include/mmeye/stdarg.h			comp-obsolete		obsolete
 ./usr/include/mmeye/trap.h			comp-obsolete		obsolete
 ./usr/include/mmeye/types.h			comp-c-include
-./usr/include/mmeye/varargs.h			comp-c-include
+./usr/include/mmeye/varargs.h			comp-obsolete		obsolete
 ./usr/include/mmeye/vmparam.h			comp-c-include
 ./usr/include/mmeye/wchar_limits.h		comp-c-include
 ./usr/include/sh3/db_disasm.h			comp-obsolete		obsolete
+./usr/libdata/debug/usr/mdec/bootelf.debug	-unknown-		debug
+./usr/libdata/debug/usr/mdec/osloader.debug	-unknown-		debug

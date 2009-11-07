@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_mmap.c,v 1.132 2009/11/01 11:16:32 uebayasi Exp $	*/
+/*	$NetBSD: uvm_mmap.c,v 1.144 2012/01/27 19:48:41 para Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -19,12 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the Charles D. Cranor,
- *	Washington University, University of California, Berkeley and
- *	its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -51,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.132 2009/11/01 11:16:32 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.144 2012/01/27 19:48:41 para Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_pax.h"
@@ -64,8 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.132 2009/11/01 11:16:32 uebayasi Exp 
 #include <sys/resourcevar.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/conf.h>
 #include <sys/stat.h>
@@ -74,9 +67,9 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.132 2009/11/01 11:16:32 uebayasi Exp 
 #include <sys/verified_exec.h>
 #endif /* NVERIEXEC > 0 */
  
-#ifdef PAX_MPROTECT
+#if defined(PAX_ASLR) || defined(PAX_MPROTECT)
 #include <sys/pax.h>
-#endif /* PAX_MPROTECT */
+#endif /* PAX_ASLR || PAX_MPROTECT */
 
 #include <miscfs/specfs/specdev.h>
 
@@ -232,7 +225,7 @@ sys_mincore(struct lwp *l, const struct sys_mincore_args *uap,
 		if (amap != NULL)
 			amap_lock(amap);
 		if (uobj != NULL)
-			mutex_enter(&uobj->vmobjlock);
+			mutex_enter(uobj->vmobjlock);
 
 		for (/* nothing */; start < lim; start += PAGE_SIZE, vec++) {
 			pgi = 0;
@@ -268,7 +261,7 @@ sys_mincore(struct lwp *l, const struct sys_mincore_args *uap,
 			(void) subyte(vec, pgi);
 		}
 		if (uobj != NULL)
-			mutex_exit(&uobj->vmobjlock);
+			mutex_exit(uobj->vmobjlock);
 		if (amap != NULL)
 			amap_unlock(amap);
 	}
@@ -402,7 +395,7 @@ sys_mmap(struct lwp *l, const struct sys_mmap_args *uap, register_t *retval)
 			fd_putfile(fd);
 			return (EINVAL);
 		}
-		if (vp->v_type != VCHR && (pos + size) < pos) {
+		if (vp->v_type != VCHR && (off_t)(pos + size) < pos) {
 			fd_putfile(fd);
 			return (EOVERFLOW);		/* no offset wrapping */
 		}
@@ -467,8 +460,10 @@ sys_mmap(struct lwp *l, const struct sys_mmap_args *uap, register_t *retval)
 			 * EPERM.
 			 */
 			if (fp->f_flag & FWRITE) {
-				if ((error =
-				    VOP_GETATTR(vp, &va, l->l_cred))) {
+				vn_lock(vp, LK_SHARED | LK_RETRY);
+				error = VOP_GETATTR(vp, &va, l->l_cred);
+				VOP_UNLOCK(vp);
+				if (error) {
 					fd_putfile(fd);
 					return (error);
 				}
@@ -706,7 +701,7 @@ sys_munmap(struct lwp *l, const struct sys_munmap_args *uap, register_t *retval)
 		return (EINVAL);
 	}
 #endif
-	uvm_unmap_remove(map, addr, addr + size, &dead_entries, NULL, 0);
+	uvm_unmap_remove(map, addr, addr + size, &dead_entries, 0);
 	vm_map_unlock(map);
 	if (dead_entries != NULL)
 		uvm_unmap_detach(dead_entries, 0);
@@ -1189,11 +1184,11 @@ uvm_mmap(struct vm_map *map, vaddr_t *addr, vsize_t size, vm_prot_t prot,
 			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 			vp->v_vflag |= VV_MAPPED;
 			if (needwritemap) {
-				mutex_enter(&vp->v_interlock);
+				mutex_enter(vp->v_interlock);
 				vp->v_iflag |= VI_WRMAP;
-				mutex_exit(&vp->v_interlock);
+				mutex_exit(vp->v_interlock);
 			}
-			VOP_UNLOCK(vp, 0);
+			VOP_UNLOCK(vp);
 		}
 	}
 

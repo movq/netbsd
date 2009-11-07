@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iy.c,v 1.86 2009/05/12 09:10:15 cegger Exp $	*/
+/*	$NetBSD: if_iy.c,v 1.90 2012/02/02 19:43:04 tls Exp $	*/
 /* #define IYDEBUG */
 /* #define IYMEMDEBUG */
 
@@ -39,11 +39,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.86 2009/05/12 09:10:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.90 2012/02/02 19:43:04 tls Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,9 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.86 2009/05/12 09:10:15 cegger Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/endian.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -66,10 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.86 2009/05/12 09:10:15 cegger Exp $");
 
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -131,9 +125,7 @@ struct iy_softc {
 	int sc_debug;
 #endif
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 void iywatchdog(struct ifnet *);
@@ -370,10 +362,8 @@ iyattach(device_t parent, device_t self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, iyintr, sc);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 
 	temp = bus_space_read_1(iot, ioh, INT_NO_REG);
 	bus_space_write_1(iot, ioh, INT_NO_REG, (temp & 0xf8) | sc->mappedirq);
@@ -689,10 +679,7 @@ iystart(struct ifnet *ifp)
 			continue;
         	}
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		avail = sc->tx_start - sc->tx_end;
 		if (avail <= 0)
@@ -988,9 +975,7 @@ iyintr(void *arg)
 		bus_space_write_1(iot, ioh, STATUS_REG, TX_INT);
 	}
 
-#if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, status);
-#endif
 
 	return 1;
 }
@@ -1060,10 +1045,7 @@ iyget(struct iy_softc *sc, bus_space_tag_t iot, bus_space_handle_t ioh, int rxle
 	++ifp->if_ipackets;
 
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, top);
-#endif
+	bpf_mtap(ifp, top);
 	(*ifp->if_input)(ifp, top);
 	return;
 

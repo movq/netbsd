@@ -277,16 +277,18 @@ The remedy is to increase the Postfix milter_protocol version number. See,
 however, the limitations section below for features that aren't supported by
 Postfix.
 
-If the Postfix milter_protocol setting specifies a too high version, the
-libmilter library simply hangs up without logging a warning, and you see a
-Postfix warning message like one of the following:
+With Postfix 2.7 and earlier, if the Postfix milter_protocol setting specifies
+a too high version, the libmilter library simply hangs up without logging a
+warning, and you see a Postfix warning message like one of the following:
 
     warning: milter inet:host:port: can't read packet header: Unknown error : 0
     warning: milter inet:host:port: can't read packet header: Success
     warning: milter inet:host:port: can't read SMFIC_DATA reply packet header:
     No such file or directory
 
-The remedy is to lower the Postfix milter_protocol version number.
+The remedy is to lower the Postfix milter_protocol version number. Postfix 2.8
+and later will automatically turn off protocol features that the application's
+libmilter library does not expect.
 
 MMiilltteerr pprroottooccooll ttiimmeeoouuttss
 
@@ -337,8 +339,11 @@ Sendmail. See the workarounds section below for solutions.
     |_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |
     |{client_addr}       |Always                   |Client IP address         |
     |_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |
-    |{client_connections}|CONNECT                  |Connection concurrency for|
-    |                    |                         |this client               |
+    |                    |                         |Connection concurrency for|
+    |                    |                         |this client (zero if the  |
+    |{client_connections}|CONNECT                  |client is excluded from   |
+    |                    |                         |all smtpd_client_*        |
+    |                    |                         |limits).                  |
     |_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _|_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |
     |                    |                         |Client hostname           |
     |                    |                         |When address -> name      |
@@ -468,7 +473,7 @@ WWoorrkkaarroouunnddss
     queue ID in the message header.
 
     To fix the ugly message header, you will need to add code that looks up the
-    Postfix queue ID at some later point im time. The example below adds the
+    Postfix queue ID at some later point in time. The example below adds the
     lookup after the end-of-message.
 
       o Edit the filter source file (typically named xxx-filter/xxx-filter.c or

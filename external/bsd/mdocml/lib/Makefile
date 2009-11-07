@@ -1,5 +1,5 @@
-# $NetBSD: Makefile,v 1.1 2009/10/21 18:04:52 joerg Exp $
+# $NetBSD: Makefile,v 1.3 2011/04/15 14:36:30 joerg Exp $
 
-SUBDIR=	libman libmdoc
+SUBDIR=	libmandoc
 
 .include <bsd.subdir.mk>

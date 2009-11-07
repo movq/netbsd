@@ -1,4 +1,4 @@
-/*	$NetBSD: getchar.S,v 1.2 2008/04/28 20:23:31 martin Exp $	*/
+/*	$NetBSD: getchar.S,v 1.5 2011/03/26 15:49:26 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -33,10 +33,9 @@
 #include <mips/cpuregs.h>
 #include <machine/dec_prom.h>
 
+	.set	reorder		# make as(1) handle hazard and BDslot
 LEAF(getchar)
 	lw	v0, _C_LABEL(callv)	# get pointer to call back vectors
 	lw	v0, 0x24(v0)	# offset for callv->_getchar
-	nop
 	j	v0		# call PROM getchar
-	nop
 END(getchar)

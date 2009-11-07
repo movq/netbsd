@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.booters,v 1.78 2009/03/30 09:22:52 tsutsui Exp $
+#	$NetBSD: Makefile.booters,v 1.85 2011/06/20 06:52:37 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -15,18 +15,11 @@ LIBC=		# nothing
 .if defined(HAVE_GCC)
 .if ${MACHINE_ARCH} == "x86_64"
 CPUFLAGS= -m32
-.if ${HAVE_GCC} != 3
-CPUFLAGS+= -Wno-attributes
-.endif
 .else
-.if ${HAVE_GCC} == 3
-CPUFLAGS=  -mcpu=i386
-.else
-CPUFLAGS=  -march=i386 -mtune=i386 -Wno-attributes
+CPUFLAGS=  -march=i386 -mtune=i386
 .endif
 .endif
-.endif
-COPTS=	-Os -ffreestanding
+COPTS=	${OPT_SIZE.${ACTIVE_CC}}
 
 I386_STAND_DIR?= $S/arch/i386/stand
 
@@ -91,21 +84,17 @@ I386DIR= ${I386_STAND_DIR}/lib
 .include "${I386DIR}/Makefile.inc"
 LIBI386=		${I386LIB}
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
 
-.if ${OBJECT_FMT} == "ELF"
 LDFLAGS+=-Wl,-M -Wl,-e,start 	# -N does not work properly.
-.else
-LDFLAGS+=-Wl,-N -Wl,-M -Wl,-e,_start 
-.endif
 
 LIBLIST=${LIBI386} ${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBI386} ${LIBSA}
 
 vers.c: ${VERSIONFILE} ${SOURCES} ${S}/conf/newvers_stand.sh
-	${HOST_SH} ${S}/conf/newvers_stand.sh -DM ${VERSIONFILE} x86 ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${VERSIONFILE} x86 ${NEWVERSWHAT}
 
 CLEANFILES+= ${BASE}.sym
 ${BASE}.sym: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386}
@@ -120,7 +109,7 @@ ${BASE}.rom: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386}
 	    ${STARTFILE} ${OBJS} ${LIBLIST} >${BASE}.list
 	${OBJCOPY} -O binary ${BASE}.sym ${BASE}.rom.tmp
 	${GENPROM} ${ROM_SIZE} < ${BASE}.rom.tmp > ${BASE}.rom || \
-	    rm -f ${BASE}.rom
+	    ( rm -f ${BASE}.rom && false )
 	rm -f ${BASE}.rom.tmp
 
 CLEANFILES+= ${BASE}.com

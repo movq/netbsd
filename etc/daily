@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: daily,v 1.72 2009/03/29 16:04:15 perry Exp $
+#	$NetBSD: daily,v 1.80.2.5 2012/08/08 14:49:24 martin Exp $
 #	@(#)daily	8.2 (Berkeley) 1/25/94
 #
 
@@ -11,8 +11,8 @@ if [ -s /etc/daily.conf ]; then
 	. /etc/daily.conf
 fi
 
-host=`hostname`
-date=`date`
+host="$(hostname)"
+date="$(date)"
 rcvar_manpage='daily.conf(5)'
 
 echo "To: ${MAILTO:-root}"
@@ -30,8 +30,14 @@ if [ -z "$MAILTO" -o "$USER" != "root" ]; then
 	MAILTO=root
 fi
 
+if [ -n "${pkgdb_dir}" ]; then
+    echo "WARNING: Setting pkgdb_dir in daily.conf(5) is deprecated"
+    echo "WARNING: Please define PKG_DBDIR in pkg_install.conf(5) instead"
+    _compat_K_flag="-K ${pkgdb_dir}"
+fi
+
 echo ""
-echo "Uptime: " `uptime`
+echo "Uptime: $(uptime)"
 
 # Uncommenting any of the finds below would open up a race condition attack
 # based on symlinks, potentially allowing removal of any file on the system.
@@ -80,10 +86,19 @@ TMP2=daily2.$$
 
 if checkyesno find_core; then
 	# Turn "foo !bar bax" into "-fstype foo -o ! -fstype bar -o -fstype bax"
-	ignfstypes=`echo $find_core_ignore_fstypes | \
+	ignfstypes="$(echo $find_core_ignore_fstypes | \
 		sed -e's/\(!*\)\([^[:space:]]\{1,\}\)/-o \1 -fstype \2/g' \
-		    -e's/^-o //'`
+		    -e's/^-o //')"
+	# Turn "foo bar" into "( -path foo -o -path bar ) -prune -o"
+	# Set ignpaths empty if no find_core_ignore_paths given
+	if [ -n "$find_core_ignore_paths" ]; then
+		ignpaths="$(printf " -o -path %s" $find_core_ignore_paths)"
+		ignpaths="( ${ignpaths# -o } ) -prune -o"
+	else
+		ignpaths=""
+	fi
 	find / \( $ignfstypes \) -prune -o \
+		${ignpaths} \
 		-name 'lost+found' -prune -o \
 		\( -name '*.core' -o -name 'core' \) -type f -print > $TMP
 #		\( -name '[#,]*' -o -name '.#*' -o -name a.out \
@@ -170,7 +185,7 @@ if checkyesno check_disks; then
 	fi
 	rm -f $TMP $TMP2
 	touch $TMP2
-	for dev in `iostat -x | awk '/^raid/ { print $1 }'`; do
+	for dev in $(iostat -x | awk '/^raid/ { print $1 }'); do
 		raidctl -s $dev | awk '/^.*: failed$/ {print $0}' > $TMP
 		if [ -s $TMP ]; then
 			echo "$dev:" >> $TMP2
@@ -231,14 +246,27 @@ if checkyesno run_fsck; then
 	fsck -n -f ${run_fsck_flags} | grep -v '^\*\* Phase'
 fi
 
-echo ""
 if checkyesno run_rdist && [ -f /etc/Distfile ]; then
+	echo ""
 	echo "Running rdist:"
 	if [ -d /var/log/rdist ]; then
-		logf=`date +%Y.%b.%d`
+		logf="$(date +%Y.%b.%d)"
 		rdist -f /etc/Distfile 2>&1 | tee /var/log/rdist/$logf
 	else
 		rdist -f /etc/Distfile 
+	fi
+fi
+
+if pkg_info ${_compat_K_flag} -q -E '*'; then
+	if [ -z "fetch_pkg_vulnerabilities" ]; then
+		echo "fetch_pkg_vulnerabilities is not set in daily.conf(5)."
+		echo "You should set it to YES to enable vulnerability checks"
+		echo "or set it to NO to get rid of this warning."
+	elif checkyesno fetch_pkg_vulnerabilities; then
+		echo ""
+		echo "Fetching package vulnerabilities database:"
+		( umask 022 && pkg_admin ${_compat_K_flag} \
+		    fetch-pkg-vulnerabilities -u )
 	fi
 fi
 
@@ -254,8 +282,13 @@ if checkyesno run_security; then
 		fi
 	fi
 	if [ -s "$SECOUT" ]; then
-		mail -s "$host daily insecurity output for $date" \
-		    "$MAILTO" < "$SECOUT"
+		if checkyesno separate_security_email; then
+			mail -s "$host daily insecurity output for $date" $MAILTO < $SECOUT
+		else
+		    echo ""
+		    echo "$host daily insecurity output for $date:"
+		    cat $SECOUT
+		fi
 	fi
 fi
 
@@ -264,6 +297,14 @@ if checkyesno run_skeyaudit; then
 		echo ""
 		echo "Checking remaining s/key OTPs:"
 		skeyaudit
+	fi
+fi
+
+if checkyesno run_makemandb; then
+	if [ -f /etc/man.conf -a -x /usr/sbin/makemandb ]; then
+		echo ""
+		echo "Updating man page index:"
+		(umask 022; nice -n 5 /usr/sbin/makemandb -q)
 	fi
 fi
 

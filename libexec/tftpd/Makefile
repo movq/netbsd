@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.12 2009/03/16 02:24:57 lukem Exp $
+#	$NetBSD: Makefile,v 1.14 2011/10/13 17:23:29 plunky Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
 
-WARNS?=	2		# XXX: setjmp clobber warnings
+WARNS?=	4
 
 .include <bsd.own.mk>
 

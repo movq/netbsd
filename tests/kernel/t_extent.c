@@ -1,4 +1,4 @@
-/* $NetBSD: t_extent.c,v 1.1 2009/02/20 21:39:57 jmmv Exp $ */
+/* $NetBSD: t_extent.c,v 1.4 2012/01/27 18:53:10 para Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_extent.c,v 1.1 2009/02/20 21:39:57 jmmv Exp $");
+__RCSID("$NetBSD: t_extent.c,v 1.4 2012/01/27 18:53:10 para Exp $");
 
 #include <sys/types.h>
 #include <sys/queue.h>
@@ -48,7 +48,7 @@ static struct extent *ex;
 
 #define h_create(name, start, end, flags) \
 	ATF_REQUIRE((ex = extent_create(name, \
-	    start, end, 0, 0, 0, flags)) != NULL);
+	    start, end, 0, 0, flags)) != NULL);
 
 #define h_alloc_region(start, size) \
 	ATF_REQUIRE_EQ_MSG(ret = extent_alloc_region(ex, \
@@ -82,7 +82,7 @@ h_alloc_subregion(u_long substart, u_long subend, u_long size,
 
 static void
 h_require(const char *name, u_long start,
-	u_long end, u_long flags, const char *exp)
+	u_long end, int flags, const char *exp)
 {
 	char buf[4096];
 	struct extent_region *rp;
@@ -95,7 +95,7 @@ h_require(const char *name, u_long start,
 	ATF_REQUIRE_EQ_MSG(ex->ex_end, end,
 	    "expected: %#lx, got: %#lx", end, ex->ex_end);
 	ATF_REQUIRE_EQ_MSG(ex->ex_flags, flags,
-	    "expected: %#lx, got: %#lx", flags, ex->ex_flags);
+	    "expected: %#x, got: %#x", flags, ex->ex_flags);
 
 	(void)memset(buf, 0, sizeof(buf));
 	LIST_FOREACH(rp, &ex->ex_regions, er_link)

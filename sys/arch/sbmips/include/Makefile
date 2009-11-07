@@ -1,8 +1,8 @@
-# $NetBSD: Makefile,v 1.11 2009/08/12 23:29:20 matt Exp $
+# $NetBSD: Makefile,v 1.13 2011/07/17 23:53:41 dyoung Exp $
 
 INCSDIR= /usr/include/sbmips
 
-# XXXcgd need local: bus.h pci_machdep.h
+# XXXcgd need local: pci_machdep.h
 # XXXcgd need export: intr.h
 
 INCS=	ansi.h asm.h \
@@ -18,9 +18,9 @@ INCS=	ansi.h asm.h \
 	math.h mcontext.h mips_opcode.h mutex.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \
 	reg.h regdef.h regnum.h reloc.h rwlock.h \
-	setjmp.h signal.h stdarg.h \
+	setjmp.h signal.h \
 	trap.h types.h \
-	varargs.h vmparam.h \
+	vmparam.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

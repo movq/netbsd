@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_carp.c,v 1.39 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: ip_carp.c,v 1.47.4.1 2012/04/02 18:25:35 riz Exp $	*/
 /*	$OpenBSD: ip_carp.c,v 1.113 2005/11/04 08:11:54 mcbride Exp $	*/
 
 /*
@@ -27,8 +27,10 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_inet.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.39 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.47.4.1 2012/04/02 18:25:35 riz Exp $");
 
 /*
  * TODO:
@@ -53,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.39 2009/09/16 15:23:05 pooka Exp $");
 #include <sys/ucred.h>
 #include <sys/syslog.h>
 #include <sys/acct.h>
+#include <sys/cprng.h>
 
 #include <sys/cpu.h>
 
@@ -64,8 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.39 2009/09/16 15:23:05 pooka Exp $");
 #include <net/netisr.h>
 #include <net/net_stats.h>
 #include <netinet/if_inarp.h>
-
-#include <machine/stdarg.h>
 
 #if NFDDI > 0
 #include <net/if_fddi.h>
@@ -92,10 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.39 2009/09/16 15:23:05 pooka Exp $");
 #include <netinet6/scope6_var.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/sha1.h>
 
@@ -803,9 +801,7 @@ carp_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_broadcastaddr = etherbroadcastaddr;
 	carp_set_enaddr(sc);
 	LIST_INIT(&sc->sc_ac.ec_multiaddrs);
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_EN10MB, ETHER_HDR_LEN);
-#endif
+	bpf_attach(ifp, DLT_EN10MB, ETHER_HDR_LEN);
 	return (0);
 }
 
@@ -882,9 +878,7 @@ carp_prepare_ad(struct mbuf *m, struct carp_softc *sc,
 {
 	if (sc->sc_init_counter) {
 		/* this could also be seconds since unix epoch */
-		sc->sc_counter = arc4random();
-		sc->sc_counter = sc->sc_counter << 32;
-		sc->sc_counter += arc4random();
+		sc->sc_counter = cprng_fast64();
 	} else
 		sc->sc_counter++;
 
@@ -1152,7 +1146,6 @@ carp_send_arp(struct carp_softc *sc)
 
 		in = &ifatoia(ifa)->ia_addr.sin_addr;
 		arprequest(sc->sc_carpdev, in, in, CLLADDR(sc->sc_if.if_sadl));
-		DELAY(1000);	/* XXX */
 	}
 	splx(s);
 }
@@ -1174,7 +1167,6 @@ carp_send_na(struct carp_softc *sc)
 		in6 = &ifatoia6(ifa)->ia_addr.sin6_addr;
 		nd6_na_output(sc->sc_carpdev, &mcast, in6,
 		    ND_NA_FLAG_OVERRIDE, 1, NULL);
-		DELAY(1000);	/* XXX */
 	}
 	splx(s);
 }
@@ -1371,10 +1363,7 @@ carp_input(struct mbuf *m, u_int8_t *shost, u_int8_t *dhost, u_int16_t etype)
 
 	m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 	ifp->if_ipackets++;
 	ether_input(ifp, m);
 	return (0);
@@ -2155,7 +2144,7 @@ carp_ether_addmulti(struct carp_softc *sc, struct ifreq *ifr)
 	memcpy(&mc->mc_addr, sa, sa->sa_len);
 	LIST_INSERT_HEAD(&sc->carp_mc_listhead, mc, mc_entries);
 
-	error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, ifr);
+	error = if_mcast_op(ifp, SIOCADDMULTI, sa);
 	if (error != 0)
 		goto ioctl_failed;
 
@@ -2207,7 +2196,7 @@ carp_ether_delmulti(struct carp_softc *sc, struct ifreq *ifr)
 		return (error);
 
 	/* We no longer use this multicast address.  Tell parent so. */
-	error = (*ifp->if_ioctl)(ifp, SIOCDELMULTI, ifr);
+	error = if_mcast_op(ifp, SIOCDELMULTI, sa);
 	if (error == 0) {
 		/* And forget about this address. */
 		LIST_REMOVE(mc, mc_entries);
@@ -2226,22 +2215,12 @@ carp_ether_purgemulti(struct carp_softc *sc)
 {
 	struct ifnet *ifp = sc->sc_carpdev;		/* Parent. */
 	struct carp_mc_entry *mc;
-	union {
-		struct ifreq ifreq;
-		struct {
-			char ifr_name[IFNAMSIZ];
-			struct sockaddr_storage ifr_ss;
-		} ifreq_storage;
-	} u;
-	struct ifreq *ifr = &u.ifreq;
 
 	if (ifp == NULL)
 		return;
 
-	memcpy(ifr->ifr_name, ifp->if_xname, IFNAMSIZ);
 	while ((mc = LIST_FIRST(&sc->carp_mc_listhead)) != NULL) {
-		memcpy(&ifr->ifr_addr, &mc->mc_addr, mc->mc_addr.ss_len);
-		(void)(*ifp->if_ioctl)(ifp, SIOCDELMULTI, ifr);
+		(void)if_mcast_op(ifp, SIOCDELMULTI, sstosa(&mc->mc_addr));
 		LIST_REMOVE(mc, mc_entries);
 		free(mc, M_DEVBUF);
 	}

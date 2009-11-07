@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.14 2009/01/31 14:22:21 tsutsui Exp $	*/
+/*	$NetBSD: boot.c,v 1.17 2011/12/25 06:09:09 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto
@@ -53,7 +53,7 @@ static void help(void);
 static int get_scsi_host_adapter(void);
 static void doboot(const char *, int);
 static void boot(char *);
-static void ls(char *);
+static void cmd_ls(char *);
 int bootmenu(void);
 void bootmain(int);
 extern int detectmpu(void);
@@ -111,7 +111,7 @@ doboot(const char *file, int flags)
 
 	loadflag = LOAD_KERNEL;
 	if (file[0] == 'f')
-		loadflag &= ~LOAD_NOTE;
+		loadflag &= ~LOAD_BACKWARDS;
 		
 	marks[MARK_START] = 0x100000;
 	if ((fd = loadfile(file, marks, loadflag)) == -1) {
@@ -201,7 +201,7 @@ boot(char *arg)
 }
 
 static void
-ls(char *arg)
+cmd_ls(char *arg)
 {
 	char filename[80];
 
@@ -217,7 +217,7 @@ ls(char *arg)
 		if (*(strchr(arg, ':')+1) == 0)
 			strcat(filename, "/");
 	}
-	ufs_ls(filename);
+	ls(filename);
 	devopen_open_dir = 0;
 }
 
@@ -266,7 +266,7 @@ bootmenu(void)
 		else if ((strcmp("halt", p) == 0) ||(strcmp("reboot", p) == 0))
 			exit(0);
 		else if (strcmp("ls", p) == 0)
-			ls(options);
+			cmd_ls(options);
 		else
 			printf("Unknown command %s\n", p);
 	}
@@ -275,8 +275,6 @@ bootmenu(void)
 
 extern const char bootprog_rev[];
 extern const char bootprog_name[];
-extern const char bootprog_date[];
-extern const char bootprog_maker[];
 
 /*
  * Arguments from the boot block:
@@ -321,8 +319,6 @@ bootmain(int bootdev)
 	default:
 		printf("Warning: unknown boot device: %x\n", bootdev);
 	}
-	print_title("%s, Revision %s\n\t(%s, %s)",
-		    bootprog_name, bootprog_rev,
-		    bootprog_maker, bootprog_date);
+	print_title("%s, Revision %s\n", bootprog_name, bootprog_rev);
 	bootmenu();
 }

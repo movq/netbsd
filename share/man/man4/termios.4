@@ -1,4 +1,4 @@
-.\"	$NetBSD: termios.4,v 1.32 2006/10/13 20:31:27 wiz Exp $
+.\"	$NetBSD: termios.4,v 1.36 2011/10/01 08:50:28 njoly Exp $
 .\"
 .\" Copyright (c) 1991, 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -243,7 +243,7 @@ Each terminal device file has associated with it an input queue, into
 which incoming data is stored by the system before being read by a
 process.
 The system imposes a limit,
-.Pf \&{ Dv MAX_INPUT Ns \&} ,
+.Brq Dv MAX_INPUT ,
 on the number of
 bytes that may be stored in the input queue.
 The behavior of the system
@@ -335,12 +335,12 @@ It is not, however, necessary to
 read a whole line at once; any number of bytes, even one, may be
 requested in a read without losing information.
 .Pp
-.Pf \&{ Dv MAX_CANON Ns \&}
+.Brq Dv MAX_CANON
 is a limit on the
 number of bytes in a line.
 The behavior of the system when this limit is
 exceeded is the same as when the input queue limit
-.Pf \&{ Dv MAX_INPUT Ns \&} ,
+.Brq Dv MAX_INPUT ,
 is exceeded.
 .Pp
 Erase and kill processing occur when either of two special characters,
@@ -349,8 +349,8 @@ the
 and
 .Dv KILL
 characters (see the
-.Sx "Special Characters section" ) ,
-is received.
+.Sx "Special Characters"
+section), is received.
 This processing affects data in the input queue that has not yet been
 delimited by a newline
 .Dv NL ,
@@ -400,7 +400,7 @@ transmissions.
 If
 .Dv VMIN
 is greater than
-.Dv \&{ Dv MAX_INPUT Ns \&} ,
+.Brq Dv MAX_INPUT ,
 the response to the
 request is undefined.
 The four possible values for
@@ -774,7 +774,7 @@ Special Control Characters.
 Special
 character functions associated with changeable special control characters
 can be disabled individually by setting their value to
-.Dv {_POSIX_VDISABLE};
+.Brq Dv _POSIX_VDISABLE ;
 see
 .Sx "Special Control Characters" .
 .Pp
@@ -829,7 +829,7 @@ characteristics
 do so by using the
 .Nm
 structure as defined in the header
-.Aq Pa termios.h .
+.In termios.h .
 This structure contains minimally four scalar elements of bit flags
 and one array of special characters.
 The scalar flag elements are named:
@@ -853,7 +853,7 @@ following masks:
 .It Dv IGNBRK
 /* ignore BREAK condition */
 .It Dv BRKINT
-/* map BREAK to SIGINTR */
+/* map BREAK to SIGINT */
 .It Dv IGNPAR
 /* ignore (discard) parity errors */
 .It Dv PARMRK
@@ -1520,7 +1520,7 @@ This table lists the array index, the corresponding special character,
 and the system default value.
 For an accurate list of
 the system defaults, consult the header file
-.Aq Pa ttydefaults.h .
+.In ttydefaults.h .
 .Pp
 .Bl -column "Index Name" "Special Character" -offset indent -compact
 .It Em "Index Name	Special Character	Default Value"
@@ -1548,14 +1548,14 @@ If the
 value of one of the changeable special control characters (see
 .Sx "Special Characters" )
 is
-.Dv {_POSIX_VDISABLE} ,
+.Brq Dv _POSIX_VDISABLE ,
 that function is disabled; that is, no input
 data is recognized as the disabled special character.
 If
 .Dv ICANON
 is
 not set, the value of
-.Dv {_POSIX_VDISABLE}
+.Brq Dv _POSIX_VDISABLE
 has no special meaning for the
 .Dv VMIN
 and
@@ -1568,7 +1568,7 @@ The initial values of the flags and control characters
 after
 .Xr open 2
 is set according to the values in the header
-.Aq Pa sys/ttydefaults.h .
+.In sys/ttydefaults.h .
 .Sh SEE ALSO
 .Xr tcsendbreak 3 ,
 .Xr tcsetattr 3

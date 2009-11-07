@@ -1,4 +1,4 @@
-/*	$NetBSD: rd.c,v 1.27 2009/09/12 18:46:42 tsutsui Exp $ */
+/*	$NetBSD: rd.c,v 1.30 2012/02/02 19:43:02 tls Exp $ */
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -30,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -67,53 +68,11 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: rd.c 1.44 92/12/26$
- *
- *	@(#)rd.c	8.2 (Berkeley) 5/19/94
- */
-
-/*
  * CS80/SS80 disk driver
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rd.c,v 1.27 2009/09/12 18:46:42 tsutsui Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: rd.c,v 1.30 2012/02/02 19:43:02 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -130,9 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: rd.c,v 1.27 2009/09/12 18:46:42 tsutsui Exp $");
 #include <sys/proc.h>
 #include <sys/stat.h>
 
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <dev/gpib/gpibvar.h>
 #include <dev/gpib/cs80busvar.h>
@@ -181,9 +138,7 @@ struct	rd_softc {
 
 	struct	callout sc_restart_ch;
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 #define RDUNIT(dev)			DISKUNIT(dev)
@@ -451,13 +406,11 @@ rdattach(device_t parent, device_t self, void *aux)
 	if (rddebug & RDB_ERROR)
 		rderrthresh = 0;
 #endif
-#if NRND > 0
 	/*
 	 * attach the device into the random source list
 	 */
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 			  RND_TYPE_DISK, 0);
-#endif
 }
 
 /*
@@ -837,9 +790,7 @@ rdintr(struct rd_softc *sc)
 	}
 	if (rdfinish(sc, bp) != NULL)
 		rdustart(sc);
-#if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, bp->b_blkno);
-#endif
 }
 
 /*

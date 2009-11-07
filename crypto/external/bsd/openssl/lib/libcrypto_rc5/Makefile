@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/07/19 23:30:57 christos Exp $
+#	$NetBSD: Makefile,v 1.2.8.1 2012/08/14 07:57:26 riz Exp $
 
 # RCSid:
 #	Id: Makefile,v 1.33 1998/11/11 11:53:53 sjg Exp
@@ -16,7 +16,7 @@
 #	sjg@quick.com.au
 #
 
-NOPIC=		# defined
+#NOPIC=		# defined
 #NOPROFILE=	# defined
 #NOLINT=	# defined
 
@@ -37,11 +37,6 @@ CRYPTODIST=	${NETBSDSRCDIR}/crypto
 CPPFLAGS+=	-I${OPENSSLSRC}/crypto/rc5
 SRCS+=		rc5_skey.c rc5_enc.c e_rc5.c c_allc.c
 
-# XXX
-.if ${OBJECT_FMT} == "ELF"
 AFLAGS+=	-DELF
-.else
-AFLAGS+=	-DOUT
-.endif
 
 .include <bsd.lib.mk>

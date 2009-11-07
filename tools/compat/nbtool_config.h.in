@@ -1,6 +1,6 @@
 /* nbtool_config.h.in.  Generated automatically from configure.ac by autoheader.  */
 
-/*      $NetBSD: nbtool_config.h.in,v 1.23 2009/06/16 22:35:34 christos Exp $    */
+/*      $NetBSD: nbtool_config.h.in,v 1.27 2011/11/03 14:13:53 joerg Exp $    */
  
 #ifndef __NETBSD_NBTOOL_CONFIG_H__
 #define __NETBSD_NBTOOL_CONFIG_H__
@@ -267,6 +267,9 @@
 /* Define if you have the `futimes' function. */
 #undef HAVE_FUTIMES
 
+/* Define if you have the `getline' function. */
+#undef HAVE_GETLINE
+
 /* Define if you have the `getopt' function. */
 #undef HAVE_GETOPT
 
@@ -365,6 +368,9 @@
 
 /* Define if you have the `pread' function. */
 #undef HAVE_PREAD
+
+/* Define if you have the <pthread.h> header file. */
+#undef HAVE_PTHREAD_H
 
 /* Define if you have the `putc_unlocked' function. */
 #undef HAVE_PUTC_UNLOCKED
@@ -488,6 +494,9 @@
 
 /* Define if you have the <sys/dir.h> header file, and it defines `DIR'. */
 #undef HAVE_SYS_DIR_H
+
+/* Define if you have the <sys/endian.h> header file. */
+#undef HAVE_SYS_ENDIAN_H
 
 /* Define if you have the <sys/featuretest.h> header file. */
 #undef HAVE_SYS_FEATURETEST_H

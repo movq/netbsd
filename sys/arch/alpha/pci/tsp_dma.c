@@ -1,4 +1,4 @@
-/* $NetBSD: tsp_dma.c,v 1.9 2009/03/14 15:36:00 dsl Exp $ */
+/* $NetBSD: tsp_dma.c,v 1.12 2012/02/06 02:14:15 matt Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsp_dma.c,v 1.9 2009/03/14 15:36:00 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsp_dma.c,v 1.12 2012/02/06 02:14:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,11 +70,9 @@ __KERNEL_RCSID(0, "$NetBSD: tsp_dma.c,v 1.9 2009/03/14 15:36:00 dsl Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <machine/autoconf.h>
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/rpb.h>
 
 #include <dev/pci/pcireg.h>
@@ -118,7 +116,7 @@ tsp_dma_init(struct tsp_config *pcp)
 	struct ts_pchip *pccsr = pcp->pc_csr;
 	bus_addr_t dwbase, dwlen, sgwbase, sgwlen, tbase;
 	static struct map_expected {
-		u_int32_t base, mask, enables;
+		uint32_t base, mask, enables;
 	} premap[4] = {
 		{ 0x800000, 		   0x700000, WSBA_ENA | WSBA_SG },
 		{ 0x80000000 | WSBA_ENA, 0x3ff00000, WSBA_ENA           },
@@ -199,7 +197,7 @@ tsp_dma_init(struct tsp_config *pcp)
 	 * window is somewhat larger than expected.
 	 */
 	alpha_sgmap_init(t, &pcp->pc_sgmap, "tsp_sgmap",
-	    sgwbase, 0, sgwlen, sizeof(u_int64_t), NULL, (32*1024));
+	    sgwbase, 0, sgwlen, sizeof(uint64_t), NULL, (32*1024));
 
 	/*
 	 * Enable window 0 and enable SG PTE mapping.

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_fork.c,v 1.174 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: kern_fork.c,v 1.187 2012/02/02 02:44:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.174 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.187 2012/02/02 02:44:06 christos Exp $");
 
 #include "opt_ktrace.h"
 
@@ -91,8 +91,19 @@ __KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.174 2009/10/21 21:12:06 rmind Exp $"
 #include <sys/atomic.h>
 #include <sys/syscallargs.h>
 #include <sys/uidinfo.h>
+#include <sys/sdt.h>
+#include <sys/ptrace.h>
 
 #include <uvm/uvm_extern.h>
+
+/*
+ * DTrace SDT provider definitions
+ */
+SDT_PROBE_DEFINE(proc,,,create, 
+	    "struct proc *", NULL,	/* new process */
+	    "struct proc *", NULL,	/* parent process */
+	    "int", NULL,		/* flags */
+	    NULL, NULL, NULL, NULL);
 
 u_int	nprocs = 1;		/* process 0 */
 
@@ -207,8 +218,8 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	struct lwp	*l2;
 	int		count;
 	vaddr_t		uaddr;
-	int		tmp;
 	int		tnprocs;
+	int		tracefork;
 	int		error = 0;
 
 	p1 = l1->l_proc;
@@ -288,9 +299,11 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 * Increase reference counts on shared objects.
 	 * Inherit flags we want to keep.  The flags related to SIGCHLD
 	 * handling are important in order to keep a consistent behaviour
-	 * for the child after the fork.
+	 * for the child after the fork.  If we are a 32-bit process, the
+	 * child will be too.
 	 */
-	p2->p_flag = p1->p_flag & (PK_SUGID | PK_NOCLDWAIT | PK_CLDSIGIGN);
+	p2->p_flag =
+	    p1->p_flag & (PK_SUGID | PK_NOCLDWAIT | PK_CLDSIGIGN | PK_32);
 	p2->p_emul = p1->p_emul;
 	p2->p_execsw = p1->p_execsw;
 
@@ -329,7 +342,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	/* bump references to the text vnode (for procfs) */
 	p2->p_textvp = p1->p_textvp;
 	if (p2->p_textvp)
-		VREF(p2->p_textvp);
+		vref(p2->p_textvp);
 
 	if (flags & FORK_SHAREFILES)
 		fd_share(p2);
@@ -338,26 +351,24 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	else
 		p2->p_fd = fd_copy();
 
+	/* XXX racy */
+	p2->p_mqueue_cnt = p1->p_mqueue_cnt;
+
 	if (flags & FORK_SHARECWD)
 		cwdshare(p2);
 	else
 		p2->p_cwdi = cwdinit();
 
 	/*
-	 * p_limit (rlimit stuff) is usually copy-on-write, so we just need
-	 * to bump pl_refcnt.
-	 * However in some cases (see compat irix, and plausibly from clone)
-	 * the parent and child share limits - in which case nothing else
-	 * must have a copy of the limits (PL_SHAREMOD is set).
+	 * Note: p_limit (rlimit stuff) is copy-on-write, so normally
+	 * we just need increase pl_refcnt.
 	 */
-	if (__predict_false(flags & FORK_SHARELIMIT))
-		lim_privatise(p1, 1);
 	p1_lim = p1->p_limit;
-	if (p1_lim->pl_flags & PL_WRITEABLE && !(flags & FORK_SHARELIMIT))
-		p2->p_limit = lim_copy(p1_lim);
-	else {
+	if (!p1_lim->pl_writeable) {
 		lim_addref(p1_lim);
 		p2->p_limit = p1_lim;
+	} else {
+		p2->p_limit = lim_copy(p1_lim);
 	}
 
 	p2->p_lflag = ((flags & FORK_PPWAIT) ? PL_PPWAIT : 0);
@@ -403,17 +414,8 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	p2->p_stats = pstatscopy(p1->p_stats);
 
 	/*
-	 * If emulation has process fork hook, call it now.
+	 * Set up the new process address space.
 	 */
-	if (p2->p_emul->e_proc_fork)
-		(*p2->p_emul->e_proc_fork)(p2, p1, flags);
-
-	/*
-	 * ...and finally, any other random fork hooks that subsystems
-	 * might have registered.
-	 */
-	doforkhooks(p2, p1);
-
 	uvm_proc_fork(p1, p2, (flags & FORK_SHAREVM) ? true : false);
 
 	/*
@@ -423,6 +425,28 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	lwp_create(l1, p2, uaddr, (flags & FORK_PPWAIT) ? LWP_VFORK : 0,
 	    stack, stacksize, (func != NULL) ? func : child_return, arg, &l2,
 	    l1->l_class);
+
+	/*
+	 * Inherit l_private from the parent.
+	 * Note that we cannot use lwp_setprivate() here since that
+	 * also sets the CPU TLS register, which is incorrect if the
+	 * process has changed that without letting the kernel know.
+	 */
+	l2->l_private = l1->l_private;
+
+	/*
+	 * If emulation has a process fork hook, call it now.
+	 */
+	if (p2->p_emul->e_proc_fork)
+		(*p2->p_emul->e_proc_fork)(p2, l1, flags);
+
+	/*
+	 * ...and finally, any other random fork hooks that subsystems
+	 * might have registered.
+	 */
+	doforkhooks(p2, p1);
+
+	SDT_PROBE(proc,,,create, p2, p1, flags, 0, 0);
 
 	/*
 	 * It's now safe for the scheduler and other processes to see the
@@ -435,6 +459,39 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 
 	LIST_INSERT_HEAD(&parent->p_children, p2, p_sibling);
 	p2->p_exitsig = exitsig;		/* signal for parent on exit */
+
+	/*
+	 * We don't want to tracefork vfork()ed processes because they
+	 * will not receive the SIGTRAP until it is too late.
+	 */
+	tracefork = (p1->p_slflag & (PSL_TRACEFORK|PSL_TRACED)) ==
+	    (PSL_TRACEFORK|PSL_TRACED) && (flags && FORK_PPWAIT) == 0;
+	if (tracefork) {
+		p2->p_slflag |= PSL_TRACED;
+		p2->p_opptr = p2->p_pptr;
+		if (p2->p_pptr != p1->p_pptr) {
+			struct proc *parent1 = p2->p_pptr;
+
+			if (parent1->p_lock < p2->p_lock) {
+				if (!mutex_tryenter(parent1->p_lock)) {
+					mutex_exit(p2->p_lock);
+					mutex_enter(parent1->p_lock);
+				}
+			} else if (parent1->p_lock > p2->p_lock) {
+				mutex_enter(parent1->p_lock);
+			}
+			parent1->p_slflag |= PSL_CHTRACED;
+			proc_reparent(p2, p1->p_pptr);
+			if (parent1->p_lock != p2->p_lock)
+				mutex_exit(parent1->p_lock);
+		}
+
+		/*
+		 * Set ptrace status.
+		 */
+		p1->p_fpid = p2->p_pid;
+		p2->p_fpid = p1->p_pid;
+	}
 
 	LIST_INSERT_AFTER(p1, p2, p_pglist);
 	LIST_INSERT_HEAD(&allproc, p2, p_list);
@@ -475,7 +532,6 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 * Make child runnable, set start time, and add to run queue except
 	 * if the parent requested the child to start in SSTOP state.
 	 */
-	tmp = (p2->p_userret != NULL ? LW_WUSERRET : 0);
 	mutex_enter(p2->p_lock);
 
 	/*
@@ -490,23 +546,23 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	getmicrotime(&p2->p_stats->p_start);
 	p2->p_acflag = AFORK;
 	lwp_lock(l2);
+	KASSERT(p2->p_nrlwps == 1);
 	if (p2->p_sflag & PS_STOPFORK) {
+		struct schedstate_percpu *spc = &l2->l_cpu->ci_schedstate;
 		p2->p_nrlwps = 0;
 		p2->p_stat = SSTOP;
 		p2->p_waited = 0;
 		p1->p_nstopchild++;
 		l2->l_stat = LSSTOP;
-		l2->l_flag |= tmp;
-		lwp_unlock(l2);
+		KASSERT(l2->l_wchan == NULL);
+		lwp_unlock_to(l2, spc->spc_lwplock);
 	} else {
 		p2->p_nrlwps = 1;
 		p2->p_stat = SACTIVE;
 		l2->l_stat = LSRUN;
-		l2->l_flag |= tmp;
 		sched_enqueue(l2, false);
 		lwp_unlock(l2);
 	}
-
 	mutex_exit(p2->p_lock);
 
 	/*
@@ -516,6 +572,17 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 */
 	while (p2->p_lflag & PL_PPWAIT)
 		cv_wait(&p1->p_waitcv, proc_lock);
+
+        /*      
+         * Let the parent know that we are tracing its child.
+         */     
+	if (tracefork) {
+		ksiginfo_t ksi;
+                KSI_INIT_EMPTY(&ksi);
+                ksi.ksi_signo = SIGTRAP;
+                ksi.ksi_lid = l1->l_lid; 
+                kpsignal(p1, &ksi, NULL);
+	}
 
 	mutex_exit(proc_lock);
 

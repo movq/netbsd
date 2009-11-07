@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0_com.c,v 1.36 2009/03/14 15:36:02 dsl Exp $ */
+/*	$NetBSD: ixp12x0_com.c,v 1.40 2012/02/02 19:42:58 tls Exp $ */
 /*
  * Copyright (c) 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -66,13 +66,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.36 2009/03/14 15:36:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.40 2012/02/02 19:42:58 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
@@ -88,9 +88,10 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_com.c,v 1.36 2009/03/14 15:36:02 dsl Exp $")
 #include <sys/uio.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
+#include <sys/lwp.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ixp12x0/ixp12x0_comreg.h>
 #include <arm/ixp12x0/ixp12x0_comvar.h>
@@ -199,7 +200,7 @@ ixpcom_attach_subr(struct ixpcom_softc *sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = ixpcomstart;
 	tp->t_param = ixpcomparam;
 	tp->t_hwiflow = ixpcomhwiflow;
@@ -235,7 +236,7 @@ ixpcom_attach_subr(struct ixpcom_softc *sc)
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, ixpcomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
 			  RND_TYPE_TTY, 0);
 #endif
@@ -1172,7 +1173,7 @@ ixpcomintr(void* arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 	return (1);

@@ -1,4 +1,4 @@
-/*	$NetBSD: threads.c,v 1.1 2009/11/04 19:17:53 pooka Exp $	*/
+/*	$NetBSD: threads.c,v 1.15 2011/08/07 14:03:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 2007-2009 Antti Kantee.  All Rights Reserved.
@@ -29,14 +29,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: threads.c,v 1.1 2009/11/04 19:17:53 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: threads.c,v 1.15 2011/08/07 14:03:16 rmind Exp $");
 
 #include <sys/param.h>
+#include <sys/atomic.h>
 #include <sys/kmem.h>
 #include <sys/kthread.h>
+#include <sys/malloc.h>
 #include <sys/systm.h>
-
-#include <machine/stdarg.h>
 
 #include <rump/rumpuser.h>
 
@@ -52,16 +52,20 @@ static void *
 threadbouncer(void *arg)
 {
 	struct kthdesc *k = arg;
+	struct lwp *l = k->mylwp;
 	void (*f)(void *);
 	void *thrarg;
 
-	/* schedule ourselves first */
 	f = k->f;
 	thrarg = k->arg;
-	rumpuser_set_curlwp(k->mylwp);
+
+	/* schedule ourselves */
+	rumpuser_set_curlwp(l);
 	rump_schedule();
 
-	kmem_free(k, sizeof(struct kthdesc));
+	/* free dance struct */
+	free(k, M_TEMP);
+
 	if ((curlwp->l_pflag & LP_MPSAFE) == 0)
 		KERNEL_LOCK(1, NULL);
 
@@ -117,26 +121,48 @@ kthread_create(pri_t pri, int flags, struct cpu_info *ci,
 			printf("rump warning: threads not enabled, not enabling"
 			   " UNP garbage collection\n");
 			return 0;
+		} else if (strncmp(thrstore, "pmf", sizeof("pmf")-1) == 0) {
+			printf("rump warning: threads not enabled, not enabling"
+			   " pmf thread\n");
+			return 0;
+		} else if (strncmp(thrstore, "xcall", sizeof("xcall")-1) == 0) {
+			printf("rump warning: threads not enabled, CPU xcall"
+			   " not functional\n");
+			return 0;
 		} else
 			panic("threads not available, setenv RUMP_THREADS 1");
 	}
-
 	KASSERT(fmt != NULL);
-	if (ci != NULL)
-		panic("%s: bounded threads not supported", __func__);
 
-	k = kmem_alloc(sizeof(struct kthdesc), KM_SLEEP);
+	k = malloc(sizeof(*k), M_TEMP, M_WAITOK);
 	k->f = func;
 	k->arg = arg;
-	k->mylwp = l = rump_lwp_alloc(0, rump_nextlid());
+	k->mylwp = l = rump__lwproc_alloclwp(&proc0);
+	l->l_flag |= LW_SYSTEM;
 	if (flags & KTHREAD_MPSAFE)
 		l->l_pflag |= LP_MPSAFE;
-	rv = rumpuser_thread_create(threadbouncer, k, thrname);
+	if (flags & KTHREAD_INTR)
+		l->l_pflag |= LP_INTR;
+	if (ci) {
+		l->l_pflag |= LP_BOUND;
+		l->l_target_cpu = ci;
+	}
+	if (thrname) {
+		l->l_name = kmem_alloc(MAXCOMLEN, KM_SLEEP);
+		strlcpy(l->l_name, thrname, MAXCOMLEN);
+	}
+		
+	rv = rumpuser_thread_create(threadbouncer, k, thrname,
+	    (flags & KTHREAD_MUSTJOIN) == KTHREAD_MUSTJOIN, &l->l_ctxlink);
 	if (rv)
 		return rv;
 
-	if (newlp)
+	if (newlp) {
 		*newlp = l;
+	} else {
+		KASSERT((flags & KTHREAD_MUSTJOIN) == 0);
+	}
+
 	return 0;
 }
 
@@ -145,8 +171,21 @@ kthread_exit(int ecode)
 {
 
 	if ((curlwp->l_pflag & LP_MPSAFE) == 0)
-		KERNEL_UNLOCK_ONE(NULL);
-	rump_lwp_release(curlwp);
+		KERNEL_UNLOCK_LAST(NULL);
+	rump_lwproc_releaselwp();
+	/* unschedule includes membar */
 	rump_unschedule();
 	rumpuser_thread_exit();
+}
+
+int
+kthread_join(struct lwp *l)
+{
+	int rv;
+
+	KASSERT(l->l_ctxlink != NULL);
+	rv = rumpuser_thread_join(l->l_ctxlink);
+	membar_consumer();
+
+	return rv;
 }

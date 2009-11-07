@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.5 2008/06/14 12:05:39 mjf Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.9 2011/07/01 20:47:43 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -49,7 +49,7 @@
 #include <uvm/uvm_extern.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -78,13 +78,14 @@ ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
 
 	pc->pc_conf_interrupt = genppc_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
 	pc->pc_conf_hook = ibmnws_pci_conf_hook;
 
-	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4);
-	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4);
+	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4, false);
+	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4, false);
 	pc->pc_bus = 0;
 	pc->pc_node = 0;
 	pc->pc_memt = 0;
@@ -92,7 +93,7 @@ ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 }
 
 int
-ibmnws_pci_bus_maxdevs(pci_chipset_tag_t pct, int busno)
+ibmnws_pci_bus_maxdevs(void *v, int busno)
 {
 
 	/*
@@ -103,7 +104,7 @@ ibmnws_pci_bus_maxdevs(pci_chipset_tag_t pct, int busno)
 }
 
 int
-ibmnws_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func, pcireg_t id)
+ibmnws_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
 {
 
 	/*

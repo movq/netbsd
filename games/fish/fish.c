@@ -1,4 +1,4 @@
-/*	$NetBSD: fish.c,v 1.20 2009/08/12 05:55:53 dholland Exp $	*/
+/*	$NetBSD: fish.c,v 1.22 2011/09/01 07:18:50 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)fish.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: fish.c,v 1.20 2009/08/12 05:55:53 dholland Exp $");
+__RCSID("$NetBSD: fish.c,v 1.22 2011/09/01 07:18:50 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -112,7 +112,7 @@ main(int argc, char **argv)
 			usage();
 		}
 
-	srandom(time((time_t *)NULL));
+	srandom(time(NULL));
 	instructions();
 	init();
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_filesystem_driver.c,v 1.1.1.1 2009/03/22 14:57:08 christos Exp $	*/
+/*	$NetBSD: dlz_filesystem_driver.c,v 1.2.6.1 2012/06/05 21:15:35 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -262,7 +262,7 @@ create_path(const char *zone, const char *host, const char *client,
 	if ((host != NULL) && (is_safe(host) != ISC_TRUE) )
 		return (ISC_R_FAILURE);
 
-	/* if host was passed, verify that it is safe */
+	/* if client was passed, verify that it is safe */
 	if ((client != NULL) && (is_safe(client) != ISC_TRUE) )
 		return (ISC_R_FAILURE);
 
@@ -776,7 +776,8 @@ fs_findzone(void *driverarg, void *dbdata, const char *name)
 
 static isc_result_t
 fs_lookup(const char *zone, const char *name, void *driverarg,
-	  void *dbdata, dns_sdlzlookup_t *lookup)
+	  void *dbdata, dns_sdlzlookup_t *lookup,
+	  dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
 {
 	isc_result_t result;
 	char *path;
@@ -786,6 +787,8 @@ fs_lookup(const char *zone, const char *name, void *driverarg,
 
 	UNUSED(driverarg);
 	UNUSED(lookup);
+	UNUSED(methods);
+	UNUSED(clientinfo);
 
 	if (strcmp(name, "*") == 0)
 		/*
@@ -998,7 +1001,14 @@ static dns_sdlzmethods_t dlz_fs_methods = {
 	fs_lookup,
 	NULL,
 	fs_allnodes,
-	fs_allowzonexfr
+	fs_allowzonexfr,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 };
 
 /*%

@@ -1,7 +1,7 @@
-/*	$NetBSD: os.c,v 1.1.1.2 2009/10/25 00:01:33 christos Exp $	*/
+/*	$NetBSD: os.c,v 1.3.4.1 2012/06/05 21:15:52 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: os.c,v 1.101 2009/08/13 07:04:38 marka Exp */
+/* Id: os.c,v 1.107 2011/03/02 00:02:54 marka Exp  */
 
 /*! \file */
 
@@ -212,7 +212,7 @@ linux_setcaps(cap_t caps) {
 				ns_main_earlyfatal("cap_set_proc failed: %s", strbuf); \
 			} \
 		} \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #define INIT_CAP \
 	do { \
 		caps = cap_init(); \
@@ -225,15 +225,15 @@ linux_setcaps(cap_t caps) {
 			isc__strerror(errno, strbuf, sizeof(strbuf)); \
 			ns_main_earlyfatal("cap_get_proc failed: %s", strbuf); \
 		} \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #define FREE_CAP \
 	{ \
 		cap_free(caps); \
 		cap_free(curcaps); \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #else
-#define SET_CAP(flag) do { caps |= (1 << (flag)); } while (0)
-#define INIT_CAP do { caps = 0; } while (0)
+#define SET_CAP(flag) do { caps |= (1 << (flag)); } while (/*CONSTCOND*/0)
+#define INIT_CAP do { caps = 0; } while (/*CONSTCOND*/0)
 #endif /* HAVE_LIBCAP */
 
 static void
@@ -792,6 +792,9 @@ ns_os_openfile(const char *filename, mode_t mode, isc_boolean_t switch_user) {
 	free(f);
 
 	if (switch_user && runas_pw != NULL) {
+#ifndef HAVE_LINUXTHREADS
+		gid_t oldgid = getgid();
+#endif
 		/* Set UID/GID to the one we'll be running with eventually */
 		setperms(runas_pw->pw_uid, runas_pw->pw_gid);
 
@@ -799,7 +802,7 @@ ns_os_openfile(const char *filename, mode_t mode, isc_boolean_t switch_user) {
 
 #ifndef HAVE_LINUXTHREADS
 		/* Restore UID/GID to root */
-		setperms(0, 0);
+		setperms(0, oldgid);
 #endif /* HAVE_LINUXTHREADS */
 
 		if (fd == -1) {
@@ -952,7 +955,7 @@ ns_os_shutdownmsg(char *command, isc_buffer_t *text) {
 		     isc_buffer_availablelength(text),
 		     "pid: %ld", (long)pid);
 	/* Only send a message if it is complete. */
-	if (n < isc_buffer_availablelength(text))
+	if (n > 0 && n < isc_buffer_availablelength(text))
 		isc_buffer_add(text, n);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: com_supio.c,v 1.26 2008/04/28 20:23:12 martin Exp $ */
+/*	$NetBSD: com_supio.c,v 1.30 2011/07/19 15:55:26 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_supio.c,v 1.26 2008/04/28 20:23:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_supio.c,v 1.30 2011/07/19 15:55:26 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: com_supio.c,v 1.26 2008/04/28 20:23:12 martin Exp $"
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -77,9 +76,9 @@ __KERNEL_RCSID(0, "$NetBSD: com_supio.c,v 1.26 2008/04/28 20:23:12 martin Exp $"
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
 
 /*#include <dev/isa/isavar.h>*/
 #include <dev/ic/comreg.h>
@@ -119,7 +118,9 @@ com_supio_attach(device_t parent, device_t self, void *aux)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	struct supio_attach_args *supa = aux;
+#ifdef __m68k__
 	u_int16_t needpsl;
+#endif
 
 	csc->sc_dev = self;
 
@@ -135,9 +136,11 @@ com_supio_attach(device_t parent, device_t self, void *aux)
 	COM_INIT_REGS(csc->sc_regs, iot, ioh, iobase);
 
 	csc->sc_frequency = supa->supio_arg;
+	csc->sc_frequency /= 4;	/* XXX IOBlix firmware sets MCR_PRESCALE? */
 
 	com_attach_subr(csc);
 
+#ifdef __m68k__
 	/* XXX this should be really in the interrupt stuff */
 	needpsl = PSL_S | (supa->supio_ipl << 8);
 
@@ -146,6 +149,7 @@ com_supio_attach(device_t parent, device_t self, void *aux)
 		    "from 0x%x to 0x%x\n", ipl2spl_table[IPL_SERIAL], needpsl);
 		ipl2spl_table[IPL_SERIAL] = needpsl;
 	}
+#endif
 	sc->sc_isr.isr_intr = comintr;
 	sc->sc_isr.isr_arg = csc;
 	sc->sc_isr.isr_ipl = supa->supio_ipl;

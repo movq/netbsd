@@ -1,4 +1,4 @@
-/*	$NetBSD: vfwprintf.c,v 1.18 2009/10/25 20:44:13 christos Exp $	*/
+/*	$NetBSD: vfwprintf.c,v 1.24 2011/08/17 09:53:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 static char sccsid[] = "@(#)vfprintf.c	8.1 (Berkeley) 6/4/93";
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vfwprintf.c,v 1.27 2007/01/09 00:28:08 imp Exp $");
 #else
-__RCSID("$NetBSD: vfwprintf.c,v 1.18 2009/10/25 20:44:13 christos Exp $");
+__RCSID("$NetBSD: vfwprintf.c,v 1.24 2011/08/17 09:53:54 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -163,6 +163,7 @@ __sbprintf(FILE *fp, const CHAR_T *fmt, va_list ap)
 	_DIAGASSERT(fmt != NULL);
 
 	_FILEEXT_SETUP(&fake, &fakeext);
+	memset(WCIO_GET(&fake), 0, sizeof(struct wchar_io_data));
 
 	/* copy the important variables */
 	fake._flags = fp->_flags & ~__SNBF;
@@ -474,9 +475,9 @@ __mbsconv(char *mbsarg, int prec)
 }
 #else
 /*
- * Convert a wide character string argument for the %ls format to a multibyte
+ * Convert a wide-character string argument for the %ls format to a multibyte
  * string representation. If not -1, prec specifies the maximum number of
- * bytes to output, and also means that we can't assume that the wide char.
+ * bytes to output, and also means that we can't assume that the wide-char.
  * string ends is null-terminated.
  */
 static char *
@@ -493,7 +494,7 @@ __wcsconv(wchar_t *wcsarg, int prec)
 	if (prec < 0) {
 		p = wcsarg;
 		mbs = initial;
-		nbytes = wcsrtombs(NULL, (const wchar_t **)&p, 0, &mbs);
+		nbytes = wcsrtombs(NULL, (void *)&p, 0, &mbs);
 		if (nbytes == (size_t)-1)
 			return (NULL);
 	} else {
@@ -523,7 +524,7 @@ __wcsconv(wchar_t *wcsarg, int prec)
 	/* Fill the output buffer. */
 	p = wcsarg;
 	mbs = initial;
-	if ((nbytes = wcsrtombs(convbuf, (const wchar_t **)&p,
+	if ((nbytes = wcsrtombs(convbuf, (void *)&p,
 	    nbytes, &mbs)) == (size_t)-1) {
 		free(convbuf);
 		return (NULL);
@@ -1130,6 +1131,7 @@ fp_common:
 					result = (ch >= 'a') ? STRCONST("inf") :
 					    STRCONST("INF");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 #else
@@ -1160,6 +1162,7 @@ fp_common:
 				else
 					result = STRCONST("inf");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 			if (isnan(_double)) {
@@ -1168,6 +1171,7 @@ fp_common:
 				else
 					result = STRCONST("nan");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 

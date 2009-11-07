@@ -1,4 +1,4 @@
-/*	$NetBSD: qmgr_message.c,v 1.1.1.1 2009/06/23 10:08:53 tron Exp $	*/
+/*	$NetBSD: qmgr_message.c,v 1.1.1.3 2011/03/02 19:32:30 tron Exp $	*/
 
 /*++
 /* NAME
@@ -198,6 +198,7 @@ static QMGR_MESSAGE *qmgr_message_create(const char *queue_name,
     message->sasl_method = 0;
     message->sasl_username = 0;
     message->sasl_sender = 0;
+    message->log_ident = 0;
     message->rewrite_context = 0;
     recipient_list_init(&message->rcpt_list, RCPT_LIST_INIT_QUEUE);
     message->rcpt_count = 0;
@@ -729,6 +730,12 @@ static int qmgr_message_read(QMGR_MESSAGE *message)
 		else
 		    msg_warn("%s: ignoring multiple %s attribute: %s",
 			   message->queue_id, MAIL_ATTR_SASL_SENDER, value);
+	    } else if (strcmp(name, MAIL_ATTR_LOG_IDENT) == 0) {
+		if (message->log_ident == 0)
+		    message->log_ident = mystrdup(value);
+		else
+		    msg_warn("%s: ignoring multiple %s attribute: %s",
+			     message->queue_id, MAIL_ATTR_LOG_IDENT, value);
 	    } else if (strcmp(name, MAIL_ATTR_RWR_CONTEXT) == 0) {
 		if (message->rewrite_context == 0)
 		    message->rewrite_context = mystrdup(value);
@@ -767,6 +774,9 @@ static int qmgr_message_read(QMGR_MESSAGE *message)
 		    msg_warn("%s: ignoring bad VERP request: \"%.100s\"",
 			     message->queue_id, start);
 		} else {
+		    if (msg_verbose)
+			msg_info("%s: enabling VERP for sender \"%.100s\"",
+				 message->queue_id, message->sender);
 		    message->single_rcpt = 1;
 		    message->verp_delims = mystrdup(start);
 		}
@@ -823,6 +833,8 @@ static int qmgr_message_read(QMGR_MESSAGE *message)
 	message->sasl_username = mystrdup("");
     if (message->sasl_sender == 0)
 	message->sasl_sender = mystrdup("");
+    if (message->log_ident == 0)
+	message->log_ident = mystrdup("");
     if (message->rewrite_context == 0)
 	message->rewrite_context = mystrdup(MAIL_ATTR_RWR_LOCAL);
     /* Postfix < 2.3 compatibility. */
@@ -1059,12 +1071,19 @@ static void qmgr_message_resolve(QMGR_MESSAGE *message)
 	 * me" bits turned on, but we handle them here anyway for the sake of
 	 * future proofing.
 	 */
+#define FILTER_WITHOUT_NEXTHOP(filter, next) \
+	(((next) = split_at((filter), ':')) == 0 || *(next) == 0)
+
+#define RCPT_WITHOUT_DOMAIN(rcpt, next) \
+	((next = strrchr(rcpt, '@')) == 0 || *++(next) == 0)
+
 	else if (message->filter_xport
 		 && (message->tflags & DEL_REQ_TRACE_ONLY_MASK) == 0) {
 	    reply.flags = 0;
 	    vstring_strcpy(reply.transport, message->filter_xport);
-	    if ((nexthop = split_at(STR(reply.transport), ':')) == 0
-		|| *nexthop == 0)
+	    if (FILTER_WITHOUT_NEXTHOP(STR(reply.transport), nexthop)
+		&& *(nexthop = var_def_filter_nexthop) == 0
+		&& RCPT_WITHOUT_DOMAIN(recipient->address, nexthop))
 		nexthop = var_myhostname;
 	    vstring_strcpy(reply.nexthop, nexthop);
 	    vstring_strcpy(reply.recipient, recipient->address);
@@ -1400,6 +1419,8 @@ void    qmgr_message_free(QMGR_MESSAGE *message)
 	myfree(message->sasl_username);
     if (message->sasl_sender)
 	myfree(message->sasl_sender);
+    if (message->log_ident)
+	myfree(message->log_ident);
     if (message->rewrite_context)
 	myfree(message->rewrite_context);
     recipient_list_free(&message->rcpt_list);

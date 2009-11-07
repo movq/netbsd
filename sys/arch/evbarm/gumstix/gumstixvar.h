@@ -1,4 +1,4 @@
-/*	$NetBSD: gumstixvar.h,v 1.4 2009/08/09 07:10:13 kiyohara Exp $ */
+/*	$NetBSD: gumstixvar.h,v 1.6 2011/07/01 20:39:34 dyoung Exp $ */
 /*
  * Copyright (C) 2005, 2006 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -36,7 +36,7 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <arm/xscale/pxa2x0_gpio.h>
 #include <evbarm/gumstix/gumstixreg.h>
 
@@ -79,5 +79,11 @@ struct gxpcic_slot_irqs {
 };
 extern struct gxpcic_slot_irqs gxpcic_slot_irqs[2];
 extern int gxpcic_gpio_reset;
+
+
+/*
+ * gxlcd
+ */
+void gxlcd_cnattach(void);
 
 #endif /* _EVBARM_GUMSTIXVAR_H_ */

@@ -1,4 +1,4 @@
-/* $NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $ */
+/* $NetBSD: mv.c,v 1.43 2011/08/29 14:46:54 joerg Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mv.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $");
+__RCSID("$NetBSD: mv.c,v 1.43 2011/08/29 14:46:54 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $");
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/extattr.h>
 
 #include <err.h>
 #include <errno.h>
@@ -64,14 +65,13 @@ __RCSID("$NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $");
 
 #include "pathnames.h"
 
-int fflg, iflg, vflg;
-int stdin_ok;
+static int fflg, iflg, vflg;
+static int stdin_ok;
 
-int	copy(char *, char *);
-int	do_move(char *, char *);
-int	fastcopy(char *, char *, struct stat *);
-void	usage(void);
-int	main(int, char *[]);
+static int	copy(char *, char *);
+static int	do_move(char *, char *);
+static int	fastcopy(char *, char *, struct stat *);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -150,7 +150,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-int
+static int
 do_move(char *from, char *to)
 {
 	struct stat sb;
@@ -252,7 +252,7 @@ do_move(char *from, char *to)
 	    fastcopy(from, to, &sb) : copy(from, to));
 }
 
-int
+static int
 fastcopy(char *from, char *to, struct stat *sbp)
 {
 	struct timeval tval[2];
@@ -290,6 +290,10 @@ err:		if (unlink(to))
 		(void)close(to_fd);
 		return (1);
 	}
+
+	if (fcpxattr(from_fd, to_fd) == -1)
+		warn("%s: error copying extended attributes", to);
+
 	(void)close(from_fd);
 #ifdef BSD4_4
 	TIMESPEC_TO_TIMEVAL(&tval[0], &sbp->st_atimespec);
@@ -332,7 +336,7 @@ err:		if (unlink(to))
 	return (0);
 }
 
-int
+static int
 copy(char *from, char *to)
 {
 	pid_t pid;
@@ -377,7 +381,7 @@ copy(char *from, char *to)
 	return (0);
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: %s [-fiv] source target\n"

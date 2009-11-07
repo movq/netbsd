@@ -1,7 +1,7 @@
-/*	$NetBSD: soa_6.c,v 1.1.1.2 2009/10/25 00:02:40 christos Exp $	*/
+/*	$NetBSD: soa_6.c,v 1.3.4.1 2012/06/05 21:15:11 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007, 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: soa_6.c,v 1.63 2009/02/16 23:48:04 tbox Exp */
+/* Id */
 
 /* Reviewed: Thu Mar 16 15:18:32 PST 2000 by explorer */
 
@@ -104,7 +104,7 @@ totext_soa(ARGS_TOTEXT) {
 
 	multiline = ISC_TF((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0);
 	if (multiline)
-		comment = ISC_TF((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0);
+		comment = ISC_TF((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0);
 	else
 		comment = ISC_FALSE;
 
@@ -441,6 +441,11 @@ checknames_soa(ARGS_CHECKNAMES) {
 		return (ISC_FALSE);
 	}
 	return (ISC_TRUE);
+}
+
+static inline int
+casecompare_soa(ARGS_COMPARE) {
+	return (compare_soa(rdata1, rdata2));
 }
 
 #endif	/* RDATA_GENERIC_SOA_6_C */

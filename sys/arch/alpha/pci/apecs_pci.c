@@ -1,21 +1,21 @@
-/* $NetBSD: apecs_pci.c,v 1.22 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: apecs_pci.c,v 1.25 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,26 +29,23 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: apecs_pci.c,v 1.22 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apecs_pci.c,v 1.25 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/apecsreg.h>
 #include <alpha/pci/apecsvar.h>
 
-void		apecs_attach_hook(struct device *, struct device *,
+void		apecs_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		apecs_bus_maxdevs(void *, int);
 pcitag_t	apecs_make_tag(void *, int, int, int);
-void		apecs_decompose_tag(void *, pcitag_t, int *, int *,
-		    int *);
+void		apecs_decompose_tag(void *, pcitag_t, int *, int *, int *);
 pcireg_t	apecs_conf_read(void *, pcitag_t, int);
 void		apecs_conf_write(void *, pcitag_t, int, pcireg_t);
 
@@ -66,7 +63,7 @@ apecs_pci_init(pci_chipset_tag_t pc, void *v)
 }
 
 void
-apecs_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
+apecs_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 }
 

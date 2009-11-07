@@ -1,7 +1,7 @@
-# $NetBSD: GENERIC,v 1.148 2009/01/24 05:06:07 mrg Exp $
+# $NetBSD: GENERIC,v 1.161.2.1 2012/06/12 17:47:59 riz Exp $
 #
 # GENERIC machine description file
-# 
+#
 # This machine description file is used to generate the default NetBSD
 # kernel.  The generic kernel does not include all options, subsystems
 # and device drivers, but should be useful for most applications.
@@ -22,7 +22,7 @@ include 	"arch/prep/conf/std.prep"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.148 $"
+#ident		"GENERIC-$Revision: 1.161.2.1 $"
 
 maxusers	32
 
@@ -30,7 +30,6 @@ maxusers	32
 
 options 	PIC_OPENPIC	# OpenPIC support (7043-140)
 options 	PIC_PREPIVR
-options 	PIC_I8259
 
 # Standard system options
 
@@ -49,7 +48,7 @@ options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under 
+# Enable experimental buffer queue strategy for better responsiveness under
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
@@ -89,19 +88,19 @@ file-system 	MSDOSFS		# MS-DOS file system
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 #file-system	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcoda (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -125,6 +124,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -165,6 +165,9 @@ options 	WSEMUL_VT100		# VT100 / VT220 emulation
 # different kernel output - see dev/wscons/wsdisplayvar.h
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
+# compatibility to other console drivers
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # see dev/pckbport/wskbdmap_mfii.c for implemented layouts
 #options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
 # allocate a number of virtual screens at autoconfiguration time
@@ -436,6 +439,9 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 #umodem* at uhub? port ? configuration ?
 #ucom*	at umodem?
 
+# Option N.V. Wireless WAN modems
+#uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 #umass*	at uhub? port ? configuration ? interface ?
 #scsibus* at umass? channel ?
@@ -535,8 +541,8 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -568,7 +574,6 @@ pseudo-device   accf_http		# "httpready" accept filter
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms

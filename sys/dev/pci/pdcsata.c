@@ -1,4 +1,4 @@
-/*	$NetBSD: pdcsata.c,v 1.17 2009/10/19 18:41:16 bouyer Exp $	*/
+/*	$NetBSD: pdcsata.c,v 1.20 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2004, Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdcsata.c,v 1.17 2009/10/19 18:41:16 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdcsata.c,v 1.20 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -56,7 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: pdcsata.c,v 1.17 2009/10/19 18:41:16 bouyer Exp $");
 #define	PDC205_SCONTROL(ch)	PDC205_REGADDR(0x408,ch)
 #define	PDC205_MULTIPLIER(ch)	PDC205_REGADDR(0x4e8,ch)
 
-static void pdcsata_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void pdcsata_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void pdc203xx_setup_channel(struct ata_channel *);
 static void pdc203xx_irqack(struct ata_channel *);
 static int  pdc203xx_dma_init(void *, int, int, void *, size_t, int);
@@ -220,13 +221,12 @@ pdcsata_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+pdcsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	struct ata_channel *wdc_cp;
 	struct wdc_regs *wdr;
 	int channel, i;
-	bus_size_t dmasize;
 	pci_intr_handle_t intrhandle;
 	const char *intrstr;
 
@@ -247,8 +247,8 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
-		    aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+		    aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
@@ -257,7 +257,7 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 	sc->sc_dma_ok = (pci_mapreg_map(pa, PCIIDE_REG_BUS_MASTER_DMA,
 	    PCI_MAPREG_MEM_TYPE_32BIT, 0, &sc->sc_dma_iot,
-	    &sc->sc_dma_ioh, NULL, &dmasize) == 0);
+	    &sc->sc_dma_ioh, NULL, &sc->sc_dma_ios) == 0);
 	if (!sc->sc_dma_ok) {
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "couldn't map bus-master DMA registers\n");
@@ -269,10 +269,10 @@ pdcsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 	if (pci_mapreg_map(pa, PDC203xx_BAR_IDEREGS,
 	    PCI_MAPREG_MEM_TYPE_32BIT, 0, &sc->sc_ba5_st,
-	    &sc->sc_ba5_sh, NULL, NULL) != 0) {
+	    &sc->sc_ba5_sh, NULL, &sc->sc_ba5_ss) != 0) {
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "couldn't map IDE registers\n");
-		bus_space_unmap(sc->sc_dma_iot, sc->sc_dma_ioh, dmasize);
+		bus_space_unmap(sc->sc_dma_iot, sc->sc_dma_ioh, sc->sc_dma_ios);
 		pci_intr_disestablish(pa->pa_pc, sc->sc_pci_ih);
 		return;
 	}

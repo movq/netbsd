@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.30 2009/09/19 14:57:29 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.34 2011/11/04 11:27:04 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -59,9 +55,10 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+
+	(void)flags;
 }
 
 int
@@ -71,17 +68,17 @@ md_get_info(void)
 	int fd;
 	char dev_name[100];
 
-	snprintf (dev_name, 100, "/dev/r%sc", diskdev);
+	snprintf(dev_name, sizeof(dev_name), "/dev/r%sc", diskdev);
 
-	fd = open (dev_name, O_RDONLY, 0);
+	fd = open(dev_name, O_RDONLY, 0);
 	if (fd < 0) {
 		endwin();
-		fprintf (stderr, "Can't open %s\n", dev_name);
+		fprintf(stderr, "Can't open %s\n", dev_name);
 		exit(1);
 	}
 	if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
 		endwin();
-		fprintf (stderr, "Can't read disklabel on %s.\n", dev_name);
+		fprintf(stderr, "Can't read disklabel on %s.\n", dev_name);
 		close(fd);
 		exit(1);
 	}
@@ -95,11 +92,11 @@ md_get_info(void)
 
 	/*
 	 * Compute whole disk size. Take max of (dlcyl*dlhead*dlsec)
-	 * and secperunit,  just in case the disk is already labelled.  
+	 * and secperunit,  just in case the disk is already labelled.
 	 * (If our new label's RAW_PART size ends up smaller than the
 	 * in-core RAW_PART size  value, updating the label will fail.)
 	 */
-	dlsize = dlcyl*dlhead*dlsec;
+	dlsize = dlcyl * dlhead * dlsec;
 	if (disklabel.d_secperunit > dlsize)
 		dlsize = disklabel.d_secperunit;
 
@@ -112,6 +109,7 @@ md_get_info(void)
 int
 md_make_bsd_partitions(void)
 {
+
 	return make_bsd_partitions();
 }
 
@@ -121,6 +119,7 @@ md_make_bsd_partitions(void)
 int
 md_check_partitions(void)
 {
+
 	return 1;
 }
 
@@ -130,6 +129,7 @@ md_check_partitions(void)
 int
 md_pre_disklabel(void)
 {
+
 	return 0;
 }
 
@@ -139,6 +139,7 @@ md_pre_disklabel(void)
 int
 md_post_disklabel(void)
 {
+
 	return 0;
 }
 
@@ -165,12 +166,14 @@ md_post_newfs(void)
 int
 md_post_extract(void)
 {
+
 	return 0;
 }
 
 void
 md_cleanup_install(void)
 {
+
 #ifndef DEBUG
 	enable_rc_conf();
 #endif
@@ -179,6 +182,7 @@ md_cleanup_install(void)
 int
 md_pre_update(void)
 {
+
 	return 1;
 }
 
@@ -186,6 +190,13 @@ md_pre_update(void)
 int
 md_update(void)
 {
+
 	md_post_newfs();
 	return 1;
+}
+
+int
+md_pre_mount()
+{
+	return 0;
 }

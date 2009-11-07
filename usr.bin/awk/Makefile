@@ -1,21 +1,21 @@
-#	$NetBSD: Makefile,v 1.14 2009/04/14 22:15:17 lukem Exp $
+#	$NetBSD: Makefile,v 1.16 2011/06/20 07:44:00 mrg Exp $
 
 WARNS?=	1	# fails -Wshadow -Wcast-qual
 
 .include <bsd.own.mk>
 
-DIST=	${NETBSDSRCDIR}/dist
-.PATH:	${DIST}/nawk
+DIST=	${NETBSDSRCDIR}/external/historical/nawk/dist/
+.PATH:	${DIST}
 
 PROG=	awk
 SRCS=	awkgram.y b.c lex.c lib.c main.c parse.c proctab.c run.c tran.c
-CPPFLAGS+=	-I${DIST}/nawk -I. -DHAS_ISBLANK
+CPPFLAGS+=	-I${DIST} -I. -DHAS_ISBLANK
 LDADD+=	-lm
 .if !defined(HOSTPROG)
 DPADD+=	${LIBM}
 .endif
 YHEADER=	yes
-.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.if defined(HAVE_GCC) || defined(HAVE_PCC)
 COPTS+=	-Wno-pointer-sign
 .endif
 

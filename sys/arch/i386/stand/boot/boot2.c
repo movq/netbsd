@@ -1,7 +1,7 @@
-/*	$NetBSD: boot2.c,v 1.45 2009/09/13 22:45:27 jmcneill Exp $	*/
+/*	$NetBSD: boot2.c,v 1.57.2.1 2012/08/12 18:56:54 martin Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -92,7 +92,7 @@ extern	const char bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 int errno;
 
 int boot_biosdev;
-u_int boot_biossector;
+daddr_t boot_biossector;
 
 static const char * const names[][2] = {
 	{ "netbsd", "netbsd.gz" },
@@ -112,7 +112,7 @@ static const char *default_filename;
 char *sprint_bootsel(const char *);
 void bootit(const char *, int, int);
 void print_banner(void);
-void boot2(int, u_int);
+void boot2(int, uint64_t);
 
 void	command_help(char *);
 void	command_ls(char *);
@@ -135,6 +135,9 @@ const struct bootblk_command commands[] = {
 	{ "load",	module_add },
 	{ "multiboot",	command_multiboot },
 	{ "vesa",	command_vesa },
+	{ "splash",	splash_add },
+	{ "rndseed",	rnd_add },
+	{ "userconf",	userconf_add },
 	{ NULL,		NULL },
 };
 
@@ -276,7 +279,7 @@ print_banner(void)
  * biossector: Sector number of the NetBSD partition
  */
 void
-boot2(int biosdev, u_int biossector)
+boot2(int biosdev, uint64_t biossector)
 {
 	extern char twiddle_toggle;
 	int currname;
@@ -291,6 +294,8 @@ boot2(int biosdev, u_int biossector)
 #endif
 	gateA20();
 
+	boot_modules_enabled = !(boot_params.bp_flags
+				 & X86_BP_FLAGS_NOMODULES);
 	if (boot_params.bp_flags & X86_BP_FLAGS_RESET_VIDEO)
 		biosvideomode();
 
@@ -308,7 +313,12 @@ boot2(int biosdev, u_int biossector)
 	default_filename = DEFFILENAME;
 
 #ifndef SMALL
-	parsebootconf(BOOTCONF);
+	if (!(boot_params.bp_flags & X86_BP_FLAGS_NOBOOTCONF)) {
+		parsebootconf(BOOTCONF);
+	} else {
+		bootconf.timeout = boot_params.bp_timeout;
+	}
+	
 
 	/*
 	 * If console set in boot.cfg, switch to it.
@@ -341,11 +351,23 @@ boot2(int biosdev, u_int biossector)
 #else
 		c = awaitkey((bootconf.timeout < 0) ? 0 : bootconf.timeout, 1);
 #endif
-		if ((c != '\r') && (c != '\n') && (c != '\0') &&
-		    ((boot_params.bp_flags & X86_BP_FLAGS_PASSWORD) == 0
-		     || check_password(boot_params.bp_password))) {
-			printf("type \"?\" or \"help\" for help.\n");
+		if ((c != '\r') && (c != '\n') && (c != '\0')) {
+		    if ((boot_params.bp_flags & X86_BP_FLAGS_PASSWORD) == 0) {
+			/* do NOT ask for password */
 			bootmenu(); /* does not return */
+		    } else {
+			/* DO ask for password */
+			if (check_password((char *)boot_params.bp_password)) {
+			    /* password ok */
+			    printf("type \"?\" or \"help\" for help.\n");
+			    bootmenu(); /* does not return */
+			} else {
+			    /* bad password */
+			    printf("Wrong password.\n");
+			    currname = 0;
+			    continue;
+			}
+		    }
 		}
 
 		/*
@@ -371,10 +393,12 @@ command_help(char *arg)
 	       "ls [path]\n"
 	       "dev xd[N[x]]:\n"
 	       "consdev {pc|com[0123]|com[0123]kbd|auto}\n"
-	       "vesa {enabled|disabled|list|modenum}\n"
-	       "modules {enabled|disabled}\n"
+	       "vesa {modenum|on|off|enabled|disabled|list}\n"
+	       "modules {on|off|enabled|disabled}\n"
 	       "load {path_to_module}\n"
 	       "multiboot [xdNx:][filename] [<args>]\n"
+	       "userconf {command}\n"
+	       "rndseed {path_to_rndseed_file}\n"
 	       "help|?\n"
 	       "quit\n");
 }
@@ -385,7 +409,7 @@ command_ls(char *arg)
 	const char *save = default_filename;
 
 	default_filename = "/";
-	ufs_ls(arg);
+	ls(arg);
 	default_filename = save;
 }
 
@@ -399,17 +423,27 @@ command_quit(char *arg)
 	reboot();
 	/* Note: we shouldn't get to this point! */
 	panic("Could not reboot!");
-	exit(0);
 }
 
 void
 command_boot(char *arg)
 {
 	char *filename;
-	int howto;
+	int howto, tell;
 
-	if (parseboot(arg, &filename, &howto))
-		bootit(filename, howto, (howto & AB_VERBOSE) != 0);
+	if (!parseboot(arg, &filename, &howto))
+		return;
+
+	tell = ((howto & AB_VERBOSE) != 0);
+	if (filename != NULL) {
+		bootit(filename, howto, tell);
+	} else {
+		int i;
+		for (i = 0; i < NUMNAMES; i++) {
+			bootit(names[i][0], howto, tell);
+			bootit(names[i][1], howto, tell);
+		}
+	}
 }
 
 void

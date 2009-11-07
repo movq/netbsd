@@ -1,5 +1,5 @@
-/*	$NetBSD: canohost.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: canohost.c,v 1.64 2009/02/12 03:00:56 djm Exp $ */
+/*	$NetBSD: canohost.c,v 1.5 2011/07/25 03:03:10 christos Exp $	*/
+/* $OpenBSD: canohost.c,v 1.66 2010/01/13 01:20:20 dtucker Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,7 +14,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: canohost.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
+__RCSID("$NetBSD: canohost.c,v 1.5 2011/07/25 03:03:10 christos Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -28,6 +28,7 @@ __RCSID("$NetBSD: canohost.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "xmalloc.h"
 #include "packet.h"
@@ -36,6 +37,8 @@ __RCSID("$NetBSD: canohost.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
 #include "misc.h"
 
 static void check_ip_options(int, char *);
+static char *canonical_host_ip = NULL;
+static int cached_port = -1;
 
 /*
  * Return the canonical name of the host at the other end of the socket. The
@@ -196,7 +199,7 @@ get_canonical_hostname(int use_dns)
 	if (packet_connection_is_on_socket())
 		host = get_remote_hostname(packet_get_connection_in(), use_dns);
 	else
-		host = "UNKNOWN";
+		host = __UNCONST("UNKNOWN");
 
 	if (use_dns)
 		canonical_host_name = host;
@@ -261,9 +264,32 @@ get_local_ipaddr(int sock)
 }
 
 char *
-get_local_name(int sock)
+get_local_name(int fd)
 {
-	return get_socket_address(sock, 0, NI_NAMEREQD);
+	char *host, myname[NI_MAXHOST];
+
+	/* Assume we were passed a socket */
+	if ((host = get_socket_address(fd, 0, NI_NAMEREQD)) != NULL)
+		return host;
+
+	/* Handle the case where we were passed a pipe */
+	if (gethostname(myname, sizeof(myname)) == -1) {
+		verbose("get_local_name: gethostname: %s", strerror(errno));
+	} else {
+		host = xstrdup(myname);
+	}
+
+	return host;
+}
+
+void
+clear_cached_addr(void)
+{
+	if (canonical_host_ip != NULL) {
+		xfree(canonical_host_ip);
+		canonical_host_ip = NULL;
+	}
+	cached_port = -1;
 }
 
 /*
@@ -274,8 +300,6 @@ get_local_name(int sock)
 const char *
 get_remote_ipaddr(void)
 {
-	static char *canonical_host_ip = NULL;
-
 	/* Check whether we have cached the ipaddr. */
 	if (canonical_host_ip == NULL) {
 		if (packet_connection_is_on_socket()) {
@@ -359,13 +383,11 @@ get_peer_port(int sock)
 int
 get_remote_port(void)
 {
-	static int port = -1;
-
 	/* Cache to avoid getpeername() on a dead connection */
-	if (port == -1)
-		port = get_port(0);
+	if (cached_port == -1)
+		cached_port = get_port(0);
 
-	return port;
+	return cached_port;
 }
 
 int

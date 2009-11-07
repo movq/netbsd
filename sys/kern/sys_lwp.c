@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_lwp.c,v 1.48 2009/11/01 21:46:09 rmind Exp $	*/
+/*	$NetBSD: sys_lwp.c,v 1.52.14.1 2012/05/21 15:25:56 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.48 2009/11/01 21:46:09 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.52.14.1 2012/05/21 15:25:56 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,19 +72,13 @@ lwp_sys_init(void)
 }
 
 int
-sys__lwp_create(struct lwp *l, const struct sys__lwp_create_args *uap,
-    register_t *retval)
+do_lwp_create(lwp_t *l, void *arg, u_long flags, lwpid_t *new_lwp)
 {
-	/* {
-		syscallarg(const ucontext_t *) ucp;
-		syscallarg(u_long) flags;
-		syscallarg(lwpid_t *) new_lwp;
-	} */
-	struct proc *p = l->l_proc;
-	struct lwp *l2;
-	vaddr_t uaddr;
-	ucontext_t *newuc;
-	int error, lid;
+ 	struct proc *p = l->l_proc;
+ 	struct lwp *l2;
+ 	struct schedstate_percpu *spc;
+ 	vaddr_t uaddr;
+	int error;
 
 #ifdef KERN_SA
 	mutex_enter(p->p_lock);
@@ -95,37 +89,20 @@ sys__lwp_create(struct lwp *l, const struct sys__lwp_create_args *uap,
 	mutex_exit(p->p_lock);
 #endif
 
-	newuc = pool_get(&lwp_uc_pool, PR_WAITOK);
-
-	error = copyin(SCARG(uap, ucp), newuc, p->p_emul->e_ucsize);
-	if (error) {
-		pool_put(&lwp_uc_pool, newuc);
-		return error;
-	}
-
 	/* XXX check against resource limits */
 
 	uaddr = uvm_uarea_alloc();
-	if (__predict_false(uaddr == 0)) {
-		pool_put(&lwp_uc_pool, newuc);
+	if (__predict_false(uaddr == 0))
 		return ENOMEM;
-	}
 
-	error = lwp_create(l, p, uaddr, SCARG(uap, flags) & LWP_DETACHED,
-	    NULL, 0, p->p_emul->e_startlwp, newuc, &l2, l->l_class);
+	error = lwp_create(l, p, uaddr, flags & LWP_DETACHED,
+	    NULL, 0, p->p_emul->e_startlwp, arg, &l2, l->l_class);
 	if (__predict_false(error)) {
 		uvm_uarea_free(uaddr);
-		pool_put(&lwp_uc_pool, newuc);
 		return error;
 	}
 
-	lid = l2->l_lid;
-	error = copyout(&lid, SCARG(uap, new_lwp), sizeof(lid));
-	if (error) {
-		lwp_exit(l2);
-		pool_put(&lwp_uc_pool, newuc);
-		return error;
-	}
+	*new_lwp = l2->l_lid;
 
 	/*
 	 * Set the new LWP running, unless the caller has requested that
@@ -134,24 +111,71 @@ sys__lwp_create(struct lwp *l, const struct sys__lwp_create_args *uap,
 	 */
 	mutex_enter(p->p_lock);
 	lwp_lock(l2);
-	if ((SCARG(uap, flags) & LWP_SUSPENDED) == 0 &&
+	spc = &l2->l_cpu->ci_schedstate;
+	if ((flags & LWP_SUSPENDED) == 0 &&
 	    (l->l_flag & (LW_WREBOOT | LW_WSUSPEND | LW_WEXIT)) == 0) {
-	    	if (p->p_stat == SSTOP || (p->p_sflag & PS_STOPPING) != 0)
+	    	if (p->p_stat == SSTOP || (p->p_sflag & PS_STOPPING) != 0) {
+			KASSERT(l2->l_wchan == NULL);
 	    		l2->l_stat = LSSTOP;
-		else {
-			KASSERT(lwp_locked(l2, l2->l_cpu->ci_schedstate.spc_mutex));
-			p->p_nrlwps++;
+			p->p_nrlwps--;
+			lwp_unlock_to(l2, spc->spc_lwplock);
+		} else {
+			KASSERT(lwp_locked(l2, spc->spc_mutex));
 			l2->l_stat = LSRUN;
 			sched_enqueue(l2, false);
+			lwp_unlock(l2);
 		}
-		lwp_unlock(l2);
 	} else {
 		l2->l_stat = LSSUSPENDED;
-		lwp_unlock_to(l2, l2->l_cpu->ci_schedstate.spc_lwplock);
+		p->p_nrlwps--;
+		lwp_unlock_to(l2, spc->spc_lwplock);
 	}
 	mutex_exit(p->p_lock);
 
 	return 0;
+}
+
+int
+sys__lwp_create(struct lwp *l, const struct sys__lwp_create_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(const ucontext_t *) ucp;
+		syscallarg(u_long) flags;
+		syscallarg(lwpid_t *) new_lwp;
+	} */
+	struct proc *p = l->l_proc;
+	ucontext_t *newuc = NULL;
+	lwpid_t lid;
+	int error;
+
+	newuc = kmem_alloc(sizeof(ucontext_t), KM_SLEEP);
+	error = copyin(SCARG(uap, ucp), newuc, p->p_emul->e_ucsize);
+	if (error)
+		goto fail;
+
+	/* validate the ucontext */
+	if ((newuc->uc_flags & _UC_CPU) == 0) {
+		error = EINVAL;
+		goto fail;
+	}
+	error = cpu_mcontext_validate(l, &newuc->uc_mcontext);
+	if (error)
+		goto fail;
+
+	error = do_lwp_create(l, newuc, SCARG(uap, flags), &lid);
+	if (error)
+		goto fail;
+
+	/*
+	 * do not free ucontext in case of an error here,
+	 * the lwp will actually run and access it
+	 */
+	return copyout(&lid, SCARG(uap, new_lwp), sizeof(lid));
+
+fail:
+	kmem_free(newuc, sizeof(ucontext_t));
+	return error;
 }
 
 int
@@ -186,12 +210,7 @@ sys__lwp_setprivate(struct lwp *l, const struct sys__lwp_setprivate_args *uap,
 		syscallarg(void *) ptr;
 	} */
 
-	l->l_private = SCARG(uap, ptr);
-#ifdef __HAVE_CPU_LWP_SETPRIVATE
-	cpu_lwp_setprivate(l, SCARG(uap, ptr));
-#endif
-
-	return 0;
+	return lwp_setprivate(l, SCARG(uap, ptr));
 }
 
 int

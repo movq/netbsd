@@ -1,4 +1,4 @@
-# $NetBSD: t_read_write.sh,v 1.3 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_read_write.sh,v 1.5 2010/11/07 17:51:18 jmmv Exp $
 #
 # Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.

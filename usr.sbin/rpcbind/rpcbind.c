@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcbind.c,v 1.15 2007/08/27 19:53:33 dsl Exp $	*/
+/*	$NetBSD: rpcbind.c,v 1.18 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -105,7 +105,7 @@ const char rpcbind_unknown[] = "unknown";
 static int init_transport(struct netconfig *);
 static void rbllist_add(rpcprog_t, rpcvers_t, struct netconfig *,
     struct netbuf *);
-static void terminate(int);
+__dead static void terminate(int);
 static void parseargs(int, char *[]);
 
 int
@@ -126,8 +126,6 @@ main(int argc, char *argv[])
 			rl.rlim_cur = 128;
 		setrlimit(RLIMIT_NOFILE, &rl);
 	}
-	if (geteuid()) /* This command allowed only to root */
-		errx(1, "Sorry. You are not superuser");
 	nc_handle = setnetconfig(); 	/* open netconfig file */
 	if (nc_handle == NULL)
 		errx(1, "could not read /etc/netconfig");
@@ -337,7 +335,7 @@ init_transport(struct netconfig *nconf)
 		
 	my_xprt = (SVCXPRT *)svc_tli_create(fd, nconf, &taddr, RPC_MAXDATASIZE,
 	    RPC_MAXDATASIZE);
-	if (my_xprt == (SVCXPRT *)NULL) {
+	if (my_xprt == NULL) {
 		warnx("Could not create service for `%s'", nconf->nc_netid);
 		goto error;
 	}

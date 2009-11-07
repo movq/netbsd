@@ -1,4 +1,11 @@
-#	$NetBSD: Makefile,v 1.70 2009/09/19 07:09:54 snj Exp $
+#	$NetBSD: Makefile,v 1.84 2011/08/09 15:02:30 jmcneill Exp $
+
+# Experimental RCS METALOG versioning
+# (Needs host's rcs(1) commands)
+#
+# TODO:
+# - In 'build.sh distribution', print diff to previous
+#RCSMETALOG=1
 
 # The `all' target must appear before bsd.own.mk is pulled in.
 all:
@@ -7,11 +14,16 @@ all:
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
-GREP?= grep
 
-SETSCMD=	cd ${.CURDIR} && \
-		DESTDIR=${DESTDIR:Q} \
-		MACHINE=${MACHINE:Q} MACHINE_ARCH=${MACHINE_ARCH:Q} \
+.if ${USE_PIGZGZIP} != "no"
+COMPRESS_PROGRAM=${TOOL_PIGZ:Q}
+.else
+COMPRESS_PROGRAM=gzip
+.endif
+
+SETSENV=	DESTDIR=${DESTDIR:Q} \
+		MACHINE=${MACHINE:Q} \
+		MACHINE_ARCH=${MACHINE_ARCH:Q} \
 		AWK=${TOOL_AWK:Q} \
 		CKSUM=${TOOL_CKSUM:Q} \
 		DB=${TOOL_DB:Q} \
@@ -20,18 +32,29 @@ SETSCMD=	cd ${.CURDIR} && \
 		MKTEMP=${TOOL_MKTEMP:Q} \
 		MTREE=${TOOL_MTREE:Q} \
 		PAX=${TOOL_PAX:Q} \
+		COMPRESS_PROGRAM=${COMPRESS_PROGRAM:Q} \
+		PKG_CREATE=${TOOL_PKG_CREATE:Q} \
 		SED=${TOOL_SED:Q} \
-		TSORT=${TSORT:Q} \
+		TSORT=${TSORT:Q}
+SETSCMD=	cd ${.CURDIR} && \
+		${SETSENV} \
 		${HOST_SH}
 
 MAKETARS_FLAGS=
 .if ${MKX11} != "no"
-MAKEFLIST_FLAGS=	-b
-MAKESRCTARS_FLAGS=	-x ${X11SRCDIR} -N ${NETBSDSRCDIR}/etc
-.else
-MAKEFLIST_FLAGS=
-MAKESRCTARS_FLAGS= 	-N ${NETBSDSRCDIR}/etc
+MAKESRCTARS_X11_FLAGS=	-x ${X11SRCDIR}
 .endif
+.if ${MKEXTSRC} != "no"
+MAKESRCTARS_EXTSRC_FLAGS=	-y ${EXTSRCSRCDIR}
+.endif
+.if ${MKX11} != "no"
+MAKEFLIST_X11_FLAGS=	,x
+.endif
+.if ${MKEXTSRC} != "no"
+MAKEFLIST_EXTSRC_FLAGS=	,ext
+.endif
+MAKEFLIST_FLAGS=	-L base${MAKEFLIST_X11_FLAGS}${MAKEFLIST_EXTSRC_FLAGS}
+MAKESRCTARS_FLAGS= 	-N ${NETBSDSRCDIR}/etc
 
 .if ${MAKEVERBOSE} < 2
 MAKETARS_FLAGS+=	-q
@@ -59,6 +82,13 @@ print_object_fmt: .PHONY
 
 print_toolchain_missing: .PHONY
 	@echo "${TOOLCHAIN_MISSING}"
+
+print_mkvars \
+print_set_lists_base print_set_lists_x print_set_lists_ext \
+list_set_lists_base list_set_lists_x list_set_lists_ext \
+list_set_files_base list_set_files_x list_set_files_ext \
+		: .PHONY
+	@${SETSENV}; rundir="${.CURDIR}"; . ./sets.subr; ${.TARGET}
 
 #
 # METALOG MANIPULATION TARGETS
@@ -94,16 +124,30 @@ clean_METALOG: .PHONY
 METALOG.unpriv= -M ${METALOG}.sanitised
 sanitise_METALOG: .PHONY ${METALOG}.sanitised
 ${METALOG}.sanitised: ${METALOG}
-	${TOOL_MTREE} -CSM -k all -N ${NETBSDSRCDIR}/etc <${METALOG} \
+	sort ${METALOG} | \
+	    ${TOOL_MTREE} -CSM -k all -N ${NETBSDSRCDIR}/etc \
 	    >${METALOG}.new
 	mv ${METALOG}.new ${METALOG}.sanitised
+.if defined(RCSMETALOG)
+	. ./metalog.subr; \
+	xrcs_descr="build distribution METALOG"; \
+	xrcs_msg="$$(date)"; \
+	xrcs_cur=${METALOG}.sanitised; \
+	xrcs update
+.endif
 .if ${MKUPDATE} == "no" || !exists(${METALOG})
 clean_METALOG: .PHONY
 	rm -f ${METALOG} ${METALOG}.*
 .else	# MKUPDATE
 clean_METALOG: .PHONY ${METALOG}.sanitised
 	mv ${METALOG}.sanitised ${METALOG}
+.if defined(RCSMETALOG)
+	[ -f ${METALOG}.sanitised,v ] && mv ${METALOG}.sanitised,v ${METALOG},v
+.endif
 	rm -f ${METALOG}.*
+.if defined(RCSMETALOG)
+	[ -f ${METALOG},v ] && mv ${METALOG},v ${METALOG}.sanitised,v
+.endif
 .endif	# MKUPDATE
 .endif	# MKUNPRIVED
 
@@ -121,6 +165,9 @@ checkflist: .PRECIOUS .PHONY check_DESTDIR sanitise_METALOG
 
 checkflist-x11: .PHONY check_DESTDIR
 	${SETSCMD} ./checkflist -x ${CHECKFLIST_FLAGS}
+
+checkflist-extsrc: .PHONY check_DESTDIR
+	${SETSCMD} ./checkflist -y ${CHECKFLIST_FLAGS}
 
 .if defined(DESTDIR) && ${DESTDIR} != ""
 checkflist_if_DESTDIR: checkflist
@@ -185,6 +232,7 @@ makesrctars: .PRECIOUS .PHONY check_RELEASEDIR
 	${_MKMSG_CREATE} "source tar files"
 	mkdir -p ${SOURCETARDIR}
 	${SETSCMD} ./makesrctars ${MAKESRCTARS_FLAGS} \
+	    ${MAKESRCTARS_X11_FLAGS} ${MAKESRCTARS_EXTSRC_FLAGS} \
 	    ${NETBSDSRCDIR} ${SOURCETARDIR}
 
 

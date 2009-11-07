@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_inode.c,v 1.78 2009/02/22 20:28:07 ad Exp $	*/
+/*	$NetBSD: ufs_inode.c,v 1.88 2011/09/20 14:01:33 chs Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.78 2009/02/22 20:28:07 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.88 2011/09/20 14:01:33 chs Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -92,23 +92,20 @@ ufs_inactive(void *v)
 	UFS_WAPBL_JUNLOCK_ASSERT(vp->v_mount);
 
 	transmp = vp->v_mount;
-	fstrans_start(transmp, FSTRANS_SHARED);
+	fstrans_start(transmp, FSTRANS_LAZY);
 	/*
 	 * Ignore inodes related to stale file handles.
 	 */
 	if (ip->i_mode == 0)
 		goto out;
 	if (ip->i_nlink <= 0 && (vp->v_mount->mnt_flag & MNT_RDONLY) == 0) {
+#ifdef UFS_EXTATTR
+		ufs_extattr_vnode_inactive(vp, curlwp);
+#endif
 		error = UFS_WAPBL_BEGIN(vp->v_mount);
 		if (error)
 			goto out;
 		logged = 1;
-#ifdef QUOTA
-		(void)chkiq(ip, -1, NOCRED, 0);
-#endif
-#ifdef UFS_EXTATTR
-		ufs_extattr_vnode_inactive(vp, curlwp);
-#endif
 		if (ip->i_size != 0) {
 			/*
 			 * When journaling, only truncate one indirect block
@@ -140,15 +137,18 @@ ufs_inactive(void *v)
 			if (!error)
 				error = UFS_TRUNCATE(vp, (off_t)0, 0, NOCRED);
 		}
+#if defined(QUOTA) || defined(QUOTA2)
+		(void)chkiq(ip, -1, NOCRED, 0);
+#endif
 		DIP_ASSIGN(ip, rdev, 0);
 		mode = ip->i_mode;
 		ip->i_mode = 0;
+		ip->i_omode = mode;
 		DIP_ASSIGN(ip, mode, 0);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		mutex_enter(&vp->v_interlock);
-		vp->v_iflag |= VI_FREEING;
-		mutex_exit(&vp->v_interlock);
-		UFS_VFREE(vp, ip->i_number, mode);
+		/*
+		 * Defer final inode free and update to ufs_reclaim().
+		 */
 	}
 
 	if (ip->i_flag & (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) {
@@ -168,7 +168,7 @@ out:
 	 * so that it can be reused immediately.
 	 */
 	*ap->a_recycle = (ip->i_mode == 0);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	fstrans_done(transmp);
 	return (error);
 }
@@ -194,15 +194,12 @@ ufs_reclaim(struct vnode *vp)
 	 * Remove the inode from its hash chain.
 	 */
 	ufs_ihashrem(ip);
-	/*
-	 * Purge old data structures associated with the inode.
-	 */
-	cache_purge(vp);
+
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);
 		ip->i_devvp = 0;
 	}
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	ufsquota_free(ip);
 #endif
 #ifdef UFS_DIRHASH
@@ -264,74 +261,49 @@ ufs_balloc_range(struct vnode *vp, off_t off, off_t len, kauth_cred_t cred,
 	off -= delta;
 	len += delta;
 
- retry:
-	mutex_enter(&uobj->vmobjlock);
+	genfs_node_wrlock(vp);
+	mutex_enter(uobj->vmobjlock);
 	error = VOP_GETPAGES(vp, pagestart, pgs, &npages, 0,
-	    VM_PROT_WRITE, 0,
-	    PGO_SYNCIO|PGO_PASTEOF|PGO_NOBLOCKALLOC|PGO_NOTIMESTAMP);
+	    VM_PROT_WRITE, 0, PGO_SYNCIO | PGO_PASTEOF | PGO_NOBLOCKALLOC |
+	    PGO_NOTIMESTAMP | PGO_GLOCKHELD);
 	if (error) {
 		goto out;
 	}
-	mutex_enter(&uobj->vmobjlock);
-	mutex_enter(&uvm_pageqlock);
-	for (i = 0; i < npages; i++) {
-		UVMHIST_LOG(ubchist, "got pgs[%d] %p", i, pgs[i],0,0);
-		KASSERT((pgs[i]->flags & PG_RELEASED) == 0);
-		pgs[i]->flags &= ~PG_CLEAN;
-		uvm_pageactivate(pgs[i]);
-	}
-	mutex_exit(&uvm_pageqlock);
-	mutex_exit(&uobj->vmobjlock);
 
 	/*
 	 * now allocate the range.
 	 */
 
-	/*
-	 * XXX: Hack around deadlock with pagebusy and genfs node lock.
-	 *      This should be properly fixed.  PR kern/40389
-	 */
-	{
-	struct genfs_node *gp = VTOG(vp); /* XXX */
-
-	if (!rw_tryenter(&gp->g_glock, RW_WRITER)) {
-		mutex_enter(&uobj->vmobjlock);
-		for (i = 0; i < npages; i++)
-			pgs[i]->flags |= PG_RELEASED | PG_CLEAN;
-		mutex_enter(&uvm_pageqlock);
-		uvm_page_unbusy(pgs, npages);
-		mutex_exit(&uvm_pageqlock);
-		mutex_exit(&uobj->vmobjlock);
-		kpause("uballo", false, 1, NULL);
-		goto retry;
-	}}
-
 	error = GOP_ALLOC(vp, off, len, flags, cred);
 	genfs_node_unlock(vp);
 
 	/*
-	 * clear PG_RDONLY on any pages we are holding
-	 * (since they now have backing store) and unbusy them.
+	 * if the allocation succeeded, clear PG_CLEAN on all the pages
+	 * and clear PG_RDONLY on any pages that are now fully backed
+	 * by disk blocks.  if the allocation failed, we do not invalidate
+	 * the pages since they might have already existed and been dirty,
+	 * in which case we need to keep them around.  if we created the pages,
+	 * they will be clean and read-only, and leaving such pages
+	 * in the cache won't cause any problems.
 	 */
 
 	GOP_SIZE(vp, off + len, &eob, 0);
-	mutex_enter(&uobj->vmobjlock);
+	mutex_enter(uobj->vmobjlock);
+	mutex_enter(&uvm_pageqlock);
 	for (i = 0; i < npages; i++) {
-		if (error) {
-			pgs[i]->flags |= PG_RELEASED;
-		} else if (off <= pagestart + (i << PAGE_SHIFT) &&
-		    pagestart + ((i + 1) << PAGE_SHIFT) <= eob) {
-			pgs[i]->flags &= ~PG_RDONLY;
+		KASSERT((pgs[i]->flags & PG_RELEASED) == 0);
+		if (!error) {
+			if (off <= pagestart + (i << PAGE_SHIFT) &&
+			    pagestart + ((i + 1) << PAGE_SHIFT) <= eob) {
+				pgs[i]->flags &= ~PG_RDONLY;
+			}
+			pgs[i]->flags &= ~PG_CLEAN;
 		}
+		uvm_pageactivate(pgs[i]);
 	}
-	if (error) {
-		mutex_enter(&uvm_pageqlock);
-		uvm_page_unbusy(pgs, npages);
-		mutex_exit(&uvm_pageqlock);
-	} else {
-		uvm_page_unbusy(pgs, npages);
-	}
-	mutex_exit(&uobj->vmobjlock);
+	mutex_exit(&uvm_pageqlock);
+	uvm_page_unbusy(pgs, npages);
+	mutex_exit(uobj->vmobjlock);
 
  out:
  	kmem_free(pgs, pgssize);

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.boot,v 1.3 2009/04/22 17:13:36 tsutsui Exp $
+# $NetBSD: Makefile.boot,v 1.5 2011/12/25 06:09:09 tsutsui Exp $
 
 PROG?=		boot
 
@@ -22,10 +22,12 @@ CPPFLAGS+=	-DSUPPORT_FFSv2
 CPPFLAGS+=	-DSUPPORT_DOSFS
 CPPFLAGS+=	-DSUPPORT_USTARFS
 CPPFLAGS+=	-DDBMONITOR
+CPPFLAGS+=	-DLIBSA_ENABLE_LS_OP
 #CPPFLAGS+=	-DDEBUG
 
 SAMISCMAKEFLAGS+="SA_USE_CREAD=yes"
 SAMISCMAKEFLAGS+="SA_USE_LOADFILE=yes"
+SAMISCMAKEFLAGS+="SA_ENABLE_LS_OP=yes"
 
 .include "../Makefile.bootprogs"
 
@@ -34,7 +36,8 @@ LIBLIST=	${LIBSA} ${LIBZ} ${LIBKERN}
 CLEANFILES+=	${PROG}.sym ${PROG}.map vers.c
 
 vers.c: ${VERSIONFILE} ${SOURCES} ${.CURDIR}/../Makefile.boot
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${VERSIONFILE} ${MACHINE} ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${VERSIONFILE} ${MACHINE} ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBLIST}
 	${LD} -o ${PROG}.sym ${LDFLAGS} -Ttext ${SECONDARY_LOAD_ADDRESS} \

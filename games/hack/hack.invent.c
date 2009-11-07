@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.invent.c,v 1.14 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: hack.invent.c,v 1.18 2011/08/07 06:03:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.invent.c,v 1.14 2009/08/12 07:28:40 dholland Exp $");
+__RCSID("$NetBSD: hack.invent.c,v 1.18 2011/08/07 06:03:45 dholland Exp $");
 #endif				/* not lint */
 
 #include <assert.h>
@@ -80,7 +80,7 @@ __RCSID("$NetBSD: hack.invent.c,v 1.14 2009/08/12 07:28:40 dholland Exp $");
 static int      lastinvnr = 51;	/* 0 ... 51 */
 
 static char *xprname(struct obj *, char);
-static void doinv(char *);
+static void doinv(const char *);
 static int merged(struct obj *, struct obj *, int);
 
 static void
@@ -237,7 +237,7 @@ freegold(struct gold *gold)
 		}
 		gtmp->ngold = gold->ngold;
 	}
-	free((char *) gold);
+	free(gold);
 }
 
 void
@@ -251,7 +251,7 @@ deltrap(struct trap *trap)
 		for (ttmp = ftrap; ttmp->ntrap != trap; ttmp = ttmp->ntrap);
 		ttmp->ntrap = trap->ntrap;
 	}
-	free((char *) trap);
+	free(trap);
 }
 
 struct wseg    *m_atseg;
@@ -499,7 +499,7 @@ getobj(const char *let, const char *word)
 				continue;
 			/* he typed a letter (not a space) to more() */
 		} else if (ilet == '*') {
-			doinv((char *) 0);
+			doinv(NULL);
 			if (!(ilet = morc))
 				continue;
 			/* ... */
@@ -655,7 +655,7 @@ askchain(struct obj *objchn, char *olets, int allflag,
 		if (ckfn && !(*ckfn) (otmp))
 			continue;
 		if (!allflag) {
-			pline(xprname(otmp, ilet));
+			pline("%s", xprname(otmp, ilet));
 			addtopl(" [nyaq]? ");
 			sym = readchar();
 		} else
@@ -664,10 +664,12 @@ askchain(struct obj *objchn, char *olets, int allflag,
 		switch (sym) {
 		case 'a':
 			allflag = 1;
+			/* FALLTHROUGH */
 		case 'y':
 			cnt += (*fn) (otmp);
 			if (--max == 0)
 				goto ret;
+			break;
 		case 'n':
 		default:
 			break;
@@ -699,7 +701,7 @@ obj_to_let(struct obj *obj)
 void
 prinv(struct obj *obj)
 {
-	pline(xprname(obj, obj_to_let(obj)));
+	pline("%s", xprname(obj, obj_to_let(obj)));
 }
 
 static char *
@@ -716,14 +718,14 @@ xprname(struct obj *obj, char let)
 int
 ddoinv(void)
 {
-	doinv((char *) 0);
+	doinv(NULL);
 	return (0);
 }
 
 /* called with 0 or "": all objects in inventory */
 /* otherwise: all objects with (serial) letter in lets */
 static void
-doinv(char *lets)
+doinv(const char *lets)
 {
 	struct obj     *otmp;
 	char            ilet;
@@ -736,7 +738,7 @@ doinv(char *lets)
 		pline("Not carrying anything.");
 		return;
 	}
-	cornline(0, (char *) 0);
+	cornline(0, NULL);
 	ilet = 'a';
 	for (otmp = invent; otmp; otmp = otmp->nobj) {
 		if (flags.invlet_constant)
@@ -883,10 +885,10 @@ dolook(void)
 	}
 	if (ct == 1 && !gold) {
 		pline("You %s here %s.", verb, doname(otmp0));
-		cornline(3, (char *) 0);
+		cornline(3, NULL);
 	}
 	if (ct > 1)
-		cornline(2, (char *) 0);
+		cornline(2, NULL);
 	return (!!Blind);
 }
 

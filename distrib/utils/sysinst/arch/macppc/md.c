@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.41 2009/09/19 14:57:29 abs Exp $	*/
+/*	$NetBSD: md.c,v 1.45 2011/11/04 11:27:03 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -59,9 +55,9 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	(void)flags;
 }
 
 int
@@ -95,7 +91,7 @@ md_get_info(void)
 
 	/*
 	 * Compute whole disk size. Take max of (dlcyl*dlhead*dlsec)
-	 * and secperunit,  just in case the disk is already labelled.  
+	 * and secperunit,  just in case the disk is already labelled.
 	 * (If our new label's RAW_PART size ends up smaller than the
 	 * in-core RAW_PART size  value, updating the label will fail.)
 	 */
@@ -154,6 +150,31 @@ md_post_newfs(void)
 {
 	const char *bootfile = "/boot";
 
+	/*
+	 * XXX
+	 * Only OpenFirmware version 1 and 2 machines need installboot(8)
+	 * and it uses a faked Apple partition map with the primary bootxx.
+	 * installboot(8) assumes that root partition is at the beginning of
+	 * the disk and put a faked Apple partition map at the top of
+	 * the partition, so it won't work if root partition has some
+	 * offset from physical block 0 where the Apple driver descriptor
+	 * map resides on.
+	 *
+	 * On OpenFirmware version 3 machines, the strategy used on OF1/2
+	 * machines doesn't work (they don't recognize boot code info
+	 * in Apple partition map entries) and they need to have
+	 * an extra native partition (HFS or MSDOSFS) which can be
+	 * recognized by the newer firmware to put a loadable bootloader.
+	 * installboot(8) against partition `a' on such machines might
+	 * corrupt existing disklabel or a valid Apple partition map.
+	 *
+	 * Currently there is no way to see OF version on running machine
+	 * yet, so assume partition a has some offset on OF3 machines
+	 * and don't try installboot(8) in that case.
+	 */
+	if (bsdlabel[PART_A].pi_offset != 0)
+		return 0;
+
 	printf (msg_string(MSG_dobootblks), diskdev);
 	cp_to_target("/usr/mdec/ofwboot", bootfile);
 	sync();
@@ -188,4 +209,10 @@ md_update(void)
 {
 	md_post_newfs();
 	return 1;
+}
+
+int
+md_pre_mount()
+{
+	return 0;
 }

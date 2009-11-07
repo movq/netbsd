@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: osrelease.sh,v 1.117 2009/10/29 06:33:27 apb Exp $
+#	$NetBSD: osrelease.sh,v 1.120.18.2 2012/02/17 00:08:38 riz Exp $
 #
 # Copyright (c) 1997 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -32,28 +32,71 @@
 
 # We use the number specified in <sys/param.h>
 
-AWK=${AWK:-awk}
-SED=${TOOL_SED:-sed}
-PARAMH="`dirname $0`"/../sys/param.h
-release=`$AWK '/^#define[ 	]*__NetBSD_Version__/ { print $6 }' $PARAMH`
+path="$0"
+[ "${path#/*}" = "$path" ] && path="./$path"
+exec < ${path%/*}/../sys/param.h
 
-# default: return nn.nn.nn
-# -m: return nn, representing only the major number; however, for -current,
+# Search for line
+# #define __NetBSD_Version__ <ver_num> /* NetBSD <ver_text> */
+#
+# <ver_num> and <ver_text> should match!
+
+while
+	read define ver_tag rel_num comment_start NetBSD rel_text rest || exit 1
+do
+	[ "$define" = "#define" ] || continue;
+	[ "$ver_tag" = "__NetBSD_Version__" ] || continue
+	break
+done
+
+# default: return MM.mm.pp
+# -m: return MM, representing only the major number; however, for -current,
 #     return the next major number (e.g. for 5.99.nn, return 6)
-# -n: return nn.nn
-# -s: return nnnnnn (no dots)
+# -n: return MM.mm
+# -s: return MMmmpp (no dots)
+# -k: return MM.mm on release branch, MM.mm.pp on current.
 
-case $1 in
+option="$1"
+
+# ${rel_num} is [M]Mmm00pp00
+rel_num=${rel_num%??}
+rel_MMmm=${rel_num%????}
+rel_MM=${rel_MMmm%??}
+rel_mm=${rel_MMmm#${rel_MM}}
+# rel_pp=${rel_num#${rel_MMmm}00}
+
+# Get patch from text version
+IFS=.
+set -- - $rel_text
+beta=${3#[0-9]}
+beta=${beta#[0-9]}
+shift 3
+IFS=' '
+set -- $rel_MM ${rel_mm#0}$beta $*
+
+case "$option" in
+-k)
+	if [ ${rel_mm#0} = 99 ]
+	then
+		IFS=.
+		echo "$*"
+	else
+		echo "${rel_MM}.${rel_mm#0}"
+	fi
+	;;
+	     
 -m)
-	echo $release | $AWK -F. '{print int($1+$2/100+0.01)}'
+	echo "$(((${rel_MMmm}+1)/100))"
 	;;
 -n)
-	echo $release | $AWK -F. '{print $1 "." $2}'
+	echo "${rel_MM}.${rel_mm#0}"
 	;;
 -s)
-	echo $release | $SED -e 's,\.,,g'
+	IFS=
+	echo "$*"
 	;;
 *)
-	echo $release
+	IFS=.
+	echo "$*"
 	;;
 esac

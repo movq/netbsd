@@ -1,4 +1,4 @@
-/*	$NetBSD: boot2.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: boot2.c,v 1.3 2011/12/25 06:09:09 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2003
@@ -213,12 +213,9 @@ print_banner(void)
 {
 	extern const char bootprog_name[];
 	extern const char bootprog_rev[];
-	extern const char bootprog_date[];
-	extern const char bootprog_maker[];
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 }
 
 void
@@ -332,7 +329,7 @@ bootcmd_ls(char *arg)
 	const char *save = default_filename;
 
 	default_filename = "/";
-	ufs_ls(arg);
+	ls(arg);
 	default_filename = save;
 }
 

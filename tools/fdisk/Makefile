@@ -1,14 +1,12 @@
-#	$NetBSD: Makefile,v 1.3 2009/02/14 13:56:41 abs Exp $
+#	$NetBSD: Makefile,v 1.4.8.1 2012/06/12 19:11:51 riz Exp $
 
 HOSTPROGNAME=	${MACHINE_GNU_PLATFORM}-fdisk
 HOST_SRCDIR=	sbin/fdisk
 HOST_SRCS=	getcap.c disklabel.c
 
-.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-CPPFLAGS+= -DBOOTSEL
-.endif
+HOST_CPPFLAGS=	-DDEFAULT_BOOTDIR=\"${DESTDIR}/usr/mdec\"
 
-.include "${.CURDIR}/../Makefile.disklabel"
+.include "${.CURDIR}/../Makefile.nbincludes"
 .include "${.CURDIR}/../Makefile.host"
 
 .PATH: ${.CURDIR}/../../lib/libc/gen

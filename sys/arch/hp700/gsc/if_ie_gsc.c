@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_gsc.c,v 1.20 2009/11/03 05:07:25 snj Exp $	*/
+/*	$NetBSD: if_ie_gsc.c,v 1.26 2012/02/04 16:31:19 skrll Exp $	*/
 
 /*	$OpenBSD: if_ie_gsc.c,v 1.6 2001/01/12 22:57:04 mickey Exp $	*/
 
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_gsc.c,v 1.20 2009/11/03 05:07:25 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_gsc.c,v 1.26 2012/02/04 16:31:19 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_gsc.c,v 1.20 2009/11/03 05:07:25 snj Exp $");
 
 #include <netinet/in.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
@@ -69,15 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_gsc.c,v 1.20 2009/11/03 05:07:25 snj Exp $");
 #include <dev/ic/i82586var.h>
 
 #define	I82596_DEBUG	I82586_DEBUG
-
-/*
- * XXX fredette - I'm defining these on a hunch.  When things
- * appear to be working, remove these.
- */
-#if 1
-#define fdcache_small fdcache
-#define pdcache_small pdcache
-#endif
 
 #ifdef __for_reference_only
 struct ie_gsc_regs {
@@ -123,7 +114,7 @@ struct ie_gsc_softc {
 int	ie_gsc_probe(device_t, cfdata_t, void *);
 void	ie_gsc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ie_gsc, sizeof(struct ie_gsc_softc),
+CFATTACH_DECL_NEW(ie_gsc, sizeof(struct ie_gsc_softc),
     ie_gsc_probe, ie_gsc_attach, NULL, NULL);
 
 static int ie_gsc_media[] = {
@@ -340,7 +331,7 @@ i82596_probe(struct ie_softc *sc)
 	/* Make sure that BUSY got cleared. */
 	if (sc->ie_bus_read16(sc, IE_ISCP_BUSY(sc->iscp))) {
 #if I82596_DEBUG
-		printf ("%s: ISCP set failed\n", sc->sc_dev.dv_xname);
+		printf ("%s: ISCP set failed\n", device_xname(sc->sc_dev));
 #endif
 		return 0;
 	}
@@ -360,7 +351,7 @@ i82596_probe(struct ie_softc *sc)
 	printf (": test %x:%x\n%s",
 		*((volatile int32_t *)((char *)sc->sc_maddr + 0)),
 		*((volatile int32_t *)((char *)sc->sc_maddr + 4)),
-		sc->sc_dev.dv_xname);
+		device_xname(sc->sc_dev));
 #endif
 	return 1;
 }
@@ -407,6 +398,7 @@ ie_gsc_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Set up some initial glue. */
+	sc->sc_dev = self;
 	gsc->iot = ga->ga_iot;
 	gsc->iemt = ga->ga_dmatag;
 	sc->bt = ga->ga_iot;
@@ -419,7 +411,7 @@ ie_gsc_attach(device_t parent, device_t self, void *aux)
 	 * physical addresses.
 	 */
 	if (bus_dmamem_alloc(gsc->iemt, sc->sc_msize, PAGE_SIZE, 0,
-			     &seg, 1, &rseg, BUS_DMA_NOWAIT | BUS_DMA_24BIT)) {
+	    &seg, 1, &rseg, BUS_DMA_NOWAIT | BUS_DMA_24BIT)) {
 		printf (": can't allocate %d bytes of DMA memory\n",
 			sc->sc_msize);
 		return;
@@ -471,7 +463,7 @@ ie_gsc_attach(device_t parent, device_t self, void *aux)
 		(u_int)sc->sc_dmamap->dm_segs[0].ds_addr,
 		sc->sc_maddr,
 		sc->sc_msize,
-		sc->sc_dev.dv_xname);
+		device_xname(self));
 	sc->sc_debug = IED_ALL;
 #endif
 
@@ -558,7 +550,6 @@ ie_gsc_attach(device_t parent, device_t self, void *aux)
 		      "LASI/i82596CA" :
 		      "i82596DX",
 		      myaddr, ie_gsc_media, IE_NMEDIA, ie_gsc_media[0]);
-	gsc->sc_ih = hp700_intr_establish(&sc->sc_dev, IPL_NET,
-					  i82586_intr, sc,
-					  ga->ga_int_reg, ga->ga_irq);
+	gsc->sc_ih = hp700_intr_establish(IPL_NET, i82586_intr, sc,
+	    ga->ga_ir, ga->ga_irq);
 }

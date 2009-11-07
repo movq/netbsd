@@ -1,4 +1,4 @@
-# $NetBSD: t_mkdir.sh,v 1.3 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_mkdir.sh,v 1.8 2011/03/05 07:41:11 pooka Exp $
 #
 # Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -92,12 +92,11 @@ attrs_head() {
 	atf_set "require.user" "root"
 }
 attrs_body() {
+	user=$(atf_config_get unprivileged-user)
 	# Allow the unprivileged user to access the work directory.
-	chmod 711 .
+	chown ${user} .
 
 	test_mount
-
-	user=$(atf_config_get unprivileged-user)
 
 	atf_check -s eq:0 -o empty -e empty mkdir b c
 
@@ -111,12 +110,12 @@ attrs_body() {
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 100 ] || atf_fail "Incorrect group"
 
-	su ${user} -c 'mkdir b/a'
+	atf_check -s eq:0 -o empty -e empty su -m ${user} -c 'mkdir b/a'
 	eval $(stat -s b/a)
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 0 ] || atf_fail "Incorrect group"
 
-	su ${user} -c 'mkdir c/a'
+	atf_check -s eq:0 -o empty -e empty su -m ${user} -c 'mkdir c/a'
 	eval $(stat -s c/a)
 	[ ${st_uid} -eq $(id -u ${user}) ] || atf_fail "Incorrect owner"
 	[ ${st_gid} -eq 100 ] || atf_fail "Incorrect group"

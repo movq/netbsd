@@ -1,4 +1,4 @@
-/* $NetBSD: disk.c,v 1.2 2009/06/30 02:44:52 agc Exp $ */
+/* $NetBSD: disk.c,v 1.6.8.1 2012/03/17 17:48:49 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -100,6 +100,8 @@
 #include <netinet/in.h>
 #endif
 
+#include <assert.h>
+
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
@@ -149,7 +151,6 @@ enum {
 typedef struct iscsi_disk_t {
 	int		 type;		/* type of disk - fs/mmap and fs */
 	char		 filename[MAXPATHLEN];	/* filename for the disk */
-	uint8_t		*buffer;	/* buffer for disk read/write ops */
 	uint64_t	 blockc;	/* # of blocks */
 	uint64_t	 blocklen;	/* block size */
 	uint64_t	 luns;		/* # of luns */
@@ -715,12 +716,12 @@ de_allocate(disc_de_t *de, char *filename)
 	}
 	if (de_read(de, block, sizeof(block)) == -1) {
 		iscsi_err(__FILE__, __LINE__,
-				"error reading \"%s\"", filename);
+				"error reading \"%s\"\n", filename);
 		return 0;
 	}
 	if (de_write(de, block, sizeof(block)) == -1) {
 		iscsi_err(__FILE__, __LINE__,
-				"error writing \"%s\"", filename);
+				"error writing \"%s\"\n", filename);
 		return 0;
 	}
 	return 1;
@@ -765,15 +766,31 @@ strpadcpy(uint8_t *dst, size_t dstlen, const char *src, const size_t srclen,
 
 /* handle REPORT LUNs SCSI command */
 static int
-report_luns(uint64_t *data, int64_t luns)
+report_luns(uint8_t *data, uint64_t luns)
 {
-	uint64_t	i;
-	int32_t		off;
+	uint64_t i;
+	uint32_t len;
 
-	for (i = 0, off = 8 ; i < (uint64_t)luns ; i++, off += sizeof(i)) {
-		data[(int)i] = ISCSI_HTONLL(i);
+	len = 8;
+	for (i = 0; i < luns; i++) {
+		uint8_t *p = &data[len];
+
+		if (i < 256) {
+			memset(p, 0, 8);
+			p[1] = (uint8_t)(i & 0xff);
+			len += 8;
+		} else if (i < 16384) {
+			memset(p, 0, 8);
+			p[0] = (uint8_t)(0x40 | ((i >> 8) & 0x3f));
+			p[1] = (uint8_t)(i & 0xff);
+			len += 8;
+		} else {
+			/* XXX */
+		}
 	}
-	return off;
+	*((uint32_t *)(void *)data) = ISCSI_HTONL(len - 8);
+	memset(&data[4], 0, 4);
+	return len;
 }
 
 /* handle persistent reserve in command */
@@ -843,7 +860,6 @@ device_init(iscsi_target_t *tgt, targv_t *tvp, disc_target_t *tp)
 	}
 	idisk->size = de_getsize(&tp->de);
 	idisk->blockc = idisk->size / idisk->blocklen;
-	NEWARRAY(uint8_t, idisk->buffer, MB(1), "buffer1", ;);
 	idisk->type = ISCSI_FS;
 	printf("DISK: %" PRIu64 " logical unit%s (%" PRIu64 " blocks, %"
 			PRIu64 " bytes/block), type %s\n",
@@ -863,7 +879,7 @@ device_init(iscsi_target_t *tgt, targv_t *tvp, disc_target_t *tp)
 	}
 	if (!(tp->flags & TARGET_READONLY) && !allocate_space(tp)) {
 		iscsi_err(__FILE__, __LINE__,
-			"error allocating space for \"%s\"", tp->target);
+			"error allocating space for \"%s\"\n", tp->target);
 		return -1;
 	}
 	printf("%" PRIu64 " MB %sdisk storage for \"%s\"\n",
@@ -1309,12 +1325,8 @@ device_command(target_session_t *sess, target_cmd_t *cmd)
 
 	case REPORT_LUNS:
 		iscsi_trace(TRACE_SCSI_CMD, "REPORT LUNS\n");
-		args->length = report_luns(
-				(uint64_t *)(void *)&args->send_data[8],
-				(off_t)disks.v[sess->d].luns);
-		*((uint32_t *)(void *)args->send_data) =
-				ISCSI_HTONL(disks.v[sess->d].luns *
-				sizeof(uint64_t));
+		args->length = report_luns(args->send_data,
+				disks.v[sess->d].luns);
 		args->input = 8;
 		args->status = SCSI_SUCCESS;
 		break;
@@ -1374,6 +1386,7 @@ disk_write(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint8_t lun,
 	uint64_t        byte_offset;
 	uint64_t        bytec;
 	uint8_t        *ptr;
+	int		result;
 
 	byte_offset = lba * disks.v[sess->d].blocklen;
 	bytec = len * disks.v[sess->d].blocklen;
@@ -1384,13 +1397,13 @@ disk_write(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint8_t lun,
 		bytec, byte_offset);
 
 	if ((unsigned) bytec > MB(1)) {
-		iscsi_err(__FILE__, __LINE__, "bytec > %u\n", bytec);
+		iscsi_err(__FILE__, __LINE__, "bytec > %" PRIu64 "m\n", bytec);
 		NO_CLEANUP;
 		return -1;
 	}
 
 	/* Assign ptr for write data */
-	ptr = disks.v[sess->d].buffer;
+	ptr = malloc(MB(1));
 
 	/* Have target do data transfer */
 	sg.iov_base = ptr;
@@ -1398,6 +1411,8 @@ disk_write(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint8_t lun,
 	if (target_transfer_data(sess, args, &sg, 1) != 0) {
 		iscsi_err(__FILE__, __LINE__,
 			"target_transfer_data() failed\n");
+		result = -1;
+		goto out;
 	}
 	/* Finish up write */
 	if (de_lseek(&disks.v[sess->d].lunv->v[lun].de, (off_t)byte_offset,
@@ -1405,7 +1420,8 @@ disk_write(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint8_t lun,
 		iscsi_err(__FILE__, __LINE__,
 			"lseek() to offset %" PRIu64 " failed\n",
 			byte_offset);
-		return -1;
+		result = -1;
+		goto out;
 	}
 	if (!target_writable(&disks.v[sess->d].lunv->v[lun])) {
 		iscsi_err(__FILE__, __LINE__,
@@ -1413,7 +1429,8 @@ disk_write(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint8_t lun,
 			PRIu64 ", size %" PRIu64 "[READONLY TARGET]\n",
 			bytec, byte_offset,
 			de_getsize(&disks.v[sess->d].lunv->v[lun].de));
-		return -1;
+		result = -1;
+		goto out;
 	}
 	if ((uint64_t)de_write(&disks.v[sess->d].lunv->v[lun].de, ptr,
 			(unsigned) bytec) != bytec) {
@@ -1422,11 +1439,15 @@ disk_write(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint8_t lun,
 			PRIu64 ", size %" PRIu64 "\n",
 			bytec, byte_offset,
 			de_getsize(&disks.v[sess->d].lunv->v[lun].de));
-		return -1;
+		result = -1;
+		goto out;
 	}
 	iscsi_trace(TRACE_SCSI_DATA, 
 		"wrote %" PRIu64 " bytes to device OK\n", bytec);
-	return 0;
+	result = 0;
+out:
+	free(ptr);
+	return result;
 }
 
 static int 
@@ -1439,11 +1460,12 @@ disk_read(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint32_t lba,
 	uint8_t        *ptr;
 	uint32_t        n;
 	int             rc;
+	int		result;
 
+	assert(args->send_buffer == NULL);
 	byte_offset = lba * disks.v[sess->d].blocklen;
 	bytec = len * disks.v[sess->d].blocklen;
 	extra = 0;
-	ptr = NULL;
 	if (len == 0) {
 		iscsi_err(__FILE__, __LINE__, "Zero \"len\"\n");
 		NO_CLEANUP;
@@ -1458,24 +1480,26 @@ disk_read(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint32_t lba,
 		return -1;
 	}
 	if ((unsigned) bytec > MB(1)) {
-		iscsi_err(__FILE__, __LINE__, "bytec > %u\n", bytec);
+		iscsi_err(__FILE__, __LINE__, "bytec > %" PRIu64 "\n", bytec);
 		NO_CLEANUP;
 		return -1;
 	}
-	ptr = disks.v[sess->d].buffer;
+	ptr = malloc(MB(1));
 	n = 0;
 	do {
 		if (de_lseek(&disks.v[sess->d].lunv->v[lun].de,
 				(off_t)(n + byte_offset), SEEK_SET) == -1) {
 			iscsi_err(__FILE__, __LINE__, "lseek failed\n");
-			return -1;
+			result = -1;
+			goto out;
 		}
 		rc = de_read(&disks.v[sess->d].lunv->v[lun].de, ptr + n,
 				(size_t)(bytec - n));
 		if (rc <= 0) {
 			iscsi_err(__FILE__, __LINE__,
 				"read failed: rc %d errno %d\n", rc, errno);
-			return -1;
+			result = -1;
+			goto out;
 		}
 		n += rc;
 		if (n < bytec) {
@@ -1491,5 +1515,9 @@ disk_read(target_session_t *sess, iscsi_scsi_cmd_args_t *args, uint32_t lba,
 	args->length = (unsigned) bytec;
 	args->send_sg_len = 1;
 	args->status = 0;
+	args->send_buffer = ptr;
 	return 0;
+out:
+	free(ptr);
+	return result;
 }

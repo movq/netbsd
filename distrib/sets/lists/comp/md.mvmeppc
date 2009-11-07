@@ -1,11 +1,11 @@
-# $NetBSD: md.mvmeppc,v 1.11 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.mvmeppc,v 1.14 2011/07/17 20:54:31 joerg Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/mvmeppc				comp-c-include
 ./usr/include/mvmeppc/_G_config.h		comp-obsolete		obsolete
 ./usr/include/mvmeppc/ansi.h			comp-c-include
 ./usr/include/mvmeppc/aout_machdep.h		comp-c-include
 ./usr/include/mvmeppc/asm.h			comp-c-include
-./usr/include/mvmeppc/atomic.h			comp-c-include
+./usr/include/mvmeppc/atomic.h			comp-obsolete		obsolete
 ./usr/include/mvmeppc/bat.h			comp-obsolete		obsolete
 ./usr/include/mvmeppc/bootinfo.h		comp-c-include
 ./usr/include/mvmeppc/bswap.h			comp-c-include
@@ -52,10 +52,10 @@
 ./usr/include/mvmeppc/rwlock.h			comp-c-include
 ./usr/include/mvmeppc/setjmp.h			comp-c-include
 ./usr/include/mvmeppc/signal.h			comp-c-include
-./usr/include/mvmeppc/spr.h			comp-c-include
-./usr/include/mvmeppc/stdarg.h			comp-c-include
+./usr/include/mvmeppc/spr.h			comp-obsolete		obsolete
+./usr/include/mvmeppc/stdarg.h			comp-obsolete		obsolete
 ./usr/include/mvmeppc/trap.h			comp-c-include
 ./usr/include/mvmeppc/types.h			comp-c-include
-./usr/include/mvmeppc/varargs.h			comp-c-include
+./usr/include/mvmeppc/varargs.h			comp-obsolete		obsolete
 ./usr/include/mvmeppc/vmparam.h			comp-c-include
 ./usr/include/mvmeppc/wchar_limits.h		comp-c-include

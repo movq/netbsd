@@ -1,4 +1,4 @@
-/*	$NetBSD: cl_term.c,v 1.2 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: cl_term.c,v 1.4 2011/11/23 19:25:27 tnozaki Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -127,8 +127,9 @@ cl_term_init(SCR *sp)
 		MEMCPYW(name, wp, wlen);
 		CHAR2INT(sp, t, strlen(t), wp, wlen);
 		MEMCPYW(ts, wp, wlen);
+		output[0] = (UCHAR_T)kp->ch;
 		if (seq_set(sp, name, strlen(tkp->name), ts, strlen(t),
-		    &kp->ch, 1, SEQ_INPUT, SEQ_NOOVERWRITE | SEQ_SCREEN))
+		    output, 1, SEQ_INPUT, SEQ_NOOVERWRITE | SEQ_SCREEN))
 			return (1);
 	}
 
@@ -414,6 +415,7 @@ cl_ssize(SCR *sp, int sigwinch, size_t *rowp, size_t *colp, int *changedp)
 			*rowp = row;
 		if (colp != NULL)
 			*colp = col;
+		resizeterm(row, col);
 		return (0);
 	}
 

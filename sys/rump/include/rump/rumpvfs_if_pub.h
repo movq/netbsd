@@ -1,9 +1,9 @@
-/*	$NetBSD: rumpvfs_if_pub.h,v 1.3 2009/10/15 00:31:25 pooka Exp $	*/
+/*	$NetBSD: rumpvfs_if_pub.h,v 1.9 2010/11/30 16:27:30 pooka Exp $	*/
 
 /*
  * Automatically generated.  DO NOT EDIT.
- * from: NetBSD: rumpvfs.ifspec,v 1.1 2009/10/14 17:17:00 pooka Exp 
- * by:   NetBSD: makerumpif.sh,v 1.4 2009/10/15 00:29:19 pooka Exp 
+ * from: NetBSD: rumpvfs.ifspec,v 1.7 2010/11/30 15:41:35 pooka Exp 
+ * by:   NetBSD: makerumpif.sh,v 1.5 2010/09/01 19:32:11 pooka Exp 
  */
 
 void rump_pub_getvninfo(struct vnode *, enum vtype *, off_t *, dev_t *);
@@ -22,21 +22,18 @@ int rump_pub_etfs_register(const char *, const char *, enum rump_etfs_type);
 int rump_pub_etfs_register_withsize(const char *, const char *, enum rump_etfs_type, uint64_t, uint64_t);
 int rump_pub_etfs_remove(const char *);
 void rump_pub_freecn(struct componentname *, int);
-int rump_pub_checksavecn(struct componentname *);
 int rump_pub_namei(uint32_t, uint32_t, const char *, struct vnode **, struct vnode **, struct componentname **);
-struct componentname * rump_pub_makecn(u_long, u_long, const char *, size_t, kauth_cred_t, struct lwp *);
+struct componentname * rump_pub_makecn(u_long, u_long, const char *, size_t, struct kauth_cred *, struct lwp *);
 int rump_pub_vfs_unmount(struct mount *, int);
 int rump_pub_vfs_root(struct mount *, struct vnode **, int);
 int rump_pub_vfs_statvfs(struct mount *, struct statvfs *);
-int rump_pub_vfs_sync(struct mount *, int, kauth_cred_t);
+int rump_pub_vfs_sync(struct mount *, int, struct kauth_cred *);
 int rump_pub_vfs_fhtovp(struct mount *, struct fid *, struct vnode **);
 int rump_pub_vfs_vptofh(struct vnode *, struct fid *, size_t *);
+int rump_pub_vfs_extattrctl(struct mount *, int, struct vnode *, int, const char *);
 void rump_pub_vfs_syncwait(struct mount *);
 int rump_pub_vfs_getmp(const char *, struct mount **);
-void rump_pub_rcvp_set(struct vnode *, struct vnode *);
-struct vnode * rump_pub_cdir_get(void);
+void rump_pub_vfs_mount_print(const char *, int);
 int rump_pub_syspuffs_glueinit(int, int *);
-int rump_pub_sys___stat30(const char *, struct stat *);
-int rump_pub_sys___lstat30(const char *, struct stat *);
 void rump_pub_vattr50_to_vattr(const struct vattr *, struct vattr *);
 void rump_pub_vattr_to_vattr50(const struct vattr *, struct vattr *);

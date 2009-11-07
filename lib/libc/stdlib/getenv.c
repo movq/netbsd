@@ -1,4 +1,4 @@
-/*	$NetBSD: getenv.c,v 1.19 2008/10/31 17:46:04 christos Exp $	*/
+/*	$NetBSD: getenv.c,v 1.35 2010/11/14 22:04:36 tron Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getenv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getenv.c,v 1.19 2008/10/31 17:46:04 christos Exp $");
+__RCSID("$NetBSD: getenv.c,v 1.35 2010/11/14 22:04:36 tron Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -43,13 +43,10 @@ __RCSID("$NetBSD: getenv.c,v 1.19 2008/10/31 17:46:04 christos Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include "local.h"
-#include "reentrant.h"
 
-#ifdef _REENTRANT
-rwlock_t __environ_lock = RWLOCK_INITIALIZER;
-#endif
-extern char **environ;
+#include "env.h"
+#include "reentrant.h"
+#include "local.h"
 
 __weak_alias(getenv_r, _getenv_r)
 
@@ -63,68 +60,54 @@ __weak_alias(getenv_r, _getenv_r)
 char *
 getenv(const char *name)
 {
-	int offset;
+	size_t l_name;
 	char *result;
 
 	_DIAGASSERT(name != NULL);
 
-	rwlock_rdlock(&__environ_lock);
-	result = __findenv(name, &offset);
-	rwlock_unlock(&__environ_lock);
+	l_name = __envvarnamelen(name, false);
+	if (l_name == 0)
+		return NULL;
+
+	result = NULL;
+	if (__readlockenv()) {
+		result = __findenvvar(name, l_name);
+		(void)__unlockenv();
+	}
+	
 	return result;
 }
 
 int
 getenv_r(const char *name, char *buf, size_t len)
 {
-	int offset;
-	char *result;
-	int rv = -1;
+	size_t l_name;
+	int rv;
 
 	_DIAGASSERT(name != NULL);
 
-	rwlock_rdlock(&__environ_lock);
-	result = __findenv(name, &offset);
-	if (result == NULL) {
+	l_name = __envvarnamelen(name, false);
+	if (l_name == 0) {
 		errno = ENOENT;
-		goto out;
+		return -1;
 	}
-	if (strlcpy(buf, result, len) >= len) {
-		errno = ERANGE;
-		goto out;
-	}
-	rv = 0;
-out:
-	rwlock_unlock(&__environ_lock);
-	return rv;
-}
 
-/*
- * __findenv --
- *	Returns pointer to value associated with name, if any, else NULL.
- *	Sets offset to be the offset of the name/value combination in the
- *	environmental array, for use by setenv(3) and unsetenv(3).
- *	Explicitly removes '=' in argument name.
- *
- *	This routine *should* be a static; don't use it.
- */
-char *
-__findenv(const char *name, int *offset)
-{
-	size_t len;
-	const char *np;
-	char **p, *c;
+	rv = -1;
+	if (__readlockenv()) {
+		const char *value;
 
-	if (name == NULL || environ == NULL)
-		return NULL;
-	for (np = name; *np && *np != '='; ++np)
-		continue;
-	len = np - name;
-	for (p = environ; (c = *p) != NULL; ++p)
-		if (strncmp(c, name, len) == 0 && c[len] == '=') {
-			*offset = p - environ;
-			return c + len + 1;
+		value = __findenvvar(name, l_name);
+		if (value != NULL) {
+			if (strlcpy(buf, value, len) < len) {
+				rv = 0;
+			} else {
+				errno = ERANGE;
+			}
+		} else {
+			errno = ENOENT;
 		}
-	*offset = p - environ;
-	return NULL;
+		(void)__unlockenv();
+	}
+	
+	return rv;
 }

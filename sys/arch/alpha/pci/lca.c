@@ -1,4 +1,4 @@
-/* $NetBSD: lca.c,v 1.47 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: lca.c,v 1.51 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,17 +34,17 @@
  * All rights reserved.
  *
  * Authors: Jeffrey Hsu and Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -62,15 +62,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lca.c,v 1.47 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lca.c,v 1.51 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -93,10 +91,10 @@ __KERNEL_RCSID(0, "$NetBSD: lca.c,v 1.47 2009/03/14 21:04:02 dsl Exp $");
 #include <alpha/pci/pci_eb66.h>
 #endif
 
-int	lcamatch(struct device *, struct cfdata *, void *);
-void	lcaattach(struct device *, struct device *, void *);
+int	lcamatch(device_t, cfdata_t, void *);
+void	lcaattach(device_t, device_t, void *);
 
-CFATTACH_DECL(lca, sizeof(struct lca_softc),
+CFATTACH_DECL_NEW(lca, sizeof(struct lca_softc),
     lcamatch, lcaattach, NULL, NULL);
 
 extern struct cfdriver lca_cd;
@@ -109,7 +107,7 @@ int lcafound;
 struct lca_config lca_configuration;
 
 int
-lcamatch(struct device *parent, struct cfdata *match, void *aux)
+lcamatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -184,15 +182,16 @@ lca_init(struct lca_config *lcp, int mallocsafe)
 }
 
 void
-lcaattach(struct device *parent, struct device *self, void *aux)
+lcaattach(device_t parent, device_t self, void *aux)
 {
-	struct lca_softc *sc = (struct lca_softc *)self;
+	struct lca_softc *sc = device_private(self);
 	struct lca_config *lcp;
 	struct pcibus_attach_args pba;
 
 	/* note that we've attached the chipset; can't have 2 LCAs. */
 	/* Um, not sure about this.  XXX JH */
 	lcafound = 1;
+	sc->sc_dev = self;
 
 	/*
 	 * set up the chipset's info; done once at console init time
@@ -203,7 +202,7 @@ lcaattach(struct device *parent, struct device *self, void *aux)
 	lca_init(lcp, 1);
 
 	/* XXX print chipset information */
-	printf("\n");
+	aprint_normal("\n");
 
 	lca_dma_init(lcp);
 
@@ -236,7 +235,7 @@ lcaattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_pc = &lcp->lc_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

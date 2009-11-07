@@ -1,4 +1,4 @@
-/* $NetBSD: seeq8005.c,v 1.43 2008/04/08 12:07:27 cegger Exp $ */
+/* $NetBSD: seeq8005.c,v 1.46.2.1 2012/06/12 19:44:46 riz Exp $ */
 
 /*
  * Copyright (c) 2000, 2001 Ben Harris
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: seeq8005.c,v 1.43 2008/04/08 12:07:27 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: seeq8005.c,v 1.46.2.1 2012/06/12 19:44:46 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,16 +79,10 @@ __KERNEL_RCSID(0, "$NetBSD: seeq8005.c,v 1.43 2008/04/08 12:07:27 cegger Exp $")
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -293,11 +287,9 @@ seeq8005_attach(struct seeq8005_softc *sc, const u_int8_t *myaddr, int *media,
 
 	printf("\n");
 
-#if NRND > 0
 	/* After \n because it can print a line of its own. */
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
 }
 
 /*
@@ -484,7 +476,7 @@ ea_stop(struct ifnet *ifp, int disable)
 	ea_stoprx(sc);
 
 	/* Disable rx and tx interrupts */
-	sc->sc_command &= (SEEQ_CMD_RX_INTEN | SEEQ_CMD_TX_INTEN);
+	sc->sc_command &= ~(SEEQ_CMD_RX_INTEN | SEEQ_CMD_TX_INTEN);
 
 	/* Clear any pending interrupts */
 	SEEQ_WRITE16(sc, iot, ioh, SEEQ_COMMAND,
@@ -500,7 +492,7 @@ ea_stop(struct ifnet *ifp, int disable)
 	}
 
 	/* Cancel any watchdog timer */
-       	sc->sc_ethercom.ec_if.if_timer = 0;
+	sc->sc_ethercom.ec_if.if_timer = 0;
 }
 
 
@@ -840,7 +832,7 @@ ea_init(struct ifnet *ifp)
 	SEEQ_WRITE16(sc, iot, ioh, SEEQ_COMMAND,
 			  sc->sc_command | SEEQ_CMD_RX_ON);
 
-	/* TX_ON gets set by ea_txpacket when there's something to transmit. */
+	/* TX_ON gets set by eatxpacket when there's something to transmit. */
 
 
 	/* Set flags appropriately. */
@@ -895,7 +887,7 @@ ea_start(struct ifnet *ifp)
  * Called at splnet()
  */
 
-void
+static void
 eatxpacket(struct seeq8005_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -917,11 +909,8 @@ eatxpacket(struct seeq8005_softc *sc)
 		return;
 	}
 
-#if NBPFILTER > 0
 	/* Give the packet to the bpf, if any. */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	DPRINTF(SEEQ_DEBUG_TX, ("Tx new packet\n"));
 
@@ -991,7 +980,7 @@ ea_writembuf(struct seeq8005_softc *sc, struct mbuf *m0, int bufstart)
 	hdr[1] = nextpacket & 0xff;
 	hdr[2] = SEEQ_PKTCMD_TX | SEEQ_PKTCMD_DATA_FOLLOWS |
 		SEEQ_TXCMD_XMIT_SUCCESS_INT | SEEQ_TXCMD_COLLISION_INT;
-	hdr[3] = 0; /* Status byte -- will be update by hardware. */
+	hdr[3] = 0; /* Status byte -- will be updated by hardware. */
 	ea_writebuf(sc, hdr, 0x0000, 4);
 
 	return len;
@@ -1038,10 +1027,9 @@ seeq8005intr(void *arg)
 		ea_rxint(sc);
 	}
 
-#if NRND > 0
 	if (handled)
 		rnd_add_uint32(&sc->rnd_source, status);
-#endif
+
 	return handled;
 }
 
@@ -1123,7 +1111,7 @@ ea_txint(struct seeq8005_softc *sc)
 	}
 }
 
-void
+static void
 ea_rxint(struct seeq8005_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -1172,7 +1160,7 @@ ea_rxint(struct seeq8005_softc *sc)
 		}
 
 		/* Get packet length */
-       		len = (ptr - addr) - 4;
+		len = (ptr - addr) - 4;
 
 		if (len < 0)
 			len += sc->sc_rx_bufsize;
@@ -1250,17 +1238,14 @@ ea_read(struct seeq8005_softc *sc, int addr, int len)
 
 	/* Pull packet off interface. */
 	m = ea_get(sc, addr, len, ifp);
-	if (m == 0)
+	if (m == NULL)
 		return;
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to bpf.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 }
@@ -1282,20 +1267,20 @@ ea_get(struct seeq8005_softc *sc, int addr, int totlen, struct ifnet *ifp)
         epkt = cp + totlen;
 
         MGETHDR(m, M_DONTWAIT, MT_DATA);
-        if (m == 0)
-                return 0;
+        if (m == NULL)
+                return NULL;
         m->m_pkthdr.rcvif = ifp;
         m->m_pkthdr.len = totlen;
         m->m_len = MHLEN;
-        top = 0;
+        top = NULL;
         mp = &top;
 
         while (totlen > 0) {
                 if (top) {
                         MGET(m, M_DONTWAIT, MT_DATA);
-                        if (m == 0) {
+                        if (m == NULL) {
                                 m_freem(top);
-                                return 0;
+                                return NULL;
                         }
                         m->m_len = MLEN;
                 }
@@ -1311,13 +1296,13 @@ ea_get(struct seeq8005_softc *sc, int addr, int totlen, struct ifnet *ifp)
                          * Place initial small packet/header at end of mbuf.
                          */
                         if (len < m->m_len) {
-                                if (top == 0 && len + max_linkhdr <= m->m_len)
+                                if (top == NULL && len + max_linkhdr <= m->m_len)
                                         m->m_data += max_linkhdr;
                                 m->m_len = len;
                         } else
                                 len = m->m_len;
                 }
-		if (top == 0) {
+		if (top == NULL) {
 			/* Make sure the payload is aligned */
 			char *newdata = (char *)
 			    ALIGN((char*)m->m_data + 
@@ -1500,4 +1485,4 @@ ea_watchdog(struct ifnet *ifp)
 	ifp->if_timer = 0;
 }
 
-/* End of if_ea.c */
+/* End of seeq8005.c */

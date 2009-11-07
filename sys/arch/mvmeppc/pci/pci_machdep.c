@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.6 2007/10/17 19:55:52 garbled Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.10 2011/07/01 20:49:38 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.6 2007/10/17 19:55:52 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.10 2011/07/01 20:49:38 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,10 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.6 2007/10/17 19:55:52 garbled Exp 
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/platform.h>
 
@@ -89,13 +87,14 @@ mvmeppc_pci_get_chipset_tag(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
 
 	pc->pc_conf_interrupt = mvmeppc_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
 	pc->pc_conf_hook = genppc_pci_conf_hook;
 
-	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4);
-	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4);
+	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4, false);
+	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4, false);
 	pc->pc_bus = 0;
 	pc->pc_node = 0;
 	pc->pc_memt = 0;
@@ -103,7 +102,7 @@ mvmeppc_pci_get_chipset_tag(pci_chipset_tag_t pc)
 }
 
 void
-mvmeppc_pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
+mvmeppc_pci_conf_interrupt(void *v, int bus, int dev, int pin,
     int swiz, int *iline)
 {
 

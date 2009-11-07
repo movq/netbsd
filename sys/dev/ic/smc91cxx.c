@@ -1,4 +1,4 @@
-/*	$NetBSD: smc91cxx.c,v 1.75 2009/05/12 14:25:18 cegger Exp $	*/
+/*	$NetBSD: smc91cxx.c,v 1.81 2012/02/12 16:34:11 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -71,11 +71,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.75 2009/05/12 14:25:18 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.81 2012/02/12 16:34:11 matt Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,14 +85,10 @@ __KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.75 2009/05/12 14:25:18 cegger Exp $")
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -109,10 +103,8 @@ __KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.75 2009/05/12 14:25:18 cegger Exp $")
 #include <netinet/ip.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -389,10 +381,8 @@ smc91cxx_attach(struct smc91cxx_softc *sc, u_int8_t *myea)
 		break;
 	}
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 
 	callout_init(&sc->sc_mii_callout, 0);
 
@@ -814,11 +804,8 @@ smc91cxx_start(struct ifnet *ifp)
 
 	ifp->if_timer = 5;
 
-#if NBPFILTER > 0
 	/* Hand off a copy to the bpf. */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	ifp->if_opackets++;
 	m_freem(m);
@@ -1139,10 +1126,8 @@ out:
 	mask |= sc->sc_intmask;
 	smc91cxx_intr_mask_write(bst, bsh, mask);
 
-#if NRND > 0
 	if (status)
 		rnd_add_uint32(&sc->rnd_source, status);
-#endif
 
 	return (1);
 }
@@ -1295,13 +1280,10 @@ smc91cxx_read(struct smc91cxx_softc *sc)
 
 	m->m_pkthdr.len = m->m_len = packetlen;
 
-#if NBPFILTER > 0
 	/*
 	 * Hand the packet off to bpf listeners.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 
@@ -1509,27 +1491,21 @@ smc91cxx_disable(struct smc91cxx_softc *sc)
 int
 smc91cxx_activate(device_t self, enum devact act)
 {
-	struct smc91cxx_softc *sc = (struct smc91cxx_softc *)self;
-	int rv = 0, s;
+	struct smc91cxx_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_ec.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (rv);
 }
 
 int
 smc91cxx_detach(device_t self, int flags)
 {
-	struct smc91cxx_softc *sc = (struct smc91cxx_softc *)self;
+	struct smc91cxx_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 
 	/* Succeed now if there's no work to do. */
@@ -1545,9 +1521,8 @@ smc91cxx_detach(device_t self, int flags)
 	/* Delete all media. */
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
+
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -1557,7 +1532,7 @@ smc91cxx_detach(device_t self, int flags)
 u_int32_t
 smc91cxx_mii_bitbang_read(device_t self)
 {
-	struct smc91cxx_softc *sc = (void *) self;
+	struct smc91cxx_softc *sc = device_private(self);
 
 	/* We're already in bank 3. */
 	return (bus_space_read_2(sc->sc_bst, sc->sc_bsh, MGMT_REG_W));
@@ -1566,7 +1541,7 @@ smc91cxx_mii_bitbang_read(device_t self)
 void
 smc91cxx_mii_bitbang_write(device_t self, u_int32_t val)
 {
-	struct smc91cxx_softc *sc = (void *) self;
+	struct smc91cxx_softc *sc = device_private(self);
 
 	/* We're already in bank 3. */
 	bus_space_write_2(sc->sc_bst, sc->sc_bsh, MGMT_REG_W, val);
@@ -1575,7 +1550,7 @@ smc91cxx_mii_bitbang_write(device_t self, u_int32_t val)
 int
 smc91cxx_mii_readreg(device_t self, int phy, int reg)
 {
-	struct smc91cxx_softc *sc = (void *) self;
+	struct smc91cxx_softc *sc = device_private(self);
 	int val;
 
 	SMC_SELECT_BANK(sc, 3);
@@ -1590,7 +1565,7 @@ smc91cxx_mii_readreg(device_t self, int phy, int reg)
 void
 smc91cxx_mii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct smc91cxx_softc *sc = (void *) self;
+	struct smc91cxx_softc *sc = device_private(self);
 
 	SMC_SELECT_BANK(sc, 3);
 
@@ -1602,7 +1577,7 @@ smc91cxx_mii_writereg(device_t self, int phy, int reg, int val)
 void
 smc91cxx_statchg(device_t self)
 {
-	struct smc91cxx_softc *sc = (struct smc91cxx_softc *)self;
+	struct smc91cxx_softc *sc = device_private(self);
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 	int mctl;

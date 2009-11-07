@@ -1,4 +1,4 @@
-/*	$NetBSD: zapm.c,v 1.6 2009/04/03 04:13:17 uwe Exp $	*/
+/*	$NetBSD: zapm.c,v 1.12 2012/01/29 10:12:41 tsutsui Exp $	*/
 /*	$OpenBSD: zaurus_apm.c,v 1.13 2006/12/12 23:14:28 dim Exp $	*/
 
 /*
@@ -18,13 +18,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zapm.c,v 1.6 2009/04/03 04:13:17 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zapm.c,v 1.12 2012/01/29 10:12:41 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/callout.h>
 #include <sys/selinfo.h> /* XXX: for apm_softc that is exposed here */
+#include <sys/device.h>
 
 #include <dev/hpc/apm/apmvar.h>
 
@@ -49,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: zapm.c,v 1.6 2009/04/03 04:13:17 uwe Exp $");
 struct zapm_softc {
 	device_t sc_dev;
 	void *sc_apmdev;
+	kmutex_t sc_mtx;
 
 	struct callout sc_cyclic_poll;
 	struct callout sc_discharge_poll;
@@ -122,9 +124,9 @@ static int
 zapm_match(device_t parent, cfdata_t cf, void *aux)
 {
 
-	if (!ZAURUS_ISC3000)
-		return 0;
-	return 1;
+	if (ZAURUS_ISC1000 || ZAURUS_ISC3000)
+		return 1;
+	return 0;
 }
 
 static void
@@ -143,8 +145,9 @@ zapm_attach(device_t parent, device_t self, void *aux)
 	callout_setfunc(&sc->sc_cyclic_poll, zapm_cyclic, sc);
 	callout_init(&sc->sc_discharge_poll, 0);
 	callout_setfunc(&sc->sc_discharge_poll, zapm_poll, sc);
+	mutex_init(&sc->sc_mtx, MUTEX_DEFAULT, IPL_NONE);
 
-	if (ZAURUS_ISC3000) {
+	if (ZAURUS_ISC1000 || ZAURUS_ISC3000) {
 		sc->sc_ac_detect_pin = GPIO_AC_IN_C3000;
 		sc->sc_batt_cover_pin = GPIO_BATT_COVER_C3000;
 		sc->sc_charge_comp_pin = GPIO_CHRG_CO_C3000;
@@ -400,16 +403,32 @@ zapm_get_powstat(void *v, u_int batteryid, struct apm_power_info *pinfo)
 		pinfo->ac_state = val;
 	else
 		pinfo->ac_state = sc->ac_state;
+	DPRINTF(("zapm: pinfo->ac_state: %d\n", pinfo->ac_state));
+
 	if (config_hook_call(CONFIG_HOOK_GET,
 			     CONFIG_HOOK_CHARGE, &val) != -1)
 		pinfo->battery_state = val;
-	else
-		pinfo->battery_state = sc->battery_state;
+	else {
+		DPRINTF(("zapm: sc->battery_state: %#x\n", sc->battery_state));
+		if (sc->battery_state & APM_BATT_FLAG_CHARGING)
+			pinfo->battery_flags = APM_BATT_FLAG_CHARGING;
+		else if (sc->battery_state & APM_BATT_FLAG_CRITICAL)
+			pinfo->battery_flags = APM_BATT_FLAG_CRITICAL;
+		else if (sc->battery_state & APM_BATT_FLAG_LOW)
+			pinfo->battery_flags = APM_BATT_FLAG_LOW;
+		else if (sc->battery_state & APM_BATT_FLAG_HIGH)
+			pinfo->battery_flags = APM_BATT_FLAG_HIGH;
+		else
+			pinfo->battery_flags = APM_BATT_FLAG_UNKNOWN;
+	}
+	DPRINTF(("zapm: pinfo->battery_flags: %#x\n", pinfo->battery_flags));
+
 	if (config_hook_call(CONFIG_HOOK_GET,
 			     CONFIG_HOOK_BATTERYVAL, &val) != -1)
 		pinfo->battery_life = val;
 	else
 		pinfo->battery_life = sc->battery_life;
+	DPRINTF(("zapm: pinfo->battery_life: %d\n", pinfo->battery_life));
 
 	return 0;
 }
@@ -630,9 +649,11 @@ static void
 zapm_set_charging(struct zapm_softc *sc, int enable)
 {
 
-	scoop_discharge_battery(0);
-	scoop_charge_battery(enable, 0);
-	scoop_led_set(SCOOP_LED_ORANGE, enable);
+	if (ZAURUS_ISC1000 || ZAURUS_ISC3000) {
+		scoop_discharge_battery(0);
+		scoop_charge_battery(enable, 0);
+		scoop_led_set(SCOOP_LED_ORANGE, enable);
+	}
 }
 
 /*
@@ -781,9 +802,9 @@ zapm_poll1(void *v, int do_suspend)
 	int bc_lock;
 	int charging;
 	int volt;
-	int s;
 
-	s = splhigh();
+	if (!mutex_tryenter(&sc->sc_mtx))
+		return;
 
 	ac_state = zapm_get_ac_state(sc);
 	bc_lock = zapm_get_battery_compartment_state(sc);
@@ -809,7 +830,7 @@ zapm_poll1(void *v, int do_suspend)
 				zapm_set_charging(sc, 0);
 			}
 		} else if (!charge_completed) {
-			charging = 1;
+			charging = APM_BATT_FLAG_CHARGING;
 			volt = zapm_get_battery_volt();
 			zapm_set_charging(sc, 1);
 			DPRINTF(("zapm_poll: start charging volt %d\n", volt));
@@ -848,7 +869,8 @@ zapm_poll1(void *v, int do_suspend)
 			if (charging)
 				zapm_set_charging(sc, 0);
 			sc->discharging = 1;
-			scoop_discharge_battery(1);
+			if (ZAURUS_ISC1000 || ZAURUS_ISC3000)
+				scoop_discharge_battery(1);
 			callout_schedule(&sc->sc_discharge_poll,
 			    DISCHARGE_TIMEOUT);
 		} else if (!ac_state) {
@@ -875,5 +897,5 @@ zapm_poll1(void *v, int do_suspend)
 		    (void *)zapm_battery_state(volt));
 	}
 
-	splx(s);
+	mutex_exit(&sc->sc_mtx);
 }

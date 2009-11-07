@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_mainbus.c,v 1.9 2008/04/28 20:23:10 martin Exp $	*/
+/*	$NetBSD: lpt_mainbus.c,v 1.12 2011/07/09 16:03:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,26 +31,17 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lpt_mainbus.c,v 1.9 2008/04/28 20:23:10 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_mainbus.c,v 1.12 2011/07/09 16:03:01 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <sys/tty.h>
-#include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/uio.h>
-#include <sys/kernel.h>
-#include <sys/syslog.h>
-#include <sys/types.h>
 #include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/ioctl.h>
+#include <sys/systm.h>
 
-#include <machine/autoconf.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <algor/autoconf.h>
 
 #include <dev/ic/lptreg.h>
 #include <dev/ic/lptvar.h>

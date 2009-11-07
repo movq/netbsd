@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.135 2009/09/13 05:17:37 tsutsui Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.141 2012/01/15 04:42:04 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007, 2007, 2008
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.135 2009/09/13 05:17:37 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.141 2012/01/15 04:42:04 perseant Exp $");
 
 #ifndef LFS
 # define LFS		/* for prototypes in syscallargs.h */
@@ -247,7 +247,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov,
 	if (fs->lfs_ronly)
 		return EROFS;
 
-	maxino = (fragstoblks(fs, fsbtofrags(fs, VTOI(fs->lfs_ivnode)->i_ffs1_blocks)) -
+	maxino = (fragstoblks(fs, VTOI(fs->lfs_ivnode)->i_ffs1_blocks) -
 		      fs->lfs_cleansz - fs->lfs_segtabsz) * fs->lfs_ifpb;
 
 	cnt = blkcnt;
@@ -708,6 +708,8 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 			 */
 			if (v_daddr != LFS_UNUSED_DADDR) {
 				lfs_vunref(vp);
+				if (VTOI(vp)->i_lfs_iflags & LFSI_BMAP)
+					vrecycle(vp, NULL, NULL);
 				numrefed--;
 			}
 
@@ -734,7 +736,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 			vp = ufs_ihashlookup(ump->um_dev, blkp->bi_inode);
 			if (vp != NULL && !(vp->v_iflag & VI_XLOCK)) {
 				ip = VTOI(vp);
-				mutex_enter(&vp->v_interlock);
+				mutex_enter(vp->v_interlock);
 				mutex_exit(&ufs_ihash_lock);
 				if (lfs_vref(vp)) {
 					v_daddr = LFS_UNUSED_DADDR;
@@ -760,7 +762,8 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 					continue;
 				} else {
 					KASSERT(VOP_ISLOCKED(vp));
-					VOP_UNLOCK(vp, 0);
+					VTOI(vp)->i_lfs_iflags |= LFSI_BMAP;
+					VOP_UNLOCK(vp);
 					numrefed++;
 				}
 			}
@@ -814,6 +817,9 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 	 */
 	if (v_daddr != LFS_UNUSED_DADDR) {
 		lfs_vunref(vp);
+		/* Recycle as above. */
+		if (ip->i_lfs_iflags & LFSI_BMAP)
+			vrecycle(vp, NULL, NULL);
 		numrefed--;
 	}
 
@@ -1026,13 +1032,13 @@ lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
 
 	mutex_enter(&ufs_ihash_lock);
 	if ((vp = ufs_ihashlookup(dev, ino)) != NULL) {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		mutex_exit(&ufs_ihash_lock);
 		if (vp->v_iflag & VI_XLOCK) {
 			DLOG((DLOG_CLEAN, "lfs_fastvget: ino %d VI_XLOCK\n",
 			      ino));
 			lfs_stats.clean_vnlocked++;
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 			return EAGAIN;
 		}
 		if (lfs_vref(vp)) {
@@ -1097,7 +1103,8 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 		*vpp = NULL;
 		return EDEADLK;
 	}
-	if ((error = getnewvnode(VT_LFS, mp, lfs_vnodeop_p, &vp)) != 0) {
+	error = getnewvnode(VT_LFS, mp, lfs_vnodeop_p, NULL, &vp);
+	if (error) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -1123,6 +1130,11 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 	ufs_ihashins(ip);
 	mutex_exit(&ufs_hashlock);
 
+#ifdef notyet
+	/* Not found in the cache => this vnode was loaded only for cleaning. */
+	ip->i_lfs_iflags |= LFSI_BMAP;
+#endif
+
 	/*
 	 * XXX
 	 * This may not need to be here, logically it should go down with
@@ -1140,7 +1152,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			vlockmgr(&vp->v_lock, LK_RELEASE);
+			VOP_UNLOCK(vp);
 			lfs_vunref(vp);
 			*vpp = NULL;
 			return (error);
@@ -1163,7 +1175,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			vlockmgr(&vp->v_lock, LK_RELEASE);
+			VOP_UNLOCK(vp);
 			lfs_vunref(vp);
 			brelse(bp, 0);
 			*vpp = NULL;
@@ -1188,7 +1200,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 	*vpp = vp;
 
 	KASSERT(VOP_ISLOCKED(vp));
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	return (0);
 }

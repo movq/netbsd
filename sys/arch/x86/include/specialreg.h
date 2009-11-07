@@ -1,4 +1,4 @@
-/*	$NetBSD: specialreg.h,v 1.37 2009/08/13 11:27:34 cegger Exp $	*/
+/*	$NetBSD: specialreg.h,v 1.55.2.3 2012/05/07 16:37:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -84,10 +84,10 @@
 #define CR4_OSXMMEXCPT	0x00000400	/* enable unmasked SSE exceptions */
 
 /*
- * CPUID "features" bits in %edx
+ * CPUID "features" bits
  */
 
-/* Fn80000001 %edx feature */
+/* Fn00000001 %edx features */
 #define	CPUID_FPU	0x00000001	/* processor has an FPU? */
 #define	CPUID_VME	0x00000002	/* has virtual mode (%cr4's VME/PVI) */
 #define	CPUID_DE	0x00000004	/* has debugging extension */
@@ -128,25 +128,40 @@
 			    "\37IA64\40SBF"
 
 /*
- * CPUID Intel extended features - %EDX
+ * Intel Digital Thermal Sensor and
+ * Power Management, Fn0000_0006 - %eax.
  */
+#define CPUID_DSPM_DTS	0x00000001	/* Digital Thermal Sensor */
+#define CPUID_DSPM_IDA	0x00000002	/* Intel Dynamic Acceleration */
+#define CPUID_DSPM_ARAT	0x00000004	/* Always Running APIC Timer */
+#define CPUID_DSPM_PLN	0x00000010	/* Power Limit Notification */
+#define CPUID_DSPM_CME	0x00000020	/* Clock Modulation Extension */
+#define CPUID_DSPM_PLTM	0x00000040	/* Package Level Thermal Management */
+
+#define CPUID_DSPM_FLAGS	"\20\1DTS\2IDA\3ARAT\5PLN\6CME\7PLTM"
+
+/*
+ * Intel Digital Thermal Sensor and
+ * Power Management, Fn0000_0006 - %ecx.
+ */
+#define CPUID_DSPM_HWF	0x00000001	/* MSR_APERF/MSR_MPERF available */
+
+#define CPUID_DSPM_FLAGS1	"\20\1HWF"
+
+/* Intel Fn80000001 extended features - %edx */
 #define CPUID_SYSCALL	0x00000800	/* SYSCALL/SYSRET */
-#define CPUID_XD	0x00100000	/* Execute Disable */
+#define CPUID_XD	0x00100000	/* Execute Disable (like CPUID_NOX) */
 #define CPUID_EM64T	0x20000000	/* Intel EM64T */
 
 #define CPUID_INTEL_EXT_FLAGS	"\20\14SYSCALL/SYSRET\25XD\36EM64T"
 
-/*
- * CPUID Intel extended features - %ECX
- */
+/* Intel Fn80000001 extended features - %ecx */
 #define	CPUID_LAHF	0x00000001	/* LAHF/SAHF in IA-32e mode, 64bit sub*/
 
-#define	CPUID_INTEL_FLAGS4	"\20\1LAHF"
+#define	CPUID_INTEL_FLAGS4	"\20\1LAHF\02B02\03B03"
 
-/*
- * AMD/VIA processor specific flags.
- */
 
+/* AMD/VIA Fn80000001 extended features - %edx */
 /*	CPUID_SYSCALL			   SYSCALL/SYSRET */
 #define CPUID_MPC	0x00080000	/* Multiprocessing Capable */
 #define CPUID_NOX	0x00100000	/* No Execute Page Protection */
@@ -158,12 +173,12 @@
 #define CPUID_3DNOW2	0x40000000	/* 3DNow! Instruction Extension */
 #define CPUID_3DNOW	0x80000000	/* 3DNow! Instructions */
 
-#define CPUID_EXT_FLAGS	"\20\14SYSCALL/SYSRET\24MPC\25NOX\27MXX\32FFXSR" \
-			    "\33P1GB\34RDTSCP\36LONG\0373DNOW2\0403DNOW"
+#define CPUID_EXT_FLAGS	"\20\14SYSCALL/SYSRET\24MPC\25NOX" \
+			    "\27MXX\32FFXSR\33P1GB\34RDTSCP" \
+			    "\36LONG\0373DNOW2\0403DNOW" \
 
-
-/* AMD Fn80000001 %ecx features */
-#define CPUID_LAHF	0x00000001	/* LAHF/SAHF instruction */
+/* AMD Fn80000001 extended features - %ecx */
+/* 	CPUID_LAHF			   LAHF/SAHF instruction */
 #define CPUID_CMPLEGACY	0x00000002	/* Compare Legacy */
 #define CPUID_SVM	0x00000004	/* Secure Virtual Machine */
 #define CPUID_EAPIC	0x00000008	/* Extended APIC space */
@@ -174,28 +189,45 @@
 #define CPUID_3DNOWPF	0x00000100	/* 3DNow Prefetch */
 #define CPUID_OSVW	0x00000200	/* OS visible workarounds */
 #define CPUID_IBS	0x00000400	/* Instruction Based Sampling */
-#define CPUID_SSE5	0x00000800	/* SSE5 instruction set */
+#define CPUID_XOP	0x00000800	/* XOP instruction set */
 #define CPUID_SKINIT	0x00001000	/* SKINIT */
 #define CPUID_WDT	0x00002000	/* watchdog timer support */
+#define CPUID_LWP	0x00008000	/* Light Weight Profiling */
+#define CPUID_FMA4	0x00010000	/* FMA4 instructions */
+#define CPUID_NODEID	0x00080000	/* NodeID MSR available*/
+#define CPUID_TBM	0x00200000	/* TBM instructions */
+#define CPUID_TOPOEXT	0x00400000	/* cpuid Topology Extension */
 
 #define CPUID_AMD_FLAGS4	"\20\1LAHF\2CMPLEGACY\3SVM\4EAPIC\5ALTMOVCR0" \
 				    "\6LZCNT\7SSE4A\10MISALIGNSSE" \
 				    "\0113DNOWPREFETCH\12OSVW\13IBS" \
-				    "\14SSE5\15SKINIT\16WDT"
+				    "\14XOP\15SKINIT\16WDT\20LWP" \
+				    "\21FMA4\22B17\23B18\24NodeID\25B20\26TBM" \
+				    "\27TopoExt\30B23\31B24" \
+				    "\32B25\33B25\34B26" \
+				    "\35B27\36B28\37B29\40B30\41B31\42B32"
 
 /* AMD Fn8000000a %edx features (SVM features) */
 #define	CPUID_AMD_SVM_NP		0x00000001
 #define	CPUID_AMD_SVM_LbrVirt		0x00000002
 #define	CPUID_AMD_SVM_SVML		0x00000004
 #define	CPUID_AMD_SVM_NRIPS		0x00000008
-#define	CPUID_AMD_SVM_Ssse3Sse5Dis	0x00000200
-#define	CPUID_AMD_SVM_FLAGS	 "\20\1NP\2LbrVirt\3SVML\4NRIPS\12Ssse3Sse5Dis"
+#define	CPUID_AMD_SVM_TSCRateCtrl	0x00000010
+#define	CPUID_AMD_SVM_VMCBCleanBits	0x00000020
+#define	CPUID_AMD_SVM_FlushByASID	0x00000040
+#define	CPUID_AMD_SVM_DecodeAssist	0x00000080
+#define	CPUID_AMD_SVM_PauseFilter	0x00000400
+#define	CPUID_AMD_SVM_FLAGS	 "\20\1NP\2LbrVirt\3SVML\4NRIPS" \
+				    "\5TSCRate\6VMCBCleanBits\7FlushByASID" \
+				    "\10DecodeAssist\11B08" \
+				    "\12B09\13PauseFilter" \
+				    "\14B11\15B12" \
+				    "\16B13\17B17\20B18\21B19"
 
 /*
  * AMD Advanced Power Management
  * CPUID Fn8000_0007 %edx
  */
-
 #define CPUID_APM_TS	0x00000001	/* Temperature Sensor */
 #define CPUID_APM_FID	0x00000002	/* Frequency ID control */
 #define CPUID_APM_VID	0x00000004	/* Voltage ID control */
@@ -205,9 +237,11 @@
 #define CPUID_APM_100	0x00000040	/* 100MHz multiplier control */
 #define CPUID_APM_HWP	0x00000080	/* HW P-State control */
 #define CPUID_APM_TSC	0x00000100	/* TSC invariant */
+#define CPUID_APM_CPB	0x00000200	/* Core performance boost */
+#define CPUID_APM_EFF	0x00000400	/* Effective Frequency (read-only) */
 
 #define CPUID_APM_FLAGS		"\20\1TS\2FID\3VID\4TTP\5HTC\6STC\007100" \
-				    "\10HWP\11TSC"
+				    "\10HWP\11TSC\12CPB\13EffFreq\14B11\15B12"
 
 /*
  * Centaur Extended Feature flags
@@ -230,6 +264,7 @@
  */
 
 #define	CPUID2_SSE3	0x00000001	/* Streaming SIMD Extensions 3 */
+#define	CPUID2_PCLMUL	0x00000002	/* PCLMULQDQ instructions */
 #define	CPUID2_DTES64	0x00000004	/* 64-bit Debug Trace */
 #define	CPUID2_MONITOR	0x00000008	/* MONITOR/MWAIT instructions */
 #define	CPUID2_DS_CPL	0x00000010	/* CPL Qualified Debug Store */
@@ -242,18 +277,24 @@
 #define	CPUID2_CX16	0x00002000	/* has CMPXCHG16B instruction */
 #define	CPUID2_xTPR	0x00004000	/* Task Priority Messages disabled? */
 #define	CPUID2_PDCM	0x00008000	/* Perf/Debug Capability MSR */
+#define	CPUID2_PCID	0x00020000	/* Process Context ID */
 #define	CPUID2_DCA	0x00040000	/* Direct Cache Access */
 #define	CPUID2_SSE41	0x00080000	/* Streaming SIMD Extensions 4.1 */
 #define	CPUID2_SSE42	0x00100000	/* Streaming SIMD Extensions 4.2 */
 #define	CPUID2_X2APIC	0x00200000	/* xAPIC Extensions */
 #define	CPUID2_POPCNT	0x00800000	/* popcount instruction available */
+#define	CPUID2_AES	0x02000000	/* AES instructions */
+#define	CPUID2_XSAVE	0x04000000	/* XSAVE instructions */
+#define	CPUID2_OSXSAVE	0x08000000	/* XGETBV/XSETBV instructions */
+#define	CPUID2_AVX	0x10000000	/* AVX instructions */
+#define	CPUID2_F16C	0x20000000	/* half precision conversion */
 #define	CPUID2_RAZ	0x80000000	/* RAZ. Indicates guest state. */
 
-#define CPUID2_FLAGS1	"\20\1SSE3\2B01\3DTES64\4MONITOR\5DS-CPL\6VMX\7SMX" \
-			    "\10EST\11TM2\12SSSE3\13CID\14B11\15B12\16CX16" \
-			    "\17xTPR\20PDCM\21B16\22B17\23DCA\24SSE41\25SSE42" \
-			    "\26X2APIC\27MOVBE\30POPCNT\31B24\32B25\33XSAVE" \
-			    "\34OSXSAVE\35B28\36B29\37B30\40RAZ"
+#define CPUID2_FLAGS1	"\20\1SSE3\2PCLMULQDQ\3DTES64\4MONITOR\5DS-CPL\6VMX\7SMX" \
+			"\10EST\11TM2\12SSSE3\13CID\14B11\15B12\16CX16" \
+			"\17xTPR\20PDCM\21B16\22PCID\23DCA\24SSE41\25SSE42" \
+			"\26X2APIC\27MOVBE\30POPCNT\31B24\32AES\33XSAVE" \
+			"\34OSXSAVE\35AVX\36F16C\37B30\40RAZ"
 
 #define CPUID2FAMILY(cpuid)	(((cpuid) >> 8) & 0xf)
 #define CPUID2MODEL(cpuid)	(((cpuid) >> 4) & 0xf)
@@ -262,6 +303,14 @@
 /* Extended family and model are defined on amd64 processors */
 #define CPUID2EXTFAMILY(cpuid)	(((cpuid) >> 20) & 0xff)
 #define CPUID2EXTMODEL(cpuid)	(((cpuid) >> 16) & 0xf)
+
+/* Blacklists of CPUID flags - used to mask certain features */
+#ifdef XEN
+/* Not on Xen */
+#define CPUID_FEAT_BLACKLIST	 (CPUID_PGE|CPUID_PSE|CPUID_MTRR)
+#else
+#define CPUID_FEAT_BLACKLIST	 0
+#endif /* XEN */
 
 /*
  * Model-specific registers for the i386 family
@@ -284,6 +333,8 @@
 #define MSR_PERFCTR0		0x0c1
 #define MSR_PERFCTR1		0x0c2
 #define MSR_FSB_FREQ		0x0cd	/* Core Duo/Solo only */
+#define MSR_MPERF		0x0e7
+#define MSR_APERF		0x0e8
 #define MSR_IA32_EXT_CONFIG	0x0ee	/* Undocumented. Core Solo/Duo only */
 #define MSR_MTRRcap		0x0fe
 #define	MSR_BBL_CR_ADDR		0x116	/* PII+ only */
@@ -307,6 +358,7 @@
 #define MSR_THERM_STATUS	0x19c
 #define MSR_THERM2_CTL		0x19d	/* Pentium M */
 #define MSR_MISC_ENABLE		0x1a0
+#define MSR_TEMPERATURE_TARGET	0x1a2
 #define MSR_DEBUGCTLMSR		0x1d9
 #define MSR_LASTBRANCHFROMIP	0x1db
 #define MSR_LASTBRANCHTOIP	0x1dc
@@ -329,6 +381,22 @@
 #define	MSR_MTRRphysMask6	0x20d
 #define	MSR_MTRRphysBase7	0x20e
 #define	MSR_MTRRphysMask7	0x20f
+#define	MSR_MTRRphysBase8	0x210
+#define	MSR_MTRRphysMask8	0x211
+#define	MSR_MTRRphysBase9	0x212
+#define	MSR_MTRRphysMask9	0x213
+#define	MSR_MTRRphysBase10	0x214
+#define	MSR_MTRRphysMask10	0x215
+#define	MSR_MTRRphysBase11	0x216
+#define	MSR_MTRRphysMask11	0x217
+#define	MSR_MTRRphysBase12	0x218
+#define	MSR_MTRRphysMask12	0x219
+#define	MSR_MTRRphysBase13	0x21a
+#define	MSR_MTRRphysMask13	0x21b
+#define	MSR_MTRRphysBase14	0x21c
+#define	MSR_MTRRphysMask14	0x21d
+#define	MSR_MTRRphysBase15	0x21e
+#define	MSR_MTRRphysMask15	0x21f
 #define	MSR_MTRRfix64K_00000	0x250
 #define	MSR_MTRRfix16K_80000	0x258
 #define	MSR_MTRRfix16K_A0000	0x259
@@ -340,6 +408,7 @@
 #define	MSR_MTRRfix4K_E8000	0x26d
 #define	MSR_MTRRfix4K_F0000	0x26e
 #define	MSR_MTRRfix4K_F8000	0x26f
+#define	MSR_CR_PAT		0x277
 #define MSR_MTRRdefType		0x2ff
 #define MSR_MC0_CTL		0x400
 #define MSR_MC0_STATUS		0x401
@@ -361,6 +430,7 @@
 #define MSR_MC3_STATUS		0x411
 #define MSR_MC3_ADDR		0x412
 #define MSR_MC3_MISC		0x413
+				/* 0x480 - 0x490 VMX */
 
 /*
  * VIA "Nehemiah" MSRs
@@ -373,6 +443,11 @@
 #define MSR_VIA_RNG_2NOISE	0x00000300
 #define MSR_VIA_ACE		0x00001107
 #define MSR_VIA_ACE_ENABLE	0x10000000
+
+/*
+ * VIA "Eden" MSRs
+ */
+#define MSR_VIA_FCR 		MSR_VIA_ACE
 
 /*
  * AMD K6/K7 MSRs.
@@ -423,7 +498,7 @@
 #define		HWCR_FFDIS		0x00000040
 
 #define	MSR_NB_CFG	0xc001001f
-#define		NB_CFG_DISIOREQLOCK	0x0000000000000004ULL
+#define		NB_CFG_DISIOREQLOCK	0x0000000000000008ULL
 #define		NB_CFG_DISDATMSK	0x0000001000000000ULL
 #define		NB_CFG_INITAPICCPUIDLO	(1ULL << 54)
 
@@ -434,7 +509,7 @@
 #define		IC_CFG_DIS_SEQ_PREFETCH	0x00000800
 
 #define	MSR_DC_CFG	0xc0011022
-#define		DC_CFG_DIS_CNV_WC_SSO	0x00000004
+#define		DC_CFG_DIS_CNV_WC_SSO	0x00000008
 #define		DC_CFG_DIS_SMC_CHK_BUF	0x00000400
 #define		DC_CFG_ERRATA_261	0x01000000
 
@@ -445,6 +520,18 @@
 #define		BU_CFG_THRL2IDXCMPDIS	0x0000080000000000ULL
 #define		BU_CFG_WBPFSMCCHKDIS	0x0000200000000000ULL
 #define		BU_CFG_WBENHWSBDIS	0x0001000000000000ULL
+
+#define MSR_DE_CFG	0xc0011029
+#define		DE_CFG_ERRATA_721	0x00000001
+
+/* AMD Family10h MSRs */
+#define	MSR_OSVW_ID_LENGTH		0xc0010140
+#define	MSR_OSVW_STATUS			0xc0010141
+#define	MSR_UCODE_AMD_PATCHLEVEL	0x0000008b
+#define	MSR_UCODE_AMD_PATCHLOADER	0xc0010020
+
+/* X86 MSRs */
+#define	MSR_RDTSCP_AUX			0xc0000103
 
 /*
  * Constants related to MTRRs

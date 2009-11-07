@@ -1,4 +1,4 @@
-/*	$NetBSD: isabus.c,v 1.45 2009/08/19 15:16:09 dyoung Exp $	*/
+/*	$NetBSD: isabus.c,v 1.48 2011/03/06 14:58:43 tsutsui Exp $	*/
 /*	$OpenBSD: isabus.c,v 1.15 1998/03/16 09:38:46 pefo Exp $	*/
 /*	NetBSD: isa.c,v 1.33 1995/06/28 04:30:51 cgd Exp 	*/
 
@@ -72,28 +72,28 @@
  *
  *	@(#)isa.c	7.2 (Berkeley) 5/12/91
  */
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1991,1990,1989 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  */
@@ -120,11 +120,10 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isabus.c,v 1.45 2009/08/19 15:16:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isabus.c,v 1.48 2011/03/06 14:58:43 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/time.h>
@@ -217,7 +216,7 @@ isabrprint(void *aux, const char *pnp)
 
         if (pnp)
                 aprint_normal("isa at %s", pnp);
-        aprint_verbose(" isa_io_base 0x%lx isa_mem_base 0x%lx",
+        aprint_verbose(" isa_io_base 0x%"PRIxVADDR" isa_mem_base 0x%"PRIxVADDR,
 	    arc_bus_io.bs_vbase, arc_bus_mem.bs_vbase);
         return UNCONF;
 }

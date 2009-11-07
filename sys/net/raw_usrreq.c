@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_usrreq.c,v 1.35 2008/05/29 17:26:56 dyoung Exp $	*/
+/*	$NetBSD: raw_usrreq.c,v 1.37 2011/07/17 20:54:52 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.35 2008/05/29 17:26:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.37 2011/07/17 20:54:52 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -49,8 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.35 2008/05/29 17:26:56 dyoung Exp $
 #include <net/route.h>
 #include <net/netisr.h>
 #include <net/raw_cb.h>
-
-#include <machine/stdarg.h>
 
 /*
  * Initialize raw connection block q.
@@ -276,7 +274,8 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		/*
 		 * stat: don't bother with a blocksize.
 		 */
-		return (0);
+		error = 0;
+		break;
 
 	/*
 	 * Not supported.

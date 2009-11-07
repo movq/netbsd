@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysmon_envsys.9,v 1.30 2009/06/15 12:21:33 wiz Exp $
+.\"	$NetBSD: sysmon_envsys.9,v 1.41 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 13, 2009
+.Dd April 10, 2010
 .Dt SYSMON_ENVSYS 9
 .Os
 .Sh NAME
@@ -47,6 +47,12 @@
 .Fn sysmon_envsys_sensor_attach "struct sysmon_envsys *" "envsys_data_t *"
 .Ft int
 .Fn sysmon_envsys_sensor_detach "struct sysmon_envsys *" "envsys_data_t *"
+.Ft void
+.Fn sysmon_envsys_sensor_event "struct sysmon_envsys *" "envsys_data_t *" "int"
+.Ft void
+.Fn sysmon_envsys_foreach_sensor "sysmon_envsys_callback_t" "void *" "bool"
+.Ft int
+.Fn sysmon_envsys_update_limits "struct sysmon_envsys *" "envsys_data_t *"
 .Sh DESCRIPTION
 .Pp
 .Nm
@@ -55,46 +61,76 @@ is the kernel part of the
 framework.
 With this framework you are able to register and unregister a
 .Nm
-device, attach or detach sensors into a device and enable or disable
+device, attach or detach sensors into a device, and enable or disable
 automatic monitoring for some sensors without any user interactivity,
 among other things.
 .Ss HOW TO USE THE FRAMEWORK
 To register a new driver to the
 .Nm
 framework, a
-.Sy sysmon_envsys
+.Em sysmon_envsys
 object must be allocated and initialized; the
 .Fn sysmon_envsys_create
 function is used for this.
-This returns a zero'ed pointer to a sysmon_envsys
-structure and takes care of initialization of some private features.
+This returns a zero'ed pointer to a
+.Em sysmon_envsys
+structure.
 .Pp
-Once we have the object we could start initializing sensors (see the
+Once the object has been initialized,
+actual sensors may be initialized and attached (see the
 .Sx SENSOR DETAILS
-section for more information) and attaching
-them to the device, this is accomplished by the
+section for more information).
+This is accomplished by the
 .Fn sysmon_envsys_sensor_attach
-function.
-This function attaches the envsys_data_t (sensor) specified
-as second argument into the sysmon_envsys object specified in the
-first argument.
+function, which will attach the
+.Em envsys_data_t
+(a sensor) specified as second argument into the
+.Em sysmon_envsys
+object specified in the first argument.
 .Pp
-Finally when the sensors are already attached, the device needs to set
-some required (and optional) members of the sysmon_envsys struct before
-calling the
+Finally, after all sensors have been attached,
+the device needs to set some required (and optional) members of the
+.Em sysmon_envsys
+structure before calling the
 .Fn sysmon_envsys_register
 function to register the device.
 .Pp
-If there's some error before registering the device, the
+In case of errors during the initialization, the
 .Fn sysmon_envsys_destroy
-function must be used to detach the sensors previously attached
-and free the sysmon_envsys object allocated by the
-.Fn sysmon_envsys_create
-function.
+function should be used.
+This detachs all previously attached sensors and deallocates the
+.Em sysmon_envsys
+object.
+.Pp
+Some sensors can be monitored, and when the sensor value changes an event
+can be delivered to the
+.Xr powerd 8
+daemon.
+Sensor monitoring can be performed by the
+.Nm
+framework on a polled basis.
+Alternatively, the sensor's device driver can call the
+.Fn sysmon_envsys_sensor_event
+function to deliver the event without waiting for the device to be polled.
+.Pp
+The
+.Fn sysmon_envsys_foreach_sensor
+function can be used by other parts of the kernel to iterate over all
+registered sensors.
+This capability is used by the
+.Xr i386/apm 4
+driver to summarize the state of all battery sensors.
+.Pp
+Drivers can also call the
+.Fn sysmon_envsys_update_limits
+function when it is necessary to reinitialize a sensor's threshhold values.
+This is used by the
+.Xr acpibat 4
+driver when a new battery is inserted.
 .Pp
 The
 .Em sysmon_envsys
-structure is defined as follow
+structure is defined as follows
 (only the public members are shown):
 .Bd -literal
 struct sysmon_envsys {
@@ -105,15 +141,15 @@ struct sysmon_envsys {
 	void 		*sme_cookie;
 	void (*sme_refresh)(struct sysmon_envsys *, envsys_data_t *);
 	void (*sme_set_limits)(struct sysmon_envsys *, envsys_data_t *,
-			       sysmon_envsys_lim_t *);
+			       sysmon_envsys_lim_t *, uint32_t *);
 	void (*sme_get_limits)(struct sysmon_envsys *, envsys_data_t *,
-			       sysmon_envsys_lim_t *);
+			       sysmon_envsys_lim_t *, uint32_t *);
 };
 .Ed
 .Pp
 The members have the following meaning:
 .Pp
-.Bl -tag -width "sme_sensor_data_xxxxxxxxx"
+.Bl -tag -width "sme_events_timeout"
 .It Fa sme_class
 This specifies the class of the sysmon envsys device.
 See the
@@ -130,7 +166,7 @@ Currently supporting
 If enabled, the
 .Ar sme_refresh
 function callback won't be used
-to refresh sensors data and the driver will use its own method (OPTIONAL).
+to refresh sensor data and the driver will use its own method (OPTIONAL).
 .It Fa sme_events_timeout
 This is used to specify the default timeout value (in seconds) that will be
 used to check for critical events if any monitoring flag was set (OPTIONAL).
@@ -140,9 +176,9 @@ If the driver wants to refresh sensors data via the
 .Nm
 framework, the following members may be specified:
 .Pp
-.Bl -tag -width "sme_sensor_data_xxxxxxxxx"
+.Bl -tag -width "sme_events_timeout"
 .It Fa sme_cookie
-Pointer to the device struct (also called
+Typically a pointer to the device struct (also called
 .Dq softc ) .
 This may be used in the
 .Sy sme_refresh ,
@@ -178,9 +214,23 @@ appropriate limits are enabled from userland via
 Pointer to a function that alerts the device driver whenever monitoring
 limits (or thresholds) are updated by the user.
 Setting this function allows the device driver to reprogram hardware
-limits (if provided by the device), and gives the driver direct control
-over setting the sensor's state based on hardware status.
-If this member is not specified, the
+limits (if provided by the device) when the user-specificied limits are
+updated, and gives the driver direct control over setting the sensor's
+state based on hardware status.
+.Pp
+The
+.Fa sme_set_limits
+callback can be invoked with the third argument (a pointer to the new
+limits) set to a
+.Dv NULL
+pointer.
+Device drivers must recognize this as a request to restore the sensor
+limits to their original, boot-time values.
+.Pp
+If the
+.Fa sme_set_limits
+member is not specified, the device driver is not informed of changes to
+the sensor's limit values, and the
 .Nm
 framework performs all limit checks in software.
 .El
@@ -203,11 +253,11 @@ framework, the
 function must be used.
 If there were monitoring events registered for the
 driver, they all will be destroyed before the device is unregistered and
-its sensors will be detached; finally the
-.Nm
+its sensors are detached.
+Finally the
+.Em sysmon_envsys
 object will be freed, so there's no need to call
-.Fn sysmon_envsys_destroy
-if we are going to unregister a device.
+.Fn sysmon_envsys_destroy .
 .Ss DEVICE CLASSES
 The
 .Fa sme_class
@@ -245,12 +295,13 @@ event to the
 .Xr powerd 8
 daemon (if running) when all battery devices are in a critical state.
 (The critical state occurs when a battery is not currently charging
-and its charge state is low or critical).
+and its charge state is low or critical.)
 When the
 .Em low-power
 condition is met, an event is sent to the
 .Xr powerd 8
-daemon (if running) and will shutdown the system gracefully via the
+daemon (if running), which will shutdown the system gracefully
+by executing the
 .Fa /etc/powerd/scripts/sensor_battery
 script.
 .Pp
@@ -274,7 +325,7 @@ event will never be sent, and the graceful shutdown won't be possible.
 .Ss SENSOR DETAILS
 Each sensor uses a
 .Sy envsys_data_t
-structure, it's defined as follow (only the public members are shown);
+structure, it's defined as follows (only the public members are shown);
 .Bd -literal
 typedef struct envsys_data {
 	uint32_t	units;
@@ -286,7 +337,8 @@ typedef struct envsys_data {
 	int32_t		value_max;
 	int32_t		value_min;
 	int32_t		value_avg;
-	bool		monitor;
+	sysmon_envsys_lim_t limits;
+	int		upropset;
 	char		desc[ENVSYS_DESCLEN];
 } envsys_data_t;
 .Ed
@@ -302,6 +354,16 @@ Used to set the units type.
 Used to set the current state.
 .It Fa flags
 Used to set additional flags.
+Among other uses, if one or more of the
+.Dv ENVSYS_FMONxxx
+flags are set, automatic sensor monitoring will be enabled.
+Periodically, the sensor's value will be checked and if certain
+conditions are met, an event will be sent to the
+.Xr powerd 8
+daemon.
+.Em NOTE
+.Em that limits (or thresholds) can be set at any time to enable
+.Em monitoring that the sensor's value remains within those limits .
 .It Fa rpms
 Used to set the nominal RPM value for
 .Sy fan
@@ -318,23 +380,10 @@ Used to set the maximum value.
 Used to set the minimum value.
 .It Fa value_avg
 Used to set the average value.
-.It Fa monitor
-Used to enable automatic sensor monitoring (by default
-it's disabled).
-The automatic sensor monitoring will check if
-a condition is met periodically and will send an event to the
-.Xr powerd 8
-daemon (if running).
-The monitoring event will be registered when this flag is
-.Dv true
-and one or more of the
-.Dv ENVSYS_FMONxxx
-flags were set in the
-.Ar flags
-member.
-.Em NOTE
-.Em that limits (or thresholds) can be set at any time to enable
-.Em monitoring that the sensor's value remains within those limits.
+.It Fa limits
+Structure used to contain the sensor's alarm thresholds.
+.It Fa upropset
+Used to keep track of which sensor properties are set.
 .It Fa desc
 Used to set the description string.
 .Em NOTE
@@ -467,11 +516,11 @@ Enables and registers a new event to monitor a critical state.
 Enables and registers a new event to monitor a sensor's value crossing
 limits or thresholds.
 .It Dv ENVSYS_FMONSTCHANGED
-Enables and registers a new event to monitor Battery capacity or drive state
+Enables and registers a new event to monitor battery capacity or drive state
 sensors.
-It won't be effective if the
+The flag is not effective if the
 .Ar units
-member is not set to
+member is not
 .Dv ENVSYS_DRIVE
 or
 .Dv ENVSYS_BATTERY_CAPACITY .
@@ -479,13 +528,13 @@ or
 Disallows setting of limits (or thresholds) via the
 .Dv ENVSYS_SETDICTIONARY
 .Xr ioctl 2 .
-This flag has no effect on monitoring flags set in the driver and is
-only disables setting the limits from userland.
+This flag only disables setting the limits from userland.
+It has no effect on monitoring flags set by the driver.
 .El
 .Pp
 .Em If the driver has to use any of the
 .Ar value_max ,
-.Ar value_min
+.Ar value_min ,
 .Em or
 .Ar value_avg
 .Em members, they should be marked as valid with the appropriate flag .
@@ -541,13 +590,13 @@ member must be set to one of the following predefined capacity states:
 .Pp
 .Bl -tag -width "ENVSYS_BATTERY_CAPACITY_CRITICAL" -compact
 .It Dv ENVSYS_BATTERY_CAPACITY_NORMAL
-Battery charge is in normal capacity.
+Battery charge is normal.
 .It Dv ENVSYS_BATTERY_CAPACITY_CRITICAL
-Battery charge is in critical capacity.
+Battery charge is critical.
 .It Dv ENVSYS_BATTERY_CAPACITY_LOW
-Battery charge is in low capacity.
+Battery charge is low.
 .It Dv ENVSYS_BATTERY_CAPACITY_WARNING
-Battery charge is in warning capacity.
+Battery charge is on or below the warning capacity.
 .El
 .It
 The
@@ -570,7 +619,7 @@ The following types shouldn't need any conversion:
 .Dv ENVSYS_BATTERY_CAPACITY ,
 .Dv ENVSYS_BATTERY_CHARGE ,
 .Dv ENVSYS_INDICATOR ,
-.Dv ENVSYS_INTEGER
+.Dv ENVSYS_INTEGER ,
 and
 .Dv ENVSYS_DRIVE .
 .Pp
@@ -632,14 +681,6 @@ mydriver_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 }
 .Ed
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing the
-.Sy envsys 2
-framework can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The
 .Sy envsys 2
 framework is implemented within the files:
@@ -674,5 +715,5 @@ developers around the world.
 .Pp
 The first
 .Em envsys
-framework was implemented by Jason R. Thorpe, Tim Rightnour
-and Bill Squier.
+framework was implemented by
+Jason R. Thorpe, Tim Rightnour, and Bill Squier.

@@ -1,5 +1,5 @@
 
-/*	$NetBSD: vnode.h,v 1.1 2009/08/07 20:57:58 haad Exp $	*/
+/*	$NetBSD: vnode.h,v 1.9 2011/06/12 04:43:11 mrg Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -108,6 +108,8 @@
 #include <sys/proc.h>
 #include <sys/filedesc.h>
 #include <sys/buf.h>
+#include <sys/debug.h>
+
 
 #ifdef _KERNEL
 #include <sys/vfs_syscalls.h>
@@ -117,7 +119,7 @@ typedef	struct vattr	vattr_t;
 typedef	enum vtype	vtype_t;
 typedef	void		caller_context_t;
 
-typedef	int (**vnodeops_t)(void *);
+typedef int (**vnodeops_t)(void *);
 
 #define	vop_fid		vop_vptofh
 #define	vop_fid_args	vop_vptofh_args
@@ -156,6 +158,9 @@ typedef struct vsecattr {
 	uint_t		vsa_aclflags;	/* ACE ACL flags */
 } vsecattr_t;
 
+#define V_XATTRDIR      0x0000  /* attribute unnamed directory */
+#define IS_XATTRDIR(vp)	(0)
+
 #define	AV_SCANSTAMP_SZ	32		/* length of anti-virus scanstamp */
 
 /*
@@ -175,6 +180,7 @@ typedef struct xoptattr {
 	uint8_t		xoa_av_quarantined;
 	uint8_t		xoa_av_modified;
 	uint8_t		xoa_av_scanstamp[AV_SCANSTAMP_SZ];
+	uint8_t 	xoa_reparse;
 } xoptattr_t;
 
 
@@ -262,8 +268,24 @@ typedef struct xvattr {
 #define	VSA_ACE_ALLTYPES	0x0040
 #define	VSA_ACE_ACLFLAGS	0x0080	/* get/set ACE ACL flags */
 
+#define v_lock v_interlock
+
+/*
+ * vnode flags.
+ */
+#define VROOT		VV_ROOT/* root of its file system */
+#define VNOCACHE	0x00/* don't keep cache pages on vnode */
+#define VNOMAP		VV_MAPPED/* file cannot be mapped/faulted */
+#define VDUP		0x00/* file should be dup'ed rather then opened */
+#define VNOSWAP		0x00/* file cannot be used as virtual swap device */
+#define VNOMOUNT	0x00/* file cannot be covered by mount */
+#define VISSWAP		0x00/* vnode is being used for swap */
+#define VSWAPLIKE	0x00/* vnode acts like swap (but may not be) */
+
 int	vn_is_readonly(vnode_t *);
 
+#define	vn_free(vp)		vrele((vp))
+#define	vn_setops(vp, ops)	(0)
 #define	vn_vfswlock(vp)		(0)
 #define	vn_vfsunlock(vp)	do { } while (0)
 #define	vn_ismntpt(vp)		((vp)->v_type == VDIR && (vp)->v_mountedhere != NULL)
@@ -274,9 +296,10 @@ int	vn_is_readonly(vnode_t *);
 #define	VN_HOLD(v)	vref(v)
 #define	VN_RELE(v)	vrele(v)
 #define	VN_URELE(v)	vput(v)
+#define	VN_SET_VFS_TYPE_DEV(vp, vfs, type, flag)	(0)
 
-#define VI_LOCK(vp)     mutex_enter(&(vp)->v_interlock)
-#define VI_UNLOCK(vp)   mutex_exit(&(vp)->v_interlock)
+#define VI_LOCK(vp)     mutex_enter((vp)->v_interlock)
+#define VI_UNLOCK(vp)   mutex_exit((vp)->v_interlock)
 
 #define	VOP_REALVP(vp, vpp, ct)	(*(vpp) = (vp), 0)
 
@@ -380,6 +403,7 @@ int	vn_is_readonly(vnode_t *);
 #define	XAT0_AV_QUARANTINED	0x00000400	/* anti-virus quarantine */
 #define	XAT0_AV_MODIFIED	0x00000800	/* anti-virus modified */
 #define	XAT0_AV_SCANSTAMP	0x00001000	/* anti-virus scanstamp */
+#define XAT0_REPARSE 	0x00002000 	/* FS reparse point */
 
 #define	XAT0_ALL_ATTRS	(XAT0_CREATETIME|XAT0_ARCHIVE|XAT0_SYSTEM| \
     XAT0_READONLY|XAT0_HIDDEN|XAT0_NOUNLINK|XAT0_IMMUTABLE|XAT0_APPENDONLY| \
@@ -417,6 +441,7 @@ int	vn_is_readonly(vnode_t *);
 #define	XAT_AV_QUARANTINED	((XAT0_INDEX << XVA_SHFT) | XAT0_AV_QUARANTINED)
 #define	XAT_AV_MODIFIED		((XAT0_INDEX << XVA_SHFT) | XAT0_AV_MODIFIED)
 #define	XAT_AV_SCANSTAMP	((XAT0_INDEX << XVA_SHFT) | XAT0_AV_SCANSTAMP)
+#define XAT_REPARSE 		((XAT0_INDEX << XVA_SHFT) | XAT0_REPARSE)
 
 /*
  * The returned attribute map array (xva_rtnattrmap[]) is located past the
@@ -436,6 +461,14 @@ int	vn_is_readonly(vnode_t *);
 	ASSERT((xvap)->xva_magic == XVA_MAGIC);			\
 	(xvap)->xva_reqattrmap[XVA_INDEX(attr)] |= XVA_ATTRBIT(attr)
 
+/*
+ * XVA_CLR_REQ() clears an attribute bit in the proper element in the bitmap
+ * of requested attributes (xva_reqattrmap[]).
+ */
+#define XVA_CLR_REQ(xvap, attr)                                 \
+	ASSERT((xvap)->xva_vattr.va_mask | AT_XVATTR);          \
+	ASSERT((xvap)->xva_magic == XVA_MAGIC);                 \
+	(xvap)->xva_reqattrmap[XVA_INDEX(attr)] &= ~XVA_ATTRBIT(attr)
 /*
  * XVA_SET_RTN() sets an attribute bit in the proper element in the bitmap
  * of returned attributes (xva_rtnattrmap[]).
@@ -498,20 +531,26 @@ static __inline int
 zfs_vn_open(const char *pnamep, enum uio_seg seg, int filemode, int createmode,
     vnode_t **vpp, enum create crwhy, mode_t umask)
 {
+	struct pathbuf *pb;
 	struct nameidata nd;
 	int error;
 
 	ASSERT(seg == UIO_SYSSPACE);
-	ASSERT(filemode == (FWRITE | FCREAT | FTRUNC | FOFFMAX));
+	ASSERT((filemode & (FWRITE | FCREAT | FTRUNC | FOFFMAX)) != 0);
 	ASSERT(crwhy == CRCREAT);
 	ASSERT(umask == 0);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, pnamep);
+	pb = pathbuf_create(pnamep);
+	if (pb == NULL) {
+		return ENOMEM;
+	}
+	NDINIT(&nd, LOOKUP, NOFOLLOW, pb);
 	error = vn_open(&nd, filemode, createmode);
 	if (error == 0) {
-		VOP_UNLOCK(nd.ni_vp, 0);
+		VOP_UNLOCK(nd.ni_vp);
 		*vpp = nd.ni_vp;
 	}
+	pathbuf_destroy(pb);
 	return (error);
 }
 #define	vn_open(pnamep, seg, filemode, createmode, vpp, crwhy, umask)	\
@@ -553,7 +592,7 @@ zfs_vop_fsync(vnode_t *vp, int flag, cred_t *cr)
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_FSYNC(vp, cr, FSYNC_WAIT, 0, 0);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 #define	VOP_FSYNC(vp, flag, cr, unk)	zfs_vop_fsync((vp), (flag), (cr))
@@ -578,7 +617,7 @@ zfs_vop_getattr(vnode_t *vp, vattr_t *ap, int flag, cred_t *cr)
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_GETATTR(vp, ap, cr);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 #define	VOP_GETATTR(vp, ap, flag, cr, unk)	zfs_vop_getattr((vp), (ap), (flag), (cr))
@@ -590,7 +629,7 @@ zfs_vop_seek(vnode_t *vp, off_t off, off_t *offp)
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_SEEK(vp, off, *offp, kauth_cred_get());
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 #define	VOP_SEEK(vp, off, offp, unk)	zfs_vop_seek(vp, off, offp)
@@ -615,7 +654,7 @@ zfs_vop_putpage(vnode_t *vp, off_t off, size_t len, int flag)
 		nbflag |= PGO_CLEANIT;
 	}
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	return VOP_PUTPAGES(vp, off, len, nbflag);
 }
 #define	VOP_PUTPAGE(vp, off, len, flag, cr, ct)	zfs_vop_putpage((vp), (off), (len), (flag))
@@ -640,18 +679,23 @@ vn_remove(char *fnamep, enum uio_seg seg, enum rm dirflag)
 	return (do_sys_unlink(fnamep, seg));
 }
 
+#define VN_RELE_ASYNC(vp, taskq) 	vrele_async((vp))
+#define vn_exists(a) 	do { } while(0)
+#define vn_reinit(a) 	vclean((a), 0)
+
 /*
  * Flags for VOP_LOOKUP
  *
  * Defined in file.h, but also possible, FIGNORECASE
  *
  */
-#define LOOKUP_XATTR            0x02    /* lookup up extended attr dir */
+#define LOOKUP_XATTR 		0x02	/* lookup up extended attr dir */
 
 /*
  * Flags for VOP_READDIR
  */
-#define V_RDDIR_ENTFLAGS    0x01    /* request dirent flags */
+#define V_RDDIR_ENTFLAGS 	0x01    /* request dirent flags */
+#define	V_RDDIR_ACCFILTER 	0x02	/* filter out inaccessible dirents */
 
 /*
  * Extensible vnode attribute (xva) routines:

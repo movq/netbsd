@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.19 2009/08/23 15:37:51 jmcneill Exp $ */
+/*	$NetBSD: pchb.c,v 1.33 2012/01/30 19:41:18 drochner Exp $ */
 
 /*-
  * Copyright (c) 1996, 1998, 2000 The NetBSD Foundation, Inc.
@@ -30,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.19 2009/08/23 15:37:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.33 2012/01/30 19:41:18 drochner Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -48,8 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.19 2009/08/23 15:37:51 jmcneill Exp $");
 #include <dev/pci/agpvar.h>
 
 #include <arch/x86/pci/pchbvar.h>
-
-#include "rnd.h"
 
 #define PCISET_BRIDGETYPE_MASK	0x3
 #define PCISET_TYPE_COMPAT	0x1
@@ -71,17 +69,21 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.19 2009/08/23 15:37:51 jmcneill Exp $");
 #define I82424_BCTL_PCIMEM_BURSTEN	0x01
 #define I82424_BCTL_PCI_BURSTEN		0x02
 
-int	pchbmatch(device_t, cfdata_t, void *);
-void	pchbattach(device_t, device_t, void *);
-int	pchbdetach(device_t, int);
+static int	pchbmatch(device_t, cfdata_t, void *);
+static void	pchbattach(device_t, device_t, void *);
+static int	pchbdetach(device_t, int);
+static int	pchbrescan(device_t, const char *, const int *);
+static void	pchbchilddet(device_t, device_t);
 
-static bool	pchb_resume(device_t PMF_FN_ARGS);
-static bool	pchb_suspend(device_t PMF_FN_ARGS);
+static bool	pchb_resume(device_t, const pmf_qual_t *);
+static bool	pchb_suspend(device_t, const pmf_qual_t *);
+
+static void	pchb_amdtempbus_configure(struct pchb_softc *);
 
 CFATTACH_DECL3_NEW(pchb, sizeof(struct pchb_softc),
-    pchbmatch, pchbattach, pchbdetach, NULL, NULL, NULL, DVF_DETACH_SHUTDOWN);
+    pchbmatch, pchbattach, pchbdetach, NULL, pchbrescan, pchbchilddet, DVF_DETACH_SHUTDOWN);
 
-int
+static int
 pchbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
@@ -148,12 +150,11 @@ pchb_get_bus_number(pci_chipset_tag_t pc, pcitag_t tag)
 	return -1;
 }
 
-void
+static void
 pchbattach(device_t parent, device_t self, void *aux)
 {
 	struct pchb_softc *sc = device_private(self);
-	struct pci_attach_args *pa = aux;
-	char devinfo[256];
+	const struct pci_attach_args *pa = aux;
 	struct pcibus_attach_args pba;
 	struct agpbus_attach_args apa;
 	pcireg_t bcreg;
@@ -161,22 +162,19 @@ pchbattach(device_t parent, device_t self, void *aux)
 	pcitag_t tag;
 	int doattach, attachflags, has_agp;
 
-	aprint_naive("\n");
-
 	doattach = 0;
 	has_agp = 0;
 	attachflags = pa->pa_flags;
 
 	sc->sc_dev = self;
+	sc->sc_pa = *pa;
 
 	/*
 	 * Print out a description, and configure certain chipsets which
 	 * have auxiliary PCI buses.
 	 */
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	switch (PCI_VENDOR(pa->pa_id)) {
 	/*
@@ -224,12 +222,12 @@ pchbattach(device_t parent, device_t self, void *aux)
 		case PCI_PRODUCT_SERVERWORKS_CIOB_X2:
 		case PCI_PRODUCT_SERVERWORKS_CIOB_E:
 			switch (attachflags &
-			    (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) {
+			    (PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY)) {
 			case 0:
 				/* Doesn't smell like there's anything there. */
 				break;
-			case PCI_FLAGS_MEM_ENABLED:
-				attachflags |= PCI_FLAGS_IO_ENABLED;
+			case PCI_FLAGS_MEM_OKAY:
+				attachflags |= PCI_FLAGS_IO_OKAY;
 				/* FALLTHROUGH */
 			default:
 				doattach = 1;
@@ -327,9 +325,9 @@ pchbattach(device_t parent, device_t self, void *aux)
 			 * at the MIOC, but less aesthetical imho.)
 			 */
 			if ((attachflags &
-			    (PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED)) ==
-			    PCI_FLAGS_MEM_ENABLED)
-				attachflags |= PCI_FLAGS_IO_ENABLED;
+			    (PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY)) ==
+			    PCI_FLAGS_MEM_OKAY)
+				attachflags |= PCI_FLAGS_IO_OKAY;
 
 			pbnum = 0;
 			switch (pa->pa_device) {
@@ -386,6 +384,16 @@ pchbattach(device_t parent, device_t self, void *aux)
 		case PCI_PRODUCT_INTEL_82IGD_E_HB:
 		case PCI_PRODUCT_INTEL_82Q45_HB:
 		case PCI_PRODUCT_INTEL_82G45_HB:
+		case PCI_PRODUCT_INTEL_82G41_HB:
+		case PCI_PRODUCT_INTEL_E7221_HB:
+		case PCI_PRODUCT_INTEL_82965GME_HB:
+		case PCI_PRODUCT_INTEL_82B43_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_D_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_M_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_MA_HB:
+		case PCI_PRODUCT_INTEL_IRONLAKE_MC2_HB:
+		case PCI_PRODUCT_INTEL_PINEVIEW_HB:
+		case PCI_PRODUCT_INTEL_PINEVIEW_M_HB:
 			/*
 			 * The host bridge is either in GFX mode (internal
 			 * graphics) or in AGP mode. In GFX mode, we pretend
@@ -400,13 +408,6 @@ pchbattach(device_t parent, device_t self, void *aux)
 		}
 		break;
 	}
-
-#if NRND > 0
-	/*
-	 * Attach a random number generator, if there is one.
-	 */
-	pchb_attach_rnd(sc, pa);
-#endif
 
 	if (!pmf_device_register(self, pchb_suspend, pchb_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -436,40 +437,55 @@ pchbattach(device_t parent, device_t self, void *aux)
 		memset(&pba.pba_intrtag, 0, sizeof(pba.pba_intrtag));
 		config_found_ia(self, "pcibus", &pba, pcibusprint);
 	}
+
+	pchb_amdtempbus_configure(sc);
 }
 
-int
+static int
 pchbdetach(device_t self, int flags)
 {
 	int rc;
-#if NRND > 0
-	struct pchb_softc *sc = device_private(self);
-#endif
 
 	if ((rc = config_detach_children(self, flags)) != 0)
 		return rc;
 
 	pmf_device_deregister(self);
 
-#if NRND > 0
-	/*
-	 * Attach a random number generator, if there is one.
-	 */
-	pchb_detach_rnd(sc);
-#endif
 	return 0;
 }
 
+static int
+pchbrescan(device_t self, const char *ifattr, const int *locators)
+{
+	struct pchb_softc *sc = device_private(self);
+
+	if (ifattr_match(ifattr, "amdtempbus"))
+		pchb_amdtempbus_configure(sc);
+
+	return 0;
+}
+
+static void
+pchbchilddet(device_t self, device_t child)
+{
+	struct pchb_softc *sc = device_private(self);
+
+	if (sc->sc_amdtempbus == child) {
+		sc->sc_amdtempbus = NULL;
+		return;
+	}
+}
+
 static bool
-pchb_suspend(device_t dv PMF_FN_ARGS)
+pchb_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pchb_softc *sc = device_private(dv);
 	pci_chipset_tag_t pc;
 	pcitag_t tag;
 	int off;
 
-	pc = sc->sc_pc;
-	tag = sc->sc_tag;
+	pc = sc->sc_pa.pa_pc;
+	tag = sc->sc_pa.pa_tag;
 
 	for (off = 0x40; off <= 0xff; off += 4)
 		sc->sc_pciconfext[(off - 0x40) / 4] = pci_conf_read(pc, tag, off);
@@ -478,18 +494,27 @@ pchb_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-pchb_resume(device_t dv PMF_FN_ARGS)
+pchb_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pchb_softc *sc = device_private(dv);
 	pci_chipset_tag_t pc;
 	pcitag_t tag;
 	int off;
 
-	pc = sc->sc_pc;
-	tag = sc->sc_tag;
+	pc = sc->sc_pa.pa_pc;
+	tag = sc->sc_pa.pa_tag;
 
 	for (off = 0x40; off <= 0xff; off += 4)
 		pci_conf_write(pc, tag, off, sc->sc_pciconfext[(off - 0x40) / 4]);
 
 	return true;
+}
+
+static void
+pchb_amdtempbus_configure(struct pchb_softc *sc)
+{
+	if (sc->sc_amdtempbus != NULL)
+		return;
+
+	sc->sc_amdtempbus = config_found_ia(sc->sc_dev, "amdtempbus", &sc->sc_pa, NULL);
 }

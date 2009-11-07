@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gre.h,v 1.39 2008/09/08 23:36:55 gmcgarry Exp $ */
+/*	$NetBSD: if_gre.h,v 1.42 2011/11/29 17:28:45 drochner Exp $ */
 
 /*
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -46,6 +46,9 @@
 #include <sys/mallocvar.h>
 
 #ifdef _KERNEL
+
+#include <sys/pcq.h>
+
 struct gre_soparm {
 	struct socket		*sp_so;
 	struct sockaddr_storage sp_src;	/* source of gre packets */
@@ -63,18 +66,10 @@ enum gre_state {
 	, GRE_S_DIE
 };
 
-#define	__cacheline_aligned	__aligned(CACHE_LINE_SIZE)
-
 struct gre_bufq {
-	volatile int	bq_prodidx;
-	volatile int	bq_considx;
-	size_t		bq_len __cacheline_aligned;
-	size_t		bq_lenmask;
+	pcq_t		*bq_q;
 	volatile int	bq_drops;
-	struct mbuf	**bq_buf;
 };
-
-MALLOC_DECLARE(M_GRE_BUFQ);
 
 enum gre_msg {
 	  GRE_M_NONE = 0

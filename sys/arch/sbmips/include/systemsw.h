@@ -1,4 +1,4 @@
-/* $NetBSD: systemsw.h,v 1.7 2008/01/08 14:38:48 simonb Exp $ */
+/* $NetBSD: systemsw.h,v 1.9 2011/02/20 07:47:38 matt Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -39,7 +39,7 @@
 
 struct systemsw {
 	/* ordered to match likely locality. */
-	void	(*s_cpu_intr)(uint32_t, uint32_t, uint32_t, uint32_t);
+	void	(*s_cpu_intr)(int, vaddr_t, uint32_t);
 
 	void	*s_clock_arg;
 	void	(*s_clock_init)(void *);
@@ -49,15 +49,17 @@ struct systemsw {
 	void	(*s_statclock_setrate)(void *, int);
 
 	void	*(*s_intr_establish)(u_int, u_int,
-		    void (*fun)(void *, uint32_t, uint32_t), void *);
+		    void (*fun)(void *, uint32_t, vaddr_t), void *);
 };
 extern struct systemsw systemsw;
 
-int	system_set_clockfns(void *, void (*)(void *));
-int	system_set_todrfns(void *, void (*)(void *, time_t), void (*)(void *));
-
-#define	cpu_intr_establish(n,s,f,a)	((*systemsw.s_intr_establish)(n,s,f,a))
+bool	system_set_clockfns(void *, void (*)(void *));
 
 void	sb1250_icu_init(void);
+struct cpu_softc;
+void	sb1250_cpu_init(struct cpu_softc *);
+void	sb1250_ipl_map_init(void);
+
+#define	cpu_intr_establish(n,s,f,a)	((*systemsw.s_intr_establish)(n,s,f,a))
 
 #endif /* _SBMIPS_SYSTEMSW_H_ */

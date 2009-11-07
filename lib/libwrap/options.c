@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.14 2005/09/24 14:26:12 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.14.44.2 2012/04/23 23:40:41 riz Exp $	*/
 
  /*
   * General skeleton for adding options to the access control language. The
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#) options.c 1.17 96/02/11 17:01:31";
 #else
-__RCSID("$NetBSD: options.c,v 1.14 2005/09/24 14:26:12 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.14.44.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif
 

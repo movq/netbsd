@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_general.h,v 1.17 2006/04/14 22:40:09 christos Exp $	*/
+/*	$NetBSD: rf_general.h,v 1.19 2011/05/23 21:49:35 joerg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -42,7 +42,6 @@
 /* error reporting and handling */
 
 #include <sys/systm.h>		/* printf, sprintf, and friends */
-#include <uvm/uvm_extern.h>	/* PAGE_SIZE, PAGE_MASK */
 
 #define RF_ERRORMSG(s)            printf((s))
 #define RF_ERRORMSG1(s,a)         printf((s),(a))
@@ -56,7 +55,7 @@ void rf_print_unable_to_add_shutdown(const char *, int, int);
 
 
 extern char rf_panicbuf[];
-#define RF_PANIC() {rf_print_panic_message(__LINE__,__FILE__); panic(rf_panicbuf);}
+#define RF_PANIC() {rf_print_panic_message(__LINE__,__FILE__); panic("%s", rf_panicbuf);}
 
 #if defined(RAID_DIAGNOSTIC) || defined(__COVERITY__)
 #define RF_ASSERT(_x_) { \

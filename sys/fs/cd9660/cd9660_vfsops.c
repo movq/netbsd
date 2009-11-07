@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.68 2009/10/19 17:53:36 tsutsui Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.74 2011/11/14 18:35:12 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.68 2009/10/19 17:53:36 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.74 2011/11/14 18:35:12 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -265,20 +265,22 @@ cd9660_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = genfs_can_mount(devvp, VREAD, l->l_cred);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);
 		return (error);
 	}
 	if ((mp->mnt_flag & MNT_UPDATE) == 0) {
+		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 		error = VOP_OPEN(devvp, FREAD, FSCRED);
+		VOP_UNLOCK(devvp);
 		if (error)
 			goto fail;
 		error = iso_mountfs(devvp, mp, l, args);
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp, FREAD, NOCRED);
-			VOP_UNLOCK(devvp, 0);
+			VOP_UNLOCK(devvp);
 			goto fail;
 		}
 	} else {
@@ -368,8 +370,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 	iso_bsize = ISO_DEFAULT_BLOCK_SIZE;
 
 	error = VOP_IOCTL(devvp, DIOCGDINFO, &label, FREAD, FSCRED);
-	if (!error &&
-	    label.d_partitions[DISKPART(dev)].p_fstype == FS_ISO9660) {
+	if (!error) {
 		/* XXX more sanity checks? */
 		sess = label.d_partitions[DISKPART(dev)].p_cdsession;
 	} else {
@@ -445,7 +446,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)dev;
 	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_CD9660);
 	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
-	mp->mnt_stat.f_namemax = MAXNAMLEN;
+	mp->mnt_stat.f_namemax = ISO_MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_iflag |= IMNT_MPSAFE;
 	mp->mnt_dev_bshift = iso_bsize;
@@ -717,7 +718,8 @@ cd9660_vget_internal(struct mount *mp, ino_t ino, struct vnode **vpp,
 		return (0);
 
 	/* Allocate a new vnode/iso_node. */
-	if ((error = getnewvnode(VT_ISOFS, mp, cd9660_vnodeop_p, &vp)) != 0) {
+	error = getnewvnode(VT_ISOFS, mp, cd9660_vnodeop_p, NULL, &vp);
+	if (error) {
 		*vpp = NULLVP;
 		return (error);
 	}
@@ -807,7 +809,7 @@ cd9660_vget_internal(struct mount *mp, ino_t ino, struct vnode **vpp,
 	} else
 		bp = 0;
 
-	VREF(ip->i_devvp);
+	vref(ip->i_devvp);
 
 	if (relocated) {
 		/*

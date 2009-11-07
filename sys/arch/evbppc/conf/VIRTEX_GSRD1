@@ -1,4 +1,4 @@
-#	$NetBSD: VIRTEX_GSRD1,v 1.6 2009/03/06 20:31:48 joerg Exp $
+#	$NetBSD: VIRTEX_GSRD1,v 1.14.2.1 2012/06/12 17:48:01 riz Exp $
 #
 # VIRTEX_GSRD1
 #
@@ -64,7 +64,8 @@ makeoptions	DEBUG="-g"	# compile full symbol table
 #options 	COMPAT_16	# NetBSD 1.6,
 #options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0,
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
@@ -79,7 +80,6 @@ file-system 	FDESC		# /dev/fd
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
@@ -87,9 +87,10 @@ file-system	PTYFS		# /dev/pts/N support
 file-system 	TMPFS 		# virtual memory file system
 
 # File system options
-options 	QUOTA		# UFS quotas
-options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -120,7 +121,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
-options 	NMBCLUSTERS=4096
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
@@ -132,7 +132,7 @@ options 	NMBCLUSTERS=4096
 options 	WSEMUL_VT100
 options 	WSEMUL_DEFAULT_FG=WSCOL_BLACK
 options 	WSEMUL_DEFAULT_BG=WSCOL_LIGHT_WHITE
-options 	WSDISPLAY_COMPAT_USL 	# VT handling
+options 	WSDISPLAY_COMPAT_USL 	# wsconscfg VT handling
 #options 	WSDISPLAY_COMPAT_RAWKBD
 #options 	WSDISPLAY_DEFAULTSCREENS=4
 options 	FONT_VT220L8x16
@@ -158,14 +158,13 @@ wsdisplay* 	at wsemuldisplaydev?
 makphy* 	at mii? phy ?		# Marvell Semiconductor 88E1000 PHYs
 ukphy*		at mii? phy ?		# generic unknown PHYs
 
-pseudo-device	md		1	# memory disk device
+pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter	8	# packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
 pseudo-device	ppp		2	# Point-to-Point Protocol
 pseudo-device	sl		2	# Serial Line IP
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 
 pseudo-device 	wsmux
 pseudo-device 	wsfont

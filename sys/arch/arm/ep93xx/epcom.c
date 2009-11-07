@@ -1,4 +1,4 @@
-/*	$NetBSD: epcom.c,v 1.19 2009/03/14 14:45:55 dsl Exp $ */
+/*	$NetBSD: epcom.c,v 1.22 2012/02/02 19:42:57 tls Exp $ */
 /*
  * Copyright (c) 1998, 1999, 2001, 2002, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -73,14 +73,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epcom.c,v 1.19 2009/03/14 14:45:55 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epcom.c,v 1.22 2012/02/02 19:42:57 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "epcom.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
@@ -111,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: epcom.c,v 1.19 2009/03/14 14:45:55 dsl Exp $");
 #include <sys/kauth.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ep93xx/epcomreg.h>
 #include <arm/ep93xx/epcomvar.h>
@@ -201,7 +201,7 @@ epcom_attach_subr(struct epcom_softc *sc)
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = epcomstart;
 	tp->t_param = epcomparam;
 	tp->t_hwiflow = epcomhwiflow;
@@ -237,7 +237,7 @@ epcom_attach_subr(struct epcom_softc *sc)
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, epcomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
 			  RND_TYPE_TTY, 0);
 #endif
@@ -1132,7 +1132,7 @@ epcomintr(void* arg)
 	softint_schedule(sc->sc_si);
 
 #if 0 /* XXX: broken */
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, intr ^ flagr);
 #endif
 #endif

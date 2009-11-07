@@ -1,4 +1,4 @@
-/*	$NetBSD: hexdump.h,v 1.10 2006/08/26 18:17:42 christos Exp $	*/
+/*	$NetBSD: hexdump.h,v 1.13 2011/09/04 20:27:27 joerg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -71,7 +71,7 @@ typedef struct _fs {			/* format strings */
 enum _vflag { ALL, DUP, FIRST, WAIT };	/* -v values */
 
 extern int blocksize;			/* data block size */
-extern int deprecated;			/* od compatibility */
+extern int odmode;			/* od compatibility */
 extern FU *endfu;			/* format at end-of-data */
 extern int exitval;			/* final exit value */
 extern FS *fshead;			/* head of format strings list */
@@ -81,21 +81,16 @@ extern enum _vflag vflag;
 
 void	 add(const char *);
 void	 addfile(char *);
-void	 badcnt(char *);
-void	 badconv(char *);
-void	 badfmt(const char *);
-void	 badsfmt(void);
 void	 bpad(PR *);
 void	 conv_c(PR *, u_char *);
 void	 conv_u(PR *, u_char *);
 void	 display(void);
 void	 doskip(const char *, int);
-/*void	 err(const char *, ...);*/
 void	 escape(char *);
 u_char	*get(void);
-void	 newsyntax(int, char ***);
+void	 hexsyntax(int, char ***);
 int	 next(char **);
-void	 oldsyntax(int, char ***);
+void	 odsyntax(int, char ***);
 void	 rewrite(FS *);
 int	 size(FS *);
-void	 usage(void);
+void	 usage(void) __attribute__((__noreturn__));

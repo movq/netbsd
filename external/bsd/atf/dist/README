@@ -1,10 +1,9 @@
-                     Automated Testing Framework (atf)
-                        The NetBSD Foundation, Inc.
----------------------------------------------------------------------------
+Introductory information                        Automated Testing Framework
+===========================================================================
 
 
 Introduction
-============
+************
 
 The Automated Testing Framework (ATF) is a collection of libraries and
 utilities designed to ease unattended application testing in the hands of
@@ -24,14 +23,11 @@ advertised.
 
 
 Other documents
-===============
+***************
 
 * AUTHORS: List of authors and contributors for this project.
 
 * COPYING: License information.
-
-* ChangeLog: Pointers to the code repository.  No actual history is
-  provided here.
 
 * INSTALL: Compilation and installation instructions.  These is not the
   standard document shipped with many packages, so be sure to read it for
@@ -39,15 +35,6 @@ Other documents
 
 * NEWS: List of major changes between formal, published releases.
 
-* ROADMAP: List of changes planned for future releases.
 
-
-Contributing
-============
-
-If you are planning to contribute code to the project, be absolutely sure
-to read doc/hacking.txt first.
-
-
----------------------------------------------------------------------------
-                              End of document
+===========================================================================
+vim: filetype=text:textwidth=75:expandtab:shiftwidth=2:softtabstop=2

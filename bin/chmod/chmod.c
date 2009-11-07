@@ -1,4 +1,4 @@
-/* $NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $ */
+/* $NetBSD: chmod.c,v 1.36 2011/08/29 14:51:17 joerg Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)chmod.c	8.8 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $");
+__RCSID("$NetBSD: chmod.c,v 1.36 2011/08/29 14:51:17 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,8 +58,7 @@ __RCSID("$NetBSD: chmod.c,v 1.34 2008/07/20 00:52:39 lukem Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int	main(int, char *[]);
-void	usage(void);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -91,7 +90,7 @@ main(int argc, char *argv[])
 		case 'R':
 			Rflag = 1;
 			break;
-		case 'f':		/* XXX: undocumented. */
+		case 'f':
 			fflag = 1;
 			break;
 		case 'h':
@@ -203,11 +202,11 @@ done:	argv += optind;
 	/* NOTREACHED */
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: %s [-R [-H | -L | -P]] [-h] mode file ...\n",
+	    "usage: %s [-R [-H | -L | -P]] [-fh] mode file ...\n",
 	    getprogname());
 	exit(1);
 	/* NOTREACHED */

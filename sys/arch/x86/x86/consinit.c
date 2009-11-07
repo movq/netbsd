@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.20 2009/03/18 10:22:38 cegger Exp $	*/
+/*	$NetBSD: consinit.c,v 1.23 2011/11/18 22:18:08 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -27,14 +27,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.20 2009/03/18 10:22:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.23 2011/11/18 22:18:08 jmcneill Exp $");
 
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bootinfo.h>
 #include <arch/x86/include/genfb_machdep.h>
 
@@ -68,13 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.20 2009/03/18 10:22:38 cegger Exp $")
 
 #if (NGENFB > 0)
 #include <dev/wsfb/genfbvar.h>
-#endif
-
-#ifdef __i386__
-#include "xboxfb.h"
-#if (NXBOXFB > 0)
-#include <machine/xbox.h>
-#endif
 #endif
 
 #include "com.h"
@@ -177,36 +170,24 @@ consinit(void)
 		}
 		genfb_disable();
 #endif
-#if (NXBOXFB > 0)
-		switch (xboxfb_cnattach()) {
-		case 0:
-			goto dokbd;
-		case 1:
-			break;
-		case -1:
-			/* defer initialization until later */
-			initted = 0;
-			return;
-		}
-#endif
 #if (NVGA > 0)
-		if (!vga_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM,
+		if (!vga_cnattach(x86_bus_space_io, x86_bus_space_mem,
 				  -1, 1))
 			goto dokbd;
 #endif
 #if (NEGA > 0)
-		if (!ega_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM))
+		if (!ega_cnattach(x86_bus_space_io, x86_bus_space_mem))
 			goto dokbd;
 #endif
 #if (NPCDISPLAY > 0)
-		if (!pcdisplay_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM))
+		if (!pcdisplay_cnattach(x86_bus_space_io, x86_bus_space_mem))
 			goto dokbd;
 #endif
 		if (0) goto dokbd; /* XXX stupid gcc */
 dokbd:
 		error = ENODEV;
 #if (NPCKBC > 0)
-		error = pckbc_cnattach(X86_BUS_SPACE_IO, IO_KBD, KBCMDP,
+		error = pckbc_cnattach(x86_bus_space_io, IO_KBD, KBCMDP,
 		    PCKBC_KBD_SLOT);
 #endif
 #if (NUKBD > 0)
@@ -220,7 +201,6 @@ dokbd:
 	}
 #if (NCOM > 0)
 	if (!strcmp(consinfo->devname, "com")) {
-		bus_space_tag_t tag = X86_BUS_SPACE_IO;
 		int addr = consinfo->addr;
 		int speed = consinfo->speed;
 
@@ -229,7 +209,7 @@ dokbd:
 		if (speed == 0)
 			speed = CONSPEED;
 
-		if (comcnattach(tag, addr, speed,
+		if (comcnattach(x86_bus_space_io, addr, speed,
 				COM_FREQ, COM_TYPE_NORMAL, comcnmode))
 			panic("can't init serial console @%x", consinfo->addr);
 
@@ -245,10 +225,8 @@ kgdb_port_init(void)
 {
 #if (NCOM > 0)
 	if(!strcmp(kgdb_devname, "com")) {
-		bus_space_tag_t tag = X86_BUS_SPACE_IO;
-
-		com_kgdb_attach(tag, comkgdbaddr, comkgdbrate, COM_FREQ, 
-		    COM_TYPE_NORMAL, comkgdbmode);
+		com_kgdb_attach(x86_bus_space_io, comkgdbaddr, comkgdbrate,
+		    COM_FREQ, COM_TYPE_NORMAL, comkgdbmode);
 	}
 #endif
 }

@@ -1,8 +1,12 @@
-#	$NetBSD: Makefile.inc,v 1.14 2009/10/01 20:07:09 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.23 2011/05/30 19:03:09 joerg Exp $
 
-.if exists(${.CURDIR}/../arch/${MACHINE_ARCH}.mk) && ${MKGCC} != "no"
+.if ${MKGCC} != "no"
+.if exists(${.CURDIR}/../arch/${MACHINE_ARCH}.mk)
 .include "${.CURDIR}/../arch/${MACHINE_ARCH}.mk"
 .endif
+.endif
+
+UNSUPPORTED_COMPILER.clang=	# defined
 
 DIST=		${NETBSDSRCDIR}/gnu/dist/gcc4
 GNUHOSTDIST=	${DIST}
@@ -14,7 +18,21 @@ GCPPFLAGS=	${G_LIBGCC2_CFLAGS} ${G_USE_COLLECT2} ${G_INCLUDES}
 CPPFLAGS+=	-I${.CURDIR} -I${GCCARCHLIBGCC}
 CPPFLAGS+=	-I${GCCARCH} ${GCPPFLAGS:M-D*} ${GCPPFLAGS:M-I*:N-I.*}
 CPPFLAGS+=	-I${G_EXTRA_HEADERS:M/*:H:u}
-CPPFLAGS+=	-I${DIST}/gcc/cp -I${DIST}/gcc/config -I${GCCARCHXX} -I.
+CPPFLAGS+=	-I${DIST} -I${DIST}/gcc/cp -I${DIST}/gcc/config -I${GCCARCHXX} -I.
+
+.if ${MACHINE_ARCH} == "powerpc" || \
+    ${MACHINE_ARCH} == "sh3el" || \
+    ${MACHINE_ARCH} == "sh3eb" || \
+    ${MACHINE_ARCH} == "m68000"
+_TRADITIONAL_CPP=
+COMPILE.S=	${CC} ${AFLAGS} ${CPPFLAGS} -c
+.endif
+
+.if !defined(MKNATIVE_LIBGCC_NEW)
+
+#
+# Old style libgcc build procedure.
+#
 
 # This is copied from gcc/mklibgcc.in:$lib2funcs
 LIB2FUNCS_ALL=	_muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 \
@@ -45,9 +63,8 @@ LIB2_EH=	${G_LIB2ADDEH:M*.c:T}
 LIB1ASMFUNCS=	${G_LIB1ASMFUNCS:=.S}
 .endif
 
-DPSRCS+=	${.CURDIR}/../arch/${MACHINE_ARCH}.mk tconfig.h
-CLEANFILES+=	${LIB2FUNCS} ${LIB2FUNCS_ST} ${LIB2DIVMOD} cs-tconfig.h \
-		tconfig.h
+DPSRCS+=	${.CURDIR}/../arch/${MACHINE_ARCH}.mk
+CLEANFILES+=	${LIB2FUNCS} ${LIB2FUNCS_ST} ${LIB2DIVMOD} cs-tconfig.h
 .if !empty(G_LIB1ASMFUNCS)
 CLEANFILES+=	${LIB1ASMFUNCS}
 .endif
@@ -59,18 +76,9 @@ BUILDSYMLINKS+=	${file} ${file:T:S/.asm$/.S/}
 # XXX
 .if ${MACHINE_ARCH} == "m68000"
 CPICFLAGS:=
-COMPILE.S=	${CC} ${AFLAGS} ${CPPFLAGS} -c
-_TRADITIONAL_CPP=
 BUILDSYMLINKS+=	${DIST}/gcc/config/m68k/fpgnulib.c fpgnulib.c
 BUILDSYMLINKS+=	${DIST}/gcc/config/m68k/fpgnulib.c xfgnulib.c
 CPPFLAGS.xfgnulib.c+=-DEXTFLOAT=1
-.endif
-
-.if ${MACHINE_ARCH} == "powerpc" || \
-    ${MACHINE_ARCH} == "sh3el" || \
-    ${MACHINE_ARCH} == "sh3eb"
-_TRADITIONAL_CPP=
-COMPILE.S=	${CC} ${AFLAGS} ${CPPFLAGS} -c
 .endif
 
 .if ${MACHINE_ARCH} == "powerpc64"
@@ -95,7 +103,7 @@ ${LIB2_EH:.c=.o}:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} -fexceptions ${COPTS.${.IMPSRC:T}} -o ${.TARGET} ${.IMPSRC}
 
-${LIB2_EH:.c=.so}:
+${LIB2_EH:.c=.pico}:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${CPICFLAGS} -fexceptions ${COPTS.${.IMPSRC:T}} -o ${.TARGET} ${.IMPSRC}
 
@@ -103,13 +111,25 @@ ${G_LIB2_DIVMOD_FUNCS:=.o}:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} -fexceptions -fnon-call-exceptions ${COPTS.${.IMPSRC:T}} -o ${.TARGET} ${.IMPSRC}
 
-${G_LIB2_DIVMOD_FUNCS:=.so}:
+${G_LIB2_DIVMOD_FUNCS:=.pico}:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${CPICFLAGS} -fexceptions -fnon-call-exceptions ${COPTS.${.IMPSRC:T}} -o ${.TARGET} ${.IMPSRC}
 
 dp-bit.c: ${.CURDIR}/Makefile
 	${_MKTARGET_CREATE}
 	printf '#define FLOAT\n#include <fp-bit.c>\n' >${.TARGET}
+
+.else	# defined(MKNATIVE_LIBGCC_NEW)
+
+#
+# New style libgcc build procedure.
+#
+
+.endif	# defined(MKNATIVE_LIBGCC_NEW)
+
+#
+# Common rules.
+#
 
 .PATH: ${DIST}/gcc ${DIST}/gcc/cp ${DIST}/gcc/cp/inc ${DIST}/gcc/config \
 	${G_CONFIGDIR}
@@ -119,6 +139,8 @@ tconfig.h:
 	TARGET_CPU_DEFAULT="" \
 	HEADERS="$(G_xm_include_list)" DEFINES="USED_FOR_TARGET $(G_xm_defines)" \
 	${HOST_SH} $(GNUHOSTDIST)/gcc/mkconfig.sh tconfig.h
+DPSRCS+=	tconfig.h
+CLEANFILES+=	tconfig.h
 
 BUILDSYMLINKS+=	${G_UNWIND_H} unwind.h
 DPSRCS+=	unwind.h

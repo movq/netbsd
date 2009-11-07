@@ -3028,7 +3028,7 @@ ppc_elf_check_relocs (bfd *abfd,
 	}
 
       r_type = ELF32_R_TYPE (rel->r_info);
-      switch (r_type)
+      switch ((int)r_type)
 	{
 	case R_PPC_GOT_TLSLD16:
 	case R_PPC_GOT_TLSLD16_LO:
@@ -5842,7 +5842,8 @@ ppc_elf_relocate_section (bfd *output_bfd,
       howto = NULL;
       if (r_type < R_PPC_max)
 	howto = ppc_elf_howto_table[r_type];
-      switch (r_type)
+      /* Cast to int as the fake relocs are not in enum elf_ppc_reloc_type.  */
+      switch ((int)r_type)
 	{
 	default:
 	  (*_bfd_error_handler)

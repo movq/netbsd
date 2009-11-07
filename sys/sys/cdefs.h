@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.78 2009/10/02 21:05:28 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.89.6.2 2012/06/24 15:44:07 jdc Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -63,14 +63,19 @@
 #include <sys/cdefs_aout.h>
 #endif
 
-#if defined(__cplusplus)
-#define	__BEGIN_DECLS		extern "C" {
-#define	__END_DECLS		}
-#define	__static_cast(x,y)	static_cast<x>(y)
+#ifdef __GNUC__
+#define	__strict_weak_alias(alias,sym)					\
+	__unused static __typeof__(alias) *__weak_alias_##alias = &sym;	\
+	__weak_alias(alias,sym)
 #else
-#define	__BEGIN_DECLS
-#define	__END_DECLS
-#define	__static_cast(x,y)	(x)y
+#define	__strict_weak_alias(alias,sym) __weak_alias(alias,sym)
+#endif
+
+/*
+ * Optional marker for size-optimised MD calling convention.
+ */
+#ifndef __compactcall
+#define	__compactcall
 #endif
 
 /*
@@ -134,6 +139,17 @@
 #else
 #define	__aconst
 #endif
+
+/*
+ * Compile Time Assertion.
+ */
+#ifdef __COUNTER__
+#define	__CTASSERT(x)		__CTASSERT0(x, __ctassert, __COUNTER__)
+#else
+#define	__CTASSERT(x)		__CTASSERT0(x, __ctassert, __LINE__)
+#endif
+#define	__CTASSERT0(x, y, z)	__CTASSERT1(x, y, z)
+#define	__CTASSERT1(x, y, z)	typedef char y ## z[/*CONSTCOND*/(x) ? 1 : -1]
 
 /*
  * The following macro is used to remove const cast-away warnings
@@ -216,6 +232,18 @@
 #define	__noinline	/* nothing */
 #endif
 
+#if __GNUC_PREREQ__(4, 1)
+#define	__returns_twice	__attribute__((__returns_twice__))
+#else
+#define	__returns_twice	/* nothing */
+#endif
+
+#if __GNUC_PREREQ__(4, 5)
+#define	__noclone	__attribute__((__noclone__))
+#else
+#define	__noclone	/* nothing */
+#endif
+
 #if __GNUC_PREREQ__(2, 7)
 #define	__unused	__attribute__((__unused__))
 #else
@@ -226,6 +254,60 @@
 #define	__used		__attribute__((__used__))
 #else
 #define	__used		__unused
+#endif
+
+#if __GNUC_PREREQ__(3, 1)
+#define	__noprofile	__attribute__((__no_instrument_function__))
+#else
+#define	__noprofile	/* nothing */
+#endif
+
+#if defined(__cplusplus)
+#define	__BEGIN_EXTERN_C	extern "C" {
+#define	__END_EXTERN_C		}
+#define	__static_cast(x,y)	static_cast<x>(y)
+#else
+#define	__BEGIN_EXTERN_C
+#define	__END_EXTERN_C
+#define	__static_cast(x,y)	(x)y
+#endif
+
+#if __GNUC_PREREQ__(4, 0)
+#  define __dso_public	__attribute__((__visibility__("default")))
+#  define __dso_hidden	__attribute__((__visibility__("hidden")))
+#  define __BEGIN_PUBLIC_DECLS	\
+	_Pragma("GCC visibility push(default)") __BEGIN_EXTERN_C
+#  define __END_PUBLIC_DECLS	__END_EXTERN_C _Pragma("GCC visibility pop")
+#  define __BEGIN_HIDDEN_DECLS	\
+	_Pragma("GCC visibility push(hidden)") __BEGIN_EXTERN_C
+#  define __END_HIDDEN_DECLS	__END_EXTERN_C _Pragma("GCC visibility pop")
+#else
+#  define __dso_public
+#  define __dso_hidden
+#  define __BEGIN_PUBLIC_DECLS	__BEGIN_EXTERN_C
+#  define __END_PUBLIC_DECLS	__END_EXTERN_C
+#  define __BEGIN_HIDDEN_DECLS	__BEGIN_EXTERN_C
+#  define __END_HIDDEN_DECLS	__END_EXTERN_C
+#endif
+
+#define	__BEGIN_DECLS		__BEGIN_PUBLIC_DECLS
+#define	__END_DECLS		__END_PUBLIC_DECLS
+
+/*
+ * Non-static C99 inline functions are optional bodies.  They don't
+ * create global symbols if not used, but can be replaced if desirable.
+ * This differs from the behavior of GCC before version 4.3.  The nearest
+ * equivalent for older GCC is `extern inline'.  For newer GCC, use the
+ * gnu_inline attribute additionally to get the old behavior.
+ *
+ * For C99 compilers other than GCC, the C99 behavior is expected.
+ */
+#if defined(__GNUC__) && defined(__GNUC_STDC_INLINE__)
+#define	__c99inline	extern __attribute__((__gnu_inline__)) __inline
+#elif defined(__GNUC__)
+#define	__c99inline	extern __inline
+#elif defined(__STDC_VERSION__)
+#define	__c99inline	__inline
 #endif
 
 #if defined(__lint__)
@@ -240,6 +322,8 @@
 #define	__packed	_Pragma("packed 1")
 #define	__aligned(x)   	_Pragma("aligned " __STRING(x))
 #define	__section(x)   	_Pragma("section " ## x)
+#elif defined(_MSC_VER)
+#define	__packed	/* ignore */
 #else
 #define	__packed	error: no __packed for this compiler
 #define	__aligned(x)	error: no __aligned for this compiler
@@ -254,7 +338,9 @@
 #define	__restrict	/* delete __restrict when not supported */
 #elif __STDC_VERSION__ >= 199901L
 #define	__restrict	restrict
-#elif !__GNUC_PREREQ__(2, 92)
+#elif __GNUC_PREREQ__(2, 92)
+#define	__restrict	__restrict__
+#else
 #define	__restrict	/* delete __restrict when not supported */
 #endif
 

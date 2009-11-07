@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxl.c,v 1.109 2009/09/15 19:20:30 dyoung Exp $	*/
+/*	$NetBSD: elinkxl.c,v 1.114 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,10 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.109 2009/09/15 19:20:30 dyoung Exp $");
-
-#include "bpfilter.h"
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.114 2012/02/02 19:43:03 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,21 +43,15 @@ __KERNEL_RCSID(0, "$NetBSD: elinkxl.c,v 1.109 2009/09/15 19:20:30 dyoung Exp $")
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -183,6 +174,8 @@ ex_config(struct ex_softc *sc)
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int i, error, attach_stage;
+
+	pmf_self_suspensor_init(sc->sc_dev, &sc->sc_suspensor, &sc->sc_qual);
 
 	callout_init(&sc->ex_mii_callout, 0);
 
@@ -443,10 +436,8 @@ ex_config(struct ex_softc *sc)
 
 	/* TODO: set queues to 0 */
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 
 	if (pmf_device_register1(sc->sc_dev, NULL, NULL, ex_shutdown))
 		pmf_class_network_register(sc->sc_dev, &sc->sc_ethercom.ec_if);
@@ -1201,13 +1192,10 @@ ex_start(struct ifnet *ifp)
 			sc->tx_tail = sc->tx_head = txp;
 		}
 
-#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, mb_head);
-#endif
+		bpf_mtap(ifp, mb_head);
 	}
  out:
 	if (sc->tx_head) {
@@ -1384,10 +1372,7 @@ ex_intr(void *arg)
 					}
 					m->m_pkthdr.rcvif = ifp;
 					m->m_pkthdr.len = m->m_len = total_len;
-#if NBPFILTER > 0
-					if (ifp->if_bpf)
-						bpf_mtap(ifp->if_bpf, m);
-#endif
+					bpf_mtap(ifp, m);
 		/*
 		 * Set the incoming checksum information for the packet.
 		 */
@@ -1429,10 +1414,8 @@ ex_intr(void *arg)
 			}
 		}
 
-#if NRND > 0
 		if (stat)
 			rnd_add_uint32(&sc->rnd_source, stat);
-#endif
 	}
 
 	/* no more interrupts */
@@ -1694,14 +1677,19 @@ ex_detach(struct ex_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ex_rxdesc *rxd;
-	int i;
+	int i, s;
 
 	/* Succeed now if there's no work to do. */
 	if ((sc->ex_flags & EX_FLAGS_ATTACHED) == 0)
 		return (0);
 
-	/* Unhook our tick handler. */
-	callout_stop(&sc->ex_mii_callout);
+	s = splnet();
+	/* Stop the interface. Callouts are stopped in it. */
+	ex_stop(ifp, 1);
+	splx(s);
+
+	/* Destroy our callout. */
+	callout_destroy(&sc->ex_mii_callout);
 
 	if (sc->ex_conf & EX_CONF_MII) {
 		/* Detach all PHYs */
@@ -1711,9 +1699,7 @@ ex_detach(struct ex_softc *sc)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->ex_mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 

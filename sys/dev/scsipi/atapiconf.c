@@ -1,4 +1,4 @@
-/*	$NetBSD: atapiconf.c,v 1.80 2009/10/19 18:41:16 bouyer Exp $	*/
+/*	$NetBSD: atapiconf.c,v 1.83.14.3 2012/07/02 21:11:50 jdc Exp $	*/
 
 /*
  * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.80 2009/10/19 18:41:16 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.83.14.3 2012/07/02 21:11:50 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,6 @@ const struct scsipi_periphsw atapi_probe_periphsw = {
 
 static int	atapibusmatch(device_t, cfdata_t, void *);
 static void	atapibusattach(device_t, device_t, void *);
-static int	atapibusactivate(device_t, enum devact);
 static int	atapibusdetach(device_t, int flags);
 static void	atapibuschilddet(device_t, device_t);
 
@@ -64,7 +63,7 @@ static int	atapi_probe_bus(struct atapibus_softc *, int);
 static int	atapibusprint(void *, const char *);
 
 CFATTACH_DECL3_NEW(atapibus, sizeof(struct atapibus_softc),
-    atapibusmatch, atapibusattach, atapibusdetach, atapibusactivate, NULL,
+    atapibusmatch, atapibusattach, atapibusdetach, NULL, NULL,
     atapibuschilddet, DVF_DETACH_SHUTDOWN);
 
 extern struct cfdriver atapibus_cd;
@@ -118,7 +117,8 @@ atapibusmatch(device_t parent, cfdata_t cf, void *aux)
 	if (chan == NULL)
 		return (0);
 
-	if (chan->chan_bustype->bustype_type != SCSIPI_BUSTYPE_ATAPI)
+	if (SCSIPI_BUSTYPE_TYPE(chan->chan_bustype->bustype_type) !=
+	    SCSIPI_BUSTYPE_ATAPI)
 		return (0);
 
 	return (1);
@@ -164,36 +164,6 @@ atapibusattach(device_t parent, device_t self, void *aux)
 	atapi_probe_bus(sc, -1);
 }
 
-static int
-atapibusactivate(device_t self, enum devact act)
-{
-	struct atapibus_softc *sc = device_private(self);
-	struct scsipi_channel *chan = sc->sc_channel;
-	struct scsipi_periph *periph;
-	int target, error = 0, s;
-
-	s = splbio();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		for (target = 0; target < chan->chan_ntargets; target++) {
-			periph = scsipi_lookup_periph(chan, target, 0);
-			if (periph == NULL)
-				continue;
-			error = config_deactivate(periph->periph_dev);
-			if (error)
-				goto out;
-		}
-		break;
-	}
- out:
-	splx(s);
-	return (error);
-}
-
 static void
 atapibuschilddet(device_t self, device_t child)
 {
@@ -201,6 +171,9 @@ atapibuschilddet(device_t self, device_t child)
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
 	int target;
+
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
 	for (target = 0; target < chan->chan_ntargets; target++) {
 		periph = scsipi_lookup_periph(chan, target, 0);
@@ -210,6 +183,9 @@ atapibuschilddet(device_t self, device_t child)
 		free(periph, M_DEVBUF);
 		break;
 	}
+
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
 }
 
 static int
@@ -218,12 +194,15 @@ atapibusdetach(device_t self, int flags)
 	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
-	int target, error;
+	int target, error = 0;
 
 	/*
 	 * Shut down the channel.
 	 */
 	scsipi_channel_shutdown(chan);
+
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
 	/*
 	 * Now detach all of the periphs.
@@ -234,10 +213,14 @@ atapibusdetach(device_t self, int flags)
 			continue;
 		error = config_detach(periph->periph_dev, flags);
 		if (error)
-			return (error);
+			goto out;
 		KASSERT(scsipi_lookup_periph(chan, target, 0) == NULL);
 	}
-	return (0);
+
+out:
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
+	return error;
 }
 
 static int

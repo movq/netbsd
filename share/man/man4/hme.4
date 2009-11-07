@@ -1,4 +1,4 @@
-.\"	$NetBSD: hme.4,v 1.8 2008/04/30 13:10:54 martin Exp $
+.\"	$NetBSD: hme.4,v 1.9.10.1 2012/07/04 19:43:10 riz Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 28, 2008
+.Dd June 23, 2012
 .Dt HME 4
 .Os
 .Sh NAME
@@ -95,7 +95,7 @@ for information on how to enable this feature.
 .%T "STP2002QFP Fast Ethernet, Parallel Port, SCSI (FEPS) User's Guide"
 .%D April 1996
 .%A Sun Microelectronics
-.%O http://mediacast.sun.com/users/Barton808/media/STP2002QFP-FEPs_UG.pdf
+.%U http://mediacast.sun.com/users/Barton808/media/STP2002QFP-FEPs_UG.pdf
 .Re
 .Sh HISTORY
 The
@@ -108,3 +108,7 @@ The
 driver was written by
 .An Paul Kranenburg
 .Aq pk@NetBSD.org .
+.Sh BUGS
+Connecting a MII transceiver on those cards that support it will cause the
+RJ45 connector to be detected as PHY instance 1, instead of the default
+instance 0.

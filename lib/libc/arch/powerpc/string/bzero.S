@@ -1,4 +1,4 @@
-/*	$NetBSD: bzero.S,v 1.7 2003/07/26 19:24:37 salo Exp $ */
+/*	$NetBSD: bzero.S,v 1.11 2011/01/29 02:21:20 matt Exp $ */
 
 /*-
  * Copyright (C) 2001	Martin J. Laubach <mjl@NetBSD.org>
@@ -29,6 +29,12 @@
 /*----------------------------------------------------------------------*/
 
 #include <machine/asm.h>
+
+
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: bzero.S,v 1.11 2011/01/29 02:21:20 matt Exp $")
+#endif /* LIBC_SCCS && !lint */
+
 #ifdef _KERNEL
 #include <assym.h>
 #endif
@@ -51,12 +57,13 @@
 ENTRY(bzero)
 		li	r_val, 0		/* Value to stuff in */
 		b	cb_memset
+END(bzero)
 
 ENTRY(memset)
-		cmplwi	cr1, %r5, 0
+		cmplwi	%cr1, %r5, 0
 		mr.	%r0, %r4
 		mr	%r8, %r3
-		beqlr-	cr1			/* Nothing to do */
+		beqlr-	%cr1			/* Nothing to do */
 
 		rlwimi	%r0, %r4, 8, 16, 23	/* word extend fill value */
 		rlwimi	%r0, %r0, 16, 0, 15
@@ -67,10 +74,9 @@ cb_memset:
 /*----------------------------------------------------------------------*/
 #ifndef _KERNEL
 		/* First find out cache line size */
-#ifdef PIC
 		mflr	%r9
-		bl	_GLOBAL_OFFSET_TABLE_@local-4
-		mflr	%r10
+#ifdef PIC
+		PIC_GOTSETUP(%r10)
 		mtlr	%r9
 		lwz	%r5,cache_info@got(%r10)
 #else
@@ -86,24 +92,33 @@ cb_memset:
 #define CPU_CACHELINE	1
 #define	CPU_CACHEINFO	5
 
-#define STKFRAME_SZ	48
+#define STKFRAME_SZ	64
 #define MIB		8
 #define OLDPLEN		16
 #define R3_SAVE		20
 #define R4_SAVE		24
 #define R0_SAVE		28
 #define R8_SAVE		32
+#define R31_SAVE	36
+#ifdef PIC
+#define R30_SAVE	40
+#endif
 
-		mflr	%r6
-		stw	%r6, 4(%r1)
+		stw	%r9, 4(%r1)
 		stwu	%r1, -STKFRAME_SZ(%r1)
+
+		stw	%r31, R31_SAVE(%r1)
+		mr	%r31, %r5		/* cache info */
+
+#ifdef PIC
+		stw	%r30, R30_SAVE(%r1)
+		PIC_TOCSETUP(cb_memset,%r30)
+#endif
 
 		stw	%r8, R8_SAVE(%r1)
 		stw	%r3, R3_SAVE(%r1)
 		stw	%r4, R4_SAVE(%r1)
 		stw	%r0, R0_SAVE(%r1)
-
-	
 
 		li	%r0, CTL_MACHDEP		/* Construct MIB */
 		stw	%r0, MIB(%r1)
@@ -126,7 +141,7 @@ cb_memset:
 
 		/* Failure, try older sysctl */
 	
-		li	%r0, CTL_MACHDEP		/* Construct MIB */
+		li	%r0, CTL_MACHDEP	/* Construct MIB */
 		stw	%r0, MIB(%r1)
 		li	%r0, CPU_CACHELINE
 		stw	%r0, MIB+4(%r1)
@@ -136,45 +151,33 @@ cb_memset:
 
 		addi	%r3, %r1, MIB
 		li	%r4, 2			/* namelen */
-#ifdef PIC
-		mflr	%r9
-		bl	_GLOBAL_OFFSET_TABLE_@local-4
-		mflr	%r10
-		mtlr	%r9
-		lwz	%r5,cache_info@got(%r10)
-		addi	%r5, %r5, 4
-#else
-		lis	%r5,cache_info+4@h
-		ori	%r5,%r5,cache_info+4@l
-#endif
+		addi	%r5, %r31, 4
 		addi	%r6, %r1, OLDPLEN
 		li	%r7, 0
 		li	%r8, 0
 		bl	PIC_PLT(_C_LABEL(sysctl))
 1:
-		lwz	%r8, R8_SAVE(%r1)
 		lwz	%r3, R3_SAVE(%r1)
 		lwz	%r4, R4_SAVE(%r1)
+		lwz	%r8, R8_SAVE(%r1)
 		lwz	%r0, R0_SAVE(%r1)
-
+		lwz	%r9, 4(%r31)
+		lwz	%r31, R31_SAVE(%r1)
 #ifdef PIC
-		bl	_GLOBAL_OFFSET_TABLE_@local-4
-		mflr	%r10
-		lwz	%r9, cache_info@got(%r10)
-		lwz	%r9, 4(%r9)
-#else
-		lis	%r5, cache_info+4@ha
-		lwz	%r9, cache_info+4@l(%r5)
+		lwz	%r30, R30_SAVE(%r1)
 #endif
-		la	%r1, STKFRAME_SZ(%r1)
-		lwz	%r5, 4(%r1)
-		mtlr	%r5
+		addi	%r1, %r1, STKFRAME_SZ
+		lwz	%r7, 4(%r1)
+		mtlr	%r7
 
 		cntlzw	%r6, %r9			/* compute shift value */
 		li	%r5, 31
 		subf	%r5, %r6, %r5
 
 #ifdef PIC
+		mflr	%r9
+		PIC_GOTSETUP(%r10)
+		mtlr	%r9
 		lwz	%r6, cache_sh@got(%r10)
 		stw	%r5, 0(%r6)
 #else
@@ -210,10 +213,10 @@ cb_cacheline_known:
 #endif /* _KERNEL */
 		/* Back in memory filling business */
 		
-		cmplwi	cr1, r_len, 0		/* Nothing to do? */
+		cmplwi	%cr1, r_len, 0		/* Nothing to do? */
 		add	%r5, %r9, %r9
 		cmplw	r_len, %r5		/* <= 2*CL bytes to move? */
-		beqlr-	cr1			/* then do nothing */
+		beqlr-	%cr1			/* then do nothing */
 
 		blt+	simple_fill		/* a trivial fill routine */
 
@@ -274,9 +277,9 @@ cb_aligned_cb:	/* no need to check r_len, see above */
 		bdnz	1b
 
 cblocks_done:	/* still CL aligned, but less than CL bytes left */
-		cmplwi	cr1, r_len, 0
+		cmplwi	%cr1, r_len, 0
 		cmplwi	r_len, 8
-		beq-	cr1, sf_return
+		beq-	%cr1, sf_return
 
 		blt-	sf_bytewise		/* <8 remaining? */
 		b	sf_aligned_w
@@ -289,12 +292,12 @@ wbzero:		li	r_val, 0
 
 simple_fill:
 #if USE_STSWX
-		cmplwi	cr1, r_len, 12		/* < 12 bytes to move? */
+		cmplwi	%cr1, r_len, 12		/* < 12 bytes to move? */
 #else
-		cmplwi	cr1, r_len, 8		/* < 8 bytes to move? */
+		cmplwi	%cr1, r_len, 8		/* < 8 bytes to move? */
 #endif
 		andi.	%r5, r_dst, 0x03		/* bytes to fill to align4 */
-		blt	cr1, sf_bytewise	/* trivial byte mover */
+		blt	%cr1, sf_bytewise	/* trivial byte mover */
 
 		li	%r6, 4
 		subf	%r5, %r5, %r6
@@ -363,6 +366,7 @@ sf_bytewise:
 #endif
 		mr	%r3, %r8			/* restore orig ptr */
 		blr				/* for memset functionality */
+END(memset)
 
 /*----------------------------------------------------------------------*/
 #ifndef _KERNEL

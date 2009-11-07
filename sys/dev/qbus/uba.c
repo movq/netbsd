@@ -1,4 +1,4 @@
-/*	$NetBSD: uba.c,v 1.77 2008/03/11 05:34:02 matt Exp $	   */
+/*	$NetBSD: uba.c,v 1.79 2010/11/13 13:52:10 uebayasi Exp $	   */
 /*
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -69,20 +69,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.77 2008/03/11 05:34:02 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uba.c,v 1.79 2010/11/13 13:52:10 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <machine/scb.h>

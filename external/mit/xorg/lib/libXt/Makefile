@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2008/10/04 20:53:13 cube Exp $
+#	$NetBSD: Makefile,v 1.5 2011/08/11 23:15:39 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -193,7 +193,8 @@ MLINKS+=	XtMalloc.3 XtCalloc.3 \
 		XtMalloc.3 XtRealloc.3 \
 		XtMalloc.3 XtFree.3 \
 		XtMalloc.3 XtNew.3 \
-		XtMalloc.3 XtNewString.3
+		XtMalloc.3 XtNewString.3 \
+		XtMalloc.3 XtAsprintf.3
 
 MLINKS+=	XtManageChildren.3 XtManageChild.3 \
 		XtManageChildren.3 XtUnmanageChildren.3 \
@@ -301,6 +302,8 @@ MLINKS+=	XtRegisterDrawable.3 XtUnregisterDrawable.3 \
 		XtOpenApplication.3 XtVaOpenApplication.3
 
 PKGDIST=	${LIB}
+
+CWARNFLAGS.clang+=	-Wno-tautological-compare
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: core_machdep.c,v 1.3 2009/08/15 23:45:00 matt Exp $ */
+/*	$NetBSD: core_machdep.c,v 1.5 2011/01/14 02:06:31 rmind Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,12 +49,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.3 2009/08/15 23:45:00 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.5 2011/01/14 02:06:31 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
@@ -68,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.3 2009/08/15 23:45:00 matt Exp $"
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/trap.h>
 
 #include <sparc/sparc/cpuvar.h>

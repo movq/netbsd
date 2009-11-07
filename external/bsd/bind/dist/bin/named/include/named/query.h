@@ -1,7 +1,7 @@
-/*	$NetBSD: query.h,v 1.1.1.1 2009/03/22 14:56:13 christos Exp $	*/
+/*	$NetBSD: query.h,v 1.2.6.1 2012/06/05 21:15:10 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2010, 2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: query.h,v 1.40 2007/06/19 23:46:59 tbox Exp */
+/* Id: query.h,v 1.45 2011/01/13 04:59:24 tbox Exp  */
 
 #ifndef NAMED_QUERY_H
 #define NAMED_QUERY_H 1
@@ -28,6 +28,8 @@
 #include <isc/buffer.h>
 #include <isc/netaddr.h>
 
+#include <dns/rdataset.h>
+#include <dns/rpz.h>
 #include <dns/types.h>
 
 #include <named/types.h>
@@ -36,6 +38,7 @@
 typedef struct ns_dbversion {
 	dns_db_t			*db;
 	dns_dbversion_t			*version;
+	isc_boolean_t			acl_checked;
 	isc_boolean_t			queryok;
 	ISC_LINK(struct ns_dbversion)	link;
 } ns_dbversion_t;
@@ -56,9 +59,16 @@ struct ns_query {
 	isc_boolean_t			isreferral;
 	isc_mutex_t			fetchlock;
 	dns_fetch_t *			fetch;
+	dns_rpz_st_t *			rpz_st;
 	isc_bufferlist_t		namebufs;
 	ISC_LIST(ns_dbversion_t)	activeversions;
 	ISC_LIST(ns_dbversion_t)	freeversions;
+	dns_rdataset_t *		dns64_aaaa;
+	dns_rdataset_t *		dns64_sigaaaa;
+	isc_boolean_t *			dns64_aaaaok;
+	unsigned int			dns64_aaaaoklen;
+	unsigned int			dns64_options;
+	unsigned int			dns64_ttl;
 };
 
 #define NS_QUERYATTR_RECURSIONOK	0x0001
@@ -73,6 +83,11 @@ struct ns_query {
 #define NS_QUERYATTR_SECURE		0x0200
 #define NS_QUERYATTR_NOAUTHORITY	0x0400
 #define NS_QUERYATTR_NOADDITIONAL	0x0800
+#define NS_QUERYATTR_CACHEACLOKVALID	0x1000
+#define NS_QUERYATTR_CACHEACLOK		0x2000
+#define NS_QUERYATTR_DNS64		0x4000
+#define NS_QUERYATTR_DNS64EXCLUDE	0x8000
+
 
 isc_result_t
 ns_query_init(ns_client_t *client);

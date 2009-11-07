@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.17 2008/04/28 20:23:10 martin Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.20.8.1 2012/08/08 15:51:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,26 +30,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2008/04/28 20:23:10 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20.8.1 2012/08/08 15:51:07 martin Exp $");
 
 #include "opt_algor_p4032.h"
 #include "opt_algor_p5064.h"
 #include "opt_algor_p6032.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/reboot.h>
 #include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
 
 #include <dev/pci/pcivar.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
-#include <machine/intr.h>
+#include <algor/autoconf.h>
 
 #ifdef ALGOR_P4032
 #include <algor/algor/algor_p4032var.h>
@@ -77,7 +77,7 @@ void
 cpu_rootconf(void)
 {
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 #if defined(ALGOR_P4032)
@@ -115,7 +115,7 @@ device_register(struct device *dev, void *aux)
 			    algor_ethaddr, ETHER_ADDR_LEN);
 			KASSERT(pd != NULL);
 			if (prop_dictionary_set(device_properties(dev),
-						"mac-addr", pd) == false) {
+						"mac-address", pd) == false) {
 				printf("WARNING: unable to set mac-addr "
 				    "property for %s\n", dev->dv_xname);
 			}

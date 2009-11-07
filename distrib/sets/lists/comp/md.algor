@@ -1,4 +1,4 @@
-# $NetBSD: md.algor,v 1.14 2009/08/19 08:24:43 he Exp $
+# $NetBSD: md.algor,v 1.16 2011/07/17 20:54:31 joerg Exp $
 ./usr/include/algor				comp-c-include
 ./usr/include/algor/_G_config.h			comp-obsolete		obsolete
 ./usr/include/algor/ansi.h			comp-c-include
@@ -7,7 +7,7 @@
 ./usr/include/algor/autoconf.h			comp-c-include
 ./usr/include/algor/bsd-aout.h			comp-obsolete		obsolete
 ./usr/include/algor/bswap.h			comp-c-include
-./usr/include/algor/bus.h			comp-c-include
+./usr/include/algor/bus.h			comp-obsolete		obsolete
 ./usr/include/algor/cdefs.h			comp-c-include
 ./usr/include/algor/cpu.h			comp-c-include
 ./usr/include/algor/db_machdep.h		comp-obsolete		obsolete
@@ -53,10 +53,10 @@
 ./usr/include/algor/rwlock.h			comp-c-include
 ./usr/include/algor/setjmp.h			comp-c-include
 ./usr/include/algor/signal.h			comp-c-include
-./usr/include/algor/stdarg.h			comp-c-include
+./usr/include/algor/stdarg.h			comp-obsolete		obsolete
 ./usr/include/algor/trap.h			comp-c-include
 ./usr/include/algor/types.h			comp-c-include
-./usr/include/algor/varargs.h			comp-c-include
+./usr/include/algor/varargs.h			comp-obsolete		obsolete
 ./usr/include/algor/vmparam.h			comp-c-include
 ./usr/include/algor/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include

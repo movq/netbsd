@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
+// Copyright (c) 2007 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,9 +33,10 @@ extern "C" {
 #include "atf-c/config.h"
 }
 
-#include "atf-c++/config.hpp"
-#include "atf-c++/env.hpp"
-#include "atf-c++/sanity.hpp"
+#include "config.hpp"
+
+#include "detail/env.hpp"
+#include "detail/sanity.hpp"
 
 static std::map< std::string, std::string > m_variables;
 
@@ -52,7 +53,15 @@ init_variables(void)
     PRE(m_variables.empty());
 
     m_variables["atf_arch"] = atf_config_get("atf_arch");
+    m_variables["atf_build_cc"] = atf_config_get("atf_build_cc");
+    m_variables["atf_build_cflags"] = atf_config_get("atf_build_cflags");
+    m_variables["atf_build_cpp"] = atf_config_get("atf_build_cpp");
+    m_variables["atf_build_cppflags"] = atf_config_get("atf_build_cppflags");
+    m_variables["atf_build_cxx"] = atf_config_get("atf_build_cxx");
+    m_variables["atf_build_cxxflags"] = atf_config_get("atf_build_cxxflags");
     m_variables["atf_confdir"] = atf_config_get("atf_confdir");
+    m_variables["atf_includedir"] = atf_config_get("atf_includedir");
+    m_variables["atf_libdir"] = atf_config_get("atf_libdir");
     m_variables["atf_libexecdir"] = atf_config_get("atf_libexecdir");
     m_variables["atf_machine"] = atf_config_get("atf_machine");
     m_variables["atf_pkgdatadir"] = atf_config_get("atf_pkgdatadir");

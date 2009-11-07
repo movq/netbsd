@@ -1,4 +1,4 @@
-/*	$NetBSD: zaudio.c,v 1.10 2009/04/18 05:20:21 nonaka Exp $	*/
+/*	$NetBSD: zaudio.c,v 1.19 2012/01/29 10:12:41 tsutsui Exp $	*/
 /*	$OpenBSD: zaurus_audio.c,v 1.8 2005/08/18 13:23:02 robert Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 /*-
- * Copyright (c) 2009 NONAKA Kimihiro <nonaka@netbsd.org>
+ * Copyright (C) 2009 NONAKA Kimihiro <nonaka@netbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,17 +30,16 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
@@ -48,19 +47,27 @@
  *	- powerhooks (currently only works until first suspend)
  */
 
+#include "opt_zaudio.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zaudio.c,v 1.10 2009/04/18 05:20:21 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zaudio.c,v 1.19 2012/01/29 10:12:41 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/kernel.h>
 #include <sys/audioio.h>
+#include <sys/mutex.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <dev/audio_if.h>
+#include <dev/mulaw.h>
+#include <dev/auconv.h>
+
+#include <dev/i2c/i2cvar.h>
 
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0var.h>
@@ -69,23 +76,15 @@ __KERNEL_RCSID(0, "$NetBSD: zaudio.c,v 1.10 2009/04/18 05:20:21 nonaka Exp $");
 #include <arm/xscale/pxa2x0_dmac.h>
 #include <arm/xscale/pxa2x0_gpio.h>
 
-#include <dev/audio_if.h>
-#include <dev/mulaw.h>
-#include <dev/auconv.h>
-
+#include <zaurus/zaurus/zaurus_var.h>
 #include <zaurus/dev/wm8750reg.h>
 #include <zaurus/dev/scoopvar.h>
+#include <zaurus/dev/ioexpvar.h>
 
 #define WM8750_ADDRESS  0x1B
 
-#define wm8750_write(sc, reg, val) \
-	pxa2x0_i2c_write_2(&sc->sc_i2c, WM8750_ADDRESS, \
-	    (((reg) << 9) | ((val) & 0x1ff)))
-
-static int	zaudio_match(device_t, cfdata_t, void *);
-static void	zaudio_attach(device_t, device_t, void *);
-static bool	zaudio_suspend(device_t dv PMF_FN_ARGS);
-static bool	zaudio_resume(device_t dv PMF_FN_ARGS);
+/* GPIO pins */
+#define GPIO_HP_IN_C3000	116
 
 #define ZAUDIO_OP_SPKR	0
 #define ZAUDIO_OP_HP	1
@@ -97,37 +96,48 @@ static bool	zaudio_resume(device_t dv PMF_FN_ARGS);
 #define ZAUDIO_JACK_STATE_INS	2
 #define ZAUDIO_JACK_STATE_REM	3
 
-/* GPIO pins */
-#define GPIO_HP_IN_C3000	116
-
 struct zaudio_volume {
-	u_int8_t		left;
-	u_int8_t		right;
+	uint8_t	left;
+	uint8_t	right;
 };
 
 struct zaudio_softc {
 	device_t		sc_dev;
+	kmutex_t		sc_lock;
+	kmutex_t		sc_intr_lock;
 
 	/* i2s device softc */
 	/* NB: pxa2x0_i2s requires this to be the second struct member */
 	struct pxa2x0_i2s_softc	sc_i2s;
 
-	/* i2c device softc */
-	struct pxa2x0_i2c_softc	sc_i2c;
+	i2c_tag_t		sc_i2c;
 
 	int			sc_playing;
 	int			sc_recording;
 
 	struct zaudio_volume	sc_volume[ZAUDIO_OP_NUM];
-	char			sc_unmute[ZAUDIO_OP_NUM];
+	uint8_t			sc_unmute[ZAUDIO_OP_NUM];
+	uint8_t			sc_unmute_toggle[ZAUDIO_OP_NUM];
 
 	int			sc_state;
 	int			sc_icount;
 	struct callout		sc_to; 
 };
 
+#define	UNMUTE(sc,op,val) sc->sc_unmute[op] = sc->sc_unmute_toggle[op] = val
+
+static int	zaudio_match(device_t, cfdata_t, void *);
+static void	zaudio_attach(device_t, device_t, void *);
+
 CFATTACH_DECL_NEW(zaudio, sizeof(struct zaudio_softc), 
     zaudio_match, zaudio_attach, NULL, NULL);
+
+static int	zaudio_finalize(device_t);
+static bool	zaudio_suspend(device_t, const pmf_qual_t *);
+static bool	zaudio_resume(device_t, const pmf_qual_t *);
+static void	zaudio_volume_up(device_t);
+static void	zaudio_volume_down(device_t);
+static void	zaudio_volume_toggle(device_t);
 
 static struct audio_device wm8750_device = {
 	"WM8750",
@@ -205,11 +215,12 @@ static int zaudio_getdev(void *, struct audio_device *);
 static int zaudio_set_port(void *, struct mixer_ctrl *);
 static int zaudio_get_port(void *, struct mixer_ctrl *);
 static int zaudio_query_devinfo(void *, struct mixer_devinfo *);
-static void *zaudio_allocm(void *, int, size_t, struct malloc_type *, int);
-static void zaudio_freem(void  *, void *, struct malloc_type *);
+static void *zaudio_allocm(void *, int, size_t);
+static void zaudio_freem(void  *, void *, size_t);
 static size_t zaudio_round_buffersize(void *, int, size_t);
 static paddr_t zaudio_mappage(void *, void *, off_t, int);
 static int zaudio_get_props(void *);
+static void zaudio_get_locks(void *, kmutex_t **, kmutex_t **);
 
 struct audio_hw_if wm8750_hw_if = {
 	.open			= zaudio_open,
@@ -239,7 +250,7 @@ struct audio_hw_if wm8750_hw_if = {
 	.trigger_output		= NULL,
 	.trigger_input		= NULL,
 	.dev_ioctl		= NULL,
-	.powerstate		= NULL,
+	.get_locks		= zaudio_get_locks,
 };
 
 static const uint16_t playback_regs[][2] = {
@@ -290,62 +301,82 @@ static const uint16_t record_regs[][2] = {
 	{ 0xffff, 0xffff }
 };
 
+static __inline int
+wm8750_write(struct zaudio_softc *sc, int reg, int val)
+{
+	uint16_t tmp;
+	uint8_t cmd;
+	uint8_t data;
+
+	tmp = (reg << 9) | (val & 0x1ff);
+	cmd = tmp >> 8;
+	data = tmp;
+	return iic_exec(sc->sc_i2c, I2C_OP_WRITE_WITH_STOP, WM8750_ADDRESS,
+	    &cmd, 1, &data, 1, 0);
+}
+
 static int
 zaudio_match(device_t parent, cfdata_t cf, void *aux)
 {
+	struct i2c_attach_args *ia = aux;
 
-	return 1;
+	if (ZAURUS_ISC860)
+		return 0;	/* XXX for now */
+
+	if (ia->ia_name) {
+		/* direct config - check name */
+		if (strcmp(ia->ia_name, "zaudio") == 0)
+			return 1;
+	} else {
+		/* indirect config - check typical address */
+		if (ia->ia_addr == WM8750_ADDRESS)
+			return 1;
+	}
+	return 0;
 }
 
 static void
 zaudio_attach(device_t parent, device_t self, void *aux)
 {
 	struct zaudio_softc *sc = device_private(self);
-	struct pxaip_attach_args *pxa = aux;
-	int rv;
+	struct i2c_attach_args *ia = aux;
+	int error;
 
 	sc->sc_dev = self;
+	sc->sc_i2c = ia->ia_tag;
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
-	aprint_normal(": I2C, I2S, WM8750 Audio\n");
+	aprint_normal(": I2S, WM8750 Audio\n");
 	aprint_naive("\n");
 
-	if (!pmf_device_register(sc->sc_dev, zaudio_suspend, zaudio_resume))
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
-
-	sc->sc_i2s.sc_iot = pxa->pxa_iot;
-	sc->sc_i2s.sc_dmat = pxa->pxa_dmat;
+	sc->sc_i2s.sc_iot = &pxa2x0_bs_tag;
+	sc->sc_i2s.sc_dmat = &pxa2x0_bus_dma_tag;
 	sc->sc_i2s.sc_size = PXA2X0_I2S_SIZE;
+	sc->sc_i2s.sc_intr_lock = &sc->sc_intr_lock;
 	if (pxa2x0_i2s_attach_sub(&sc->sc_i2s)) {
-		aprint_error_dev(sc->sc_dev, "unable to attach I2S\n");
+		aprint_error_dev(self, "unable to attach I2S\n");
 		goto fail_i2s;
 	}
 
-	sc->sc_i2c.sc_iot = pxa->pxa_iot;
-	sc->sc_i2c.sc_size = PXA2X0_I2C_SIZE;
-	if (pxa2x0_i2c_attach_sub(&sc->sc_i2c)) {
-		aprint_error_dev(sc->sc_dev, "unable to attach I2C\n");
-		goto fail_i2c;
-	}
-
 	/* Check for an I2C response from the wm8750 */
-	pxa2x0_i2c_open(&sc->sc_i2c);
-	rv = wm8750_write(sc, RESET_REG, 0);
-	pxa2x0_i2c_close(&sc->sc_i2c);
-	if (rv) {
-		aprint_error_dev(sc->sc_dev, "codec failed to respond\n");
-		goto fail_probe;
+	iic_acquire_bus(sc->sc_i2c, 0);
+	error = wm8750_write(sc, RESET_REG, 0);
+	iic_release_bus(sc->sc_i2c, 0);
+	if (error) {
+		aprint_error_dev(self, "codec failed to respond\n");
+		goto fail_i2c;
 	}
 	delay(100);
 
 	/* Speaker on, headphones off by default. */
-	sc->sc_volume[ZAUDIO_OP_SPKR].left = 240;
-	sc->sc_unmute[ZAUDIO_OP_SPKR] = 1;
+	sc->sc_volume[ZAUDIO_OP_SPKR].left = 180;
+	UNMUTE(sc, ZAUDIO_OP_SPKR, 1);
 	sc->sc_volume[ZAUDIO_OP_HP].left = 180;
 	sc->sc_volume[ZAUDIO_OP_HP].right = 180;
-	sc->sc_unmute[ZAUDIO_OP_HP] = 0;
-	sc->sc_volume[ZAUDIO_OP_MIC].left = 240;
-	sc->sc_unmute[ZAUDIO_OP_MIC] = 0;
+	UNMUTE(sc, ZAUDIO_OP_HP, 0);
+	sc->sc_volume[ZAUDIO_OP_MIC].left = 180;
+	UNMUTE(sc, ZAUDIO_OP_MIC, 0);
 
 	/* Configure headphone jack state change handling. */
 	callout_init(&sc->sc_to, 0);
@@ -354,22 +385,42 @@ zaudio_attach(device_t parent, device_t self, void *aux)
 	(void) pxa2x0_gpio_intr_establish(GPIO_HP_IN_C3000, IST_EDGE_BOTH,
 	    IPL_BIO, zaudio_jack_intr, sc);
 
-	zaudio_init(sc);
+	/* zaudio_init() implicitly depends on ioexp or scoop */
+	config_finalize_register(self, zaudio_finalize);
 
-	audio_attach_mi(&wm8750_hw_if, sc, sc->sc_dev);
+	audio_attach_mi(&wm8750_hw_if, sc, self);
+
+	if (!pmf_device_register(self, zaudio_suspend, zaudio_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	if (!pmf_event_register(self, PMFE_AUDIO_VOLUME_UP,
+	    zaudio_volume_up, true))
+		aprint_error_dev(self, "couldn't register event handler\n");
+	if (!pmf_event_register(self, PMFE_AUDIO_VOLUME_DOWN,
+	    zaudio_volume_down, true))
+		aprint_error_dev(self, "couldn't register event handler\n");
+	if (!pmf_event_register(self, PMFE_AUDIO_VOLUME_TOGGLE,
+	    zaudio_volume_toggle, true))
+		aprint_error_dev(self, "couldn't register event handler\n");
 
 	return;
 
-fail_probe:
-	pxa2x0_i2c_detach_sub(&sc->sc_i2c);
 fail_i2c:
 	pxa2x0_i2s_detach_sub(&sc->sc_i2s);
 fail_i2s:
 	pmf_device_deregister(self);
 }
 
+static int
+zaudio_finalize(device_t dv)
+{
+	struct zaudio_softc *sc = device_private(dv);
+
+	zaudio_init(sc);
+	return 0;
+}
+
 static bool
-zaudio_suspend(device_t dv PMF_FN_ARGS)
+zaudio_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct zaudio_softc *sc = device_private(dv);
 
@@ -380,22 +431,115 @@ zaudio_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-zaudio_resume(device_t dv PMF_FN_ARGS)
+zaudio_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct zaudio_softc *sc = device_private(dv);
 
 	pxa2x0_i2s_init(&sc->sc_i2s);
-	pxa2x0_i2c_init(&sc->sc_i2c);
 	zaudio_init(sc);
 
 	return true;
+}
+
+static __inline uint8_t
+vol_sadd(int vol, int stride)
+{
+
+	vol += stride;
+	if (vol > 255)
+		return 255;
+	return (uint8_t)vol;
+}
+
+#ifndef	ZAUDIO_VOLUME_STRIDE
+#define	ZAUDIO_VOLUME_STRIDE	8
+#endif
+
+static void
+zaudio_volume_up(device_t dv)
+{
+	struct zaudio_softc *sc = device_private(dv);
+	int s;
+
+	s = splbio();
+	iic_acquire_bus(sc->sc_i2c, 0);
+
+	sc->sc_volume[ZAUDIO_OP_SPKR].left =
+	    vol_sadd(sc->sc_volume[ZAUDIO_OP_SPKR].left, ZAUDIO_VOLUME_STRIDE);
+	sc->sc_volume[ZAUDIO_OP_HP].left =
+	    vol_sadd(sc->sc_volume[ZAUDIO_OP_HP].left, ZAUDIO_VOLUME_STRIDE);
+	sc->sc_volume[ZAUDIO_OP_HP].right =
+	    vol_sadd(sc->sc_volume[ZAUDIO_OP_HP].right, ZAUDIO_VOLUME_STRIDE);
+
+	zaudio_update_volume(sc, ZAUDIO_OP_SPKR);
+	zaudio_update_volume(sc, ZAUDIO_OP_HP);
+
+	iic_release_bus(sc->sc_i2c, 0);
+	splx(s);
+}
+
+static __inline uint8_t
+vol_ssub(int vol, int stride)
+{
+
+	vol -= stride;
+	if (vol < 0)
+		return 0;
+	return (uint8_t)vol;
+}
+
+static void
+zaudio_volume_down(device_t dv)
+{
+	struct zaudio_softc *sc = device_private(dv);
+	int s;
+
+	s = splbio();
+	iic_acquire_bus(sc->sc_i2c, 0);
+
+	sc->sc_volume[ZAUDIO_OP_SPKR].left =
+	    vol_ssub(sc->sc_volume[ZAUDIO_OP_SPKR].left, ZAUDIO_VOLUME_STRIDE);
+	sc->sc_volume[ZAUDIO_OP_HP].left =
+	    vol_ssub(sc->sc_volume[ZAUDIO_OP_HP].left, ZAUDIO_VOLUME_STRIDE);
+	sc->sc_volume[ZAUDIO_OP_HP].right =
+	    vol_ssub(sc->sc_volume[ZAUDIO_OP_HP].right, ZAUDIO_VOLUME_STRIDE);
+
+	zaudio_update_volume(sc, ZAUDIO_OP_SPKR);
+	zaudio_update_volume(sc, ZAUDIO_OP_HP);
+
+	iic_release_bus(sc->sc_i2c, 0);
+	splx(s);
+}
+
+static void
+zaudio_volume_toggle(device_t dv)
+{
+	struct zaudio_softc *sc = device_private(dv);
+	int s;
+
+	s = splbio();
+	iic_acquire_bus(sc->sc_i2c, 0);
+
+	if (!sc->sc_unmute[ZAUDIO_OP_SPKR] && !sc->sc_unmute[ZAUDIO_OP_HP]) {
+		sc->sc_unmute[ZAUDIO_OP_SPKR] =
+		    sc->sc_unmute_toggle[ZAUDIO_OP_SPKR];
+		sc->sc_unmute[ZAUDIO_OP_HP] =
+		    sc->sc_unmute_toggle[ZAUDIO_OP_HP];
+	} else {
+		sc->sc_unmute[ZAUDIO_OP_SPKR] = 0;
+		sc->sc_unmute[ZAUDIO_OP_HP] = 0;
+	}
+	zaudio_update_mutes(sc, 1);
+
+	iic_release_bus(sc->sc_i2c, 0);
+	splx(s);
 }
 
 static void
 zaudio_init(struct zaudio_softc *sc)
 {
 
-	pxa2x0_i2c_open(&sc->sc_i2c);
+	iic_acquire_bus(sc->sc_i2c, 0);
 
 	/* Reset the codec */
 	wm8750_write(sc, RESET_REG, 0);
@@ -413,10 +557,13 @@ zaudio_init(struct zaudio_softc *sc)
 	zaudio_update_volume(sc, ZAUDIO_OP_HP);
 	zaudio_update_volume(sc, ZAUDIO_OP_MIC);
 
-	pxa2x0_i2c_close(&sc->sc_i2c);
-
 	scoop_set_headphone(0);
-	scoop_set_mic_bias(0);
+	if (ZAURUS_ISC1000)
+		ioexp_set_mic_bias(0);
+	else
+		scoop_set_mic_bias(0);
+
+	iic_release_bus(sc->sc_i2c, 0);
 
 	/* Assume that the jack state has changed. */ 
 	zaudio_jack(sc);
@@ -450,9 +597,9 @@ zaudio_jack(void *v)
 		if (sc->sc_icount++ > 2) {
 			if (pxa2x0_gpio_get_bit(GPIO_HP_IN_C3000)) {
 				sc->sc_state = ZAUDIO_JACK_STATE_IN;
-				sc->sc_unmute[ZAUDIO_OP_SPKR] = 0;
-				sc->sc_unmute[ZAUDIO_OP_HP] = 1;
-				sc->sc_unmute[ZAUDIO_OP_MIC] = 1;
+				UNMUTE(sc, ZAUDIO_OP_SPKR, 0);
+				UNMUTE(sc, ZAUDIO_OP_HP, 1);
+				UNMUTE(sc, ZAUDIO_OP_MIC, 1);
 				goto update_mutes;
 			} else 
 				sc->sc_state = ZAUDIO_JACK_STATE_OUT;
@@ -470,9 +617,9 @@ zaudio_jack(void *v)
 		if (sc->sc_icount++ > 2) {
 			if (!pxa2x0_gpio_get_bit(GPIO_HP_IN_C3000)) {
 				sc->sc_state = ZAUDIO_JACK_STATE_OUT;
-				sc->sc_unmute[ZAUDIO_OP_SPKR] = 1;
-				sc->sc_unmute[ZAUDIO_OP_HP] = 0;
-				sc->sc_unmute[ZAUDIO_OP_MIC] = 0;
+				UNMUTE(sc, ZAUDIO_OP_SPKR, 1);
+				UNMUTE(sc, ZAUDIO_OP_HP, 0);
+				UNMUTE(sc, ZAUDIO_OP_MIC, 0);
 				goto update_mutes;
 			} else
 				sc->sc_state = ZAUDIO_JACK_STATE_IN;
@@ -488,12 +635,12 @@ update_mutes:
 	callout_stop(&sc->sc_to);
 
 	if (sc->sc_playing || sc->sc_recording) {
-		pxa2x0_i2c_open(&sc->sc_i2c);
+		iic_acquire_bus(sc->sc_i2c, 0);
 		if (sc->sc_playing)
 			zaudio_update_mutes(sc, 1);
 		if (sc->sc_recording)
 			zaudio_update_mutes(sc, 2);
-		pxa2x0_i2c_close(&sc->sc_i2c);
+		iic_release_bus(sc->sc_i2c, 0);
 	}
 }
 
@@ -501,16 +648,19 @@ static void
 zaudio_standby(struct zaudio_softc *sc)
 {
 
-	pxa2x0_i2c_open(&sc->sc_i2c);
+	iic_acquire_bus(sc->sc_i2c, 0);
 
 	/* Switch codec to standby power only */
 	wm8750_write(sc, PWRMGMT1_REG, PWRMGMT1_SET_VMIDSEL(2));
 	wm8750_write(sc, PWRMGMT2_REG, 0);
 
-	pxa2x0_i2c_close(&sc->sc_i2c);
-
 	scoop_set_headphone(0);
-	scoop_set_mic_bias(0);
+	if (ZAURUS_ISC1000)
+		ioexp_set_mic_bias(0);
+	else
+		scoop_set_mic_bias(0);
+
+	iic_release_bus(sc->sc_i2c, 0);
 }
 
 static void
@@ -565,7 +715,10 @@ zaudio_update_mutes(struct zaudio_softc *sc, int mask)
 			       | PWRMGMT1_ADCL | PWRMGMT1_ADCR | PWRMGMT1_MICB;
 		}
 		wm8750_write(sc, PWRMGMT1_REG, val);
-		scoop_set_mic_bias(sc->sc_unmute[ZAUDIO_OP_MIC]);
+		if (ZAURUS_ISC1000)
+			ioexp_set_mic_bias(sc->sc_unmute[ZAUDIO_OP_MIC]);
+		else
+			scoop_set_mic_bias(sc->sc_unmute[ZAUDIO_OP_MIC]);
 	}
 }
 
@@ -574,7 +727,7 @@ zaudio_play_setup(struct zaudio_softc *sc)
 {
 	int i;
 
-	pxa2x0_i2c_open(&sc->sc_i2c);
+	iic_acquire_bus(sc->sc_i2c, 0);
 
 	/* Program the codec with playback settings */
 	for (i = 0; playback_regs[i][0] != 0xffff; i++) {
@@ -582,7 +735,7 @@ zaudio_play_setup(struct zaudio_softc *sc)
 	}
 	zaudio_update_mutes(sc, 1);
 
-	pxa2x0_i2c_close(&sc->sc_i2c);
+	iic_release_bus(sc->sc_i2c, 0);
 }
 
 /*static*/ void
@@ -590,16 +743,15 @@ zaudio_record_setup(struct zaudio_softc *sc)
 {
 	int i;
 
-	pxa2x0_i2c_open(&sc->sc_i2c);
+	iic_acquire_bus(sc->sc_i2c, 0);
 
 	/* Program the codec with playback settings */
 	for (i = 0; record_regs[i][0] != 0xffff; i++) {
 		wm8750_write(sc, record_regs[i][0], record_regs[i][1]);
 	}
-
 	zaudio_update_mutes(sc, 2);
 
-	pxa2x0_i2c_close(&sc->sc_i2c);
+	iic_release_bus(sc->sc_i2c, 0);
 }
 
 /*
@@ -694,9 +846,8 @@ zaudio_query_encoding(void *hdl, struct audio_encoding *aep)
 }
 
 static int
-zaudio_set_params(void *hdl, int setmode, int usemode,
-    audio_params_t *play, audio_params_t *rec,
-    stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+zaudio_set_params(void *hdl, int setmode, int usemode, audio_params_t *play,
+    audio_params_t *rec, stream_filter_list_t *pfil, stream_filter_list_t *rfil)
 {
 	struct zaudio_softc *sc = hdl;
 	struct audio_params *p;
@@ -749,7 +900,6 @@ zaudio_round_blocksize(void *hdl, int bs, int mode, const audio_params_t *param)
 
 	return pxa2x0_i2s_round_blocksize(&sc->sc_i2s, bs, mode, param);
 }
-
 
 static int
 zaudio_halt_output(void *hdl)
@@ -806,7 +956,7 @@ zaudio_set_port(void *hdl, struct mixer_ctrl *mc)
 	int s;
 
 	s = splbio();
-	pxa2x0_i2c_open(&sc->sc_i2c);
+	iic_acquire_bus(sc->sc_i2c, 0);
 
 	switch (mc->dev) {
 	case ZAUDIO_SPKR_LVL:
@@ -824,7 +974,7 @@ zaudio_set_port(void *hdl, struct mixer_ctrl *mc)
 	case ZAUDIO_SPKR_MUTE:
 		if (mc->type != AUDIO_MIXER_ENUM)
 			break;
-		sc->sc_unmute[ZAUDIO_OP_SPKR] = mc->un.ord ? 1 : 0;
+		UNMUTE(sc, ZAUDIO_OP_SPKR, mc->un.ord ? 1 : 0);
 		zaudio_update_mutes(sc, 1);
 		error = 0;
 		break;
@@ -852,7 +1002,7 @@ zaudio_set_port(void *hdl, struct mixer_ctrl *mc)
 	case ZAUDIO_HP_MUTE:
 		if (mc->type != AUDIO_MIXER_ENUM)
 			break;
-		sc->sc_unmute[ZAUDIO_OP_HP] = mc->un.ord ? 1 : 0;
+		UNMUTE(sc, ZAUDIO_OP_HP, mc->un.ord ? 1 : 0);
 		zaudio_update_mutes(sc, 1);
 		error = 0;
 		break;
@@ -872,7 +1022,7 @@ zaudio_set_port(void *hdl, struct mixer_ctrl *mc)
 	case ZAUDIO_MIC_MUTE:
 		if (mc->type != AUDIO_MIXER_ENUM)
 			break;
-		sc->sc_unmute[ZAUDIO_OP_MIC] = mc->un.ord ? 1 : 0;
+		UNMUTE(sc, ZAUDIO_OP_MIC, mc->un.ord ? 1 : 0);
 		zaudio_update_mutes(sc, 2);
 		error = 0;
 		break;
@@ -887,7 +1037,7 @@ zaudio_set_port(void *hdl, struct mixer_ctrl *mc)
 		break;
 	}
 
-	pxa2x0_i2c_close(&sc->sc_i2c);
+	iic_release_bus(sc->sc_i2c, 0);
 	splx(s);
 
 	return error;
@@ -1086,20 +1236,19 @@ mute:
 }
 
 static void *
-zaudio_allocm(void *hdl, int direction, size_t size, struct malloc_type *type,
-    int flags)
+zaudio_allocm(void *hdl, int direction, size_t size)
 {
 	struct zaudio_softc *sc = hdl;
 
-	return pxa2x0_i2s_allocm(&sc->sc_i2s, direction, size, type, flags);
+	return pxa2x0_i2s_allocm(&sc->sc_i2s, direction, size);
 }
 
 static void
-zaudio_freem(void *hdl, void *ptr, struct malloc_type *type)
+zaudio_freem(void *hdl, void *ptr, size_t size)
 {
 	struct zaudio_softc *sc = hdl;
 
-	return pxa2x0_i2s_freem(&sc->sc_i2s, ptr, type);
+	return pxa2x0_i2s_freem(&sc->sc_i2s, ptr, size);
 }
 
 static size_t
@@ -1145,6 +1294,7 @@ zaudio_start_output(void *hdl, void *block, int bsize, void (*intr)(void *),
 			zaudio_standby(sc);
 		sc->sc_playing = 0;
 	}
+
 	return rv;
 }
 
@@ -1169,4 +1319,13 @@ zaudio_start_input(void *hdl, void *block, int bsize, void (*intr)(void *),
 		sc->sc_recording = 0;
 	}
 	return rv;
+}
+
+static void
+zaudio_get_locks(void *hdl, kmutex_t **intr, kmutex_t **thread)
+{
+	struct zaudio_softc *sc = hdl;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
 }

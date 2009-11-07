@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.10 2009/08/23 15:42:51 jmcneill Exp $	*/
+/*	$NetBSD: pcib.c,v 1.14 2012/01/30 19:41:18 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -30,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.10 2009/08/23 15:42:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.14 2012/01/30 19:41:18 drochner Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 
@@ -185,17 +185,12 @@ pcibattach(device_t parent, device_t self, void *aux)
 {
 	struct pcib_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
-	char devinfo[256];
-
-	aprint_naive("\n");
 
 	/*
 	 * Just print out a description and defer configuration
 	 * until all PCI devices have been attached.
 	 */
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_tag = pa->pa_tag;
@@ -231,13 +226,6 @@ pcibchilddet(device_t self, device_t child)
 		sc->sc_isabus = NULL;
 }
 
-/* XXX share this with sys/arch/i386/pci/elan520.c */
-static bool
-ifattr_match(const char *snull, const char *t)
-{
-	return (snull == NULL) || strcmp(snull, t) == 0;
-}
-
 int
 pcibrescan(device_t self, const char *ifattr, const int *loc)
 {
@@ -249,8 +237,8 @@ pcibrescan(device_t self, const char *ifattr, const int *loc)
 		 * Attach the ISA bus behind this bridge.
 		 */
 		memset(&iba, 0, sizeof(iba));
-		iba.iba_iot = X86_BUS_SPACE_IO;
-		iba.iba_memt = X86_BUS_SPACE_MEM;
+		iba.iba_iot = x86_bus_space_io;
+		iba.iba_memt = x86_bus_space_mem;
 #if NISA > 0
 		iba.iba_dmat = &isa_bus_dma_tag;
 #endif

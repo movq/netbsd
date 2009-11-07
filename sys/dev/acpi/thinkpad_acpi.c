@@ -1,4 +1,4 @@
-/* $NetBSD: thinkpad_acpi.c,v 1.20 2009/09/25 20:26:26 dyoung Exp $ */
+/* $NetBSD: thinkpad_acpi.c,v 1.39 2011/06/20 15:00:04 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,26 +27,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: thinkpad_acpi.c,v 1.20 2009/09/25 20:26:26 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: thinkpad_acpi.c,v 1.39 2011/06/20 15:00:04 pgoyette Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/malloc.h>
-#include <sys/buf.h>
-#include <sys/callout.h>
-#include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/pmf.h>
-#include <sys/queue.h>
-#include <sys/kmem.h>
+#include <sys/module.h>
+#include <sys/systm.h>
 
+#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 #include <dev/acpi/acpi_ecvar.h>
+#include <dev/acpi/acpi_power.h>
 
-#if defined(__i386__) || defined(__amd64__)
 #include <dev/isa/isareg.h>
-#include <machine/pio.h>
-#endif
+
+#define _COMPONENT		ACPI_RESOURCE_COMPONENT
+ACPI_MODULE_NAME		("thinkpad_acpi")
 
 #define	THINKPAD_NTEMPSENSORS	8
 #define	THINKPAD_NFANSENSORS	1
@@ -56,8 +52,8 @@ typedef struct thinkpad_softc {
 	device_t		sc_dev;
 	device_t		sc_ecdev;
 	struct acpi_devnode	*sc_node;
+	ACPI_HANDLE		sc_powhdl;
 	ACPI_HANDLE		sc_cmoshdl;
-	bool			sc_cmoshdl_valid;
 
 #define	TP_PSW_SLEEP		0
 #define	TP_PSW_HIBERNATE	1
@@ -94,6 +90,9 @@ typedef struct thinkpad_softc {
 #define	THINKPAD_NOTIFY_BrightnessDown	0x011
 #define	THINKPAD_NOTIFY_ThinkLight	0x012
 #define	THINKPAD_NOTIFY_Zoom		0x014
+#define	THINKPAD_NOTIFY_VolumeUp	0x015
+#define	THINKPAD_NOTIFY_VolumeDown	0x016
+#define	THINKPAD_NOTIFY_VolumeMute	0x017
 #define	THINKPAD_NOTIFY_ThinkVantage	0x018
 
 #define	THINKPAD_CMOS_BRIGHTNESS_UP	0x04
@@ -109,9 +108,10 @@ typedef struct thinkpad_softc {
 
 static int	thinkpad_match(device_t, cfdata_t, void *);
 static void	thinkpad_attach(device_t, device_t, void *);
+static int	thinkpad_detach(device_t, int);
 
 static ACPI_STATUS thinkpad_mask_init(thinkpad_softc_t *, uint32_t);
-static void	thinkpad_notify_handler(ACPI_HANDLE, UINT32, void *);
+static void	thinkpad_notify_handler(ACPI_HANDLE, uint32_t, void *);
 static void	thinkpad_get_hotkeys(void *);
 
 static void	thinkpad_sensors_init(thinkpad_softc_t *);
@@ -121,14 +121,14 @@ static void	thinkpad_fan_refresh(struct sysmon_envsys *, envsys_data_t *);
 
 static void	thinkpad_wireless_toggle(thinkpad_softc_t *);
 
-static bool	thinkpad_resume(device_t PMF_FN_PROTO);
+static bool	thinkpad_resume(device_t, const pmf_qual_t *);
 static void	thinkpad_brightness_up(device_t);
 static void	thinkpad_brightness_down(device_t);
 static uint8_t	thinkpad_brightness_read(thinkpad_softc_t *sc);
 static void	thinkpad_cmos(thinkpad_softc_t *, uint8_t);
 
 CFATTACH_DECL_NEW(thinkpad, sizeof(thinkpad_softc_t),
-    thinkpad_match, thinkpad_attach, NULL, NULL);
+    thinkpad_match, thinkpad_attach, thinkpad_detach, NULL);
 
 static const char * const thinkpad_ids[] = {
 	"IBM0068",
@@ -171,21 +171,14 @@ thinkpad_attach(device_t parent, device_t self, void *opaque)
 	ACPI_INTEGER val;
 	int i;
 
-	sc->sc_node = aa->aa_node;
 	sc->sc_dev = self;
+	sc->sc_powhdl = NULL;
+	sc->sc_cmoshdl = NULL;
+	sc->sc_node = aa->aa_node;
 	sc->sc_display_state = THINKPAD_DISPLAY_LCD;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
-
-	/* T61 uses \UCMS method for issuing CMOS commands */
-	rv = AcpiGetHandle(NULL, "\\UCMS", &sc->sc_cmoshdl);
-	if (ACPI_FAILURE(rv))
-		sc->sc_cmoshdl_valid = false;
-	else {
-		aprint_debug_dev(self, "using CMOS at \\UCMS\n");
-		sc->sc_cmoshdl_valid = true;
-	}
 
 	sc->sc_ecdev = NULL;
 	for (curdev = deviter_first(&di, DEVITER_F_ROOT_FIRST);
@@ -217,12 +210,20 @@ thinkpad_attach(device_t parent, device_t self, void *opaque)
 		goto fail;
 	}
 
-	/* Install notify handler for events */
-	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
-	    ACPI_DEVICE_NOTIFY, thinkpad_notify_handler, sc);
-	if (ACPI_FAILURE(rv))
-		aprint_error_dev(self, "couldn't install notify handler: %s\n",
-		    AcpiFormatException(rv));
+	(void)acpi_register_notify(sc->sc_node, thinkpad_notify_handler);
+
+	/*
+	 * Obtain a handle for CMOS commands. This is used by T61.
+	 */
+	(void)AcpiGetHandle(NULL, "\\UCMS", &sc->sc_cmoshdl);
+
+	/*
+	 * Obtain a handle to the power resource available on many models.
+	 * Since pmf(9) is not yet integrated with the ACPI power resource
+	 * code, this must be turned on manually upon resume. Otherwise the
+	 * system may, for instance, resume from S3 with usb(4) powered down.
+	 */
+	(void)AcpiGetHandle(NULL, "\\_SB.PCI0.LPC.EC.PUBS", &sc->sc_powhdl);
 
 	/* Register power switches with sysmon */
 	psw = sc->sc_smpsw;
@@ -269,22 +270,45 @@ fail:
 		aprint_error_dev(self, "couldn't register event handler\n");
 }
 
-static void
-thinkpad_notify_handler(ACPI_HANDLE hdl, UINT32 notify, void *opaque)
+static int
+thinkpad_detach(device_t self, int flags)
 {
-	thinkpad_softc_t *sc = (thinkpad_softc_t *)opaque;
-	device_t self = sc->sc_dev;
-	ACPI_STATUS rv;
- 
+	struct thinkpad_softc *sc = device_private(self);
+	int i;
+
+	acpi_deregister_notify(sc->sc_node);
+
+	for (i = 0; i < TP_PSW_LAST; i++)
+		sysmon_pswitch_unregister(&sc->sc_smpsw[i]);
+
+	if (sc->sc_sme != NULL)
+		sysmon_envsys_unregister(sc->sc_sme);
+
+	pmf_device_deregister(self);
+
+	pmf_event_deregister(self, PMFE_DISPLAY_BRIGHTNESS_UP,
+	    thinkpad_brightness_up, true);
+
+	pmf_event_deregister(self, PMFE_DISPLAY_BRIGHTNESS_DOWN,
+	    thinkpad_brightness_down, true);
+
+	return 0;
+}
+
+static void
+thinkpad_notify_handler(ACPI_HANDLE hdl, uint32_t notify, void *opaque)
+{
+	device_t self = opaque;
+	thinkpad_softc_t *sc;
+
+	sc = device_private(self);
+
 	if (notify != 0x80) {
 		aprint_debug_dev(self, "unknown notify 0x%02x\n", notify);
 		return;
 	}
 
-	rv = AcpiOsExecute(OSL_NOTIFY_HANDLER, thinkpad_get_hotkeys, sc);
-	if (ACPI_FAILURE(rv))
-		aprint_error_dev(self, "couldn't queue hotkey handler: %s\n",
-		    AcpiFormatException(rv));
+	(void)AcpiOsExecute(OSL_NOTIFY_HANDLER, thinkpad_get_hotkeys, sc);
 }
 
 static void
@@ -295,7 +319,7 @@ thinkpad_get_hotkeys(void *opaque)
 	ACPI_STATUS rv;
 	ACPI_INTEGER val;
 	int type, event;
-	
+
 	for (;;) {
 		rv = acpi_eval_integer(sc->sc_node->ad_handle, "MHKP", &val);
 		if (ACPI_FAILURE(rv)) {
@@ -386,6 +410,9 @@ thinkpad_get_hotkeys(void *opaque)
 		case THINKPAD_NOTIFY_FnF10:
 		case THINKPAD_NOTIFY_FnF11:
 		case THINKPAD_NOTIFY_ThinkLight:
+		case THINKPAD_NOTIFY_VolumeUp:
+		case THINKPAD_NOTIFY_VolumeDown:
+		case THINKPAD_NOTIFY_VolumeMute:
 			/* XXXJDM we should deliver hotkeys as keycodes */
 			break;
 		default:
@@ -419,9 +446,7 @@ thinkpad_mask_init(thinkpad_softc_t *sc, uint32_t mask)
 	}
 
 	/* Enable hotkey events */
-	params.Count = 1;
-	param[0].Integer.Value = 1;
-	rv = AcpiEvaluateObject(sc->sc_node->ad_handle, "MHKC", &params, NULL);
+	rv = acpi_eval_set_integer(sc->sc_node->ad_handle, "MHKC", 1);
 	if (ACPI_FAILURE(rv)) {
 		aprint_error_dev(sc->sc_dev, "couldn't enable hotkeys: %s\n",
 		    AcpiFormatException(rv));
@@ -429,8 +454,7 @@ thinkpad_mask_init(thinkpad_softc_t *sc, uint32_t mask)
 	}
 
 	/* Claim ownership of brightness control */
-	param[0].Integer.Value = 0;
-	(void)AcpiEvaluateObject(sc->sc_node->ad_handle, "PWMS", &params, NULL);
+	(void)acpi_eval_set_integer(sc->sc_node->ad_handle, "PWMS", 0);
 
 	return AE_OK;
 }
@@ -438,44 +462,52 @@ thinkpad_mask_init(thinkpad_softc_t *sc, uint32_t mask)
 static void
 thinkpad_sensors_init(thinkpad_softc_t *sc)
 {
-	char sname[5] = "TMP?";
-	char fname[5] = "FAN?";
-	int i, j, err;
+	int i, j;
 
 	if (sc->sc_ecdev == NULL)
 		return;	/* no chance of this working */
 
 	sc->sc_sme = sysmon_envsys_create();
-	for (i = 0; i < THINKPAD_NTEMPSENSORS; i++) {
-		sname[3] = '0' + i;
-		strcpy(sc->sc_sensor[i].desc, sname);
+
+	for (i = j = 0; i < THINKPAD_NTEMPSENSORS; i++) {
+
 		sc->sc_sensor[i].units = ENVSYS_STEMP;
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
 
-		if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_sensor[i]))
-			aprint_error_dev(sc->sc_dev,
-			    "couldn't attach sensor %s\n", sname);
+		(void)snprintf(sc->sc_sensor[i].desc,
+		    sizeof(sc->sc_sensor[i].desc), "temperature %d", i);
+
+		if (sysmon_envsys_sensor_attach(sc->sc_sme,
+			&sc->sc_sensor[i]) != 0)
+			goto fail;
 	}
-	j = i; /* THINKPAD_NTEMPSENSORS */
-	for (; i < (j + THINKPAD_NFANSENSORS); i++) {
-		fname[3] = '0' + (i - j);
-		strcpy(sc->sc_sensor[i].desc, fname);
-		sc->sc_sensor[i].units = ENVSYS_SFANRPM;
 
-		if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_sensor[i]))
-			aprint_error_dev(sc->sc_dev,
-			    "couldn't attach sensor %s\n", fname);
+	for (i = THINKPAD_NTEMPSENSORS; i < THINKPAD_NSENSORS; i++, j++) {
+
+		sc->sc_sensor[i].units = ENVSYS_SFANRPM;
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
+
+		(void)snprintf(sc->sc_sensor[i].desc,
+		    sizeof(sc->sc_sensor[i].desc), "fan speed %d", j);
+
+		if (sysmon_envsys_sensor_attach(sc->sc_sme,
+			&sc->sc_sensor[i]) != 0)
+			goto fail;
 	}
 
 	sc->sc_sme->sme_name = device_xname(sc->sc_dev);
 	sc->sc_sme->sme_cookie = sc;
 	sc->sc_sme->sme_refresh = thinkpad_sensors_refresh;
 
-	err = sysmon_envsys_register(sc->sc_sme);
-	if (err) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't register with sysmon: %d\n", err);
-		sysmon_envsys_destroy(sc->sc_sme);
-	}
+	if (sysmon_envsys_register(sc->sc_sme) != 0)
+		goto fail;
+
+	return;
+
+fail:
+	aprint_error_dev(sc->sc_dev, "failed to initialize sysmon\n");
+	sysmon_envsys_destroy(sc->sc_sme);
+	sc->sc_sme = NULL;
 }
 
 static void
@@ -547,10 +579,6 @@ thinkpad_fan_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 	}
 
 	edata->value_cur = rpm;
-	if (rpm < edata->value_min || edata->value_min == -1)
-		edata->value_min = rpm;
-	if (rpm > edata->value_max || edata->value_max == -1)
-		edata->value_max = rpm;
 	edata->state = ENVSYS_SVALID;
 }
 
@@ -559,23 +587,18 @@ thinkpad_wireless_toggle(thinkpad_softc_t *sc)
 {
 	/* Ignore return value, as the hardware may not support bluetooth */
 	(void)AcpiEvaluateObject(sc->sc_node->ad_handle, "BTGL", NULL, NULL);
+	(void)AcpiEvaluateObject(sc->sc_node->ad_handle, "GWAN", NULL, NULL);
 }
 
 static uint8_t
 thinkpad_brightness_read(thinkpad_softc_t *sc)
 {
-#if defined(__i386__) || defined(__amd64__)
-	/*
-	 * We have two ways to get the current brightness -- either via
-	 * magic RTC registers, or using the EC. Since I don't dare mess
-	 * with the EC, and Thinkpads are x86-only, this will have to do
-	 * for now.
-	 */
-	outb(IO_RTC, 0x6c);
-	return inb(IO_RTC+1) & 7;
-#else
-	return 0;
-#endif
+	uint32_t val = 0;
+
+	AcpiOsWritePort(IO_RTC, 0x6c, 8);
+	AcpiOsReadPort(IO_RTC + 1, &val, 8);
+
+	return val & 7;
 }
 
 static void
@@ -585,6 +608,7 @@ thinkpad_brightness_up(device_t self)
 
 	if (thinkpad_brightness_read(sc) == 7)
 		return;
+
 	thinkpad_cmos(sc, THINKPAD_CMOS_BRIGHTNESS_UP);
 }
 
@@ -595,43 +619,70 @@ thinkpad_brightness_down(device_t self)
 
 	if (thinkpad_brightness_read(sc) == 0)
 		return;
+
 	thinkpad_cmos(sc, THINKPAD_CMOS_BRIGHTNESS_DOWN);
 }
 
 static void
 thinkpad_cmos(thinkpad_softc_t *sc, uint8_t cmd)
 {
-	ACPI_OBJECT param;
-	ACPI_OBJECT_LIST params;
 	ACPI_STATUS rv;
 
-	if (sc->sc_cmoshdl_valid == false)
+	if (sc->sc_cmoshdl == NULL)
 		return;
-	
-	params.Count = 1;
-	params.Pointer = &param;
-	param.Type = ACPI_TYPE_INTEGER;
-	param.Integer.Value = cmd;
-	rv = AcpiEvaluateObject(sc->sc_cmoshdl, NULL, &params, NULL);
+
+	rv = acpi_eval_set_integer(sc->sc_cmoshdl, NULL, cmd);
+
 	if (ACPI_FAILURE(rv))
-		aprint_error_dev(sc->sc_dev, "couldn't evalute CMOS: %s\n",
+		aprint_error_dev(sc->sc_dev, "couldn't evaluate CMOS: %s\n",
 		    AcpiFormatException(rv));
 }
 
 static bool
-thinkpad_resume(device_t dv PMF_FN_ARGS)
+thinkpad_resume(device_t dv, const pmf_qual_t *qual)
 {
-	ACPI_STATUS rv;
-	ACPI_HANDLE pubs;
+	thinkpad_softc_t *sc = device_private(dv);
 
-	rv = AcpiGetHandle(NULL, "\\_SB.PCI0.LPC.EC.PUBS", &pubs);
-	if (ACPI_FAILURE(rv))
-		return true;	/* not fatal */
+	if (sc->sc_powhdl == NULL)
+		return true;
 
-	rv = AcpiEvaluateObject(pubs, "_ON", NULL, NULL);
-	if (ACPI_FAILURE(rv))
-		aprint_error_dev(dv, "failed to execute PUBS._ON: %s\n",
-		    AcpiFormatException(rv));
+	(void)acpi_power_res(sc->sc_powhdl, sc->sc_node->ad_handle, true);
 
 	return true;
+}
+
+MODULE(MODULE_CLASS_DRIVER, thinkpad, NULL);
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+thinkpad_modcmd(modcmd_t cmd, void *aux)
+{
+	int rv = 0;
+
+	switch (cmd) {
+
+	case MODULE_CMD_INIT:
+
+#ifdef _MODULE
+		rv = config_init_component(cfdriver_ioconf_thinkpad,
+		    cfattach_ioconf_thinkpad, cfdata_ioconf_thinkpad);
+#endif
+		break;
+
+	case MODULE_CMD_FINI:
+
+#ifdef _MODULE
+		rv = config_fini_component(cfdriver_ioconf_thinkpad,
+		    cfattach_ioconf_thinkpad, cfdata_ioconf_thinkpad);
+#endif
+		break;
+
+	default:
+		rv = ENOTTY;
+	}
+
+	return rv;
 }

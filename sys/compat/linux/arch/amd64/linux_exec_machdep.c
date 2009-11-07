@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_machdep.c,v 1.16 2009/03/29 01:02:50 mrg Exp $ */
+/*	$NetBSD: linux_exec_machdep.c,v 1.19 2012/02/03 20:11:53 matt Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved
@@ -32,11 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.16 2009/03/29 01:02:50 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.19 2012/02/03 20:11:53 matt Exp $");
 
-#ifdef __amd64__
 #define ELFSIZE 64
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.16 2009/03/29 01:02:50 mrg 
 #include <sys/resource.h>
 #include <sys/proc.h>
 #include <sys/conf.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/exec_elf.h>
 #include <sys/vnode.h>
 #include <sys/lwp.h>
@@ -152,11 +150,11 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 	eh = (Elf_Ehdr *)pack->ep_hdr;
 
 	/*
-	 * We forgot this, so we ned to reload it now. XXX keep track of it?
+	 * We forgot this, so we need to reload it now. XXX keep track of it?
 	 */
 	if (ap == NULL) {
 		phsize = eh->e_phnum * sizeof(Elf_Phdr);
-		ph = (Elf_Phdr *)malloc(phsize, M_TEMP, M_WAITOK);
+		ph = (Elf_Phdr *)kmem_alloc(phsize, KM_SLEEP);
 		error = exec_read_from(l, pack->ep_vp, eh->e_phoff, ph, phsize);
 		if (error != 0) {
 			for (i = 0; i < eh->e_phnum; i++) {
@@ -166,7 +164,7 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 				}
 			}
 		}
-		free(ph, M_TEMP);
+		kmem_free(ph, phsize);
 	}
 
 
@@ -237,11 +235,8 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 		
 	strcpy(esd.hw_platform, LINUX_PLATFORM); 
 
-	if (ap) {
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
-	}
-	
+	exec_free_emul_arg(pack);
+
 	/*
 	 * Copy out the ELF auxiliary table and hw platform name
 	 */
@@ -251,17 +246,3 @@ ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
 
 	return 0;
 }
-
-#ifdef LINUX_NPTL
-int
-linux_init_thread_area(struct lwp *l, struct lwp *l2)
-{
-	register_t retval;
-	struct linux_sys_arch_prctl_args uap;
-	struct trapframe *tf = l2->l_md.md_regs;
-
-	SCARG(&uap, code) = LINUX_ARCH_SET_FS;
-	SCARG(&uap, addr) = tf->tf_r8;
-	return linux_sys_arch_prctl(l2, &uap, &retval);
-}
-#endif

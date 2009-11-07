@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_stub_driver.c,v 1.1.1.1 2009/03/22 14:57:12 christos Exp $	*/
+/*	$NetBSD: dlz_stub_driver.c,v 1.2.6.1 2012/06/05 21:15:34 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -166,19 +166,22 @@ stub_dlz_findzonedb(void *driverarg, void *dbdata, const char *name)
 	if (strcmp(cd->myzone, name) == 0)
 		return (ISC_R_SUCCESS);
 	else
-		return (ISC_R_SUCCESS);
+		return (ISC_R_NOTFOUND);
 }
 
 
 static isc_result_t
 stub_dlz_lookup(const char *zone, const char *name, void *driverarg,
-		void *dbdata, dns_sdlzlookup_t *lookup)
+		void *dbdata, dns_sdlzlookup_t *lookup,
+		dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
 {
 	isc_result_t result;
 	config_data_t *cd;
 
 	UNUSED(zone);
 	UNUSED(driverarg);
+	UNUSED(methods);
+	UNUSED(clientinfo);
 
 	cd = (config_data_t *) dbdata;
 
@@ -281,7 +284,14 @@ static dns_sdlzmethods_t dlz_stub_methods = {
 	stub_dlz_lookup,
 	stub_dlz_authority,
 	stub_dlz_allnodes,
-	stub_dlz_allowzonexfr
+	stub_dlz_allowzonexfr,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 };
 
 /*%

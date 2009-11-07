@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_event.c,v 1.66 2009/10/03 00:14:07 elad Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.75 2012/01/25 00:28:35 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.66 2009/10/03 00:14:07 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.75 2012/01/25 00:28:35 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,7 +115,7 @@ static const struct fileops kqueueops = {
 	.fo_stat = kqueue_stat,
 	.fo_close = kqueue_close,
 	.fo_kqfilter = kqueue_kqfilter,
-	.fo_drain = fnullop_drain,
+	.fo_restart = fnullop_restart,
 };
 
 static const struct filterops kqread_filtops =
@@ -318,7 +318,7 @@ kfilter_register(const char *name, const struct filterops *filtops,
 	if (user_kfilterc + 1 > user_kfiltermaxc) {
 		/* Grow in KFILTER_EXTENT chunks. */
 		user_kfiltermaxc += KFILTER_EXTENT;
-		len = user_kfiltermaxc * sizeof(struct filter *);
+		len = user_kfiltermaxc * sizeof(*kfilter);
 		kfilter = kmem_alloc(len, KM_SLEEP);
 		memset((char *)kfilter + user_kfiltersz, 0, len - user_kfiltersz);
 		if (user_kfilters != NULL) {
@@ -457,7 +457,7 @@ filt_procattach(struct knote *kn)
 	curp = curl->l_proc;
 
 	mutex_enter(proc_lock);
-	p = p_find(kn->kn_id, PFIND_LOCKED);
+	p = proc_find(kn->kn_id);
 	if (p == NULL) {
 		mutex_exit(proc_lock);
 		return ESRCH;
@@ -598,6 +598,8 @@ filt_timerexpire(void *knx)
 	knote_activate(kn);
 	if ((kn->kn_flags & EV_ONESHOT) == 0) {
 		tticks = mstohz(kn->kn_sdata);
+		if (tticks <= 0)
+			tticks = 1;
 		callout_schedule((callout_t *)kn->kn_hook, tticks);
 	}
 	mutex_exit(&kqueue_misc_lock);
@@ -714,8 +716,8 @@ seltrue_kqfilter(dev_t dev, struct knote *kn)
 /*
  * kqueue(2) system call.
  */
-int
-sys_kqueue(struct lwp *l, const void *v, register_t *retval)
+static int
+kqueue1(struct lwp *l, int flags, register_t *retval)
 {
 	struct kqueue *kq;
 	file_t *fp;
@@ -723,7 +725,7 @@ sys_kqueue(struct lwp *l, const void *v, register_t *retval)
 
 	if ((error = fd_allocfile(&fp, &fd)) != 0)
 		return error;
-	fp->f_flag = FREAD | FWRITE;
+	fp->f_flag = FREAD | FWRITE | (flags & (FNONBLOCK|FNOSIGPIPE));
 	fp->f_type = DTYPE_KQUEUE;
 	fp->f_ops = &kqueueops;
 	kq = kmem_zalloc(sizeof(*kq), KM_SLEEP);
@@ -734,8 +736,28 @@ sys_kqueue(struct lwp *l, const void *v, register_t *retval)
 	fp->f_data = kq;
 	*retval = fd;
 	kq->kq_fdp = curlwp->l_fd;
+	fd_set_exclose(l, fd, (flags & O_CLOEXEC) != 0);
 	fd_affix(curproc, fp, fd);
 	return error;
+}
+
+/*
+ * kqueue(2) system call.
+ */
+int
+sys_kqueue(struct lwp *l, const void *v, register_t *retval)
+{
+	return kqueue1(l, 0, retval);
+}
+
+int
+sys_kqueue1(struct lwp *l, const struct sys_kqueue1_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+	} */
+	return kqueue1(l, SCARG(uap, flags), retval);
 }
 
 /*
@@ -894,18 +916,16 @@ kqueue_register(struct kqueue *kq, struct kevent *kev)
 		return (EINVAL);
 	}
 
- 	mutex_enter(&fdp->fd_lock);
-
 	/* search if knote already exists */
 	if (kfilter->filtops->f_isfd) {
 		/* monitoring a file descriptor */
 		fd = kev->ident;
 		if ((fp = fd_getfile(fd)) == NULL) {
-		 	mutex_exit(&fdp->fd_lock);
 			rw_exit(&kqueue_filter_lock);
 			kmem_free(newkn, sizeof(*newkn));
 			return EBADF;
 		}
+		mutex_enter(&fdp->fd_lock);
 		ff = fdp->fd_dt->dt_ff[fd];
 		if (fd <= fdp->fd_lastkqfile) {
 			SLIST_FOREACH(kn, &ff->ff_knlist, kn_link) {
@@ -919,6 +939,7 @@ kqueue_register(struct kqueue *kq, struct kevent *kev)
 		 * not monitoring a file descriptor, so
 		 * lookup knotes in internal hash table
 		 */
+		mutex_enter(&fdp->fd_lock);
 		if (fdp->fd_knhashmask != 0) {
 			list = &fdp->fd_knhash[
 			    KN_HASH((u_long)kev->ident, fdp->fd_knhashmask)];
@@ -1460,9 +1481,9 @@ kqueue_kqfilter(file_t *fp, struct knote *kn)
 void
 knote(struct klist *list, long hint)
 {
-	struct knote *kn;
+	struct knote *kn, *tmpkn;
 
-	SLIST_FOREACH(kn, list, kn_selnext) {
+	SLIST_FOREACH_SAFE(kn, list, kn_selnext, tmpkn) {
 		if ((*kn->kn_fop->f_event)(kn, hint))
 			knote_activate(kn);
 	}

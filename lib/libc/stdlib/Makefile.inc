@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile.inc,v 1.73 2009/07/31 20:39:59 dsl Exp $
+#	$NetBSD: Makefile.inc,v 1.78 2011/09/14 23:33:51 christos Exp $
 #	from: @(#)Makefile.inc	8.3 (Berkeley) 2/4/95
 
 # stdlib sources
 .PATH: ${ARCHDIR}/stdlib ${.CURDIR}/stdlib
 
-SRCS+=	_rand48.c \
+SRCS+=	_env.c _rand48.c \
 	a64l.c abort.c atexit.c atof.c atoi.c atol.c atoll.c \
 	bsearch.c drand48.c exit.c \
 	getenv.c getopt.c getopt_long.c getsubopt.c \
@@ -43,8 +43,9 @@ MAN+=	a64l.3 abort.3 abs.3 alloca.3 atexit.3 atof.3 atoi.3 atol.3 atoll.3 \
 	exit.3 \
 	getenv.3 getopt.3 getopt_long.3 getsubopt.3 grantpt.3 \
 	hcreate.3 \
-	imaxabs.3 imaxdiv.3 insque.3 \
-	labs.3 ldiv.3 llabs.3 lldiv.3 lsearch.3 \
+	insque.3 \
+	jemalloc.3 \
+	lsearch.3 \
 	malloc.3 memory.3 mi_vector_hash.3 \
 	posix_memalign.3 posix_openpt.3 ptsname.3 \
 	qabs.3 qdiv.3 qsort.3 \
@@ -55,9 +56,16 @@ MAN+=	a64l.3 abort.3 abs.3 alloca.3 atexit.3 atof.3 atoi.3 atol.3 atoll.3 \
 
 MLINKS+=a64l.3 l64a.3
 MLINKS+=a64l.3 l64a_r.3
+MLINKS+=abs.3 labs.3 \
+	abs.3 llabs.3 \
+	abs.3 imaxabs.3
+MLINKS+=div.3 ldiv.3 \
+	div.3 lldiv.3 \
+	div.3 imaxdiv.3
 MLINKS+=getenv.3 setenv.3 getenv.3 unsetenv.3 getenv.3 putenv.3
 MLINKS+=getenv.3 getenv_r.3
 MLINKS+=hcreate.3 hdestroy.3 hcreate.3 hsearch.3
+MLINKS+=hcreate.3 hcreate_r.3 hcreate.3 hdestroy_r.3 hcreate.3 hsearch_r.3
 MLINKS+=insque.3 remque.3
 MLINKS+=lsearch.3 lfind.3
 MLINKS+=malloc.3 calloc.3 malloc.3 realloc.3 malloc.3 free.3

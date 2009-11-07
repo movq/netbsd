@@ -1,4 +1,4 @@
-/*	$NetBSD: callcontext.c,v 1.23 2008/08/11 16:23:37 pooka Exp $	*/
+/*	$NetBSD: callcontext.c,v 1.27 2011/12/06 21:15:39 skrll Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2008 Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: callcontext.c,v 1.23 2008/08/11 16:23:37 pooka Exp $");
+__RCSID("$NetBSD: callcontext.c,v 1.27 2011/12/06 21:15:39 skrll Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -78,6 +78,14 @@ puffs_cc_yield(struct puffs_cc *pcc)
 
 	assert(puffs_fakecc == 0);
 
+	if ((~pcc->pcc_flags & (PCC_BORROWED|PCC_DONE)) == 0) {
+		pcc->pcc_flags &= ~(PCC_BORROWED|PCC_DONE);
+		/*
+		 * see the XXX comment in puffs__cc_cont
+		 */
+		puffs__cc_destroy(pcc, 1);
+		setcontext(&pcc->pcc_uc_ret);
+	}
 	pcc->pcc_flags &= ~PCC_BORROWED;
 
 	/* romanes eunt domus */
@@ -110,7 +118,7 @@ puffs__cc_cont(struct puffs_cc *pcc)
 	DPRINTF(("puffs__cc_cont: pcc %p, mycc %p\n", pcc, mycc));
 
 	/*
-	 * XXX: race between setcontenxt() and recycle if
+	 * XXX: race between setcontext() and recycle if
 	 * we go multithreaded
 	 */
 	puffs__cc_destroy(mycc, 1);
@@ -180,7 +188,7 @@ slowccalloc(struct puffs_usermount *pu)
 	struct puffs_cc *volatile pcc;
 	void *sp;
 	size_t stacksize = 1<<pu->pu_cc_stackshift;
-	long psize = sysconf(_SC_PAGESIZE);
+	const long psize = sysconf(_SC_PAGESIZE);
 
 	if (puffs_fakecc)
 		return &fakecc;
@@ -193,7 +201,11 @@ slowccalloc(struct puffs_usermount *pu)
 	pcc = sp;
 	memset(pcc, 0, sizeof(struct puffs_cc));
 
+#ifndef __MACHINE_STACK_GROWS_UP
 	mprotect((uint8_t *)sp + psize, (size_t)psize, PROT_NONE);
+#else
+	mprotect((uint8_t *)sp + stacksize - psize, (size_t)psize, PROT_NONE);
+#endif
 
 	/* initialize both ucontext's */
 	if (getcontext(&pcc->pcc_uc) == -1) {
@@ -237,6 +249,8 @@ puffs__cc_create(struct puffs_usermount *pu, puffs_ccfunc func,
 		pcc->pcc_func = func;
 		pcc->pcc_farg = pcc;
 	} else {
+		const long psize = sysconf(_SC_PAGESIZE);
+
 		/* link context */
 		pcc->pcc_uc.uc_link = &pcc->pcc_uc_ret;
 
@@ -246,8 +260,8 @@ puffs__cc_create(struct puffs_usermount *pu, puffs_ccfunc func,
 		 * swapcontext().  However, it gets lost.  So reinit it.
 		 */
 		st = &pcc->pcc_uc.uc_stack;
-		st->ss_sp = pcc;
-		st->ss_size = stacksize;
+		st->ss_sp = ((uint8_t *)(void *)pcc) + psize;
+		st->ss_size = stacksize - psize;
 		st->ss_flags = 0;
 
 		/*
@@ -291,6 +305,7 @@ puffs__cc_destroy(struct puffs_cc *pcc, int nonuke)
 {
 	struct puffs_usermount *pu = pcc->pcc_pu;
 
+	pcc->pcc_flags &= ~PCC_HASCALLER;
 	assert(pcc->pcc_flags == 0);
 	assert(!puffs_fakecc);
 

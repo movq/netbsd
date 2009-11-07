@@ -1,4 +1,4 @@
-/*      $NetBSD: raidctl.c,v 1.41 2009/10/11 12:14:05 pooka Exp $   */
+/*      $NetBSD: raidctl.c,v 1.55 2011/10/12 16:45:37 christos Exp $   */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: raidctl.c,v 1.41 2009/10/11 12:14:05 pooka Exp $");
+__RCSID("$NetBSD: raidctl.c,v 1.55 2011/10/12 16:45:37 christos Exp $");
 #endif
 
 
@@ -58,12 +58,10 @@ __RCSID("$NetBSD: raidctl.c,v 1.41 2009/10/11 12:14:05 pooka Exp $");
 #include <unistd.h>
 #include <util.h>
 
-#include <rump/rump.h>
-#include <rump/rump_syscalls.h>
-
 #include <dev/raidframe/raidframevar.h>
 #include <dev/raidframe/raidframeio.h>
 #include "rf_configure.h"
+#include "prog_ops.h"
 
 void	do_ioctl(int, u_long, void *, const char *);
 static  void rf_configure(int, char*, int);
@@ -72,7 +70,7 @@ static  void rf_get_device_status(int);
 static	void rf_output_configuration(int, const char *);
 static  void get_component_number(int, char *, int *, int *);
 static  void rf_fail_disk(int, char *, int);
-static  void usage(void);
+__dead static  void usage(void);
 static  void get_component_label(int, char *);
 static  void set_component_label(int, char *);
 static  void init_component_labels(int, int);
@@ -85,13 +83,15 @@ static  void check_parity(int,int, char *);
 static  void do_meter(int, u_long);
 static  void get_bar(char *, double, int);
 static  void get_time_string(char *, int);
+static  void rf_output_pmstat(int, int);
+static  void rf_pm_configure(int, int, char *, int[]);
 
 int verbose;
 
 int
 main(int argc,char *argv[])
 {
-	int ch;
+	int ch, i;
 	int num_options;
 	unsigned long action;
 	char config_filename[PATH_MAX];
@@ -99,6 +99,8 @@ main(int argc,char *argv[])
 	char name[PATH_MAX];
 	char component[PATH_MAX];
 	char autoconf[10];
+	char *parityconf = NULL;
+	int parityparams[3];
 	int do_output;
 	int do_recon;
 	int do_rewrite;
@@ -120,11 +122,7 @@ main(int argc,char *argv[])
 	force = 0;
 	openmode = O_RDWR;	/* default to read/write */
 
-#ifdef RUMP_ACTION
-	rump_init();
-#endif
-
-	while ((ch = getopt(argc, argv, "a:A:Bc:C:f:F:g:GiI:l:r:R:sSpPuv")) 
+	while ((ch = getopt(argc, argv, "a:A:Bc:C:f:F:g:GiI:l:mM:r:R:sSpPuv")) 
 	       != -1)
 		switch(ch) {
 		case 'a':
@@ -188,6 +186,23 @@ main(int argc,char *argv[])
 			serial_number = atoi(optarg);
 			num_options++;
 			break;
+		case 'm':
+			action = RAIDFRAME_PARITYMAP_STATUS;
+			openmode = O_RDONLY;
+			num_options++;
+			break;
+		case 'M':
+			action = RAIDFRAME_PARITYMAP_SET_DISABLE;
+			parityconf = strdup(optarg);
+			num_options++;
+			/* XXXjld: should rf_pm_configure do the atoi()s? */
+			i = 0;
+			while (i < 3 && optind < argc &&
+			    isdigit((int)argv[optind][0]))
+				parityparams[i++] = atoi(argv[optind++]);
+			while (i < 3)
+				parityparams[i++] = 0;
+			break;
 		case 'l': 
 			action = RAIDFRAME_SET_COMPONENT_LABEL;
 			strlcpy(component, optarg, sizeof(component));
@@ -242,28 +257,18 @@ main(int argc,char *argv[])
 	if ((num_options > 1) || (argc == 0)) 
 		usage();
 
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
+
 	strlcpy(name, argv[0], sizeof(name));
-#ifdef RUMP_ACTION
 	fd = opendisk1(name, openmode, dev_name, sizeof(dev_name), 0,
-	    rump_sys_open);
-#else
-	fd = opendisk(name, openmode, dev_name, sizeof(dev_name), 0);
-#endif
-	if (fd == -1) {
-		fprintf(stderr, "%s: unable to open device file: %s\n",
-			getprogname(), name);
-		exit(1);
-	}
-	if (fstat(fd, &st) != 0) {
-		fprintf(stderr,"%s: stat failure on: %s\n",
-			getprogname(), dev_name);
-		exit(1);
-	}
-	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode)) {
-		fprintf(stderr,"%s: invalid device: %s\n",
-			getprogname(), dev_name);
-		exit(1);
-	}
+	    prog_open);
+	if (fd == -1)
+		err(1, "Unable to open device file: %s", name);
+	if (prog_fstat(fd, &st) == -1)
+		err(1, "stat failure on: %s", dev_name);
+	if (!S_ISBLK(st.st_mode) && !S_ISCHR(st.st_mode))
+		err(1, "invalid device: %s", dev_name);
 
 	raidID = DISKUNIT(st.st_rdev);
 
@@ -320,6 +325,12 @@ main(int argc,char *argv[])
 		else
 			rf_get_device_status(fd);
 		break;
+	case RAIDFRAME_PARITYMAP_STATUS:
+		rf_output_pmstat(fd, raidID);
+		break;
+	case RAIDFRAME_PARITYMAP_SET_DISABLE:
+		rf_pm_configure(fd, raidID, parityconf, parityparams);
+		break;
 	case RAIDFRAME_REBUILD_IN_PLACE:
 		rebuild_in_place(fd, component);
 		break;
@@ -333,17 +344,15 @@ main(int argc,char *argv[])
 		break;
 	}
 
-	close(fd);
+	prog_close(fd);
 	exit(0);
 }
 
 void
 do_ioctl(int fd, unsigned long command, void *arg, const char *ioctl_name)
 {
-	if (ioctl(fd, command, arg) < 0) {
-		warn("ioctl (%s) failed", ioctl_name);
-		exit(1);
-	}
+	if (prog_ioctl(fd, command, arg) == -1)
+		err(1, "ioctl (%s) failed", ioctl_name);
 }
 
 
@@ -353,11 +362,8 @@ rf_configure(int fd, char *config_file, int force)
 	void *generic;
 	RF_Config_t cfg;
 
-	if (rf_MakeConfig( config_file, &cfg ) != 0) {
-		fprintf(stderr,"%s: unable to create RAIDframe %s\n",
-			getprogname(), "configuration structure\n");
-		exit(1);
-	}
+	if (rf_MakeConfig( config_file, &cfg ) != 0)
+		err(1, "Unable to create RAIDframe configuration structure");
 	
 	cfg.force = force;
 
@@ -367,7 +373,7 @@ rf_configure(int fd, char *config_file, int force)
 	 * the configuration structure. 
 	 */
 
-	generic = (void *) &cfg;
+	generic = &cfg;
 	do_ioctl(fd, RAIDFRAME_CONFIGURE, &generic, "RAIDFRAME_CONFIGURE");
 }
 
@@ -465,6 +471,109 @@ rf_get_device_status(int fd)
 	}
 	check_status(fd,0);
 }
+
+static void
+rf_output_pmstat(int fd, int raidID)
+{
+	char srs[7];
+	unsigned int i, j;
+	int dis, dr;
+	struct rf_pmstat st;
+
+	if (prog_ioctl(fd, RAIDFRAME_PARITYMAP_STATUS, &st) == -1) {
+		if (errno == EINVAL) {
+			printf("raid%d: has no parity; parity map disabled\n",
+				raidID);
+			return;
+		}
+		err(1, "ioctl (%s) failed", "RAIDFRAME_PARITYMAP_STATUS");
+	}
+
+	if (st.enabled) {
+		if (0 > humanize_number(srs, 7, st.region_size * DEV_BSIZE, 
+			"B", HN_AUTOSCALE, HN_NOSPACE))
+			strlcpy(srs, "???", 7);
+
+		printf("raid%d: parity map enabled with %u regions of %s\n",
+		    raidID, st.params.regions, srs);
+		printf("raid%d: regions marked clean after %d intervals of"
+		    " %d.%03ds\n", raidID, st.params.cooldown,
+		    st.params.tickms / 1000, st.params.tickms % 1000);
+		printf("raid%d: write/sync/clean counters "
+		    "%"PRIu64"/%"PRIu64"/%"PRIu64"\n", raidID,
+		    st.ctrs.nwrite, st.ctrs.ncachesync, st.ctrs.nclearing);
+
+		dr = 0;
+		for (i = 0; i < st.params.regions; i++)
+			if (isset(st.dirty, i))
+				dr++;
+		printf("raid%d: %d dirty region%s\n", raidID, dr,
+		    dr == 1 ? "" : "s");
+
+		if (verbose > 0) {
+			for (i = 0; i < RF_PARITYMAP_NBYTE; i += 32) {
+				printf("    ");
+				for (j = i; j < RF_PARITYMAP_NBYTE
+					 && j < i + 32; j++)
+					printf("%x%x", st.dirty[j] & 15, 
+					    (st.dirty[j] >> 4) & 15);
+				printf("\n");
+			}
+		}
+	} else {
+		printf("raid%d: parity map disabled\n", raidID);
+	}
+
+	do_ioctl(fd, RAIDFRAME_PARITYMAP_GET_DISABLE, &dis,
+	    "RAIDFRAME_PARITYMAP_GET_DISABLE");
+	printf("raid%d: parity map will %s %sabled on next configure\n", 
+	    raidID, dis == st.enabled ? "be" : "remain", dis ? "dis" : "en");
+}
+
+static void
+rf_pm_configure(int fd, int raidID, char *parityconf, int parityparams[])
+{
+	int dis;
+	struct rf_pmparams params;
+
+	if (strcasecmp(parityconf, "yes") == 0)
+		dis = 0;
+	else if (strcasecmp(parityconf, "no") == 0)
+		dis = 1;
+	else if (strcasecmp(parityconf, "set") == 0) {
+		params.cooldown = parityparams[0];
+		params.tickms = parityparams[1];
+		params.regions = parityparams[2];
+		
+		do_ioctl(fd, RAIDFRAME_PARITYMAP_SET_PARAMS, &params,
+		    "RAIDFRAME_PARITYMAP_SET_PARAMS");
+
+		if (params.cooldown != 0 || params.tickms != 0) {
+			printf("raid%d: parity cleaned after", raidID);
+			if (params.cooldown != 0)
+				printf(" %d", params.cooldown);
+			printf(" intervals");
+			if (params.tickms != 0) {
+				printf(" of %d.%03ds", params.tickms / 1000,
+				    params.tickms % 1000);
+			}
+			printf("\n");
+		}
+		if (params.regions != 0)
+			printf("raid%d: will use %d regions on next"
+			    " configuration\n", raidID, params.regions);
+
+		return;
+		/* XXX the control flow here could be prettier. */
+	} else
+		err(1, "`%s' is not a valid parity map command", parityconf);
+
+	do_ioctl(fd, RAIDFRAME_PARITYMAP_SET_DISABLE, &dis,
+	    "RAIDFRAME_PARITYMAP_SET_DISABLE");
+	printf("raid%d: parity map will be %sabled on next configure\n", 
+	    raidID, dis ? "dis" : "en");
+}
+
 
 static void
 rf_output_configuration(int fd, const char *name)
@@ -573,11 +682,8 @@ get_component_number(int fd, char *component_name, int *component_number,
 		}
 	}
 
-	if (!found) {
-		fprintf(stderr,"%s: %s is not a component %s", getprogname(), 
-			component_name, "of this device\n");
-		exit(1);
-	}
+	if (!found)
+		err(1,"%s is not a component of this device", component_name);
 }
 
 static void
@@ -628,7 +734,7 @@ get_component_label(int fd, char *component)
 	printf("   Row: %d, Column: %d, Num Rows: %d, Num Columns: %d\n",
 	       component_label.row, component_label.column, 
 	       component_label.num_rows, component_label.num_columns);
-	printf("   Version: %d, Serial Number: %d, Mod Counter: %d\n",
+	printf("   Version: %d, Serial Number: %u, Mod Counter: %d\n",
 	       component_label.version, component_label.serial_number,
 	       component_label.mod_counter);
 	printf("   Clean: %s, Status: %d\n",
@@ -637,9 +743,9 @@ get_component_label(int fd, char *component)
 	printf("   sectPerSU: %d, SUsPerPU: %d, SUsPerRU: %d\n",
 	       component_label.sectPerSU, component_label.SUsPerPU, 
 	       component_label.SUsPerRU);
-	printf("   Queue size: %d, blocksize: %d, numBlocks: %u\n",
+	printf("   Queue size: %d, blocksize: %d, numBlocks: %"PRIu64"\n",
 	       component_label.maxOutstanding, component_label.blockSize,
-	       component_label.numBlocks);
+	       rf_component_label_numblocks(&component_label));
 	printf("   RAID Level: %c\n", (char) component_label.parityConfig);
 	printf("   Autoconfig: %s\n", 
 	       component_label.autoconfigure ? "Yes" : "No" );
@@ -882,14 +988,11 @@ do_meter(int fd, u_long option)
 	double rate;
 	RF_uint64 amount;
 	int tbit_value;
-	char buffer[1024];
 	char bar_buffer[1024];
 	char eta_buffer[1024];
 
-	if (gettimeofday(&start_time,NULL)) {
-		fprintf(stderr,"%s: gettimeofday failed!?!?\n", getprogname());
-		exit(errno);
-	}
+	if (gettimeofday(&start_time,NULL) == -1)
+		err(1, "gettimeofday failed!?!?");
 	memset(&progressInfo, 0, sizeof(RF_ProgressInfo_t));
 	pInfoPtr=&progressInfo;
 
@@ -945,10 +1048,8 @@ do_meter(int fd, u_long option)
 
 		get_time_string(eta_buffer, simple_eta);
 
-		snprintf(buffer,1024,"\r%3d%% |%s| ETA: %s %c",
-			 percent_done,bar_buffer,eta_buffer,tbits[tbit_value]);
-
-		write(fileno(stdout),buffer,strlen(buffer));
+		fprintf(stdout,"\r%3d%% |%s| ETA: %s %c",
+			percent_done,bar_buffer,eta_buffer,tbits[tbit_value]);
 		fflush(stdout);
 
 		if (++tbit_value>3) 
@@ -956,11 +1057,8 @@ do_meter(int fd, u_long option)
 
 		sleep(2);
 
-		if (gettimeofday(&current_time,NULL)) {
-			fprintf(stderr,"%s: gettimeofday failed!?!?\n",
-				getprogname());
-			exit(errno);
-		}
+		if (gettimeofday(&current_time,NULL) == -1)
+			err(1, "gettimeofday failed!?!?");
 
 		do_ioctl( fd, option, &pInfoPtr, "");
 		
@@ -1034,7 +1132,7 @@ usage(void)
 	const char *progname = getprogname();
 
 	fprintf(stderr, "usage: %s [-v] -a component dev\n", progname);
-	fprintf(stderr, "       %s [-v] -A yes | no | root dev\n", progname);
+	fprintf(stderr, "       %s [-v] -A [yes | no | root] dev\n", progname);
 	fprintf(stderr, "       %s [-v] -B dev\n", progname);
 	fprintf(stderr, "       %s [-v] -c config_file dev\n", progname);
 	fprintf(stderr, "       %s [-v] -C config_file dev\n", progname);
@@ -1044,6 +1142,9 @@ usage(void)
 	fprintf(stderr, "       %s [-v] -G dev\n", progname);
 	fprintf(stderr, "       %s [-v] -i dev\n", progname);
 	fprintf(stderr, "       %s [-v] -I serial_number dev\n", progname);
+	fprintf(stderr, "       %s [-v] -m dev\n", progname);
+	fprintf(stderr, "       %s [-v] -M [yes | no | set params] dev\n",
+	    progname);
 	fprintf(stderr, "       %s [-v] -p dev\n", progname);
 	fprintf(stderr, "       %s [-v] -P dev\n", progname);
 	fprintf(stderr, "       %s [-v] -r component dev\n", progname); 

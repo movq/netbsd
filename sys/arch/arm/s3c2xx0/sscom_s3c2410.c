@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: sscom_s3c2410.c,v 1.5 2012/01/30 03:28:33 nisimura Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.5 2012/01/30 03:28:33 nisimura Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos E
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -58,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos E
 #include <sys/vnode.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c2410var.h>
@@ -68,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos E
 static int sscom_match(struct device *, struct cfdata *, void *);
 static void sscom_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL(sscom, sizeof(struct sscom_softc), sscom_match,
+CFATTACH_DECL_NEW(sscom, sizeof(struct sscom_softc), sscom_match,
     sscom_attach, NULL, NULL);
 
 const struct sscom_uart_info s3c2410_uart_config[] = {
@@ -110,13 +109,14 @@ sscom_match(struct device *parent, struct cfdata *cf, void *aux)
 static void
 sscom_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct sscom_softc *sc = (struct sscom_softc *)self;
+	struct sscom_softc *sc = device_private(self);
 	struct s3c2xx0_attach_args *sa = aux;
 	int unit = sa->sa_index;
 	bus_addr_t iobase = s3c2410_uart_config[unit].iobase;
 
 	printf( ": UART%d addr=%lx", sa->sa_index, iobase );
 
+	sc->sc_dev = self;
 	sc->sc_iot = s3c2xx0_softc->sc_iot;
 	sc->sc_unit = unit;
 	sc->sc_frequency = s3c2xx0_softc->sc_pclk;

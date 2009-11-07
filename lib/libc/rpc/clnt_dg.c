@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_dg.c,v 1.23 2009/02/12 04:33:20 lukem Exp $	*/
+/*	$NetBSD: clnt_dg.c,v 1.25 2011/06/20 09:11:17 mrg Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_dg.c 1.19 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_dg.c,v 1.23 2009/02/12 04:33:20 lukem Exp $");
+__RCSID("$NetBSD: clnt_dg.c,v 1.25 2011/06/20 09:11:17 mrg Exp $");
 #endif
 #endif
 
@@ -99,7 +99,6 @@ static void clnt_dg_destroy __P((CLIENT *));
  */
 static int	*dg_fd_locks;
 #ifdef _REENTRANT
-extern int __isthreaded;
 #define __rpc_lock_value __isthreaded;
 extern mutex_t clnt_fd_lock;
 static cond_t	*dg_cv;
@@ -416,12 +415,12 @@ send_again:
 				cu->cu_error.re_status = RPC_CANTRECV;
 				goto out;
 			}
-			if (recvlen >= (ssize_t)sizeof(uint32_t) &&
-			    (*((uint32_t *)(void *)(cu->cu_inbuf)) == 
-				*((uint32_t *)(void *)(cu->cu_outbuf)))) {
-				/* We now assume we have the proper reply. */
-				break;
-			}	       
+			if (recvlen >= (ssize_t)sizeof(uint32_t)) {
+				if (memcmp(cu->cu_inbuf, cu->cu_outbuf,
+				    sizeof(uint32_t)) == 0)
+					/* Assume we have the proper reply. */
+					break;
+			}
 		}
 		if (n == -1) {
 			cu->cu_error.re_errno = errno;

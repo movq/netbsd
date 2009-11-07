@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: byacc2netbsd,v 1.1 2009/10/29 00:56:35 christos Exp $
+#	$NetBSD: byacc2netbsd,v 1.4 2011/10/08 19:28:39 christos Exp $
 #
 # Copyright (c) 2000 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -34,13 +34,14 @@
 #
 #	$ cd /some/where/temporary
 #	$ tar xpfz /new/byacc/release/tar/file
-#	$ sh /usr/src/external/bsd/byacc/dist/byacc2netbsd byacc-20091027 `pwd`
+#	$ sh /usr/src/external/bsd/byacc/dist/byacc2netbsd byacc-YYYYMMDD `pwd`
 #	$ cd src/external/bsd/byacc/dist
-#	$ cvs import -m "Import byacc 20091027" src/external/bsd/byacc/dist FLEX byacc-20091027
-#	$ cd ../../../../../byacc-20091027
+#	$ cvs import -m "Import byacc YYYYMMDD" src/external/bsd/byacc/dist DICKEY byacc-YYYYMMDD
+#	$ cd ../../../../../byacc-YYYYMMDD
 #	$ run ./configure
 #	$ run make
 #	check the config file and copy it to /usr/src/external/bsd/byacc/include
+#	remove the version from SYSTEM_NAME
 #	check the manual page against our copy if there are new options and
 #	update
 
@@ -75,14 +76,7 @@ cd $r
 pax -rw * $d
 
 ### Remove the $'s around RCS tags
-find $d -type f -print | xargs egrep -l '\$(Id|Created|Header|Revision)' | while read f; do
-	sed -e 's/\$\(Id.*\) \$/\1/' \
-	    -e 's/\$\(Created.*\) \$/\1/' \
-	    -e 's/\$\(Header.*\) \$/\1/' \
-	    -e 's/\$\(Revision.*\) \$/\1/' \
-	    < $f > /tmp/byacc1f$$ && mv /tmp/byacc1f$$ $f && \
-	echo removed \$RCS tag from $f
-done
+cleantags $d
 
 ### Add our NetBSD RCS Id
 find $d -type f -name '*.[chly]' -print | while read c; do

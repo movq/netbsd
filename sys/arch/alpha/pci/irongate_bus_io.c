@@ -1,4 +1,4 @@
-/* $NetBSD: irongate_bus_io.c,v 1.5 2008/04/28 20:23:11 martin Exp $ */
+/* $NetBSD: irongate_bus_io.c,v 1.7 2011/07/01 19:19:49 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(1, "$NetBSD: irongate_bus_io.c,v 1.5 2008/04/28 20:23:11 martin Exp $");
+__KERNEL_RCSID(1, "$NetBSD: irongate_bus_io.c,v 1.7 2011/07/01 19:19:49 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,9 +39,7 @@ __KERNEL_RCSID(1, "$NetBSD: irongate_bus_io.c,v 1.5 2008/04/28 20:23:11 martin E
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <alpha/pci/irongatereg.h>
 #include <alpha/pci/irongatevar.h>

@@ -1,7 +1,6 @@
-/*	$NetBSD: pmap.h,v 1.22 2008/10/26 00:08:15 mrg Exp $	*/
+/*	$NetBSD: pmap.h,v 1.31 2012/01/19 22:00:56 bouyer Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgment:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -184,6 +177,7 @@
  */
 
 #define PTE_BASE  ((pt_entry_t *) (L4_SLOT_PTE * NBPD_L4))
+#define KERN_BASE  ((pt_entry_t *) (L4_SLOT_KERN * NBPD_L4))
 #define APTE_BASE ((pt_entry_t *) (VA_SIGN_NEG((L4_SLOT_APTE * NBPD_L4))))
 
 #define L1_BASE		PTE_BASE
@@ -198,7 +192,7 @@
 #define AL4_BASE ((pd_entry_t *)((char *)AL3_BASE + L4_SLOT_PTE * NBPD_L1))
 
 #define PDP_PDE		(L4_BASE + PDIR_SLOT_PTE)
-#define APDP_PDE	(L4_BASE + PDIR_SLOT_APTE)
+#define APDP_PDE	(&curcpu()->ci_kpm_pdir[PDIR_SLOT_APTE])
 
 #define PDP_BASE	L4_BASE
 #define APDP_BASE	AL4_BASE
@@ -268,6 +262,8 @@
     atomic_and_ulong((volatile unsigned long *)p, ~(b))
 #define pmap_pte_flush()		/* nothing */
 #else
+extern kmutex_t pte_lock;
+
 static __inline pt_entry_t
 pmap_pa2pte(paddr_t pa)
 {
@@ -290,45 +286,49 @@ pmap_pte_set(pt_entry_t *pte, pt_entry_t npte)
 static __inline pt_entry_t
 pmap_pte_cas(volatile pt_entry_t *ptep, pt_entry_t o, pt_entry_t n)
 {
-	int s = splvm();
-	pt_entry_t opte = *ptep;
+	pt_entry_t opte;
 
+	mutex_enter(&pte_lock);
+	opte = *ptep;
 	if (opte == o) {
 		xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(ptep)), n);
 		xpq_flush_queue();
 	}
-	splx(s);
+
+	mutex_exit(&pte_lock);
 	return opte;
 }
 
 static __inline pt_entry_t
 pmap_pte_testset(volatile pt_entry_t *pte, pt_entry_t npte)
 {
-	int s = splvm();
-	pt_entry_t opte = *pte;
+	pt_entry_t opte;
+
+	mutex_enter(&pte_lock);
+	opte = *pte;
 	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), npte);
 	xpq_flush_queue();
-	splx(s);
+	mutex_exit(&pte_lock);
 	return opte;
 }
 
 static __inline void
 pmap_pte_setbits(volatile pt_entry_t *pte, pt_entry_t bits)
 {
-	int s = splvm();
+	mutex_enter(&pte_lock);
 	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), (*pte) | bits);
 	xpq_flush_queue();
-	splx(s);
+	mutex_exit(&pte_lock);
 }
 
 static __inline void
 pmap_pte_clearbits(volatile pt_entry_t *pte, pt_entry_t bits)
 {	
-	int s = splvm();
+	mutex_enter(&pte_lock);
 	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)),
 	    (*pte) & ~bits);
 	xpq_flush_queue();
-	splx(s);
+	mutex_exit(&pte_lock);
 }
 
 static __inline void
@@ -343,7 +343,18 @@ pmap_pte_flush(void)
 void pmap_prealloc_lowmem_ptps(void);
 void pmap_changeprot_local(vaddr_t, vm_prot_t);
 
-#else	/*	__x86_64__	*/
+#include <x86/pmap_pv.h>
+
+#define	__HAVE_VM_PAGE_MD
+#define	VM_MDPAGE_INIT(pg) \
+	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
+	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
+
+struct vm_page_md {
+	struct pmap_page mp_pp;
+};
+
+#else	/*	!__x86_64__	*/
 
 #include <i386/pmap.h>
 

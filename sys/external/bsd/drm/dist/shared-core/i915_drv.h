@@ -232,9 +232,6 @@ typedef struct drm_i915_private {
 	u8 saveDACDATA[256*3]; /* 256 3-byte colors */
 	u8 saveCR[37];
 	struct {
-#ifdef __linux__
-		struct drm_mm gtt_space;
-#endif
 		/**
 		 * List of objects currently involved in rendering from the
 		 * ringbuffer.
@@ -267,16 +264,6 @@ typedef struct drm_i915_private {
 		 * outstanding.
 		 */
 		struct list_head request_list;
-#ifdef __linux__
-		/**
-		 * We leave the user IRQ off as much as possible,
-		 * but this means that requests will finish and never
-		 * be retired once the system goes idle. Set a timer to
-		 * fire periodically while the ring is running. When it
-		 * fires, go retire requests.
-		 */
-		struct delayed_work retire_work;
-#endif
 		uint32_t next_gem_seqno;
 
 		/**
@@ -445,18 +432,18 @@ extern int i915_vblank_pipe_set(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
 extern int i915_vblank_pipe_get(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
-extern int i915_enable_vblank(struct drm_device *dev, int crtc);
-extern void i915_disable_vblank(struct drm_device *dev, int crtc);
-extern u32 i915_get_vblank_counter(struct drm_device *dev, int crtc);
-extern u32 gm45_get_vblank_counter(struct drm_device *dev, int crtc);
+extern int i915_enable_vblank(struct drm_device *dev, unsigned int crtc);
+extern void i915_disable_vblank(struct drm_device *dev, unsigned int crtc);
+extern u32 i915_get_vblank_counter(struct drm_device *dev, unsigned int crtc);
+extern u32 gm45_get_vblank_counter(struct drm_device *dev, unsigned int crtc);
 extern int i915_vblank_swap(struct drm_device *dev, void *data,
 			    struct drm_file *file_priv);
 
 void
-i915_enable_pipestat(drm_i915_private_t *dev_priv, int pipe, u32 mask);
+i915_enable_pipestat(drm_i915_private_t *dev_priv, unsigned int pipe, u32 mask);
 
 void
-i915_disable_pipestat(drm_i915_private_t *dev_priv, int pipe, u32 mask);
+i915_disable_pipestat(drm_i915_private_t *dev_priv, unsigned int pipe, u32 mask);
 
 
 /* i915_mem.c */
@@ -556,10 +543,6 @@ extern void opregion_enable_asle(struct drm_device *dev);
 		LOCK_TEST_WITH_RETURN(dev, file_priv);			\
 } while (0)
 
-#if defined(__FreeBSD__)
-typedef boolean_t bool;
-#endif
-
 #define I915_READ(reg)		DRM_READ32(dev_priv->mmio_map, (reg))
 #define I915_WRITE(reg,val)	DRM_WRITE32(dev_priv->mmio_map, (reg), (val))
 #define I915_READ16(reg)	DRM_READ16(dev_priv->mmio_map, (reg))
@@ -650,15 +633,21 @@ extern int i915_wait_ring(struct drm_device * dev, int n, const char *caller);
 		     (dev)->pci_device == 0x2E12 || \
 		     (dev)->pci_device == 0x2E22)
 
+#define IS_IGDG(dev) ((dev)->pci_device == 0xA001)
+#define IS_IGDGM(dev) ((dev)->pci_device == 0xA011)
+#define IS_IGD(dev) (IS_IGDG(dev) || IS_IGDGM(dev))
+
 #define IS_G33(dev)    ((dev)->pci_device == 0x29C2 ||	\
 			(dev)->pci_device == 0x29B2 ||	\
-			(dev)->pci_device == 0x29D2)
+			(dev)->pci_device == 0x29D2 ||	\
+			IS_IGD(dev))
 
 #define IS_I9XX(dev) (IS_I915G(dev) || IS_I915GM(dev) || IS_I945G(dev) || \
 		      IS_I945GM(dev) || IS_I965G(dev) || IS_G33(dev))
 
 #define IS_MOBILE(dev) (IS_I830(dev) || IS_I85X(dev) || IS_I915GM(dev) || \
-			IS_I945GM(dev) || IS_I965GM(dev) || IS_GM45(dev))
+			IS_I945GM(dev) || IS_I965GM(dev) || IS_GM45(dev) || \
+			IS_IGD(dev))
 
 #define I915_NEED_GFX_HWS(dev) (IS_G33(dev) || IS_GM45(dev) || IS_G4X(dev))
 

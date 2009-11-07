@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2009/07/28 21:18:01 christos Exp $
+#	$NetBSD: Makefile,v 1.4 2011/09/11 18:55:24 christos Exp $
 
 .include <bsd.own.mk>
 
@@ -13,7 +13,7 @@ DIST=${IDIST}/bin/named
 CPPFLAGS+=-I${DIST}/include -I${DIST}/unix/include -DCONFIGARGS=\"defaults\"
 CPPFLAGS+=-DNO_VERSION_DATE
 
-.if defined(HAVE_GCC) && ${HAVE_GCC} == 4
+.if defined(HAVE_GCC)
 .for f in client
 COPTS.${f}.c+=  -fno-strict-aliasing
 .endfor
@@ -21,7 +21,7 @@ COPTS.${f}.c+=  -fno-strict-aliasing
 
 .PATH: ${DIST}/unix ${DIST}
 
-SRCS_UNIX=	os.c
+SRCS_UNIX=	os.c dlz_dlopen_driver.c
 SRCS=	builtin.c client.c config.c control.c controlconf.c \
 	interfacemgr.c listenlist.c log.c logconf.c \
 	lwaddr.c lwdclient.c lwderror.c \

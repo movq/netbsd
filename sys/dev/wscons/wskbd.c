@@ -1,4 +1,4 @@
-/* $NetBSD: wskbd.c,v 1.122 2009/01/15 04:22:11 yamt Exp $ */
+/* $NetBSD: wskbd.c,v 1.130 2010/10/26 05:12:34 jruoho Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.122 2009/01/15 04:22:11 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.130 2010/10/26 05:12:34 jruoho Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -347,7 +347,7 @@ struct wssrcops wskbd_srcops = {
 };
 #endif
 
-static bool wskbd_suspend(device_t dv PMF_FN_PROTO);
+static bool wskbd_suspend(device_t dv, const pmf_qual_t *);
 static void wskbd_repeat(void *v);
 
 static int wskbd_console_initted;
@@ -505,7 +505,7 @@ wskbd_attach(device_t parent, device_t self, void *aux)
 }
 
 static bool
-wskbd_suspend(device_t dv PMF_FN_ARGS)
+wskbd_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct wskbd_softc *sc = device_private(dv);
 
@@ -761,7 +761,7 @@ wskbd_rawinput(device_t dev, u_char *tbuf, int len)
 	if (sc->sc_base.me_dispdv != NULL)
 		for (i = 0; i < len; i++)
 			wsdisplay_kbdinput(sc->sc_base.me_dispdv, tbuf[i]);
-	/* this is KS_GROUP_Ascii */
+	/* this is KS_GROUP_Plain */
 #endif
 }
 #endif /* WSDISPLAY_COMPAT_RAWKBD */
@@ -1392,7 +1392,7 @@ wskbd_cngetc(dev_t dev)
 	for(;;) {
 		if (num-- > 0) {
 			ks = wskbd_console_data.t_symbols[pos++];
-			if (KS_GROUP(ks) == KS_GROUP_Ascii)
+			if (KS_GROUP(ks) == KS_GROUP_Plain)
 				return (KS_VALUE(ks));
 		} else {
 			(*wskbd_console_data.t_consops->getc)
@@ -1507,7 +1507,7 @@ static int
 internal_command(struct wskbd_softc *sc, u_int *type, keysym_t ksym,
 	keysym_t ksym2)
 {
-#ifdef WSDISPLAY_SCROLLSUPPORT
+#if NWSDISPLAY > 0 && defined(WSDISPLAY_SCROLLSUPPORT)
 	u_int state = 0;
 #endif
 	switch (ksym) {
@@ -1523,7 +1523,7 @@ internal_command(struct wskbd_softc *sc, u_int *type, keysym_t ksym,
 		if (*type == WSCONS_EVENT_KEY_DOWN)
 			pmf_event_inject(NULL, PMFE_AUDIO_VOLUME_DOWN);
 		break;
-#ifdef WSDISPLAY_SCROLLSUPPORT
+#if NWSDISPLAY > 0 && defined(WSDISPLAY_SCROLLSUPPORT)
 	case KS_Cmd_ScrollFastUp:
 	case KS_Cmd_ScrollFastDown:
 		if (*type == WSCONS_EVENT_KEY_DOWN) {
@@ -1653,9 +1653,24 @@ wskbd_hotkey_register(device_t self, void *cookie, wskbd_hotkey_plugin *hotkey)
 {
 	struct wskbd_softc *sc = device_private(self);
 
+	KASSERT(sc != NULL);
+	KASSERT(hotkey != NULL);
+
 	sc->sc_hotkey = hotkey;
 	sc->sc_hotkeycookie = cookie;
+
 	return sc->sc_base.me_dv;
+}
+
+void
+wskbd_hotkey_deregister(device_t self)
+{
+	struct wskbd_softc *sc = device_private(self);
+
+	KASSERT(sc != NULL);
+
+	sc->sc_hotkey = NULL;
+	sc->sc_hotkeycookie = NULL;
 }
 
 static int
@@ -1794,7 +1809,7 @@ wskbd_translate(struct wskbd_internal *id, u_int type, int value)
 	res = KS_voidSymbol;
 
 	switch (KS_GROUP(ksym)) {
-	case KS_GROUP_Ascii:
+	case KS_GROUP_Plain:
 	case KS_GROUP_Keypad:
 	case KS_GROUP_Function:
 		res = ksym;
@@ -1835,7 +1850,7 @@ wskbd_translate(struct wskbd_internal *id, u_int type, int value)
 	update_leds(id);
 
 	/* We are done, return the symbol */
-	if (KS_GROUP(res) == KS_GROUP_Ascii) {
+	if (KS_GROUP(res) == KS_GROUP_Plain) {
 		if (MOD_ONESET(id, MOD_ANYCONTROL)) {
 			if ((res >= KS_at && res <= KS_z) || res == KS_space)
 				res = res & 0x1f;
@@ -1845,6 +1860,9 @@ wskbd_translate(struct wskbd_internal *id, u_int type, int value)
 				res = KS_Escape + (res - KS_3);
 			else if (res == KS_8)
 				res = KS_Delete;
+			/* convert CTL-/ to ^_ as xterm does (undo in emacs) */
+			else if (res == KS_slash)
+				res = KS_underscore & 0x1f;
 		}
 		if (MOD_ONESET(id, MOD_ANYMETA)) {
 			if (id->t_flags & WSKFL_METAESC) {

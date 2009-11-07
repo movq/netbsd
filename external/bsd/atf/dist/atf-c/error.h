@@ -30,16 +30,16 @@
 #if !defined(ATF_C_ERROR_H)
 #define ATF_C_ERROR_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #include <atf-c/error_fwd.h>
-#include <atf-c/object.h>
 
 /* ---------------------------------------------------------------------
  * The "atf_error" type.
  * --------------------------------------------------------------------- */
 
 struct atf_error {
-    atf_object_t m_object;
-
     bool m_free;
     const char *m_type;
     void *m_data;
@@ -64,6 +64,7 @@ void atf_error_format(const atf_error_t, char *, size_t);
 
 atf_error_t atf_libc_error(int, const char *, ...);
 int atf_libc_error_code(const atf_error_t);
+const char *atf_libc_error_msg(const atf_error_t);
 
 atf_error_t atf_no_memory_error(void);
 

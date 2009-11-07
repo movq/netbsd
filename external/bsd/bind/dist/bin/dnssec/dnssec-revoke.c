@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssec-revoke.c,v 1.1.1.1 2009/10/25 00:01:32 christos Exp $	*/
+/*	$NetBSD: dnssec-revoke.c,v 1.2.6.1 2012/06/06 18:17:10 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dnssec-revoke.c,v 1.16 2009/10/12 20:48:10 each Exp */
+/* Id: dnssec-revoke.c,v 1.24 2011/10/20 23:46:51 tbox Exp  */
 
 /*! \file */
 
@@ -56,12 +56,11 @@ usage(void) {
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr,	"    %s [options] keyfile\n\n", program);
 	fprintf(stderr, "Version: %s\n", VERSION);
-	fprintf(stderr, "\t-E engine:\n");
 #ifdef USE_PKCS11
-	fprintf(stderr, "\t\tname of an OpenSSL engine to use "
-				"(default is \"pkcs11\")\n");
+	fprintf(stderr, "    -E engine:    specify OpenSSL engine "
+					   "(default \"pkcs11\")\n");
 #else
-	fprintf(stderr, "\t\tname of an OpenSSL engine to use\n");
+	fprintf(stderr, "    -E engine:    specify OpenSSL engine\n");
 #endif
 	fprintf(stderr, "    -f:	   force overwrite\n");
 	fprintf(stderr, "    -K directory: use directory for key files\n");
@@ -95,6 +94,7 @@ main(int argc, char **argv) {
 	isc_buffer_t buf;
 	isc_boolean_t force = ISC_FALSE;
 	isc_boolean_t remove = ISC_FALSE;
+	isc_boolean_t id = ISC_FALSE;
 
 	if (argc == 1)
 		usage();
@@ -107,7 +107,7 @@ main(int argc, char **argv) {
 
 	isc_commandline_errprint = ISC_FALSE;
 
-	while ((ch = isc_commandline_parse(argc, argv, "E:fK:rhv:")) != -1) {
+	while ((ch = isc_commandline_parse(argc, argv, "E:fK:rRhv:")) != -1) {
 		switch (ch) {
 		    case 'E':
 			engine = isc_commandline_argument;
@@ -128,6 +128,9 @@ main(int argc, char **argv) {
 			break;
 		    case 'r':
 			remove = ISC_TRUE;
+			break;
+		    case 'R':
+			id = ISC_TRUE;
 			break;
 		    case 'v':
 			verbose = strtol(isc_commandline_argument, &endp, 0);
@@ -158,8 +161,16 @@ main(int argc, char **argv) {
 	if (dir != NULL) {
 		filename = argv[isc_commandline_index];
 	} else {
-		isc_file_splitpath(mctx, argv[isc_commandline_index],
-				   &dir, &filename);
+		result = isc_file_splitpath(mctx, argv[isc_commandline_index],
+					    &dir, &filename);
+		if (result != ISC_R_SUCCESS)
+			fatal("cannot process filename %s: %s",
+			      argv[isc_commandline_index],
+			      isc_result_totext(result));
+		if (strcmp(dir, ".") == 0) {
+			isc_mem_free(mctx, dir);
+			dir = NULL;
+		}
 	}
 
 	if (ectx == NULL)
@@ -181,17 +192,24 @@ main(int argc, char **argv) {
 		fatal("Invalid keyfile name %s: %s",
 		      filename, isc_result_totext(result));
 
-	if (verbose > 2) {
-		char keystr[DST_KEY_FORMATSIZE];
-
-		dst_key_format(key, keystr, sizeof(keystr));
-		fprintf(stderr, "%s: %s\n", program, keystr);
+	if (id) {
+		fprintf(stdout, "%u\n", dst_key_rid(key));
+		goto cleanup;
 	}
+	dst_key_format(key, keystr, sizeof(keystr));
+
+	if (verbose > 2)
+		fprintf(stderr, "%s: %s\n", program, keystr);
+
+	if (force)
+		set_keyversion(key);
+	else
+		check_keyversion(key, keystr);
+
 
 	flags = dst_key_flags(key);
 	if ((flags & DNS_KEYFLAG_REVOKE) == 0) {
 		isc_stdtime_t now;
-
 
 		if ((flags & DNS_KEYFLAG_KSK) == 0)
 			fprintf(stderr, "%s: warning: Key is not flagged "
@@ -220,10 +238,8 @@ main(int argc, char **argv) {
 			      isc_result_totext(result));
 		}
 
-		printf("%s\n", newname);
-
 		isc_buffer_clear(&buf);
-		dst_key_buildfilename(key, DST_TYPE_PRIVATE, dir, &buf);
+		dst_key_buildfilename(key, 0, dir, &buf);
 		printf("%s\n", newname);
 
 		/*
@@ -255,7 +271,8 @@ cleanup:
 	cleanup_entropy(&ectx);
 	if (verbose > 10)
 		isc_mem_stats(mctx, stdout);
-	isc_mem_free(mctx, dir);
+	if (dir != NULL)
+		isc_mem_free(mctx, dir);
 	isc_mem_destroy(&mctx);
 
 	return (0);

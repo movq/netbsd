@@ -1,7 +1,7 @@
-/*	$NetBSD: resolver.h,v 1.1.1.2 2009/10/25 00:02:38 christos Exp $	*/
+/*	$NetBSD: resolver.h,v 1.4.4.1 2012/06/05 21:14:56 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: resolver.h,v 1.64 2009/09/01 00:22:26 jinmei Exp */
+/* Id: resolver.h,v 1.72 2011/12/05 17:10:51 each Exp  */
 
 #ifndef DNS_RESOLVER_H
 #define DNS_RESOLVER_H 1
@@ -182,7 +182,7 @@ dns_resolver_freeze(dns_resolver_t *res);
  *
  * Requires:
  *
- *\li	'res' is a valid, unfrozen resolver.
+ *\li	'res' is a valid resolver.
  *
  * Ensures:
  *
@@ -494,6 +494,27 @@ dns_resolver_setmustbesecure(dns_resolver_t *resolver, dns_name_t *name,
 isc_boolean_t
 dns_resolver_getmustbesecure(dns_resolver_t *resolver, dns_name_t *name);
 
+
+void
+dns_resolver_settimeout(dns_resolver_t *resolver, unsigned int seconds);
+/*%<
+ * Set the length of time the resolver will work on a query, in seconds.
+ *
+ * If timeout is 0, the default timeout will be applied.
+ *
+ * Requires:
+ * \li  resolver to be valid.
+ */
+
+unsigned int
+dns_resolver_gettimeout(dns_resolver_t *resolver);
+/*%<
+ * Get the current length of time the resolver will work on a query, in seconds.
+ *
+ * Requires:
+ * \li  resolver to be valid.
+ */
+
 void
 dns_resolver_setclientsperquery(dns_resolver_t *resolver,
 				isc_uint32_t min, isc_uint32_t max);
@@ -510,6 +531,48 @@ dns_resolver_setzeronosoattl(dns_resolver_t *resolver, isc_boolean_t state);
 
 unsigned int
 dns_resolver_getoptions(dns_resolver_t *resolver);
+
+void
+dns_resolver_addbadcache(dns_resolver_t *resolver, dns_name_t *name,
+			 dns_rdatatype_t type, isc_time_t *expire);
+/*%<
+ * Add a entry to the bad cache for <name,type> that will expire at 'expire'.
+ *
+ * Requires:
+ * \li	resolver to be valid.
+ * \li	name to be valid.
+ */
+
+isc_boolean_t
+dns_resolver_getbadcache(dns_resolver_t *resolver, dns_name_t *name,
+			 dns_rdatatype_t type, isc_time_t *now);
+/*%<
+ * Check to see if there is a unexpired entry in the bad cache for
+ * <name,type>.
+ *
+ * Requires:
+ * \li	resolver to be valid.
+ * \li	name to be valid.
+ */
+
+void
+dns_resolver_flushbadcache(dns_resolver_t *resolver, dns_name_t *name);
+/*%<
+ * Flush the bad cache of all entries at 'name' if 'name' is non NULL.
+ * Flush the entire bad cache if 'name' is NULL.
+ *
+ * Requires:
+ * \li	resolver to be valid.
+ */
+
+void
+dns_resolver_printbadcache(dns_resolver_t *resolver, FILE *fp);
+/*%
+ * Print out the contents of the bad cache to 'fp'.
+ *
+ * Requires:
+ * \li	resolver to be valid.
+ */
 
 ISC_LANG_ENDDECLS
 

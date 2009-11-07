@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.10 2008/10/25 22:27:35 apb Exp $
+# $NetBSD: Makefile,v 1.12 2011/05/26 12:56:29 joerg Exp $
 
 # $FreeBSD: src/gnu/usr.bin/groff/src/roff/troff/Makefile,v 1.4 2003/05/01 13:22:20 ru Exp $
 
@@ -7,10 +7,10 @@ DIST_SUBDIR=	src/roff/troff
 PROG=		troff
 SRCS=		dictionary.cpp div.cpp env.cpp input.cpp \
 		majorminor.cpp mtsm.cpp node.cpp number.cpp reg.cpp
-DPADD+=		${LIBGROFF} ${LIBM} ${LIBSUPCXX}
-LDADD+=		${LIBGROFF} -lm -lsupc++
 CLEANFILES=	majorminor.cpp ${MAN}
 USETBL=
+
+CWARNFLAGS.clang+=	-Wno-format-security
 
 .include <bsd.prog.mk>
 

@@ -1,4 +1,4 @@
-/* $NetBSD: rm.c,v 1.49 2009/02/14 08:05:04 lukem Exp $ */
+/* $NetBSD: rm.c,v 1.51.2.1 2012/06/15 10:00:05 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993, 1994, 2003
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)rm.c	8.8 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: rm.c,v 1.49 2009/02/14 08:05:04 lukem Exp $");
+__RCSID("$NetBSD: rm.c,v 1.51.2.1 2012/06/15 10:00:05 sborrill Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,20 +54,22 @@ __RCSID("$NetBSD: rm.c,v 1.49 2009/02/14 08:05:04 lukem Exp $");
 #include <grp.h>
 #include <locale.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-int dflag, eval, fflag, iflag, Pflag, stdin_ok, vflag, Wflag;
+static int dflag, eval, fflag, iflag, Pflag, stdin_ok, vflag, Wflag;
+static sig_atomic_t pinfo;
 
-int	check(char *, char *, struct stat *);
-void	checkdot(char **);
-void	rm_file(char **);
-int	rm_overwrite(char *, struct stat *);
-void	rm_tree(char **);
-void	usage(void);
-int	main(int, char *[]);
+static int	check(char *, char *, struct stat *);
+static void	checkdot(char **);
+static void	progress(int);
+static void	rm_file(char **);
+static int	rm_overwrite(char *, struct stat *);
+static void	rm_tree(char **);
+__dead static void	usage(void);
 
 /*
  * For the sake of the `-f' flag, check whether an error number indicates the
@@ -132,6 +134,8 @@ main(int argc, char *argv[])
 		usage();
 	}
 
+	(void)signal(SIGINFO, progress);
+
 	checkdot(argv);
 
 	if (*argv) {
@@ -147,7 +151,7 @@ main(int argc, char *argv[])
 	/* NOTREACHED */
 }
 
-void
+static void
 rm_tree(char **argv)
 {
 	FTS *fts;
@@ -253,15 +257,17 @@ rm_tree(char **argv)
 		if (rval != 0) {
 			warn("%s", p->fts_path);
 			eval = 1;
-		} else if (vflag)
+		} else if (vflag || pinfo) {
+			pinfo = 0;
 			(void)printf("%s\n", p->fts_path);
+		}
 	}
 	if (errno)
 		err(1, "fts_read");
 	fts_close(fts);
 }
 
-void
+static void
 rm_file(char **argv)
 {
 	struct stat sb;
@@ -371,10 +377,10 @@ rm_file(char **argv)
  * rm_overwrite will return 0 on success.
  */
 
-int
+static int
 rm_overwrite(char *file, struct stat *sbp)
 {
-	struct stat sb;
+	struct stat sb, sb2;
 	int fd, randint;
 	char randchar;
 
@@ -388,8 +394,18 @@ rm_overwrite(char *file, struct stat *sbp)
 		return 0;
 
 	/* flags to try to defeat hidden caching by forcing seeks */
-	if ((fd = open(file, O_RDWR|O_SYNC|O_RSYNC, 0)) == -1)
+	if ((fd = open(file, O_RDWR|O_SYNC|O_RSYNC|O_NOFOLLOW, 0)) == -1)
 		goto err;
+
+	if (fstat(fd, &sb2)) {
+		goto err;
+	}
+
+	if (sb2.st_dev != sbp->st_dev || sb2.st_ino != sbp->st_ino ||
+	    !S_ISREG(sb2.st_mode)) {
+		errno = EPERM;
+		goto err;
+	}
 
 #define RAND_BYTES	1
 #define THIS_BYTE	0
@@ -492,7 +508,7 @@ err:	eval = 1;
 	return 1;
 }
 
-int
+static int
 check(char *path, char *name, struct stat *sp)
 {
 	int ch, first;
@@ -540,7 +556,7 @@ check(char *path, char *name, struct stat *sp)
  * trailing slashes have been removed, we'll remove them here.
  */
 #define ISDOT(a) ((a)[0] == '.' && (!(a)[1] || ((a)[1] == '.' && !(a)[2])))
-void
+static void
 checkdot(char **argv)
 {
 	char *p, **save, **t;
@@ -571,7 +587,7 @@ checkdot(char **argv)
 	}
 }
 
-void
+static void
 usage(void)
 {
 
@@ -579,4 +595,11 @@ usage(void)
 	    getprogname());
 	exit(1);
 	/* NOTREACHED */
+}
+
+static void
+progress(int sig __unused)
+{
+	
+	pinfo++;
 }

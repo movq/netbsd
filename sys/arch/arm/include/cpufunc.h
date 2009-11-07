@@ -213,6 +213,10 @@ void	cpufunc_domains		(u_int);
 u_int	cpufunc_faultstatus	(void);
 u_int	cpufunc_faultaddress	(void);
 
+#if defined(CPU_ARM2) || defined(CPU_ARM250) || defined(CPU_ARM3)
+void	arm3_cache_flush	(void);
+#endif	/* CPU_ARM2 || CPU_ARM250 || CPU_ARM3 */
+
 #ifdef CPU_ARM2
 u_int	arm2_id			(void);
 #endif /* CPU_ARM2 */
@@ -223,7 +227,6 @@ u_int	arm250_id		(void);
 
 #ifdef CPU_ARM3
 u_int	arm3_control		(u_int, u_int);
-void	arm3_cache_flush	(void);
 #endif	/* CPU_ARM3 */
 
 #if defined(CPU_ARM6) || defined(CPU_ARM7)
@@ -365,7 +368,7 @@ extern unsigned arm9_dcache_index_max;
 extern unsigned arm9_dcache_index_inc;
 #endif
 
-#if defined(CPU_ARM9E) || defined(CPU_ARM10)
+#if defined(CPU_ARM9E) || defined(CPU_ARM10) || defined(CPU_SHEEVA)
 void	arm10_tlb_flushID_SE	(u_int);
 void	arm10_tlb_flushI_SE	(u_int);
 
@@ -374,7 +377,7 @@ void	arm10_context_switch	(u_int);
 void	arm10_setup		(char *);
 #endif
 
-#if defined(CPU_ARM9E) || defined (CPU_ARM10)
+#if defined(CPU_ARM9E) || defined (CPU_ARM10) || defined(CPU_SHEEVA)
 void	armv5_ec_setttb			(u_int);
 
 void	armv5_ec_icache_sync_all	(void);
@@ -389,7 +392,7 @@ void	armv5_ec_idcache_wbinv_all	(void);
 void	armv5_ec_idcache_wbinv_range	(vaddr_t, vsize_t);
 #endif
 
-#if defined (CPU_ARM10)
+#if defined (CPU_ARM10) || defined (CPU_ARM11MPCORE)
 void	armv5_setttb		(u_int);
 
 void	armv5_icache_sync_all	(void);
@@ -409,7 +412,11 @@ extern unsigned armv5_dcache_index_max;
 extern unsigned armv5_dcache_index_inc;
 #endif
 
-#if defined(CPU_ARM11)
+#if defined(CPU_ARM11MPCORE)
+void	arm11mpcore_setup		(char *);
+#endif
+
+#if defined(CPU_ARM11) || defined(CPU_CORTEX)
 void	arm11_setttb		(u_int);
 
 void	arm11_tlb_flushID_SE	(u_int);
@@ -444,15 +451,37 @@ void	armv6_idcache_wbinv_all	(void);
 void	armv6_idcache_wbinv_range (vaddr_t, vsize_t);
 #endif
 
+#if defined(CPU_CORTEX)
+void	armv7_setttb(u_int);
+
+void	armv7_icache_sync_range(vaddr_t, vsize_t);
+void	armv7_dcache_wb_range(vaddr_t, vsize_t);
+void	armv7_dcache_wbinv_range(vaddr_t, vsize_t);
+void	armv7_dcache_inv_range(vaddr_t, vsize_t);
+void	armv7_idcache_wbinv_range(vaddr_t, vsize_t);
+
+void 	armv7_dcache_wbinv_all (void);
+void	armv7_idcache_wbinv_all(void);
+void	armv7_icache_sync_all(void);
+void	armv7_cpu_sleep(int);
+void	armv7_context_switch(u_int);
+void	armv7_tlb_flushID_SE(u_int);
+void	armv7_setup		(char *string);
+#endif
+
+
+#if defined(CPU_ARM1136) || defined(CPU_ARM1176)
+void	arm11x6_setttb			(u_int);
+void	arm11x6_idcache_wbinv_all	(void);
+void	arm11x6_dcache_wbinv_all	(void);
+void	arm11x6_icache_sync_all		(void);
+void	arm11x6_flush_prefetchbuf	(void);
+void	arm11x6_icache_sync_range	(vaddr_t, vsize_t);
+void	arm11x6_idcache_wbinv_range	(vaddr_t, vsize_t);
+void	arm11x6_setup			(char *string);
+void	arm11x6_sleep			(int);	/* no ref. for errata */
+#endif
 #if defined(CPU_ARM1136)
-void	arm1136_setttb			(u_int);
-void	arm1136_idcache_wbinv_all	(void);
-void	arm1136_dcache_wbinv_all	(void);
-void	arm1136_icache_sync_all		(void);
-void	arm1136_flush_prefetchbuf	(void);
-void	arm1136_icache_sync_range	(vaddr_t, vsize_t);
-void	arm1136_idcache_wbinv_range	(vaddr_t, vsize_t);
-void	arm1136_setup			(char *string);
 void	arm1136_sleep_rev0		(int);	/* for errata 336501 */
 #endif
 
@@ -461,7 +490,8 @@ void	arm1136_sleep_rev0		(int);	/* for errata 336501 */
     defined(CPU_SA110) || defined(CPU_SA1100) || defined(CPU_SA1110) || \
     defined(CPU_FA526) || \
     defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) || \
-    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425)
+    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425) || \
+    defined(CPU_CORTEX) || defined(CPU_SHEEVA)
 
 void	armv4_tlb_flushID	(void);
 void	armv4_tlb_flushI	(void);
@@ -478,7 +508,8 @@ void	ixp12x0_setup		(char *);
 #endif
 
 #if defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) || \
-    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425)
+    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425) || \
+    defined(CPU_CORTEX)
 
 void	xscale_cpwait		(void);
 #define	cpu_cpwait()		cpufuncs.cf_cpwait()
@@ -518,7 +549,15 @@ void	xscale_cache_flushD_rng	(vaddr_t, vsize_t);
 void	xscale_context_switch	(u_int);
 
 void	xscale_setup		(char *);
-#endif	/* CPU_XSCALE_80200 || CPU_XSCALE_80321 || __CPU_XSCALE_PXA2XX || CPU_XSCALE_IXP425 */
+#endif	/* CPU_XSCALE_80200 || CPU_XSCALE_80321 || __CPU_XSCALE_PXA2XX || CPU_XSCALE_IXP425 || CPU_CORTEX */
+
+#if defined(CPU_SHEEVA)
+void	sheeva_dcache_wbinv_range (vaddr_t, vsize_t);
+void	sheeva_dcache_inv_range	(vaddr_t, vsize_t);
+void	sheeva_dcache_wb_range	(vaddr_t, vsize_t);
+void	sheeva_idcache_wbinv_range (vaddr_t, vsize_t);
+void	sheeva_setup(char *);
+#endif
 
 #define tlb_flush	cpu_tlb_flushID
 #define setttb		cpu_setttb

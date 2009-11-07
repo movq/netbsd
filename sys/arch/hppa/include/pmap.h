@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.21 2009/05/24 06:53:35 skrll Exp $	*/
+/*	$NetBSD: pmap.h,v 1.36 2012/01/06 20:55:28 skrll Exp $	*/
 
 /*	$OpenBSD: pmap.h,v 1.35 2007/12/14 18:32:23 deraadt Exp $	*/
 
@@ -35,6 +35,10 @@
 #ifndef	_HPPA_PMAP_H_
 #define	_HPPA_PMAP_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_cputype.h"
+#endif
+
 #include <sys/mutex.h>
 #include <machine/pte.h>
 #include <machine/cpufunc.h>
@@ -44,9 +48,12 @@
 
 #ifdef	_KERNEL
 
+#define PMAP_NEED_PROCWR
+
 struct pmap {
 	struct uvm_object pm_obj;	/* object (lck by object lock) */
 #define	pm_lock	pm_obj.vmobjlock
+	kmutex_t	pm_obj_lock;	/* lock for pm_obj */
 	struct vm_page	*pm_ptphint;
 	struct vm_page	*pm_pdir_pg;	/* vm_page for pdir */
 	volatile uint32_t *pm_pdir;	/* page dir (read-only after create) */
@@ -56,37 +63,11 @@ struct pmap {
 	struct pmap_statistics	pm_stats;
 };
 
-#define	PMAP_NC		0x100
-
-/*
- * Flags that indicate attributes of pages or mappings of pages.
- *
- * We need two flags for cacheability because pages/mappings can be marked
- * uncacheable for two reasons,
- *
- *	1) A page's contents may change under our feet and can never be
- *	   cacheable, e.g. I/O space, DMA buffers.
- *	2) A page has non-equivalent aliases and must be (temporarily)
- *	   marked uncachable.
- *
- * A page that is marked PVF_NC can *never* be marked cacheable and will have
- * all mappings marked PVF_UNCACHEABLE. A page marked PVF_UNCACHEABLE only
- * is done so due to non-equivalent aliases this maybe removed is the non-
- * equivalent aliases are removed. 
- *
- */
-
-#define	PVF_NC		0x2000			/* pg is never cacheable */
-
 #define	PVF_MOD		PTE_PROT(TLB_DIRTY)	/* pg/mp is modified */
 #define	PVF_REF		PTE_PROT(TLB_REFTRAP)	/* pg/mp (inv) is referenced */
 #define	PVF_WRITE	PTE_PROT(TLB_WRITE)	/* pg/mp is writable */
-#define	PVF_UNCACHEABLE	PTE_PROT(TLB_UNCACHEABLE)
-						/* pg/mp is uncacheable */
-
-#define	pmap_is_aliased(pg)	\
-	(((pg)->mdpage.pvh_attrs & PVF_NC) == 0 && \
-	 ((pg)->mdpage.pvh_attrs & PVF_UNCACHEABLE) != 0)
+#define	PVF_EXEC	PTE_PROT(TLB_EXECUTE)	/* pg/mp is executable */
+#define	PVF_UNCACHEABLE	PTE_PROT(TLB_UNCACHEABLE)	/* pg/mp is uncacheable */
 
 #define	HPPA_MAX_PID	0xfffa
 #define	HPPA_SID_MAX	0x7ffd
@@ -121,6 +102,11 @@ static inline vaddr_t hppa_map_poolpage(paddr_t pa)
 static inline paddr_t hppa_unmap_poolpage(vaddr_t va)
 {
 	pdcache(HPPA_SID_KERNEL, va, PAGE_SIZE);
+
+#if defined(HP8000_CPU) || defined(HP8200_CPU) || \
+    defined(HP8500_CPU) || defined(HP8600_CPU)
+	pdtlb(HPPA_SID_KERNEL, va);
+#endif
 
 	return (paddr_t)va;
 }
@@ -163,6 +149,8 @@ void pmap_write_protect(struct pmap *, vaddr_t, vaddr_t, vm_prot_t);
 void pmap_remove(struct pmap *pmap, vaddr_t sva, vaddr_t eva);
 void pmap_page_remove(struct vm_page *pg);
 
+void pmap_procwr(struct proc *, vaddr_t, size_t);
+
 static inline void
 pmap_deactivate(struct lwp *l)
 {
@@ -179,7 +167,7 @@ static inline int
 pmap_prot(struct pmap *pmap, int prot)
 {
 	extern u_int hppa_prot[];
-	return (hppa_prot[prot] | (pmap == pmap_kernel()? 0 : TLB_USER));
+	return (hppa_prot[prot] | (pmap == pmap_kernel() ? 0 : TLB_USER));
 }
 
 static inline void
@@ -207,6 +195,21 @@ pmap_protect(struct pmap *pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 #define	pmap_sid(pmap, va) \
 	((((va) & 0xc0000000) != 0xc0000000) ? \
 	 (pmap)->pm_space : HPPA_SID_KERNEL)
+
+#define __HAVE_VM_PAGE_MD
+
+struct pv_entry;
+
+struct vm_page_md {
+	struct pv_entry	*pvh_list;	/* head of list */
+	u_int		pvh_attrs;	/* to preserve ref/mod */
+};
+
+#define	VM_MDPAGE_INIT(pg) \
+do {									\
+	(pg)->mdpage.pvh_list = NULL;					\
+	(pg)->mdpage.pvh_attrs = 0;					\
+} while (0)
 
 #endif /* _KERNEL */
 

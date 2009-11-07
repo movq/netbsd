@@ -1,4 +1,4 @@
-/*	$NetBSD: cyclic.h,v 1.1 2009/08/07 20:57:57 haad Exp $	*/
+/*	$NetBSD: cyclic.h,v 1.3 2010/02/21 01:46:35 darran Exp $	*/
 
 /*
  * Copyright (C) 2007 John Birrell <jb@freebsd.org>

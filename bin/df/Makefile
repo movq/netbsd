@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.17 2009/02/14 08:31:13 lukem Exp $
+#	$NetBSD: Makefile,v 1.19 2011/08/28 08:20:58 christos Exp $
 #	@(#)Makefile	8.3 (Berkeley) 5/8/95
 
 .include <bsd.own.mk>
 
 PROG=	df
-.PATH:  ${NETBSDSRCDIR}/bin/csh
-SRCS=	df.c strpct.c
+
+LDADD+=-lutil
+DPADD+=${LIBUTIL}
 
 .include <bsd.prog.mk>

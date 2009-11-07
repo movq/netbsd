@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.332 2009/10/26 19:16:56 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.343 2012/01/27 18:52:57 para Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -32,41 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- */
+
 /*-
  * Copyright (C) 1993	Allen K. Briggs, Chris P. Caputo,
  *			Michael L. Finch, Bradley A. Grantham, and
@@ -107,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.332 2009/10/26 19:16:56 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.343 2012/01/27 18:52:57 para Exp $");
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
@@ -140,9 +107,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.332 2009/10/26 19:16:56 cegger Exp $")
 #include <sys/reboot.h>
 #include <sys/signalvar.h>
 #include <sys/syscallargs.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
@@ -159,6 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.332 2009/10/26 19:16:56 cegger Exp $")
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
@@ -170,6 +138,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.332 2009/10/26 19:16:56 cegger Exp $")
 #include <sys/sysctl.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/iopreg.h>
 #include <machine/psc.h>
@@ -219,7 +188,6 @@ struct mac68k_video mac68k_video;
 int	(*mac68k_bell_callback)(void *, int, int, int);
 void *	mac68k_bell_cookie;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
@@ -310,7 +278,7 @@ mac68k_init(void)
 	 * on the machine.  When the amount of RAM is found, all
 	 * extents of RAM are allocated from the map.
 	 */
-	iomem_ex = extent_create("iomem", 0x0, 0xffffffff, M_DEVBUF,
+	iomem_ex = extent_create("iomem", 0x0, 0xffffffff,
 	    (void *)iomem_ex_storage, sizeof(iomem_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 
@@ -450,12 +418,6 @@ cpu_startup(void)
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 	    VM_PHYS_SIZE, 0, false, NULL);
 
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
-
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
 
@@ -477,51 +439,18 @@ initcpu(void)
 
 void doboot(void) __attribute__((__noreturn__));
 
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
 int	waittime = -1;
 struct pcb dumppcb;
 
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 	extern u_long maxaddr;
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* If system is cold, just halt. */
 	if (cold) {
@@ -710,7 +639,6 @@ cpu_dumpconf(void)
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
-	const struct bdevsw *bdev;
 	int chdrsize;	/* size of dump header */
 	int nblks;	/* size of dump area */
 	int i;
@@ -718,14 +646,7 @@ cpu_dumpconf(void)
 	if (dumpdev == NODEV)
 		return;
 
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	if (bdev->d_psize == NULL)
-		return;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	chdrsize = cpu_dumpsize();
 
 	dumpsize = 0;
@@ -930,6 +851,16 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 
 	return error;
 }
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif
 
 static char *envbuf = NULL;
 
@@ -2738,4 +2669,12 @@ mac68k_ring_bell(int freq, int length, int volume)
 		    freq, length, volume));
 	else
 		return (ENXIO);
+}
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+	extern u_long maxaddr;
+
+	return (pa < maxaddr) ? 0 : EFAULT;
 }

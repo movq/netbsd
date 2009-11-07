@@ -1,7 +1,7 @@
-/*	$NetBSD: view.h,v 1.1.1.2 2009/10/25 00:02:39 christos Exp $	*/
+/*	$NetBSD: view.h,v 1.3.4.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: view.h,v 1.118 2009/06/30 02:52:32 each Exp */
+/* Id */
 
 #ifndef DNS_VIEW_H
 #define DNS_VIEW_H 1
@@ -75,7 +75,10 @@
 
 #include <dns/acl.h>
 #include <dns/fixedname.h>
+#include <dns/rdatastruct.h>
+#include <dns/rpz.h>
 #include <dns/types.h>
+#include <dns/zt.h>
 
 ISC_LANG_BEGINDECLS
 
@@ -94,7 +97,13 @@ struct dns_view {
 	dns_cache_t *			cache;
 	dns_db_t *			cachedb;
 	dns_db_t *			hints;
-	dns_keytable_t *		secroots;   /* security roots */
+
+	/*
+	 * security roots.
+	 * internal use only; access via * dns_view_getsecroots()
+	 */
+	dns_keytable_t *		secroots_priv;
+
 	isc_mutex_t			lock;
 	isc_boolean_t			frozen;
 	isc_task_t *			task;
@@ -120,6 +129,8 @@ struct dns_view {
 	isc_boolean_t			enablevalidation;
 	isc_boolean_t			acceptexpired;
 	dns_transfer_format_t		transfer_format;
+	dns_acl_t *			cacheacl;
+	dns_acl_t *			cacheonacl;
 	dns_acl_t *			queryacl;
 	dns_acl_t *			queryonacl;
 	dns_acl_t *			recursionacl;
@@ -133,7 +144,6 @@ struct dns_view {
 	dns_rbt_t *			answeracl_exclude;
 	dns_rbt_t *			denyanswernames;
 	dns_rbt_t *			answernames_exclude;
-	isc_boolean_t			requestixfr;
 	isc_boolean_t			provideixfr;
 	isc_boolean_t			requestnsid;
 	dns_ttl_t			maxcachettl;
@@ -149,6 +159,11 @@ struct dns_view {
 	dns_name_t *			dlv;
 	dns_fixedname_t			dlv_fixed;
 	isc_uint16_t			maxudp;
+	dns_v4_aaaa_t			v4_aaaa;
+	dns_acl_t *			v4_aaaa_acl;
+	dns_dns64list_t 		dns64;
+	unsigned int 			dns64cnt;
+	ISC_LIST(dns_rpz_zone_t)	rpz_zones;
 
 	/*
 	 * Configurable data for server use only,
@@ -167,6 +182,17 @@ struct dns_view {
 	/* Under owner's locking control. */
 	ISC_LINK(struct dns_view)	link;
 	dns_viewlist_t *		viewlist;
+
+	dns_zone_t *			managed_keys;
+	dns_zone_t *			redirect;
+
+#ifdef BIND9
+	/* File in which to store configuration for newly added zones */
+	char *				new_zone_file;
+
+	void *				new_zone_config;
+	void				(*cfg_destroy)(void **);
+#endif
 };
 
 #define DNS_VIEW_MAGIC			ISC_MAGIC('V','i','e','w')
@@ -355,6 +381,8 @@ dns_view_sethints(dns_view_t *view, dns_db_t *hints);
 
 void
 dns_view_setkeyring(dns_view_t *view, dns_tsig_keyring_t *ring);
+void
+dns_view_setdynamickeyring(dns_view_t *view, dns_tsig_keyring_t *ring);
 /*%<
  * Set the view's static TSIG keys
  *
@@ -368,6 +396,15 @@ dns_view_setkeyring(dns_view_t *view, dns_tsig_keyring_t *ring);
  * Ensures:
  *
  *\li      The static TSIG keyring of 'view' is 'ring'.
+ */
+
+void
+dns_view_getdynamickeyring(dns_view_t *view, dns_tsig_keyring_t **ringp);
+/*%<
+ * Return the views dynamic keys.
+ *
+ *   \li  'view' is a valid, unfrozen view.
+ *   \li  'ringp' != NULL && ringp == NULL.
  */
 
 void
@@ -407,7 +444,7 @@ dns_view_addzone(dns_view_t *view, dns_zone_t *zone);
 void
 dns_view_freeze(dns_view_t *view);
 /*%<
- * Freeze view.
+ * Freeze view.  No changes can be made to view configuration while frozen.
  *
  * Requires:
  *
@@ -418,14 +455,44 @@ dns_view_freeze(dns_view_t *view);
  *\li	'view' is frozen.
  */
 
+void
+dns_view_thaw(dns_view_t *view);
+/*%<
+ * Thaw view.  This allows zones to be added or removed at runtime.  This is
+ * NOT thread-safe; the caller MUST have run isc_task_exclusive() prior to
+ * thawing the view.
+ *
+ * Requires:
+ *
+ *\li	'view' is a valid, frozen view.
+ *
+ * Ensures:
+ *
+ *\li	'view' is no longer frozen.
+ */
 isc_result_t
 dns_view_find(dns_view_t *view, dns_name_t *name, dns_rdatatype_t type,
 	      isc_stdtime_t now, unsigned int options, isc_boolean_t use_hints,
 	      dns_db_t **dbp, dns_dbnode_t **nodep, dns_name_t *foundname,
 	      dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset);
+isc_result_t
+dns_view_find2(dns_view_t *view, dns_name_t *name, dns_rdatatype_t type,
+	       isc_stdtime_t now, unsigned int options,
+	       isc_boolean_t use_hints, isc_boolean_t use_static_stub,
+	       dns_db_t **dbp, dns_dbnode_t **nodep, dns_name_t *foundname,
+	       dns_rdataset_t *rdataset, dns_rdataset_t *sigrdataset);
 /*%<
  * Find an rdataset whose owner name is 'name', and whose type is
  * 'type'.
+ * In general, this function first searches view's zone and cache DBs for the
+ * best match data against 'name'.  If nothing found there, and if 'use_hints'
+ * is ISC_TRUE, the view's hint DB (if configured) is searched.
+ * If the view is configured with a static-stub zone which gives the longest
+ * match for 'name' among the zones, however, the cache DB is not consulted
+ * unless 'use_static_stub' is ISC_FALSE (see below about this argument).
+ *
+ * dns_view_find() is a backward compatible version equivalent to
+ * dns_view_find2() with use_static_stub argument being ISC_FALSE.
  *
  * Notes:
  *
@@ -440,6 +507,23 @@ dns_view_find(dns_view_t *view, dns_name_t *name, dns_rdatatype_t type,
  *	database, the result code will be DNS_R_HINT.  If the name is found
  *	in the hints database but not the type, the result code will be
  *	#DNS_R_HINTNXRRSET.
+ *
+ *\li	If 'use_static_stub' is ISC_FALSE and the longest match zone for 'name'
+ *	is a static-stub zone, it's ignored and the cache and/or hints will be
+ *	searched.  In the majority of the cases this argument should be
+ *	ISC_FALSE.  The only known usage of this argument being ISC_TRUE is
+ *	if this search is for a "bailiwick" glue A or AAAA RRset that may
+ *	best match a static-stub zone.  Consider the following example:
+ *	this view is configured with a static-stub zone "example.com",
+ *	and an attempt of recursive resolution needs to send a query for the
+ *	zone.  In this case it's quite likely that the resolver is trying to
+ *	find A/AAAA RRs for the apex name "example.com".  And, to honor the
+ *	static-stub configuration it needs to return the glue RRs in the
+ *	static-stub zone even if that exact RRs coming from the authoritative
+ *	zone has been cached.
+ *	In other general cases, the requested data is better to be
+ *	authoritative, either locally configured or retrieved from an external
+ *	server, and the data in the static-stub zone should better be ignored.
  *
  *\li	'foundname' must meet the requirements of dns_db_find().
  *
@@ -646,14 +730,21 @@ dns_view_load(dns_view_t *view, isc_boolean_t stop);
 
 isc_result_t
 dns_view_loadnew(dns_view_t *view, isc_boolean_t stop);
+
+isc_result_t
+dns_view_asyncload(dns_view_t *view, dns_zt_allloaded_t callback, void *arg);
 /*%<
  * Load zones attached to this view.  dns_view_load() loads
  * all zones whose master file has changed since the last
  * load; dns_view_loadnew() loads only zones that have never
  * been loaded.
  *
+ * dns_view_asyncload() loads zones asynchronously.  When all zones
+ * in the view have finished loading, 'callback' is called with argument
+ * 'arg' to inform the caller.
+ *
  * If 'stop' is ISC_TRUE, stop on the first error and return it.
- * If 'stop' is ISC_FALSE, ignore errors.
+ * If 'stop' is ISC_FALSE (or we are loading asynchronously), ignore errors.
  *
  * Requires:
  *
@@ -757,9 +848,31 @@ dns_view_flushcache2(dns_view_t *view, isc_boolean_t fixuponly);
  */
 
 isc_result_t
-dns_view_flushname(dns_view_t *view, dns_name_t *);
+dns_view_flushnode(dns_view_t *view, dns_name_t *name, isc_boolean_t tree);
 /*%<
- * Flush the given name from the view's cache (and ADB).
+ * Flush the given name from the view's cache (and optionally ADB/badcache).
+ *
+ * If 'tree' is true, flush 'name' and all names below it
+ * from the cache, but do not flush ADB.
+ *
+ * If 'tree' is false, flush 'name' frmo both the cache and ADB,
+ * but do not touch any other nodes.
+ *
+ * Requires:
+ *\li	'view' is valid.
+ *\li	'name' is valid.
+ *
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ *	other returns are failures.
+ */
+
+isc_result_t
+dns_view_flushname(dns_view_t *view, dns_name_t *name);
+/*%<
+ * Flush the given name from the view's cache, ADB and badcache.
+ * Equivalent to dns_view_flushnode(view, name, ISC_FALSE).
+ *
  *
  * Requires:
  *\li	'view' is valid.
@@ -774,7 +887,6 @@ isc_result_t
 dns_view_adddelegationonly(dns_view_t *view, dns_name_t *name);
 /*%<
  * Add the given name to the delegation only table.
- *
  *
  * Requires:
  *\li	'view' is valid.
@@ -905,5 +1017,95 @@ dns_view_iscacheshared(dns_view_t *view);
  *\li	#ISC_TRUE if the cache is shared.
  *\li	#ISC_FALSE otherwise.
  */
+
+isc_result_t
+dns_view_initsecroots(dns_view_t *view, isc_mem_t *mctx);
+/*%<
+ * Initialize security roots for the view.  (Note that secroots is
+ * NULL until this function is called, so any function using
+ * secroots must check its validity first.  One way to do this is
+ * use dns_view_getsecroots() and check its return value.)
+ *
+ * Requires:
+ * \li	'view' is valid.
+ * \li	'view->secroots' is NULL.
+ *
+ * Returns:
+ *\li	ISC_R_SUCCESS
+ *\li	Any other result indicates failure
+ */
+
+isc_result_t
+dns_view_getsecroots(dns_view_t *view, dns_keytable_t **ktp);
+/*%<
+ * Get the security roots for this view.  Returns ISC_R_NOTFOUND if
+ * the security roots keytable has not been initialized for the view.
+ *
+ * '*ktp' is attached on success; the caller is responsible for
+ * detaching it with dns_keytable_detach().
+ *
+ * Requires:
+ * \li	'view' is valid.
+ * \li	'ktp' is not NULL and '*ktp' is NULL.
+ *
+ * Returns:
+ *\li	ISC_R_SUCCESS
+ *\li	ISC_R_NOTFOUND
+ */
+
+isc_result_t
+dns_view_issecuredomain(dns_view_t *view, dns_name_t *name,
+			 isc_boolean_t *secure_domain);
+/*%<
+ * Is 'name' at or beneath a trusted key?  Put answer in
+ * '*secure_domain'.
+ *
+ * Requires:
+ * \li	'view' is valid.
+ *
+ * Returns:
+ *\li	ISC_R_SUCCESS
+ *\li	Any other value indicates failure
+ */
+
+void
+dns_view_untrust(dns_view_t *view, dns_name_t *keyname,
+		 dns_rdata_dnskey_t *dnskey, isc_mem_t *mctx);
+/*%<
+ * Remove keys that match 'keyname' and 'dnskey' from the views trust
+ * anchors.
+ *
+ * Requires:
+ * \li	'view' is valid.
+ * \li	'keyname' is valid.
+ * \li	'mctx' is valid.
+ * \li	'dnskey' is valid.
+ */
+
+void
+dns_view_setnewzones(dns_view_t *view, isc_boolean_t allow, void *cfgctx,
+		     void (*cfg_destroy)(void **));
+/*%<
+ * Set whether or not to allow zones to be created or deleted at runtime.
+ *
+ * If 'allow' is ISC_TRUE, determines the filename into which new zone
+ * configuration will be written.  Preserves the configuration context
+ * (a pointer to which is passed in 'cfgctx') for use when parsing new
+ * zone configuration.  'cfg_destroy' points to a callback routine to
+ * destroy the configuration context when the view is destroyed.  (This
+ * roundabout method is used in order to avoid libdns having a dependency
+ * on libisccfg and libbind9.)
+ *
+ * If 'allow' is ISC_FALSE, removes any existing references to
+ * configuration context and frees any memory.
+ *
+ * Requires:
+ * \li 'view' is valid.
+ */
+
+void
+dns_view_restorekeyring(dns_view_t *view);
+
+ISC_LANG_ENDDECLS
 
 #endif /* DNS_VIEW_H */

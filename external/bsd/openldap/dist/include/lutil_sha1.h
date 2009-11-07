@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/include/lutil_sha1.h,v 1.28.2.3 2008/02/11 23:26:40 kurt Exp $ */
+/*	$NetBSD: lutil_sha1.h,v 1.1.1.3 2010/12/12 15:21:25 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/include/lutil_sha1.h,v 1.28.2.5 2010/04/13 20:22:49 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2008 The OpenLDAP Foundation.
+ * Copyright 1998-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,7 +16,7 @@
  */
 
 /* This version is based on:
- *	$OpenBSD: sha1.h,v 1.8 1997/07/15 01:54:23 millert Exp $	*/
+ *	OpenBSD: sha1.h,v 1.8 1997/07/15 01:54:23 millert Exp	*/
 
 #ifndef _LUTIL_SHA1_H_
 #define _LUTIL_SHA1_H_

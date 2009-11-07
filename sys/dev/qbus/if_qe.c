@@ -1,4 +1,4 @@
-/*      $NetBSD: if_qe.c,v 1.69 2009/03/18 16:00:20 cegger Exp $ */
+/*      $NetBSD: if_qe.c,v 1.71 2010/04/05 07:21:47 joerg Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -38,10 +38,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.69 2009/03/18 16:00:20 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.71 2010/04/05 07:21:47 joerg Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -57,10 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.69 2009/03/18 16:00:20 cegger Exp $");
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -495,10 +492,7 @@ qestart(struct ifnet *ifp)
 
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		/*
 		 * m now points to a mbuf chain that can be loaded.
 		 * Loop around and set it.
@@ -597,10 +591,7 @@ qeintr(void *arg)
 			m->m_pkthdr.len = m->m_len = len;
 			if (++sc->sc_nextrx == RXDESCS)
 				sc->sc_nextrx = 0;
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
+			bpf_mtap(ifp, m);
 			if ((status1 & QE_ESETUP) == 0)
 				(*ifp->if_input)(ifp, m);
 			else

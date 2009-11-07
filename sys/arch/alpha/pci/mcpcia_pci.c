@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia_pci.c,v 1.8 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: mcpcia_pci.c,v 1.11 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1998 by Matthew Jacob
@@ -32,14 +32,12 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia_pci.c,v 1.8 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia_pci.c,v 1.11 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -48,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia_pci.c,v 1.8 2009/03/14 21:04:02 dsl Exp $");
 
 #define	KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
-static void mcpcia_attach_hook(struct device *, struct device *,
+static void mcpcia_attach_hook(device_t, device_t,
 	struct pcibus_attach_args *);
 static int
 mcpcia_bus_maxdevs(void *, int);
@@ -74,7 +72,7 @@ mcpcia_pci_init(pci_chipset_tag_t pc, void *v)
 }
 
 static void
-mcpcia_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
+mcpcia_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 }
 
@@ -113,7 +111,7 @@ mcpcia_conf_read(void *cpv, pcitag_t tag, int offset)
 	/*
 	 * There's nothing in slot 0 on a primary bus- don't even try.
 	 */
-	if ((tag >> 21) == 0 && ((u_int32_t) tag & 0x1f0000) == 0)
+	if ((tag >> 21) == 0 && ((uint32_t) tag & 0x1f0000) == 0)
 		return (data);
 
 	if (ccp == NULL) {
@@ -141,7 +139,7 @@ mcpcia_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 	/*
 	 * There's nothing in slot 0 on a primary bus- don't even try.
 	 */
-	if ((tag >> 21) == 0 && ((u_int32_t) tag & 0x1f0000) == 0)
+	if ((tag >> 21) == 0 && ((uint32_t) tag & 0x1f0000) == 0)
 		return;
 
 	if (ccp == NULL) {

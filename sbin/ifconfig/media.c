@@ -1,6 +1,6 @@
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: media.c,v 1.3 2008/07/15 21:27:58 dyoung Exp $");
+__RCSID("$NetBSD: media.c,v 1.6 2011/08/29 14:35:00 joerg Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -24,6 +24,7 @@ __RCSID("$NetBSD: media.c,v 1.3 2008/07/15 21:27:58 dyoung Exp $");
 #include "media.h"
 #include "parse.h"
 #include "util.h"
+#include "prog_ops.h"
 
 static void init_current_media(prop_dictionary_t, prop_dictionary_t);
 static void media_constructor(void) __attribute__((constructor));
@@ -51,21 +52,21 @@ static const int ifm_status_valid_list[] = IFM_STATUS_VALID_LIST;
 static const struct ifmedia_status_description ifm_status_descriptions[] =
     IFM_STATUS_DESCRIPTIONS;
 
-static struct pstr mediamode = PSTR_INITIALIZER(&mediamode, "mediamode",
-    setmediamode, "mediamode", &command_root.pb_parser);
+static struct pstr mediamode = PSTR_INITIALIZER1(&mediamode, "mediamode",
+    setmediamode, "mediamode", false, &command_root.pb_parser);
 
 static struct pinteger mediainst = PINTEGER_INITIALIZER1(&mediainst,
     "mediainst", 0, IFM_INST_MAX, 10, setmediainst, "mediainst",
     &command_root.pb_parser);
 
-static struct pstr unmediaopt = PSTR_INITIALIZER(&unmediaopt, "-mediaopt",
-    unsetmediaopt, "unmediaopt", &command_root.pb_parser);
+static struct pstr unmediaopt = PSTR_INITIALIZER1(&unmediaopt, "-mediaopt",
+    unsetmediaopt, "unmediaopt", false, &command_root.pb_parser);
 
-static struct pstr mediaopt = PSTR_INITIALIZER(&mediaopt, "mediaopt",
-    setmediaopt, "mediaopt", &command_root.pb_parser);
+static struct pstr mediaopt = PSTR_INITIALIZER1(&mediaopt, "mediaopt",
+    setmediaopt, "mediaopt", false, &command_root.pb_parser);
 
-static struct pstr media = PSTR_INITIALIZER(&media, "media", setmedia, "media",
-    &command_root.pb_parser);
+static struct pstr media = PSTR_INITIALIZER1(&media, "media", setmedia, "media",
+    false, &command_root.pb_parser);
 
 static const struct kwinst mediakw[] = {
 	  {.k_word = "instance", .k_key = "anymedia", .k_type = KW_T_BOOL,
@@ -91,7 +92,7 @@ static const struct kwinst mediakw[] = {
 struct pkw kwmedia = PKW_INITIALIZER(&kwmedia, "media keywords", NULL, NULL,
     mediakw, __arraycount(mediakw), NULL);
 
-static void
+__dead static void
 media_error(int type, const char *val, const char *opt)
 {
 	errx(EXIT_FAILURE, "unknown %s media %s: %s",
@@ -363,7 +364,7 @@ media_status(prop_dictionary_t env, prop_dictionary_t oenv)
 	memset(&ifmr, 0, sizeof(ifmr));
 	estrlcpy(ifmr.ifm_name, ifname, sizeof(ifmr.ifm_name));
 
-	if (ioctl(s, SIOCGIFMEDIA, &ifmr) == -1) {
+	if (prog_ioctl(s, SIOCGIFMEDIA, &ifmr) == -1) {
 		/*
 		 * Interface doesn't support SIOC{G,S}IFMEDIA.
 		 */
@@ -380,7 +381,7 @@ media_status(prop_dictionary_t env, prop_dictionary_t oenv)
 		err(EXIT_FAILURE, "malloc");
 	ifmr.ifm_ulist = media_list;
 
-	if (ioctl(s, SIOCGIFMEDIA, &ifmr) == -1)
+	if (prog_ioctl(s, SIOCGIFMEDIA, &ifmr) == -1)
 		err(EXIT_FAILURE, "SIOCGIFMEDIA");
 
 	printf("\tmedia: %s ", get_media_type_string(ifmr.ifm_current));

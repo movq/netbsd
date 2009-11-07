@@ -1,4 +1,4 @@
-/*	$NetBSD: fdc_gsc.c,v 1.8 2009/11/03 05:07:25 snj Exp $	*/
+/*	$NetBSD: fdc_gsc.c,v 1.10 2011/07/01 18:33:09 dyoung Exp $	*/
 
 /*	$OpenBSD: fdc_gsc.c,v 1.1 1998/09/30 04:45:46 mickey Exp $	*/
 
@@ -29,14 +29,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdc_gsc.c,v 1.8 2009/11/03 05:07:25 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdc_gsc.c,v 1.10 2011/07/01 18:33:09 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/iomod.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 
@@ -82,8 +82,10 @@ fdc_gsc_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 
 	/* Re-map the I/O space. */
-	if (bus_space_map(ca->ca_iot, ca->ca_hpa, IOMOD_HPASIZE, 0, &ioh))
-		panic("fdcattach: couldn't map I/O ports");
+	if (bus_space_map(ca->ca_iot, ca->ca_hpa, IOMOD_HPASIZE, 0, &ioh)) {
+		aprint_error(": can't map I/O ports\n");
+		return;
+	}
 
 	ioh |= IOMOD_DEVOFFSET;
 	sc->sc_iot = ca->ca_iot;

@@ -1,7 +1,7 @@
-/*	$NetBSD: cfg_test.c,v 1.1.1.2 2009/10/25 00:01:35 christos Exp $	*/
+/*	$NetBSD: cfg_test.c,v 1.2.6.1 2012/06/05 21:15:19 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001, 2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: cfg_test.c,v 1.21 2009/03/02 23:47:43 tbox Exp */
+/* Id: cfg_test.c,v 1.25 2011/09/05 23:46:54 tbox Exp  */
 
 /*! \file */
 

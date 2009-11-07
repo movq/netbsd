@@ -1,10 +1,10 @@
-# $NetBSD: configure.ac,v 1.18 2009/06/11 17:05:17 agc Exp $
+# $NetBSD: configure.ac,v 1.39 2010/11/06 00:14:35 agc Exp $
 #
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([netpgp],[20090611],[Alistair Crooks <agc@netbsd.org> c0596823])
+AC_INIT([netpgp],[20101105],[Alistair Crooks <agc@netbsd.org> c0596823])
 AC_PREREQ(2.63)
-AC_REVISION([$Revision: 1.18 $])
+AC_REVISION([$Revision: 1.39 $])
 
 AS_SHELL_SANITIZE
 
@@ -38,16 +38,19 @@ AS_IF([test "$GCC" = "yes"],
        AC_MSG_RESULT([no])])
 AC_SUBST([WARNCFLAGS])
 
+# try to see if we need to link with -ldl
+AC_SEARCH_LIBS(dlopen, dl)
+
 # Checks for header files.
 #
 AC_HEADER_STDC
 AC_CHECK_HEADERS([CommonCrypto/CommonDigest.h])
 AC_CHECK_HEADERS([dmalloc.h direct.h errno.h fcntl.h \
                  inttypes.h limits.h malloc.h zlib.h])
-AC_CHECK_HEADERS([openssl/aes.h openssl/bn.h openssl/cast.h openssl/des.h \
-                  openssl/dsa.h openssl/err.h openssl/idea.h openssl/md5.h \
-                  openssl/rand.h openssl/rsa.h openssl/sha.h openssl/err.h \
-                  openssl/sha.h])
+AC_CHECK_HEADERS([openssl/aes.h openssl/bn.h openssl/camellia.h openssl/cast.h \
+		  openssl/des.h openssl/dsa.h openssl/err.h openssl/idea.h \
+		  openssl/md5.h openssl/rand.h openssl/rsa.h openssl/sha.h \
+		  openssl/err.h openssl/sha.h])
 AC_CHECK_HEADERS([sys/cdefs.h sys/file.h sys/mman.h sys/param.h \
                   sys/resource.h sys/uio.h])
 
@@ -63,6 +66,12 @@ AC_TYPE_UINT16_T
 AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
+
+# check for openssl
+m4_include([ax_check_openssl.m4])
+
+AX_CHECK_OPENSSL([LIBS="$LIBS $OPENSSL_LIBS" INCLUDES="$INCLUDES $OPENSSL_INCLUDES"],
+	[AC_MSG_ERROR([Missing OpenSSL])])
 
 AC_CHECK_TYPES([SHA256_CTX],
                [],
@@ -97,6 +106,7 @@ AC_CONFIG_FILES([
         Makefile
         include/Makefile
         src/Makefile
+        src/libmj/Makefile
         src/lib/Makefile
         src/netpgp/Makefile
         src/netpgpkeys/Makefile

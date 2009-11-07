@@ -62,6 +62,10 @@
 
 #include <openssl/buffer.h>
 #include <openssl/pqueue.h>
+#ifdef OPENSSL_SYS_VMS
+#include <resource.h>
+#include <sys/timeb.h>
+#endif
 #ifdef OPENSSL_SYS_WIN32
 /* Needed for struct timeval */
 #include <winsock.h>
@@ -84,7 +88,7 @@ extern "C" {
 #endif
 
 /* lengths of messages */
-#define DTLS1_COOKIE_LENGTH                     32
+#define DTLS1_COOKIE_LENGTH                     256
 
 #define DTLS1_RT_HEADER_LENGTH                  13
 
@@ -101,6 +105,11 @@ extern "C" {
 #define DTLS1_AL_HEADER_LENGTH                   2
 #endif
 
+#ifndef OPENSSL_NO_SSL_INTERN
+
+#ifndef OPENSSL_NO_SCTP
+#define DTLS1_SCTP_AUTH_LABEL	"EXPORTER_DTLS_OVER_SCTP"
+#endif
 
 typedef struct dtls1_bitmap_st
 	{
@@ -163,6 +172,7 @@ typedef struct hm_fragment_st
 	{
 	struct hm_header_st msg_header;
 	unsigned char *fragment;
+	unsigned char *reassembly;
 	} hm_fragment;
 
 typedef struct dtls1_state_st
@@ -212,6 +222,9 @@ typedef struct dtls1_state_st
 	 */
 	record_pqueue buffered_app_data;
 
+	/* Is set when listening for new connections with dtls1_listen() */
+	unsigned int listen;
+
 	unsigned int mtu; /* max DTLS packet size */
 
 	struct hm_header_st w_msg_hdr;
@@ -219,7 +232,7 @@ typedef struct dtls1_state_st
 
 	struct dtls1_timeout_st timeout;
 
-	/* Indicates when the last handshake msg sent will timeout */
+	/* Indicates when the last handshake msg or heartbeat sent will timeout */
 	struct timeval next_timeout;
 
 	/* Timeout duration */
@@ -235,6 +248,13 @@ typedef struct dtls1_state_st
 	unsigned int retransmitting;
 	unsigned int change_cipher_spec_ok;
 
+#ifndef OPENSSL_NO_SCTP
+	/* used when SSL_ST_XX_FLUSH is entered */
+	int next_state;
+
+	int shutdown_received;
+#endif
+
 	} DTLS1_STATE;
 
 typedef struct dtls1_record_data_st
@@ -243,8 +263,12 @@ typedef struct dtls1_record_data_st
 	unsigned int   packet_length;
 	SSL3_BUFFER    rbuf;
 	SSL3_RECORD    rrec;
+#ifndef OPENSSL_NO_SCTP
+	struct bio_dgram_sctp_rcvinfo recordinfo;
+#endif
 	} DTLS1_RECORD_DATA;
 
+#endif
 
 /* Timeout multipliers (timeout slice is defined in apps/timeouts.h */
 #define DTLS1_TMO_READ_COUNT                      2

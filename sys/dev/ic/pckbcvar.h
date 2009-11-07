@@ -1,4 +1,4 @@
-/* $NetBSD: pckbcvar.h,v 1.15 2008/03/15 13:23:25 cube Exp $ */
+/* $NetBSD: pckbcvar.h,v 1.19 2012/02/02 19:43:03 tls Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -30,13 +30,13 @@
 #define _DEV_IC_PCKBCVAR_H_
 
 #include <sys/callout.h>
+#include <sys/pmf.h>
 
 #include <dev/pckbport/pckbportvar.h>
 
-#include "rnd.h"
-#if NRND > 0
+
+
 #include <sys/rnd.h>
-#endif
 
 typedef void *pckbc_tag_t;
 typedef int pckbc_slot_t;
@@ -112,6 +112,6 @@ void pckbcintr_soft(void *);
 int pckbc_machdep_cnattach(pckbc_tag_t, pckbc_slot_t);
 
 /* power management */
-bool pckbc_resume(device_t PMF_FN_PROTO);
+bool pckbc_resume(device_t, const pmf_qual_t *);
 
 #endif /* _DEV_IC_PCKBCVAR_H_ */

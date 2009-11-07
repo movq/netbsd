@@ -1,7 +1,7 @@
-# $NetBSD: GENERIC,v 1.97 2009/01/17 01:19:18 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.109 2011/12/18 05:49:30 dholland Exp $
 #
 # GENERIC machine description file
-# 
+#
 # This machine description file is used to generate the default NetBSD
 # kernel.  The generic kernel does not include all options, subsystems
 # and device drivers, but should be useful for most applications.
@@ -22,7 +22,7 @@ include		"arch/news68k/conf/std.news68k"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.97 $"
+#ident 		"GENERIC-$Revision: 1.109 $"
 
 maxusers	8
 
@@ -38,6 +38,9 @@ options 	SYSVMSG			# System V message queues
 options 	SYSVSEM			# System V semaphores
 options 	SYSVSHM			# System V shared memory
 options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
+#options 	MODULAR			# new style module(7) framework
+
 options 	USERCONF		# userconf(4) support
 #options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -90,18 +93,19 @@ file-system	PROCFS		# /proc
 file-system	FDESC		# /dev/fd/*
 file-system	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcode (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 options 	NFSSERVER	# nfs server support
-options 	QUOTA		# ffs quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# ffs endian independent support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 
@@ -124,6 +128,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -216,6 +221,9 @@ ch*	at scsibus? target ? lun ?		# SCSI changer devices
 ss*	at scsibus? target ? lun ?		# SCSI scanners
 uk*	at scsibus? target ? lun ?		# unknown SCSI devices
 
+# PROM console support
+#romcons0 at mainbus0
+
 #
 # accept filters
 pseudo-device   accf_data		# "dataready" accept filter
@@ -224,7 +232,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 # Misc.
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	md		1	# memory disk device
+pseudo-device	md			# memory disk device
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	ccd		4	# concatenated and striped disks
@@ -239,7 +247,7 @@ pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 pseudo-device	sl			# SLIP interfaces
 pseudo-device	ppp			# PPP interfaces
 pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
@@ -257,12 +265,12 @@ pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
-pseudo-device	rnd			# /dev/random and in-kernle generator
 #pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs and pud
 
 # Veriexec
 #

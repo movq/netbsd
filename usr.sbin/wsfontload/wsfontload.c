@@ -1,4 +1,4 @@
-/* $NetBSD: wsfontload.c,v 1.14 2009/04/19 02:25:48 lukem Exp $ */
+/* $NetBSD: wsfontload.c,v 1.17 2011/08/31 13:32:42 joerg Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -45,7 +45,7 @@
 #define DEFBITORDER	WSDISPLAY_FONTORDER_L2R
 #define DEFBYTEORDER	WSDISPLAY_FONTORDER_L2R
 
-static void usage(void);
+__dead static void usage(void);
 static int getencoding(char *);
 static const char *rgetencoding(int);
 static const char *rgetfontorder(int);
@@ -68,6 +68,7 @@ static struct {
 	{"pcvt", WSDISPLAY_FONTENC_PCVT},
 	{"iso7", WSDISPLAY_FONTENC_ISO7},
 	{"iso2", WSDISPLAY_FONTENC_ISO2},
+	{"koi8r", WSDISPLAY_FONTENC_KOI8_R},
 };
 
 static void
@@ -75,8 +76,8 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: %s [-f wsdev] [-w width] [-h height] [-e encoding]"
-		" [-N name] [-b] [-B] [fontfile]\n",
+		"usage: %s [-Bbv] [-e encoding] [-f wsdev] [-h height]"
+		" [-N name] [-w width] [fontfile]\n",
 		      getprogname());
 	exit(1);
 }

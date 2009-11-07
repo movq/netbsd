@@ -1,4 +1,4 @@
-/*	$NetBSD: be.c,v 1.75 2009/09/22 13:13:46 tsutsui Exp $	*/
+/*	$NetBSD: be.c,v 1.78 2012/02/02 19:43:06 tls Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -57,12 +57,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.75 2009/09/22 13:13:46 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.78 2012/02/02 19:43:06 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,9 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: be.c,v 1.75 2009/09/22 13:13:46 tsutsui Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -95,10 +91,8 @@ __KERNEL_RCSID(0, "$NetBSD: be.c,v 1.75 2009/09/22 13:13:46 tsutsui Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -575,14 +569,11 @@ be_read(struct be_softc *sc, int idx, int len)
 	}
 	ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
 }
@@ -615,14 +606,11 @@ bestart(struct ifnet *ifp)
 		if (m == 0)
 			break;
 
-#if NBPFILTER > 0
 		/*
 		 * If BPF is listening on this interface, let it see the
 		 * packet before we commit it to the wire.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/*
 		 * Copy the mbuf chain into the transmit buffer.

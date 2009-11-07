@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.11 2008/10/22 11:24:28 hans Exp $	*/
+/*	$NetBSD: userret.h,v 1.13 2011/07/03 02:18:20 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,13 +33,13 @@
 #include <sys/userret.h>
 
 /*
- *	Common code used by various execption handlers to
+ *	Common code used by various exception handlers to
  *	return to usermode.
  */
 static __inline void
-userret(struct lwp *l, struct trapframe *frame, u_quad_t oticks)
+userret(struct lwp *l, struct trapframe *tf, u_quad_t oticks)
 {
-	struct proc *p = l->l_proc;
+	struct proc * const p = l->l_proc;
 
 	mi_userret(l);
 
@@ -49,7 +49,7 @@ userret(struct lwp *l, struct trapframe *frame, u_quad_t oticks)
 	if ((p->p_stflag & PST_PROFIL) != 0) {
 		extern int psratio;
 
-		addupc_task(l, frame->pc,
+		addupc_task(l, tf->tf_pc,
 		    (int)(p->p_sticks - oticks) * psratio);
 	}
 }

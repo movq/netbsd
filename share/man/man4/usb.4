@@ -1,4 +1,4 @@
-.\" $NetBSD: usb.4,v 1.91 2009/05/18 00:07:47 snj Exp $
+.\" $NetBSD: usb.4,v 1.96.2.1 2012/06/14 09:48:46 sborrill Exp $
 .\"
 .\" Copyright (c) 1999-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 25, 2008
+.Dd January 22, 2012
 .Dt USB 4
 .Os
 .Sh NAME
@@ -148,6 +148,10 @@ Ralink Technology USB IEEE 802.11b/g wireless network device
 Ralink Technology USB IEEE 802.11a/b/g wireless network device
 .It Xr ubt 4
 USB Bluetooth dongles
+.It Xr upgt 4
+Conexant/Intersil PrismGT SoftMAC USB 802.11b/g wireless network device
+.It Xr urtwn 4
+Realtek RTL8188CU/RTL8192CU USB IEEE 802.11b/g/n wireless network device
 .It Xr zyd 4
 ZyDAS ZD1211/ZD1211B USB IEEE 802.11b/g wireless network device
 .El
@@ -445,7 +449,7 @@ can destroy the bus integrity.
 .El
 .Pp
 The include file
-.Aq Pa dev/usb/usb.h
+.In dev/usb/usb.h
 contains definitions for the types used by the various
 .Xr ioctl 2
 calls.
@@ -462,7 +466,7 @@ and
 macros to handle byte order and alignment properly.
 .Pp
 The include file
-.Aq Pa dev/usb/usbhid.h
+.In dev/usb/usbhid.h
 similarly contains the definitions for
 Human Interface Devices
 .Pq Tn HID .
@@ -554,11 +558,6 @@ which handles various minor tasks that are initiated from
 an interrupt context, but need to sleep, e.g., time-out
 abort of transfers.
 .Sh SEE ALSO
-The
-.Tn USB
-specifications can be found at:
-.D1 http://www.usb.org/developers/docs/
-.Pp
 .Xr usbhidaction 1 ,
 .Xr usbhidctl 1 ,
 .Xr cardbus 4 ,
@@ -570,6 +569,10 @@ specifications can be found at:
 .Xr slhci 4 ,
 .Xr uhci 4 ,
 .Xr usbdevs 8
+.Rs
+.%T Universal Serial Bus Specifications Documents
+.%U http://www.usb.org/developers/docs/
+.Re
 .Sh HISTORY
 The
 .Nm

@@ -1,4 +1,4 @@
-/*	$NetBSD: comvar.h,v 1.66 2009/05/27 23:01:07 rjs Exp $	*/
+/*	$NetBSD: comvar.h,v 1.73 2012/02/02 19:43:03 tls Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -36,13 +36,14 @@
 #include "opt_com.h"
 #include "opt_kgdb.h"
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
 #include <sys/callout.h>
 #include <sys/timepps.h>
 #include <sys/mutex.h>
+#include <sys/device.h>
 
 #include <dev/ic/comreg.h>	/* for COM_NPORTS */
 
@@ -144,6 +145,14 @@ struct com_regs {
 
 #endif
 
+struct comcons_info {
+	struct com_regs regs;
+	int rate;
+	int frequency;
+	int type;
+	tcflag_t cflag;
+};
+
 struct com_softc {
 	device_t sc_dev;
 	void *sc_si;
@@ -218,8 +227,8 @@ struct com_softc {
 
 	struct pps_state sc_pps_state;	/* pps state */
 
-#if NRND > 0 && defined(RND_COM)
-	rndsource_element_t  rnd_source;
+#ifdef RND_COM
+	krndsource_t  rnd_source;
 #endif
 	kmutex_t		sc_lock;
 };
@@ -229,10 +238,9 @@ int comintr(void *);
 void com_attach_subr(struct com_softc *);
 int com_probe_subr(struct com_regs *);
 int com_detach(device_t, int);
-bool com_resume(device_t PMF_FN_PROTO);
-int com_activate(device_t, enum devact);
+bool com_resume(device_t, const pmf_qual_t *);
 bool com_cleanup(device_t, int);
-bool com_suspend(device_t PMF_FN_PROTO);
+bool com_suspend(device_t, const pmf_qual_t *);
 
 #ifndef IPL_SERIAL
 #define	IPL_SERIAL	IPL_TTY

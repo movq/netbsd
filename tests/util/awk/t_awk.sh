@@ -1,4 +1,4 @@
-# $NetBSD: t_awk.sh,v 1.1 2009/02/13 05:19:51 jmmv Exp $
+# $NetBSD: t_awk.sh,v 1.7 2011/11/22 20:22:10 cheusov Exp $
 #
 # Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -27,10 +27,12 @@
 
 h_check()
 {
+	local fname=d_$1
 	for sfx in in out awk; do
-		cp -r $(atf_get_srcdir)/d_$1.$sfx .
+		cp -r $(atf_get_srcdir)/$fname.$sfx .
 	done
-	atf_check -o file:d_$1.out -x "awk -f d_$1.awk < d_$1.in"
+	shift 1
+	atf_check -o file:$fname.out -x "awk $@ -f $fname.awk < $fname.in"
 }
 
 atf_test_case big_regexp
@@ -82,10 +84,36 @@ multibyte_body()
 	h_check toupper
 }
 
+atf_test_case period
+period_head()
+{
+	atf_set "descr" "Checks that the period character is recognised" \
+	                "in awk program regardless of locale (bin/42320)"
+}
+period_body()
+{
+	export LANG=ru_RU.KOI8-R
+
+	atf_expect_fail "PR bin/42320"
+	h_check period -v x=0.5
+}
+
+atf_test_case assign_NF
+assign_NF_head()
+{
+	atf_set "descr" 'Checks that assign to NF changes $0 and $n (PR/44063)'
+}
+assign_NF_body()
+{
+	h_check assign_NF
+}
+
 atf_init_test_cases()
 {
 	atf_add_test_case big_regexp
 	atf_add_test_case end
 	atf_add_test_case string1
 	atf_add_test_case multibyte
+	atf_add_test_case period
+	atf_add_test_case assign_NF
 }

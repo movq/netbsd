@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.49 2009/10/04 22:59:25 christos Exp $	*/
+/*	$NetBSD: math.h,v 1.57.2.1 2012/05/09 18:22:36 riz Exp $	*/
 
 /*
  * ====================================================
@@ -59,8 +59,12 @@ union __long_double_u {
  * ANSI/POSIX
  */
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
+#if __GNUC_PREREQ__(3, 3)
+#define HUGE_VAL	__builtin_huge_val()
+#else
 extern const union __double_u __infinity;
 #define HUGE_VAL	__infinity.__val
+#endif
 
 /*
  * ISO C99
@@ -72,15 +76,22 @@ extern const union __double_u __infinity;
     ((_XOPEN_SOURCE  - 0) >= 600) || \
     defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
+#if __GNUC_PREREQ__(3, 3)
+#define	HUGE_VALF	__builtin_huge_valf()
+#define	HUGE_VALL	__builtin_huge_vall()
+#else
 extern const union __float_u __infinityf;
 #define	HUGE_VALF	__infinityf.__val
 
 extern const union __long_double_u __infinityl;
 #define	HUGE_VALL	__infinityl.__val
+#endif
 
 /* 7.12#4 INFINITY */
-#ifdef __INFINITY
+#if defined(__INFINITY)
 #define	INFINITY	__INFINITY	/* float constant which overflows */
+#elif __GNUC_PREREQ__(3, 3)
+#define	INFINITY	__builtin_inff()
 #else
 #define	INFINITY	HUGE_VALF	/* positive infinity */
 #endif /* __INFINITY */
@@ -194,6 +205,7 @@ double	sinh(double);
 double	tanh(double);
 
 double	exp(double);
+double	exp2(double);
 double	frexp(double, int *);
 double	ldexp(double, int);
 double	log(double);
@@ -282,6 +294,7 @@ float	tanhf(float);
 /* 7.12.6 exp / log */
 
 float	expf(float);
+float	exp2f(float);
 float	expm1f(float);
 float	frexpf(float, int *);
 int	ilogbf(float);
@@ -298,6 +311,7 @@ float	scalbnf(float, int);
 
 float	cbrtf(float);
 float	fabsf(float);
+long double	fabsl(long double);
 float	hypotf(float, float);
 float	powf(float, float);
 float	sqrtf(float);
@@ -307,6 +321,8 @@ float	sqrtf(float);
 float	erff(float);
 float	erfcf(float);
 float	lgammaf(float);
+float	tgammaf(float);
+double	tgamma(double);
 
 /* 7.12.9 nearest integer */
 
@@ -335,15 +351,22 @@ long long int	llroundf(float);
 float	fmodf(float, float);
 float	remainderf(float, float);
 
+/* 7.12.10.3 The remquo functions */
+double	remquo(double, double, int *);
+float	remquof(float, float, int *);
+
 /* 7.12.11 manipulation */
 
 float	copysignf(float, float);
+long double	copysignl(long double, long double);
 double	nan(const char *);
 float	nanf(const char *);
 long double	nanl(const char *);
 float	nextafterf(float, float);
+long double     nextafterl(long double, long double);
+double	nexttoward(double, long double);
 
-/* 7.12.14 comparision */
+/* 7.12.14 comparison */
 
 #define isunordered(x, y)	(isnan(x) || isnan(y))
 #define isgreater(x, y)		(!isunordered((x), (y)) && (x) > (y))
@@ -476,6 +499,11 @@ int	__isinfl(long double);
 int	__isnanl(long double);
 int	__signbitl(long double);
 #endif
+
+int		ilogbl(long double);
+long double	logbl(long double);
+long double	scalbnl(long double, int);
+
 __END_DECLS
 
 #endif /* _MATH_H_ */

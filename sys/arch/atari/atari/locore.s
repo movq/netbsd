@@ -1,6 +1,7 @@
-/*	$NetBSD: locore.s,v 1.102 2008/12/27 16:17:24 tsutsui Exp $	*/
+/*	$NetBSD: locore.s,v 1.110 2011/12/22 15:33:28 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)locore.s	7.11 (Berkeley) 5/9/91
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: locore.s 1.58 91/04/22$
- *
- *	@(#)locore.s	7.11 (Berkeley) 5/9/91
- */
 
 /*
  *
@@ -91,6 +53,8 @@
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 #include "opt_mbtype.h"
+#include "opt_m68k_arch.h"
+
 #include "kbd.h"
 #include "ncrscsi.h"
 #include "zs.h"
@@ -380,9 +344,9 @@ Lfptnull:
 
 ENTRY_NOPROFILE(intr_glue)
 	addql	#1,_C_LABEL(idepth)
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
+	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(intr_dispatch)	|  handle interrupt
-	moveml	%sp@+,%d0-%d1/%a0-%a1
+	INTERRUPT_RESTOREREG
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 
@@ -396,9 +360,9 @@ ENTRY_NOPROFILE(lev4intr)		|  VBL interrupt
 	rte				|  Nothing to do.
 1:
 	addql	#1,_C_LABEL(idepth)
-	moveml	%d0-%d1/%a0-%a1,%sp@-
+	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(falcon_display_switch)
-	moveml	%sp@+,%d0-%d1/%a0-%a1
+	INTERRUPT_RESTOREREG
 	subql	#1,_C_LABEL(idepth)
 #endif /* FALCON_VIDEO */
 	rte
@@ -435,7 +399,7 @@ ENTRY_NOPROFILE(lev6intr)
 	movel	%d1,%sp@-		| Call handler
 	jbsr	_C_LABEL(milan_isa_intr)
 	addql	#8,%sp
-	moveml	%sp@+,%d0-%d2/%a0-%a1
+	INTERRUPT_RESTOREREG
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 
@@ -485,12 +449,13 @@ ENTRY(milan_pci_confwrite)
 ENTRY_NOPROFILE(lev7intr)
 	tstl	_ASM_LABEL(plx_nonmi)	| milan_conf_read shortcut
 	jne	1f			| .... get out immediately
+	INTERRUPT_SAVEREG
 	moveml	%d0-%d1/%a0-%a1,%sp@-
 	movl	_C_LABEL(stio_addr),%a0	| get KVA of ST-IO area
 	movw	%a0@(PLX_PCICR),_C_LABEL(plx_status)
 	movw	#0xf900,%a0@(PLX_PCICR)	| Clear error bits
 	jbsr	_C_LABEL(nmihandler)	| notify...
-	moveml	%sp@+,%d0-%d1/%a0-%a1
+	INTERRUPT_RESTOREREG
 	addql	#1,_C_LABEL(intrcnt)+28	| add another nmi interrupt
 1:
 	rte				| all done
@@ -500,24 +465,25 @@ ENTRY_NOPROFILE(lev3intr)
 ENTRY_NOPROFILE(badtrap)
 	addql	#1,_C_LABEL(idepth)
 	moveml	#0xC0C0,%sp@-		|  save scratch regs
+	INTERRUPT_SAVEREG
 	movw	%sp@(22),%sp@-		|  push exception vector info
 	clrw	%sp@-
 	movl	%sp@(22),%sp@-		|  and PC
 	jbsr	_C_LABEL(straytrap)	|  report
 	addql	#8,%sp			|  pop args
-	moveml	%sp@+,#0x0303		|  restore regs
+	INTERRUPT_RESTOREREG		|  restore regs
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		|  all done
 
 ENTRY_NOPROFILE(badmfpint)
 	addql	#1,_C_LABEL(idepth)
-	moveml	#0xC0C0,%sp@-		|  save scratch regs
+	INTERRUPT_SAVEREG		|  save scratch regs
 	movw	%sp@(22),%sp@-		|  push exception vector info
 	clrw	%sp@-
 	movl	%sp@(22),%sp@-		|  and PC
 	jbsr	_C_LABEL(straymfpint)	|  report
 	addql	#8,%sp			|  pop args
-	moveml	%sp@+,#0x0303		|  restore regs
+	INTERRUPT_RESTOREREG		|  restore regs
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		|  all done
 
@@ -677,20 +643,22 @@ Lbrkpt3:
 
 ENTRY_NOPROFILE(spurintr)
 	addql	#1,_C_LABEL(intrcnt)+0
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	INTERRUPT_SAVEREG		|  save scratch registers
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG		|  restore scratch regs	
 	jra	_ASM_LABEL(rei)
 
 	/* MFP timer A handler --- System clock --- */
 ASENTRY_NOPROFILE(mfp_tima)
 	addql	#1,_C_LABEL(idepth)
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  save scratch registers
+	INTERRUPT_SAVEREG		|  save scratch registers
 	movl	%sp,%sp@-		|  push pointer to clockframe
 	jbsr	_C_LABEL(hardclock)	|  call generic clock int routine
 	addql	#4,%sp			|  pop params
 	addql	#1,_C_LABEL(intrcnt_user)+52
 					|  add another system clock interrupt
-	moveml	%sp@+,%d0-%d1/%a0-%a1	|  restore scratch regs	
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG		|  restore scratch regs	
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		|  all done
 
@@ -698,11 +666,11 @@ ASENTRY_NOPROFILE(mfp_tima)
 	/* MFP timer C handler --- Stat/Prof clock --- */
 ASENTRY_NOPROFILE(mfp_timc)
 	addql	#1,_C_LABEL(idepth)
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  save scratch registers
+	INTERRUPT_SAVEREG		|  save scratch registers
 	jbsr	_C_LABEL(statintr)	|  call statistics clock handler
 	addql	#1,_C_LABEL(intrcnt)+36	|  add another stat clock interrupt
-	moveml	%sp@+,%d0-%d1/%a0-%a1	|  restore scratch regs	
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG		|  restore scratch regs	
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		|  all done
 #endif /* STATCLOCK */
@@ -713,13 +681,13 @@ ASENTRY_NOPROFILE(mfp_kbd)
 	addql	#1,_C_LABEL(idepth)
 	addql	#1,_C_LABEL(intrcnt)+8	|  add another kbd/mouse interrupt
 
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
+	INTERRUPT_SAVEREG		|  save scratch registers
 	movw	%sp@(16),%sp@-		|  push previous SR value
 	clrw	%sp@-			|     padded to longword
 	jbsr	_C_LABEL(kbdintr)	|  handle interrupt
 	addql	#4,%sp			|  pop SR
-	moveml	%sp@+,%d0-%d1/%a0-%a1
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG		|  restore scratch regs	
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 #endif /* NKBD */
@@ -730,13 +698,13 @@ ASENTRY_NOPROFILE(mfp2_5380dm)
 	addql	#1,_C_LABEL(idepth)
 	addql	#1,_C_LABEL(intrcnt)+24	|  add another 5380-DMA interrupt
 
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
+	INTERRUPT_SAVEREG		|  save scratch registers
 	movw	%sp@(16),%sp@-		|  push previous SR value
 	clrw	%sp@-			|     padded to longword
 	jbsr	_C_LABEL(scsi_dma)	|  handle interrupt
 	addql	#4,%sp			|  pop SR
-	moveml	%sp@+,%d0-%d1/%a0-%a1
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG		|  restore scratch regs	
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 
@@ -745,45 +713,28 @@ ASENTRY_NOPROFILE(mfp2_5380)
 	addql	#1,_C_LABEL(idepth)
 	addql	#1,_C_LABEL(intrcnt)+20	|  add another 5380-SCSI interrupt
 
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
+	INTERRUPT_SAVEREG		|  save scratch registers
 	movw	%sp@(16),%sp@-		|  push previous SR value
 	clrw	%sp@-			|     padded to longword
 	jbsr	_C_LABEL(scsi_ctrl)	|  handle interrupt
 	addql	#4,%sp			|  pop SR
-	moveml	%sp@+,%d0-%d1/%a0-%a1
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG		|  restore scratch regs	
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 #endif /* NNCRSCSI > 0 */
-
-#if NZS > 0
-	/* SCC Interrupt --- modem2/serial2 --- */
-ASENTRY_NOPROFILE(sccint)
-	addql	#1,_C_LABEL(idepth)
-	addql	#1,_C_LABEL(intrcnt)+32	|  add another SCC interrupt
-
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
-	movw	%sp@(16),%sp@-		|  push previous SR value
-	clrw	%sp@-			|     padded to longword
-	jbsr	_C_LABEL(zshard)	|  handle interrupt
-	addql	#4,%sp			|  pop SR
-	moveml	%sp@+,%d0-%d1/%a0-%a1
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
-	subql	#1,_C_LABEL(idepth)
-	jra	_ASM_LABEL(rei)
-#endif /* NZS > 0 */
 
 #ifdef _ATARIHW_
 	/* Level 1 (Software) interrupt handler */
 ENTRY_NOPROFILE(lev1intr)
 	addql	#1,_C_LABEL(idepth)
-	moveml	%d0-%d1/%a0-%a1,%sp@-
+	INTERRUPT_SAVEREG		|  save scratch registers
 	movl	_C_LABEL(stio_addr),%a0 |  get KVA of ST-IO area
 	moveb	#0, %a0@(SCU_SOFTINT)	|  Turn off software interrupt
 	addql	#1,_C_LABEL(intrcnt)+16	|  add another software interrupt
 	jbsr	_C_LABEL(nullop)	|  XXX handle software interrupts
-	moveml	%sp@+,%d0-%d1/%a0-%a1
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 
@@ -1024,16 +975,13 @@ Lend_cpuset:
 	jsr	_C_LABEL(start_c)
 
 	/*
-	 * set kernel stack, user SP, and initial pcb
+	 * set kernel stack, user SP
 	 */
-	movl	_C_LABEL(proc0paddr),%a1| lwp0 kernel stack
+	movl	_C_LABEL(lwp0uarea),%a1	| grab lwp0 uarea
 	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.p_addr so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
 	movl	%a2,%a1@(PCB_USP)	| and save it
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 	clrw	%a1@(PCB_FLAGS)		| clear flags
 
 	/* flush TLB and turn on caches */
@@ -1078,8 +1026,8 @@ Lcacheon:
   	movw	#PSL_USER,%sp@-		|  in user mode
 	clrl	%sp@-			|  stack adjust count
 	lea	%sp@(-64),%sp		|  construct space for D0-D7/A0-A7
-	lea	_C_LABEL(lwp0),%a0	| proc0 in a0
-	movl	%sp,%a0@(L_MD_REGS)     | save frame for proc0
+	lea	_C_LABEL(lwp0),%a0	| lwp0 in a0
+	movl	%sp,%a0@(L_MD_REGS)     | save frame for lwp0
 	movl	%usp,%a1
 	movl	%a1,%sp@(FR_SP)		| save user stack pointer in frame
 	pea	%sp@			|  addr of space for D0
@@ -1218,13 +1166,6 @@ ENTRY_NOPROFILE(getsp)
 	addql	#4,%d0			|  compensate for return address
 	rts
 
-ENTRY_NOPROFILE(getsfc)
-	movc	%sfc,%d0
-	rts
-ENTRY_NOPROFILE(getdfc)
-	movc	%dfc,%d0
-	rts
-
 /*
  * Check out a virtual address to see if it's okay to write to.
  *
@@ -1330,64 +1271,6 @@ Lspldone:
 	rts
 
 /*
- * Save and restore 68881 state.
- * Pretty awful looking since our assembler does not
- * recognize FP mnemonics.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-#if defined(M68060)
-	cmpl	#CPU_68060,_C_LABEL(cputype)
-	jeq	Lm68060fpsave		| Handle 060 fpu
-#endif
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general registers
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR) | save FP control registers
-Lm68881sdone:
-	rts
-
-#if defined(M68060)
-Lm68060fpsave:
-	tstb	%a0@(2)			| null state frame?
-	jeq	Lm68060sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)| save FP general registers
-	fmovem	%fpcr,%a0@(FPF_FPCR)	| save FP control registers
-	fmovem	%fpsr,%a0@(FPF_FPSR)
-	fmovem	%fpi,%a0@(FPF_FPI)
-Lm68060sdone:
-	rts
-#endif
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0			| save area pointer
-#if defined(M68060)
-	cmpl	#CPU_68060,_C_LABEL(cputype)
-	jeq	Lm68060fprestore		| a 060 fpu
-#endif
-	tstb	%a0@				| null state frame?
-	jeq	Lm68881rdone			| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general registers
-Lm68881rdone:
-	frestore %a0@				| restore state
-	rts
-
-#if defined(M68060)
-Lm68060fprestore:
-	tstb	%a0@(2)				| null state frame?
-	jeq	Lm68060fprdone			| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr		| restore FP control registers
-	fmovem	%a0@(FPF_FPSR),%fpsr
-	fmovem	%a0@(FPF_FPI),%fpi
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general registers
-Lm68060fprdone:
-	frestore %a0@				| restore state
-	rts
-#endif
-
-/*
  * Handle the nitty-gritty of rebooting the machine.
  *
  */
@@ -1464,8 +1347,6 @@ ASLOCAL(tmpstk)
 GLOBAL(protorp)
 	.long	0x80000002,0		|  prototype root pointer
 
-GLOBAL(proc0paddr)
-	.long	0			|  KVA of proc0 u-area
 #ifdef M68060 /* XXX */
 L60iem:		.long	0
 L60fpiem:	.long	0

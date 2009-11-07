@@ -1,4 +1,4 @@
-/*	$NetBSD: isadma_machdep.c,v 1.13 2009/03/18 10:22:23 cegger Exp $	*/
+/*	$NetBSD: isadma_machdep.c,v 1.15 2012/02/12 16:34:07 matt Exp $	*/
 
 #define ISA_DMA_STATS
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.13 2009/03/18 10:22:23 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.15 2012/02/12 16:34:07 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: isadma_machdep.c,v 1.13 2009/03/18 10:22:23 cegger E
 #include <sys/mbuf.h>
 
 #define _ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -250,13 +250,13 @@ _isa_bus_dmamap_destroy(bus_dma_tag_t t, bus_dmamap_t map)
  * Load an ISA DMA map with a linear buffer.
  */
 int
-_isa_bus_dmamap_load(t, map, buf, buflen, p, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map; 
-	void *buf;
-	bus_size_t buflen;
-	struct proc *p;
-	int flags;
+_isa_bus_dmamap_load(
+	bus_dma_tag_t t,
+	bus_dmamap_t map,
+	void *buf,
+	bus_size_t buflen,
+	struct proc *p,
+	int flags)
 {
 	struct arm32_isa_dma_cookie *cookie = map->_dm_cookie;
 	int error;
@@ -321,11 +321,11 @@ _isa_bus_dmamap_load(t, map, buf, buflen, p, flags)
  * Like _isa_bus_dmamap_load(), but for mbufs.
  */
 int
-_isa_bus_dmamap_load_mbuf(t, map, m0, flags)  
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct mbuf *m0;
-	int flags;
+_isa_bus_dmamap_load_mbuf(
+	bus_dma_tag_t t,
+	bus_dmamap_t map,
+	struct mbuf *m0,
+	int flags)
 {
 	struct arm32_isa_dma_cookie *cookie = map->_dm_cookie;
 	int error;

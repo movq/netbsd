@@ -1,4 +1,4 @@
-/*	$NetBSD: apmdev.c,v 1.23 2009/04/03 05:01:10 uwe Exp $ */
+/*	$NetBSD: apmdev.c,v 1.25 2011/07/17 20:54:51 joerg Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.23 2009/04/03 05:01:10 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.25 2011/07/17 20:54:51 joerg Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_apm.h"
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.23 2009/04/03 05:01:10 uwe Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -63,8 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: apmdev.c,v 1.23 2009/04/03 05:01:10 uwe Exp $");
 #include <sys/conf.h>
 
 #include <dev/hpc/apm/apmvar.h>
-
-#include <machine/stdarg.h>
 
 #ifdef APMDEBUG
 #define DPRINTF(f, x)		do { if (apmdebug & (f)) printf x; } while (0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdb.c,v 1.39 2009/04/11 06:53:53 lukem Exp $	*/
+/*	$NetBSD: fsdb.c,v 1.43 2011/08/29 14:34:59 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsdb.c,v 1.39 2009/04/11 06:53:53 lukem Exp $");
+__RCSID("$NetBSD: fsdb.c,v 1.43 2011/08/29 14:34:59 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -61,7 +61,7 @@ __RCSID("$NetBSD: fsdb.c,v 1.39 2009/04/11 06:53:53 lukem Exp $");
 #include "fsck.h"
 #include "extern.h"
 
-static void usage(void);
+__dead static void usage(void);
 static int cmdloop(void);
 static char *prompt(EditLine *);
 static int scannames(struct inodesc *);
@@ -85,7 +85,6 @@ static int find_indirblks32(uint32_t blk, int ind_level,
 static int find_indirblks64(uint64_t blk, int ind_level,
 						uint64_t *blknum);
 
-int     returntosingle = 0;
 union dinode *curinode;
 ino_t   curinum;
 
@@ -140,7 +139,7 @@ main(int argc, char *argv[])
 	sblock->fs_clean = 0;	/* mark it dirty */
 	sbdirty();
 	markclean = 0;
-	ckfini();
+	ckfini(1);
 	printf("*** FILE SYSTEM MARKED DIRTY\n");
 	printf("*** BE SURE TO RUN FSCK TO CLEAN UP ANY DAMAGE\n");
 	printf("*** IF IT WAS MOUNTED, RE-MOUNT WITH -u -o reload\n");
@@ -281,8 +280,7 @@ cmdloop(void)
 		         * el_parse returns -1 to signal that it's not been
 		         * handled internally.
 		         */
-			if (el_parse(elptr, cmd_argc,
-				     (const char **)cmd_argv) != -1)
+			if (el_parse(elptr, cmd_argc, (void *)cmd_argv) != -1)
 				continue;
 			known = 0;
 			for (cmdp = cmds; cmdp->cmd; cmdp++) {

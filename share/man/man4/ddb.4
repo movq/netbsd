@@ -1,4 +1,4 @@
-.\"	$NetBSD: ddb.4,v 1.127 2009/06/05 09:29:15 wiz Exp $
+.\"	$NetBSD: ddb.4,v 1.149 2012/02/12 12:43:51 sborrill Exp $
 .\"
 .\" Copyright (c) 1997 - 2009 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -56,7 +56,7 @@
 .\" any improvements or extensions that they make and grant Carnegie Mellon
 .\" the rights to redistribute these changes.
 .\"
-.Dd March 7, 2009
+.Dd February 12, 2012
 .Dt DDB 4
 .Os
 .Sh NAME
@@ -106,7 +106,7 @@ In general, sending a break on a serial console will activate
 There are also key sequences for each port that will activate
 .Nm
 from the keyboard:
-.Bl -tag -offset indent -width "mvme68k" -compact
+.Bl -tag -offset indent -width "xen domU" -compact
 .It alpha
 \*[Lt]Ctrl\*[Gt]-\*[Lt]Alt\*[Gt]-\*[Lt]Esc\*[Gt] on PC style keyboards.
 .It amd64
@@ -120,8 +120,10 @@ from the keyboard:
 .It hp300
 \*[Lt]Shift\*[Gt]-\*[Lt]Reset\*[Gt]
 .It hp700
+\*[Lt]Ctrl\*[Gt]-\*[Lt]Alt\*[Gt]-\*[Lt]Esc\*[Gt] on PC style keyboards.
+.It ""
 +++++
-(five plus signs)
+(five plus signs) on PDC console
 .It ""
 \*[Lt]Break\*[Gt] on serial console.
 .It hpcarm
@@ -169,9 +171,14 @@ keyboard.
 \*[Lt]Esc\*[Gt]-\*[Lt]Shift\*[Gt]-D on serial console.
 .It x68k
 Interrupt switch on the body.
-.It xen
+.It xen dom0
+\*[Lt]Ctrl\*[Gt]-\*[Lt]Alt\*[Gt]-\*[Lt]Esc\*[Gt] on PC style keyboards.
+.It ""
 +++++
-(five plus signs)
+(five plus signs) on serial console.
+.It xen domU
++++++
+(five plus signs) on serial console.
 .It zaurus
 \*[Lt]Ctrl\*[Gt]-\*[Lt]Alt\*[Gt]-\*[Lt]Esc\*[Gt]
 .El
@@ -191,6 +198,17 @@ may be explicitly activated by the debugging code in the kernel
 if
 .Cm DDB
 is configured.
+.Pp
+Commands can be automatically run when
+.Nm
+is entered by using
+.Cd options DDB_COMMANDONENTER
+or by setting
+.Ar ddb.commandonenter
+with
+.Xr sysctl 8 .
+Multiple commands can be separated by a semi-colon.
+
 .Sh COMMAND SYNTAX
 The general command syntax is:
 .Bd -ragged -offset indent
@@ -297,7 +315,7 @@ Set a breakpoint at
 If
 .Ar count
 is supplied, continues
-.Pq Ar count Ns -1
+.Pq Ar count Ns \-1
 times before stopping at the breakpoint.
 If the breakpoint is set, a breakpoint number is printed with
 .Sq \&# .
@@ -563,21 +581,24 @@ show process information in a
 .Xr ps 1
 style format.
 Information printed includes: process ID, parent process ID,
-process group, UID, process status, process flags, process
+process group, UID, process status, process flags, number of LWPs,
 command name, and process wait channel message.
 .It Cm /a
-show the kernel virtual addresses of each process'
-proc structure, u-area, and vmspace structure.
+show each process ID, command name, kernel virtual addresses of
+each process' proc structure, u-area, and vmspace structure.
 The vmspace address is also the address of the process'
 vm_map structure, and can be used in the
 .Ic show map
 command.
 .It Cm /w
-show each process' PID, command, system call emulation, wait channel
-address, and wait channel message.
+show each LWP ID, process ID, command name, system call emulation,
+priority, wait channel message and wait channel address.
+LWPs currently running on a CPU are marked with the '\&>' sign.
 .It Cm /l
-show each process' associated LWP information, including each LWP's
-LID, flags, kernel LWP structure address, u-area, and wait channel.
+show each LWP ID, process ID, process status, CPU ID the LWP runs on,
+process flags, kernel virtual address of LWP structure,
+LWP name and wait channel message.
+LWPs currently running on a CPU are marked with the '\&>' sign.
 This is the default.
 .El
 .It Ic show arptab
@@ -688,6 +709,22 @@ Print the cachelist and its statistics for this pool.
 Print the log entries for this pool.
 .It Cm /p
 Print the pagelist for this pool.
+.El
+.It Ic show proc Ns Oo Cm /ap Oc Ar address | pid
+Show information about a process and its LWPs.
+LWPs currently running on a CPU are marked with the '\&>' sign.
+.Bl -tag -width 4n -compact
+.It Cm /a
+The argument passed is the kernel virtual address
+of LWP structure.
+.It Cm /p
+The argument passed is a PID.
+Note that
+.Ar pid
+is interpreted using the current radix (see
+.Cm trace/t
+command for details).
+This is the default.
 .El
 .It Ic show registers Ns Op Cm /u
 Display the register set.
@@ -852,7 +889,7 @@ an unrecoverable error in some systems such as i386.
 Watchpoints on user addresses work the best.
 .It Ic whatis Ar address
 Describe what an address is.
-.It Ic write Ns Oo Cm /bhl Oc Ar address Ar expression Oo Ar expression ... Oc
+.It Ic write Ns Oo Cm /bhlBHL Oc Ar address Ar expression Oo Ar expression ... Oc
 Write the
 .Ar expression Ns s
 at succeeding locations.
@@ -866,6 +903,15 @@ and
 If no modifier is specified,
 .Cm /l
 is used.
+.Pp
+Specifying the modifiers in upper case,
+.Cm /B ,
+.Cm /H ,
+.Cm /L ,
+will prevent
+.Nm
+from reading the memory location first, which is useful for avoiding
+side effects when writing to I/O memory regions.
 .Pp
 Warning: since there is no delimiter between
 .Ar expression Ns s ,
@@ -910,19 +956,62 @@ to indicate that they are part of the machine-specific command
 set (e.g.
 .Ic machine reboot ) .
 Some of these commands are:
+.Ss ACORN26
+.Bl -tag -width "traptrace" -compact
+.It Ic bsw
+Writes one or two bytes to the IObus.
+Takes an address and a value.
+Use the
+.Dq b
+modifier to write a single byte and the
+.Dq h
+modifier to write two bytes.
+.It Ic frame
+Given a trap frame address, print out the trap frame.
+.It Ic irqstat
+Display the IRQ statistics
+.It Ic panic
+Print the current "panic" string.
+.El
 .Ss ALPHA
 .Bl -tag -width "traptrace" -compact
-.It Ic halt
-Call the PROM monitor to halt the CPU.
-.It Ic reboot
-Call the PROM monitor to reboot the CPU.
+.It Ic cpu
+Switch to another cpu.
+.\" .It Ic halt
+.\" Call the PROM monitor to halt the CPU.
+.\" .It Ic reboot
+.\" Call the PROM monitor to reboot the CPU.
+.El
+.Ss AMD64
+.Bl -tag -width "traptrace" -compact
+.It Ic cpu
+Switch to another cpu.
 .El
 .Ss ARM32
 .Bl -tag -width "traptrace" -compact
-.It Ic panic
-Print the current "panic" string.
 .It Ic frame
 Given a trap frame address, print out the trap frame.
+.It Ic panic
+Print the current "panic" string.
+.El
+.Ss HP700
+.Bl -tag -width "traptrace" -compact
+.It Ic frame
+Without an address the default trap frame is printed.
+Otherwise, the trap frame address can be given, or, when the
+.Dq l
+modifier is used, an LWP address.
+.El
+.Ss I386
+.Bl -tag -width "traptrace" -compact
+.It Ic cpu
+Switch to another cpu.
+.El
+.Ss IA64
+.Bl -tag -width "traptrace" -compact
+.It Ic vector
+Without a vector, information about all 256 vectors is shown.
+Otherwise, the given vector is shown.
 .El
 .Ss MIPS
 .Bl -tag -width "traptrace" -compact
@@ -938,12 +1027,40 @@ kernels compiled with
 .Dv DEBUG
 option.
 .El
+.Ss POWERPC 4xx
+.Bl -tag -width "traptrace" -compact
+.It Ic ctx
+Print process MMU context information.
+.It Ic pv
+Print PA-\*[Gt]VA mapping information.
+.It Ic reset
+Reset the system.
+.It Ic tf
+Display the contents of the trapframe.
+.It Ic tlb
+Display instruction translation storage buffer information.
+.It Ic dcr
+Set the DCR register.
+Must be between 0x00 and 0x3ff.
+.It Ic user
+Display user memory.
+Use the
+.Dq i
+modifier to get instruction decoding.
+.El
+.Ss POWERPC OEA
+.Bl -tag -width "traptrace" -compact
+.It Ic bat
+Print BAT registers and translations.
+.It Ic mmu
+Print MMU registers.
+.El
 .Ss SH3
 .Bl -tag -width "traptrace" -compact
 .It Ic tlb
-Print TLB entries
+Print TLB entries.
 .It Ic cache
-Print cache entries
+Print cache entries.
 .It Ic frame
 Print switch frame and trap frames.
 .It Ic stack
@@ -956,8 +1073,20 @@ option.
 .El
 .Ss SPARC
 .Bl -tag -width "traptrace" -compact
+.It Ic cpu
+Switch to another cpu.
 .It Ic prom
-Exit to the Sun PROM monitor.
+Enter the Sun PROM monitor.
+.It Ic proc
+Display some information about the LWP pointed to, or curlwp.
+.It Ic pcb
+Display information about the
+.Dq struct pcb
+listed.
+.It Ic page
+Display the pointer to the
+.Dq struct vm_page
+for this physical address.
 .El
 .Ss SPARC64
 .Bl -tag -width "traptrace" -compact
@@ -1051,7 +1180,7 @@ Print register window information.
 Argument is a stack frame number (0 is
 top of stack, which is used when no index is given).
 .El
-.Ss SUN3 and SUN3X
+.Ss SUN2, SUN3 and SUN3X
 .Bl -tag -width "traptrace" -compact
 .It Ic abort
 Drop into monitor via abort (allows continue).
@@ -1064,6 +1193,11 @@ Reboot the machine as in
 .It Ic pgmap
 Given an address, print the address, segment map, page map, and
 Page Table Entry (PTE).
+.El
+.Ss VAX
+.Bl -tag -width "traptrace" -compact
+.It Ic cpu
+Switch to another cpu.
 .El
 .Sh VARIABLES
 .Nm
@@ -1107,14 +1241,21 @@ When this variable is set to zero
 .Nm
 doesn't perform any wrapping.
 .It Va onpanic
-If non-zero (the default),
+If greater than zero (the default is 1),
 .Nm
 will be invoked when the kernel panics.
 If the kernel configuration option
 .D1 Cd options DDB_ONPANIC=0
 is used,
 .Va onpanic
-will be initialized to off.
+will be initialized to off, causing a stack trace to be printed and
+the system to be rebooted instead of
+.Nm
+being entered.
+Other useful settings are \-1, which suppresses the stack trace before
+reboot, and 2, which causes a stack trace to be printed and
+.Nm
+to be entered.
 .It Va fromconsole
 If non-zero (the default),
 the kernel allows to enter

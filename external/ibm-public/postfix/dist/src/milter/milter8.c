@@ -1,4 +1,4 @@
-/*	$NetBSD: milter8.c,v 1.1.1.2 2009/08/31 17:54:04 tron Exp $	*/
+/*	$NetBSD: milter8.c,v 1.1.1.6 2011/09/10 10:36:18 tron Exp $	*/
 
 /*++
 /* NAME
@@ -211,7 +211,7 @@ static const NAME_CODE smfir_table[] = {
 #define SMFIP_NOUNKNOWN 	(1L<<8)	/* filter does not want unknown cmd */
 #define SMFIP_NODATA		(1L<<9)	/* filter does not want DATA */
  /* Introduced with Sendmail 8.14. */
-#define SMFIP_SKIP		(1L<<10)/* MTA supports SMFIS_SKIP */
+#define SMFIP_SKIP		(1L<<10)/* MTA supports SMFIR_SKIP */
 #define SMFIP_RCPT_REJ		(1L<<11)/* filter wants rejected RCPTs */
 #define SMFIP_NR_CONN		(1L<<12)/* filter won't reply for connect */
 #define SMFIP_NR_HELO		(1L<<13)/* filter won't reply for HELO */
@@ -446,12 +446,15 @@ typedef struct {
   * 
   * XXX Is this still needed? Sendmail 8.14 provides a proper way to negotiate
   * what replies the mail filter will send.
+  * 
+  * XXX Keep this table in reverse numerical order. This is needed by the code
+  * that implements compatibility with older Milter protocol versions.
   */
 static const NAME_CODE milter8_event_masks[] = {
-    "2", MILTER8_V2_PROTO_MASK,
-    "3", MILTER8_V3_PROTO_MASK,
-    "4", MILTER8_V4_PROTO_MASK,
     "6", MILTER8_V6_PROTO_MASK,
+    "4", MILTER8_V4_PROTO_MASK,
+    "3", MILTER8_V3_PROTO_MASK,
+    "2", MILTER8_V2_PROTO_MASK,
     "no_header_reply", SMFIP_NOHREPL,
     0, -1,
 };
@@ -1254,11 +1257,13 @@ static const char *milter8_event(MILTER8 *milter, int event,
 				  MILTER8_DATA_BUFFER, milter->buf,
 				  MILTER8_DATA_END) != 0)
 		MILTER8_EVENT_BREAK(milter->def_reply);
+	    /* XXX Enforce this for each line of a multi-line reply. */
 	    if ((STR(milter->buf)[0] != '4' && STR(milter->buf)[0] != '5')
 		|| !ISDIGIT(STR(milter->buf)[1])
 		|| !ISDIGIT(STR(milter->buf)[2])
 		|| (STR(milter->buf)[3] != ' ' && STR(milter->buf)[3] != '-')
-		|| STR(milter->buf)[4] != STR(milter->buf)[0]) {
+		|| (ISDIGIT(STR(milter->buf)[4])
+		    && (STR(milter->buf)[4] != STR(milter->buf)[0]))) {
 		msg_warn("milter %s: malformed reply: %s",
 			 milter->m.name, STR(milter->buf));
 		milter8_conf_error(milter);
@@ -1776,6 +1781,41 @@ static void milter8_connect(MILTER8 *milter)
     }
     if (milter->ev_mask & SMFIP_RCPT_REJ)
 	milter->m.flags |= MILTER_FLAG_WANT_RCPT_REJ;
+
+    /*
+     * Allow the remote application to run an older protocol version, but
+     * don't them send events that their protocol version doesn't support.
+     * Based on a suggestion by Kouhei Sutou.
+     * 
+     * XXX When the Milter sends a protocol version that we don't have
+     * information for, use the information for the next-lower protocol
+     * version instead. This code assumes that the milter8_event_masks table
+     * is organized in reverse numerical order.
+     */
+    if (milter->version < my_version) {
+	const NAME_CODE *np;
+	int     version;
+
+	for (np = milter8_event_masks; /* see below */ ; np++) {
+	    if (np->name == 0) {
+		msg_warn("milter %s: unexpected protocol version %d",
+			 milter->m.name, milter->version);
+		break;
+	    }
+	    if ((version = atoi(np->name)) > 0 && version <= milter->version) {
+		milter->np_mask |= (SMFIP_NOSEND_MASK & ~np->code);
+		if (msg_verbose)
+		    msg_info("%s: non-protocol events for milter %s"
+			     " protocol version %d: %s",
+			     myname, milter->m.name, milter->version,
+			     str_name_mask_opt(milter->buf,
+					       "non-protocol event mask",
+					       smfip_table, milter->np_mask,
+					       NAME_MASK_NUMBER));
+		break;
+	    }
+	}
+    }
 
     /*
      * Initial negotiations completed.
@@ -2464,6 +2504,7 @@ static const char *milter8_message(MILTER *m, VSTREAM *qfile,
     int     mime_errs = 0;
     MILTER_MSG_CONTEXT msg_ctx;
     VSTRING *buf;
+    int     saved_errno;
 
     switch (milter->state) {
     case MILTER8_STAT_ERROR:
@@ -2477,8 +2518,12 @@ static const char *milter8_message(MILTER *m, VSTREAM *qfile,
 	if (msg_verbose)
 	    msg_info("%s: message to milter %s", myname, milter->m.name);
 	if (vstream_fseek(qfile, data_offset, SEEK_SET) < 0) {
+	    saved_errno = errno;
 	    msg_warn("%s: vstream_fseek %s: %m", myname, VSTREAM_PATH(qfile));
-	    return ("450 4.3.0 Queue file write error");
+	    /* XXX This should be available from cleanup_strerror.c. */
+	    return (saved_errno == EFBIG ?
+		    "552 5.3.4 Message file too big" :
+		    "451 4.3.0 Queue file write error");
 	}
 	msg_ctx.milter = milter;
 	msg_ctx.eoh_macros = eoh_macros;
@@ -2585,6 +2630,13 @@ static int milter8_send(MILTER *m, VSTREAM *stream)
 
     if (msg_verbose)
 	msg_info("%s: milter %s", myname, milter->m.name);
+
+    /*
+     * The next read on this Milter socket happens in a different process. It
+     * will not automatically flush the output buffer in this process.
+     */
+    if (milter->fp)
+	vstream_fflush(milter->fp);
 
     if (attr_print(stream, ATTR_FLAG_MORE,
 		   ATTR_TYPE_STR, MAIL_ATTR_MILT_NAME, milter->m.name,

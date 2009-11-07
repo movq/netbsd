@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.240 2009/10/26 16:41:35 cegger Exp $	*/
+/*	$NetBSD: if.c,v 1.260 2012/02/03 03:35:30 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2008 The NetBSD Foundation, Inc.
@@ -90,7 +90,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.240 2009/10/26 16:41:35 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.260 2012/02/03 03:35:30 christos Exp $");
 
 #include "opt_inet.h"
 
@@ -112,6 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: if.c,v 1.240 2009/10/26 16:41:35 cegger Exp $");
 #include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
+#include <sys/kmem.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -168,6 +169,10 @@ struct pfil_head if_pfil;	/* packet filtering hook for interfaces */
 
 static kauth_listener_t if_listener;
 
+static int ifioctl_attach(struct ifnet *);
+static void ifioctl_detach(struct ifnet *);
+static void ifnet_lock_enter(struct ifnet_lock *);
+static void ifnet_lock_exit(struct ifnet_lock *);
 static void if_detach_queues(struct ifnet *, struct ifqueue *);
 static void sysctl_sndq_setup(struct sysctllog **, const char *,
     struct ifaltq *);
@@ -249,6 +254,12 @@ if_alloc(u_char type)
 }
 
 void
+if_free(struct ifnet *ifp)
+{
+	free(ifp, M_DEVBUF);
+}
+
+void
 if_initname(struct ifnet *ifp, const char *name, int unit)
 {
 	(void)snprintf(ifp->if_xname, sizeof(ifp->if_xname),
@@ -286,6 +297,10 @@ int
 if_nullioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 
+	/* Wake ifioctl_detach(), who may wait for all threads to
+	 * quit the critical section.
+	 */
+	cv_signal(&ifp->if_ioctl_lock->il_emptied);
 	return ENXIO;
 }
 
@@ -491,8 +506,9 @@ if_attach(struct ifnet *ifp)
 	}
 	TAILQ_INIT(&ifp->if_addrlist);
 	TAILQ_INSERT_TAIL(&ifnet, ifp, if_list);
-	if (ifp->if_ioctl == NULL)
-		ifp->if_ioctl = ifioctl_common;
+
+	if (ifioctl_attach(ifp) != 0)
+		panic("%s: ifioctl_attach() failed", __func__);
 
 	mutex_enter(&index_gen_mtx);
 	ifp->if_index_gen = index_gen++;
@@ -792,13 +808,20 @@ again:
 	if_free_sadl(ifp);
 
 	/* Walk the routing table looking for stragglers. */
-	for (i = 0; i <= AF_MAX; i++)
-		(void)rt_walktree(i, if_rt_walktree, ifp);
+	for (i = 0; i <= AF_MAX; i++) {
+		while (rt_walktree(i, if_rt_walktree, ifp) == ERESTART)
+			continue;
+	}
 
 	DOMAIN_FOREACH(dp) {
 		if (dp->dom_ifdetach != NULL && ifp->if_afdata[dp->dom_family])
-			(*dp->dom_ifdetach)(ifp,
-			    ifp->if_afdata[dp->dom_family]);
+		{
+			void *p = ifp->if_afdata[dp->dom_family];
+			if (p) {
+				ifp->if_afdata[dp->dom_family] = NULL;
+				(*dp->dom_ifdetach)(ifp, p);
+			}
+		}
 
 		/*
 		 * One would expect multicast memberships (INET and
@@ -834,14 +857,18 @@ again:
 
 	TAILQ_REMOVE(&ifnet, ifp, if_list);
 
+	ifioctl_detach(ifp);
+
 	/*
 	 * remove packets that came from ifp, from software interrupt queues.
 	 */
 	DOMAIN_FOREACH(dp) {
 		for (i = 0; i < __arraycount(dp->dom_ifqueues); i++) {
-			if (dp->dom_ifqueues[i] == NULL)
+			struct ifqueue *iq = dp->dom_ifqueues[i];
+			if (iq == NULL)
 				break;
-			if_detach_queues(ifp, dp->dom_ifqueues[i]);
+			dp->dom_ifqueues[i] = NULL;
+			if_detach_queues(ifp, iq);
 		}
 	}
 
@@ -904,7 +931,7 @@ if_rt_walktree(struct rtentry *rt, void *v)
 	if (error != 0)
 		printf("%s: warning: unable to delete rtentry @ %p, "
 		    "error = %d\n", ifp->if_xname, rt, error);
-	return 0;
+	return ERESTART;
 }
 
 /*
@@ -979,7 +1006,7 @@ if_clone_lookup(const char *name, int *unitp)
 
 	unit = 0;
 	while (cp - name < IFNAMSIZ && *cp) {
-		if (*cp < '0' || *cp > '9' || unit > INT_MAX / 10) {
+		if (*cp < '0' || *cp > '9' || unit >= INT_MAX / 10) {
 			/* Bogus unit number. */
 			return NULL;
 		}
@@ -1395,42 +1422,27 @@ int
 ifpromisc(struct ifnet *ifp, int pswitch)
 {
 	int pcount, ret;
-	short flags;
-	struct ifreq ifr;
+	short nflags;
 
 	pcount = ifp->if_pcount;
-	flags = ifp->if_flags;
 	if (pswitch) {
 		/*
 		 * Allow the device to be "placed" into promiscuous
 		 * mode even if it is not configured up.  It will
-		 * consult IFF_PROMISC when it is is brought up.
+		 * consult IFF_PROMISC when it is brought up.
 		 */
 		if (ifp->if_pcount++ != 0)
 			return 0;
-		ifp->if_flags |= IFF_PROMISC;
-		if ((ifp->if_flags & IFF_UP) == 0)
-			return 0;
+		nflags = ifp->if_flags | IFF_PROMISC;
 	} else {
 		if (--ifp->if_pcount > 0)
 			return 0;
-		ifp->if_flags &= ~IFF_PROMISC;
-		/*
-		 * If the device is not configured up, we should not need to
-		 * turn off promiscuous mode (device should have turned it
-		 * off when interface went down; and will look at IFF_PROMISC
-		 * again next time interface comes up).
-		 */
-		if ((ifp->if_flags & IFF_UP) == 0)
-			return 0;
+		nflags = ifp->if_flags & ~IFF_PROMISC;
 	}
-	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_flags = ifp->if_flags;
-	ret = (*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, &ifr);
+	ret = if_flags_set(ifp, nflags);
 	/* Restore interface state if not successful. */
 	if (ret != 0) {
 		ifp->if_pcount = pcount;
-		ifp->if_flags = flags;
 	}
 	return ret;
 }
@@ -1473,6 +1485,13 @@ ifunit(const char *name)
 			return ifp;
 	}
 	return NULL;
+}
+
+ifnet_t *
+if_byindex(u_int idx)
+{
+
+	return (idx < if_indexlim) ? ifindex2ifnet[idx] : NULL;
 }
 
 /* common */
@@ -1678,6 +1697,32 @@ ifaddrpref_ioctl(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
 	}
 }
 
+static void
+ifnet_lock_enter(struct ifnet_lock *il)
+{
+	uint64_t *nenter;
+
+	/* Before trying to acquire the mutex, increase the count of threads
+	 * who have entered or who wait to enter the critical section.
+	 * Avoid one costly locked memory transaction by keeping a count for
+	 * each CPU.
+	 */
+	nenter = percpu_getref(il->il_nenter);
+	(*nenter)++;
+	percpu_putref(il->il_nenter);
+	mutex_enter(&il->il_lock);
+}
+
+static void
+ifnet_lock_exit(struct ifnet_lock *il)
+{
+	/* Increase the count of threads who have exited the critical
+	 * section.  Increase while we still hold the lock.
+	 */
+	il->il_nexit++;
+	mutex_exit(&il->il_lock);
+}
+
 /*
  * Interface ioctls.
  */
@@ -1686,8 +1731,6 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 {
 	struct ifnet *ifp;
 	struct ifreq *ifr;
-	struct ifcapreq *ifcr;
-	struct ifdatareq *ifdr;
 	int error = 0;
 #if defined(COMPAT_OSOCK) || defined(COMPAT_OIFREQ)
 	u_long ocmd = cmd;
@@ -1724,8 +1767,6 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 	} else
 #endif
 		ifr = data;
-	ifcr = data;
-	ifdr = data;
 
 	ifp = ifunit(ifr->ifr_name);
 
@@ -1777,6 +1818,7 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 	case SIOCS80211POWER:
 	case SIOCS80211BSSID:
 	case SIOCS80211CHANNEL:
+	case SIOCSLINKSTR:
 		if (l != NULL) {
 			error = kauth_authorize_network(l->l_cred,
 			    KAUTH_NETWORK_INTERFACE,
@@ -1789,11 +1831,12 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 
 	oif_flags = ifp->if_flags;
 
+	ifnet_lock_enter(ifp->if_ioctl_lock);
 	error = (*ifp->if_ioctl)(ifp, cmd, data);
 	if (error != ENOTTY)
 		;
 	else if (so->so_proto == NULL)
-		return EOPNOTSUPP;
+		error = EOPNOTSUPP;
 	else {
 #ifdef COMPAT_OSOCK
 		error = compat_ifioctl(so, ocmd, cmd, data, l);
@@ -1818,7 +1861,98 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 		ifreqn2o(oifr, ifr);
 #endif
 
+	ifnet_lock_exit(ifp->if_ioctl_lock);
 	return error;
+}
+
+/* This callback adds to the sum in `arg' the number of
+ * threads on `ci' who have entered or who wait to enter the
+ * critical section.
+ */
+static void
+ifnet_lock_sum(void *p, void *arg, struct cpu_info *ci)
+{
+	uint64_t *sum = arg, *nenter = p;
+
+	*sum += *nenter;
+}
+
+/* Return the number of threads who have entered or who wait
+ * to enter the critical section on all CPUs.
+ */
+static uint64_t
+ifnet_lock_entrances(struct ifnet_lock *il)
+{
+	uint64_t sum = 0;
+
+	percpu_foreach(il->il_nenter, ifnet_lock_sum, &sum);
+
+	return sum;
+}
+
+static int
+ifioctl_attach(struct ifnet *ifp)
+{
+	struct ifnet_lock *il;
+
+	/* If the driver has not supplied its own if_ioctl, then
+	 * supply the default.
+	 */
+	if (ifp->if_ioctl == NULL)
+		ifp->if_ioctl = ifioctl_common;
+
+	/* Create an ifnet_lock for synchronizing ifioctls. */
+	if ((il = kmem_zalloc(sizeof(*il), KM_SLEEP)) == NULL)
+		return ENOMEM;
+
+	il->il_nenter = percpu_alloc(sizeof(uint64_t));
+	if (il->il_nenter == NULL) {
+		kmem_free(il, sizeof(*il));
+		return ENOMEM;
+	}
+
+	mutex_init(&il->il_lock, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&il->il_emptied, ifp->if_xname);
+
+	ifp->if_ioctl_lock = il;
+
+	return 0;
+}
+
+/*
+ * This must not be called until after `ifp' has been withdrawn from the
+ * ifnet tables so that ifioctl() cannot get a handle on it by calling
+ * ifunit().
+ */
+static void
+ifioctl_detach(struct ifnet *ifp)
+{
+	struct ifnet_lock *il;
+
+	il = ifp->if_ioctl_lock;
+	mutex_enter(&il->il_lock);
+	/* Install if_nullioctl to make sure that any thread that
+	 * subsequently enters the critical section will quit it
+	 * immediately and signal the condition variable that we
+	 * wait on, below.
+	 */
+	ifp->if_ioctl = if_nullioctl;
+	/* Sleep while threads are still in the critical section or
+	 * wait to enter it.
+	 */
+	while (ifnet_lock_entrances(il) != il->il_nexit)
+		cv_wait(&il->il_emptied, &il->il_lock);
+	/* At this point, we are the only thread still in the critical
+	 * section, and no new thread can get a handle on the ifioctl
+	 * lock, so it is safe to free its memory.
+	 */
+	mutex_exit(&il->il_lock);
+	ifp->if_ioctl_lock = NULL;
+	percpu_free(il->il_nenter, sizeof(uint64_t));
+	il->il_nenter = NULL;
+	cv_destroy(&il->il_emptied);
+	mutex_destroy(&il->il_lock);
+	kmem_free(il, sizeof(*il));
 }
 
 /*
@@ -1914,25 +2048,33 @@ ifconf(u_long cmd, void *data)
 }
 
 int
-ifreq_setaddr(const u_long cmd, struct ifreq *ifr, const struct sockaddr *sa)
+ifreq_setaddr(u_long cmd, struct ifreq *ifr, const struct sockaddr *sa)
 {
 	uint8_t len;
-	u_long ncmd;
-	const uint8_t osockspace = sizeof(ifr->ifr_addr);
-	const uint8_t sockspace = sizeof(ifr->ifr_ifru.ifru_space);
+#ifdef COMPAT_OIFREQ
+	struct ifreq ifrb;
+	struct oifreq *oifr = NULL;
+	u_long ocmd = cmd;
+	cmd = compat_cvtcmd(cmd);
+	if (cmd != ocmd) {
+		oifr = (struct oifreq *)(void *)ifr;
+		ifr = &ifrb;
+		ifreqo2n(oifr, ifr);
+		len = sizeof(oifr->ifr_addr);
+	} else
+#endif
+		len = sizeof(ifr->ifr_ifru.ifru_space);
 
-#ifdef INET6
-	if (cmd == SIOCGIFPSRCADDR_IN6 || cmd == SIOCGIFPDSTADDR_IN6)
-		len = MIN(sizeof(struct sockaddr_in6), sa->sa_len);
-	else
-#endif /* INET6 */
-	if ((ncmd = compat_cvtcmd(cmd)) != cmd)
-		len = MIN(osockspace, sa->sa_len);
-	else
-		len = MIN(sockspace, sa->sa_len);
 	if (len < sa->sa_len)
 		return EFBIG;
+
+	memset(&ifr->ifr_addr, 0, len);
 	sockaddr_copy(&ifr->ifr_addr, len, sa);
+
+#ifdef COMPAT_OIFREQ
+	if (cmd != ocmd)
+		ifreqn2o(oifr, ifr);
+#endif
 	return 0;
 }
 
@@ -1992,6 +2134,71 @@ ifq_enqueue2(struct ifnet *ifp, struct ifqueue *ifq, struct mbuf *m
 	return 0;
 }
 
+int
+if_addr_init(ifnet_t *ifp, struct ifaddr *ifa, const bool src)
+{
+	int rc;
+
+	if (ifp->if_initaddr != NULL)
+		rc = (*ifp->if_initaddr)(ifp, ifa, src);
+	else if (src ||
+	         (rc = (*ifp->if_ioctl)(ifp, SIOCSIFDSTADDR, ifa)) == ENOTTY)
+		rc = (*ifp->if_ioctl)(ifp, SIOCINITIFADDR, ifa);
+
+	return rc;
+}
+
+int
+if_flags_set(ifnet_t *ifp, const short flags)
+{
+	int rc;
+
+	if (ifp->if_setflags != NULL)
+		rc = (*ifp->if_setflags)(ifp, flags);
+	else {
+		short cantflags, chgdflags;
+		struct ifreq ifr;
+
+		chgdflags = ifp->if_flags ^ flags;
+		cantflags = chgdflags & IFF_CANTCHANGE;
+
+		if (cantflags != 0)
+			ifp->if_flags ^= cantflags;
+
+                /* Traditionally, we do not call if_ioctl after
+                 * setting/clearing only IFF_PROMISC if the interface
+                 * isn't IFF_UP.  Uphold that tradition.
+		 */
+		if (chgdflags == IFF_PROMISC && (ifp->if_flags & IFF_UP) == 0)
+			return 0;
+
+		memset(&ifr, 0, sizeof(ifr));
+
+		ifr.ifr_flags = flags & ~IFF_CANTCHANGE;
+		rc = (*ifp->if_ioctl)(ifp, SIOCSIFFLAGS, &ifr);
+
+		if (rc != 0 && cantflags != 0)
+			ifp->if_flags ^= cantflags;
+	}
+
+	return rc;
+}
+
+int
+if_mcast_op(ifnet_t *ifp, const unsigned long cmd, const struct sockaddr *sa)
+{
+	int rc;
+	struct ifreq ifr;
+
+	if (ifp->if_mcastop != NULL)
+		rc = (*ifp->if_mcastop)(ifp, cmd, sa);
+	else {
+		ifreq_setaddr(cmd, &ifr, sa);
+		rc = (*ifp->if_ioctl)(ifp, cmd, &ifr);
+	}
+
+	return rc;
+}
 
 static void
 sysctl_sndq_setup(struct sysctllog **clog, const char *ifname,

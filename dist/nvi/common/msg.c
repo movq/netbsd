@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.c,v 1.3 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: msg.c,v 1.5 2011/08/17 12:56:55 christos Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -76,7 +76,7 @@ msgq(sp, mt, fmt, va_alist)
 	char *bp, *mp;
         va_list ap;
 #ifndef NL_ARGMAX
-	CHAR_T ch;
+	int ch;
 	char *rbp, *s_rbp;
 	const char *t, *u;
 	size_t cnt1, cnt2, soff;
@@ -214,12 +214,12 @@ retry:		FREE_SPACE(sp, bp, blen);
 		if (*p == '\0')
 			break;
 		++p;
-		if (!isdigit(*p)) {
+		if (!isdigit((unsigned char)*p)) {
 			if (*p == '%')
 				++p;
 			continue;
 		}
-		for (u = p; *++p != '\0' && isdigit(*p););
+		for (u = p; *++p != '\0' && isdigit((unsigned char)*p););
 		if (*p != '$')
 			continue;
 
@@ -234,7 +234,7 @@ retry:		FREE_SPACE(sp, bp, blen);
 			goto ret;
 
 		/* Up to, and including the conversion character. */
-		for (u = p; (ch = *++p) != '\0';)
+		for (u = p; (ch = (unsigned char)*++p) != '\0';)
 			if (isalpha(ch) &&
 			    strchr("diouxXfeEgGcspn", ch) != NULL)
 				break;
@@ -388,7 +388,7 @@ msgq_wstr(SCR *sp, mtype_t mtype, const CHAR_T *str, const char *fmt)
 	const char *nstr;
 
 	if (str == NULL) {
-		msgq(sp, mtype, fmt);
+		msgq(sp, mtype, "%s", fmt);
 		return;
 	}
 	INT2CHAR(sp, str, STRLEN(str) + 1, nstr, nlen);
@@ -408,7 +408,7 @@ msgq_str(SCR *sp, mtype_t mtype, const char *str, const char *fmt)
 	char *p;
 
 	if (str == NULL) {
-		msgq(sp, mtype, fmt);
+		msgq(sp, mtype, "%s", fmt);
 		return;
 	}
 

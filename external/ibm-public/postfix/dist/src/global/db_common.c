@@ -1,4 +1,4 @@
-/*	$NetBSD: db_common.c,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: db_common.c,v 1.1.1.3 2011/03/02 19:32:13 tron Exp $	*/
 
 /*++
 /* NAME
@@ -163,13 +163,13 @@ typedef struct {
     STRING_LIST *domain;
     int     flags;
     int     nparts;
-}       DB_COMMON_CTX;
+} DB_COMMON_CTX;
 
 /* db_common_parse - validate query or result template */
 
 int     db_common_parse(DICT *dict, void **ctxPtr, const char *format, int query)
 {
-    DB_COMMON_CTX *ctx = (DB_COMMON_CTX *) * ctxPtr;
+    DB_COMMON_CTX *ctx = (DB_COMMON_CTX *) *ctxPtr;
     const char *cp;
     int     dynamic = 0;
 
@@ -230,7 +230,7 @@ int     db_common_parse(DICT *dict, void **ctxPtr, const char *format, int query
 		break;
 	    default:
 		msg_fatal("db_common_parse: %s: Invalid %s template: %s",
-			  dict->name, query ? "query" : "result", format);
+		       ctx->dict->name, query ? "query" : "result", format);
 	    }
     return dynamic;
 }

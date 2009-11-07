@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.53 2009/08/21 04:05:20 thorpej Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.56 2011/07/09 17:32:30 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,19 +31,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.53 2009/08/21 04:05:20 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.56 2011/07/09 17:32:30 matt Exp $");
 
 #include "opt_cputype.h"
 
+#define _PMAX_BUS_DMA_PRIVATE
+
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
+#include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
-
-#define _PMAX_BUS_DMA_PRIVATE
-#include <machine/bus.h>
 
 #include <common/bus_dma/bus_dmamem_common.h>
 
@@ -155,6 +155,7 @@ _bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
     struct vmspace *vm, int flags, vaddr_t *lastaddrp, int *segp, int first)
 {
 	bus_size_t sgsize;
+	paddr_t pa;
 	bus_addr_t curaddr, lastaddr, baddr, bmask;
 	vaddr_t vaddr = (vaddr_t)buf;
 	int seg;
@@ -168,14 +169,15 @@ _bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
 		 */
 		if (!VMSPACE_IS_KERNEL_P(vm))
 			(void) pmap_extract(vm_map_pmap(&vm->vm_map),
-			    vaddr, &curaddr);
+			    vaddr, &pa);
 		else
-			curaddr = kvtophys(vaddr);
+			pa = kvtophys(vaddr);
+		curaddr = pa;
 
 		/*
 		 * Compute the segment size, and adjust counts.
 		 */
-		sgsize = PAGE_SIZE - ((u_long)vaddr & PGOFSET);
+		sgsize = PAGE_SIZE - (vaddr & PGOFSET);
 		if (buflen < sgsize)
 			sgsize = buflen;
 
@@ -468,7 +470,7 @@ _bus_dmamap_sync_r3k(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 	 * NOTE: Even though this is `wbinv_all', since the cache is
 	 * write-though, it just invalidates it.
 	 */
-	if (len >= mips_pdcache_size) {
+	if (len >= mips_cache_info.mci_pdcache_size) {
 		mips_dcache_wbinv_all();
 		return;
 	}
@@ -656,12 +658,9 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
     bus_size_t boundary, bus_dma_segment_t *segs, int nsegs, int *rsegs,
     int flags)
 {
-	extern paddr_t avail_start, avail_end;		/* XXX */
-
 	return (_bus_dmamem_alloc_range_common(t, size, alignment, boundary,
-					       segs, nsegs, rsegs, flags,
-					       avail_start /*low*/,
-					       avail_end - PAGE_SIZE /*high*/));
+	    segs, nsegs, rsegs, flags,
+	    mips_avail_start /*low*/, mips_avail_end - PAGE_SIZE /*high*/));
 }
 
 /*

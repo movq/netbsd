@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.libkern,v 1.5 2009/08/14 19:23:53 dsl Exp $
+#	$NetBSD: Makefile.libkern,v 1.17 2012/02/05 14:19:03 dholland Exp $
 
 # 
 # Variable definitions for libkern.  
@@ -9,7 +9,7 @@
 # You *may* set:
 #   LIBKERN_ARCH: architecture subdir to be used
 #   KERNCPPFLAGS: see Makefile.inc
-#   KERNMICPPFLAGS: see Makefile.inc
+#   KERNMISCCPPFLAGS: see Makefile.inc
 #
 
 .include <bsd.own.mk>
@@ -32,6 +32,7 @@ CPPFLAGS+=	-I$M ${KERNCPPFLAGS} ${KERNMISCCPPFLAGS}
 .include "${.PARSEDIR}/../../../common/lib/libc/Makefile.inc"
 .include "${.PARSEDIR}/../../../common/lib/libutil/Makefile.inc"
 .include "${.PARSEDIR}/../../../common/lib/libprop/Makefile.inc"
+.include "${.PARSEDIR}/../../../common/lib/libppath/Makefile.inc"
 
 CPPFLAGS+=	-I${KERNDIR}/../../../common/include
 
@@ -42,7 +43,12 @@ CPPFLAGS+=	-I${KERNDIR}/../../../common/include
 .include "$M/Makefile.inc"
 .endif
 
-.if (${MACHINE_ARCH} != "alpha")
+.if (${MACHINE_ARCH} != "alpha") && \
+    (${MACHINE_ARCH} != "mips64eb" || !empty(CFLAGS:M-mabi=32)) && \
+    (${MACHINE_ARCH} != "mips64el" || !empty(CFLAGS:M-mabi=32)) && \
+    (${MACHINE_ARCH} != "powerpc64") && \
+    (${MACHINE_ARCH} != "sparc64") && \
+    (${MACHINE_ARCH} != "x86_64" || !empty(CFLAGS:M-m32))
 # Quad support
 SRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c iordi3.c \
 	lshldi3.c lshrdi3.c moddi3.c muldi3.c negdi2.c notdi2.c qdivrem.c \
@@ -50,11 +56,15 @@ SRCS+=	adddi3.c anddi3.c ashldi3.c ashrdi3.c cmpdi2.c divdi3.c iordi3.c \
 .endif
 
 # Other stuff
-SRCS+=	__assert.c __main.c
-SRCS+=	__cmsg_alignbytes.c cpuset.c inet_addr.c intoa.c
+SRCS+=	kern_assert.c __main.c
+SRCS+=	cpuset.c inet_addr.c intoa.c
+.if empty(SRCS:Mbyte_swap_8.*)
 SRCS+=	bswap64.c
+.endif
 SRCS+=	md4c.c md5c.c rmd160.c sha1.c sha2.c
 SRCS+=	pmatch.c arc4random.c bcd.c mcount.c mertwist.c crc32.c
+
+SRCS+=	ppath_kmem_alloc.c
 
 SRCS+=	strsep.c strstr.c
 SRCS+=	strlcpy.c strlcat.c
@@ -62,12 +72,16 @@ SRCS+=	strlcpy.c strlcat.c
 SRCS+=	imax.c imin.c lmax.c lmin.c max.c min.c ulmax.c ulmin.c
 SRCS+=	memcpy.c memmove.c
 SRCS+=	strchr.c strrchr.c
-SRCS+=	memcmp.c memset.c 
+SRCS+=	memcmp.c
+.if empty(SRCS:Mmemset2.*)
+SRCS+=	memset.c 
+.endif
 SRCS+=	popcount32.c popcount64.c
 SRCS+=	strtoul.c strtoll.c strtoull.c strtoumax.c
 
 SRCS+=	scanc.c skpc.c
 SRCS+=	random.c
+SRCS+=	rngtest.c
 
 SRCS+=	memchr.c
 SRCS+=	strcat.c strcmp.c strcpy.c strlen.c
@@ -91,4 +105,3 @@ unwanted_file := ${SRCS:M${check_file:.S=.c}}
 SRCS := ${SRCS:N${unwanted_file}}
 .endif
 .endfor
-

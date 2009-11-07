@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.33 2008/01/31 05:30:00 matt Exp $	*/
+/*	$NetBSD: types.h,v 1.46.8.1 2012/06/13 19:44:11 riz Exp $	*/
 
 /*-
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -42,6 +42,12 @@
 #if defined(_NETBSD_SOURCE)
 typedef	unsigned long	paddr_t, vaddr_t;
 typedef	unsigned long	psize_t, vsize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 #endif
 
 /*
@@ -50,23 +56,47 @@ typedef	unsigned long	psize_t, vsize_t;
 typedef unsigned long register_t;
 typedef __uint64_t register64_t;
 typedef __uint32_t register32_t;
+#define	PRIxREGISTER	"lx"
+#define	PRIxREGISTER64	PRIx64
+#define	PRIxREGISTER32	PRIx32
 
 #if defined(_KERNEL)
 typedef struct label_t {
 	register_t val[40]; /* double check this XXX */
 } label_t;
+
+typedef __uint32_t tlb_asid_t;		/* for booke */
 #endif
 
 typedef volatile int __cpu_simple_lock_t;
+typedef volatile __uint32_t __cpuset_t;
 
 #define __SIMPLELOCK_LOCKED	1
 #define __SIMPLELOCK_UNLOCKED	0
 
-#define	__HAVE_CPU_COUNTER
-#define	__HAVE_SYSCALL_INTERN
-
+#define __HAVE_CPU_COUNTER
+#define __HAVE_NEW_STYLE_BUS_H
+#define __HAVE_SYSCALL_INTERN
+#define	__HAVE_CPU_DATA_FIRST
+#define	__HAVE_CPU_UAREA_ROUTINES
 #ifdef _LP64
 #define	__HAVE_ATOMIC64_OPS
+#endif
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE___LWP_GETTCB_FAST
+#define	__HAVE___LWP_SETTCB
+#define	__HAVE_TLS_VARIANT_I
+
+#if defined(_KERNEL) || defined(_KMEMUSER)
+#define	PCU_FPU		0	/* FPU */
+#define	PCU_VEC		1	/* AltiVec/SPE */
+#define	PCU_UNIT_COUNT	2
+#endif
+
+#define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
+#define	__HAVE_MM_MD_KERNACC
+#if defined(_KERNEL)
+#define	__HAVE_RAS
 #endif
 
 #endif	/* _MACHTYPES_H_ */

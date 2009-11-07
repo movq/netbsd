@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_termios.h,v 1.19 2009/03/15 15:55:51 cegger Exp $	*/
+/*	$NetBSD: linux_termios.h,v 1.21 2011/09/25 13:40:07 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -263,7 +263,9 @@ linux_termio_to_bsd_termios(struct linux_termio *lt, struct termios *bts)
 	bts->c_cc[VQUIT] = lt->c_cc[LINUX_OLD_VQUIT];
 	bts->c_cc[VERASE] = lt->c_cc[LINUX_OLD_VERASE];
 	bts->c_cc[VKILL] = lt->c_cc[LINUX_OLD_VKILL];
+#if LINUX_VEOF < LINUX_NCC
 	bts->c_cc[VEOF] = lt->c_cc[LINUX_OLD_VEOF];
+#endif
 	bts->c_cc[VTIME] = lt->c_cc[LINUX_OLD_VTIME];
 	bts->c_cc[VMIN] = lt->c_cc[LINUX_OLD_VMIN];
 }
@@ -343,14 +345,16 @@ bsd_termios_to_linux_termio(struct termios *bts, struct linux_termio *lt)
 	}
 	lt->c_cflag |= mask;
 
-	lt->c_cc[LINUX_VINTR] = bts->c_cc[VINTR];
-	lt->c_cc[LINUX_VQUIT] = bts->c_cc[VQUIT];
-	lt->c_cc[LINUX_VERASE] = bts->c_cc[VERASE];
-	lt->c_cc[LINUX_VKILL] = bts->c_cc[VKILL];
-	lt->c_cc[LINUX_VEOF] = bts->c_cc[VEOF];
-	lt->c_cc[LINUX_VTIME] = bts->c_cc[VTIME];
-	lt->c_cc[LINUX_VMIN] = bts->c_cc[VMIN];
-	lt->c_cc[LINUX_VSWTC] = 0;
+	lt->c_cc[LINUX_OLD_VINTR] = bts->c_cc[VINTR];
+	lt->c_cc[LINUX_OLD_VQUIT] = bts->c_cc[VQUIT];
+	lt->c_cc[LINUX_OLD_VERASE] = bts->c_cc[VERASE];
+	lt->c_cc[LINUX_OLD_VKILL] = bts->c_cc[VKILL];
+#if LINUX_OLD_VEOF < LINUX_NCC
+	lt->c_cc[LINUX_OLD_VEOF] = bts->c_cc[VEOF];
+#endif
+	lt->c_cc[LINUX_OLD_VTIME] = bts->c_cc[VTIME];
+	lt->c_cc[LINUX_OLD_VMIN] = bts->c_cc[VMIN];
+	lt->c_cc[LINUX_OLD_VSWTC] = 0;
 
 	/* XXX should be fixed someday */
 	lt->c_line = 0;

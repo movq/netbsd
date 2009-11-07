@@ -1,4 +1,4 @@
-/*	$NetBSD: uniq.c,v 1.15 2008/07/21 14:19:27 lukem Exp $	*/
+/*	$NetBSD: uniq.c,v 1.17 2010/10/06 07:59:18 wiz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)uniq.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: uniq.c,v 1.15 2008/07/21 14:19:27 lukem Exp $");
+__RCSID("$NetBSD: uniq.c,v 1.17 2010/10/06 07:59:18 wiz Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -106,13 +106,6 @@ main (int argc, char *argv[])
 
 done:	argc -= optind;
 	argv +=optind;
-
-	/* If no flags are set, default is -d -u. */
-	if (cflag) {
-		if (dflag || uflag)
-			usage();
-	} else if (!dflag && !uflag)
-		dflag = uflag = 1;
 
 	switch(argc) {
 	case 0:
@@ -192,10 +185,13 @@ static void
 show(FILE *ofp, const char *str)
 {
 
-	if (cflag && *str)
+	if ((dflag && repeats == 0) || (uflag && repeats > 0))
+		return;
+	if (cflag) {
 		(void)fprintf(ofp, "%4d %s", repeats + 1, str);
-	if ((dflag && repeats) || (uflag && !repeats))
+	} else {
 		(void)fprintf(ofp, "%s", str);
+	}
 }
 
 static const char *
@@ -255,7 +251,7 @@ obsolete(char *argv[])
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: %s [-c | -du] [-f fields] [-s chars] "
+	(void)fprintf(stderr, "Usage: %s [-cdu] [-f fields] [-s chars] "
 	    "[input [output]]\n", getprogname());
 	exit(1);
 }

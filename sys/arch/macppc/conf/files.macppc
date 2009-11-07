@@ -1,4 +1,4 @@
-#	$NetBSD: files.macppc,v 1.96 2008/10/07 19:32:29 pgoyette Exp $
+#	$NetBSD: files.macppc,v 1.99 2012/01/24 04:33:11 macallan Exp $
 #
 # macppc-specific configuration info
 
@@ -18,6 +18,7 @@ file arch/macppc/macppc/interrupts.c
 file arch/powerpc/oea/ofwoea_machdep.c
 file arch/powerpc/oea/ofw_consinit.c
 file arch/macppc/macppc/machdep.c
+file arch/macppc/macppc/static_edid.c
 file arch/powerpc/oea/ofw_rascons.c
 file arch/macppc/dev/dbdma.c
 
@@ -97,6 +98,7 @@ file arch/macppc/pci/pci_machdep.c		pci
 file arch/macppc/pci/agp_machdep.c		agp
 file arch/powerpc/pci/pciconf_indirect.c	pci
 file arch/powerpc/pci/pci_machdep_common.c	pci
+file    arch/powerpc/pci/pci_module.c		pci & modular
 
 device bandit: pcibus, pic_ohare, ipi_hammerhead
 attach bandit at mainbus
@@ -293,4 +295,12 @@ device deq
 attach deq at ki2c
 file arch/macppc/dev/deq.c				deq
 
+device videopll
+attach videopll at iic
+file arch/macppc/dev/videopll.c				videopll needs-flag
+defflag opt_videopll.h VIDEOPLL_DEBUG
 
+device valkyriefb: wsemuldisplaydev, rasops8, vcons, videomode
+attach valkyriefb at mainbus
+file arch/macppc/dev/valkyriefb.c			valkyriefb
+defflag opt_valkyriefb.h VALKYRIEFB_DEBUG

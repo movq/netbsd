@@ -1,4 +1,4 @@
-/*	$NetBSD: umass.c,v 1.135 2009/10/30 16:22:32 is Exp $	*/
+/*	$NetBSD: umass.c,v 1.141 2011/08/24 11:28:50 mbalmer Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -124,7 +124,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.135 2009/10/30 16:22:32 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.141 2011/08/24 11:28:50 mbalmer Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_umass.h"
+#endif
 
 #include "atapibus.h"
 #include "scsibus.h"
@@ -707,21 +711,14 @@ int
 umass_activate(device_t dev, enum devact act)
 {
 	struct umass_softc *sc = device_private(dev);
-	struct umassbus_softc *scbus = sc->bus;
-	int rv;
 
 	DPRINTF(UDMASS_USB, ("%s: umass_activate: %d\n",
-	    device_xname(sc->sc_dev), act));
+	    device_xname(dev), act));
 
 	switch (act) {
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		if (scbus == NULL || scbus->sc_child == NULL)
-			return 0;
-		rv = config_deactivate(scbus->sc_child);
-		DPRINTF(UDMASS_USB, ("%s: umass_deactivate: child "
-		    "returned %d\n", device_xname(sc->sc_dev), rv));
-		return rv;
+		return 0;
 	default:
 		return EOPNOTSUPP;
 	}
@@ -1185,10 +1182,11 @@ umass_bbb_state(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 		DIF(UDMASS_BBB, umass_bbb_dump_csw(sc, &sc->csw));
 
-		if (sc->sc_quirks & UMASS_QUIRK_IGNORE_RESIDUE)
-                    residue = sc->transfer_datalen - sc->transfer_actlen;
-                else
-                    residue = UGETDW(sc->csw.dCSWDataResidue);
+		if ((sc->sc_quirks & UMASS_QUIRK_IGNORE_RESIDUE) == 0) {
+			residue = UGETDW(sc->csw.dCSWDataResidue);
+		} else {
+			residue = sc->transfer_datalen - sc->transfer_actlen;
+		}
 
 		/* Translate weird command-status signatures. */
 		if ((sc->sc_quirks & UMASS_QUIRK_WRONG_CSWSIG) &&

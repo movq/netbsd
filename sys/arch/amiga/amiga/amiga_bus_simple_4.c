@@ -1,4 +1,4 @@
-/* $NetBSD: amiga_bus_simple_4.c,v 1.5 2008/04/28 20:23:12 martin Exp $ */
+/* $NetBSD: amiga_bus_simple_4.c,v 1.10 2011/10/30 08:33:43 rkujawa Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,26 +30,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: amiga_bus_simple_4.c,v 1.5 2008/04/28 20:23:12 martin Exp $");
+__KERNEL_RCSID(1, "$NetBSD: amiga_bus_simple_4.c,v 1.10 2011/10/30 08:33:43 rkujawa Exp $");
 
 #define AMIGA_SIMPLE_BUS_STRIDE 4		/* 1 byte per long */
 #define AMIGA_SIMPLE_BUS_WORD_METHODS
+#define AMIGA_SIMPLE_BUS_LONGWORD_METHODS
 
 #include "simple_busfuncs.c"
 
 /*
  * Little-endian word methods.
- * Stream access does not swap, used for 16-bit wide transfers of byte streams.
- * Non-stream access swaps bytes.
- * XXX Only *_multi_2 transfers currently swap bytes XXX
+ * Stream access does not swap, used for 16-bit and 32-bit wide transfers 
+ * of byte streams. Non-stream access swaps bytes.
+ * XXX Only *_multi_2 and *_multi_4 transfers currently swap bytes XXX
  */
 
 bsrm(oabs(bsrm2_swap_), u_int16_t);
 bswm(oabs(bswm2_swap_), u_int16_t);
+bsrm(oabs(bsrm4_swap_), u_int32_t);
+bswm(oabs(bswm4_swap_), u_int32_t);
 
 void
 oabs(bsrm2_swap_)(bus_space_handle_t handle, bus_size_t offset,
-	 	  u_int16_t *pointer, bus_size_t count)
+		  u_int16_t *pointer, bus_size_t count)
 {
 	volatile u_int16_t *p;
 
@@ -57,6 +60,7 @@ oabs(bsrm2_swap_)(bus_space_handle_t handle, bus_size_t offset,
 
 	while (count > 0) {
 		*pointer++ = bswap16(*p);
+		amiga_bus_reorder_protect();
 		--count;
 	}
 }
@@ -71,6 +75,38 @@ oabs(bswm2_swap_)(bus_space_handle_t handle, bus_size_t offset,
 
 	while (count > 0) {
 		*p = bswap16(*pointer);
+		amiga_bus_reorder_protect();
+		++pointer;
+		--count;
+	}
+}
+
+void
+oabs(bsrm4_swap_)(bus_space_handle_t handle, bus_size_t offset,
+		  u_int32_t *pointer, bus_size_t count)
+{
+	volatile u_int32_t *p;
+
+	p = (volatile u_int32_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
+
+	while (count > 0) {
+		*pointer++ = bswap32(*p);
+		amiga_bus_reorder_protect();
+		--count;
+	}
+}
+
+void
+oabs(bswm4_swap_)(bus_space_handle_t handle, bus_size_t offset,
+		  const u_int32_t *pointer, bus_size_t count)
+{
+	volatile u_int32_t *p;
+
+	p = (volatile u_int32_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
+
+	while (count > 0) {
+		*p = bswap32(*pointer);
+		amiga_bus_reorder_protect();
 		++pointer;
 		--count;
 	}
@@ -78,33 +114,49 @@ oabs(bswm2_swap_)(bus_space_handle_t handle, bus_size_t offset,
 
 const struct amiga_bus_space_methods amiga_bus_stride_4swap = {
 
-        oabs(bsm_),
-        oabs(bsms_),
-        oabs(bsu_),
-        0,
-        0,
+	.bsm =		oabs(bsm_),
+	.bsms =		oabs(bsms_),
+	.bsu =		oabs(bsu_),
+	.bsa =		NULL,
+	.bsf =		NULL,
 
-        oabs(bsr1_),
-        oabs(bsw1_),
-        oabs(bsrm1_),
-        oabs(bswm1_),
-        oabs(bsrr1_),
-        oabs(bswr1_),
-        oabs(bssr1_),
-        oabs(bscr1_),
+	.bsr1 =		oabs(bsr1_),
+	.bsw1 =		oabs(bsw1_),
+	.bsrm1 =	oabs(bsrm1_),
+	.bswm1 =	oabs(bswm1_),
+	.bsrr1 =	oabs(bsrr1_),
+	.bswr1 =	oabs(bswr1_),
+	.bssr1 =	oabs(bssr1_),
+	.bscr1 =	oabs(bscr1_),
 
-        oabs(bsr2_),		/* XXX swap? */
-        oabs(bsw2_),		/* XXX swap? */
-        oabs(bsr2_),
-        oabs(bsw2_),
-        oabs(bsrm2_swap_),
-        oabs(bswm2_swap_),
-        oabs(bsrm2_),
-        oabs(bswm2_),
-        oabs(bsrr2_),		/* XXX swap? */
-        oabs(bswr2_),		/* XXX swap? */
-        oabs(bsrr2_),
-        oabs(bswr2_),
-        oabs(bssr2_),		/* XXX swap? */
-        oabs(bscr2_)		/* XXX swap? */
+	.bsr2 =		oabs(bsr2_),		/* XXX swap? */
+	.bsw2 =		oabs(bsw2_),		/* XXX swap? */
+	.bsrs2 =	oabs(bsr2_),
+	.bsws2 =	oabs(bsw2_),
+	.bsrm2 =	oabs(bsrm2_swap_),
+	.bswm2 =	oabs(bswm2_swap_),
+	.bsrms2 =	oabs(bsrm2_),
+	.bswms2 =	oabs(bswm2_),
+	.bsrr2 =	oabs(bsrr2_),		/* XXX swap? */
+	.bswr2 =	oabs(bswr2_),		/* XXX swap? */
+	.bsrrs2 =	oabs(bsrr2_),
+	.bswrs2 =	oabs(bswr2_),
+	.bssr2 =	oabs(bssr2_),		/* XXX swap? */
+	.bscr2 =	oabs(bscr2_),		/* XXX swap? */
+
+	.bsr4 =		oabs(bsr4_),		/* XXX swap? */
+	.bsw4 =		oabs(bsw4_),		/* XXX swap? */
+	.bsrs4 =	oabs(bsr4_),
+	.bsws4 =	oabs(bsw4_),
+	.bsrm4 =	oabs(bsrm4_swap_),
+	.bswm4 =	oabs(bswm4_swap_),
+	.bsrms4 =	oabs(bsrm4_),
+	.bswms4 =	oabs(bswm4_),
+	.bsrr4 =	oabs(bsrr4_),		/* XXX swap? */
+	.bswr4 =	oabs(bswr4_),		/* XXX swap? */
+	.bsrrs4 =	oabs(bsrr4_),
+	.bswrs4 =	oabs(bswr4_),
+	.bssr4 =	oabs(bssr4_),		/* XXX swap? */
+	.bscr4 =	oabs(bscr4_)		/* XXX swap? */
 };
+

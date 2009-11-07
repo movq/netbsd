@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.5 2007/11/18 05:00:08 isaki Exp $	*/
+/*	$NetBSD: fd.c,v 1.7 2011/07/17 20:54:49 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001 MINOURA Makoto.
@@ -27,7 +27,6 @@
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
-#include <machine/stdarg.h>
 #include <lib/libsa/stand.h>
 
 #include "libx68k.h"
@@ -112,7 +111,7 @@ fdstrategy(void *arg, int rw, daddr_t dblk, size_t size,
 	head = (dblk / nsect) % nhead + sc->fmt.minsec.H;
 	cyl = (dblk / nsect) / nhead + sc->fmt.minsec.C;
 
-	error = IOCS_B_READ((sc->unit+0x90)*256 + 0x70,
+	error = IOCS_B_READ((sc->unit + 0x90) * 256 + 0x70,
 			    ((sc->fmt.minsec.N << 24) |
 			     (cyl << 16) |
 			     (head << 8) |

@@ -1,7 +1,7 @@
-/*	$NetBSD: lwconfig.c,v 1.1.1.2 2009/10/25 00:02:51 christos Exp $	*/
+/*	$NetBSD: lwconfig.c,v 1.3.4.1 2012/06/05 21:14:54 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: lwconfig.c,v 1.48 2008/12/17 23:47:58 tbox Exp */
+/* Id */
 
 /*! \file */
 
@@ -184,7 +184,7 @@ getword(FILE *fp, char *buffer, size_t size) {
 	if (ch == EOF)
 		return (EOF);
 
-	do {
+	for (;;) {
 		*p = '\0';
 
 		if (ch == EOF || isspace((unsigned char)ch))
@@ -194,7 +194,7 @@ getword(FILE *fp, char *buffer, size_t size) {
 
 		*p++ = (char)ch;
 		ch = fgetc(fp);
-	} while (1);
+	}
 
 	return (ch);
 }
@@ -587,10 +587,11 @@ lwres_conf_parse(lwres_context_t *ctx, const char *filename) {
 		return (LWRES_R_NOTFOUND);
 
 	ret = LWRES_R_SUCCESS;
-	do {
+	for (;;) {
 		stopchar = getword(fp, word, sizeof(word));
 		if (stopchar == EOF) {
 			rval = LWRES_R_SUCCESS;
+			POST(rval);
 			break;
 		}
 
@@ -618,7 +619,7 @@ lwres_conf_parse(lwres_context_t *ctx, const char *filename) {
 		}
 		if (ret == LWRES_R_SUCCESS && rval != LWRES_R_SUCCESS)
 			ret = rval;
-	} while (1);
+	}
 
 	fclose(fp);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: clock.c,v 1.3 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: clock.c,v 1.26 2012/01/21 22:09:56 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,42 +26,58 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_hz.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.3 2009/10/21 16:06:59 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.26 2012/01/21 22:09:56 reinoud Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/lwp.h>
+#include <sys/cpu.h>
+#include <sys/malloc.h>
 #include <sys/timetc.h>
+#include <sys/time.h>
 
+#include <machine/pcb.h>
 #include <machine/mainbus.h>
+#include <machine/thunk.h>
+
+#include <dev/clock_subr.h>
 
 static int	clock_match(device_t, cfdata_t, void *);
 static void	clock_attach(device_t, device_t, void *);
 
-static void 	clock_intr(int);
-static u_int	clock_getcounter(struct timecounter *);
+static unsigned int clock_getcounter(struct timecounter *);
 
-typedef struct clock_softc {
-	device_t	sc_dev;
-} clock_softc_t;
+static int	clock_todr_gettime(struct todr_chip_handle *, struct timeval *);
 
-extern int	setitimer(int, const struct itimerval *, struct itimerval *);
+extern void setup_clock_intr(void);
+void clock_intr(void *priv);
+
+
+struct clock_softc {
+	device_t		sc_dev;
+	struct todr_chip_handle	sc_todr;
+};
 
 static struct timecounter clock_timecounter = {
 	clock_getcounter,	/* get_timecount */
 	0,			/* no poll_pps */
 	~0u,			/* counter_mask */
-	1000000,		/* frequency */
-	"gettimeofday",		/* name */
-	100,			/* quality */
+	1000000000ULL,		/* frequency */
+	"CLOCK_MONOTONIC",	/* name */
+	-100,			/* quality */
 	NULL,			/* prev */
 	NULL,			/* next */
 };
 
-CFATTACH_DECL_NEW(clock, sizeof(clock_softc_t),
+timer_t clock_timerid;
+int clock_running = 0;
+
+CFATTACH_DECL_NEW(clock, sizeof(struct clock_softc),
     clock_match, clock_attach, NULL, NULL);
 
 static int
@@ -78,45 +94,54 @@ clock_match(device_t parent, cfdata_t match, void *opaque)
 static void
 clock_attach(device_t parent, device_t self, void *opaque)
 {
-	clock_softc_t *sc = device_private(self);
-	struct itimerval itimer;
+	struct clock_softc *sc = device_private(self);
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
 	sc->sc_dev = self;
 
-	(void)signal(SIGALRM, clock_intr);
+	sc->sc_todr.todr_gettime = clock_todr_gettime;
+	todr_attach(&sc->sc_todr);
 
-	itimer.it_interval.tv_sec = 0;
-	itimer.it_interval.tv_usec = 10000;
-	itimer.it_value = itimer.it_interval;
-	(void)setitimer(ITIMER_REAL, &itimer, NULL);
-
+	clock_timerid = thunk_timer_attach();
+	clock_timecounter.tc_quality = 1000;
 	tc_init(&clock_timecounter);
+
+	setup_clock_intr();
+	clock_running = 1;
 }
 
-static void
-clock_intr(int notused)
+void
+clock_intr(void *priv)
 {
-	extern int usermode_x;
 	struct clockframe cf;
+	int nticks = thunk_timer_getoverrun(clock_timerid) + 1;
 
-#if notyet
-	/* XXXJDM */
-	if (usermode_x > IPL_SOFTCLOCK)
-		return;
-#endif
-
-	hardclock(&cf);
+	while (nticks-- > 0) {
+		hardclock(&cf);
+	}
 }
 
-static u_int
+
+static unsigned int
 clock_getcounter(struct timecounter *tc)
 {
-	extern int gettimeofday(struct timeval *, void *);
-	struct timeval tv;
+	return thunk_getcounter();
+}
 
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000000 + tv.tv_usec;
+static int
+clock_todr_gettime(struct todr_chip_handle *tch, struct timeval *tv)
+{
+	struct thunk_timeval ttv;
+	int error;
+
+	error = thunk_gettimeofday(&ttv, NULL);
+	if (error)
+		return error;
+
+	tv->tv_sec = ttv.tv_sec;
+	tv->tv_usec = ttv.tv_usec;
+
+	return 0;
 }

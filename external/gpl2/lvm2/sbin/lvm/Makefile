@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 2009/01/13 22:38:00 haad Exp $
+#	$NetBSD: Makefile,v 1.10.6.1 2012/05/18 16:56:26 riz Exp $
 
 USE_FORT?=	no
 NOLINT=		#defined
+CWARNFLAGS.clang+=	-Wno-parentheses
 
 .include "../../lvm2tools.mk"
 
@@ -22,13 +23,15 @@ SRCS=		dumpconfig.c formats.c lvchange.c lvconvert.c lvcreate.c \
 		vgmknodes.c vgreduce.c vgremove.c vgrename.c vgscan.c \
 		vgsplit.c lvm.c
 
-CFLAGS+= 	-fno-inline
 
 CPPFLAGS+=	-I${LVM2_DISTDIR}/lib -I${LVM2_DISTDIR}/include \
-		-I. -I${LIBDM_INCLUDE} -I${LVM2_DISTDIR}/tools \
-		-I${LIBDM_DISTDIR}
+		-I. -I${LIBDEVMAPPER_INCLUDE} -I${LVM2_DISTDIR}/tools \
+		-I${LIBDEVMAPPER_DISTDIR}
 
 CPPFLAGS+=	-DLVM_SHARED_PATH=\"$(BINDIR)/lvm\"
+
+.include <bsd.own.mk>
+.include <bsd.sys.mk> # for USE_SSP
 
 # Some parts of the code can't be protected because if its
 # alloca() usage.
@@ -96,13 +99,18 @@ LIBLVM_OBJDIR!= cd ${LVM2_SRCDIR}/lib/liblvm && ${PRINTOBJDIR}
 LDADD+=         -L${LIBLVM_OBJDIR} -llvm
 DPADD+=         ${LIBLVM_OBJDIR}/liblvm.a
 
+LIBDEVMAPPER_OBJDIR!=  cd ${LIBDEVMAPPER_SRCDIR} && ${PRINTOBJDIR}
+LDADD+=         -L${LIBDEVMAPPER_OBJDIR} -ldevmapper
+DPADD+=         ${LIBDEVMAPPER_OBJDIR}/libdevmapper.a
+
 LIBDM_OBJDIR!=  cd ${LIBDM_SRCDIR} && ${PRINTOBJDIR}
-LDADD+=         -L${LIBDM_OBJDIR} -ldevmapper
-DPADD+=         ${LIBDM_OBJDIR}/libdevmapper.a
+#LDADD+=         -L${LIBDM_OBJDIR} -ldm
+LDADD+=         ${LIBDM_OBJDIR}/libdm.a
+DPADD+=         ${LIBDM_OBJDIR}/libdm.a
 
 LDADD+=		-lprop -ledit -ltermcap
 
-LDSTATIC= 	-static
+#LDSTATIC= 	-static
 
 .PATH:	${LVM2_DISTDIR}/tools
 

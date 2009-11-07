@@ -144,11 +144,15 @@ case "$SYSTEM.$RELEASE" in
 		;;
   FreeBSD.7*)	SYSTYPE=FREEBSD7
 		;;
+  FreeBSD.8*)	SYSTYPE=FREEBSD8
+		;;
   OpenBSD.2*)	SYSTYPE=OPENBSD2
 		;;
   OpenBSD.3*)	SYSTYPE=OPENBSD3
 		;;
   OpenBSD.4*)	SYSTYPE=OPENBSD4
+		;;
+  OpenBSD.5*)	SYSTYPE=OPENBSD5
 		;;
   ekkoBSD.1*)	SYSTYPE=EKKOBSD1
 		;;
@@ -159,6 +163,8 @@ case "$SYSTEM.$RELEASE" in
    NetBSD.3*)	SYSTYPE=NETBSD3
 		;;
    NetBSD.4*)	SYSTYPE=NETBSD4
+		;;
+   NetBSD.5*)	SYSTYPE=NETBSD5
 		;;
    BSD/OS.2*)	SYSTYPE=BSDI2
 		;;
@@ -226,6 +232,12 @@ case "$SYSTEM.$RELEASE" in
 		done
 		;;
        AIX.*)	case "`uname -v`" in
+		6)	SYSTYPE=AIX6
+			case "$CC" in
+			cc|*/cc|xlc|*/xlc) CCARGS="$CCARGS -w -blibpath:/usr/lib:/lib:/usr/local/lib";;
+			esac
+			CCARGS="$CCARGS -D_ALL_SOURCE -DHAS_POSIX_REGEXP"
+			;;
 		5)	SYSTYPE=AIX5
 			case "$CC" in
 			cc|*/cc|xlc|*/xlc) CCARGS="$CCARGS -w -blibpath:/usr/lib:/lib:/usr/local/lib";;
@@ -298,7 +310,15 @@ case "$SYSTEM.$RELEASE" in
 		case "$RELEASE" in
 		2.[0-5].*) CCARGS="$CCARGS -DNO_EPOLL";;
 		    # Workaround for retarded libc 
-		    2.6.*) trap 'rm -f makedefs.test makedefs.test.[co]' 1 2 3 15
+		    2.6.*)
+		       if [ `expr "X$CCARGS" : "X.*-DNO_EPOLL"` -gt 0 ]
+                       then
+                           :
+                       elif [ ! -e /usr/include/sys/epoll.h ]
+                       then
+                           echo CCARGS="$CCARGS -DNO_EPOLL"
+                       else
+			   trap 'rm -f makedefs.test makedefs.test.[co]' 1 2 3 15
 			   cat >makedefs.test.c <<'EOF'
 #include <sys/types.h>
 #include <sys/epoll.h>
@@ -320,8 +340,36 @@ EOF
 			   ${CC-gcc} -o makedefs.test makedefs.test.c || exit 1
 			   ./makedefs.test 2>/dev/null ||
 				CCARGS="$CCARGS -DNO_EPOLL"
-			   rm -f makedefs.test makedefs.test.[co];;
+			   rm -f makedefs.test makedefs.test.[co]
+		       fi;;
 		esac
+		;;
+    Linux.3*)	SYSTYPE=LINUX3
+		if [ -f /usr/include/db.h ]
+		then
+		    : we are all set
+		elif [ -f /usr/include/db/db.h ]
+		then
+		    CCARGS="$CCARGS -I/usr/include/db"
+		else
+		    # On a properly installed system, Postfix builds
+		    # by including <db.h> and by linking with -ldb
+		    echo "No <db.h> include file found." 1>&2
+		    echo "Install the appropriate db*-devel package first." 1>&2
+		    echo "See the RELEASE_NOTES file for more information." 1>&2
+		    exit 1
+		fi
+		SYSLIBS="-ldb"
+		for name in nsl resolv
+		do
+		    for lib in /usr/lib64 /lib64 /usr/lib /lib
+		    do
+			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+			    SYSLIBS="$SYSLIBS -l$name"
+			    break
+			}
+		    done
+		done
 		;;
      GNU.0*|GNU/kFreeBSD.[567]*)
      		SYSTYPE=GNU0
@@ -409,6 +457,11 @@ ReliantUNIX-?.5.43) SYSTYPE=ReliantUnix543
 		case $RELEASE in
 		 [1-6].*) CCARGS="$CCARGS -DNO_IPV6";;
 		       *) CCARGS="$CCARGS -DBIND_8_COMPAT -DNO_NETINFO";;
+		esac
+		# Darwin 10.3.0 no longer has <nameser8_compat.h>.
+		case $RELEASE in
+		     ?.*) CCARGS="$CCARGS -DRESOLVE_H_NEEDS_NAMESER8_COMPAT_H";;
+		       *) CCARGS="$CCARGS -DRESOLVE_H_NEEDS_ARPA_NAMESER_COMPAT_H";;
 		esac
 		# kqueue and/or poll are broken up to and including MacOS X 10.5
 		CCARGS="$CCARGS -DNO_KQUEUE"

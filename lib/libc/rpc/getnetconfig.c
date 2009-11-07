@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetconfig.c,v 1.17 2008/04/25 17:44:44 christos Exp $	*/
+/*	$NetBSD: getnetconfig.c,v 1.19 2011/10/15 23:00:02 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 #if 0
 static        char sccsid[] = "@(#)getnetconfig.c	1.12 91/12/19 SMI";
 #else
-__RCSID("$NetBSD: getnetconfig.c,v 1.17 2008/04/25 17:44:44 christos Exp $");
+__RCSID("$NetBSD: getnetconfig.c,v 1.19 2011/10/15 23:00:02 christos Exp $");
 #endif
 #endif
 
@@ -160,7 +160,6 @@ static int *
 __nc_error()
 {
 #ifdef _REENTRANT
-	extern int __isthreaded;
 	int *nc_addr = NULL;
 #endif
 	static int nc_error = 0;
@@ -221,7 +220,7 @@ setnetconfig()
 	 * handle without reopening the netconfig db.
 	 */
 	ni.ref++;
-	if ((nc_file != NULL) || (nc_file = fopen(NETCONFIG, "r")) != NULL) {
+	if ((nc_file != NULL) || (nc_file = fopen(NETCONFIG, "re")) != NULL) {
 		nc_vars->valid = NC_VALID;
 		nc_vars->flag = 0;
 		nc_vars->nc_configs = ni.head;

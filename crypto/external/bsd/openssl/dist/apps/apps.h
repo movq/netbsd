@@ -168,6 +168,12 @@ extern BIO *bio_err;
 #define do_pipe_sig()
 #endif
 
+#ifdef OPENSSL_NO_COMP
+#define zlib_cleanup() 
+#else
+#define zlib_cleanup() COMP_zlib_cleanup()
+#endif
+
 #if defined(MONOLITH) && !defined(OPENSSL_C)
 #  define apps_startup() \
 		do_pipe_sig()
@@ -182,7 +188,7 @@ extern BIO *bio_err;
 			do { CONF_modules_unload(1); destroy_ui_method(); \
 			OBJ_cleanup(); EVP_cleanup(); ENGINE_cleanup(); \
 			CRYPTO_cleanup_all_ex_data(); ERR_remove_thread_state(NULL); \
-			ERR_free_strings(); COMP_zlib_cleanup();} while(0)
+			ERR_free_strings(); zlib_cleanup();} while(0)
 #  else
 #    define apps_startup() \
 			do { do_pipe_sig(); CRYPTO_malloc_init(); \
@@ -192,7 +198,7 @@ extern BIO *bio_err;
 			do { CONF_modules_unload(1); destroy_ui_method(); \
 			OBJ_cleanup(); EVP_cleanup(); \
 			CRYPTO_cleanup_all_ex_data(); ERR_remove_thread_state(NULL); \
-			ERR_free_strings(); } while(0)
+			ERR_free_strings(); zlib_cleanup(); } while(0)
 #  endif
 #endif
 
@@ -245,6 +251,8 @@ EVP_PKEY *load_pubkey(BIO *err, const char *file, int format, int maybe_stdin,
 	const char *pass, ENGINE *e, const char *key_descrip);
 STACK_OF(X509) *load_certs(BIO *err, const char *file, int format,
 	const char *pass, ENGINE *e, const char *cert_descrip);
+STACK_OF(X509_CRL) *load_crls(BIO *err, const char *file, int format,
+	const char *pass, ENGINE *e, const char *cert_descrip);
 X509_STORE *setup_verify(BIO *bp, char *CAfile, char *CApath);
 #ifndef OPENSSL_NO_ENGINE
 ENGINE *setup_engine(BIO *err, const char *engine, int debug);
@@ -253,6 +261,7 @@ ENGINE *setup_engine(BIO *err, const char *engine, int debug);
 #ifndef OPENSSL_NO_OCSP
 OCSP_RESPONSE *process_responder(BIO *err, OCSP_REQUEST *req,
 			char *host, char *path, char *port, int use_ssl,
+			STACK_OF(CONF_VALUE) *headers,
 			int req_timeout);
 #endif
 
@@ -308,6 +317,12 @@ int bio_to_mem(unsigned char **out, int maxlen, BIO *in);
 int pkey_ctrl_string(EVP_PKEY_CTX *ctx, char *value);
 int init_gen_str(BIO *err, EVP_PKEY_CTX **pctx,
 			const char *algname, ENGINE *e, int do_param);
+int do_X509_sign(BIO *err, X509 *x, EVP_PKEY *pkey, const EVP_MD *md,
+			STACK_OF(OPENSSL_STRING) *sigopts);
+int do_X509_REQ_sign(BIO *err, X509_REQ *x, EVP_PKEY *pkey, const EVP_MD *md,
+			STACK_OF(OPENSSL_STRING) *sigopts);
+int do_X509_CRL_sign(BIO *err, X509_CRL *x, EVP_PKEY *pkey, const EVP_MD *md,
+			STACK_OF(OPENSSL_STRING) *sigopts);
 #ifndef OPENSSL_NO_PSK
 extern char *psk_key;
 #endif
@@ -315,6 +330,10 @@ extern char *psk_key;
 void jpake_client_auth(BIO *out, BIO *conn, const char *secret);
 void jpake_server_auth(BIO *out, BIO *conn, const char *secret);
 #endif
+
+#if !defined(OPENSSL_NO_TLSEXT) && !defined(OPENSSL_NO_NEXTPROTONEG)
+unsigned char *next_protos_parse(unsigned short *outlen, const char *in);
+#endif  /* !OPENSSL_NO_TLSEXT && !OPENSSL_NO_NEXTPROTONEG */
 
 #define FORMAT_UNDEF    0
 #define FORMAT_ASN1     1
@@ -348,4 +367,7 @@ int raw_write_stdout(const void *,int);
 #define TM_START	0
 #define TM_STOP		1
 double app_tminterval (int stop,int usertime);
+
+#define OPENSSL_NO_SSL_INTERN
+
 #endif

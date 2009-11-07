@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sip.c,v 1.142 2009/09/16 16:34:50 dyoung Exp $	*/
+/*	$NetBSD: if_sip.c,v 1.153 2012/02/02 19:43:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -73,10 +73,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.142 2009/09/16 16:34:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.153 2012/02/02 19:43:05 tls Exp $");
 
-#include "bpfilter.h"
-#include "rnd.h"
+
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,20 +89,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.142 2009/09/16 16:34:50 dyoung Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
-
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -207,8 +200,8 @@ enum sip_attach_stage {
  */
 struct sip_softc {
 	device_t sc_dev;		/* generic device information */
-	struct device_suspensor		sc_suspensor;
-	struct pmf_qual			sc_qual;
+	device_suspensor_t		sc_suspensor;
+	pmf_qual_t			sc_qual;
 
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
@@ -359,9 +352,7 @@ struct sip_softc {
 
 	void (*sc_rxintr)(struct sip_softc *);
 
-#if NRND > 0
-	rndsource_element_t rnd_source;	/* random source */
-#endif
+	krndsource_t rnd_source;	/* random source */
 };
 
 #define	sc_bits	sc_parm->p_bits
@@ -610,8 +601,8 @@ static int	sipcom_match(device_t, cfdata_t, void *);
 static void	sipcom_attach(device_t, device_t, void *);
 static void	sipcom_do_detach(device_t, enum sip_attach_stage);
 static int	sipcom_detach(device_t, int);
-static bool	sipcom_resume(device_t PMF_FN_PROTO);
-static bool	sipcom_suspend(device_t PMF_FN_PROTO);
+static bool	sipcom_resume(device_t, const pmf_qual_t *);
+static bool	sipcom_suspend(device_t, const pmf_qual_t *);
 
 int	gsip_copy_small = 0;
 int	sip_copy_small = 0;
@@ -916,9 +907,7 @@ sipcom_do_detach(device_t self, enum sip_attach_stage stage)
 		}
 #endif /* SIP_EVENT_COUNTERS */
 
-#if NRND > 0
 		rnd_detach_source(&sc->rnd_source);
-#endif
 
 		ether_ifdetach(ifp);
 		if_detach(ifp);
@@ -965,7 +954,7 @@ sipcom_do_detach(device_t self, enum sip_attach_stage stage)
 }
 
 static bool
-sipcom_resume(device_t self PMF_FN_ARGS)
+sipcom_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct sip_softc *sc = device_private(self);
 
@@ -973,7 +962,7 @@ sipcom_resume(device_t self PMF_FN_ARGS)
 }
 
 static bool
-sipcom_suspend(device_t self PMF_FN_ARGS)
+sipcom_suspend(device_t self, const pmf_qual_t *qual)
 {
 	struct sip_softc *sc = device_private(self);
 
@@ -1113,11 +1102,12 @@ sipcom_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
-		return sipcom_do_detach(self, SIP_ATTACH_MAP);
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
+		sipcom_do_detach(self, SIP_ATTACH_MAP);
+		return;
 	}
-	printf("%s: interrupting at %s\n", device_xname(sc->sc_dev), intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	SIMPLEQ_INIT(&sc->sc_txfreeq);
 	SIMPLEQ_INIT(&sc->sc_txdirtyq);
@@ -1131,12 +1121,13 @@ sipcom_attach(device_t parent, device_t self, void *aux)
 	    &rseg, 0)) != 0) {
 		aprint_error_dev(sc->sc_dev, "unable to allocate control data, error = %d\n",
 		    error);
-		return sipcom_do_detach(self, SIP_ATTACH_INTR);
+		sipcom_do_detach(self, SIP_ATTACH_INTR);
+		return;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_seg, rseg,
 	    sizeof(struct sip_control_data), (void **)&sc->sc_control_data,
-	    BUS_DMA_COHERENT|BUS_DMA_NOCACHE)) != 0) {
+	    BUS_DMA_COHERENT)) != 0) {
 		aprint_error_dev(sc->sc_dev, "unable to map control data, error = %d\n",
 		    error);
 		sipcom_do_detach(self, SIP_ATTACH_ALLOC_MEM);
@@ -1294,10 +1285,8 @@ sipcom_attach(device_t parent, device_t self, void *aux)
 	sc->sc_prev.ec_capenable = sc->sc_ethercom.ec_capenable;
 	sc->sc_prev.is_vlan = VLAN_ATTACHED(&(sc)->sc_ethercom);
 	sc->sc_prev.if_capenable = ifp->if_capenable;
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
 
 	/*
 	 * The number of bytes that must be available in
@@ -1648,13 +1637,10 @@ sipcom_start(struct ifnet *ifp)
 		SIMPLEQ_REMOVE_HEAD(&sc->sc_txfreeq, txs_q);
 		SIMPLEQ_INSERT_TAIL(&sc->sc_txdirtyq, txs, txs_q);
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (txs == NULL || sc->sc_txfree == 0) {
@@ -1848,10 +1834,7 @@ sipcom_intr(void *arg)
 		if ((isr & sc->sc_imr) == 0)
 			break;
 
-#if NRND > 0
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, isr);
-#endif
+		rnd_add_uint32(&sc->rnd_source, isr);
 
 		handled = 1;
 
@@ -2248,14 +2231,11 @@ gsip_rxintr(struct sip_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass if up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -2418,14 +2398,11 @@ sip_rxintr(struct sip_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass if up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);

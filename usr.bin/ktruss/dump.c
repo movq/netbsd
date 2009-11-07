@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.36 2009/07/24 11:34:03 njoly Exp $	*/
+/*	$NetBSD: dump.c,v 1.39.2.2 2012/03/08 17:48:59 riz Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: dump.c,v 1.36 2009/07/24 11:34:03 njoly Exp $");
+__RCSID("$NetBSD: dump.c,v 1.39.2.2 2012/03/08 17:48:59 riz Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -112,7 +112,7 @@ void	putpendq(struct ktr_entry *);
 void	syscallnameprint(int);
 void	syscallprint(struct ktr_header *);
 void	sysretprint(struct ktr_header *);
-int	wprintf(const char *, ...);
+int	wprintf(const char *, ...) __printflike(1, 2);
 void	*xrealloc(void *, size_t *, size_t);
 
 int
@@ -349,6 +349,7 @@ dumpheader(struct ktr_header *kth)
 	static union timeholder prevtime;
 	union timeholder temp;
 
+	temp.tv.tv_sec = temp.tv.tv_usec = 0;
 	wprintf("%6d ", kth->ktr_pid);
 	if (kth->ktr_version > KTRFAC_VERSION(KTRFACv0))
 		wprintf("%6d ", kth->ktr_lid);
@@ -525,7 +526,8 @@ syscallprint(struct ktr_header *kth)
 	case SYS_mkdir:
 	case SYS_rmdir:
 	case SYS___utimes50:
-	case SYS_quotactl:
+	case SYS_compat_50_quotactl:
+	case SYS___quotactl:
 	case SYS_statvfs1:
 	case SYS_compat_30_getfh:
 	case SYS_pathconf:
@@ -633,7 +635,7 @@ sysretprint(struct ktr_header *kth)
 	} else
 		switch (ktr->ktr_code) {
 		case SYS_mmap:
-			wprintf(" = %p", (long)ret);
+			wprintf(" = %p", (void *)(intptr_t)ret);
 			break;
 		default:
 			wprintf(" = %ld", (long)ret);

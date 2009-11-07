@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.34 2009/09/04 17:55:03 dyoung Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.38 2011/01/18 08:29:24 matt Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -116,6 +116,7 @@ typedef struct ehci_softc {
 	u_int sc_offs;			/* offset to operational regs */
 	int sc_flags;			/* misc flags */
 #define EHCIF_DROPPED_INTR_WORKAROUND	0x01
+#define EHCIF_ETTF			0x02 /* Emb. Transaction Translater func. */
 
 	char sc_vendor[32];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
@@ -167,6 +168,9 @@ typedef struct ehci_softc {
 	device_t sc_child; /* /dev/usb# device */
 	char sc_dying;
 	struct usb_dma_reserve sc_dma_reserve;
+
+	void (*sc_vendor_init)(struct ehci_softc *);
+	int (*sc_vendor_port_status)(struct ehci_softc *, uint32_t, int);
 } ehci_softc_t;
 
 #define EREAD1(sc, a) bus_space_read_1((sc)->iot, (sc)->ioh, (a))
@@ -187,6 +191,6 @@ int		ehci_intr(void *);
 int		ehci_detach(ehci_softc_t *, int);
 int		ehci_activate(device_t, enum devact);
 void		ehci_childdet(device_t, device_t);
-bool		ehci_suspend(device_t PMF_FN_PROTO);
-bool		ehci_resume(device_t PMF_FN_PROTO);
+bool		ehci_suspend(device_t, const pmf_qual_t *);
+bool		ehci_resume(device_t, const pmf_qual_t *);
 bool		ehci_shutdown(device_t, int);

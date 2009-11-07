@@ -1,4 +1,4 @@
-/*	$NetBSD: pdc.h,v 1.10 2009/05/24 06:53:35 skrll Exp $	*/
+/*	$NetBSD: pdc.h,v 1.20 2012/01/26 08:11:06 skrll Exp $	*/
 
 /*	$OpenBSD: pdc.h,v 1.35 2007/07/15 20:03:48 kettenis Exp $	*/
 
@@ -126,7 +126,7 @@
 #define	PDC_MODEL_ENSPEC	4	/* enable product-specific instrs */
 #define	PDC_MODEL_DISPEC	5	/* disable product-specific instrs */
 #define	PDC_MODEL_CPUID		6	/* return CPU versions */
-#define	PDC_MODEL_CPBALITIES	7	/* return capabilites */
+#define	PDC_MODEL_CAPABILITIES	7	/* return capabilities */
 #define	PDC_MODEL_GETBOOTSTOPTS	8	/* return boot test options */
 #define	PDC_MODEL_SETBOOTSTOPTS	9	/* set boot test options */
 
@@ -299,6 +299,7 @@
 #define	PDC_ERR_NOPROC		-1	/* no such procedure */
 #define	PDC_ERR_NOPT		-2	/* no such option */
 #define	PDC_ERR_COMPL		-3	/* unable to complete w/o error */
+#define	PDC_ERR_NMOD		-5	/* module not found */
 #define	PDC_ERR_EOD		-9	/* end of device list */
 #define	PDC_ERR_INVAL		-10	/* invalid argument */
 #define	PDC_ERR_PFAIL		-12	/* aborted by powerfail */
@@ -334,17 +335,21 @@ struct device_path {
 #define	PZL_ENCODE(bits, parity, speed) \
 	(((bits) - 5) & 0x03) | (((parity) & 0x3) << 3) | \
 	(((speed) & 0x0f) << 6)
+};
 
+struct pdc_result {	/* general result buffer */
+	u_int	result[32];
 };
 
 struct pdc_pim {	/* PDC_PIM */
 	u_int	count;		/* actual (HPMC, LPMC) or total (SIZE) count */
 	u_int	archsize;	/* size of architected regions (see "pim.h") */
-	u_int	filler[30];
 };
 
 struct pdc_model {	/* PDC_MODEL */
-	u_int	hvers;		/* hardware version */
+	u_int	res1 : 16;	/* reserved */
+	u_int	hwmodel : 12;	/* hardware model. */
+	u_int	hv : 4;
 	u_int	rev : 4;	/* zero for all native processors */
 	u_int	model : 20;	/* 4 for all native processors */
 	u_int	sh : 1;		/* shadow registers are present */
@@ -359,22 +364,18 @@ struct pdc_model {	/* PDC_MODEL */
 	u_int	arch_rev;	/* architecture revision */
 	u_int	pot_key;	/* potential key */
 	u_int	curr_key;	/* current key */
-	int	filler1;
-	u_int	filler2[22];
 };
 
 struct pdc_cpuid {	/* PDC_MODEL, PDC_CPUID */
 	u_int	reserved : 20;
 	u_int	version  :  7;	/* CPU version */
 	u_int	revision :  5;	/* CPU revision */
-	u_int	filler[31];
 };
 
 struct pdc_getbootopts {	/* PDC_MODEL_GETBOOTOPTS */
 	u_int	cur_test;	/* current enabled tests */
 	u_int	sup_test;	/* supported tests */
 	u_int	def_test;	/* default enabled tests */
-	u_int	filler[29];
 };
 
 struct cache_cf {	/* PDC_CACHE (for "struct pdc_cache") */
@@ -389,14 +390,25 @@ struct cache_cf {	/* PDC_CACHE (for "struct pdc_cache") */
 		cc_hvers: 2;	/* H-VERSION dependent */
 };
 
-struct tlb_cf {		/* PDC_CACHE (for "struct pdc_cache") */
+struct itlb_cf {		/* PDC_CACHE (for "struct pdc_cache") */
 	u_int	tc_resv1:12,	/* (reserved) */
 		tc_sh	: 2,	/* separate I and D = 0, shared I and D = 1 */
 		tc_hvers: 1,	/* H-VERSION dependent */
 		tc_page : 1,	/* 2K page size = 0, 4k page size = 1 */
 		tc_cst  : 3,	/* incoherent = 0, coherent = 1 */
-		tc_resv2: 5,	/* (reserved) */
-		tc_assoc: 8;	/* associativity of TLB */
+		tc_aid  : 5,	/* access id width = 15 + aid */
+		tc_sr   : 6,	/* space id width */
+		tc_hv2  : 2;	/* H-VERSION dependent */
+};
+
+struct dtlb_cf {		/* PDC_CACHE (for "struct pdc_cache") */
+	u_int	tc_resv1:12,	/* (reserved) */
+		tc_sh	: 2,	/* separate I and D = 0, shared I and D = 1 */
+		tc_hvers: 1,	/* H-VERSION dependent */
+		tc_u    : 1,	/* TLB U bit implemented  */
+		tc_cst  : 3,	/* incoherent = 0, coherent = 1 */
+		tc_resv2: 11,	/* (reserved) */
+		tc_hv2  : 2;	/* H-VERSION dependent */
 };
 
 struct pdc_cache {	/* PDC_CACHE */
@@ -416,7 +428,7 @@ struct pdc_cache {	/* PDC_CACHE */
 	u_int	dc_loop;	/* number of FDCE's per addr stride (flush) */
 /* Instruction TLB */
 	u_int	it_size;	/* number of entries in I-TLB */
-	struct tlb_cf it_conf;	/* I-TLB configuration (see above) */
+	struct itlb_cf it_conf;	/* I-TLB configuration (see above) */
 	u_int	it_sp_base;	/* start space of I-TLB (for PITLBE flush) */
 	u_int	it_sp_stride;	/* space incr per sp_count iteration (flush) */
 	u_int	it_sp_count;	/* number of off_count iterations (flush) */
@@ -426,7 +438,7 @@ struct pdc_cache {	/* PDC_CACHE */
 	u_int	it_loop;	/* number of PITLBE's per off_stride (flush) */
 /* Data TLB */
 	u_int	dt_size;	/* number of entries in D-TLB */
-	struct tlb_cf dt_conf;	/* D-TLB configuration (see above) */
+	struct dtlb_cf dt_conf;	/* D-TLB configuration (see above) */
 	u_int	dt_sp_base;	/* start space of D-TLB (for PDTLBE flush) */
 	u_int	dt_sp_stride;	/* space incr per sp_count iteration (flush) */
 	u_int	dt_sp_count;	/* number of off_count iterations (flush) */
@@ -434,14 +446,12 @@ struct pdc_cache {	/* PDC_CACHE */
 	u_int	dt_off_stride;	/* offset incr per off_count iteration (flush)*/
 	u_int	dt_off_count;	/* number of dt_loop iterations/space (flush) */
 	u_int	dt_loop;	/* number of PDTLBE's per off_stride (flush) */
-	u_int	filler[2];
 };
 
 struct pdc_spidb {	/* PDC_CACHE, PDC_CACHE_GETSPIDB */
 	u_int	spidR1   : 4;
 	u_int	spidbits : 12;
 	u_int	spidR2   : 16;
-	u_int	filler[31];
 };
 
 struct pdc_cst {
@@ -459,13 +469,10 @@ struct pdc_coherence {	/* PDC_CACHE, PDC_CACHE_SETCS */
 #define	ita_cst ita.cst
 	struct pdc_cst	dta;
 #define	dta_cst dta.cst
-	u_int	filler[28];
 };
 
 struct pdc_hpa {	/* PDC_HPA */
 	hppa_hpa_t hpa;	/* HPA of processor */
-	int	filler1;
-	u_int	filler2[30];
 };
 
 struct pdc_coproc {	/* PDC_COPROC */
@@ -474,13 +481,11 @@ struct pdc_coproc {	/* PDC_COPROC */
 	u_int	pad[15];
 	u_int	fpu_revision;
 	u_int	fpu_model;
-	u_int	filler2[13];
 };
 
 struct pdc_tod {	/* PDC_TOD, PDC_TOD_READ */
 	u_int	sec;		/* elapsed time since 00:00:00 GMT, 1/1/70 */
 	u_int	usec;		/* accurate to microseconds */
-	u_int	filler2[30];
 };
 
 struct pdc_itimer {	/* PDC_TOD_ITIMER */
@@ -488,7 +493,6 @@ struct pdc_itimer {	/* PDC_TOD_ITIMER */
 	u_int	calib1;
 	u_int	tod_acc;	/* TOD accuracy in 1e-9 part */
 	u_int	cr_acc;		/* itmr accuracy in 1e-9 parts */
-	u_int	filler[28];
 };
 
 struct pdc_nvm {	/* PDC_NVM */
@@ -503,8 +507,6 @@ struct pdc_nvm {	/* PDC_NVM */
 
 struct pdc_instr {	/* PDC_INSTR */
 	u_int	instr;		/* instruction that invokes PDC mchk entry pt */
-	int	filler1;
-	u_int	filler2[30];
 };
 
 struct pdc_iodc_read {	/* PDC_IODC, PDC_IODC_READ */
@@ -518,7 +520,6 @@ struct pdc_iodc_minit {	/* PDC_IODC, PDC_IODC_NINIT or PDC_IODC_DINIT */
 	u_int	max_spa;	/* size of SPA (in bytes) > max_mem+map_mem */
 	u_int	max_mem;	/* size of "implemented" memory (in bytes) */
 	u_int	map_mem;	/* size of "mappable-only" memory (in bytes) */
-	u_int	filler[28];
 };
 
 struct btlb_info {		/* for "struct pdc_btlb" (PDC_BTLB) */
@@ -533,24 +534,20 @@ struct pdc_btlb {	/* PDC_BLOCK_TLB */
 	u_int	max_size;	/* Max size in pages */
 	struct btlb_info finfo;	/* Fixed range info */
 	struct btlb_info vinfo; /* Variable range info */
-	u_int 	filler[28];
 };
 
 struct pdc_hwtlb {	/* PDC_TLB */
 	u_int	min_size;	/* What do these mean? */
 	u_int	max_size;
-	u_int	filler[30];
 };
 
 struct pdc_power_info {		/* PDC_SOFT_POWER_INFO */
 	u_int	addr;		/* power register address */
-	u_int	filler[31];
 };
 
 struct pdc_pat_cell_id {	/* PDC_PAT_CELL_GETID */
 	u_long	id;		/* cell id */
 	u_long	loc;		/* cell location */
-	u_long	filler[14];
 };
 
 struct pdc_pat_cell_module {	/* PDC_PAT_CELL_MODULE */
@@ -567,7 +564,6 @@ struct pdc_pat_cell_module {	/* PDC_PAT_CELL_MODULE */
 
 struct pdc_pat_io_num {	/* PDC_PAT_IO */
 	u_int	num;
-	u_int	filler[31];
 };
 
 struct pdc_pat_pci_rt {	/* PDC_PAT_IO_GET_PCI_RT */
@@ -585,7 +581,6 @@ struct pdc_pat_pci_rt {	/* PDC_PAT_IO_GET_PCI_RT */
 struct pdc_memmap {	/* PDC_MEMMAP */
 	u_int	hpa;		/* HPA for module */
 	u_int	morepages;	/* additional IO pages */
-	u_int	filler[30];
 };
 
 struct pdc_system_map_find_mod {	/* PDC_SYSTEM_MAP_FIND_MOD */
@@ -593,19 +588,15 @@ struct pdc_system_map_find_mod {	/* PDC_SYSTEM_MAP_FIND_MOD */
 	u_int	size;		/* pages */
 	u_int	naddrs;
 	u_int	mod_index;
-	u_int	filler[28];
 };
 
 struct pdc_system_map_find_addr {	/* PDC_SYSTEM_MAP_FIND_ADDR */
 	u_int	hpa;
 	u_int	size;		/* pages */
-	u_int	filler[30];
 };
 
 struct pdc_lan_station_id {	/* PDC_LAN_STATION_ID */
 	uint8_t	addr[6];
-	uint8_t	filler1[2];
-	u_int	filler2[30];
 };
 
 /*
@@ -651,7 +642,6 @@ struct pdc_lan_station_id {	/* PDC_LAN_STATION_ID */
 struct pdc_chassis_info {
 	u_int	size;
 	u_int	max_size;
-	u_int	filler[30];
 };
 
 struct pdc_chassis_lcd {
@@ -664,7 +654,6 @@ struct pdc_chassis_lcd {
 	uint8_t	enabled;
 	uint8_t	heartbeat[3];
 	uint8_t disk[3];
-	u_int	filler[25];
 };
 
 /*
@@ -677,7 +666,7 @@ struct stable_storage {
 	struct device_path ss_pri_boot;	/* (see above) */
 	char	ss_filenames[32];
 	u_short	ss_os_version;	/* 0 == none, 1 == HP-UX, 2 == MPE-XL */
-	char	ss_os[22];	/* OS-dependant information */
+	char	ss_os[22];	/* OS-dependent information */
 	char	ss_pdc[7];	/* reserved */
 	char	ss_fast_size;	/* how much memory to test.  0xf == all, or */
 				/*	else it's (256KB << ss_fast_size) */
@@ -766,7 +755,15 @@ struct consdev;
 
 extern int kernelmapped;
 
+enum pdc_type {
+        PDC_TYPE_UNKNOWN,
+        PDC_TYPE_SNAKE
+};
+
 void pdc_init(void);
+void pdc_settype(int);
+enum pdc_type pdc_gettype(void);
+
 int pdc_call(iodcio_t, int, ...);
 
 void pdccnprobe(struct consdev *);
@@ -774,6 +771,57 @@ void pdccninit(struct consdev *);
 int pdccngetc(dev_t);
 void pdccnputc(dev_t, int);
 void pdccnpollc(dev_t, int);
+
+int pdcproc_chassis_display(unsigned long);
+int pdcproc_chassis_info(struct pdc_chassis_info *, struct pdc_chassis_lcd *);
+
+int pdcproc_pim(int, struct pdc_pim *, void **, size_t *);
+
+int pdcproc_model_info(struct pdc_model *);
+int pdcproc_model_cpuid(struct pdc_cpuid *);
+
+int pdcproc_cache(struct pdc_cache *);
+int pdcproc_cache_coherence(struct pdc_coherence *);
+int pdcproc_cache_spidbits(struct pdc_spidb *);
+
+int pdcproc_hpa_processor(hppa_hpa_t *);
+
+int pdcproc_coproc(struct pdc_coproc *);
+
+int pdcproc_iodc_read(hppa_hpa_t, int, int *, struct pdc_iodc_read *, size_t,
+    struct iodc_data *, size_t);
+int pdcproc_iodc_ninit(struct pdc_iodc_minit *, hppa_hpa_t, int);
+
+int pdcproc_instr(unsigned int *);
+
+int pdcproc_block_tlb(struct pdc_btlb *);
+int pdcproc_btlb_insert(pa_space_t, vaddr_t, paddr_t, vsize_t, u_int, int);
+int pdcproc_btlb_purge(pa_space_t, vaddr_t, paddr_t, vsize_t);
+int pdcproc_btlb_purgeall(void);
+
+int pdcproc_tlb_info(struct pdc_hwtlb *);
+int pdcproc_tlb_config(struct pdc_hwtlb *, vaddr_t, vsize_t, unsigned long);
+
+int pdcproc_system_map_find_mod(struct pdc_system_map_find_mod *,
+    struct device_path *, int);
+int pdcproc_system_map_find_addr(struct pdc_system_map_find_addr *, int, int);
+int pdcproc_system_map_trans_path(struct pdc_memmap *, struct device_path *);
+
+int pdcproc_soft_power_enable(int);
+int pdcproc_soft_power_info(struct pdc_power_info *);
+
+int pdcproc_memmap(struct pdc_memmap *, struct device_path *);
+
+int pdcproc_ioclrerrors(void);
+int pdcproc_ioreset(void);
+
+int pdcproc_doreset(void);
+
+int pdcproc_lan_station_id(char *, size_t, hppa_hpa_t);
+
+int pdcproc_pci_inttblsz(int *);
+int pdcproc_pci_gettable(int, size_t, void *);
+
 #endif
 
 #endif	/* !(_LOCORE) */

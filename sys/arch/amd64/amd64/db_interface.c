@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.20 2009/01/29 13:52:20 joerg Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.24 2011/08/11 19:52:52 cherry Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.20 2009/01/29 13:52:20 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.24 2011/08/11 19:52:52 cherry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -44,8 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.20 2009/01/29 13:52:20 joerg Exp 
 #include <sys/systm.h>
 #include <sys/atomic.h>
 #include <sys/cpu.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
@@ -63,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.20 2009/01/29 13:52:20 joerg Exp 
 #include <ddb/db_output.h>
 #include <ddb/ddbvar.h>
 
-extern const char *trap_type[];
+extern const char *const trap_type[];
 extern int trap_types;
 
 int	db_active;
@@ -84,7 +82,9 @@ void kdbprinttrap(int, int);
 #ifdef MULTIPROCESSOR
 extern void ddb_ipi(struct trapframe);
 static void ddb_suspend(struct trapframe *);
+#ifndef XEN
 int ddb_vec;
+#endif /* XEN */
 static bool ddb_mp_online;
 #endif
 
@@ -100,9 +100,13 @@ db_machine_init(void)
 {
 
 #ifdef MULTIPROCESSOR
+#ifndef XEN
 	ddb_vec = idt_vec_alloc(0xf0, 0xff);
 	setgate((struct gate_descriptor *)&idt[ddb_vec], &Xintrddb, 1,
 	    SDT_SYS386IGT, SEL_KPL, GSEL(GCODE_SEL, SEL_KPL));
+#else
+	/* Initialised as part of xen_ipi_init() */
+#endif /* XEN */
 #endif
 }
 
@@ -116,8 +120,10 @@ db_suspend_others(void)
 	int cpu_me = cpu_number();
 	int win;
 
+#ifndef XEN
 	if (ddb_vec == 0)
 		return 1;
+#endif /* XEN */
 
 	__cpu_simple_lock(&db_lock);
 	if (ddb_cpu == NOCPU)
@@ -125,7 +131,12 @@ db_suspend_others(void)
 	win = (ddb_cpu == cpu_me);
 	__cpu_simple_unlock(&db_lock);
 	if (win) {
+#ifdef XEN
+		xen_broadcast_ipi(XEN_IPI_DDB);
+#else
 		x86_ipi(ddb_vec, LAPIC_DEST_ALLEXCL, LAPIC_DLMODE_FIXED);
+#endif /* XEN */
+
 	}
 	ddb_mp_online = x86_mp_online;
 	x86_mp_online = false;
@@ -175,9 +186,11 @@ kdb_trap(int type, int code, db_regs_t *regs)
 	db_regs_t dbreg;
 
 	switch (type) {
+	case T_NMI:	/* NMI */
+		printf("NMI ... going to debugger\n");
+		/*FALLTHROUGH*/
 	case T_BPTFLT:	/* breakpoint */
 	case T_TRCTRAP:	/* single_step */
-	case T_NMI:	/* NMI */
 	case -1:	/* keyboard interrupt */
 		break;
 	default:

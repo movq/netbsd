@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_subr.c,v 1.73 2008/04/28 20:24:11 martin Exp $	*/
+/*	$NetBSD: lfs_subr.c,v 1.77 2012/01/02 22:10:44 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.73 2008/04/28 20:24:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.77 2012/01/02 22:10:44 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -293,9 +293,9 @@ lfs_seglock(struct lfs *fs, unsigned long flags)
 	if (fs->lfs_seglock) {
 		if (fs->lfs_lockpid == curproc->p_pid &&
 		    fs->lfs_locklwp == curlwp->l_lid) {
-			mutex_exit(&lfs_lock);
 			++fs->lfs_seglock;
 			fs->lfs_sp->seg_flags |= flags;
+			mutex_exit(&lfs_lock);
 			return 0;
 		} else if (flags & SEGM_PAGEDAEMON) {
 			mutex_exit(&lfs_lock);
@@ -335,6 +335,7 @@ lfs_seglock(struct lfs *fs, unsigned long flags)
 	 */
 	mutex_enter(&lfs_lock);
 	++fs->lfs_iocount;
+	fs->lfs_startseg = fs->lfs_curseg;
 	mutex_exit(&lfs_lock);
 	return 0;
 }
@@ -361,9 +362,7 @@ lfs_unmark_dirop(struct lfs *fs)
 	for (ip = TAILQ_FIRST(&fs->lfs_dchainhd); ip != NULL; ip = nip) {
 		nip = TAILQ_NEXT(ip, i_lfs_dchain);
 		vp = ITOV(ip);
-		if (VOP_ISLOCKED(vp) == LK_EXCLOTHER)
-			continue;
-		if ((VTOI(vp)->i_flag & (IN_ADIROP | IN_ALLMOD)) == 0) {
+		if ((ip->i_flag & (IN_ADIROP | IN_CDIROP)) == IN_CDIROP) {
 			--lfs_dirvcount;
 			--fs->lfs_dirvcount;
 			vp->v_uflag &= ~VU_DIROP;
@@ -374,6 +373,7 @@ lfs_unmark_dirop(struct lfs *fs)
 			vrele(vp);
 			mutex_enter(&lfs_lock);
 			fs->lfs_unlockvp = NULL;
+			ip->i_flag &= ~IN_CDIROP;
 		}
 	}
 
@@ -439,8 +439,7 @@ lfs_segunlock(struct lfs *fs)
 	mutex_enter(&lfs_lock);
 	KASSERT(LFS_SEGLOCK_HELD(fs));
 	if (fs->lfs_seglock == 1) {
-		if ((sp->seg_flags & (SEGM_PROT | SEGM_CLEAN)) == 0 &&
-		    LFS_STARVED_FOR_SEGS(fs) == 0)
+		if ((sp->seg_flags & (SEGM_PROT | SEGM_CLEAN)) == 0)
 			do_unmark_dirop = 1;
 		mutex_exit(&lfs_lock);
 		sync = sp->seg_flags & SEGM_SYNC;
@@ -503,9 +502,11 @@ lfs_segunlock(struct lfs *fs)
 		 * by a superblock completed.
 		 */
 		mutex_enter(&lfs_lock);
-		while (ckp && sync && fs->lfs_iocount)
+		while (ckp && sync && fs->lfs_iocount) {
 			(void)mtsleep(&fs->lfs_iocount, PRIBIO + 1,
 				      "lfs_iocount", 0, &lfs_lock);
+			DLOG((DLOG_SEG, "sleeping on iocount %x == %d\n", fs, fs->lfs_iocount));
+		}
 		while (sync && sp->seg_iocount) {
 			(void)mtsleep(&sp->seg_iocount, PRIBIO + 1,
 				     "seg_iocount", 0, &lfs_lock);

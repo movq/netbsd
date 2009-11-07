@@ -1,4 +1,4 @@
-/*	$NetBSD: wss_isapnp.c,v 1.25 2009/05/12 10:16:35 cegger Exp $	*/
+/*	$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.25 2009/05/12 10:16:35 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.27 2011/11/22 19:33:38 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.25 2009/05/12 10:16:35 cegger Exp $
 int	wss_isapnp_match(device_t, cfdata_t, void *);
 void	wss_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(wss_isapnp, sizeof(struct wss_softc),
+CFATTACH_DECL_NEW(wss_isapnp, sizeof(struct wss_softc),
     wss_isapnp_match, wss_isapnp_attach, NULL, NULL);
 
 /*
@@ -93,6 +93,7 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 
 	sc = device_private(self);
 	ac = &sc->sc_ad1848.sc_ad1848;
+	ac->sc_dev = self;
 	ipa = aux;
 	printf("\n");
 
@@ -143,7 +144,6 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 	/* Set up AD1848 I/O handle. */
 	ac->sc_iot = sc->sc_iot;
 	ac->sc_ioh = sc->sc_ioh;
-	ac->mode = 2;
 
 	sc->sc_ad1848.sc_ic = ipa->ipa_ic;
 
@@ -161,6 +161,8 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 	aprint_error_dev(self, "%s %s", ipa->ipa_devident,
 	    ipa->ipa_devclass);
 
+	ac->mode = 2;
+
 	wssattach(sc);
 
 	/* set up OPL I/O handle for ISAPNP boards w/o MAD */
@@ -172,6 +174,6 @@ wss_isapnp_attach(device_t parent, device_t self, void *aux)
 		arg.type = AUDIODEV_TYPE_OPL;
 		arg.hwif = 0;
 		arg.hdl = 0;
-		(void)config_found(&ac->sc_dev, &arg, audioprint);
+		(void)config_found(self, &arg, audioprint);
 	}
 }

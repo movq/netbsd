@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.8 2009/10/20 19:10:11 snj Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.10 2011/10/01 15:59:00 chs Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -36,6 +36,7 @@
  * size of the boot block must be at least 8KB.
  */
 #define	BBMINSIZE	8192		/* minimum size of boot block      */
+#define LABELUSESMBR	0			/* no MBR partitionning */
 #define LABELSECTOR	0		/* `natural' start of boot block   */
 #define LABELOFFSET	516		/* offset of disk label in bytes,
 					   relative to start of boot block */
@@ -70,7 +71,7 @@ struct bootblock {
 };
 
 struct disklabel;
-#define	BBGETLABEL(bb, dl)	*(dl) = *((struct disklabel *)(bb)->bb_label)
-#define	BBSETLABEL(bb, dl)	*((struct disklabel *)(bb)->bb_label) = *(dl)
+#define	BBGETLABEL(bb, dl)	memcpy((dl), (bb)->bb_label, sizeof (struct disklabel))
+#define	BBSETLABEL(bb, dl)	memcpy((bb)->bb_label, (dl), sizeof (struct disklabel))
 
 #endif /* _MACHINE_DISKLABEL_H_ */

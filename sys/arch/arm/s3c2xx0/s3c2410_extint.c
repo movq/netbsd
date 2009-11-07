@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2410_extint.c,v 1.9 2008/01/06 01:37:55 matt Exp $ */
+/* $NetBSD: s3c2410_extint.c,v 1.12 2012/01/30 03:28:33 nisimura Exp $ */
 
 /*
  * Copyright (c) 2003  Genetec corporation.  All rights reserved.
@@ -39,13 +39,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2410_extint.c,v 1.9 2008/01/06 01:37:55 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2410_extint.c,v 1.12 2012/01/30 03:28:33 nisimura Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <uvm/uvm_extern.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <arm/cpufunc.h>
 
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: s3c2410_extint.c,v 1.9 2008/01/06 01:37:55 matt Exp 
 #define	N_EXTINT	(S3C2410_EXTINT_MAX - EXTINT_CASCADE_MIN +1)
 
 struct ssextio_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -143,7 +143,7 @@ void
 ssextio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ssextio_softc *sc = (struct ssextio_softc*)self;
-	struct s3c24x0_softc *cpuc = (struct s3c24x0_softc *)parent;
+	struct s3c24x0_softc *cpuc = ((struct s3c2xx0_attach_args *)aux)->sa_sc;
 
 	aprint_normal("\n");
 
@@ -171,8 +171,8 @@ static int
 ssextio_search(struct device *parent, struct cfdata *cf,
 	       const int *ldesc, void *aux)
 {
-	struct ssextio_softc *sc = (struct ssextio_softc *)parent;
-	struct s3c24x0_softc *cpuc =(struct s3c24x0_softc *) device_parent(&sc->sc_dev);
+	struct ssextio_softc *sc = device_private(parent);
+	struct s3c24x0_softc *cpuc =(struct s3c24x0_softc *) device_private(device_parent(sc->sc_dev));
 	struct s3c2xx0_attach_args sa;
 
 	sa.sa_sc = sc;
@@ -257,7 +257,7 @@ ssextio_cascaded_intr(void *cookie)
 	}
 
 
-	save = disable_interrupts(I32_bit);;
+	save = disable_interrupts(I32_bit);
 	pending = pending_mask & bus_space_read_4(iot, ioh, GPIO_EINTPEND);
 	pending &= ~ssextio_softc->sc_mask;
 	ssextio_softc->sc_pending |= pending;

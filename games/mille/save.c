@@ -1,4 +1,4 @@
-/*	$NetBSD: save.c,v 1.14 2009/05/25 23:24:54 dholland Exp $	*/
+/*	$NetBSD: save.c,v 1.16 2011/08/26 09:01:07 tron Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)save.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: save.c,v 1.14 2009/05/25 23:24:54 dholland Exp $");
+__RCSID("$NetBSD: save.c,v 1.16 2011/08/26 09:01:07 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -113,7 +113,7 @@ over:
 		return FALSE;
 
 	if ((outfd = creat(buf, 0644)) < 0) {
-		error(strerror(errno));
+		error("%s", strerror(errno));
 		return FALSE;
 	}
 	mvwaddstr(Score, ERR_Y, ERR_X, buf);
@@ -124,7 +124,11 @@ over:
 	if (rv == FALSE) {
 		unlink(buf);
 	} else {
-		strcpy(buf, ctime(tp));
+		char *p;
+		if ((p = ctime(tp)) == NULL)
+			strcpy(buf, "?");
+		else
+			strcpy(buf, p);
 		for (sp = buf; *sp != '\n'; sp++)
 			continue;
 		*sp = '\0';
@@ -144,7 +148,7 @@ bool
 rest_f(const char *file)
 {
 
-	char	*sp;
+	char	*sp, *p;
 	int	inf;
 	char	buf[80];
 	STAT	sbuf;
@@ -159,7 +163,10 @@ rest_f(const char *file)
 	}
 	varpush(inf, readv);
 	close(inf);
-	strcpy(buf, ctime(&sbuf.st_mtime));
+	if ((p = ctime(&sbuf.st_mtime)) == NULL)
+		strcpy(buf, "?");
+	else
+		strcpy(buf, p);
 	for (sp = buf; *sp != '\n'; sp++)
 		continue;
 	*sp = '\0';

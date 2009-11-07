@@ -275,7 +275,6 @@ int MAIN(int argc, char **argv)
 		}
 	if (topk8)
 		{
-		BIO_free(in); /* Not needed in this section */
 		pkey = load_key(bio_err, infile, informat, 1,
 			passin, e, "key");
 		if (!pkey)
@@ -402,6 +401,10 @@ int MAIN(int argc, char **argv)
 
 			case PKCS8_NS_DB:
 			BIO_printf(bio_err, "DSA public key include in PrivateKey\n");
+			break;
+
+			case PKCS8_NEG_PRIVKEY:
+			BIO_printf(bio_err, "DSA private key value is negative\n");
 			break;
 
 			default:

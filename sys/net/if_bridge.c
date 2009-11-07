@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridge.c,v 1.70 2009/05/17 11:34:21 cegger Exp $	*/
+/*	$NetBSD: if_bridge.c,v 1.74 2011/11/19 22:51:25 tls Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -80,12 +80,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.70 2009/05/17 11:34:21 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.74 2011/11/19 22:51:25 tls Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_bridge_ipf.h"
 #include "opt_inet.h"
 #include "opt_pfil_hooks.h"
-#include "bpfilter.h"
+#endif /* _KERNEL_OPT */
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -99,10 +100,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.70 2009/05/17 11:34:21 cegger Exp $"
 #include <sys/pool.h>
 #include <sys/kauth.h>
 #include <sys/cpu.h>
+#include <sys/cprng.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
@@ -1081,7 +1081,7 @@ bridge_ifdetach(struct ifnet *ifp)
 	struct ifbreq breq;
 
 	memset(&breq, 0, sizeof(breq));
-	snprintf(breq.ifbr_ifsname, sizeof(breq.ifbr_ifsname), ifp->if_xname);
+	strlcpy(breq.ifbr_ifsname, ifp->if_xname, sizeof(breq.ifbr_ifsname));
 
 	(void) bridge_ioctl_del(sc, &breq);
 }
@@ -1849,7 +1849,7 @@ bridge_rtable_init(struct bridge_softc *sc)
 	for (i = 0; i < BRIDGE_RTHASH_SIZE; i++)
 		LIST_INIT(&sc->sc_rthash[i]);
 
-	sc->sc_rthash_key = arc4random();
+	sc->sc_rthash_key = cprng_fast32();
 
 	LIST_INIT(&sc->sc_rtlist);
 

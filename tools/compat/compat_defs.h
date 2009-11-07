@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.74 2009/11/06 18:26:06 joerg Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.83.2.1 2012/06/23 22:54:57 riz Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -72,6 +72,11 @@
 #endif
 #define __UNCONST(a)   ((void *)(unsigned long)(const void *)(a))
 
+#undef __predict_false
+#define __predict_false(x) (x)
+#undef __predict_true
+#define __predict_true(x) (x)
+
 /* We don't include <pwd.h> here, so that "compat_pwd.h" works. */
 struct passwd;
 
@@ -114,10 +119,14 @@ struct group;
 #define __aconst
 #undef __dead
 #define __dead
+#undef __printflike
+#define __printflike(x,y)
 #undef __restrict
 #define __restrict
 #undef __unused
 #define __unused
+#undef __arraycount
+#define	__arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
 
 /* Dirent support. */
 
@@ -272,6 +281,11 @@ int flock(int, int);
 char *fparseln(FILE *, size_t *, size_t *, const char [3], int);
 #endif
 
+#if !HAVE_GETLINE
+ssize_t getdelim(char **, size_t *, int, FILE *);
+ssize_t getline(char **, size_t *, FILE *);
+#endif
+
 #if !HAVE_ISSETUGID
 int issetugid(void);
 #endif
@@ -345,34 +359,15 @@ int		string_to_flags(char **, unsigned long *, unsigned long *);
  * XXX host system has all of these functions, all of their interfaces
  * XXX and interactions are exactly the same as in our libc/libutil -- ugh.
  */
-#if !HAVE_USER_FROM_UID
-# define user_from_uid __nbcompat_user_from_uid
-# undef HAVE_DECL_USER_FROM_UID
-#endif
-
-#if !HAVE_UID_FROM_USER
-# define uid_from_user __nbcompat_uid_from_user
-# undef HAVE_DECL_UID_FROM_USER
-#endif
-
-#if !HAVE_PWCACHE_USERDB
-# define pwcache_userdb __nbcompat_pwcache_userdb
-# undef HAVE_DECL_PWCACHE_USERDB
-#endif
-
-#if !HAVE_GROUP_FROM_GID
-# define group_from_gid __nbcompat_group_from_gid
-# undef HAVE_DECL_GROUP_FROM_GID
-#endif
-
-#if !HAVE_GID_FROM_GROUP
-# define gid_from_group __nbcompat_gid_from_group
-# undef HAVE_DECL_GID_FROM_GROUP
-#endif
-
-#if !HAVE_PWCACHE_GROUDB
-# define pwcache_groupdb __nbcompat_pwcache_groupdb
-# undef HAVE_DECL_PWCACHE_GROUPDB
+#if !HAVE_USER_FROM_UID || !HAVE_UID_FROM_USER || !HAVE_GROUP_FROM_GID || \
+    !HAVE_GID_FROM_GROUP || !HAVE_PWCACHE_USERDB || !HAVE_PWCACHE_GROUDB
+/* Make them use our version */
+#  define user_from_uid __nbcompat_user_from_uid
+#  define uid_from_user __nbcompat_uid_from_user
+#  define pwcache_userdb __nbcompat_pwcache_userdb
+#  define group_from_gid __nbcompat_group_from_gid
+#  define gid_from_group __nbcompat_gid_from_group
+#  define pwcache_groupdb __nbcompat_pwcache_groupdb
 #endif
 
 #if !HAVE_DECL_UID_FROM_USER
@@ -385,7 +380,7 @@ const char *user_from_uid(uid_t, int);
 
 #if !HAVE_DECL_PWCACHE_USERDB
 int pwcache_userdb(int (*)(int), void (*)(void),
-    struct passwd * (*)(const char *), struct passwd * (*)(uid_t));
+                struct passwd * (*)(const char *), struct passwd * (*)(uid_t));
 #endif
 
 #if !HAVE_DECL_GID_FROM_GROUP
@@ -549,6 +544,53 @@ void *setmode(const char *);
 
 /* <inttypes.h> */
 
+#if UCHAR_MAX == 0xffU			/* char is an 8-bit type */
+#ifndef PRId8
+#define PRId8 "hhd"
+#endif
+#ifndef PRIi8
+#define PRIi8 "hhi"
+#endif
+#ifndef PRIo8
+#define PRIo8 "hho"
+#endif
+#ifndef PRIu8
+#define PRIu8 "hhu"
+#endif
+#ifndef PRIx8
+#define PRIx8 "hhx"
+#endif
+#ifndef PRIX8
+#define PRIX8 "hhX"
+#endif
+#ifndef SCNd8
+#define SCNd8 "hhd"
+#endif
+#ifndef SCNi8
+#define SCNi8 "hhi"
+#endif
+#ifndef SCNo8
+#define SCNo8 "hho"
+#endif
+#ifndef SCNu8
+#define SCNu8 "hhu"
+#endif
+#ifndef SCNx8
+#define SCNx8 "hhx"
+#endif
+#ifndef SCNX8
+#define SCNX8 "hhX"
+#endif
+#endif					/* char is an 8-bit type */
+#if ! (defined(PRId8) && defined(PRIi8) && defined(PRIo8) && \
+	defined(PRIu8) && defined(PRIx8) && defined(PRIX8))
+#error "Don't know how to define PRI[diouxX]8"
+#endif
+#if ! (defined(SCNd8) && defined(SCNi8) && defined(SCNo8) && \
+	defined(SCNu8) && defined(SCNx8) && defined(SCNX8))
+#error "Don't know how to define SCN[diouxX]8"
+#endif
+
 #if USHRT_MAX == 0xffffU		/* short is a 16-bit type */
 #ifndef PRId16
 #define PRId16 "hd"
@@ -568,10 +610,32 @@ void *setmode(const char *);
 #ifndef PRIX16
 #define PRIX16 "hX"
 #endif
+#ifndef SCNd16
+#define SCNd16 "hd"
+#endif
+#ifndef SCNi16
+#define SCNi16 "hi"
+#endif
+#ifndef SCNo16
+#define SCNo16 "ho"
+#endif
+#ifndef SCNu16
+#define SCNu16 "hu"
+#endif
+#ifndef SCNx16
+#define SCNx16 "hx"
+#endif
+#ifndef SCNX16
+#define SCNX16 "hX"
+#endif
 #endif					/* short is a 16-bit type */
 #if ! (defined(PRId16) && defined(PRIi16) && defined(PRIo16) && \
 	defined(PRIu16) && defined(PRIx16) && defined(PRIX16))
 #error "Don't know how to define PRI[diouxX]16"
+#endif
+#if ! (defined(SCNd16) && defined(SCNi16) && defined(SCNo16) && \
+	defined(SCNu16) && defined(SCNx16) && defined(SCNX16))
+#error "Don't know how to define SCN[diouxX]16"
 #endif
 
 #if UINT_MAX == 0xffffffffU		/* int is a 32-bit type */
@@ -593,6 +657,24 @@ void *setmode(const char *);
 #ifndef PRIX32
 #define PRIX32 "X"
 #endif
+#ifndef SCNd32
+#define SCNd32 "d"
+#endif
+#ifndef SCNi32
+#define SCNi32 "i"
+#endif
+#ifndef SCNo32
+#define SCNo32 "o"
+#endif
+#ifndef SCNu32
+#define SCNu32 "u"
+#endif
+#ifndef SCNx32
+#define SCNx32 "x"
+#endif
+#ifndef SCNX32
+#define SCNX32 "X"
+#endif
 #endif					/* int is a 32-bit type */
 #if ULONG_MAX == 0xffffffffU		/* long is a 32-bit type */
 #ifndef PRId32
@@ -613,10 +695,32 @@ void *setmode(const char *);
 #ifndef PRIX32
 #define PRIX32 "lX"
 #endif
+#ifndef SCNd32
+#define SCNd32 "ld"
+#endif
+#ifndef SCNi32
+#define SCNi32 "li"
+#endif
+#ifndef SCNo32
+#define SCNo32 "lo"
+#endif
+#ifndef SCNu32
+#define SCNu32 "lu"
+#endif
+#ifndef SCNx32
+#define SCNx32 "lx"
+#endif
+#ifndef SCNX32
+#define SCNX32 "lX"
+#endif
 #endif					/* long is a 32-bit type */
 #if ! (defined(PRId32) && defined(PRIi32) && defined(PRIo32) && \
 	defined(PRIu32) && defined(PRIx32) && defined(PRIX32))
 #error "Don't know how to define PRI[diouxX]32"
+#endif
+#if ! (defined(SCNd32) && defined(SCNi32) && defined(SCNo32) && \
+	defined(SCNu32) && defined(SCNx32) && defined(SCNX32))
+#error "Don't know how to define SCN[diouxX]32"
 #endif
 
 #if ULONG_MAX == 0xffffffffffffffffU	/* long is a 64-bit type */
@@ -638,6 +742,24 @@ void *setmode(const char *);
 #ifndef PRIX64
 #define PRIX64 "lX"
 #endif
+#ifndef SCNd64
+#define SCNd64 "ld"
+#endif
+#ifndef SCNi64
+#define SCNi64 "li"
+#endif
+#ifndef SCNo64
+#define SCNo64 "lo"
+#endif
+#ifndef SCNu64
+#define SCNu64 "lu"
+#endif
+#ifndef SCNx64
+#define SCNx64 "lx"
+#endif
+#ifndef SCNX64
+#define SCNX64 "lX"
+#endif
 #endif					/* long is a 64-bit type */
 #if ULLONG_MAX == 0xffffffffffffffffU	/* long long is a 64-bit type */
 #ifndef PRId64
@@ -658,10 +780,32 @@ void *setmode(const char *);
 #ifndef PRIX64
 #define PRIX64 "llX"
 #endif
+#ifndef SCNd64
+#define SCNd64 "lld"
+#endif
+#ifndef SCNi64
+#define SCNi64 "lli"
+#endif
+#ifndef SCNo64
+#define SCNo64 "llo"
+#endif
+#ifndef SCNu64
+#define SCNu64 "llu"
+#endif
+#ifndef SCNx64
+#define SCNx64 "llx"
+#endif
+#ifndef SCNX64
+#define SCNX64 "llX"
+#endif
 #endif					/* long long is a 64-bit type */
 #if ! (defined(PRId64) && defined(PRIi64) && defined(PRIo64) && \
 	defined(PRIu64) && defined(PRIx64) && defined(PRIX64))
 #error "Don't know how to define PRI[diouxX]64"
+#endif
+#if ! (defined(SCNd64) && defined(SCNi64) && defined(SCNo64) && \
+	defined(SCNu64) && defined(SCNx64) && defined(SCNX64))
+#error "Don't know how to define SCN[diouxX]64"
 #endif
 
 /* <limits.h> */
@@ -714,12 +858,6 @@ void *setmode(const char *);
 #endif
 #ifndef _PATH_VI
 #define _PATH_VI "/usr/bin/vi"
-#endif
-
-/* <stdarg.h> */
-
-#ifndef _BSD_VA_LIST_
-#define _BSD_VA_LIST_ va_list
 #endif
 
 /* <stdint.h> */
@@ -907,8 +1045,10 @@ __GEN_ENDIAN_DEC(64, le)
 
 #undef BIG_ENDIAN
 #undef LITTLE_ENDIAN
+#undef PDP_ENDIAN
 #define BIG_ENDIAN 4321
 #define LITTLE_ENDIAN 1234
+#define PDP_ENDIAN 3412
 
 #undef BYTE_ORDER
 #if WORDS_BIGENDIAN
@@ -917,9 +1057,9 @@ __GEN_ENDIAN_DEC(64, le)
 #define BYTE_ORDER LITTLE_ENDIAN
 #endif
 
-#ifndef DEV_BSIZE
+/* all references of DEV_BSIZE in tools are for NetBSD's file images */
+#undef DEV_BSIZE
 #define DEV_BSIZE (1 << 9)
-#endif
 
 #undef MIN
 #undef MAX

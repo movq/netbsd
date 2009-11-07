@@ -1,4 +1,4 @@
-#	$NetBSD: OFWGENCFG,v 1.33 2009/03/06 20:31:52 joerg Exp $
+#	$NetBSD: OFWGENCFG,v 1.38 2011/11/22 21:25:36 tls Exp $
 #
 #	OFWGENCFG: 'generic' configuration for Open Firmware boards.
 #
@@ -47,14 +47,14 @@ file-system	NFS
 #file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	NFSSERVER
 options 	NFS_BOOT_DHCP	# NFS booting via DHCP
 options 	NFS_BOOT_RWSIZE=1024	# OFW driver can't cope with more
@@ -144,9 +144,8 @@ pseudo-device	bpfilter		# packet filter
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	fss	4		# file system snapshot device
-pseudo-device	rnd			# /dev/random and /dev/urandom
+#pseudo-device	fss			# file system snapshot device
 
-#pseudo-device	md	1		# Ramdisk driver
+#pseudo-device	md			# Ramdisk driver
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	openfirm		# /dev/openfirm

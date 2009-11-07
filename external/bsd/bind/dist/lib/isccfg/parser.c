@@ -1,7 +1,7 @@
-/*	$NetBSD: parser.c,v 1.1.1.2 2009/10/25 00:02:50 christos Exp $	*/
+/*	$NetBSD: parser.c,v 1.3.4.1 2012/06/05 21:15:37 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: parser.c,v 1.132 2009/09/02 23:43:54 each Exp */
+/* Id */
 
 /*! \file */
 
@@ -54,11 +54,11 @@
 #define CHECK(op) 						\
 	do { result = (op); 					\
 		if (result != ISC_R_SUCCESS) goto cleanup; 	\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 /* Clean up a configuration object if non-NULL. */
 #define CLEANUP_OBJ(obj) \
-	do { if ((obj) != NULL) cfg_obj_destroy(pctx, &(obj)); } while (0)
+	do { if ((obj) != NULL) cfg_obj_destroy(pctx, &(obj)); } while (/*CONSTCOND*/0)
 
 
 /*
@@ -389,6 +389,12 @@ cfg_parser_create(isc_mem_t *mctx, isc_log_t *lctx, cfg_parser_t **ret) {
 	if (pctx == NULL)
 		return (ISC_R_NOMEMORY);
 
+	result = isc_refcount_init(&pctx->references, 1);
+	if (result != ISC_R_SUCCESS) {
+		isc_mem_put(mctx, pctx, sizeof(*pctx));
+		return (result);
+	}
+
 	pctx->mctx = mctx;
 	pctx->lctx = lctx;
 	pctx->lexer = NULL;
@@ -529,17 +535,30 @@ cfg_parse_buffer(cfg_parser_t *pctx, isc_buffer_t *buffer,
 }
 
 void
+cfg_parser_attach(cfg_parser_t *src, cfg_parser_t **dest) {
+	REQUIRE(src != NULL);
+	REQUIRE(dest != NULL && *dest == NULL);
+	isc_refcount_increment(&src->references, NULL);
+	*dest = src;
+}
+
+void
 cfg_parser_destroy(cfg_parser_t **pctxp) {
 	cfg_parser_t *pctx = *pctxp;
-	isc_lex_destroy(&pctx->lexer);
-	/*
-	 * Cleaning up open_files does not
-	 * close the files; that was already done
-	 * by closing the lexer.
-	 */
-	CLEANUP_OBJ(pctx->open_files);
-	CLEANUP_OBJ(pctx->closed_files);
-	isc_mem_put(pctx->mctx, pctx, sizeof(*pctx));
+	unsigned int refs;
+
+	isc_refcount_decrement(&pctx->references, &refs);
+	if (refs == 0) {
+		isc_lex_destroy(&pctx->lexer);
+		/*
+		 * Cleaning up open_files does not
+		 * close the files; that was already done
+		 * by closing the lexer.
+		 */
+		CLEANUP_OBJ(pctx->open_files);
+		CLEANUP_OBJ(pctx->closed_files);
+		isc_mem_put(pctx->mctx, pctx, sizeof(*pctx));
+	}
 	*pctxp = NULL;
 }
 
@@ -851,8 +870,8 @@ cfg_obj_asboolean(const cfg_obj_t *obj) {
 	return (obj->value.boolean);
 }
 
-static isc_result_t
-parse_boolean(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret)
+isc_result_t
+cfg_parse_boolean(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret)
 {
 	isc_result_t result;
 	isc_boolean_t value;
@@ -891,8 +910,8 @@ parse_boolean(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret)
 	return (result);
 }
 
-static void
-print_boolean(cfg_printer_t *pctx, const cfg_obj_t *obj) {
+void
+cfg_print_boolean(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	if (obj->value.boolean)
 		cfg_print_chars(pctx, "yes", 3);
 	else
@@ -900,7 +919,7 @@ print_boolean(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 }
 
 cfg_type_t cfg_type_boolean = {
-	"boolean", parse_boolean, print_boolean, cfg_doc_terminal,
+	"boolean", cfg_parse_boolean, cfg_print_boolean, cfg_doc_terminal,
 	&cfg_rep_boolean, NULL
 };
 
@@ -1135,7 +1154,7 @@ cfg_list_length(const cfg_obj_t *obj, isc_boolean_t recurse) {
 	return (count);
 }
 
-const cfg_obj_t *
+cfg_obj_t *
 cfg_listelt_value(const cfg_listelt_t *elt) {
 	REQUIRE(elt != NULL);
 	return (elt->obj);
@@ -1240,6 +1259,14 @@ cfg_parse_mapbody(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret)
 		if ((clause->flags & CFG_CLAUSEFLAG_NYI) != 0)
 			cfg_parser_warning(pctx, 0, "option '%s' is "
 				       "not implemented", clause->name);
+
+		if ((clause->flags & CFG_CLAUSEFLAG_NOTCONFIGURED) != 0) {
+			cfg_parser_warning(pctx, 0, "option '%s' is not "
+					   "configured", clause->name);
+			result = ISC_R_FAILURE;
+			goto cleanup;
+		}
+
 		/*
 		 * Don't log options with CFG_CLAUSEFLAG_NEWDEFAULT
 		 * set here - we need to log the *lack* of such an option,
@@ -1481,6 +1508,7 @@ static struct flagtext {
 	{ CFG_CLAUSEFLAG_OBSOLETE, "obsolete" },
 	{ CFG_CLAUSEFLAG_NEWDEFAULT, "default changed" },
 	{ CFG_CLAUSEFLAG_TESTONLY, "test only" },
+	{ CFG_CLAUSEFLAG_NOTCONFIGURED, "not configured" },
 	{ 0, NULL }
 };
 
@@ -1878,6 +1906,7 @@ cfg_doc_netaddr(cfg_printer_t *pctx, const cfg_type_t *type) {
 			cfg_print_chars(pctx, " | ", 3);
 		cfg_print_chars(pctx, "*", 1);
 		n++;
+		POST(n);
 	}
 	if (*flagp != CFG_ADDR_V4OK && *flagp != CFG_ADDR_V6OK)
 		cfg_print_chars(pctx, " )", 2);
@@ -1917,7 +1946,7 @@ cfg_parse_netprefix(cfg_parser_t *pctx, const cfg_type_t *type,
 	cfg_obj_t *obj = NULL;
 	isc_result_t result;
 	isc_netaddr_t netaddr;
-	unsigned int addrlen, prefixlen;
+	unsigned int addrlen = 0, prefixlen;
 	UNUSED(type);
 
 	CHECK(cfg_parse_rawaddr(pctx, CFG_ADDR_V4OK | CFG_ADDR_V4PREFIXOK |
@@ -1930,7 +1959,6 @@ cfg_parse_netprefix(cfg_parser_t *pctx, const cfg_type_t *type,
 		addrlen = 128;
 		break;
 	default:
-		addrlen = 0;
 		INSIST(0);
 		break;
 	}
@@ -1980,8 +2008,12 @@ cfg_obj_isnetprefix(const cfg_obj_t *obj) {
 
 void
 cfg_obj_asnetprefix(const cfg_obj_t *obj, isc_netaddr_t *netaddr,
-		    unsigned int *prefixlen) {
+		    unsigned int *prefixlen)
+{
 	REQUIRE(obj != NULL && obj->type->rep == &cfg_rep_netprefix);
+	REQUIRE(netaddr != NULL);
+	REQUIRE(prefixlen != NULL);
+
 	*netaddr = obj->value.netprefix.address;
 	*prefixlen = obj->value.netprefix.prefixlen;
 }
@@ -2065,6 +2097,7 @@ cfg_doc_sockaddr(cfg_printer_t *pctx, const cfg_type_t *type) {
 			cfg_print_chars(pctx, " | ", 3);
 		cfg_print_chars(pctx, "*", 1);
 		n++;
+		POST(n);
 	}
 	cfg_print_chars(pctx, " ) ", 3);
 	if (*flagp & CFG_ADDR_WILDOK) {
@@ -2201,16 +2234,30 @@ cfg_parser_warning(cfg_parser_t *pctx, unsigned int flags, const char *fmt, ...)
 
 #define MAX_LOG_TOKEN 30 /* How much of a token to quote in log messages. */
 
+static isc_boolean_t
+have_current_file(cfg_parser_t *pctx) {
+	cfg_listelt_t *elt;
+	if (pctx->open_files == NULL)
+		return (ISC_FALSE);
+
+	elt = ISC_LIST_TAIL(pctx->open_files->value.list);
+	if (elt == NULL)
+	      return (ISC_FALSE);
+
+	return (ISC_TRUE);
+}
+
 static char *
 current_file(cfg_parser_t *pctx) {
 	static char none[] = "none";
 	cfg_listelt_t *elt;
 	cfg_obj_t *fileobj;
 
-	if (pctx->open_files == NULL)
+	if (!have_current_file(pctx))
 		return (none);
+
 	elt = ISC_LIST_TAIL(pctx->open_files->value.list);
-	if (elt == NULL)
+	if (elt == NULL)	/* shouldn't be possible, but... */
 	      return (none);
 
 	fileobj = elt->obj;
@@ -2233,8 +2280,10 @@ parser_complain(cfg_parser_t *pctx, isc_boolean_t is_warning,
 	if (is_warning)
 		level = ISC_LOG_WARNING;
 
-	snprintf(where, sizeof(where), "%s:%u: ",
-		 current_file(pctx), pctx->line);
+	where[0] = '\0';
+	if (have_current_file(pctx))
+		snprintf(where, sizeof(where), "%s:%u: ",
+			 current_file(pctx), pctx->line);
 
 	len = vsnprintf(message, sizeof(message), format, args);
 	if (len >= sizeof(message))
@@ -2308,6 +2357,7 @@ cfg_obj_line(const cfg_obj_t *obj) {
 
 isc_result_t
 cfg_create_obj(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
+	isc_result_t result;
 	cfg_obj_t *obj;
 
 	obj = isc_mem_get(pctx->mctx, sizeof(cfg_obj_t));
@@ -2316,9 +2366,15 @@ cfg_create_obj(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 	obj->type = type;
 	obj->file = current_file(pctx);
 	obj->line = pctx->line;
+	result = isc_refcount_init(&obj->references, 1);
+	if (result != ISC_R_SUCCESS) {
+		isc_mem_put(pctx->mctx, obj, sizeof(cfg_obj_t));
+		return (result);
+	}
 	*ret = obj;
 	return (ISC_R_SUCCESS);
 }
+
 
 static void
 map_symtabitem_destroy(char *key, unsigned int type,
@@ -2373,9 +2429,23 @@ cfg_obj_istype(const cfg_obj_t *obj, const cfg_type_t *type) {
 void
 cfg_obj_destroy(cfg_parser_t *pctx, cfg_obj_t **objp) {
 	cfg_obj_t *obj = *objp;
-	obj->type->rep->free(pctx, obj);
-	isc_mem_put(pctx->mctx, obj, sizeof(cfg_obj_t));
+	unsigned int refs;
+
+	isc_refcount_decrement(&obj->references, &refs);
+	if (refs == 0) {
+		obj->type->rep->free(pctx, obj);
+		isc_refcount_destroy(&obj->references);
+		isc_mem_put(pctx->mctx, obj, sizeof(cfg_obj_t));
+	}
 	*objp = NULL;
+}
+
+void
+cfg_obj_attach(cfg_obj_t *src, cfg_obj_t **dest) {
+    REQUIRE(src != NULL);
+    REQUIRE(dest != NULL && *dest == NULL);
+    isc_refcount_increment(&src->references, NULL);
+    *dest = src;
 }
 
 static void

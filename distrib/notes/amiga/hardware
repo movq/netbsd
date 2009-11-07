@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.46 2009/04/23 01:56:48 snj Exp $
+.\"	$NetBSD: hardware,v 1.49 2011/10/27 22:30:11 rkujawa Exp $
 .
 .Nx \*V
 runs on any Amiga that has a 68020 or better CPU with
@@ -35,7 +35,12 @@ place your swap partition onto a old small (and normally slow) disk!
 .
 .Ss2 Supported devices
 .(bullet -offset indent
+IDE controllers
+.(bullet -compact
 A4000/A1200 IDE controller, including ATAPI devices
+.It
+ELBOX FastATA 1200 Mk-III/Mk-IV
+.bullet)
 .It
 SCSI host adapters
 .(bullet -compact
@@ -48,12 +53,20 @@ and GVP series II.
 The Emplant SCSI adapter has been reported by a party to
 hang after doing part of the installation without problems
 .It
-53c710 based boards: A4091, Magnum, Warp Engine, Zeus and DraCo builtin
+53c710 based boards: A4091, BlizzardPPC 603e+, Magnum, Warp Engine, Zeus
+and DraCo builtin
 .It
 FAS216 based SCSI boards: FastLane Z3, Blizzard I and II, Blizzard IV,
 Blizzard 2060, CyberSCSI Mk I and II
 .It
 53c770 based SCSI boards: Cyberstorm Mk III SCSI, Cyberstorm PPC SCSI
+.bullet)
+.It
+PCI bridges
+.(bullet -compact
+Prometheus PCI bridge
+.It
+Phase5 PCI bridge: CyberVision PPC, BlizzardVision PPC
 .bullet)
 .It
 Video controllers

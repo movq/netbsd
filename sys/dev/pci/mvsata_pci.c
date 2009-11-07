@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsata_pci.c,v 1.1 2009/07/27 12:34:14 kiyohara Exp $	*/
+/*	$NetBSD: mvsata_pci.c,v 1.7 2012/01/30 19:41:22 drochner Exp $	*/
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvsata_pci.c,v 1.1 2009/07/27 12:34:14 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvsata_pci.c,v 1.7 2012/01/30 19:41:22 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -98,7 +98,7 @@ static void mvsata_pci_attach(device_t, device_t, void *);
 static int mvsata_pci_detach(device_t, int);
 
 static int mvsata_pci_intr(void *);
-static bool mvsata_pci_resume(device_t PMF_FN_ARGS);
+static bool mvsata_pci_resume(device_t, const pmf_qual_t *qual);
 
 static int mvsata_pci_sreset(struct mvsata_softc *);
 static int mvsata_pci_misc_reset(struct mvsata_softc *);
@@ -107,6 +107,24 @@ static void mvsata_pci_enable_intr(struct mvsata_port *, int);
 
 CFATTACH_DECL_NEW(mvsata_pci, sizeof(struct mvsata_pci_softc),
     mvsata_pci_match, mvsata_pci_attach, mvsata_pci_detach, NULL);
+
+struct mvsata_product mvsata_pci_products[] = {
+#define PCI_VP(v, p)	PCI_VENDOR_ ## v, PCI_PRODUCT_ ## v ## _ ## p
+	{ PCI_VP(MARVELL, 88SX5040),		1, 4, gen1, 0 },
+	{ PCI_VP(MARVELL, 88SX5041),		1, 4, gen1, 0 },
+	{ PCI_VP(MARVELL, 88SX5080),		2, 4, gen1, 0 },
+	{ PCI_VP(MARVELL, 88SX5081),		2, 4, gen1, 0 },
+	{ PCI_VP(MARVELL, 88SX6040),		1, 4, gen2, 0 },
+	{ PCI_VP(MARVELL, 88SX6041),		1, 4, gen2, 0 },
+	{ PCI_VP(ADP2, 1420SA),			1, 4, gen2, 0 }, /* 88SX6041 */
+	{ PCI_VP(MARVELL, 88SX6042),		1, 4, gen2e, 0 },
+	{ PCI_VP(MARVELL, 88SX6080),		2, 4, gen2, MVSATA_FLAGS_PCIE },
+	{ PCI_VP(MARVELL, 88SX6081),		2, 4, gen2, MVSATA_FLAGS_PCIE },
+	{ PCI_VP(MARVELL, 88SX7042),		1, 4, gen2e, 0 },
+	{ PCI_VP(ADP2, 1430SA),			1, 4, gen2e, 0 }, /* 88SX7042 */
+	{ PCI_VP(TRIONES, ROCKETRAID_2310),	1, 4, gen2e, 0 },
+#undef PCI_VP
+};
 
 
 /*
@@ -117,29 +135,11 @@ static int
 mvsata_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
+	int i;
 
-	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_MARVELL)
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_MARVELL_88SX5040:
-		case PCI_PRODUCT_MARVELL_88SX5041:
-		case PCI_PRODUCT_MARVELL_88SX5080:
-		case PCI_PRODUCT_MARVELL_88SX5081:
-		case PCI_PRODUCT_MARVELL_88SX6040:
-		case PCI_PRODUCT_MARVELL_88SX6041:
-		case PCI_PRODUCT_MARVELL_88SX6042:
-		case PCI_PRODUCT_MARVELL_88SX6080:
-		case PCI_PRODUCT_MARVELL_88SX6081:
-		case PCI_PRODUCT_MARVELL_88SX7042:
-			return 2;
-		}
-	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_ADP2)
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_ADP2_1420SA:
-		case PCI_PRODUCT_ADP2_1430SA:
-			return 2;
-		}
-	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_TRIONES &&
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_TRIONES_ROCKETRAID_2310)
+	for (i = 0; i < __arraycount(mvsata_pci_products); i++)
+		if (PCI_VENDOR(pa->pa_id) == mvsata_pci_products[i].vendor &&
+		    PCI_PRODUCT(pa->pa_id) == mvsata_pci_products[i].model)
 			return 2;
 	return 0;
 }
@@ -154,8 +154,7 @@ mvsata_pci_attach(device_t parent, device_t self, void *aux)
 	pcireg_t csr;
 	bus_size_t size;
 	uint32_t reg, mask;
-	int read_pre_amps, hc, port, rv;
-	char devinfo[256];
+	int read_pre_amps, hc, port, rv, i;
 	const char *intrstr;
 
 	sc->sc_wdcdev.sc_atac.atac_dev = self;
@@ -164,9 +163,7 @@ mvsata_pci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dmat = pa->pa_dmat;
 	sc->sc_enable_intr = mvsata_pci_enable_intr;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_naive(": Marvell Serial-ATA Host Controller\n");
-	aprint_normal(": %s\n", devinfo);
+	pci_aprint_devinfo(pa, "Marvell Serial-ATA Host Controller");
 	
 	/* Map I/O register */
 	if (pci_mapreg_map(pa, PCI_MAPREG_START,
@@ -214,8 +211,14 @@ mvsata_pci_attach(device_t parent, device_t self, void *aux)
 	reg = bus_space_read_4(psc->psc_iot, psc->psc_ioh, MVSATA_PCI_RESETCFG);
 	read_pre_amps = (reg & 0x00000001) ? 1 : 0;
 
-	rv = mvsata_attach(sc, mvsata_pci_sreset, mvsata_pci_misc_reset,
-	    read_pre_amps);
+	for (i = 0; i < __arraycount(mvsata_pci_products); i++)
+		if (PCI_VENDOR(pa->pa_id) == mvsata_pci_products[i].vendor &&
+		    PCI_PRODUCT(pa->pa_id) == mvsata_pci_products[i].model)
+			break;
+	KASSERT(i < __arraycount(mvsata_pci_products));
+
+	rv = mvsata_attach(sc, &mvsata_pci_products[i],
+	    mvsata_pci_sreset, mvsata_pci_misc_reset, read_pre_amps);
 	if (rv != 0) {
 		pci_intr_disestablish(psc->psc_pc, psc->psc_ih);
 		return;
@@ -298,7 +301,7 @@ mvsata_pci_intr(void *arg)
 }
 
 static bool
-mvsata_pci_resume(device_t dev PMF_FN_ARGS)
+mvsata_pci_resume(device_t dev, const pmf_qual_t *qual)
 {
 
 	/* not yet... */

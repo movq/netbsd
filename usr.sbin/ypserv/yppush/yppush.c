@@ -1,7 +1,6 @@
-/*	$NetBSD: yppush.c,v 1.22 2009/04/19 06:06:40 lukem Exp $	*/
+/*	$NetBSD: yppush.c,v 1.24 2011/08/30 21:10:29 joerg Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor
  * All rights reserved.
  *
@@ -13,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +27,7 @@
 
 /*
  * yppush
- * author: Chuck Cranor <chuck@ccrc.wustl.edu>
+ * author: Chuck Cranor <chuck@netbsd>
  * date: 05-Nov-97
  *
  * notes: this is a full rewrite of Mats O Jansson <moj@stacken.kth.se>'s
@@ -92,11 +89,10 @@ int     verbo = 0;		/* verbose */
  * prototypes
  */
 
-int	main(int, char *[]);
-int	pushit(int, char *, int, char *, int, char *);
+static int	pushit(int, char *, int, char *, int, char *);
 void	push(char *, int, struct yppush_info *);
 void	_svc_run(void);
-void	usage(void);
+__dead static void	usage(void);
 
 
 /*
@@ -281,7 +277,7 @@ main(int argc, char *argv[])
 /*
  * usage: print usage and exit
  */
-void
+static void
 usage(void)
 {
 	fprintf(stderr, "usage: %s [-d domain] [-h host] [-v] map\n",
@@ -293,7 +289,7 @@ usage(void)
  * pushit: called from yp_all_host to push a specific host.
  * the key/value pairs are from the ypservers map.
  */
-int
+static int
 pushit(int instatus, char *inkey, int inkeylen, char *inval,
        int invallen, char *indata)
 {

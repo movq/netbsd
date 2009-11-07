@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_bio.c,v 1.68 2009/11/07 07:27:49 cegger Exp $	*/
+/*	$NetBSD: uvm_bio.c,v 1.79 2011/09/27 01:02:39 jym Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.68 2009/11/07 07:27:49 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.79 2011/09/27 01:02:39 jym Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_ubc.h"
@@ -79,8 +79,7 @@ static struct ubc_map *ubc_find_mapping(struct uvm_object *, voff_t);
 #define UMAP_PAGES_LOCKED	0x0001
 #define UMAP_MAPPING_CACHED	0x0002
 
-struct ubc_map
-{
+struct ubc_map {
 	struct uvm_object *	uobj;		/* mapped object */
 	voff_t			offset;		/* offset into uobj */
 	voff_t			writeoff;	/* write offset */
@@ -91,10 +90,10 @@ struct ubc_map
 
 	LIST_ENTRY(ubc_map)	hash;		/* hash table */
 	TAILQ_ENTRY(ubc_map)	inactive;	/* inactive queue */
+	LIST_ENTRY(ubc_map)	list;		/* per-object list */
 };
 
-static struct ubc_object
-{
+static struct ubc_object {
 	struct uvm_object uobj;		/* glue for uvm_map() */
 	char *kva;			/* where ubc_object is mapped */
 	struct ubc_map *umap;		/* array of ubc_map's */
@@ -104,7 +103,6 @@ static struct ubc_object
 
 	TAILQ_HEAD(ubc_inactive_head, ubc_map) *inactive;
 					/* inactive queues for ubc_map's */
-
 } ubc_object;
 
 const struct uvm_pagerops ubc_pager = {
@@ -168,7 +166,7 @@ ubc_init(void)
 	 * map in ubc_object.
 	 */
 
-	UVM_OBJ_INIT(&ubc_object.uobj, &ubc_pager, UVM_OBJ_KERN);
+	uvm_obj_init(&ubc_object.uobj, &ubc_pager, true, UVM_OBJ_KERN);
 
 	ubc_object.umap = kmem_zalloc(ubc_nwins * sizeof(struct ubc_map),
 	    KM_SLEEP);
@@ -216,6 +214,83 @@ ubc_init(void)
 }
 
 /*
+ * ubc_fault_page: helper of ubc_fault to handle a single page.
+ *
+ * => Caller has UVM object locked.
+ * => Caller will perform pmap_update().
+ */
+
+static inline int
+ubc_fault_page(const struct uvm_faultinfo *ufi, const struct ubc_map *umap,
+    struct vm_page *pg, vm_prot_t prot, vm_prot_t access_type, vaddr_t va)
+{
+	struct uvm_object *uobj;
+	vm_prot_t mask;
+	int error;
+	bool rdonly;
+
+	uobj = pg->uobject;
+	KASSERT(mutex_owned(uobj->vmobjlock));
+
+	if (pg->flags & PG_WANTED) {
+		wakeup(pg);
+	}
+	KASSERT((pg->flags & PG_FAKE) == 0);
+	if (pg->flags & PG_RELEASED) {
+		mutex_enter(&uvm_pageqlock);
+		uvm_pagefree(pg);
+		mutex_exit(&uvm_pageqlock);
+		return 0;
+	}
+	if (pg->loan_count != 0) {
+
+		/*
+		 * Avoid unneeded loan break, if possible.
+		 */
+
+		if ((access_type & VM_PROT_WRITE) == 0) {
+			prot &= ~VM_PROT_WRITE;
+		}
+		if (prot & VM_PROT_WRITE) {
+			struct vm_page *newpg;
+
+			newpg = uvm_loanbreak(pg);
+			if (newpg == NULL) {
+				uvm_page_unbusy(&pg, 1);
+				return ENOMEM;
+			}
+			pg = newpg;
+		}
+	}
+
+	/*
+	 * Note that a page whose backing store is partially allocated
+	 * is marked as PG_RDONLY.
+	 */
+
+	KASSERT((pg->flags & PG_RDONLY) == 0 ||
+	    (access_type & VM_PROT_WRITE) == 0 ||
+	    pg->offset < umap->writeoff ||
+	    pg->offset + PAGE_SIZE > umap->writeoff + umap->writelen);
+
+	rdonly = ((access_type & VM_PROT_WRITE) == 0 &&
+	    (pg->flags & PG_RDONLY) != 0) ||
+	    UVM_OBJ_NEEDS_WRITEFAULT(uobj);
+	mask = rdonly ? ~VM_PROT_WRITE : VM_PROT_ALL;
+
+	error = pmap_enter(ufi->orig_map->pmap, va, VM_PAGE_TO_PHYS(pg),
+	    prot & mask, PMAP_CANFAIL | (access_type & mask));
+
+	mutex_enter(&uvm_pageqlock);
+	uvm_pageactivate(pg);
+	mutex_exit(&uvm_pageqlock);
+	pg->flags &= ~(PG_BUSY|PG_WANTED);
+	UVM_PAGE_OWN(pg, NULL);
+
+	return error;
+}
+
+/*
  * ubc_fault: fault routine for ubc mapping
  */
 
@@ -226,10 +301,11 @@ ubc_fault(struct uvm_faultinfo *ufi, vaddr_t ign1, struct vm_page **ign2,
 	struct uvm_object *uobj;
 	struct ubc_map *umap;
 	vaddr_t va, eva, ubc_offset, slot_offset;
+	struct vm_page *pgs[ubc_winsize >> PAGE_SHIFT];
 	int i, error, npages;
-	struct vm_page *pgs[ubc_winsize >> PAGE_SHIFT], *pg;
 	vm_prot_t prot;
-	UVMHIST_FUNC("ubc_fault");  UVMHIST_CALLED(ubchist);
+
+	UVMHIST_FUNC("ubc_fault"); UVMHIST_CALLED(ubchist);
 
 	/*
 	 * no need to try with PGO_LOCKED...
@@ -238,7 +314,7 @@ ubc_fault(struct uvm_faultinfo *ufi, vaddr_t ign1, struct vm_page **ign2,
 	 */
 
 	if (flags & PGO_LOCKED) {
-		uvmfault_unlockall(ufi, NULL, &ubc_object.uobj, NULL);
+		uvmfault_unlockall(ufi, NULL, &ubc_object.uobj);
 		flags &= ~PGO_LOCKED;
 	}
 
@@ -286,7 +362,7 @@ ubc_fault(struct uvm_faultinfo *ufi, vaddr_t ign1, struct vm_page **ign2,
 
 again:
 	memset(pgs, 0, sizeof (pgs));
-	mutex_enter(&uobj->vmobjlock);
+	mutex_enter(uobj->vmobjlock);
 
 	UVMHIST_LOG(ubchist, "slot_offset 0x%x writeoff 0x%x writelen 0x%x ",
 	    slot_offset, umap->writeoff, umap->writelen, 0);
@@ -300,106 +376,64 @@ again:
 	    0);
 
 	if (error == EAGAIN) {
-		kpause("ubc_fault", false, hz, NULL);
+		kpause("ubc_fault", false, hz >> 2, NULL);
 		goto again;
 	}
 	if (error) {
 		return error;
 	}
 
+	/*
+	 * For virtually-indexed, virtually-tagged caches we should avoid
+	 * creating writable mappings when we do not absolutely need them,
+	 * since the "compatible alias" trick does not work on such caches.
+	 * Otherwise, we can always map the pages writable.
+	 */
+
+#ifdef PMAP_CACHE_VIVT
+	prot = VM_PROT_READ | access_type;
+#else
+	prot = VM_PROT_READ | VM_PROT_WRITE;
+#endif
+
 	va = ufi->orig_rvaddr;
 	eva = ufi->orig_rvaddr + (npages << PAGE_SHIFT);
 
 	UVMHIST_LOG(ubchist, "va 0x%lx eva 0x%lx", va, eva, 0, 0);
+
+	/*
+	 * Note: normally all returned pages would have the same UVM object.
+	 * However, layered file-systems and e.g. tmpfs, may return pages
+	 * which belong to underlying UVM object.  In such case, lock is
+	 * shared amongst the objects.
+	 */
+	mutex_enter(uobj->vmobjlock);
 	for (i = 0; va < eva; i++, va += PAGE_SIZE) {
-		bool rdonly;
-		vm_prot_t mask;
+		struct vm_page *pg;
 
-		/*
-		 * for virtually-indexed, virtually-tagged caches we should
-		 * avoid creating writable mappings when we don't absolutely
-		 * need them, since the "compatible alias" trick doesn't work
-		 * on such caches.  otherwise, we can always map the pages
-		 * writable.
-		 */
-
-#ifdef PMAP_CACHE_VIVT
-		prot = VM_PROT_READ | access_type;
-#else
-		prot = VM_PROT_READ | VM_PROT_WRITE;
-#endif
 		UVMHIST_LOG(ubchist, "pgs[%d] = %p", i, pgs[i], 0, 0);
 		pg = pgs[i];
 
 		if (pg == NULL || pg == PGO_DONTCARE) {
 			continue;
 		}
-
-		uobj = pg->uobject;
-		mutex_enter(&uobj->vmobjlock);
-		if (pg->flags & PG_WANTED) {
-			wakeup(pg);
-		}
-		KASSERT((pg->flags & PG_FAKE) == 0);
-		if (pg->flags & PG_RELEASED) {
-			mutex_enter(&uvm_pageqlock);
-			uvm_pagefree(pg);
-			mutex_exit(&uvm_pageqlock);
-			mutex_exit(&uobj->vmobjlock);
-			continue;
-		}
-		if (pg->loan_count != 0) {
-
-			/*
-			 * avoid unneeded loan break if possible.
-			 */
-
-			if ((access_type & VM_PROT_WRITE) == 0)
-				prot &= ~VM_PROT_WRITE;
-
-			if (prot & VM_PROT_WRITE) {
-				struct vm_page *newpg;
-
-				newpg = uvm_loanbreak(pg);
-				if (newpg == NULL) {
-					uvm_page_unbusy(&pg, 1);
-					mutex_exit(&uobj->vmobjlock);
-					uvm_wait("ubc_loanbrk");
-					continue; /* will re-fault */
-				}
-				pg = newpg;
-			}
-		}
-
-		/*
-		 * note that a page whose backing store is partially allocated
-		 * is marked as PG_RDONLY.
-		 */
-
-		rdonly = ((access_type & VM_PROT_WRITE) == 0 &&
-		    (pg->flags & PG_RDONLY) != 0) ||
-		    UVM_OBJ_NEEDS_WRITEFAULT(uobj);
-		KASSERT((pg->flags & PG_RDONLY) == 0 ||
-		    (access_type & VM_PROT_WRITE) == 0 ||
-		    pg->offset < umap->writeoff ||
-		    pg->offset + PAGE_SIZE > umap->writeoff + umap->writelen);
-		mask = rdonly ? ~VM_PROT_WRITE : VM_PROT_ALL;
-		error = pmap_enter(ufi->orig_map->pmap, va, VM_PAGE_TO_PHYS(pg),
-		    prot & mask, PMAP_CANFAIL | (access_type & mask));
-		mutex_enter(&uvm_pageqlock);
-		uvm_pageactivate(pg);
-		mutex_exit(&uvm_pageqlock);
-		pg->flags &= ~(PG_BUSY|PG_WANTED);
-		UVM_PAGE_OWN(pg, NULL);
-		mutex_exit(&uobj->vmobjlock);
+		KASSERT(uobj->vmobjlock == pg->uobject->vmobjlock);
+		error = ubc_fault_page(ufi, umap, pg, prot, access_type, va);
 		if (error) {
-			UVMHIST_LOG(ubchist, "pmap_enter fail %d",
-			    error, 0, 0, 0);
-			uvm_wait("ubc_pmfail");
-			/* will refault */
+			/*
+			 * Flush (there might be pages entered), drop the lock,
+			 * and perform uvm_wait().  Note: page will re-fault.
+			 */
+			pmap_update(ufi->orig_map->pmap);
+			mutex_exit(uobj->vmobjlock);
+			uvm_wait("ubc_fault");
+			mutex_enter(uobj->vmobjlock);
 		}
 	}
+	/* Must make VA visible before the unlock. */
 	pmap_update(ufi->orig_map->pmap);
+	mutex_exit(uobj->vmobjlock);
+
 	return 0;
 }
 
@@ -447,39 +481,54 @@ ubc_alloc(struct uvm_object *uobj, voff_t offset, vsize_t *lenp, int advice,
 	slot_offset = (vaddr_t)(offset & ((voff_t)ubc_winsize - 1));
 	*lenp = MIN(*lenp, ubc_winsize - slot_offset);
 
-	/*
-	 * the object is always locked here, so we don't need to add a ref.
-	 */
-
+	mutex_enter(ubc_object.uobj.vmobjlock);
 again:
-	mutex_enter(&ubc_object.uobj.vmobjlock);
+	/*
+	 * The UVM object is already referenced.
+	 * Lock order: UBC object -> ubc_map::uobj.
+	 */
 	umap = ubc_find_mapping(uobj, umap_offset);
 	if (umap == NULL) {
+		struct uvm_object *oobj;
+
 		UBC_EVCNT_INCR(wincachemiss);
 		umap = TAILQ_FIRST(UBC_QUEUE(offset));
 		if (umap == NULL) {
-			mutex_exit(&ubc_object.uobj.vmobjlock);
-			kpause("ubc_alloc", false, hz, NULL);
+			kpause("ubc_alloc", false, hz >> 2,
+			    ubc_object.uobj.vmobjlock);
 			goto again;
 		}
 
+		va = UBC_UMAP_ADDR(umap);
+		oobj = umap->uobj;
+
 		/*
-		 * remove from old hash (if any), add to new hash.
+		 * Remove from old hash (if any), add to new hash.
 		 */
 
-		if (umap->uobj != NULL) {
+		if (oobj != NULL) {
+			/*
+			 * Mapping must be removed before the list entry,
+			 * since there is a race with ubc_purge().
+			 */
+			if (umap->flags & UMAP_MAPPING_CACHED) {
+				umap->flags &= ~UMAP_MAPPING_CACHED;
+				mutex_enter(oobj->vmobjlock);
+				pmap_remove(pmap_kernel(), va,
+				    va + ubc_winsize);
+				pmap_update(pmap_kernel());
+				mutex_exit(oobj->vmobjlock);
+			}
 			LIST_REMOVE(umap, hash);
+			LIST_REMOVE(umap, list);
+		} else {
+			KASSERT((umap->flags & UMAP_MAPPING_CACHED) == 0);
 		}
 		umap->uobj = uobj;
 		umap->offset = umap_offset;
 		LIST_INSERT_HEAD(&ubc_object.hash[UBC_HASH(uobj, umap_offset)],
 		    umap, hash);
-		va = UBC_UMAP_ADDR(umap);
-		if (umap->flags & UMAP_MAPPING_CACHED) {
-			umap->flags &= ~UMAP_MAPPING_CACHED;
-			pmap_remove(pmap_kernel(), va, va + ubc_winsize);
-			pmap_update(pmap_kernel());
-		}
+		LIST_INSERT_HEAD(&uobj->uo_ubc, umap, list);
 	} else {
 		UBC_EVCNT_INCR(wincachehit);
 		va = UBC_UMAP_ADDR(umap);
@@ -489,19 +538,16 @@ again:
 		TAILQ_REMOVE(UBC_QUEUE(offset), umap, inactive);
 	}
 
-#ifdef DIAGNOSTIC
-	if ((flags & UBC_WRITE) && (umap->writeoff || umap->writelen)) {
-		panic("ubc_alloc: concurrent writes uobj %p", uobj);
-	}
-#endif
 	if (flags & UBC_WRITE) {
+		KASSERTMSG(umap->writeoff == 0 && umap->writelen == 0,
+		    "ubc_alloc: concurrent writes to uobj %p", uobj);
 		umap->writeoff = slot_offset;
 		umap->writelen = *lenp;
 	}
 
 	umap->refcount++;
 	umap->advice = advice;
-	mutex_exit(&ubc_object.uobj.vmobjlock);
+	mutex_exit(ubc_object.uobj.vmobjlock);
 	UVMHIST_LOG(ubchist, "umap %p refs %d va %p flags 0x%x",
 	    umap, umap->refcount, va, flags);
 
@@ -516,13 +562,14 @@ again:
 		KASSERT(umap->refcount == 1);
 
 		UBC_EVCNT_INCR(faultbusy);
+again_faultbusy:
+		mutex_enter(uobj->vmobjlock);
 		if (umap->flags & UMAP_MAPPING_CACHED) {
 			umap->flags &= ~UMAP_MAPPING_CACHED;
 			pmap_remove(pmap_kernel(), va, va + ubc_winsize);
 		}
-again_faultbusy:
 		memset(pgs, 0, sizeof(pgs));
-		mutex_enter(&uobj->vmobjlock);
+
 		error = (*uobj->pgops->pgo_get)(uobj, trunc_page(offset), pgs,
 		    &npages, 0, VM_PROT_READ | VM_PROT_WRITE, advice, gpflags);
 		UVMHIST_LOG(ubchist, "faultbusy getpages %d", error, 0, 0, 0);
@@ -534,20 +581,19 @@ again_faultbusy:
 
 			KASSERT(pg->uobject == uobj);
 			if (pg->loan_count != 0) {
-				mutex_enter(&uobj->vmobjlock);
+				mutex_enter(uobj->vmobjlock);
 				if (pg->loan_count != 0) {
 					pg = uvm_loanbreak(pg);
 				}
-				mutex_exit(&uobj->vmobjlock);
 				if (pg == NULL) {
 					pmap_kremove(va, ubc_winsize);
 					pmap_update(pmap_kernel());
-					mutex_enter(&uobj->vmobjlock);
 					uvm_page_unbusy(pgs, npages);
-					mutex_exit(&uobj->vmobjlock);
+					mutex_exit(uobj->vmobjlock);
 					uvm_wait("ubc_alloc");
 					goto again_faultbusy;
 				}
+				mutex_exit(uobj->vmobjlock);
 				pgs[i] = pg;
 			}
 			pmap_kenter_pa(va + slot_offset + (i << PAGE_SHIFT),
@@ -584,23 +630,24 @@ ubc_release(void *va, int flags)
 	KASSERT(uobj != NULL);
 
 	if (umap->flags & UMAP_PAGES_LOCKED) {
-		int slot_offset = umap->writeoff;
-		int endoff = umap->writeoff + umap->writelen;
-		int zerolen = round_page(endoff) - endoff;
-		int npages = (int)(round_page(umap->writeoff + umap->writelen)
-				   - trunc_page(umap->writeoff)) >> PAGE_SHIFT;
+		const voff_t slot_offset = umap->writeoff;
+		const voff_t endoff = umap->writeoff + umap->writelen;
+		const voff_t zerolen = round_page(endoff) - endoff;
+		const u_int npages = (round_page(endoff) -
+		    trunc_page(slot_offset)) >> PAGE_SHIFT;
 		struct vm_page *pgs[npages];
-		paddr_t pa;
-		int i;
-		bool rv;
 
 		KASSERT((umap->flags & UMAP_MAPPING_CACHED) == 0);
 		if (zerolen) {
 			memset((char *)umapva + endoff, 0, zerolen);
 		}
 		umap->flags &= ~UMAP_PAGES_LOCKED;
+		mutex_enter(uobj->vmobjlock);
 		mutex_enter(&uvm_pageqlock);
-		for (i = 0; i < npages; i++) {
+		for (u_int i = 0; i < npages; i++) {
+			paddr_t pa;
+			bool rv;
+
 			rv = pmap_extract(pmap_kernel(),
 			    umapva + slot_offset + (i << PAGE_SHIFT), &pa);
 			KASSERT(rv);
@@ -612,32 +659,33 @@ ubc_release(void *va, int flags)
 		mutex_exit(&uvm_pageqlock);
 		pmap_kremove(umapva, ubc_winsize);
 		pmap_update(pmap_kernel());
-		mutex_enter(&uobj->vmobjlock);
 		uvm_page_unbusy(pgs, npages);
-		mutex_exit(&uobj->vmobjlock);
+		mutex_exit(uobj->vmobjlock);
 		unmapped = true;
 	} else {
 		unmapped = false;
 	}
 
-	mutex_enter(&ubc_object.uobj.vmobjlock);
+	mutex_enter(ubc_object.uobj.vmobjlock);
 	umap->writeoff = 0;
 	umap->writelen = 0;
 	umap->refcount--;
 	if (umap->refcount == 0) {
 		if (flags & UBC_UNMAP) {
-
 			/*
 			 * Invalidate any cached mappings if requested.
 			 * This is typically used to avoid leaving
 			 * incompatible cache aliases around indefinitely.
 			 */
-
+			mutex_enter(uobj->vmobjlock);
 			pmap_remove(pmap_kernel(), umapva,
 				    umapva + ubc_winsize);
-			umap->flags &= ~UMAP_MAPPING_CACHED;
 			pmap_update(pmap_kernel());
+			mutex_exit(uobj->vmobjlock);
+
+			umap->flags &= ~UMAP_MAPPING_CACHED;
 			LIST_REMOVE(umap, hash);
+			LIST_REMOVE(umap, list);
 			umap->uobj = NULL;
 			TAILQ_INSERT_HEAD(UBC_QUEUE(umap->offset), umap,
 			    inactive);
@@ -650,7 +698,7 @@ ubc_release(void *va, int flags)
 		}
 	}
 	UVMHIST_LOG(ubchist, "umap %p refs %d", umap, umap->refcount, 0, 0);
-	mutex_exit(&ubc_object.uobj.vmobjlock);
+	mutex_exit(ubc_object.uobj.vmobjlock);
 }
 
 /*
@@ -661,8 +709,8 @@ int
 ubc_uiomove(struct uvm_object *uobj, struct uio *uio, vsize_t todo, int advice,
     int flags)
 {
-	voff_t off;
 	const bool overwrite = (flags & UBC_FAULTBUSY) != 0;
+	voff_t off;
 	int error;
 
 	KASSERT(todo <= uio->uio_resid);
@@ -699,16 +747,14 @@ ubc_uiomove(struct uvm_object *uobj, struct uio *uio, vsize_t todo, int advice,
 	return error;
 }
 
-
 /*
- * uvm_vnp_zerorange:  set a range of bytes in a file to zero.
+ * ubc_zerorange: set a range of bytes in an object to zero.
  */
 
 void
-uvm_vnp_zerorange(struct vnode *vp, off_t off, size_t len)
+ubc_zerorange(struct uvm_object *uobj, off_t off, size_t len, int flags)
 {
 	void *win;
-	int flags;
 
 	/*
 	 * XXXUBC invent kzero() and use it
@@ -717,13 +763,45 @@ uvm_vnp_zerorange(struct vnode *vp, off_t off, size_t len)
 	while (len) {
 		vsize_t bytelen = len;
 
-		win = ubc_alloc(&vp->v_uobj, off, &bytelen, UVM_ADV_NORMAL,
-		    UBC_WRITE);
+		win = ubc_alloc(uobj, off, &bytelen, UVM_ADV_NORMAL, UBC_WRITE);
 		memset(win, 0, bytelen);
-		flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
 		ubc_release(win, flags);
 
 		off += bytelen;
 		len -= bytelen;
 	}
+}
+
+/*
+ * ubc_purge: disassociate ubc_map structures from an empty uvm_object.
+ */
+
+void
+ubc_purge(struct uvm_object *uobj)
+{
+	struct ubc_map *umap;
+	vaddr_t va;
+
+	KASSERT(uobj->uo_npages == 0);
+
+	/*
+	 * Safe to check without lock held, as ubc_alloc() removes
+	 * the mapping and list entry in the correct order.
+	 */
+	if (__predict_true(LIST_EMPTY(&uobj->uo_ubc))) {
+		return;
+	}
+	mutex_enter(ubc_object.uobj.vmobjlock);
+	while ((umap = LIST_FIRST(&uobj->uo_ubc)) != NULL) {
+		KASSERT(umap->refcount == 0);
+		for (va = 0; va < ubc_winsize; va += PAGE_SIZE) {
+			KASSERT(!pmap_extract(pmap_kernel(),
+			    va + UBC_UMAP_ADDR(umap), NULL));
+		}
+		LIST_REMOVE(umap, list);
+		LIST_REMOVE(umap, hash);
+		umap->flags &= ~UMAP_MAPPING_CACHED;
+		umap->uobj = NULL;
+	}
+	mutex_exit(ubc_object.uobj.vmobjlock);
 }

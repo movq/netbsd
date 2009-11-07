@@ -1,7 +1,7 @@
-/*	$NetBSD: check-tool.c,v 1.1.1.2 2009/10/25 00:01:29 christos Exp $	*/
+/*	$NetBSD: check-tool.c,v 1.2.6.1 2012/06/05 21:15:45 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,13 +17,17 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: check-tool.c,v 1.39 2009/09/01 00:22:24 jinmei Exp */
+/* Id: check-tool.c,v 1.44 2011/12/22 07:32:39 each Exp  */
 
 /*! \file */
 
 #include <config.h>
 
 #include <stdio.h>
+
+#ifdef _WIN32
+#include <Winsock2.h>
+#endif
 
 #include "check-tool.h"
 #include <isc/buffer.h>
@@ -70,7 +74,7 @@
 		result = (r); \
 		if (result != ISC_R_SUCCESS) \
 			goto cleanup; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define ERR_IS_CNAME 1
 #define ERR_NO_ADDRESSES 2
@@ -633,7 +637,8 @@ load_zone(isc_mem_t *mctx, const char *zonename, const char *filename,
 /*% dump the zone */
 isc_result_t
 dump_zone(const char *zonename, dns_zone_t *zone, const char *filename,
-	  dns_masterformat_t fileformat, const dns_master_style_t *style)
+	  dns_masterformat_t fileformat, const dns_master_style_t *style,
+	  const isc_uint32_t rawversion)
 {
 	isc_result_t result;
 	FILE *output = stdout;
@@ -656,10 +661,33 @@ dump_zone(const char *zonename, dns_zone_t *zone, const char *filename,
 		}
 	}
 
-	result = dns_zone_dumptostream2(zone, output, fileformat, style);
-
+	result = dns_zone_dumptostream3(zone, output, fileformat, style,
+					rawversion);
 	if (output != stdout)
 		(void)isc_stdio_close(output);
 
 	return (result);
 }
+
+#ifdef _WIN32
+void
+InitSockets(void) {
+	WORD wVersionRequested;
+	WSADATA wsaData;
+	int err;
+
+	wVersionRequested = MAKEWORD(2, 0);
+
+	err = WSAStartup( wVersionRequested, &wsaData );
+	if (err != 0) {
+		fprintf(stderr, "WSAStartup() failed: %d\n", err);
+		exit(1);
+	}
+}
+
+void
+DestroySockets(void) {
+	WSACleanup();
+}
+#endif
+

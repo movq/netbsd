@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_icu.c,v 1.19 2009/01/05 06:03:39 briggs Exp $	*/
+/*	$NetBSD: i80321_icu.c,v 1.23 2012/02/12 16:31:01 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2006 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.19 2009/01/05 06:03:39 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.23 2012/02/12 16:31:01 matt Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.19 2009/01/05 06:03:39 briggs Exp $
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -187,7 +187,11 @@ i80321_intr_calculate_masks(void)
 		i80321_imask[ipl] = irqs;
 	}
 
-	i80321_imask[IPL_NONE] = 0;
+	KASSERT(i80321_imask[IPL_NONE] == 0);
+	KASSERT(i80321_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(i80321_imask[IPL_SOFTBIO] == 0);
+	KASSERT(i80321_imask[IPL_SOFTNET] == 0);
+	KASSERT(i80321_imask[IPL_SOFTSERIAL] == 0);
 
 	/*
 	 * Enforce a hierarchy that gives "slow" device (or devices with
@@ -276,15 +280,23 @@ i80321_intr_init(void)
 	for (i = 0; i < NIRQ; i++) {
 		iq = &intrq[i];
 		TAILQ_INIT(&iq->iq_list);
-
-		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
-		    NULL, "iop321", i80321_irqnames[i]);
 	}
 
 	i80321_intr_calculate_masks();
 
 	/* Enable IRQs (don't yet use FIQs). */
 	enable_interrupts(I32_bit);
+}
+
+void
+i80321_intr_evcnt_attach(void)
+{
+	for (u_int i = 0; i < NIRQ; i++) {
+		struct intrq *iq = &intrq[i];
+		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
+		    NULL, "iop321", i80321_irqnames[i]);
+	}
+
 }
 
 void *
@@ -436,7 +448,7 @@ i80321_intr_dispatch(struct clockframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
+		ci->ci_data.cpu_nintr++;
 #ifdef I80321_HPI_ENABLED
 		/*
 		 * Re-enable interrupts iff an HPI is not pending

@@ -35,7 +35,7 @@
  *	trace.c - print traces of D (B) channel activity for isdn4bsd
  *	-------------------------------------------------------------
  *
- *	$Id: trace.c,v 1.10 2009/04/16 05:56:33 lukem Exp $ 
+ *	$Id: trace.c,v 1.13 2011/08/31 16:24:59 plunky Exp $ 
  *
  * $FreeBSD$
  *
@@ -77,7 +77,7 @@ static struct stat fst;
 
 static void dumpbuf( int n, unsigned char *buf, struct i4b_trace_hdr *hdr, int raw );
 static int switch_driver( int value, int rx, int tx );
-static void usage( void );
+__dead static void usage( void );
 static void exit_hdl( void );
 static void reopenfiles( int );
 void add_datetime(char *filename, char *rfilename);
@@ -86,7 +86,7 @@ char * fmt_hdr(struct i4b_trace_hdr *hdr, int frm_len);
 /*---------------------------------------------------------------------------*
  *	usage instructions
  *---------------------------------------------------------------------------*/
-void
+static void
 usage(void)
 {
 	fprintf(stderr,"\n");
@@ -121,9 +121,6 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	extern int optind;
-	extern int opterr;
-	extern char *optarg;
 	char devicename[80];
 	char headerbuf[256];
 		
@@ -257,7 +254,7 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 		
-		if ((setvbuf(BP, (char *)NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(BP, NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 
@@ -336,7 +333,7 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 		
-		if ((setvbuf(Fout, (char *)NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(Fout, NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 
@@ -348,7 +345,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if ((setvbuf(stdout, (char *)NULL, _IOLBF, 0)) != 0)
+	if ((setvbuf(stdout, NULL, _IOLBF, 0)) != 0)
 	{
 		char buffer[80];
 
@@ -792,7 +789,7 @@ reopenfiles(int dummy)
 			exit(1);
 		}
 
-		if ((setvbuf(Fout, (char *)NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(Fout, NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 
@@ -821,7 +818,7 @@ reopenfiles(int dummy)
 			exit(1);
 		}
 
-		if ((setvbuf(BP, (char *)NULL, _IONBF, 0)) != 0)
+		if ((setvbuf(BP, NULL, _IONBF, 0)) != 0)
 		{
 			char buffer[80];
 

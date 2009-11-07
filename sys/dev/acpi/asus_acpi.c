@@ -1,4 +1,4 @@
-/* $NetBSD: asus_acpi.c,v 1.11 2009/09/16 10:47:55 mlelstv Exp $ */
+/* $NetBSD: asus_acpi.c,v 1.23.2.1 2012/06/12 17:13:57 riz Exp $ */
 
 /*-
  * Copyright (c) 2007, 2008, 2009 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,19 +27,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asus_acpi.c,v 1.11 2009/09/16 10:47:55 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asus_acpi.c,v 1.23.2.1 2012/06/12 17:13:57 riz Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/malloc.h>
-#include <sys/buf.h>
-#include <sys/callout.h>
-#include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/module.h>
 #include <sys/sysctl.h>
+#include <sys/systm.h>
 
-#include <dev/acpi/acpivar.h>
 #include <dev/acpi/acpireg.h>
+#include <dev/acpi/acpivar.h>
 
 #define _COMPONENT          ACPI_RESOURCE_COMPONENT
 ACPI_MODULE_NAME            ("asus_acpi")
@@ -58,7 +55,7 @@ struct asus_softc {
 #define	ASUS_SENSOR_LAST	1
 	envsys_data_t		sc_sensor[ASUS_SENSOR_LAST];
 
-	ACPI_INTEGER		sc_brightness;
+	int32_t			sc_brightness;
 	ACPI_INTEGER		sc_cfvnum;
 
 	struct sysctllog	*sc_log;
@@ -94,11 +91,11 @@ static int	asus_match(device_t, cfdata_t, void *);
 static void	asus_attach(device_t, device_t, void *);
 static int	asus_detach(device_t, int);
 
-static void	asus_notify_handler(ACPI_HANDLE, UINT32, void *);
+static void	asus_notify_handler(ACPI_HANDLE, uint32_t, void *);
 
 static void	asus_init(device_t);
-static bool	asus_suspend(device_t PMF_FN_PROTO);
-static bool	asus_resume(device_t PMF_FN_PROTO);
+static bool	asus_suspend(device_t, const pmf_qual_t *);
+static bool	asus_resume(device_t, const pmf_qual_t *);
 
 static void	asus_sysctl_setup(struct asus_softc *);
 
@@ -129,10 +126,9 @@ asus_attach(device_t parent, device_t self, void *opaque)
 {
 	struct asus_softc *sc = device_private(self);
 	struct acpi_attach_args *aa = opaque;
-	ACPI_STATUS rv;
 
-	sc->sc_node = aa->aa_node;
 	sc->sc_dev = self;
+	sc->sc_node = aa->aa_node;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
@@ -151,12 +147,13 @@ asus_attach(device_t parent, device_t self, void *opaque)
 	}
 
 	if (asus_get_fan_speed(sc, NULL) == false)
-		goto nosensors;
+		goto out;
 
 	sc->sc_sme = sysmon_envsys_create();
 
 	strcpy(sc->sc_sensor[ASUS_SENSOR_FAN].desc, "fan");
 	sc->sc_sensor[ASUS_SENSOR_FAN].units = ENVSYS_SFANRPM;
+	sc->sc_sensor[ASUS_SENSOR_FAN].state = ENVSYS_SINVALID;
 	sysmon_envsys_sensor_attach(sc->sc_sme,
 	    &sc->sc_sensor[ASUS_SENSOR_FAN]);
 
@@ -170,16 +167,10 @@ asus_attach(device_t parent, device_t self, void *opaque)
 		sysmon_envsys_destroy(sc->sc_sme);
 		sc->sc_sme = NULL;
 	}
-nosensors:
 
-	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle, ACPI_ALL_NOTIFY,
-	    asus_notify_handler, sc);
-	if (ACPI_FAILURE(rv))
-		aprint_error_dev(self, "couldn't install notify handler: %s\n",
-		    AcpiFormatException(rv));
-
-	if (!pmf_device_register(self, asus_suspend, asus_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+out:
+	(void)pmf_device_register(self, asus_suspend, asus_resume);
+	(void)acpi_register_notify(sc->sc_node, asus_notify_handler);
 }
 
 static int
@@ -188,23 +179,32 @@ asus_detach(device_t self, int flags)
 	struct asus_softc *sc = device_private(self);
 	int i;
 
-	if (sc->sc_smpsw_valid)
+	acpi_deregister_notify(sc->sc_node);
+
+	if (sc->sc_smpsw_valid != false) {
+
 		for (i = 0; i < ASUS_PSW_LAST; i++)
 			sysmon_pswitch_unregister(&sc->sc_smpsw[i]);
+	}
 
-	if (sc->sc_sme)
+	if (sc->sc_sme != NULL)
 		sysmon_envsys_unregister(sc->sc_sme);
-	if (sc->sc_log)
+
+	if (sc->sc_log != NULL)
 		sysctl_teardown(&sc->sc_log);
+
 	pmf_device_deregister(self);
 
 	return 0;
 }
 
 static void
-asus_notify_handler(ACPI_HANDLE hdl, UINT32 notify, void *opaque)
+asus_notify_handler(ACPI_HANDLE hdl, uint32_t notify, void *opaque)
 {
-	struct asus_softc *sc = opaque;
+	struct asus_softc *sc;
+	device_t self = opaque;
+
+	sc = device_private(self);
 
 	if (notify >= ASUS_NOTIFY_BrightnessLow &&
 	    notify <= ASUS_NOTIFY_BrightnessHigh) {
@@ -242,29 +242,18 @@ static void
 asus_init(device_t self)
 {
 	struct asus_softc *sc = device_private(self);
-	ACPI_STATUS rv;
-	ACPI_OBJECT param;
-	ACPI_OBJECT_LIST params;
-	ACPI_BUFFER ret;
 	ACPI_INTEGER cfv;
+	ACPI_STATUS rv;
 
-	ret.Pointer = NULL;
-	ret.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
-	param.Type = ACPI_TYPE_INTEGER;
-	param.Integer.Value = 0x40;	/* disable ASL display switching */
-	params.Pointer = &param;
-	params.Count = 1;
+	/* Disable ASL display switching. */
+	rv = acpi_eval_set_integer(sc->sc_node->ad_handle, "INIT", 0x40);
 
-	rv = AcpiEvaluateObject(sc->sc_node->ad_handle, "INIT",
-	    &params, &ret);
 	if (ACPI_FAILURE(rv))
 		aprint_error_dev(self, "couldn't evaluate INIT: %s\n",
 		    AcpiFormatException(rv));
 
-	if (ret.Pointer)
-		ACPI_FREE(ret.Pointer);
-
 	rv = acpi_eval_integer(sc->sc_node->ad_handle, ASUS_METHOD_CFVG, &cfv);
+
 	if (ACPI_FAILURE(rv))
 		return;
 
@@ -272,42 +261,38 @@ asus_init(device_t self)
 }
 
 static bool
-asus_suspend(device_t self PMF_FN_ARGS)
+asus_suspend(device_t self, const pmf_qual_t *qual)
 {
 	struct asus_softc *sc = device_private(self);
+	ACPI_INTEGER val = 0;
 	ACPI_STATUS rv;
 
-	/* capture display brightness when we're sleeping */
-	rv = acpi_eval_integer(sc->sc_node->ad_handle, ASUS_METHOD_PBLG,
-	    &sc->sc_brightness);
-	if (ACPI_FAILURE(rv))
-		aprint_error_dev(sc->sc_dev, "couldn't evaluate PBLG: %s\n",
-		    AcpiFormatException(rv));
+	/* Capture display brightness. */
+	rv = acpi_eval_integer(sc->sc_node->ad_handle, ASUS_METHOD_PBLG, &val);
+
+	if (ACPI_FAILURE(rv) || val > INT32_MAX)
+		sc->sc_brightness = -1;
+	else
+		sc->sc_brightness = val;
 
 	return true;
 }
 
 static bool
-asus_resume(device_t self PMF_FN_ARGS)
+asus_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct asus_softc *sc = device_private(self);
 	ACPI_STATUS rv;
-	ACPI_OBJECT param;
-	ACPI_OBJECT_LIST params;
-	ACPI_BUFFER ret;
 
 	asus_init(self);
 
-	/* restore previous display brightness */
-	ret.Pointer = NULL;
-	ret.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
-	param.Type = ACPI_TYPE_INTEGER;
-	param.Integer.Value = sc->sc_brightness;
-	params.Pointer = &param;
-	params.Count = 1;
+	if (sc->sc_brightness < 0)
+		return true;
 
-	rv = AcpiEvaluateObject(sc->sc_node->ad_handle, ASUS_METHOD_PBLS,
-	    &params, &ret);
+	/* Restore previous display brightness. */
+	rv = acpi_eval_set_integer(sc->sc_node->ad_handle, ASUS_METHOD_PBLS,
+	    sc->sc_brightness);
+
 	if (ACPI_FAILURE(rv))
 		aprint_error_dev(self, "couldn't evaluate PBLS: %s\n",
 		    AcpiFormatException(rv));
@@ -320,11 +305,8 @@ asus_sysctl_verify(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node;
 	struct asus_softc *sc;
-	ACPI_STATUS rv;
 	ACPI_INTEGER cfv;
-	ACPI_OBJECT param, retval;
-	ACPI_OBJECT_LIST params;
-	ACPI_BUFFER ret;
+	ACPI_STATUS rv;
 	int err, tmp;
 
 	node = *rnode;
@@ -340,18 +322,12 @@ asus_sysctl_verify(SYSCTLFN_ARGS)
 		if (err || newp == NULL)
 			return err;
 
-		if (tmp < 0 || tmp >= sc->sc_cfvnum)
+		if (tmp < 0 || (uint64_t)tmp >= sc->sc_cfvnum)
 			return EINVAL;
 
-		ret.Pointer = &retval;
-		ret.Length = sizeof(retval);
-		param.Type = ACPI_TYPE_INTEGER;
-		param.Integer.Value = tmp;
-		params.Pointer = &param;
-		params.Count = 1;
+		rv = acpi_eval_set_integer(sc->sc_node->ad_handle,
+		    ASUS_METHOD_CFVS, tmp);
 
-		rv = AcpiEvaluateObject(sc->sc_node->ad_handle,
-		    ASUS_METHOD_CFVS, &params, &ret);
 		if (ACPI_FAILURE(rv))
 			return ENXIO;
 	}
@@ -379,7 +355,7 @@ asus_sysctl_setup(struct asus_softc *sc)
 		goto sysctl_err;
 	node_mib = node->sysctl_num;
 	err = sysctl_createv(&sc->sc_log, 0, NULL, &node_ncfv,
-	    CTLFLAG_READONLY, CTLTYPE_INT, "ncfv",
+	    CTLFLAG_READONLY, CTLTYPE_QUAD, "ncfv",
 	    SYSCTL_DESCR("Number of CPU frequency/voltage modes"),
 	    NULL, 0, &sc->sc_cfvnum, 0,
 	    CTL_HW, node_mib, CTL_CREATE, CTL_EOL);
@@ -389,7 +365,7 @@ asus_sysctl_setup(struct asus_softc *sc)
 	err = sysctl_createv(&sc->sc_log, 0, NULL, &node_cfv,
 	    CTLFLAG_READWRITE, CTLTYPE_INT, "cfv",
 	    SYSCTL_DESCR("Current CPU frequency/voltage mode"),
-	    asus_sysctl_verify, 0, sc, 0,
+	    asus_sysctl_verify, 0, (void *)sc, 0,
 	    CTL_HW, node_mib, CTL_CREATE, CTL_EOL);
 	if (err)
 		goto sysctl_err;
@@ -435,4 +411,40 @@ asus_get_fan_speed(struct asus_softc *sc, uint32_t *speed)
 	if (speed)
 		*speed = (rpmh << 8) | rpml;
 	return true;
+}
+
+MODULE(MODULE_CLASS_DRIVER, asus, NULL);
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+asus_modcmd(modcmd_t cmd, void *aux)
+{
+	int rv = 0;
+
+	switch (cmd) {
+
+	case MODULE_CMD_INIT:
+
+#ifdef _MODULE
+		rv = config_init_component(cfdriver_ioconf_asus,
+		    cfattach_ioconf_asus, cfdata_ioconf_asus);
+#endif
+		break;
+
+	case MODULE_CMD_FINI:
+
+#ifdef _MODULE
+		rv = config_fini_component(cfdriver_ioconf_asus,
+		    cfattach_ioconf_asus, cfdata_ioconf_asus);
+#endif
+		break;
+
+	default:
+		rv = ENOTTY;
+	}
+
+	return rv;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_linux.h,v 1.4 2007/10/17 19:58:41 garbled Exp $	*/
+/*	$NetBSD: compat_linux.h,v 1.6 2011/12/11 14:05:39 nonaka Exp $	*/
 /*	$OpenBSD: compat_linux.h,v 1.5 2006/01/15 17:58:27 deraadt Exp $	*/
 
 /*
@@ -31,11 +31,6 @@
 struct file;
 struct inode;
 
-#define	ELFSIZE	32
-#include <sys/exec_elf.h>
-#include <sys/types.h>
-#include <sys/errno.h>
-
 typedef long loff_t;
 
 struct file_operations {
@@ -67,14 +62,8 @@ extern	int kernel_read(struct file *, unsigned long, char *, unsigned long);
 extern	int memcmp(const void *, const void *, size_t);
 extern	int register_chrdev(unsigned int, const char *, struct file_operations *);
 extern	int unregister_chrdev(unsigned int, const char *);
-extern	void printk(const char *, ...);
+extern	void printk(const char *, ...) __printflike(1, 2);
 extern	void *memcpy(void *, const void *, size_t);
-
-/* Linux LKM support */
-static const char __module_kernel_version[] __attribute__((section(".modinfo"))) =
-"kernel_version=" UTS_RELEASE;
-static const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
-"using_checksums=1";
 
 /* procfs support */
 struct proc_dir_entry {

@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.h,v 1.5 2009/08/09 04:02:00 matt Exp $ */
+/* $NetBSD: pci_machdep.h,v 1.7 2011/04/04 20:37:51 dyoung Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -26,6 +26,9 @@
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  */
+
+#ifndef _MIPS_INCLUDE_PCI_MACHDEP_H_
+#define _MIPS_INCLUDE_PCI_MACHDEP_H_
 
 /*
  * __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH (if used) needs to be
@@ -60,7 +63,7 @@ struct mips_pci_chipset {
 	void		(*pc_conf_write)(void *, pcitag_t, int, pcireg_t);
 
 	void		*pc_intr_v;
-	int		(*pc_intr_map)(struct pci_attach_args *, 
+	int		(*pc_intr_map)(const struct pci_attach_args *, 
 			    pci_intr_handle_t *);
 	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
 	const struct evcnt *(*pc_intr_evcnt)(void *, pci_intr_handle_t);
@@ -73,7 +76,7 @@ struct mips_pci_chipset {
 
 #ifdef __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH
 	void		*(*pc_pciide_compat_intr_establish)(void *,
-			    device_t, struct pci_attach_args *, int,
+			    device_t, const struct pci_attach_args *, int,
 			    int (*)(void *), void *);
 #endif
 };
@@ -116,3 +119,5 @@ struct mips_pci_chipset {
      (*(c)->pc_pciide_compat_intr_establish)((c)->pc_conf_v, (d), (p),	\
 	(ch), (f), (a)))
 #endif
+
+#endif	/* _MIPS_INCLUDE_PCI_MACHDEP_H_ */

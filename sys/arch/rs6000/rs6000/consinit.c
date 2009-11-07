@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.2 2008/04/28 20:23:34 martin Exp $	*/
+/*	$NetBSD: consinit.c,v 1.3 2011/07/18 17:26:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,13 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.2 2008/04/28 20:23:34 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.3 2011/07/18 17:26:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
 
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/cons.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: xattr.h,v 1.3 2008/04/28 20:24:11 martin Exp $	*/
+/*	$NetBSD: xattr.h,v 1.5 2011/09/27 01:40:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -41,13 +41,13 @@
 #define	_SYS_XATTR_H_
 
 #include <sys/types.h>
-#include <sys/syslimits.h>
+#include <sys/param.h>
 
 /*
  * This is compatible with EXTATTR_MAXNAMELEN, and also happens to be
  * the same as Linux (255).
  */
-#define	XATTR_NAME_MAX		NAME_MAX
+#define	XATTR_NAME_MAX		KERNEL_NAME_MAX
 
 #define	XATTR_SIZE_MAX		65536	/* NetBSD does not enforce this */
 
@@ -59,9 +59,9 @@
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	setxattr(const char *, const char *, void *, size_t, int);
-int	lsetxattr(const char *, const char *, void *, size_t, int);
-int	fsetxattr(int, const char *, void *, size_t, int);
+int	setxattr(const char *, const char *, const void *, size_t, int);
+int	lsetxattr(const char *, const char *, const void *, size_t, int);
+int	fsetxattr(int, const char *, const void *, size_t, int);
 
 ssize_t	getxattr(const char *, const char *, void *, size_t);
 ssize_t	lgetxattr(const char *, const char *, void *, size_t);

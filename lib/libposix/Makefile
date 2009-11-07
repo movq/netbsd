@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2008/10/26 07:28:49 mrg Exp $
+#	$NetBSD: Makefile,v 1.16 2011/10/27 19:56:50 christos Exp $
 
 LIB=	posix
 
@@ -13,6 +13,12 @@ CPPFLAGS+=-I${NETBSDSRCDIR}/sys
 .include "${.CURDIR}/../libc/libcincludes.mk"
 
 AFLAGS+=-I${ARCHDIR}
+
+.if ${MACHINE_ARCH} == "powerpc64"
+# XXX: How come it does not resolve from libc?
+.PATH.c: ${NETBSDSRCDIR}/lib/libc/gen
+SRCS+= _errno.c
+.endif
 
 .include "${.CURDIR}/sys/Makefile.inc"
 

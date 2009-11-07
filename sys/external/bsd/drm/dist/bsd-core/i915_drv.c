@@ -163,7 +163,7 @@ MODULE_DEPEND(i915, drm, 1, 1, 1);
 #elif   defined(__NetBSD__)
 
 static bool
-i915drm_suspend(device_t self PMF_FN_ARGS)
+i915drm_suspend(device_t self, const pmf_qual_t *qual)
 {
 	struct drm_device *dev = device_private(self);
 
@@ -172,7 +172,7 @@ i915drm_suspend(device_t self PMF_FN_ARGS)
 }
 
 static bool
-i915drm_resume(device_t self PMF_FN_ARGS)
+i915drm_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct drm_device *dev = device_private(self);
 
@@ -212,64 +212,37 @@ i915drm_detach(device_t self, int flags)
 }
 
 CFATTACH_DECL_NEW(i915drm, sizeof(struct drm_device), i915drm_probe,
-    i915drm_attach, i915drm_detach, drm_activate);
-
-#ifdef _MODULE
+    i915drm_attach, i915drm_detach, NULL);
 
 MODULE(MODULE_CLASS_DRIVER, i915drm, "drm");
 
-CFDRIVER_DECL(i915drm, DV_DULL, NULL);
-extern struct cfattach i915drm_ca;
-static int drmloc[] = { -1 };
-static struct cfparent drmparent = {
-	"drm", "vga", DVUNIT_ANY
-};
-static struct cfdata i915drm_cfdata[] = {
-	{
-		.cf_name = "i915drm",
-		.cf_atname = "i915drm",
-		.cf_unit = 0,
-		.cf_fstate = FSTATE_STAR,
-		.cf_loc = drmloc,
-		.cf_flags = 0,
-		.cf_pspec = &drmparent,
-	},
-	{ NULL }
-};
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
 
 static int
 i915drm_modcmd(modcmd_t cmd, void *arg)
 {
-	int err;
+	int error = 0;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		err = config_cfdriver_attach(&i915drm_cd);
-		if (err)
-			return err;
-		err = config_cfattach_attach("i915drm", &i915drm_ca);
-		if (err) {
-			config_cfdriver_detach(&i915drm_cd);
-			return err;
-		}
-		err = config_cfdata_attach(i915drm_cfdata, 1);
-		if (err) {
-			config_cfattach_detach("i915drm", &i915drm_ca);
-			config_cfdriver_detach(&i915drm_cd);
-			return err;
-		}
-		return 0;
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_i915drm,
+		    cfattach_ioconf_i915drm, cfdata_ioconf_i915drm);
+#endif
+		break;
 	case MODULE_CMD_FINI:
-		err = config_cfdata_detach(i915drm_cfdata);
-		if (err)
-			return err;
-		config_cfattach_detach("i915drm", &i915drm_ca);
-		config_cfdriver_detach(&i915drm_cd);
-		return 0;
+#ifdef _MODULE
+		error = config_fini_component(cfdriver_ioconf_i915drm,
+		    cfattach_ioconf_i915drm, cfdata_ioconf_i915drm);
+#endif
+		break;
 	default:
 		return ENOTTY;
 	}
+
+	return error;
 }
-#endif /* _MODULE */
 
 #endif

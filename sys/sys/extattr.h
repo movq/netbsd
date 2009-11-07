@@ -1,4 +1,4 @@
-/*	$NetBSD: extattr.h,v 1.4 2006/05/14 21:38:18 elad Exp $	*/
+/*	$NetBSD: extattr.h,v 1.8 2011/09/27 01:40:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001 Robert N. M. Watson
@@ -46,11 +46,18 @@
 #define	EXTATTR_NAMESPACE_SYSTEM	0x00000002
 #define	EXTATTR_NAMESPACE_SYSTEM_STRING	"system"
 
+/* for sys_extattrctl */
+#define EXTATTR_CMD_START		0x00000001
+#define EXTATTR_CMD_STOP		0x00000002
+
 #ifdef _KERNEL
 
-#include <sys/syslimits.h>
+#include <sys/param.h>
 
-#define	EXTATTR_MAXNAMELEN	NAME_MAX
+/* VOP_LISTEXTATTR flags */
+#define EXTATTR_LIST_LENPREFIX	1	/* names with length prefix */
+
+#define	EXTATTR_MAXNAMELEN	KERNEL_NAME_MAX
 struct lwp;
 struct vnode;
 int	extattr_check_cred(struct vnode *, int, kauth_cred_t,
@@ -87,8 +94,17 @@ int	extattr_set_file(const char *_path, int _attrnamespace,
 int	extattr_set_link(const char *_path, int _attrnamespace,
 	    const char *_attrname, const void *_data, size_t _nbytes);
 
+extern const int extattr_namespaces[];
+
 int	extattr_namespace_to_string(int, char **);
 int	extattr_string_to_namespace(const char *, int *);
+int	extattr_copy_fd(int _from_fd, int _to_fd, int _namespace);
+int	extattr_copy_file(const char *_from, const char *_to, int _namespace);
+int	extattr_copy_link(const char *_from, const char *_to, int _namespace);
+
+int	fcpxattr(int _from_fd, int _to_fd);
+int	cpxattr(const char *_from, const char *_to);
+int	lcpxattr(const char *_from, const char *_to);
 __END_DECLS
 
 #endif /* !_KERNEL */

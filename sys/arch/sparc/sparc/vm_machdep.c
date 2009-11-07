@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.100 2009/05/29 22:06:56 mrg Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.106 2011/04/18 00:26:12 rmind Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,25 +49,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.100 2009/05/29 22:06:56 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.106 2011/04/18 00:26:12 rmind Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/core.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/vnode.h>
-#include <sys/simplelock.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/trap.h>
 
 #include <sparc/sparc/cpuvar.h>
@@ -77,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.100 2009/05/29 22:06:56 mrg Exp $")
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	struct pmap *upmap, *kpmap;
@@ -121,6 +121,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 		len -= PAGE_SIZE;
 	} while (len);
 	pmap_update(kpmap);
+
+	return 0;
 }
 
 /*
@@ -187,8 +189,8 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2,
 	     void *stack, size_t stacksize,
 	     void (*func)(void *), void *arg)
 {
-	struct pcb *opcb = &l1->l_addr->u_pcb;
-	struct pcb *npcb = &l2->l_addr->u_pcb;
+	struct pcb *opcb = lwp_getpcb(l1);
+	struct pcb *npcb = lwp_getpcb(l2);
 	struct trapframe *tf2;
 	struct rwindow *rp;
 
@@ -217,8 +219,8 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2,
 		struct cpu_info *cpi;
 		int s;
 
-		l2->l_md.md_fpstate = malloc(sizeof(struct fpstate),
-		    M_SUBPROC, M_WAITOK);
+		l2->l_md.md_fpstate =
+		    kmem_alloc(sizeof(struct fpstate), KM_SLEEP);
 
 		FPU_LOCK(s);
 		if ((cpi = l1->l_md.md_fpu) != NULL) {
@@ -229,7 +231,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2,
 				savefpstate(l1->l_md.md_fpstate);
 #if defined(MULTIPROCESSOR)
 			else
-				XCALL1(savefpstate, l1->l_md.md_fpstate,
+				XCALL1(ipi_savefpstate, l1->l_md.md_fpstate,
 					1 << cpi->ci_cpuid);
 #endif
 		}
@@ -307,7 +309,7 @@ cpu_lwp_free(struct lwp *l, int proc)
 				savefpstate(fs);
 #if defined(MULTIPROCESSOR)
 			else
-				XCALL1(savefpstate, fs, 1 << cpi->ci_cpuid);
+				XCALL1(ipi_savefpstate, fs, 1 << cpi->ci_cpuid);
 #endif
 			cpi->fplwp = NULL;
 		}
@@ -322,13 +324,13 @@ cpu_lwp_free2(struct lwp *l)
 	struct fpstate *fs;
 
 	if ((fs = l->l_md.md_fpstate) != NULL)
-		free((void *)fs, M_SUBPROC);
+		kmem_free(fs, sizeof(struct fpstate));
 }
 
 void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	/*struct trapframe *tf = l->l_md.md_tf;*/
 	struct rwindow *rp;
 
@@ -341,4 +343,14 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	pcb->pcb_sp = (int)rp;
 	pcb->pcb_psr &= ~PSR_CWP;	/* Run in window #0 */
 	pcb->pcb_wim = 1;		/* Fence at window #1 */
+}
+
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+	struct trapframe *tf = l->l_md.md_tf;
+
+	tf->tf_global[7] = (uintptr_t)addr;
+
+	return 0;
 }

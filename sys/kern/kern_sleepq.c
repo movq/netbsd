@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sleepq.c,v 1.37 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: kern_sleepq.c,v 1.45 2012/01/28 12:22:33 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.37 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.45 2012/01/28 12:22:33 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -50,14 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.37 2009/10/21 21:12:06 rmind Exp $
 #include <sys/sleepq.h>
 #include <sys/ktrace.h>
 
-#include <uvm/uvm_extern.h>
-
 #include "opt_sa.h"
 
-int	sleepq_sigtoerror(lwp_t *, int);
+static int	sleepq_sigtoerror(lwp_t *, int);
 
-/* General purpose sleep table, used by ltsleep() and condition variables. */
-sleeptab_t	sleeptab;
+/* General purpose sleep table, used by mtsleep() and condition variables. */
+sleeptab_t	sleeptab	__cacheline_aligned;
 
 /*
  * sleeptab_init:
@@ -163,13 +161,14 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
  *
  *	Insert an LWP into the sleep queue, optionally sorting by priority.
  */
-inline void
+void
 sleepq_insert(sleepq_t *sq, lwp_t *l, syncobj_t *sobj)
 {
-	lwp_t *l2;
-	const int pri = lwp_eprio(l);
 
 	if ((sobj->sobj_flag & SOBJ_SLEEPQ_SORTED) != 0) {
+		lwp_t *l2;
+		const int pri = lwp_eprio(l);
+
 		TAILQ_FOREACH(l2, sq, l_sleepchain) {
 			if (lwp_eprio(l2) < pri) {
 				TAILQ_INSERT_BEFORE(l2, l, l_sleepchain);
@@ -285,7 +284,9 @@ sleepq_block(int timo, bool catch)
 			 * not recurse again.
 			 */
 			mutex_enter(p->p_lock);
-			if ((sig = issignal(l)) != 0)
+			if (((sig = sigispending(l, 0)) != 0 &&
+			    (sigprop[sig] & SA_STOP) == 0) ||
+			    (sig = issignal(l)) != 0)
 				error = sleepq_sigtoerror(l, sig);
 			mutex_exit(p->p_lock);
 		}
@@ -378,7 +379,7 @@ sleepq_timeout(void *arg)
  *
  *	Given a signal number, interpret and return an error code.
  */
-int
+static int
 sleepq_sigtoerror(lwp_t *l, int sig)
 {
 	struct proc *p = l->l_proc;
@@ -421,26 +422,16 @@ sleepq_abort(kmutex_t *mtx, int unlock)
 }
 
 /*
- * sleepq_changepri:
+ * sleepq_reinsert:
  *
- *	Adjust the priority of an LWP residing on a sleepq.  This method
- *	will only alter the user priority; the effective priority is
- *	assumed to have been fixed at the time of insertion into the queue.
+ *	Move the possition of the lwp in the sleep queue after a possible
+ *	change of the lwp's effective priority.
  */
-void
-sleepq_changepri(lwp_t *l, pri_t pri)
+static void
+sleepq_reinsert(sleepq_t *sq, lwp_t *l)
 {
-	sleepq_t *sq = l->l_sleepq;
-	pri_t opri;
 
-	KASSERT(lwp_locked(l, NULL));
-
-	opri = lwp_eprio(l);
-	l->l_priority = pri;
-
-	if (lwp_eprio(l) == opri) {
-		return;
-	}
+	KASSERT(l->l_sleepq == sq);
 	if ((l->l_syncobj->sobj_flag & SOBJ_SLEEPQ_SORTED) == 0) {
 		return;
 	}
@@ -458,33 +449,34 @@ sleepq_changepri(lwp_t *l, pri_t pri)
 	sleepq_insert(sq, l, l->l_syncobj);
 }
 
+/*
+ * sleepq_changepri:
+ *
+ *	Adjust the priority of an LWP residing on a sleepq.
+ */
+void
+sleepq_changepri(lwp_t *l, pri_t pri)
+{
+	sleepq_t *sq = l->l_sleepq;
+
+	KASSERT(lwp_locked(l, NULL));
+
+	l->l_priority = pri;
+	sleepq_reinsert(sq, l);
+}
+
+/*
+ * sleepq_changepri:
+ *
+ *	Adjust the lended priority of an LWP residing on a sleepq.
+ */
 void
 sleepq_lendpri(lwp_t *l, pri_t pri)
 {
 	sleepq_t *sq = l->l_sleepq;
-	pri_t opri;
 
 	KASSERT(lwp_locked(l, NULL));
 
-	opri = lwp_eprio(l);
 	l->l_inheritedprio = pri;
-
-	if (lwp_eprio(l) == opri) {
-		return;
-	}
-	if ((l->l_syncobj->sobj_flag & SOBJ_SLEEPQ_SORTED) == 0) {
-		return;
-	}
-
-	/*
-	 * Don't let the sleep queue become empty, even briefly.
-	 * cv_signal() and cv_broadcast() inspect it without the
-	 * sleep queue lock held and need to see a non-empty queue
-	 * head if there are waiters.
-	 */
-	if (TAILQ_FIRST(sq) == l && TAILQ_NEXT(l, l_sleepchain) == NULL) {
-		return;
-	}
-	TAILQ_REMOVE(sq, l, l_sleepchain);
-	sleepq_insert(sq, l, l->l_syncobj);
+	sleepq_reinsert(sq, l);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: wsconsio.h,v 1.90 2009/02/08 22:58:56 uwe Exp $ */
+/* $NetBSD: wsconsio.h,v 1.103 2012/01/24 04:34:05 macallan Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -105,6 +105,8 @@ struct wscons_event {
 #define	WSKBD_TYPE_EWS4800	20	/* NEC EWS4800 */
 #define	WSKBD_TYPE_BLUETOOTH	21	/* Bluetooth keyboard */
 #define	WSKBD_TYPE_ZAURUS	22	/* Sharp Zaurus keyboard */
+#define	WSKBD_TYPE_LUNA		23	/* OMRON SX-9100 LUNA */
+#define	WSKBD_TYPE_RFB		24	/* Usermode vnc remote keyboard */
 
 /* Manipulate the keyboard bell. */
 struct wskbd_bell_data {
@@ -296,12 +298,12 @@ struct wsmouse_repeat {
 #define	WSDISPLAY_TYPE_SB_P9100	22	/* Tadpole SPARCbook P9100 */
 #define	WSDISPLAY_TYPE_EGA	23	/* (generic) EGA */
 #define	WSDISPLAY_TYPE_DCPVR	24	/* Dreamcast PowerVR */
-#define	WSDISPLAY_TYPE_GATOR	25	/* HP Gator */
+#define	WSDISPLAY_TYPE_GBOX	25	/* HP Gator */
 #define	WSDISPLAY_TYPE_TOPCAT	26	/* HP TopCat */
-#define	WSDISPLAY_TYPE_RENAISSANCE	27	/* HP Renaissance */
+#define	WSDISPLAY_TYPE_RBOX	27	/* HP Renaissance */
 #define	WSDISPLAY_TYPE_CATSEYE	28	/* HP CatsEye */
-#define	WSDISPLAY_TYPE_DAVINCI	29	/* HP DaVinci */
-#define	WSDISPLAY_TYPE_TIGER	30	/* HP Tiger */
+#define	WSDISPLAY_TYPE_DVBOX	29	/* HP DaVinci */
+#define	WSDISPLAY_TYPE_TVRX	30	/* HP TigerShark */
 #define	WSDISPLAY_TYPE_HYPERION	31	/* HP Hyperion */
 #define	WSDISPLAY_TYPE_AMIGACC	32	/* Amiga custom chips */
 #define	WSDISPLAY_TYPE_SUN24	33	/* Sun 24 bit framebuffers */
@@ -320,6 +322,12 @@ struct wsmouse_repeat {
 #define WSDISPLAY_TYPE_CRIME	46	/* SGI O2 */
 #define WSDISPLAY_TYPE_PXALCD	47	/* PXA2x0 LCD controller */
 #define WSDISPLAY_TYPE_AG10	48	/* Fujitsu AG-10e */
+#define WSDISPLAY_TYPE_DL	49	/* DisplayLink DL-1x0/DL-1x5 */
+#define WSDISPLAY_TYPE_XVR1000	50	/* Sun XVR-1000 */
+#define WSDISPLAY_TYPE_LUNA	51	/* OMRON SX-9100 LUNA */
+#define WSDISPLAY_TYPE_GRF	52	/* wsdisplay on top of grf(4) */
+#define WSDISPLAY_TYPE_VNC	53	/* Usermode vnc framebuffer */
+#define WSDISPLAY_TYPE_VALKYRIE	54	/* Apple onboard video 'valkyrie' */
 
 /* Basic display information.  Not applicable to all display types. */
 struct wsdisplay_fbinfo {
@@ -402,6 +410,7 @@ struct wsdisplay_font {
 #define	WSDISPLAY_FONTENC_PCVT 2
 #define	WSDISPLAY_FONTENC_ISO7 3 /* greek */
 #define	WSDISPLAY_FONTENC_ISO2 4 /* east european */
+#define	WSDISPLAY_FONTENC_KOI8_R 5 /* russian */
 	u_int fontwidth, fontheight, stride;
 #define	WSDISPLAY_MAXFONTSZ	(512*1024)
 	int bitorder, byteorder;
@@ -440,7 +449,14 @@ struct wsdisplay_kbddata {
 };
 #define	_O_WSDISPLAYIO_SETKEYBOARD	_IOWR('W', 81, struct wsdisplay_kbddata)
 
-/* Misc control.  Not applicable to all display types. */
+/*
+ * Misc control.  Not applicable to all display types.
+ * - WSDISPLAYIO_PARAM_BACKLIGHT should be an on/off switch for screensavers,
+ *   it should turn the display dark / turn the backlight off without changing
+ *   the brightness value so screensavers and such can just flip the switch
+ *   without caring about actual brightness settings
+ * - WSDISPLAYIO_PARAM_BRIGHTNESS should set display / backlight brightness
+ */
 struct wsdisplay_param {
 	int param;
 #define	WSDISPLAYIO_PARAM_BACKLIGHT	1
@@ -532,5 +548,55 @@ struct wsmux_device_list {
 
 #define	WSMUXIO_INJECTEVENT	_IOW('W', 100, struct wscons_event)
 #define	WSMUX_INJECTEVENT	WSMUXIO_INJECTEVENT /* XXX compat */
+
+/* Mapping information retrieval. */
+struct wsdisplayio_bus_id {
+    u_int bus_type;
+#define WSDISPLAYIO_BUS_PCI	0
+#define WSDISPLAYIO_BUS_SBUS	1
+    union bus_data {
+        struct bus_pci {
+            uint32_t domain;
+            uint32_t bus;
+            uint32_t device;
+            uint32_t function;
+        } pci;
+        struct bus_sbus {
+            uint32_t fb_instance;
+        } sbus;
+        /* so the size doesn't change if we add more bus types */
+        char pad[32];
+    } ubus;
+};
+
+#define WSDISPLAYIO_GET_BUSID	_IOR('W', 101, struct wsdisplayio_bus_id)
+
+/*
+ * retrieving EDID data from a wsdisplay driver
+ * The EDID block will be written into a buffer pointed at by edid_data,
+ * the caller must fill in buffer_size and edid_data, the driver will set
+ * data_size to the number of bytes actually written.
+ * If the buffer is too small the call will fail with EAGAIN and the driver
+ * will set data_size without writing anything into the buffer.
+ */
+
+struct wsdisplayio_edid_info {
+	uint32_t buffer_size;
+	uint32_t data_size;
+	void *edid_data;
+};
+#define WSDISPLAYIO_GET_EDID	_IOWR('W', 102, struct wsdisplayio_edid_info)
+
+/* 
+ * this is for enabling and disabling interrupt-driven drawing
+ * pass 1 to enable polling, 0 to go back to normal
+ * the kernel itself will call this on the console device when entering or
+ * leaving ddb and on panic
+ * may have side effects like hard switching to the virtual console which
+ * shows kernel output, resetting the video hardware etc. - not really for
+ * userland to mess with
+ */
+#define WSDISPLAYIO_SET_POLLING	_IOW('W', 103, int)
+#define WSDISPLAYIOMGWEHITANDKILLEDASKUNK WSDISPLAYIO_SET_POLLING
 
 #endif /* _DEV_WSCONS_WSCONSIO_H_ */

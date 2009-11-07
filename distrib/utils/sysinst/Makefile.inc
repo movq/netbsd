@@ -1,22 +1,26 @@
-#	$NetBSD: Makefile.inc,v 1.48 2009/08/23 20:58:05 jmcneill Exp $
+#	$NetBSD: Makefile.inc,v 1.58.2.1 2012/05/17 18:57:07 sborrill Exp $
 #
 # Makefile for sysinst
 
+.if empty(DBG:M-g)
 COPTS += -Os
+.endif
 
 PROG=		sysinst
 NOMAN=		# defined
 
-WARNS=		3
+WARNS=		4
 
 SRCS+=	menu_defs.c msg_defs.c main.c install.c upgrade.c \
 	txtwalk.c run.c factor.c net.c disks.c disks_lfs.c util.c geom.c \
-	label.c target.c md.c sizemultname.c
+	label.c target.c md.c sizemultname.c configmenu.c checkrc.c
 
 SRCS+=	${MD_OPTIONS:MAOUT2ELF:S/AOUT2ELF/aout2elf.c/}
 SRCS+=	${MENUS_MD:Mmenus.mbr:S/menus.mbr/mbr.c/}
 SRCS+=	${CPPFLAGS:M-DWSKBD:S/-DWSKBD/wskbd.c/}
 SRCS+=	${NODISKLABEL:D:Ubsddisklabel.c savenewlabel.c}
+
+DPSRCS+= defs.h
 
 SYSINSTLANG?=	en
 LANGUAGES?=	de en es fr pl
@@ -30,22 +34,32 @@ MENUS_MD?=	menus.md.${SYSINSTLANG}
 
 _MKSHTARGET_CREATE?=	${_MKSHMSG_CREATE} ${.CURDIR:T}/${.TARGET}
 
-DPADD=		${LIBCURSES} ${LIBTERMCAP} ${LIBUTIL}
-LDADD=		-lcurses -ltermcap -lutil
+DPADD=		${LIBCURSES} ${LIBTERMLIB} ${LIBUTIL}
+LDADD=		-lcurses -ltermlib -lutil
 
 UNIF_AWK=	${.CURDIR}/../../unif.awk
 MSG_XLAT_SH=	${.CURDIR}/../../msg_xlat.sh
 
 CPPFLAGS+=	-I. -I${.CURDIR}/../.. -I${.CURDIR} \
-		-DREL=\"${DISTRIBVER}\" -DMACH=\"${MACHINE}\"
+		-DREL=\"${DISTRIBVER}\" -DMACH=\"${MACHINE}\" \
+		-DMACH_${MACHINE} -DARCH_${MACHINE_ARCH}
 
-.if defined(SMALLPROG_INET6) && (${USE_INET6} != "no")
+.if (!defined(SMALLPROG) || defined(SMALLPROG_INET6)) && (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
 .endif
 
-.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.if defined(HAVE_GCC) || defined(HAVE_PCC)
 COPTS.label.c+=	-Wno-pointer-sign
 .endif
+COPTS.main.c += -Wno-format-nonliteral
+COPTS.disks.c += -Wno-format-nonliteral
+COPTS.util.c += -Wno-format-nonliteral
+COPTS.label.c += -Wno-format-nonliteral
+COPTS.target.c += -Wno-format-nonliteral
+COPTS.mbr.c += -Wno-format-nonliteral
+COPTS.msg_defs.c += -Wno-format-nonliteral
+COPTS.bsddisklabel.c += -Wno-format-nonliteral
+COPTS.md.c += -Wno-format-nonliteral
 
 # Host to ftp from.  Default:
 #	"ftp.NetBSD.org"

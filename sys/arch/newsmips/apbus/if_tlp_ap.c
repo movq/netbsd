@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_ap.c,v 1.11 2009/04/17 14:48:17 tsutsui Exp $	*/
+/*	$NetBSD: if_tlp_ap.c,v 1.13 2011/07/15 07:49:20 he Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_ap.c,v 1.11 2009/04/17 14:48:17 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_ap.c,v 1.13 2011/07/15 07:49:20 he Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -140,7 +140,7 @@ tlp_ap_attach(device_t parent, device_t self, void *aux)
 	}
 
 	aprint_normal(": %s Ethernet, pass %d.%d\n",
-	    tlp_chip_names[sc->sc_chip],
+	    tlp_chip_name(sc->sc_chip),
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	/* CSR */
@@ -155,10 +155,10 @@ tlp_ap_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Initialize bus specific parameters.
 	 */
-	if (mips_sdcache_line_size > 0)
-		sc->sc_cacheline = mips_sdcache_line_size / 4;
-	else if (mips_pdcache_line_size > 0)
-		sc->sc_cacheline = mips_pdcache_line_size / 4;
+	if (mips_cache_info.mci_sdcache_line_size > 0)
+		sc->sc_cacheline = mips_cache_info.mci_sdcache_line_size / 4;
+	else if (mips_cache_info.mci_pdcache_line_size > 0)
+		sc->sc_cacheline = mips_cache_info.mci_pdcache_line_size / 4;
 	else
 		sc->sc_cacheline = 4;
 	sc->sc_maxburst = sc->sc_cacheline;		/* XXX */

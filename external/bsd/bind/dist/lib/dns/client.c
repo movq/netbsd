@@ -1,7 +1,7 @@
-/*	$NetBSD: client.c,v 1.1.1.1 2009/10/25 00:02:28 christos Exp $	*/
+/*	$NetBSD: client.c,v 1.3.4.1 2012/06/05 21:15:00 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,9 +16,11 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: client.c,v 1.5 2009/09/03 21:45:46 jinmei Exp */
+/* Id: client.c,v 1.14 2011/03/12 04:59:47 tbox Exp  */
 
 #include <config.h>
+
+#include <stddef.h>
 
 #include <isc/app.h>
 #include <isc/mem.h>
@@ -311,16 +313,11 @@ dns_client_createview(isc_mem_t *mctx, dns_rdataclass_t rdclass,
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
-	/*
-	 * Workaround for a recent change in dns_view_create(): proactively
-	 * create view->secroots if it's not created with view creation.
-	 */
-	if (view->secroots == NULL) {
-		result = dns_keytable_create(mctx, &view->secroots);
-		if (result != ISC_R_SUCCESS) {
-			dns_view_detach(&view);
-			return (result);
-		}
+	/* Initialize view security roots */
+	result = dns_view_initsecroots(view, mctx);
+	if (result != ISC_R_SUCCESS) {
+		dns_view_detach(&view);
+		return (result);
 	}
 
 	result = dns_view_createresolver(view, taskmgr, ntasks, socketmgr,
@@ -392,12 +389,12 @@ dns_client_create(dns_client_t **clientp, unsigned int options) {
 	return (ISC_R_SUCCESS);
 
  cleanup:
+	if (taskmgr != NULL)
+		isc_taskmgr_destroy(&taskmgr);
 	if (timermgr != NULL)
 		isc_timermgr_destroy(&timermgr);
 	if (socketmgr != NULL)
 		isc_socketmgr_destroy(&socketmgr);
-	if (taskmgr != NULL)
-		isc_taskmgr_destroy(&taskmgr);
 	if (actx != NULL)
 		isc_appctx_destroy(&actx);
 	isc_mem_detach(&mctx);
@@ -449,16 +446,22 @@ dns_client_createx(isc_mem_t *mctx, isc_appctx_t *actx, isc_taskmgr_t *taskmgr,
 	client->dispatchmgr = dispatchmgr;
 
 	/* TODO: whether to use dispatch v4 or v6 should be configurable */
+	client->dispatchv4 = NULL;
+	client->dispatchv6 = NULL;
 	result = getudpdispatch(AF_INET, dispatchmgr, socketmgr,
 				taskmgr, ISC_TRUE, &dispatchv4);
-	if (result != ISC_R_SUCCESS)
-		goto cleanup;
-	client->dispatchv4 = dispatchv4;
+	if (result == ISC_R_SUCCESS)
+		client->dispatchv4 = dispatchv4;
 	result = getudpdispatch(AF_INET6, dispatchmgr, socketmgr,
 				taskmgr, ISC_TRUE, &dispatchv6);
-	if (result != ISC_R_SUCCESS)
+	if (result == ISC_R_SUCCESS)
+		client->dispatchv6 = dispatchv6;
+
+	/* We need at least one of the dispatchers */
+	if (dispatchv4 == NULL && dispatchv6 == NULL) {
+		INSIST(result != ISC_R_SUCCESS);
 		goto cleanup;
-	client->dispatchv6 = dispatchv6;
+	}
 
 	/* Create the default view for class IN */
 	result = dns_client_createview(mctx, dns_rdataclass_in, options,
@@ -720,7 +723,7 @@ view_find(resctx_t *rctx, dns_db_t **dbp, dns_dbnode_t **nodep,
 static void
 client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 	isc_mem_t *mctx;
-	isc_result_t result, tresult;
+	isc_result_t tresult, result = ISC_R_SUCCESS;
 	isc_result_t vresult = ISC_R_SUCCESS;
 	isc_boolean_t want_restart;
 	isc_boolean_t send_event = ISC_FALSE;
@@ -740,7 +743,6 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 
 	mctx = rctx->view->mctx;
 
-	result = ISC_R_SUCCESS;
 	name = dns_fixedname_name(&rctx->name);
 
 	do {
@@ -781,6 +783,7 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 				goto done;
 			}
 		} else {
+			INSIST(event != NULL);
 			INSIST(event->fetch == rctx->fetch);
 			dns_resolver_destroyfetch(&rctx->fetch);
 			db = event->db;
@@ -964,6 +967,7 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 							      &rctx->rdataset);
 					if (tresult != ISC_R_SUCCESS) {
 						result = tresult;
+						POST(result);
 						break;
 					}
 				}
@@ -975,6 +979,7 @@ client_resfind(resctx_t *rctx, dns_fetchevent_t *event) {
 				 * implementation).
 				 */
 				result = DNS_R_SERVFAIL; /* better code? */
+				POST(result);
 			} else {
 				ISC_LIST_APPEND(rctx->namelist, ansname, link);
 				ansname = NULL;
@@ -1400,6 +1405,7 @@ dns_client_addtrustedkey(dns_client_t *client, dns_rdataclass_t rdclass,
 	isc_result_t result;
 	dns_view_t *view = NULL;
 	dst_key_t *dstkey = NULL;
+	dns_keytable_t *secroots = NULL;
 
 	REQUIRE(DNS_CLIENT_VALID(client));
 
@@ -1408,17 +1414,26 @@ dns_client_addtrustedkey(dns_client_t *client, dns_rdataclass_t rdclass,
 				   rdclass, &view);
 	UNLOCK(&client->lock);
 	if (result != ISC_R_SUCCESS)
-		return (result);
+		goto cleanup;
+
+	result = dns_view_getsecroots(view, &secroots);
+	if (result != ISC_R_SUCCESS)
+		goto cleanup;
 
 	result = dst_key_fromdns(keyname, rdclass, keydatabuf, client->mctx,
 				 &dstkey);
 	if (result != ISC_R_SUCCESS)
-		return (result);
+		goto cleanup;
 
-	result = dns_keytable_add(view->secroots, ISC_FALSE, &dstkey);
+	result = dns_keytable_add(secroots, ISC_FALSE, &dstkey);
 
-	dns_view_detach(&view);
-
+ cleanup:
+	if (dstkey != NULL)
+		dst_key_free(&dstkey);
+	if (view != NULL)
+		dns_view_detach(&view);
+	if (secroots != NULL)
+		dns_keytable_detach(&secroots);
 	return (result);
 }
 
@@ -2120,6 +2135,7 @@ receive_soa(isc_task_t *task, isc_event_t *event) {
 	reqev = (dns_requestevent_t *)event;
 	request = reqev->request;
 	result = eresult = reqev->result;
+	POST(result);
 	uctx = reqev->ev_arg;
 	client = uctx->client;
 	soaquery = uctx->soaquery;
@@ -2166,6 +2182,7 @@ receive_soa(isc_task_t *task, isc_event_t *event) {
 	}
 
 	section = DNS_SECTION_ANSWER;
+	POST(section);
 
 	if (rcvmsg->rcode != dns_rcode_noerror &&
 	    rcvmsg->rcode != dns_rcode_nxdomain) {
@@ -2801,9 +2818,9 @@ dns_client_cancelupdate(dns_clientupdatetrans_t *trans) {
 		if (uctx->soareq != NULL)
 			dns_request_cancel(uctx->soareq);
 		if (uctx->restrans != NULL)
-			dns_client_cancelresolve(&uctx->restrans);
+			dns_client_cancelresolve(uctx->restrans);
 		if (uctx->restrans2 != NULL)
-			dns_client_cancelresolve(&uctx->restrans2);
+			dns_client_cancelresolve(uctx->restrans2);
 	}
 
 	UNLOCK(&uctx->lock);
@@ -2871,7 +2888,7 @@ typedef struct {
 	dns_rdata_t	rdata;
 	size_t		size;
 	isc_mem_t *	mctx;
-	unsigned char	data[0];
+	unsigned char	data[FLEXIBLE_ARRAY_MEMBER];
 } dns_client_updaterec_t;
 
 isc_result_t
@@ -2881,9 +2898,8 @@ dns_client_updaterec(dns_client_updateop_t op, dns_name_t *owner,
 		     dns_rdataset_t *rdataset, dns_rdatalist_t *rdatalist,
 		     dns_rdata_t *rdata, isc_mem_t *mctx)
 {
-	dns_client_updaterec_t *updaterec;
-	size_t size = sizeof(dns_client_updaterec_t);
-	isc_buffer_t *b = NULL;
+	dns_client_updaterec_t *updaterec = NULL;
+	size_t size = offsetof(dns_client_updaterec_t, data);
 
 	REQUIRE(op < updateop_max);
 	REQUIRE(owner != NULL);
@@ -2912,16 +2928,15 @@ dns_client_updaterec(dns_client_updateop_t op, dns_name_t *owner,
 		dns_rdataset_init(rdataset);
 		dns_rdatalist_init(&updaterec->rdatalist);
 		dns_rdata_init(&updaterec->rdata);
-		isc_buffer_init(b, b + 1,
-				size - sizeof(dns_client_updaterec_t));
-		dns_name_copy(owner, target, b);
+		isc_buffer_init(&updaterec->buffer, updaterec->data,
+				size - offsetof(dns_client_updaterec_t, data));
+		dns_name_copy(owner, target, &updaterec->buffer);
 		if (source != NULL) {
 			isc_region_t r;
 			dns_rdata_clone(source, rdata);
 			dns_rdata_toregion(rdata, &r);
-			rdata->data = isc_buffer_used(b);
-			isc_buffer_copyregion(b, &r);
-
+			rdata->data = isc_buffer_used(&updaterec->buffer);
+			isc_buffer_copyregion(&updaterec->buffer, &r);
 		}
 		updaterec->mctx = NULL;
 		isc_mem_attach(mctx, &updaterec->mctx);
@@ -2961,9 +2976,9 @@ dns_client_updaterec(dns_client_updateop_t op, dns_name_t *owner,
 	ISC_LIST_APPEND(rdatalist->rdata, rdata, link);
 	dns_rdatalist_tordataset(rdatalist, rdataset);
 	ISC_LIST_APPEND(target->list, rdataset, link);
-	if (b != NULL) {
+	if (updaterec != NULL) {
 		target->attributes |= DNS_NAMEATTR_HASUPDATEREC;
-		dns_name_setbuffer(target, b);
+		dns_name_setbuffer(target, &updaterec->buffer);
 	}
 	if (op == updateop_add || op == updateop_delete)
 		target->attributes |= DNS_NAMEATTR_UPDATE;

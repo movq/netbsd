@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.c,v 1.14 2008/04/08 12:07:26 cegger Exp $	*/
+/*	$NetBSD: mpt_netbsd.c,v 1.17 2012/01/30 17:45:14 mhitch Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -77,11 +77,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.14 2008/04/08 12:07:26 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.17 2012/01/30 17:45:14 mhitch Exp $");
 
 #include <dev/ic/mpt.h>			/* pulls in all headers */
-
-#include <machine/stdarg.h>		/* for mpt_prt() */
 
 static int	mpt_poll(mpt_softc_t *, struct scsipi_xfer *, int);
 static void	mpt_timeout(void *);
@@ -112,8 +110,8 @@ mpt_scsipi_attach(mpt_softc_t *mpt)
 	memset(adapt, 0, sizeof(*adapt));
 	adapt->adapt_dev = &mpt->sc_dev;
 	adapt->adapt_nchannels = 1;
-	adapt->adapt_openings = maxq;
-	adapt->adapt_max_periph = maxq;
+	adapt->adapt_openings = maxq - 2;	/* Reserve 2 for driver use*/
+	adapt->adapt_max_periph = maxq - 2;
 	adapt->adapt_request = mpt_scsipi_request;
 	adapt->adapt_minphys = mpt_minphys;
 
@@ -412,7 +410,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 			uint32_t *pReply = (uint32_t *) mpt_reply;
 
 			mpt_prt(mpt, "Address Reply (index %u):",
-			    mpt_reply->MsgContext & 0xffff);
+			    le32toh(mpt_reply->MsgContext) & 0xffff);
 			mpt_prt(mpt, "%08x %08x %08x %08x",
 			    pReply[0], pReply[1], pReply[2], pReply[3]);
 			mpt_prt(mpt, "%08x %08x %08x %08x",
@@ -420,7 +418,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 			mpt_prt(mpt, "%08x %08x %08x %08x",
 			    pReply[8], pReply[9], pReply[10], pReply[11]);
 		}
-		index = mpt_reply->MsgContext;
+		index = le32toh(mpt_reply->MsgContext);
 	}
 
 	/*
@@ -533,7 +531,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 	}
 
 	xs->status = mpt_reply->SCSIStatus;
-	switch (mpt_reply->IOCStatus) {
+	switch (le16toh(mpt_reply->IOCStatus)) {
 	case MPI_IOCSTATUS_SCSI_DATA_OVERRUN:
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
@@ -546,7 +544,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 		 * that returns status should probably be a status
 		 * error as well.
 		 */
-		xs->resid = xs->datalen - mpt_reply->TransferCount;
+		xs->resid = xs->datalen - le32toh(mpt_reply->TransferCount);
 		if (mpt_reply->SCSIState &
 		    MPI_SCSI_STATE_NO_SCSI_STATUS) {
 			xs->error = XS_DRIVER_STUFFUP;
@@ -683,7 +681,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 	 * We use the message context to find the request structure when
 	 * we get the command completion interrupt from the IOC.
 	 */
-	mpt_req->MsgContext = req->index;
+	mpt_req->MsgContext = htole32(req->index);
 
 	/* Which physical device to do the I/O on. */
 	mpt_req->TargetID = periph->periph_target;
@@ -735,12 +733,14 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			     (1 << periph->periph_target)) == 0))
 		mpt_req->Control |= MPI_SCSIIO_CONTROL_NO_DISCONNECT;
 
+	mpt_req->Control = htole32(mpt_req->Control);
+
 	/* Copy the SCSI command block into place. */
 	memcpy(mpt_req->CDB, xs->cmd, xs->cmdlen);
 
 	mpt_req->CDBLength = xs->cmdlen;
-	mpt_req->DataLength = xs->datalen;
-	mpt_req->SenseBufferLowAddr = req->sense_pbuf;
+	mpt_req->DataLength = htole32(xs->datalen);
+	mpt_req->SenseBufferLowAddr = htole32(req->sense_pbuf);
 
 	/*
 	 * Map the DMA transfer.
@@ -781,8 +781,6 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			SGE_CHAIN32 *ce;
 
 			seg = 0;
-
-			mpt_req->DataLength = xs->datalen;
 			flags = MPI_SGE_FLAGS_SIMPLE_ELEMENT;
 			if (xs->xs_control & XS_CTL_DATA_OUT)
 				flags |= MPI_SGE_FLAGS_HOST_TO_IOC;
@@ -793,13 +791,15 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 				uint32_t tf;
 
 				memset(se, 0, sizeof(*se));
-				se->Address = req->dmap->dm_segs[seg].ds_addr;
+				se->Address =
+				    htole32(req->dmap->dm_segs[seg].ds_addr);
 				MPI_pSGE_SET_LENGTH(se,
 				    req->dmap->dm_segs[seg].ds_len);
 				tf = flags;
 				if (i == MPT_NSGL_FIRST(mpt) - 2)
 					tf |= MPI_SGE_FLAGS_LAST_ELEMENT;
 				MPI_pSGE_SET_FLAGS(se, tf);
+				se->FlagsLength = htole32(se->FlagsLength);
 				nleft--;
 			}
 
@@ -824,23 +824,23 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 					ntodo = MPT_NSGL(mpt) - 1;
 					ce->NextChainOffset = (MPT_RQSL(mpt) -
 					    sizeof(SGE_SIMPLE32)) >> 2;
-					ce->Length = MPT_NSGL(mpt)
-						* sizeof(SGE_SIMPLE32);
+					ce->Length = htole16(MPT_NSGL(mpt)
+						* sizeof(SGE_SIMPLE32));
 				} else {
 					ntodo = nleft;
 					ce->NextChainOffset = 0;
-					ce->Length = ntodo
-						* sizeof(SGE_SIMPLE32);
+					ce->Length = htole16(ntodo
+						* sizeof(SGE_SIMPLE32));
 				}
-				ce->Address = req->req_pbuf +
-				    ((char *)se - (char *)mpt_req);
+				ce->Address = htole32(req->req_pbuf +
+				    ((char *)se - (char *)mpt_req));
 				ce->Flags = MPI_SGE_FLAGS_CHAIN_ELEMENT;
 				for (i = 0; i < ntodo; i++, se++, seg++) {
 					uint32_t tf;
 
 					memset(se, 0, sizeof(*se));
-					se->Address =
-					    req->dmap->dm_segs[seg].ds_addr;
+					se->Address = htole32(
+					    req->dmap->dm_segs[seg].ds_addr);
 					MPI_pSGE_SET_LENGTH(se,
 					    req->dmap->dm_segs[seg].ds_len);
 					tf = flags;
@@ -854,6 +854,8 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 						}
 					}
 					MPI_pSGE_SET_FLAGS(se, tf);
+					se->FlagsLength =
+					    htole32(se->FlagsLength);
 					nleft--;
 				}
 			}
@@ -866,7 +868,6 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			int i;
 			uint32_t flags;
 
-			mpt_req->DataLength = xs->datalen;
 			flags = MPI_SGE_FLAGS_SIMPLE_ELEMENT;
 			if (xs->xs_control & XS_CTL_DATA_OUT)
 				flags |= MPI_SGE_FLAGS_HOST_TO_IOC;
@@ -878,7 +879,8 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 				uint32_t tf;
 
 				memset(se, 0, sizeof(*se));
-				se->Address = req->dmap->dm_segs[i].ds_addr;
+				se->Address =
+				    htole32(req->dmap->dm_segs[i].ds_addr);
 				MPI_pSGE_SET_LENGTH(se,
 				    req->dmap->dm_segs[i].ds_len);
 				tf = flags;
@@ -889,6 +891,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 					    MPI_SGE_FLAGS_END_OF_LIST;
 				}
 				MPI_pSGE_SET_FLAGS(se, tf);
+				se->FlagsLength = htole32(se->FlagsLength);
 			}
 			bus_dmamap_sync(mpt->sc_dmat, req->dmap, 0,
 			    req->dmap->dm_mapsize,
@@ -906,6 +909,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 		MPI_pSGE_SET_FLAGS(se,
 		    (MPI_SGE_FLAGS_LAST_ELEMENT | MPI_SGE_FLAGS_END_OF_BUFFER |
 		     MPI_SGE_FLAGS_SIMPLE_ELEMENT | MPI_SGE_FLAGS_END_OF_LIST));
+		se->FlagsLength = htole32(se->FlagsLength);
 	}
 
 	if (mpt->verbose > 1)
@@ -933,14 +937,6 @@ mpt_set_xfer_mode(mpt_softc_t *mpt, struct scsipi_xfer_mode *xm)
 {
 	fCONFIG_PAGE_SCSI_DEVICE_1 tmp;
 
-	if (!mpt->is_scsi) {
-		/*
-		 * SCSI transport settings don't make any sense for
-		 * Fibre Channel; silently ignore the request.
-		 */
-		return;
-	}
-
 	/*
 	 * Always allow disconnect; we don't have a way to disable
 	 * it right now, in any case.
@@ -952,62 +948,71 @@ mpt_set_xfer_mode(mpt_softc_t *mpt, struct scsipi_xfer_mode *xm)
 	else
 		mpt->mpt_tag_enable &= ~(1 << xm->xm_target);
 
-	tmp = mpt->mpt_dev_page1[xm->xm_target];
+	if (mpt->is_scsi) {
+		/*
+		 * SCSI transport settings only make any sense for
+		 * SCSI
+		 */
 
-	/*
-	 * Set the wide/narrow parameter for the target.
-	 */
-	if (xm->xm_mode & PERIPH_CAP_WIDE16)
-		tmp.RequestedParameters |= MPI_SCSIDEVPAGE1_RP_WIDE;
-	else
-		tmp.RequestedParameters &= ~MPI_SCSIDEVPAGE1_RP_WIDE;
+		tmp = mpt->mpt_dev_page1[xm->xm_target];
 
-	/*
-	 * Set the synchronous parameters for the target.
-	 *
-	 * XXX If we request sync transfers, we just go ahead and
-	 * XXX request the maximum available.  We need finer control
-	 * XXX in order to implement Domain Validation.
-	 */
-	tmp.RequestedParameters &= ~(MPI_SCSIDEVPAGE1_RP_MIN_SYNC_PERIOD_MASK |
-	    MPI_SCSIDEVPAGE1_RP_MAX_SYNC_OFFSET_MASK |
-	    MPI_SCSIDEVPAGE1_RP_DT | MPI_SCSIDEVPAGE1_RP_QAS |
-	    MPI_SCSIDEVPAGE1_RP_IU);
-	if (xm->xm_mode & PERIPH_CAP_SYNC) {
-		int factor, offset, np;
+		/*
+		 * Set the wide/narrow parameter for the target.
+		 */
+		if (xm->xm_mode & PERIPH_CAP_WIDE16)
+			tmp.RequestedParameters |= MPI_SCSIDEVPAGE1_RP_WIDE;
+		else
+			tmp.RequestedParameters &= ~MPI_SCSIDEVPAGE1_RP_WIDE;
 
-		factor = (mpt->mpt_port_page0.Capabilities >> 8) & 0xff;
-		offset = (mpt->mpt_port_page0.Capabilities >> 16) & 0xff;
-		np = 0;
-		if (factor < 0x9) {
-			/* Ultra320 */
-			np |= MPI_SCSIDEVPAGE1_RP_QAS | MPI_SCSIDEVPAGE1_RP_IU;
+		/*
+		 * Set the synchronous parameters for the target.
+		 *
+		 * XXX If we request sync transfers, we just go ahead and
+		 * XXX request the maximum available.  We need finer control
+		 * XXX in order to implement Domain Validation.
+		 */
+		tmp.RequestedParameters &= ~(MPI_SCSIDEVPAGE1_RP_MIN_SYNC_PERIOD_MASK |
+		    MPI_SCSIDEVPAGE1_RP_MAX_SYNC_OFFSET_MASK |
+		    MPI_SCSIDEVPAGE1_RP_DT | MPI_SCSIDEVPAGE1_RP_QAS |
+		    MPI_SCSIDEVPAGE1_RP_IU);
+		if (xm->xm_mode & PERIPH_CAP_SYNC) {
+			int factor, offset, np;
+
+			factor = (mpt->mpt_port_page0.Capabilities >> 8) & 0xff;
+			offset = (mpt->mpt_port_page0.Capabilities >> 16) & 0xff;
+			np = 0;
+			if (factor < 0x9) {
+				/* Ultra320 */
+				np |= MPI_SCSIDEVPAGE1_RP_QAS | MPI_SCSIDEVPAGE1_RP_IU;
+			}
+			if (factor < 0xa) {
+				/* at least Ultra160 */
+				np |= MPI_SCSIDEVPAGE1_RP_DT;
+			}
+			np |= (factor << 8) | (offset << 16);
+			tmp.RequestedParameters |= np;
 		}
-		if (factor < 0xa) {
-			/* at least Ultra160 */
-			np |= MPI_SCSIDEVPAGE1_RP_DT;
+
+		host2mpt_config_page_scsi_device_1(&tmp);
+		if (mpt_write_cfg_page(mpt, xm->xm_target, &tmp.Header)) {
+			mpt_prt(mpt, "unable to write Device Page 1");
+			return;
 		}
-		np |= (factor << 8) | (offset << 16);
-		tmp.RequestedParameters |= np;
-	}
 
-	if (mpt_write_cfg_page(mpt, xm->xm_target, &tmp.Header)) {
-		mpt_prt(mpt, "unable to write Device Page 1");
-		return;
-	}
+		if (mpt_read_cfg_page(mpt, xm->xm_target, &tmp.Header)) {
+			mpt_prt(mpt, "unable to read back Device Page 1");
+			return;
+		}
 
-	if (mpt_read_cfg_page(mpt, xm->xm_target, &tmp.Header)) {
-		mpt_prt(mpt, "unable to read back Device Page 1");
-		return;
-	}
-
-	mpt->mpt_dev_page1[xm->xm_target] = tmp;
-	if (mpt->verbose > 1) {
-		mpt_prt(mpt,
-		    "SPI Target %d Page 1: RequestedParameters %x Config %x",
-		    xm->xm_target,
-		    mpt->mpt_dev_page1[xm->xm_target].RequestedParameters,
-		    mpt->mpt_dev_page1[xm->xm_target].Configuration);
+		mpt2host_config_page_scsi_device_1(&tmp);
+		mpt->mpt_dev_page1[xm->xm_target] = tmp;
+		if (mpt->verbose > 1) {
+			mpt_prt(mpt,
+			    "SPI Target %d Page 1: RequestedParameters %x Config %x",
+			    xm->xm_target,
+			    mpt->mpt_dev_page1[xm->xm_target].RequestedParameters,
+			    mpt->mpt_dev_page1[xm->xm_target].Configuration);
+		}
 	}
 
 	/*
@@ -1026,10 +1031,12 @@ mpt_get_xfer_mode(mpt_softc_t *mpt, struct scsipi_periph *periph)
 	int period, offset;
 
 	tmp = mpt->mpt_dev_page0[periph->periph_target];
+	host2mpt_config_page_scsi_device_0(&tmp);
 	if (mpt_read_cfg_page(mpt, periph->periph_target, &tmp.Header)) {
 		mpt_prt(mpt, "unable to read Device Page 0");
 		return;
 	}
+	mpt2host_config_page_scsi_device_0(&tmp);
 
 	if (mpt->verbose > 1) {
 		mpt_prt(mpt,
@@ -1085,7 +1092,7 @@ mpt_ctlop(mpt_softc_t *mpt, void *vmsg, uint32_t reply)
 	case MPI_FUNCTION_PORT_ENABLE:
 	    {
 		MSG_PORT_ENABLE_REPLY *msg = vmsg;
-		int index = msg->MsgContext & ~0x80000000;
+		int index = le32toh(msg->MsgContext) & ~0x80000000;
 		if (mpt->verbose > 1)
 			mpt_prt(mpt, "enable port reply index %d", index);
 		if (index >= 0 && index < MPT_MAX_REQUESTS(mpt)) {
@@ -1099,7 +1106,7 @@ mpt_ctlop(mpt_softc_t *mpt, void *vmsg, uint32_t reply)
 	case MPI_FUNCTION_CONFIG:
 	    {
 		MSG_CONFIG_REPLY *msg = vmsg;
-		int index = msg->MsgContext & ~0x80000000;
+		int index = le32toh(msg->MsgContext) & ~0x80000000;
 		if (index >= 0 && index < MPT_MAX_REQUESTS(mpt)) {
 			request_t *req = &mpt->request_pool[index];
 			req->debug = REQ_DONE;
@@ -1118,7 +1125,7 @@ static void
 mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 {
 
-	switch (msg->Event) {
+	switch (le32toh(msg->Event)) {
 	case MPI_EVENT_LOG_DATA:
 	    {
 		int i;
@@ -1288,6 +1295,12 @@ mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 		/* ignore these events for now */
 		break;
 
+	case MPI_EVENT_QUEUE_FULL:
+		/* This can get a little chatty */
+		if (mpt->verbose > 0)
+			mpt_prt(mpt, "Queue Full Event");
+		break;
+
 	default:
 		mpt_prt(mpt, "Unknown async event: 0x%x", msg->Event);
 		break;
@@ -1308,7 +1321,7 @@ mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 		ackp->Function = MPI_FUNCTION_EVENT_ACK;
 		ackp->Event = msg->Event;
 		ackp->EventContext = msg->EventContext;
-		ackp->MsgContext = req->index | 0x80000000;
+		ackp->MsgContext = htole32(req->index | 0x80000000);
 		mpt_check_doorbell(mpt);
 		mpt_send_cmd(mpt, req);
 	}

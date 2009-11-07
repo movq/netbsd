@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_cfg.c,v 1.22 2009/07/03 06:41:46 tteras Exp $	*/
+/*	$NetBSD: isakmp_cfg.c,v 1.24 2010/09/21 13:14:17 vanhu Exp $	*/
 
 /* Id: isakmp_cfg.c,v 1.55 2006/08/22 18:17:17 manubsd Exp */
 
@@ -38,7 +38,7 @@
 #include <sys/socket.h>
 #include <sys/queue.h>
 
-#include <utmp.h>
+#include <utmpx.h>
 #if defined(__APPLE__) && defined(__MACH__)
 #include <util.h>
 #endif
@@ -114,6 +114,8 @@ static vchar_t *isakmp_cfg_void(struct ph1handle *, struct isakmp_data *);
 #endif
 static vchar_t *isakmp_cfg_addr4(struct ph1handle *, 
 				 struct isakmp_data *, in_addr_t *);
+static vchar_t *isakmp_cfg_addrnet4(struct ph1handle *, 
+				 struct isakmp_data *, in_addr_t *, in_addr_t *);
 static void isakmp_cfg_getaddr4(struct isakmp_data *, struct in_addr *);
 static vchar_t *isakmp_cfg_addr4_list(struct ph1handle *,
 				      struct isakmp_data *, in_addr_t *, int);
@@ -901,8 +903,15 @@ retry_source:
 		break;
 
 	case INTERNAL_IP4_SUBNET:
-		return isakmp_cfg_addr4(iph1, 
-		    attr, &isakmp_cfg_config.network4);
+		if(isakmp_cfg_config.splitnet_count > 0){
+			return isakmp_cfg_addrnet4(iph1, attr,
+						    &isakmp_cfg_config.splitnet_list->network.addr4.s_addr,
+						    &isakmp_cfg_config.splitnet_list->network.mask4.s_addr);
+		}else{
+			plog(LLV_INFO, LOCATION, NULL,
+			     "%s requested but no splitnet in configuration\n",
+			     s_isakmp_cfg_type(type));
+		}
 		break;
 
 	default:
@@ -1040,6 +1049,36 @@ isakmp_cfg_addr4(iph1, attr, addr)
 	
 	return buffer;
 }
+
+static vchar_t *
+isakmp_cfg_addrnet4(iph1, attr, addr, mask)
+	struct ph1handle *iph1;
+	struct isakmp_data *attr;
+	in_addr_t *addr;
+	in_addr_t *mask;
+{
+	vchar_t *buffer;
+	struct isakmp_data *new;
+	size_t len;
+	in_addr_t netbuff[2];
+
+	len = sizeof(netbuff);
+	if ((buffer = vmalloc(sizeof(*attr) + len)) == NULL) {
+		plog(LLV_ERROR, LOCATION, NULL, "Cannot allocate memory\n");
+		return NULL;
+	}
+
+	new = (struct isakmp_data *)buffer->v;
+
+	new->type = attr->type;
+	new->lorv = htons(len);
+	netbuff[0]=*addr;
+	netbuff[1]=*mask;
+	memcpy(new + 1, netbuff, len);
+	
+	return buffer;
+}
+
 
 static vchar_t *
 isakmp_cfg_addr4_list(iph1, attr, addr, nbr)
@@ -1622,8 +1661,7 @@ isakmp_cfg_accounting_system(port, raddr, usr, inout)
 	int inout;
 {
 	int error = 0;
-	struct utmp ut;
-	char term[UT_LINESIZE];
+	struct utmpx ut;
 	char addr[NI_MAXHOST];
 	
 	if (usr == NULL || usr[0]=='\0') {
@@ -1632,36 +1670,33 @@ isakmp_cfg_accounting_system(port, raddr, usr, inout)
 		return -1;
 	}
 
-	sprintf(term, TERMSPEC, port);
+	memset(&ut, 0, sizeof ut);
+	gettimeofday((struct timeval *)&ut.ut_tv, NULL);
+	snprintf(ut.ut_id, sizeof ut.ut_id, TERMSPEC, port);
 
 	switch (inout) {
 	case ISAKMP_CFG_LOGIN:
-		strncpy(ut.ut_name, usr, UT_NAMESIZE);
-		ut.ut_name[UT_NAMESIZE - 1] = '\0';
-
-		strncpy(ut.ut_line, term, UT_LINESIZE);
-		ut.ut_line[UT_LINESIZE - 1] = '\0';
+		ut.ut_type = USER_PROCESS;
+		strncpy(ut.ut_user, usr, sizeof ut.ut_user);
 
 		GETNAMEINFO_NULL(raddr, addr);
-		strncpy(ut.ut_host, addr, UT_HOSTSIZE);
-		ut.ut_host[UT_HOSTSIZE - 1] = '\0';
+		strncpy(ut.ut_host, addr, sizeof ut.ut_host);
 
-		ut.ut_time = time(NULL);
- 
 		plog(LLV_INFO, LOCATION, NULL,
 			"Accounting : '%s' logging on '%s' from %s.\n",
-			ut.ut_name, ut.ut_line, ut.ut_host);
+			ut.ut_user, ut.ut_id, addr);
 
-		login(&ut);
+		pututxline(&ut);
 
 		break;
 	case ISAKMP_CFG_LOGOUT:	
+		ut.ut_type = DEAD_PROCESS;
 
 		plog(LLV_INFO, LOCATION, NULL,
 			"Accounting : '%s' unlogging from '%s'.\n",
-			usr, term);
+			usr, ut.ut_id);
 
-		logout(term);
+		pututxline(&ut);
 
 		break;
 	default:

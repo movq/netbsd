@@ -1,4 +1,4 @@
-/*	$NetBSD: melody.c,v 1.15 2008/04/28 20:23:12 martin Exp $ */
+/*	$NetBSD: melody.c,v 1.17 2011/11/23 23:07:28 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: melody.c,v 1.15 2008/04/28 20:23:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: melody.c,v 1.17 2011/11/23 23:07:28 jmcneill Exp $");
 
 /*
  * Melody audio driver.
@@ -44,11 +44,10 @@ __KERNEL_RCSID(0, "$NetBSD: melody.c,v 1.15 2008/04/28 20:23:12 martin Exp $");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <dev/ic/tms320av110reg.h>
 #include <dev/ic/tms320av110var.h>
-
-#include <machine/bus.h>
 
 #include <amiga/dev/zbusvar.h>
 #include <amiga/amiga/isr.h>
@@ -111,6 +110,10 @@ melody_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_tav.sc_pcm_18 = 0;
 	sc->sc_tav.sc_dif = 0;
 	sc->sc_tav.sc_pcm_div = 12;
+
+	mutex_init(&sc->sc_tav.sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_tav.sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
+	cv_init(&sc->sc_tav.sc_cv, device_xname(self));
 
 	/*
 	 * Attach option boards now. They might provide additional

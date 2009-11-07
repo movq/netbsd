@@ -1,4 +1,4 @@
-/*	$NetBSD: filedesc.h,v 1.57 2009/10/27 02:58:28 rmind Exp $	*/
+/*	$NetBSD: filedesc.h,v 1.63 2012/02/11 23:16:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -181,6 +181,7 @@ struct proc;
  * Kernel global variables and routines.
  */
 void	fd_sys_init(void);
+int	fd_open(const char*, int, int, int*);
 int	fd_dupopen(int, int *, int, int);
 int	fd_alloc(struct proc *, int, int *);
 void	fd_tryexpand(struct proc *);
@@ -193,24 +194,30 @@ void	fd_share(proc_t *);
 void	fd_hold(lwp_t *);
 void	fd_free(void);
 void	fd_closeexec(void);
+void	fd_ktrexecfd(void);
 int	fd_checkstd(void);
 file_t	*fd_getfile(unsigned);
 file_t	*fd_getfile2(proc_t *, unsigned);
 void	fd_putfile(unsigned);
 int	fd_getvnode(unsigned, file_t **);
 int	fd_getsock(unsigned, struct socket **);
+int	fd_getsock1(unsigned, struct socket **, file_t **);
 void	fd_putvnode(unsigned);
 void	fd_putsock(unsigned);
 int	fd_close(unsigned);
 int	fd_dup(file_t *, int, int *, bool);
-int	fd_dup2(file_t *, unsigned);
+int	fd_dup2(file_t *, unsigned, int);
 int	fd_clone(file_t *, unsigned, int, const struct fileops *, void *);
+void	fd_set_exclose(struct lwp *, int, bool);
+int	pipe1(struct lwp *, register_t *, int);
+int	dodup(struct lwp *, int, int, int, register_t *);
 
 void	cwd_sys_init(void);
 struct cwdinfo *cwdinit(void);
 void	cwdshare(proc_t *);
 void	cwdunshare(proc_t *);
 void	cwdfree(struct cwdinfo *);
+void	cwdexec(struct proc *);
 
 #define GETCWD_CHECK_ACCESS 0x0001
 int	getcwd_common(struct vnode *, struct vnode *, char **, char *, int,

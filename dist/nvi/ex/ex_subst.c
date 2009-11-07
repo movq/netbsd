@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_subst.c,v 1.2 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: ex_subst.c,v 1.4 2011/03/21 14:53:03 tnozaki Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -55,7 +55,7 @@ ex_s(SCR *sp, EXCMD *cmdp)
 	regex_t *re;
 	size_t blen, len;
 	u_int flags;
-	int delim;
+	ARG_CHAR_T delim;
 	CHAR_T *bp, *p, *ptrn, *rep, *t;
 
 	/*
@@ -73,14 +73,14 @@ ex_s(SCR *sp, EXCMD *cmdp)
 		goto subagain;
 	for (p = cmdp->argv[0]->bp,
 	    len = cmdp->argv[0]->len; len > 0; --len, ++p) {
-		if (!isblank(*p))
+		if (!ISBLANK((UCHAR_T)*p))
 			break;
 	}
 	if (len == 0)
 subagain:	return (ex_subagain(sp, cmdp));
 
-	delim = *p++;
-	if (isalnum(delim) || delim == '\\')
+	delim = (UCHAR_T)*p++;
+	if (ISALNUM(delim) || delim == '\\')
 		return (s(sp, cmdp, p, &sp->subre_c, SUB_MUSTSETR));
 
 	/*
@@ -912,7 +912,7 @@ re_compile(SCR *sp, CHAR_T *ptrn, size_t plen, CHAR_T **ptrnp, size_t *lenp, reg
 	}
 	if (LF_ISSET(SEARCH_ICL)) {
 iclower:	for (p = ptrn, len = plen; len > 0; ++p, --len)
-			if (isupper(*p))
+			if (ISUPPER((UCHAR_T)*p))
 				break;
 		if (len == 0)
 			reflags |= REG_ICASE;
@@ -1355,8 +1355,8 @@ re_sub(SCR *sp, CHAR_T *ip, CHAR_T **lbp, size_t *lbclenp, size_t *lblenp, regma
 	 * all escaping characters.  This (hopefully) matches historic practice.
 	 */
 #define	OUTCH(ch, nltrans) {						\
-	CHAR_T __ch = (ch);						\
-	u_int __value = KEY_VAL(sp, __ch);				\
+	ARG_CHAR_T __ch = (ch);						\
+	e_key_t __value = KEY_VAL(sp, __ch);				\
 	if (nltrans && (__value == K_CR || __value == K_NL)) {		\
 		NEEDNEWLINE(sp);					\
 		sp->newl[sp->newl_cnt++] = lbclen;			\
@@ -1366,15 +1366,15 @@ re_sub(SCR *sp, CHAR_T *ip, CHAR_T **lbp, size_t *lbclenp, size_t *lblenp, regma
 			conv = C_NOT_SET;				\
 			/* FALLTHROUGH */				\
 		case C_LOWER:						\
-			if (isupper(__ch))				\
-				__ch = tolower(__ch);			\
+			if (ISUPPER(__ch))				\
+				__ch = TOLOWER(__ch);			\
 			break;						\
 		case C_ONE_UPPER:					\
 			conv = C_NOT_SET;				\
 			/* FALLTHROUGH */				\
 		case C_UPPER:						\
-			if (islower(__ch))				\
-				__ch = toupper(__ch);			\
+			if (ISLOWER(__ch))				\
+				__ch = TOUPPER(__ch);			\
 			break;						\
 		default:						\
 			abort();					\
@@ -1413,7 +1413,7 @@ subzero:			if (match[no].rm_so == -1 ||
 					break;
 				mlen = match[no].rm_eo - match[no].rm_so;
 				for (t = ip + match[no].rm_so; mlen--; ++t)
-					OUTCH(*t, 0);
+					OUTCH((UCHAR_T)*t, 0);
 				continue;
 			case 'e':
 			case 'E':

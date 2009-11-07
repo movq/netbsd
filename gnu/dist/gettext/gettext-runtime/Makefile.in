@@ -315,6 +315,8 @@ all: config.h
 am--refresh:
 	@:
 $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_Makefile.in:
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -342,6 +344,8 @@ $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENC
 	$(SHELL) ./config.status --recheck
 
 $(top_srcdir)/configure:  $(am__configure_deps)
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_configure:
 	cd $(srcdir) && $(AUTOCONF)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
@@ -356,6 +360,8 @@ stamp-h1: $(srcdir)/config.h.in $(top_builddir)/config.status
 	@rm -f stamp-h1
 	cd $(top_builddir) && $(SHELL) ./config.status config.h
 $(srcdir)/config.h.in:  $(am__configure_deps) 
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_config.h.in:
 	cd $(top_srcdir) && $(AUTOHEADER)
 	rm -f stamp-h1
 	touch $@
@@ -363,6 +369,8 @@ $(srcdir)/config.h.in:  $(am__configure_deps)
 distclean-hdr:
 	-rm -f config.h stamp-h1
 intl/Makefile: $(top_builddir)/config.status $(top_srcdir)/intl/Makefile.in
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_intl_Makefile:
 	cd $(top_builddir) && $(SHELL) ./config.status $@
 
 mostlyclean-libtool:
@@ -772,6 +780,8 @@ uninstall-info: uninstall-info-recursive
 all-local: ABOUT-NLS
 
 ABOUT-NLS: $(srcdir)/doc/nls.texi $(srcdir)/doc/matrix.texi
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_ABOUT-NLS:
 	rm -f $(srcdir)/ABOUT-NLS \
 	  && $(MAKEINFO) --output=$(srcdir)/ABOUT-NLS --no-header \
 	    -I $(srcdir)/doc --no-validate nls.texi
@@ -844,6 +854,8 @@ config.h_vms: config.h.in ../version.sh
 # KEEP_CRTL_SETLOCALE tells it to not override the native locale support.
 
 intl/libgnuintl.h_vms: intl/libgnuintl.h.in
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_intl_libgnuintl.h_vms:
 	sed -e 's,@''HAVE_POSIX_PRINTF''@,1,g ' \
 	    -e 's,@''HAVE_ASPRINTF''@,0,g' \
 	    -e 's,@''HAVE_SNPRINTF''@,0,g' \
@@ -902,6 +914,8 @@ config.h.msvc: config.h.in ../version.sh
 	  < $(srcdir)/config.h.in > $@
 
 intl/libgnuintl.h.msvc-static: intl/libgnuintl.h.in
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_intl_libgnuintl.h.msvc-static:
 	sed -e 's,@''HAVE_POSIX_PRINTF''@,0,g ' \
 	    -e 's,@''HAVE_ASPRINTF''@,0,g' \
 	    -e 's,@''HAVE_SNPRINTF''@,0,g' \
@@ -909,6 +923,8 @@ intl/libgnuintl.h.msvc-static: intl/libgnuintl.h.in
 	  < $(srcdir)/intl/libgnuintl.h.in > $@
 
 intl/libgnuintl.h.msvc-shared: intl/libgnuintl.h.in windows/dllexport.h
+	@echo "NOT REBUILDING $@"
+NetBSD_DISABLED_intl_libgnuintl.h.msvc-shared:
 	sed -e 's,@''HAVE_POSIX_PRINTF''@,0,g ' \
 	    -e 's,@''HAVE_ASPRINTF''@,0,g' \
 	    -e 's,@''HAVE_SNPRINTF''@,0,g' \

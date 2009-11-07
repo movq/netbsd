@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.10 2008/04/28 20:23:17 martin Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.12.2.1 2012/08/08 15:51:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,12 +30,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10 2008/04/28 20:23:17 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.2.1 2012/08/08 15:51:09 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
-#include <sys/device.h>
+#include <sys/device_if.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
+
+#include <powerpc/ibm4xx/cpu.h>
 
 void
 cpu_configure(void)
@@ -49,20 +52,15 @@ cpu_configure(void)
 	    imask[IPL_BIO], imask[IPL_NET], imask[IPL_TTY]);
 	
 	(void)spl0();
-
-	/*
-	 * Now allow hardware interrupts.
-	 */
-	__asm volatile ("wrteei 1");
 }
 
 void
 cpu_rootconf(void)
 {
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.11 2009/03/14 15:36:11 dsl Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.15 2012/01/27 18:52:59 para Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.11 2009/03/14 15:36:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2012/01/27 18:52:59 para Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.11 2009/03/14 15:36:11 dsl Exp $");
 #include <sys/malloc.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -49,10 +49,10 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.11 2009/03/14 15:36:11 dsl Exp $");
 #include <machine/pci_machdep.h>
 #include <machine/isa_machdep.h>
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
-void	mainbus_attach(struct device *, struct device *, void *);
+int	mainbus_match(device_t, cfdata_t, void *);
+void	mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
@@ -67,7 +67,7 @@ struct genppc_pci_chipset *genppc_pct;
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+mainbus_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	if (mainbus_found)
@@ -79,7 +79,7 @@ mainbus_match(struct device *parent, struct cfdata *match, void *aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(struct device *parent, struct device *self, void *aux)
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct pcibus_attach_args pba;
 #if NPCI > 0
@@ -118,9 +118,9 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	SIMPLEQ_INSERT_TAIL(&genppc_pct->pc_pbi, pbi, next);
 
 #ifdef PCI_NETBSD_CONFIGURE
-	ioext  = extent_create("pciio",  0x00008000, 0x0000ffff, M_DEVBUF,
+	ioext  = extent_create("pciio",  0x00008000, 0x0000ffff,
 	    NULL, 0, EX_NOWAIT);
-	memext = extent_create("pcimem", 0x00000000, 0x0fffffff, M_DEVBUF,
+	memext = extent_create("pcimem", 0x00000000, 0x0fffffff,
 	    NULL, 0, EX_NOWAIT);
 
 	pci_configure_bus(0, ioext, memext, NULL, 0, 32);
@@ -136,7 +136,7 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_pc = genppc_pct;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 #endif
 }

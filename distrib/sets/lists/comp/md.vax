@@ -1,5 +1,6 @@
-# $NetBSD: md.vax,v 1.35 2008/10/31 20:24:52 mrg Exp $
+# $NetBSD: md.vax,v 1.37 2011/11/10 17:18:22 chs Exp $
 ./usr/include/ieeefp.h				comp-obsolete		obsolete
+./usr/include/gcc-4.5/tgmath.h			comp-c-include		gcccmds,gcc=45
 ./usr/include/vax				comp-c-include
 ./usr/include/vax/_G_config.h			comp-obsolete		obsolete
 ./usr/include/vax/ansi.h			comp-c-include
@@ -64,11 +65,11 @@
 ./usr/include/vax/setjmp.h			comp-c-include
 ./usr/include/vax/sid.h				comp-c-include
 ./usr/include/vax/signal.h			comp-c-include
-./usr/include/vax/stdarg.h			comp-c-include
+./usr/include/vax/stdarg.h			comp-obsolete		obsolete
 ./usr/include/vax/trap.h			comp-c-include
 ./usr/include/vax/types.h			comp-c-include
 ./usr/include/vax/uvax.h			comp-c-include
-./usr/include/vax/varargs.h			comp-c-include
+./usr/include/vax/varargs.h			comp-obsolete		obsolete
 ./usr/include/vax/vaxfp.h			comp-c-include
 ./usr/include/vax/vmparam.h			comp-c-include
 ./usr/include/vax/vsbus.h			comp-c-include

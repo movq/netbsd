@@ -1,4 +1,4 @@
-/*	$NetBSD: pmu.c,v 1.16 2009/03/18 10:22:32 cegger Exp $ */
+/*	$NetBSD: pmu.c,v 1.21 2011/07/01 18:41:52 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.16 2009/03/18 10:22:32 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.21 2011/07/01 18:41:52 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,11 +36,13 @@ __KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.16 2009/03/18 10:22:32 cegger Exp $");
 #include <sys/proc.h>
 #include <sys/kthread.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 #include <machine/autoconf.h>
 #include <dev/clock_subr.h>
 #include <dev/i2c/i2cvar.h>
+
+#include <dev/sysmon/sysmonvar.h>
 
 #include <macppc/dev/viareg.h>
 #include <macppc/dev/pmuvar.h>
@@ -62,19 +64,20 @@ __KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.16 2009/03/18 10:22:32 cegger Exp $");
 #define PMU_OUT		0x3	/* sending out a command */
 #define PMU_IN		0x4	/* receiving data */
 
-static void pmu_attach(struct device *, struct device *, void *);
-static int pmu_match(struct device *, struct cfdata *, void *);
+static void pmu_attach(device_t, device_t, void *);
+static int pmu_match(device_t, cfdata_t, void *);
 static void pmu_autopoll(void *, int);
 
 static int pmu_intr(void *);
 
 struct pmu_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 	struct todr_chip_handle sc_todr;
 	struct adb_bus_accessops sc_adbops;
 	struct i2c_controller sc_i2c;
 	struct pmu_ops sc_pmu_ops;
+	struct sysmon_pswitch sc_lidswitch;
 	bus_space_tag_t sc_memt;
 	bus_space_handle_t sc_memh;
 	uint32_t sc_flags;
@@ -86,6 +89,7 @@ struct pmu_softc {
 	int sc_pending_eject;
 	int sc_brightness, sc_brightness_wanted;
 	int sc_volume, sc_volume_wanted;
+	int sc_lid_closed;
 	/* deferred processing */
 	lwp_t *sc_thread;
 	/* signalling the event thread */
@@ -97,7 +101,7 @@ struct pmu_softc {
 	void *sc_cb_cookie;
 };
 
-CFATTACH_DECL(pmu, sizeof(struct pmu_softc),
+CFATTACH_DECL_NEW(pmu, sizeof(struct pmu_softc),
     pmu_match, pmu_attach, NULL, NULL);
 
 static inline void pmu_write_reg(struct pmu_softc *, int, uint8_t);
@@ -118,8 +122,8 @@ static void pmu_register_callback(void *, void (*)(void *), void *);
  */
 static int pmu_send(void *, int, int, uint8_t *, int, uint8_t *);
 static void pmu_adb_poll(void *);
-static int pmu_todr_set(todr_chip_handle_t, volatile struct timeval *);
-static int pmu_todr_get(todr_chip_handle_t, volatile struct timeval *);
+static int pmu_todr_set(todr_chip_handle_t, struct timeval *);
+static int pmu_todr_get(todr_chip_handle_t, struct timeval *);
 
 static int pmu_adb_handler(void *, int, uint8_t *);
 
@@ -224,7 +228,7 @@ static const char *has_two_smart_batteries[] = {
 	NULL };
 
 static int
-pmu_match(struct device *parent, struct cfdata *cf, void *aux)
+pmu_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -242,10 +246,10 @@ pmu_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pmu_attach(struct device *parent, struct device *dev, void *aux)
+pmu_attach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct pmu_softc *sc = (struct pmu_softc *)dev;
+	struct pmu_softc *sc = device_private(self);
 #if notyet
 	struct i2cbus_attach_args iba;
 #endif
@@ -265,8 +269,9 @@ pmu_attach(struct device *parent, struct device *dev, void *aux)
 		type = IST_LEVEL;
 	}
 
-	printf(" irq %d: ", irq);
+	aprint_normal(" irq %d: ", irq);
 
+	sc->sc_dev = self;
 	sc->sc_node = ca->ca_node;
 	sc->sc_memt = ca->ca_tag;
 
@@ -279,11 +284,11 @@ pmu_attach(struct device *parent, struct device *dev, void *aux)
 	sc->sc_volume = sc->sc_volume_wanted = 0x80;
 	sc->sc_flags = 0;
 	sc->sc_callback = NULL;
+	sc->sc_lid_closed = 0;
 
 	if (bus_space_map(sc->sc_memt, ca->ca_reg[0] + ca->ca_baseaddr,
 	    ca->ca_reg[1], 0, &sc->sc_memh) != 0) {
-
-		printf("%s: unable to map registers\n", dev->dv_xname);
+		aprint_error_dev(self, "unable to map registers\n");
 		return;
 	}
 	sc->sc_ih = intr_establish(irq, type, IPL_TTY, pmu_intr, sc);
@@ -301,8 +306,8 @@ pmu_attach(struct device *parent, struct device *dev, void *aux)
 
 	/* check what kind of PMU we're talking to */
 	if (pmu_send(sc, PMU_GET_VERSION, 0, cmd, 16, resp) > 1)
-		printf(" rev. %d", resp[1]);
-	printf("\n");
+		aprint_normal(" rev. %d", resp[1]);
+	aprint_normal("\n");
 
 	node = OF_child(sc->sc_node);
 
@@ -312,28 +317,25 @@ pmu_attach(struct device *parent, struct device *dev, void *aux)
 			goto next;
 
 		if (strncmp(name, "pmu-i2c", 8) == 0) {
-
-			printf("%s: initializing IIC bus\n",
-			    sc->sc_dev.dv_xname);
+			aprint_normal_dev(self, "initializing IIC bus\n");
 			goto next;
 		}
 		if (strncmp(name, "adb", 4) == 0) {
-
-			printf("%s: initializing ADB\n", sc->sc_dev.dv_xname);
+			aprint_normal_dev(self, "initializing ADB\n");
 			sc->sc_adbops.cookie = sc;
 			sc->sc_adbops.send = pmu_adb_send;
 			sc->sc_adbops.poll = pmu_adb_poll;
 			sc->sc_adbops.autopoll = pmu_autopoll;
 			sc->sc_adbops.set_handler = pmu_adb_set_handler;
 #if NNADB > 0
-			config_found_ia(dev, "adb_bus", &sc->sc_adbops,
+			config_found_ia(self, "adb_bus", &sc->sc_adbops,
 			    nadb_print);
 #endif
 			goto next;
 		}
 		if (strncmp(name, "rtc", 4) == 0) {
 
-			printf("%s: initializing RTC\n", sc->sc_dev.dv_xname);
+			aprint_normal_dev(self, "initializing RTC\n");
 			sc->sc_todr.todr_gettime = pmu_todr_get;
 			sc->sc_todr.todr_settime = pmu_todr_set;
 			sc->sc_todr.cookie = sc;
@@ -343,14 +345,13 @@ pmu_attach(struct device *parent, struct device *dev, void *aux)
 		if (strncmp(name, "battery", 8) == 0)
 			goto next;
 
-		printf("%s: %s not configured\n", sc->sc_dev.dv_xname, name);
+		aprint_normal_dev(self, "%s not configured\n", name);
 next:
 		node = OF_peer(node);
 	}
 
 	if (OF_finddevice("/bandit/ohare") != -1) {
-		printf("%s: enabling ohare backlight control\n",
-		    device_xname(dev));
+		aprint_normal_dev(self, "enabling ohare backlight control\n");
 		sc->sc_flags |= PMU_HAS_BACKLIGHT_CONTROL;
 		cmd[0] = 0;
 		cmd[1] = 0;
@@ -394,13 +395,19 @@ bat_done:
 	sc->sc_i2c.ic_read_byte = NULL;
 	sc->sc_i2c.ic_write_byte = NULL;
 	sc->sc_i2c.ic_exec = pmu_i2c_exec;
-	config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
+	config_found_ia(sc->sc_dev, "i2cbus", &iba, iicbus_print);
 #endif
 	
 	if (kthread_create(PRI_NONE, 0, NULL, pmu_thread, sc, &sc->sc_thread,
 	    "%s", "pmu") != 0) {
-		printf("pmu: unable to create event kthread");
+		aprint_error_dev(self, "unable to create event kthread\n");
 	}
+
+	sc->sc_lidswitch.smpsw_name = "Lid switch";
+	sc->sc_lidswitch.smpsw_type = PSWITCH_TYPE_LID;
+	if (sysmon_pswitch_register(&sc->sc_lidswitch) != 0)
+		aprint_error_dev(self,
+		    "unable to register lid switch with sysmon\n");
 }
 
 static void
@@ -640,6 +647,7 @@ pmu_intr(void *arg)
 		goto done;
 	}
 	if (resp[1] & PMU_INT_ENVIRONMENT) {
+		int closed;
 #ifdef PMU_VERBOSE
 		/* deal with environment messages */
 		printf("environment:");
@@ -647,6 +655,13 @@ pmu_intr(void *arg)
 			printf(" %02x", resp[i]);
 		printf("\n");
 #endif
+		closed = (resp[2] & PMU_ENV_LID_CLOSED) != 0;
+		if (closed != sc->sc_lid_closed) {
+			sc->sc_lid_closed = closed;
+			sysmon_pswitch_event(&sc->sc_lidswitch, 
+	    		    closed ? PSWITCH_EVENT_PRESSED : 
+			    PSWITCH_EVENT_RELEASED);
+		}
 		goto done;
 	}
 	if (resp[1] & PMU_INT_TICK) {
@@ -683,7 +698,7 @@ pmu_error_handler(void *cookie, int len, uint8_t *data)
 #define DIFF19041970 2082844800
 
 static int
-pmu_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
+pmu_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct pmu_softc *sc = tch->cookie;
 	uint32_t sec;
@@ -700,7 +715,7 @@ pmu_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
 }
 
 static int
-pmu_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
+pmu_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct pmu_softc *sc = tch->cookie;
 	uint32_t sec;
@@ -737,6 +752,20 @@ pmu_restart(void)
 	sc = pmu0;
 	if (pmu_send(sc, PMU_RESET_CPU, 0, NULL, 16, resp) >= 0)
 		while (1);
+}
+
+void
+pmu_modem(int on)
+{
+	struct pmu_softc *sc;
+	uint8_t resp[16], cmd[2] = {0, 0};
+
+	if (pmu0 == NULL)
+		return;
+
+	sc = pmu0;
+	cmd[0] = PMU_POW0_MODEM | (on ? PMU_POW0_ON : 0);
+	pmu_send(sc, PMU_POWER_CTRL0, 1, cmd, 16, resp);
 }
 
 static void
@@ -914,8 +943,8 @@ pmu_update_brightness(struct pmu_softc *sc)
 
 	if ((sc->sc_flags & PMU_HAS_BACKLIGHT_CONTROL) == 0) {
 
-		printf("%s: this PMU doesn't support backlight control\n",
-			sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev,
+		     "this PMU doesn't support backlight control\n");
 		sc->sc_brightness = sc->sc_brightness_wanted;	
 		return;
 	}
@@ -1000,7 +1029,7 @@ pmu_attach_legacy_battery(struct pmu_softc *sc)
 
 	baa.baa_type = BATTERY_TYPE_LEGACY;
 	baa.baa_pmu_ops = &sc->sc_pmu_ops;
-	config_found_ia(&sc->sc_dev, "pmu_bus", &baa, pmu_print);
+	config_found_ia(sc->sc_dev, "pmu_bus", &baa, pmu_print);
 }
 
 static void
@@ -1011,5 +1040,5 @@ pmu_attach_smart_battery(struct pmu_softc *sc, int num)
 	baa.baa_type = BATTERY_TYPE_SMART;
 	baa.baa_pmu_ops = &sc->sc_pmu_ops;
 	baa.baa_num = num;
-	config_found_ia(&sc->sc_dev, "pmu_bus", &baa, pmu_print);
+	config_found_ia(sc->sc_dev, "pmu_bus", &baa, pmu_print);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: au1100.c,v 1.7 2007/02/28 04:21:52 thorpej Exp $ */
+/* $NetBSD: au1100.c,v 1.10 2011/07/10 23:13:23 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -97,15 +97,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: au1100.c,v 1.7 2007/02/28 04:21:52 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: au1100.c,v 1.10 2011/07/10 23:13:23 matt Exp $");
 
 #include <sys/param.h>
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/bus.h>
+#include <mips/locore.h>
 #include <mips/alchemy/include/aureg.h>
 #include <mips/alchemy/include/auvar.h>
 
-static const char *au1100_irqnames[] = {
+static const char * const au1100_irqnames[] = {
 	"uart0",
 	"uart1",
 	"sdcard",
@@ -206,7 +206,7 @@ bool
 au1100_match(struct au_chipdep **cpp)
 {
 
-	if (MIPS_PRID_COPTS(cpu_id) == MIPS_AU1100) {
+	if (MIPS_PRID_COPTS(mips_options.mips_cpu_id) == MIPS_AU1100) {
 		*cpp = &au1100_chipdep;
 		return true;
 	}

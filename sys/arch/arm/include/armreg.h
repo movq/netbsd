@@ -1,4 +1,4 @@
-/*	$NetBSD: armreg.h,v 1.41 2008/08/27 11:04:23 matt Exp $	*/
+/*	$NetBSD: armreg.h,v 1.48.8.1 2012/08/09 06:36:46 jdc Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Ben Harris
@@ -119,6 +119,7 @@
 #define CPU_ID_DEC		0x44000000 /* 'D' */
 #define CPU_ID_INTEL		0x69000000 /* 'i' */
 #define	CPU_ID_TI		0x54000000 /* 'T' */
+#define CPU_ID_MARVELL		0x56000000 /* 'V' */
 #define	CPU_ID_FARADAY		0x66000000 /* 'f' */
 
 /* How to decide what format the CPUID is in. */
@@ -195,14 +196,19 @@
 #define CPU_ID_ARM1020E		0x4115a200 /* (AKA arm10 rev 1) */
 #define CPU_ID_ARM1022ES	0x4105a220
 #define CPU_ID_ARM1026EJS	0x4106a260
+#define CPU_ID_ARM11MPCORE	0x410fb020
 #define CPU_ID_ARM1136JS	0x4107b360
 #define CPU_ID_ARM1136JSR1	0x4117b360
-#define CPU_ID_ARM1176JS	0x410fb760
+#define CPU_ID_ARM1176JZS	0x410fb760
 #define CPU_ID_CORTEXA8R1	0x411fc080
 #define CPU_ID_CORTEXA8R2	0x412fc080
+#define CPU_ID_CORTEXA8R3	0x413fc080
+#define CPU_ID_CORTEXA9R1	0x411fc090
 #define CPU_ID_SA110		0x4401a100
 #define CPU_ID_SA1100		0x4401a110
 #define	CPU_ID_TI925T		0x54029250
+#define CPU_ID_MV88FR571_VD	0x56155710
+#define CPU_ID_MV88SV131	0x56251310
 #define	CPU_ID_FA526		0x66015260
 #define CPU_ID_SA1110		0x6901b110
 #define CPU_ID_IXP1200		0x6901c120
@@ -291,9 +297,15 @@
 #define CPU_CONTROL_VECRELOC	0x00002000 /* V: Vector relocation */
 #define CPU_CONTROL_ROUNDROBIN	0x00004000 /* RR: Predictable replacement */
 #define CPU_CONTROL_V4COMPAT	0x00008000 /* L4: ARMv4 compat LDR R15 etc */
-#define CPU_CONTROL_UNAL_ENABLE	0x00040000 /* U: unaligned data access */
-#define CPU_CONTROL_XP_ENABLE	0x00080000 /* XP: extended page table */
 #define CPU_CONTROL_FI_ENABLE	0x00200000 /* FI: Low interrupt latency */
+#define CPU_CONTROL_UNAL_ENABLE	0x00400000 /* U: unaligned data access */
+#define CPU_CONTROL_XP_ENABLE	0x00800000 /* XP: extended page table */
+#define	CPU_CONTROL_V_ENABLE	0x01000000 /* VE: Interrupt vectors enable */
+#define	CPU_CONTROL_EX_BEND	0x02000000 /* EE: exception endianness */
+#define	CPU_CONTROL_NMFI	0x08000000 /* NMFI: Non maskable FIQ */
+#define	CPU_CONTROL_TR_ENABLE	0x10000000 /* TRE: */
+#define	CPU_CONTROL_AF_ENABLE	0x20000000 /* AFE: Access flag enable */
+#define	CPU_CONTROL_TE_ENABLE	0x40000000 /* TE: Thumb Exception enable */
 
 #define CPU_CONTROL_IDC_ENABLE	CPU_CONTROL_DC_ENABLE
 
@@ -304,6 +316,21 @@
 					    * in r0 steppings. See errata
 					    * 364296.
 					    */
+/* ARM11x6 Auxiliary Control Register (CP15 register 1, opcode2 1) */
+#define	ARM11X6_AUXCTL_RS	0x00000001 /* return stack */
+#define	ARM11X6_AUXCTL_DB	0x00000002 /* dynamic branch prediction */
+#define	ARM11X6_AUXCTL_SB	0x00000004 /* static branch prediction */
+#define	ARM11X6_AUXCTL_TR	0x00000008 /* MicroTLB replacement strat. */
+#define	ARM11X6_AUXCTL_EX	0x00000010 /* exclusive L1/L2 cache */
+#define	ARM11X6_AUXCTL_RA	0x00000020 /* clean entire cache disable */
+#define	ARM11X6_AUXCTL_RV	0x00000040 /* block transfer cache disable */
+#define	ARM11X6_AUXCTL_CZ	0x00000080 /* restrict cache size */
+
+/* ARM1176 Auxiliary Control Register (CP15 register 1, opcode2 1) */   
+#define	ARM1176_AUXCTL_PHD	0x10000000 /* inst. prefetch halting disable */
+#define	ARM1176_AUXCTL_BFD	0x20000000 /* branch folding disable */
+#define	ARM1176_AUXCTL_FSD	0x40000000 /* force speculative ops disable */
+#define	ARM1176_AUXCTL_FIO	0x80000000 /* low intr latency override */
 
 /* XScale Auxillary Control Register (CP15 register 1, opcode2 1) */
 #define	XSCALE_AUXCTL_K		0x00000001 /* dis. write buffer coalescing */
@@ -312,6 +339,26 @@
 #define	XSCALE_AUXCTL_MD_WB_RWA	0x00000010 /* mini-D$ wb, read/write-allocate */
 #define	XSCALE_AUXCTL_MD_WT	0x00000020 /* mini-D$ wt, read-allocate */
 #define	XSCALE_AUXCTL_MD_MASK	0x00000030
+
+/* ARM11 MPCore Auxillary Control Register (CP15 register 1, opcode2 1) */
+#define	MPCORE_AUXCTL_RS	0x00000001 /* return stack */
+#define	MPCORE_AUXCTL_DB	0x00000002 /* dynamic branch prediction */
+#define	MPCORE_AUXCTL_SB	0x00000004 /* static branch prediction */
+#define	MPCORE_AUXCTL_F 	0x00000008 /* instruction folding enable */
+#define	MPCORE_AUXCTL_EX	0x00000010 /* exclusive L1/L2 cache */
+#define	MPCORE_AUXCTL_SA	0x00000020 /* SMP/AMP */
+
+/* Marvell Feroceon Extra Features Register (CP15 register 1, opcode2 0) */
+#define FC_DCACHE_REPL_LOCK	0x80000000 /* Replace DCache Lock */
+#define FC_DCACHE_STREAM_EN	0x20000000 /* DCache Streaming Switch */
+#define FC_WR_ALLOC_EN		0x10000000 /* Enable Write Allocate */
+#define FC_L2_PREF_DIS		0x01000000 /* L2 Cache Prefetch Disable */
+#define FC_L2_INV_EVICT_LINE	0x00800000 /* L2 Invalidates Uncorrectable Error Line Eviction */
+#define FC_L2CACHE_EN		0x00400000 /* L2 enable */
+#define FC_ICACHE_REPL_LOCK	0x00080000 /* Replace ICache Lock */
+#define FC_GLOB_HIST_REG_EN	0x00040000 /* Branch Global History Register Enable */
+#define FC_BRANCH_TARG_BUF_DIS	0x00020000 /* Branch Target Buffer Disable */
+#define FC_L1_PAR_ERR_EN	0x00010000 /* L1 Parity Error Enable */
 
 /* Cache type register definitions 0 */
 #define	CPU_CT_FORMAT(x)	(((x) >> 29) & 0x7)	/* reg format */
@@ -344,7 +391,7 @@
 #define	CPU_CSID_CTYPE_WB	0x40000000	/* write-back avail */ 
 #define	CPU_CSID_CTYPE_RA	0x20000000	/* read-allocation avail */ 
 #define	CPU_CSID_CTYPE_WA	0x10000000	/* write-allocation avail */ 
-#define	CPU_CSID_NUMSETS(x)	(((x) >> 12) & 0xffff)
+#define	CPU_CSID_NUMSETS(x)	(((x) >> 13) & 0x7fff)
 #define	CPU_CSID_ASSOC(x)	(((x) >> 3) & 0x1ff)
 #define	CPU_CSID_LEN(x)		((x) & 0x03)
 
@@ -389,7 +436,7 @@
  *       3 3 2 2 2                              
  *       1 0 9 8 7                                                     0
  *      +-------+-------------------------------------------------------+
- *      | cond  |              instruction dependant                    |
+ *      | cond  |              instruction dependent                    |
  *      |c c c c|                                                       |
  *      +-------+-------------------------------------------------------+
  */
@@ -445,5 +492,10 @@
 #define	ARM11_PMCEVT_RETURN_HIT		37	/* return address predicted */
 #define	ARM11_PMCEVT_RETURN_MISS	38	/* return addr. mispredicted */
 #define	ARM11_PMCEVT_CYCLE		255	/* Increment each cycle */
+
+/* Defines for ARM CORTEX performance counters */
+#define CORTEX_CNTENS_C __BIT(31)	/* Enables the cycle counter */
+#define CORTEX_CNTENC_C __BIT(31)	/* Disables the cycle counter */
+#define CORTEX_CNTOFL_C __BIT(31)	/* Cycle counter overflow flag */
 
 #endif	/* _ARM_ARMREG_H */

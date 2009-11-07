@@ -1,5 +1,5 @@
-/*	$NetBSD: servconf.h,v 1.2 2009/06/07 22:38:47 christos Exp $	*/
-/* $OpenBSD: servconf.h,v 1.87 2009/01/22 10:02:34 djm Exp $ */
+/*	$NetBSD: servconf.h,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: servconf.h,v 1.99 2011/06/22 21:57:01 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -17,6 +17,10 @@
 #ifndef SERVCONF_H
 #define SERVCONF_H
 
+#ifdef WITH_LDAP_PUBKEY
+#include "ldapauth.h"
+#endif
+
 #define MAX_PORTS		256	/* Max # ports. */
 
 #define MAX_ALLOW_USERS		256	/* Max # users on allow list. */
@@ -25,8 +29,10 @@
 #define MAX_DENY_GROUPS		256	/* Max # groups on deny list. */
 #define MAX_SUBSYSTEMS		256	/* Max # subsystems. */
 #define MAX_HOSTKEYS		256	/* Max # hostkeys. */
+#define MAX_HOSTCERTS		256	/* Max # host certificates. */
 #define MAX_ACCEPT_ENV		256	/* Max # of env vars. */
 #define MAX_MATCH_GROUPS	256	/* Max # of groups for Match. */
+#define MAX_AUTHKEYS_FILES	256	/* Max # of authorized_keys files. */
 
 /* permit_root_login */
 #define	PERMIT_NOT_SET		-1
@@ -34,6 +40,11 @@
 #define	PERMIT_FORCED_ONLY	1
 #define	PERMIT_NO_PASSWD	2
 #define	PERMIT_YES		3
+
+/* use_privsep */
+#define PRIVSEP_OFF		0
+#define PRIVSEP_ON		1
+#define PRIVSEP_SANDBOX		2
 
 #define DEFAULT_AUTH_FAIL_MAX	6	/* Default for MaxAuthTries */
 #define DEFAULT_SESSIONS_MAX	10	/* Default for MaxSessions */
@@ -50,6 +61,8 @@ typedef struct {
 	int     address_family;		/* Address family used by the server. */
 	char   *host_key_files[MAX_HOSTKEYS];	/* Files containing host keys. */
 	int     num_host_key_files;     /* Number of files for host keys. */
+	char   *host_cert_files[MAX_HOSTCERTS];	/* Files containing host certs. */
+	int     num_host_cert_files;     /* Number of files for host certs. */
 	char   *pid_file;	/* Where to put our pid */
 	int     server_key_bits;/* Size of the server key. */
 	int     login_grace_time;	/* Disconnect if no auth in this time
@@ -71,8 +84,11 @@ typedef struct {
 	char   *xauth_location;	/* Location of xauth program */
 	int     strict_modes;	/* If true, require string home dir modes. */
 	int     tcp_keep_alive;	/* If true, set SO_KEEPALIVE. */
+	int	ip_qos_interactive;	/* IP ToS/DSCP/class for interactive */
+	int	ip_qos_bulk;		/* IP ToS/DSCP/class for bulk traffic */
 	char   *ciphers;	/* Supported SSH2 ciphers. */
 	char   *macs;		/* Supported SSH2 macs. */
+	char   *kex_algorithms;	/* SSH2 kex methods in order of preference. */
 	int	protocol;	/* Supported protocol versions. */
 	int     gateway_ports;	/* If true, allow remote connects to forwarded ports. */
 	SyslogFacility log_facility;	/* Facility for system logging. */
@@ -148,8 +164,8 @@ typedef struct {
 					 * disconnect the session
 					 */
 
-	char   *authorized_keys_file;	/* File containing public keys */
-	char   *authorized_keys_file2;
+	u_int num_authkeys_files;	/* Files containing public keys */
+	char   *authorized_keys_files[MAX_AUTHKEYS_FILES];
 
 	int	use_pam;		/* Enable auth via PAM */
 	int     none_enabled;           /* enable NONE cipher switch */
@@ -160,11 +176,31 @@ typedef struct {
 	char   *adm_forced_command;
 
 	int	permit_tun;
+#ifdef WITH_LDAP_PUBKEY
+        ldap_opt_t lpk;
+#endif
 
 	int	num_permitted_opens;
 
 	char   *chroot_directory;
+	char   *revoked_keys_file;
+	char   *trusted_user_ca_keys;
+	char   *authorized_principals_file;
 }       ServerOptions;
+
+/*
+ * These are string config options that must be copied between the
+ * Match sub-config and the main config, and must be sent from the
+ * privsep slave to the privsep master. We use a macro to ensure all
+ * the options are copied and the copies are done in the correct order.
+ */
+#define COPY_MATCH_STRING_OPTS() do { \
+		M_CP_STROPT(banner); \
+		M_CP_STROPT(trusted_user_ca_keys); \
+		M_CP_STROPT(revoked_keys_file); \
+		M_CP_STROPT(authorized_principals_file); \
+		M_CP_STRARRAYOPT(authorized_keys_files, num_authkeys_files); \
+	} while (0)
 
 void	 initialize_server_options(ServerOptions *);
 void	 fill_default_server_options(ServerOptions *);
@@ -177,5 +213,6 @@ void	 parse_server_match_config(ServerOptions *, const char *, const char *,
 	     const char *);
 void	 copy_set_server_options(ServerOptions *, ServerOptions *, int);
 void	 dump_config(ServerOptions *);
+char	*derelativise_path(const char *);
 
 #endif				/* SERVCONF_H */

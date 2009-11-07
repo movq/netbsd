@@ -1,4 +1,4 @@
-/*	$NetBSD: textdomain.c,v 1.12 2007/09/25 08:19:09 junyoung Exp $	*/
+/*	$NetBSD: textdomain.c,v 1.12.30.2 2012/04/23 23:40:40 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Citrus Project,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: textdomain.c,v 1.12 2007/09/25 08:19:09 junyoung Exp $");
+__RCSID("$NetBSD: textdomain.c,v 1.12.30.2 2012/04/23 23:40:40 riz Exp $");
 
 #include <sys/param.h>
 

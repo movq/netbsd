@@ -1,4 +1,4 @@
-/* $NetBSD: if_bce.c,v 1.27 2009/09/05 14:09:55 tsutsui Exp $	 */
+/* $NetBSD: if_bce.c,v 1.35 2012/02/02 19:43:05 tls Exp $	 */
 
 /*
  * Copyright (c) 2003 Clifford Wright. All rights reserved.
@@ -35,11 +35,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.27 2009/09/05 14:09:55 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.35 2012/02/02 19:43:05 tls Exp $");
 
-#include "bpfilter.h"
 #include "vlan.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,12 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.27 2009/09/05 14:09:55 tsutsui Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -73,8 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_bce.c,v 1.27 2009/09/05 14:09:55 tsutsui Exp $");
 #include <dev/mii/brgphyreg.h>
 
 #include <dev/pci/if_bcereg.h>
-
-#include <uvm/uvm_extern.h>
 
 /* transmit buffer max frags allowed */
 #define BCE_NTXFRAGS	16
@@ -143,9 +135,7 @@ struct bce_softc {
 	int			bce_txsfree;	/* no. tx slots available */
 	int			bce_txsnext;	/* next available tx slot */
 	callout_t		bce_timeout;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 };
 
 /* for ring descriptors */
@@ -182,7 +172,7 @@ static	int	bce_add_rxbuf(struct bce_softc *, int);
 static	void	bce_rxdrain(struct bce_softc *);
 static	void	bce_stop(struct ifnet *, int);
 static	void	bce_reset(struct bce_softc *);
-static	bool	bce_resume(device_t PMF_FN_PROTO);
+static	bool	bce_resume(device_t, const pmf_qual_t *);
 static	void	bce_set_filter(struct ifnet *);
 static	int	bce_mii_read(device_t, int, int);
 static	void	bce_mii_write(device_t, int, int, int);
@@ -331,8 +321,8 @@ bce_attach(device_t parent, device_t self, void *aux)
 	if (sc->bce_intrhand == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt\n");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
@@ -466,10 +456,8 @@ bce_attach(device_t parent, device_t self, void *aux)
 	aprint_normal_dev(self, "Ethernet address %s\n",
 	    ether_sprintf(sc->enaddr));
 	ether_ifattach(ifp, sc->enaddr);
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 	callout_init(&sc->bce_timeout, 0);
 
 	if (pmf_device_register(self, NULL, bce_resume))
@@ -630,11 +618,8 @@ bce_start(struct ifnet *ifp)
 
 		newpkts++;
 
-#if NBPFILTER > 0
 		/* Pass the packet to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif				/* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 	if (txsfree == 0) {
 		/* No more slots left; notify upper layer. */
@@ -722,10 +707,7 @@ bce_intr(void *xsc)
 	if (handled) {
 		if (wantinit)
 			bce_init(ifp);
-#if NRND > 0
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, intstatus);
-#endif
+		rnd_add_uint32(&sc->rnd_source, intstatus);
 		/* Try to get more packets going. */
 		bce_start(ifp);
 	}
@@ -822,14 +804,11 @@ bce_rxintr(struct bce_softc *sc)
 		m->m_pkthdr.len = m->m_len = len;
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass it up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif				/* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input) (ifp, m);
@@ -1374,7 +1353,7 @@ bce_set_filter(struct ifnet *ifp)
 }
 
 static bool
-bce_resume(device_t self PMF_FN_ARGS)
+bce_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct bce_softc *sc = device_private(self);
 

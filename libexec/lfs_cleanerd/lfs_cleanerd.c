@@ -1,4 +1,4 @@
-/* $NetBSD: lfs_cleanerd.c,v 1.22 2009/10/09 16:35:17 pooka Exp $	 */
+/* $NetBSD: lfs_cleanerd.c,v 1.29 2012/02/02 03:47:11 perseant Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -45,6 +45,7 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,6 +204,8 @@ init_fs(struct clfs *fs, char *fsname)
 	struct statvfs sf;
 	int rootfd;
 	int i;
+	void *sbuf;
+	char *bn;
 
 	/*
 	 * Get the raw device from the block device.
@@ -216,7 +219,11 @@ init_fs(struct clfs *fs, char *fsname)
 		syslog(LOG_ERR, "couldn't malloc device name string: %m");
 		return -1;
 	}
-	sprintf(fs->clfs_dev, "/dev/r%s", sf.f_mntfromname + 5);
+	bn = strrchr(sf.f_mntfromname, '/');
+	bn = bn ? bn+1 : sf.f_mntfromname;
+	strlcpy(fs->clfs_dev, sf.f_mntfromname, bn - sf.f_mntfromname + 1);
+	strcat(fs->clfs_dev, "r");
+	strcat(fs->clfs_dev, bn);
 	if ((fs->clfs_devfd = kops.ko_open(fs->clfs_dev, O_RDONLY, 0)) < 0) {
 		syslog(LOG_ERR, "couldn't open device %s for reading",
 			fs->clfs_dev);
@@ -233,10 +240,20 @@ init_fs(struct clfs *fs, char *fsname)
 		return -4;
 	kops.ko_close(rootfd);
 
-	/* Load in the superblock */
-	if (kops.ko_pread(fs->clfs_devfd, &(fs->lfs_dlfs), sizeof(struct dlfs),
-		  LFS_LABELPAD) < 0)
+	sbuf = malloc(LFS_SBPAD);
+	if (sbuf == NULL) {
+		syslog(LOG_ERR, "couldn't malloc superblock buffer");
 		return -1;
+	}
+
+	/* Load in the superblock */
+	if (kops.ko_pread(fs->clfs_devfd, sbuf, LFS_SBPAD, LFS_LABELPAD) < 0) {
+		free(sbuf);
+		return -1;
+	}
+
+	memcpy(&(fs->lfs_dlfs), sbuf, sizeof(struct dlfs));
+	free(sbuf);
 
 	/* If this is not a version 2 filesystem, complain and exit */
 	if (fs->lfs_version != 2) {
@@ -818,7 +835,7 @@ toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, int *bic, int *sizep)
 		if (sizep)
 			*sizep += bip[i].bi_size;
 	}
-	*bic = i; /* XXX realloc bip? */
+	*bic = i; /* XXX should we shrink bip? */
 	*bipp = bip;
 
 	return;
@@ -911,7 +928,7 @@ check_or_add(ino_t ino, int32_t lbn, BLOCK_INFO *bip, int bic, BLOCK_INFO **ebip
 	++ebic;
 	t = realloc(ebip, ebic * sizeof(BLOCK_INFO));
 	if (t == NULL)
-		return 1; /* Note *ebipc is not updated */
+		return 1; /* Note *ebicp is unchanged */
 
 	ebip = t;
 	ebip[ebic - 1].bi_inode = ino;
@@ -1132,9 +1149,18 @@ clean_fs(struct clfs *fs, CLEANERINFO *cip)
 #endif /* TEST_PATTERN */
 		dlog("sending blocks %d-%d", mc, mc + lim.blkcnt - 1);
 		if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim))<0) {
-			syslog(LOG_WARNING, "%s: markv returned %d (%m)",
-			       fs->lfs_fsmnt, r);
-			if (errno != EAGAIN && errno != ESHUTDOWN) {
+			int oerrno = errno;
+			syslog(LOG_WARNING, "%s: markv returned %d (errno %d, %m)",
+			       fs->lfs_fsmnt, r, errno);
+			if (oerrno != EAGAIN && oerrno != ESHUTDOWN) {
+				syslog(LOG_DEBUG, "%s: errno %d, returning",
+				       fs->lfs_fsmnt, oerrno);
+				fd_release_all(fs->clfs_devvp);
+				return r;
+			}
+			if (oerrno == ESHUTDOWN) {
+				syslog(LOG_NOTICE, "%s: filesystem unmounted",
+				       fs->lfs_fsmnt);
 				fd_release_all(fs->clfs_devvp);
 				return r;
 			}
@@ -1328,6 +1354,7 @@ lfs_cleaner_main(int argc, char **argv)
 {
 	int i, opt, error, r, loopcount, nodetach;
 	struct timeval tv;
+	sem_t *semaddr = NULL;
 	CLEANERINFO ci;
 #ifndef USE_CLIENT_SERVER
 	char *cp, *pidname;
@@ -1347,7 +1374,7 @@ lfs_cleaner_main(int argc, char **argv)
 	/*
 	 * Parse command-line arguments
 	 */
-	while ((opt = getopt(argc, argv, "bC:cdDfi:l:mn:qr:st:")) != -1) {
+	while ((opt = getopt(argc, argv, "bC:cdDfi:l:mn:qr:sS:t:")) != -1) {
 		switch (opt) {
 		    case 'b':	/* Use bytes written, not segments read */
 			    use_bytes = 1;
@@ -1387,6 +1414,13 @@ lfs_cleaner_main(int argc, char **argv)
 			    break;
 		    case 's':	/* Small writes */
 			    do_small = 1;
+			    break;
+		    case 'S':	/* semaphore */
+#ifndef LFS_CLEANER_AS_LIB
+			    usage();
+			    /*NOTREACHED*/
+#endif
+			    semaddr = (void*)(uintptr_t)strtoull(optarg,NULL,0);
 			    break;
 		    case 't':	/* timeout */
 			    segwait_timeout = atoi(optarg);
@@ -1519,6 +1553,11 @@ lfs_cleaner_main(int argc, char **argv)
 	 * Main cleaning loop.
 	 */
 	loopcount = 0;
+#ifdef LFS_CLEANER_AS_LIB
+	if (semaddr)
+		sem_post(semaddr);
+#endif
+	error = 0;
 	while (nfss > 0) {
 		int cleaned_one;
 		do {
@@ -1528,6 +1567,8 @@ lfs_cleaner_main(int argc, char **argv)
 			cleaned_one = 0;
 			for (i = 0; i < nfss; i++) {
 				if ((error = needs_cleaning(fsp[i], &ci)) < 0) {
+					syslog(LOG_DEBUG, "%s: needs_cleaning returned %d",
+					       getprogname(), error);
 					handle_error(fsp, i);
 					continue;
 				}
@@ -1535,7 +1576,9 @@ lfs_cleaner_main(int argc, char **argv)
 					continue;
 				
 				reload_ifile(fsp[i]);
-				if (clean_fs(fsp[i], &ci) < 0) {
+				if ((error = clean_fs(fsp[i], &ci)) < 0) {
+					syslog(LOG_DEBUG, "%s: clean_fs returned %d",
+					       getprogname(), error);
 					handle_error(fsp, i);
 					continue;
 				}
@@ -1554,14 +1597,22 @@ lfs_cleaner_main(int argc, char **argv)
 		if (error) {
 			if (errno == ESHUTDOWN) {
 				for (i = 0; i < nfss; i++) {
+					syslog(LOG_INFO, "%s: shutdown",
+					       getprogname());
 					handle_error(fsp, i);
 					assert(nfss == 0);
 				}
-			} else
+			} else {
+#ifdef LFS_CLEANER_AS_LIB
+				error = ESHUTDOWN;
+				break;
+#else
 				err(1, "LFCNSEGWAITALL");
+#endif
+			}
 		}
 	}
 
 	/* NOTREACHED */
-	return 0;
+	return error;
 }

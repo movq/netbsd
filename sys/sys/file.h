@@ -1,4 +1,4 @@
-/*	$NetBSD: file.h,v 1.68 2009/05/17 05:54:42 yamt Exp $	*/
+/*	$NetBSD: file.h,v 1.74 2011/04/24 18:46:24 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -67,7 +67,6 @@
 #include <sys/unistd.h>
 
 #ifdef _KERNEL
-#include <sys/mallocvar.h>
 #include <sys/queue.h>
 #include <sys/mutex.h>
 #include <sys/condvar.h>
@@ -100,7 +99,7 @@ struct file {
 		int	(*fo_stat)	(struct file *, struct stat *);
 		int	(*fo_close)	(struct file *);
 		int	(*fo_kqfilter)	(struct file *, struct knote *);
-		void	(*fo_drain)	(struct file *);
+		void	(*fo_restart)	(struct file *);
 		void	(*fo_spare1)	(void);
 		void	(*fo_spare2)	(void);
 	} *f_ops;
@@ -108,16 +107,7 @@ struct file {
 	LIST_ENTRY(file) f_list;	/* list of active files */
 	kmutex_t	f_lock;		/* lock on structure */
 	int		f_flag;		/* see fcntl.h */
-	u_int		f_unused1;	/* unused; was internal flags; FIF_* */
-#define	DTYPE_VNODE	1		/* file */
-#define	DTYPE_SOCKET	2		/* communications endpoint */
-#define	DTYPE_PIPE	3		/* pipe */
-#define	DTYPE_KQUEUE	4		/* event queue */
-#define	DTYPE_MISC	5		/* misc file descriptor type */
-#define	DTYPE_CRYPTO	6		/* crypto */
-#define	DTYPE_MQUEUE	7		/* message queue */
-#define DTYPE_NAMES \
-    "0", "file", "socket", "pipe", "kqueue", "misc", "crypto", "mqueue"
+	u_int		f_marker;	/* traversal marker (sysctl) */
 	u_int		f_type;		/* descriptor type */
 	u_int		f_advice;	/* access pattern hint; UVM_ADV_* */
 	u_int		f_count;	/* reference count */
@@ -125,6 +115,23 @@ struct file {
 	u_int		f_unpcount;	/* deferred close: see uipc_usrreq.c */
 	SLIST_ENTRY(file) f_unplist;	/* deferred close: see uipc_usrreq.c */
 };
+
+/*
+ * Descriptor types.
+ */
+
+#define	DTYPE_VNODE	1		/* file */
+#define	DTYPE_SOCKET	2		/* communications endpoint */
+#define	DTYPE_PIPE	3		/* pipe */
+#define	DTYPE_KQUEUE	4		/* event queue */
+#define	DTYPE_MISC	5		/* misc file descriptor type */
+#define	DTYPE_CRYPTO	6		/* crypto */
+#define	DTYPE_MQUEUE	7		/* message queue */
+#define	DTYPE_SEM	8		/* semaphore */
+
+#define DTYPE_NAMES	\
+    "0", "file", "socket", "pipe", "kqueue", "misc", "crypto", "mqueue", \
+    "semaphore"
 
 /*
  * Flags for fo_read and fo_write and do_fileread/write/v
@@ -135,7 +142,6 @@ struct file {
 LIST_HEAD(filelist, file);
 extern struct filelist	filehead;	/* head of list of open files */
 extern u_int		maxfiles;	/* kernel limit on # of open files */
-extern u_int		nfiles;		/* actual number of open files */
 
 extern const struct fileops vnops;	/* vnode operations for files */
 
@@ -162,7 +168,7 @@ int	fbadop_write(struct file *, off_t *, struct uio *, kauth_cred_t, int);
 int	fbadop_ioctl(struct file *, u_long, void *);
 int	fbadop_close(struct file *);
 int	fbadop_stat(struct file *, struct stat *);
-void	fnullop_drain(struct file *);
+void	fnullop_restart(struct file *);
 
 #endif /* _KERNEL */
 

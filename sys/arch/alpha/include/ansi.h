@@ -1,4 +1,4 @@
-/* $NetBSD: ansi.h,v 1.22 2009/01/11 02:45:45 christos Exp $ */
+/* $NetBSD: ansi.h,v 1.24 2011/07/17 20:54:36 joerg Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -52,33 +52,11 @@
 #define	_BSD_SIZE_T_		unsigned long	/* sizeof() */
 #define	_BSD_SSIZE_T_		long		/* byte count or error */
 #define	_BSD_TIME_T_		__int64_t	/* time() */
-#if __GNUC_PREREQ__(2, 96)
-#define	_BSD_VA_LIST_		__builtin_va_list /* GCC built-in type */
-#else
-typedef struct {
-	char *__base;
-	int __offset;
-	int __pad;
-} __va_list;
-#define	_BSD_VA_LIST_		__va_list	/* va_list */
-#endif
 #define	_BSD_CLOCKID_T_		int		/* clockid_t */
 #define	_BSD_TIMER_T_		int		/* timer_t */
 #define	_BSD_SUSECONDS_T_	int		/* suseconds_t */
 #define	_BSD_USECONDS_T_	unsigned int	/* useconds_t */
 #define	_BSD_WCHAR_T_	int			/* wchar_t */
 #define _BSD_WINT_T_	int			/* wint_t */
-#define _BSD_WCTRANS_T_	void *			/* wctrans_t */
-#define _BSD_WCTYPE_T_	void *			/* wctype_t */
-
-/*
- * mbstate_t is an opaque object to keep conversion state, during multibyte
- * stream conversions.  The content must not be referenced by user programs.
- */
-typedef union {
-	__int64_t __mbstateL;	/* for alignment */
-	char __mbstate8[128];
-} __mbstate_t;
-#define	_BSD_MBSTATE_T_	__mbstate_t		/* mbstate_t */
 
 #endif	/* _ANSI_H_ */

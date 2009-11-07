@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.38 2008/05/03 05:54:52 yamt Exp $	*/
+/*	$NetBSD: asm.h,v 1.40 2011/06/16 13:16:20 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -85,7 +85,7 @@
 /* let kernels and others override entrypoint alignment */
 #if !defined(_ALIGN_TEXT) && !defined(_KERNEL)
 # ifdef _STANDALONE
-#  define _ALIGN_TEXT .align 4
+#  define _ALIGN_TEXT .align 1
 # elif defined __ELF__
 #  define _ALIGN_TEXT .align 16
 # else
@@ -205,16 +205,14 @@
 
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(_C_LABEL(sym)) ## ,1,0,0,0
-#elif defined(__ELF__)
-#define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(sym),1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(_/**/sym),1,0,0,0
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
 
 #endif /* !_I386_ASM_H_ */

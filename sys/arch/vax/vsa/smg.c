@@ -1,4 +1,4 @@
-/*	$NetBSD: smg.c,v 1.53 2009/10/26 19:16:58 cegger Exp $ */
+/*	$NetBSD: smg.c,v 1.55 2012/01/11 21:26:13 macallan Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,20 +31,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smg.c,v 1.53 2009/10/26 19:16:58 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smg.c,v 1.55 2012/01/11 21:26:13 macallan Exp $");
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
-#include <sys/time.h>
-#include <sys/malloc.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/time.h>
 
 #include <machine/vsbus.h>
 #include <machine/sid.h>
-#include <machine/cpu.h>
 #include <machine/ka420.h>
 
 #include <dev/cons.h>
@@ -247,8 +247,8 @@ smg_attach(device_t parent, device_t self, void *aux)
 	callout_reset(&smg_cursor_ch, hz / 2, smg_crsr_blink, NULL);
 	curcmd = CUR_CMD_HSHI;
 	WRITECUR(CUR_CMD, curcmd);
-	if ((fcookie = wsfont_find(NULL, 8, 15, 0,
-		WSDISPLAY_FONTORDER_R2L, WSDISPLAY_FONTORDER_L2R)) < 0) {
+	if ((fcookie = wsfont_find(NULL, 8, 15, 0, WSDISPLAY_FONTORDER_R2L,
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP)) < 0) {
 		aprint_error_dev(self, "could not find 8x15 font\n");
 		return;
 	}
@@ -595,8 +595,8 @@ smgcninit(struct consdev *cndev)
 	curscr = &smg_conscreen;
 	wsdisplay_cnattach(&smg_stdscreen, &smg_conscreen, 0, 0, 0);
 	cn_tab->cn_pri = CN_INTERNAL;
-	if ((fcookie = wsfont_find(NULL, 8, 15, 0,
-		WSDISPLAY_FONTORDER_R2L, WSDISPLAY_FONTORDER_L2R)) < 0)
+	if ((fcookie = wsfont_find(NULL, 8, 15, 0, WSDISPLAY_FONTORDER_R2L,
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP)) < 0)
 	{
 		printf("smg: could not find 8x15 font\n");
 		return;

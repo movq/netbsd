@@ -1,4 +1,4 @@
-.\"	$NetBSD: fsck.8,v 1.35 2009/10/21 01:07:46 snj Exp $
+.\"	$NetBSD: fsck.8,v 1.38 2011/04/28 12:16:10 wiz Exp $
 .\"
 .\" Copyright (c) 1996 Christos Zoulas.  All rights reserved.
 .\"
@@ -22,7 +22,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 23, 2008
+.Dd February 17, 2010
 .Dt FSCK 8
 .Os
 .Sh NAME
@@ -34,6 +34,7 @@
 .Op Fl l Ar maxparallel
 .Op Fl T Ar fstype:fsoptions
 .Op Fl t Ar fstype
+.Op Fl x Ar mountpoint
 .Op special | node ...
 .Sh DESCRIPTION
 The
@@ -46,7 +47,9 @@ file or in the command line for consistency.
 It is normally used in the script
 .Pa /etc/rc
 during automatic reboot.
-If no file systems are specified, and ``preen'' mode is enabled (
+If no file systems are specified, and
+.Dq preen
+mode is enabled (
 .Fl p
 option)
 .Nm
@@ -111,15 +114,28 @@ then invoke
 for the file system types that are not specified in the list.
 .It Fl v
 Print the commands before executing them.
+.It Fl x Ar mountpoint
+Exclude the filesystem which has a
+.Ar mountpoint
+the same as in
+.Pa /etc/fstab .
+Used only in
+.Dq preen
+mode.
 .It Fl y
 Causes
 .Nm
 to assume yes
 as the answer to all operator questions.
 .El
+.Sh FILES
+.Bl -tag -width /etc/fstab -compact
+.It Pa /etc/fstab
+file system table
+.El
 .Sh EXIT STATUS
 .Nm
-exits with 
+exits with
 .Dv 0
 on success.
 Any major problems will cause
@@ -138,22 +154,18 @@ Re-running
 on the filesystem(s) is required.
 .It Dv 4
 The root filesystem was changed in the process of checking, and updating the
-mount was unsuccessful. A reboot (without sync) is required.
+mount was unsuccessful.
+A reboot (without sync) is required.
 .It Dv 8
 The filesystem check has failed, and a subsequent check is required
 that will require human intervention.
-.It Dv 12 
+.It Dv 12
 .Nm
 exited because of the result of a signal (usually
 .Dv SIGINT
 or
 .Dv SIGQUIT
 from the terminal).
-.El
-.Sh FILES
-.Bl -tag -width /etc/fstab -compact
-.It Pa /etc/fstab
-file system table
 .El
 .Sh SEE ALSO
 .Xr fstab 5 ,

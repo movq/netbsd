@@ -1,4 +1,4 @@
-/*	$NetBSD: bonito_mainbus.c,v 1.11 2008/04/28 20:23:10 martin Exp $	*/
+/*	$NetBSD: bonito_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,18 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.11 2008/04/28 20:23:10 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $");
 
 #include "opt_algor_p6032.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/reboot.h>
 #include <sys/device.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
+#include <algor/autoconf.h>
 
 #include <mips/bonito/bonitoreg.h>
 
@@ -94,7 +94,7 @@ bonito_mainbus_attach(struct device *parent, struct device *self, void *aux)
 	    BONITO_REV_FPGA(rev) ? "FPGA" : "ASIC",
 	    BONITO_REV_MAJOR(rev), BONITO_REV_MINOR(rev));
 
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 

@@ -1,4 +1,5 @@
-/*	$Id: order.c,v 1.1.1.1 2009/09/04 00:27:30 gmcgarry Exp $	*/
+/*	Id: order.c,v 1.14 2011/02/18 17:08:31 ragge Exp 	*/	
+/*	$NetBSD: order.c,v 1.1.1.3 2011/09/01 12:46:28 plunky Exp $	*/
 /*
  * Copyright (c) 2008 Michael Shalayeff
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
@@ -44,59 +45,142 @@ notoff(TWORD t, int r, CONSZ off, char *cp)
 }
 
 /*
+ * Check if LS and try to make it indexable.
+ * Ignore SCONV to long.
+ * Return 0 if failed.
+ */
+static int
+findls(NODE *p, int check)
+{
+	CONSZ c;
+
+	if (p->n_op == SCONV && p->n_type == LONG && p->n_left->n_type == INT)
+		p = p->n_left; /* Ignore pointless SCONVs here */
+	if (p->n_op != LS || p->n_right->n_op != ICON)
+		return 0;
+	if ((c = p->n_right->n_lval) != 1 && c != 2 && c != 3)
+		return 0;
+	if (check == 1 && p->n_left->n_op != REG)
+		return 0;
+	if (!isreg(p->n_left))
+		(void)geninsn(p->n_left, INAREG);
+	return 1;
+}
+
+/*
  * Turn a UMUL-referenced node into OREG.
  * Be careful about register classes, this is a place where classes change.
+ *
+ * AMD64 (and i386) have a quite powerful addressing scheme:
+ * 	:	4(%rax)		4 + %rax
+ * 	:	4(%rbx,%rax,8)	4 + %rbx + %rax * 8
+ * 	:	4(,%rax)	4 + %rax * 8
+ * The 8 above can be 1,2,4 or 8.
  */
 void
 offstar(NODE *p, int shape)
 {
-	NODE *r;
+	NODE *l;
 
-	if (x2debug)
+	if (x2debug) {
 		printf("offstar(%p)\n", p);
+		fwalk(p, e2print, 0);
+	}
 
 	if (isreg(p))
-		return; /* Is already OREG */
+		return; /* Matched (%rax) */
 
-	r = p->n_right;
-	if( p->n_op == PLUS || p->n_op == MINUS ){
-		if( r->n_op == ICON ){
-			if (isreg(p->n_left) == 0)
-				(void)geninsn(p->n_left, INAREG);
-			/* Converted in ormake() */
-			return;
+	if (findls(p, 0))
+		return; /* Matched (,%rax,8) */
+
+	if ((p->n_op == PLUS || p->n_op == MINUS) && p->n_left->n_op == ICON) {
+		l = p->n_right;
+		if (isreg(l))
+			return; /* Matched 4(%rax) */
+		if (findls(l, 0))
+			return; /* Matched 4(,%rax,8) */
+		if (l->n_op == PLUS && isreg(l->n_right)) {
+			if (findls(l->n_left, 0))
+				return; /* Matched 4(%rbx,%rax,8) */
+			(void)geninsn(l->n_left, INAREG);
+			return; /* Generate 4(%rbx,%rax) */
 		}
-		if (r->n_op == LS && r->n_right->n_op == ICON &&
-		    r->n_right->n_lval == 2 && p->n_op == PLUS) {
-			if (isreg(p->n_left) == 0)
-				(void)geninsn(p->n_left, INAREG);
-			if (isreg(r->n_left) == 0)
-				(void)geninsn(r->n_left, INAREG);
-			return;
-		}
+		(void)geninsn(l, INAREG);
+		return; /* Generate 4(%rbx) */
 	}
+
+	if (p->n_op == PLUS) {
+		if (!isreg(p->n_left)) /* ensure right is REG */
+			(void)geninsn(p->n_left, INAREG);
+		if (isreg(p->n_right))
+			return; /* Matched (%rax,%rbx) */
+		if (findls(p->n_right, 0))
+			return; /* Matched (%rax,%rbx,4) */
+		(void)geninsn(p->n_right, INAREG);
+		return; /* Generate (%rbx,%rax) */
+	}
+		
 	(void)geninsn(p, INAREG);
 }
 
 /*
  * Do the actual conversion of offstar-found OREGs into real OREGs.
+ * For simple OREGs conversion should already be done.
  */
 void
 myormake(NODE *q)
 {
+	static int shtbl[] = { 1,2,4,8 };
 	NODE *p, *r;
+	CONSZ c = 0;
+	int r1, r2, sh;
+	int mkconv = 0;
+	char *n = "";
 
-	if (x2debug)
+#define	risreg(p)	(p->n_op == REG)
+	if (x2debug) {
 		printf("myormake(%p)\n", q);
+		fwalk(q, e2print, 0);
+	}
+	r1 = r2 = MAXREGS;
+	sh = 1;
 
-	p = q->n_left;
-	if (p->n_op == PLUS && (r = p->n_right)->n_op == LS &&
-	    r->n_right->n_op == ICON && r->n_right->n_lval == 2 &&
-	    p->n_left->n_op == REG && r->n_left->n_op == REG) {
-		q->n_op = OREG;
-		q->n_lval = 0;
-		q->n_rval = R2PACK(p->n_left->n_rval, r->n_left->n_rval, 0);
-		tfree(p);
+	r = p = q->n_left;
+
+	if ((p->n_op == PLUS || p->n_op == MINUS) && p->n_left->n_op == ICON) {
+		c = p->n_left->n_lval;
+		n = p->n_left->n_name;
+		p = p->n_right;
+	}
+
+	if (p->n_op == PLUS && risreg(p->n_left)) {
+		r1 = regno(p->n_left);
+		p = p->n_right;
+	}
+
+	if (findls(p, 1)) {
+		if (p->n_op == SCONV)
+			p = p->n_left;
+		sh = shtbl[(int)p->n_right->n_lval];
+		r2 = regno(p->n_left);
+		mkconv = 1;
+	} else if (risreg(p)) {
+		r2 = regno(p);
+		mkconv = 1;
+	} //else
+	//	comperr("bad myormake tree");
+
+	if (mkconv == 0)
+		return;
+
+	q->n_op = OREG;
+	q->n_lval = c;
+	q->n_rval = R2PACK(r1, r2, sh);
+	q->n_name = n;
+	tfree(r);
+	if (x2debug) {
+		printf("myormake converted %p\n", q);
+		fwalk(q, e2print, 0);
 	}
 }
 
@@ -173,7 +257,13 @@ nspecial(struct optab *q)
 		break;
 
 	case MOD:
-		{
+		if (q->ltype & TUCHAR) {
+			static struct rspecial s[] = {
+				{ NEVER, RAX },
+				{ NLEFT, RAX }, { NRES, RAX },
+				{ NORIGHT, RAX }, { 0 } };
+			return s;
+		} else {
 			static struct rspecial s[] = {
 				{ NEVER, RAX }, { NEVER, RDX },
 				{ NLEFT, RAX }, { NRES, RDX },
@@ -182,39 +272,34 @@ nspecial(struct optab *q)
 		}
 		break;
 
-	case STASG:
 	case STARG:
 		{
 			static struct rspecial s[] = {
-				{ NEVER, RAX }, { NEVER, RDX },
-				{ NEVER, RCX }, { NEVER, RSI },
-				{ NEVER, RDI }, { NEVER, R08 },
-				{ NEVER, R09 }, { NEVER, R10 },
-				{ NEVER, R11 }, { 0 } };
+				{ NEVER, RDI }, 
+				{ NLEFT, RSI },
+				{ NEVER, RCX }, { 0 } };
 			return s;
 		}
 
-#if 0
-	case OPLOG:
+	case STASG:
 		{
-			static struct rspecial s[] = { { NEVER, EAX }, { 0 } };
+			static struct rspecial s[] = {
+				{ NEVER, RDI }, 
+				{ NRIGHT, RSI }, { NOLEFT, RSI },
+				{ NOLEFT, RCX }, { NORIGHT, RCX },
+				{ NEVER, RCX }, { 0 } };
 			return s;
 		}
 
 	case MUL:
-		if (q->lshape == SBREG) {
+		if (q->lshape == SAREG) {
 			static struct rspecial s[] = {
-				{ NEVER, AL }, { NEVER, AH },
-				{ NLEFT, AL }, { NRES, AL }, { 0 } };
-			return s;
-		} else if (q->lshape & SCREG) {
-			static struct rspecial s[] = {
-				{ NEVER, EAX }, { NEVER, EDX },
-				{ NEVER, ECX }, { NRES, RAX }, { 0 } };
+				{ NEVER, RAX },
+				{ NLEFT, RAX }, { NRES, RAX }, { 0 } };
 			return s;
 		}
 		break;
-#endif
+
 	case LS:
 	case RS:
 		{
@@ -246,20 +331,22 @@ setorder(NODE *p)
 int *
 livecall(NODE *p)
 {
-	static int r[] = { R09, R08, RCX, RDX, RSI, RDI, -1 };
+	static int r[NTEMPREG+1];
+	NODE *q;
+	int cr = 0;
+
+	if (optype(p->n_op) != BITYPE)
+		return r[0] = -1, r;
+
+	for (q = p->n_right; q->n_op == CM; q = q->n_left) {
+		if (q->n_right->n_op == ASSIGN &&
+		    q->n_right->n_left->n_op == REG)
+			r[cr++] = regno(q->n_right->n_left);
+	}
+	if (q->n_op == ASSIGN && q->n_left->n_op == REG)
+		r[cr++] = regno(q->n_left);
+	r[cr++] = -1;
 	return r;
-#if 0
-	static int r[] = { EAX, EBX, -1 };
-	int off = 1;
-
-#ifdef TLS
-	if (p->n_left->n_op == ICON &&
-	    strcmp(p->n_left->n_name, "___tls_get_addr@PLT") == 0)
-		off--;
-#endif
-
-	return kflag ? &r[off] : &r[2];
-#endif
 }
 
 /*

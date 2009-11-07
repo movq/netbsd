@@ -1,4 +1,4 @@
-/*	$NetBSD: db_xxx.c,v 1.62 2009/07/19 02:37:33 rmind Exp $	*/
+/*	$NetBSD: db_xxx.c,v 1.66 2011/12/03 16:25:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_xxx.c,v 1.62 2009/07/19 02:37:33 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_xxx.c,v 1.66 2011/12/03 16:25:49 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_kgdb.h"
@@ -80,8 +80,60 @@ void
 db_kill_proc(db_expr_t addr, bool haddr,
     db_expr_t count, const char *modif)
 {
+#ifdef _KERNEL	/* XXX CRASH(8) */
+	struct proc *p;
+	ksiginfo_t	ksi;
+	db_expr_t pid, sig;
+	int t;
 
+	/* What pid? */
+	if (!db_expression(&pid)) {
+	       db_error("pid?\n");
+	       /*NOTREACHED*/
+	}
+	/* What sig? */
+	t = db_read_token();
+	if (t == tCOMMA) {
+	       if (!db_expression(&sig)) {
+		       db_error("sig?\n");
+		       /*NOTREACHED*/
+	       }
+	} else {
+	       db_unread_token(t);
+	       sig = 15;
+	}
+	if (db_read_token() != tEOL) {
+	       db_error("?\n");
+	       /*NOTREACHED*/
+	}
+	/* We might stop when the mutex is held or when not */
+	t = mutex_tryenter(proc_lock);
+#ifdef DIAGNOSTIC
+	if (!t) {
+	       db_error("could not acquire proc_lock mutex\n");
+	       /*NOTREACHED*/
+	}
+#endif
+	p = proc_find((pid_t)pid);
+	if (p == NULL) {
+		if (t)
+			mutex_exit(proc_lock);
+		db_error("no such proc\n");
+		/*NOTREACHED*/
+	}
+	KSI_INIT(&ksi);
+	ksi.ksi_signo = sig;
+	ksi.ksi_code = SI_USER;
+	ksi.ksi_pid = 0;
+	ksi.ksi_uid = 0;
+	mutex_enter(p->p_lock);
+	kpsignal2(p, &ksi);
+	mutex_exit(p->p_lock);
+	if (t)
+		mutex_exit(proc_lock);
+#else
 	db_printf("This command is not currently supported.\n");
+#endif
 }
 
 #ifdef KGDB
@@ -130,7 +182,7 @@ db_show_files_cmd(db_expr_t addr, bool haddr,
 
 #ifdef LOCKDEBUG
 				db_printf("\nv_uobj.vmobjlock lock details:\n");
-				lockdebug_lock_print(&(vn->v_uobj.vmobjlock),
+				lockdebug_lock_print(vn->v_uobj.vmobjlock,
 					     db_printf);
 				db_printf("\n");
 #endif

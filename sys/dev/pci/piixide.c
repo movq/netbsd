@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.51 2009/10/19 18:41:16 bouyer Exp $	*/
+/*	$NetBSD: piixide.c,v 1.57.10.1 2012/03/07 23:33:10 riz Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.51 2009/10/19 18:41:16 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.57.10.1 2012/03/07 23:33:10 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,17 +36,19 @@ __KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.51 2009/10/19 18:41:16 bouyer Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_piix_reg.h>
 
-static void piix_chip_map(struct pciide_softc*, struct pci_attach_args *);
+static void piix_chip_map(struct pciide_softc*,
+    const struct pci_attach_args *);
 static void piix_setup_channel(struct ata_channel *);
 static void piix3_4_setup_channel(struct ata_channel *);
 static u_int32_t piix_setup_idetim_timings(u_int8_t, u_int8_t, u_int8_t);
 static u_int32_t piix_setup_idetim_drvs(struct ata_drive_datas *);
 static u_int32_t piix_setup_sidetim_timings(u_int8_t, u_int8_t, u_int8_t);
-static void piixsata_chip_map(struct pciide_softc*, struct pci_attach_args *);
+static void piixsata_chip_map(struct pciide_softc*,
+    const struct pci_attach_args *);
 static int piix_dma_init(void *, int, int, void *, size_t, int);
 
-static bool piixide_resume(device_t PMF_FN_PROTO);
-static bool piixide_suspend(device_t PMF_FN_PROTO);
+static bool piixide_resume(device_t, const pmf_qual_t *);
+static bool piixide_suspend(device_t, const pmf_qual_t *);
 static int  piixide_match(device_t, cfdata_t, void *);
 static void piixide_attach(device_t, device_t, void *);
 
@@ -261,30 +263,96 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  "Intel 631xESB/632xESB Serial ATA Controller",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_ICH10_SATA2_2x1,
+	{ PCI_PRODUCT_INTEL_82801JD_SATA_IDE2,
 	  0,
-	  "Intel ICH10 Serial ATA 2 Controller 2x1",
+	  "Intel 82801JD Serial ATA Controller (ICH10)",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_ICH10_SATA2_2x2,
+	{ PCI_PRODUCT_INTEL_82801JI_SATA_IDE2,
 	  0,
-	  "Intel ICH10 Serial ATA 2 Controller 2x2",
+	  "Intel 82801JI Serial ATA Controller (ICH10)",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_ICH10_SATA2_4x1,
+	{ PCI_PRODUCT_INTEL_82801JD_SATA_IDE,
 	  0,
-	  "Intel ICH10 Serial ATA 2 Controller 4x1",
+	  "Intel 82801JD Serial ATA Controller (ICH10)",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_ICH10_SATA2_4x2,
+	{ PCI_PRODUCT_INTEL_82801JI_SATA_IDE,
 	  0,
-	  "Intel ICH10 Serial ATA 2 Controller 4x2",
+	  "Intel 82801JI Serial ATA Controller (ICH10)",
 	  piixsata_chip_map,
 	},
 	{
 	  PCI_PRODUCT_INTEL_82965PM_IDE,
 	  0,
 	  "Intel 82965PM IDE controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_1,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_1,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_2,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_3,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_4,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_5,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_6,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_6SERIES_SATA_1,
+	  0,
+	  "Intel 6 Series Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_6SERIES_SATA_2,
+	  0,
+	  "Intel 6 Series Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_6SERIES_SATA_3,
+	  0,
+	  "Intel 6 Series Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_6SERIES_SATA_4,
+	  0,
+	  "Intel 6 Series Serial ATA Controller",
 	  piixsata_chip_map,
 	},
 	{ 0,
@@ -325,7 +393,7 @@ piixide_attach(device_t parent, device_t self, void *aux)
 }
 
 static bool
-piixide_resume(device_t dv PMF_FN_ARGS)
+piixide_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pciide_softc *sc = device_private(dv);
 
@@ -338,7 +406,7 @@ piixide_resume(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-piixide_suspend(device_t dv PMF_FN_ARGS)
+piixide_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pciide_softc *sc = device_private(dv);
 
@@ -351,12 +419,11 @@ piixide_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static void
-piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+piix_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	u_int32_t idetim;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
 
 	if (pciide_chipen(sc, pa) == 0)
@@ -481,8 +548,7 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			    channel, idetim, interface);
 #endif
 		}
-		pciide_mapchan(pa, cp, interface,
-		    &cmdsize, &ctlsize, pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 
 	ATADEBUG_PRINT(("piix_setup_chip: idetim=0x%x",
@@ -849,10 +915,9 @@ piix_setup_sidetim_timings(u_int8_t mode, u_int8_t dma, u_int8_t channel)
 }
 
 static void
-piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+piixsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface, cmdsts;
 	int channel;
 
@@ -896,8 +961,7 @@ piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }
 

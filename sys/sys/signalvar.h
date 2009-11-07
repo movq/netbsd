@@ -1,4 +1,4 @@
-/*	$NetBSD: signalvar.h,v 1.75 2009/01/11 02:45:55 christos Exp $	*/
+/*	$NetBSD: signalvar.h,v 1.82 2011/11/18 03:34:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -31,7 +31,7 @@
  *	@(#)signalvar.h	8.6 (Berkeley) 2/19/95
  */
 
-#ifndef	_SYS_SIGNALVAR_H_		/* tmp for user.h */
+#ifndef	_SYS_SIGNALVAR_H_
 #define	_SYS_SIGNALVAR_H_
 
 #include <sys/siginfo.h>
@@ -120,7 +120,7 @@ typedef struct sigstore {
 
 #include <sys/systm.h>			/* for copyin_t/copyout_t */
 
-extern sigset_t contsigmask, stopsigmask, sigcantmask;
+extern sigset_t contsigmask, sigcantmask;
 
 struct vnode;
 
@@ -129,8 +129,6 @@ struct vnode;
  */
 int	coredump_netbsd(struct lwp *, void *);
 void	execsigs(struct proc *);
-void	gsignal(int, int);
-void	kgsignal(int, struct ksiginfo *, void *);
 int	issignal(struct lwp *);
 void	pgsignal(struct pgrp *, int, int);
 void	kpgsignal(struct pgrp *, struct ksiginfo *, void *, int);
@@ -150,6 +148,8 @@ int	sigaction1(struct lwp *, int, const struct sigaction *,
 	    struct sigaction *, const void *, int);
 int	sigprocmask1(struct lwp *, int, const sigset_t *, sigset_t *);
 void	sigpending1(struct lwp *, sigset_t *);
+void	sigsuspendsetup(struct lwp *, const sigset_t *);
+void	sigsuspendteardown(struct lwp *);
 int	sigsuspend1(struct lwp *, const sigset_t *);
 int	sigaltstack1(struct lwp *, const struct sigaltstack *,
 	    struct sigaltstack *);
@@ -179,8 +179,8 @@ void	ksiginfo_free(ksiginfo_t *);
 void	ksiginfo_queue_drain0(ksiginfoq_t *);
 
 struct sys_____sigtimedwait50_args;
-int	__sigtimedwait1(struct lwp *, const struct sys_____sigtimedwait50_args *,
-    register_t *, copyout_t, copyin_t, copyout_t);
+int	sigtimedwait1(struct lwp *, const struct sys_____sigtimedwait50_args *,
+    register_t *, copyin_t, copyout_t, copyin_t, copyout_t);
 
 void	signotify(struct lwp *);
 int	sigispending(struct lwp *, int);

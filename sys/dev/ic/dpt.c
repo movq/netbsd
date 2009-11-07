@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt.c,v 1.63 2009/10/21 21:12:05 rmind Exp $	*/
+/*	$NetBSD: dpt.c,v 1.66 2011/08/07 13:39:24 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.63 2009/10/21 21:12:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.66 2011/08/07 13:39:24 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,8 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.63 2009/10/21 21:12:05 rmind Exp $");
 #include <sys/conf.h>
 #include <sys/kauth.h>
 #include <sys/proc.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/mutex.h>
 
 #include <sys/bus.h>
 #ifdef i386
@@ -332,6 +331,7 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 	ec = &sc->sc_ec;
 	snprintf(dpt_sig.dsDescription, sizeof(dpt_sig.dsDescription),
 	    "NetBSD %s DPT driver", osrelease);
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	/*
 	 * Allocate the CCB/status packet/scratch DMA map and load.
@@ -537,7 +537,7 @@ dpt_readcfg(struct dpt_softc *sc)
 	 */
 	dpt_outb(sc, HA_COMMAND, CP_PIO_GETCFG);
 	memset(ec, 0, sizeof(*ec));
-	i = ((int)&((struct eata_cfg *)0)->ec_cfglen +
+	i = ((int)(uintptr_t)&((struct eata_cfg *)0)->ec_cfglen +
 	    sizeof(ec->ec_cfglen)) >> 1;
 	p = (u_int16_t *)ec;
 
@@ -552,13 +552,13 @@ dpt_readcfg(struct dpt_softc *sc)
 		*p++ = bus_space_read_stream_2(sc->sc_iot, sc->sc_ioh, HA_DATA);
 
 	if ((i = ec->ec_cfglen) > (sizeof(struct eata_cfg)
-	    - (int)(&(((struct eata_cfg *)0L)->ec_cfglen))
+	    - (int)(uintptr_t)(&(((struct eata_cfg *)0L)->ec_cfglen))
 	    - sizeof(ec->ec_cfglen)))
 		i = sizeof(struct eata_cfg)
-		  - (int)(&(((struct eata_cfg *)0L)->ec_cfglen))
+		  - (int)(uintptr_t)(&(((struct eata_cfg *)0L)->ec_cfglen))
 		  - sizeof(ec->ec_cfglen);
 
-	j = i + (int)(&(((struct eata_cfg *)0L)->ec_cfglen)) +
+	j = i + (int)(uintptr_t)(&(((struct eata_cfg *)0L)->ec_cfglen)) +
 	    sizeof(ec->ec_cfglen);
 	i >>= 1;
 
@@ -1158,13 +1158,10 @@ dptioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			return (EINVAL);
 		}
 
-		if (sc->sc_uactive++)
-			tsleep(&sc->sc_uactive, PRIBIO, "dptslp", 0);
-
+		mutex_enter(&sc->sc_lock);
 		rv = dpt_passthrough(sc, (struct eata_ucp *)data, l);
+		mutex_exit(&sc->sc_lock);
 
-		sc->sc_uactive--;
-		wakeup_one(&sc->sc_uactive);
 		return (rv);
 
 	default:

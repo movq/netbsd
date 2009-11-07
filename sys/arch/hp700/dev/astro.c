@@ -1,4 +1,4 @@
-/*	$NetBSD: astro.c,v 1.5 2009/05/08 09:33:57 skrll Exp $	*/
+/*	$NetBSD: astro.c,v 1.14 2012/01/27 18:52:55 para Exp $	*/
 
 /*	$OpenBSD: astro.c,v 1.8 2007/10/06 23:50:54 krw Exp $	*/
 
@@ -26,7 +26,7 @@
 #include <sys/reboot.h>
 #include <sys/tree.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
@@ -156,7 +156,7 @@ struct iommu_map_state {
 
 int	astro_match(device_t, cfdata_t, void *);
 void	astro_attach(device_t, device_t, void *);
-static void astro_callback(device_t self, struct confargs *ca);
+static device_t astro_callback(device_t self, struct confargs *ca);
 
 CFATTACH_DECL_NEW(astro, sizeof(struct astro_softc),
     astro_match, astro_attach, NULL, NULL);
@@ -232,6 +232,7 @@ astro_attach(device_t parent, device_t self, void *aux)
 	psize_t size;
 	vaddr_t va;
 	paddr_t pa;
+	void *p;
 	struct vm_page *m;
 	struct pglist mlist;
 	int iova_bits;
@@ -244,8 +245,8 @@ astro_attach(device_t parent, device_t self, void *aux)
 		aprint_error(": can't map IO space\n");
 		return;
 	}
-	sc->sc_regs = r = (struct astro_regs *)ca->ca_hpa;
-
+	p = bus_space_vaddr(ca->ca_iot, ioh);
+	sc->sc_regs = r = p;
 	rid = le32toh(r->rid);
 	aprint_normal(": Astro rev %d.%d\n", (rid & 7) + 1, (rid >> 3) & 3);
 
@@ -278,13 +279,17 @@ astro_attach(device_t parent, device_t self, void *aux)
 
 	size = (1 << (iova_bits - PAGE_SHIFT)) * sizeof(uint64_t);
 	TAILQ_INIT(&mlist);
-	if (uvm_pglistalloc(size, 0, -1, PAGE_SIZE, 0, &mlist, 1, 0) != 0)
-		panic("astrottach: no memory");
+	if (uvm_pglistalloc(size, 0, -1, PAGE_SIZE, 0, &mlist, 1, 0) != 0) {
+		aprint_error(": can't allocate PDIR\n");
+		return;
+	}
 
 	va = uvm_km_alloc(kernel_map, size, 0, UVM_KMF_VAONLY | UVM_KMF_NOWAIT);
 
-	if (va == 0)
-		panic("astroattach: no memory");
+	if (va == 0) {
+		aprint_error(": can't map PDIR\n");
+		return;
+	}
 	sc->sc_pdir = (uint64_t *)va;
 
 	m = TAILQ_FIRST(&mlist);
@@ -311,7 +316,7 @@ astro_attach(device_t parent, device_t self, void *aux)
 	 */
 	pagezero_cookie = hp700_pagezero_map();
 	if (PAGE0->mem_cons.pz_class != PCL_DUPLEX)
-		pdc_call((iodcio_t)pdc, 0, PDC_IO, PDC_IO_RESET_DEVICES);
+		pdcproc_ioreset();
 	hp700_pagezero_unmap(pagezero_cookie);
 
 	/* Enable iova space. */
@@ -323,24 +328,23 @@ astro_attach(device_t parent, device_t self, void *aux)
 	snprintf(sc->sc_dvmamapname, sizeof(sc->sc_dvmamapname),
 	    "%s_dvma", device_xname(sc->sc_dv));
 	sc->sc_dvmamap = extent_create(sc->sc_dvmamapname, 0, (1 << iova_bits),
-	    M_DEVBUF, 0, 0, EX_NOWAIT);
+	    0, 0, EX_NOWAIT);
 
 	sc->sc_dmatag = astro_dmat;
 	sc->sc_dmatag._cookie = sc;
 
 	nca = *ca;	/* clone from us */
-// 	nca.ca_hpamask = HPPA_IOBEGIN;
 	nca.ca_dmatag = &sc->sc_dmatag;
-	nca.ca_hpabase = 0; /* HPPA_UNDEF */
+	nca.ca_hpabase = IOMOD_IO_IO_LOW(p);
 	nca.ca_nmodules = MAXMODBUS;
 	pdc_scanbus(self, &nca, astro_callback);
 }
 
-static void
+static device_t
 astro_callback(device_t self, struct confargs *ca)
 {
 
-	config_found_sm_loc(self, "gedoens", NULL, ca, mbprint, mbsubmatch);
+	return config_found_sm_loc(self, "gedoens", NULL, ca, mbprint, mbsubmatch);
 }
 
 int
@@ -715,7 +719,7 @@ iommu_enter(struct astro_softc *sc, bus_addr_t dva, paddr_t pa, vaddr_t va,
 	uint64_t tte;
 	uint32_t ci;
 
-#ifdef DEBUG
+#ifdef ASTRODEBUG
 	printf("iommu_enter dva %lx, pa %lx, va %lx\n", dva, pa, va);
 #endif
 
@@ -730,14 +734,13 @@ iommu_enter(struct astro_softc *sc, bus_addr_t dva, paddr_t pa, vaddr_t va,
 	}
 #endif
 
-	mtsp(HPPA_SID_KERNEL, 1);
-	__asm volatile("lci 0(%%sr1, %1), %0" : "=r" (ci) : "r" (va));
+	ci = lci(HPPA_SID_KERNEL, va);
 
 	tte = (pa & IOTTE_PAMASK) | ((ci >> 12) & IOTTE_CI);
 	tte |= IOTTE_V;
 
 	*tte_ptr = htole64(tte);
-	__asm volatile("fdc 0(%%sr1, %0)\n\tsync" : : "r" (tte_ptr));
+	fdcache(HPPA_SID_KERNEL, (vaddr_t)tte_ptr, sizeof(*tte_ptr));
 }
 
 /*

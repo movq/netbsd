@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_node.c,v 1.42 2009/10/19 19:12:06 pooka Exp $	*/
+/*	$NetBSD: smbfs_node.c,v 1.47 2011/06/12 03:35:54 rmind Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.42 2009/10/19 19:12:06 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.47 2011/06/12 03:35:54 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,8 +112,11 @@ smbfs_node_alloc(struct mount *mp, struct vnode *dvp,
 		if (dvp == NULL)
 			return EINVAL;
 		vp = VTOSMB(VTOSMB(dvp)->n_parent)->n_vnode;
-		if ((error = vget(vp, LK_EXCLUSIVE | LK_RETRY)) == 0)
+		vref(vp);
+		if ((error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY)) == 0)
 			*vpp = vp;
+		else
+			vrele(vp);
 		return (error);
 	}
 
@@ -132,9 +135,9 @@ retry:
 		    || memcmp(name, np->n_name, nmlen) != 0)
 			continue;
 		vp = SMBTOV(np);
-		mutex_enter(&(vp)->v_interlock);
+		mutex_enter((vp)->v_interlock);
 		mutex_exit(&smp->sm_hashlock);
-		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK) != 0)
+		if (vget(vp, LK_EXCLUSIVE) != 0)
 			goto retry;
 		*vpp = vp;
 		return (0);
@@ -151,7 +154,7 @@ retry:
 	np = pool_get(&smbfs_node_pool, PR_WAITOK);
 	memset(np, 0, sizeof(*np));
 
-	error = getnewvnode(VT_SMBFS, mp, smbfs_vnodeop_p, &vp);
+	error = getnewvnode(VT_SMBFS, mp, smbfs_vnodeop_p, NULL, &vp);
 	if (error) {
 		pool_put(&smbfs_node_pool, np);
 		return error;
@@ -251,7 +254,6 @@ smbfs_reclaim(void *v)
 
 	LIST_REMOVE(np, n_hash);
 
-	cache_purge(vp);
 	if (smp->sm_root == np) {
 		SMBVDEBUG0("root vnode\n");
 		smp->sm_root = NULL;
@@ -305,7 +307,7 @@ smbfs_inactive(void *v)
 		np->n_flag &= ~NOPEN;
 		smbfs_attr_cacheremove(vp);
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	*ap->a_recycle = false; /* XXX: should set the value properly */
 

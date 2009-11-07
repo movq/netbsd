@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.29 2008/09/20 18:29:06 tsutsui Exp $
+#	$NetBSD: genassym.cf,v 1.33 2011/01/14 02:06:33 rmind Exp $
 
 #
 # Copyright (c) 1982, 1990, 1993
@@ -41,7 +41,6 @@ include <sys/proc.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
 include <sys/syscall.h>
-include <sys/user.h>
 
 include <uvm/uvm.h>
 
@@ -52,7 +51,7 @@ endif
 
 include <machine/cpu.h>
 include <machine/psl.h>
-include <machine/reg.h>
+include <machine/pcb.h>
 include <machine/pte.h>
 include <machine/bootinfo.h>
 
@@ -104,7 +103,7 @@ define	PGSHIFT			PGSHIFT
 define	USRSTACK		USRSTACK
 
 # lwp & proc fields and values
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_PRIORITY		offsetof(struct lwp, l_priority)
 define	L_STAT			offsetof(struct lwp, l_stat)
 define	L_WCHAN			offsetof(struct lwp, l_wchan)
@@ -122,7 +121,7 @@ define	LSRUN			LSRUN
 define	LSONPROC		LSONPROC
 
 # interrupt/fault metering
-define	UVMEXP_INTRS		offsetof(struct uvmexp, intrs)
+define	CI_NINTR		offsetof(struct cpu_info, ci_data.cpu_nintr)
 
 define	T_BUSERR		T_BUSERR
 define	T_ADDRERR		T_ADDRERR

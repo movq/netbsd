@@ -1,4 +1,4 @@
-.\"	$NetBSD: ifconfig.8,v 1.101 2009/09/14 10:36:49 degroote Exp $
+.\"	$NetBSD: ifconfig.8,v 1.104 2012/01/28 15:01:44 mbalmer Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ifconfig.8	8.4 (Berkeley) 6/1/94
 .\"
-.Dd August 7, 2009
+.Dd January 28, 2012
 .Dt IFCONFIG 8
 .Os
 .Sh NAME
@@ -502,7 +502,7 @@ The
 .Fl v
 flag may be used to display long SSIDs.
 .Fl v
-also causes received information elements to be displayed symbolicaly.
+also causes received information elements to be displayed symbolically.
 Only the super-user can use this command.
 .It Cm tunnel Ar src_addr Ns Op Ar ,src_port
 .Ar dest_addr Ns Op Ar ,dest_port
@@ -569,6 +569,13 @@ Refer to the man page for the specific driver
 for more information.
 .It Fl link[0-2]
 Disable special processing at the link level with the specified interface.
+.It Cm linkstr
+Set a link-level string parameter for the interface.
+This functionality varies from interface to interface.
+Refer to the man page for the specific driver
+for more information.
+.It Fl linkstr
+Remove an interface link-level string parameter.
 .It Cm up
 Mark an interface ``up''.
 This may be used to enable an interface after an ``ifconfig down.''
@@ -798,6 +805,12 @@ flag may be used instead of an interface name.
 This flag instructs
 .Nm
 to display information about all interfaces in the system.
+This is also the default behaviour when no arguments are given to
+.Nm
+on the command line.
+When
+.Fl a
+is used, the output can be modified by adding more flags:
 .Fl d
 limits this to interfaces that are down,
 .Fl u

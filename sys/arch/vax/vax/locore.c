@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.c,v 1.76 2009/01/22 18:49:03 christos Exp $	*/
+/*	$NetBSD: locore.c,v 1.80 2011/07/03 02:18:21 matt Exp $	*/
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -32,26 +32,20 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore.c,v 1.76 2009/01/22 18:49:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.c,v 1.80 2011/07/03 02:18:21 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
-#include <sys/reboot.h>
-#include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/reboot.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
 #include <machine/sid.h>
-#include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pcb.h>
-#include <machine/pte.h>
-#include <machine/pmap.h>
 #include <machine/nexus.h>
 #include <machine/rpb.h>
 
@@ -62,7 +56,6 @@ void	main(void);
 
 extern	paddr_t avail_end;
 paddr_t esym;
-struct user *proc0paddr;
 
 /*
  * The strict CPU-dependent information is set up here, in
@@ -100,6 +93,7 @@ _start(struct rpb *prpb)
 {
 	extern uintptr_t scratch;
 	struct pte *pt;
+	vaddr_t uv;
 
 	mtpr(AST_NO, PR_ASTLVL); /* Turn off ASTs */
 
@@ -319,15 +313,17 @@ _start(struct rpb *prpb)
 	 *
 	 * In post-1.4 a RPB is always provided from the boot blocks.
 	 */
+	uv = uvm_lwp_getuarea(&lwp0);
+	uv += REDZONEADDR;
 #if defined(COMPAT_14)
 	if (prpb == 0) {
-		memset((char *)proc0paddr + REDZONEADDR, 0, sizeof(struct rpb));
-		prpb = (struct rpb *)(proc0paddr + REDZONEADDR);
+		memset((void *)uv, 0, sizeof(struct rpb));
+		prpb = (struct rpb *)uv;
 		prpb->pfncnt = avail_end >> VAX_PGSHIFT;
 		prpb->rpb_base = (void *)-1;	/* RPB is fake */
 	} else
 #endif
-	memcpy((char *)proc0paddr + REDZONEADDR, prpb, sizeof(struct rpb));
+	memcpy((void *)uv, prpb, sizeof(struct rpb));
 	if (prpb->pfncnt)
 		avail_end = prpb->pfncnt << VAX_PGSHIFT;
 	else
@@ -337,15 +333,13 @@ _start(struct rpb *prpb)
 
 	avail_end &= ~PGOFSET; /* be sure */
 
-	lwp0.l_addr = (void *)proc0paddr; /* XXX */
-
 	pmap_bootstrap();
 
 	/* Now running virtual. set red zone for proc0 */
-	pt = kvtopte((u_int)lwp0.l_addr + REDZONEADDR);
+	pt = kvtopte(uv);
 	pt->pg_v = 0;
 
-	((struct pcb *)proc0paddr)->framep = (void *)scratch;
+	lwp0.l_md.md_utf = (void *)scratch;
 
 	/*
 	 * Change mode down to userspace is done by faking a stack

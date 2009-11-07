@@ -1,4 +1,4 @@
-/* $NetBSD: nilfs_vfsops.c,v 1.1 2009/07/18 16:31:42 reinoud Exp $ */
+/* $NetBSD: nilfs_vfsops.c,v 1.8 2011/11/14 18:35:13 hannken Exp $ */
 
 /*
  * Copyright (c) 2008, 2009 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: nilfs_vfsops.c,v 1.1 2009/07/18 16:31:42 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nilfs_vfsops.c,v 1.8 2011/11/14 18:35:13 hannken Exp $");
 #endif /* not lint */
 
 
@@ -333,7 +333,7 @@ nilfs_read_superblock(struct nilfs_device *nilfsdev)
 	struct nilfs_super_block *super, tmp_super;
 	struct buf *bp;
 	uint64_t sb1off, sb2off;
-	uint64_t time1, time2;
+	uint64_t last_cno1, last_cno2;
 	uint64_t dev_blk;
 	int dev_bsize, dev_blks;
 	int sb1ok, sb2ok, swp;
@@ -377,9 +377,9 @@ nilfs_read_superblock(struct nilfs_device *nilfsdev)
 	sb1ok = nilfs_check_superblock_crc(&nilfsdev->super);
 	sb2ok = nilfs_check_superblock_crc(&nilfsdev->super2);
 
-	time1 = nilfs_rw64(nilfsdev->super.s_wtime);
-	time2 = nilfs_rw64(nilfsdev->super2.s_wtime);
-	swp = sb2ok && (time2 > time1);
+	last_cno1 = nilfs_rw64(nilfsdev->super.s_last_cno);
+	last_cno2 = nilfs_rw64(nilfsdev->super2.s_last_cno);
+	swp = sb2ok && (last_cno2 > last_cno1);
 
 	if (swp) {
 		printf("nilfs warning: broken superblock, using spare\n");
@@ -563,7 +563,8 @@ static int
 nilfs_mount_device(struct vnode *devvp, struct mount *mp, struct nilfs_args *args,
 	struct nilfs_device **nilfsdev_p)
 {
-	struct partinfo dpart;
+	uint64_t psize;
+	unsigned secsize;
 	struct nilfs_device *nilfsdev;
 	struct lwp *l = curlwp;
 	int openflags, accessmode, error;
@@ -607,7 +608,7 @@ nilfs_mount_device(struct vnode *devvp, struct mount *mp, struct nilfs_args *arg
 		accessmode |= VWRITE;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = genfs_can_mount(devvp, accessmode, l->l_cred);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);
 		return error;
@@ -617,35 +618,36 @@ nilfs_mount_device(struct vnode *devvp, struct mount *mp, struct nilfs_args *arg
 	 * Open device read-write; TODO how about upgrading later when needed?
 	 */
 	openflags = FREAD | FWRITE;
+	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_OPEN(devvp, openflags, FSCRED);
+	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);
 		return error;
 	}
 
 	/* opened ok, try mounting */
-	nilfsdev = malloc(sizeof(struct nilfs_device), M_NILFSMNT, M_WAITOK);
-	KASSERT(nilfsdev);
+	nilfsdev = malloc(sizeof(*nilfsdev), M_NILFSMNT, M_WAITOK | M_ZERO);
 
 	/* initialise */
-	memset(nilfsdev, 0, sizeof(struct nilfs_device));
 	nilfsdev->refcnt        = 1;
 	nilfsdev->devvp         = devvp;
 	nilfsdev->uncomitted_bl = 0;
-	cv_init(&nilfsdev->sync_cv, "nilfssync");
+	cv_init(&nilfsdev->sync_cv, "nilfssyn");
 	STAILQ_INIT(&nilfsdev->mounts);
 
+	/* register nilfs_device in list */
+	SLIST_INSERT_HEAD(&nilfs_devices, nilfsdev, next_device);
+
 	/* get our device's size */
-	error = VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, NOCRED);
+	error = getdisksize(devvp, &psize, &secsize);
 	if (error) {
 		/* remove all our information */
 		nilfs_unmount_device(nilfsdev);
 		return EINVAL;
 	}
-	nilfsdev->devsize = dpart.part->p_size * dpart.disklab->d_secsize;
 
-	/* register nilfs_device in list */
-	SLIST_INSERT_HEAD(&nilfs_devices, nilfsdev, next_device);
+	nilfsdev->devsize = psize * secsize;
 
 	/* connect to the head for most recent files XXX really pass mp and args? */
 	error = nilfs_mount_base(nilfsdev, mp, args);

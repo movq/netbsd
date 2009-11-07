@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.c,v 1.13 2008/10/27 19:52:28 apb Exp $	*/
+/*	$NetBSD: lex.c,v 1.15 2011/10/16 17:12:11 joerg Exp $	*/
 
 /*
  * lexical analysis and source input
@@ -6,7 +6,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: lex.c,v 1.13 2008/10/27 19:52:28 apb Exp $");
+__RCSID("$NetBSD: lex.c,v 1.15 2011/10/16 17:12:11 joerg Exp $");
 #endif
 
 
@@ -245,6 +245,9 @@ yylex(cf)
 
 		  Subst:
 			switch (c) {
+			  Lex_state *s;
+			  Lex_state *base;
+
 			  case '\\':
 				c = getsc();
 				switch (c) {
@@ -341,8 +344,8 @@ yylex(cf)
 				 * posix mode was not in effect.
 				 */
 				statep->ls_sbquote.indquotes = 0;
-				Lex_state *s = statep;
-				Lex_state *base = state_info.base;
+				s = statep;
+				base = state_info.base;
 				while (1) {
 					for (; s != base; s--) {
 						if (s->ls_state == SDQUOTE) {
@@ -858,7 +861,7 @@ yyerror(fmt, va_alist)
 	SH_VA_START(va, fmt);
 	shf_vfprintf(shl_out, fmt, va);
 	va_end(va);
-	errorf(null);
+	errorf("%s", null);
 }
 
 /*

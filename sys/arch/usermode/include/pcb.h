@@ -1,4 +1,4 @@
-/* $NetBSD: pcb.h,v 1.2 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: pcb.h,v 1.17 2012/01/14 17:42:51 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,15 +31,20 @@
 
 #include <sys/cdefs.h>
 #include <sys/ucontext.h>
+#include <sys/queue.h>
 
-extern int	getcontext(ucontext_t *);
-extern int	setcontext(const ucontext_t *);
-extern void	makecontext(ucontext_t *, void (*)(void), int, ...);
-extern int	swapcontext(ucontext_t *, const ucontext_t *);
 
+#define TRAPSTACKSIZE (USPACE -2*sizeof(ucontext_t) - 3*sizeof(register_t))
 struct pcb {
-	ucontext_t	pcb_ucp;
-	bool		pcb_needfree;
+	ucontext_t pcb_ucp;		/* switchframe */
+	ucontext_t pcb_userret_ucp;
+
+	uint8_t *sys_stack_top;		/* points at free point in sys_stack */
+	uint8_t	 sys_stack[TRAPSTACKSIZE];
+
+	void	*pcb_onfault;		/* on fault handler */
+
+	int	 pcb_errno;		/* save/restore place */
 };
 
 #endif /* !_ARCH_USERMODE_INCLUDE_PCB_H */

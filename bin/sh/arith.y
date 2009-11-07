@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith.y,v 1.18 2007/03/25 06:29:26 apb Exp $	*/
+/*	$NetBSD: arith.y,v 1.21 2011/08/29 14:50:27 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -38,12 +38,13 @@
 #if 0
 static char sccsid[] = "@(#)arith.y	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith.y,v 1.18 2007/03/25 06:29:26 apb Exp $");
+__RCSID("$NetBSD: arith.y,v 1.21 2011/08/29 14:50:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
 #include "expand.h"
+#include "builtins.h"
 #include "shell.h"
 #include "error.h"
 #include "output.h"
@@ -55,7 +56,7 @@ typedef intmax_t YYSTYPE;
 intmax_t arith_result;
 const char *arith_buf, *arith_startbuf;
 
-void yyerror(const char *);
+__dead static void yyerror(const char *);
 #ifdef TESTARITH
 int main(int , char *[]);
 int error(char *);
@@ -83,7 +84,6 @@ exp:	expr {
 			 * the desired result elsewhere.
 			 */
 			arith_result = $1;
-			return 0;
 		}
 	;
 
@@ -197,9 +197,8 @@ error(s)
 }
 #endif
 
-void
-yyerror(s)
-	const char *s;
+static void
+yyerror(const char *s)
 {
 
 	yyerrok;

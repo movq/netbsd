@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_inode.c,v 1.70 2009/10/19 18:41:17 bouyer Exp $	*/
+/*	$NetBSD: ext2fs_inode.c,v 1.75 2012/01/27 19:22:48 para Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_inode.c,v 1.70 2009/10/19 18:41:17 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_inode.c,v 1.75 2012/01/27 19:22:48 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_inode.c,v 1.70 2009/10/19 18:41:17 bouyer Exp
 #include <sys/buf.h>
 #include <sys/vnode.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/trace.h>
 #include <sys/resourcevar.h>
 #include <sys/kauth.h>
@@ -156,10 +156,7 @@ ext2fs_inactive(void *v)
 		}
 		ip->i_e2fs_dtime = time_second;
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		mutex_enter(&vp->v_interlock);
-		vp->v_iflag |= VI_FREEING;
-		mutex_exit(&vp->v_interlock);
-		ext2fs_vfree(vp, ip->i_number, ip->i_e2fs_mode);
+		ip->i_omode = 1;
 	}
 	if (ip->i_flag & (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) {
 		ext2fs_update(vp, NULL, NULL, 0);
@@ -170,7 +167,7 @@ out:
 	 * so that it can be reused immediately.
 	 */
 	*ap->a_recycle = (ip->i_e2fs_dtime != 0);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -272,6 +269,8 @@ ext2fs_truncate(struct vnode *ovp, off_t length, int ioflag,
 		return (ext2fs_update(ovp, NULL, NULL, 0));
 	}
 	if (ext2fs_size(oip) == length) {
+		/* still do a uvm_vnp_setsize() as writesize may be larger */
+		uvm_vnp_setsize(ovp, length);
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
 		return (ext2fs_update(ovp, NULL, NULL, 0));
 	}
@@ -312,7 +311,8 @@ ext2fs_truncate(struct vnode *ovp, off_t length, int ioflag,
 		size = fs->e2fs_bsize;
 
 		/* XXXUBC we should handle more than just VREG */
-		uvm_vnp_zerorange(ovp, length, size - offset);
+		ubc_zerorange(&ovp->v_uobj, length, size - offset,
+		    UBC_UNMAP_FLAG(ovp));
 	}
 	(void)ext2fs_setsize(oip, length);
 	uvm_vnp_setsize(ovp, length);
@@ -499,7 +499,7 @@ ext2fs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	bap = (int32_t *)bp->b_data;	/* XXX ondisk32 */
 	if (lastbn >= 0) {
 		/* XXX ondisk32 */
-		copy = malloc(fs->e2fs_bsize, M_TEMP, M_WAITOK);
+		copy = kmem_alloc(fs->e2fs_bsize, KM_SLEEP);
 		memcpy((void *)copy, (void *)bap, (u_int)fs->e2fs_bsize);
 		memset((void *)&bap[last + 1], 0,
 			(u_int)(NINDIR(fs) - (last + 1)) * sizeof (uint32_t));
@@ -548,7 +548,7 @@ ext2fs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	}
 
 	if (copy != NULL) {
-		free(copy, M_TEMP);
+		kmem_free(copy, fs->e2fs_bsize);
 	} else {
 		brelse(bp, BC_INVAL);
 	}

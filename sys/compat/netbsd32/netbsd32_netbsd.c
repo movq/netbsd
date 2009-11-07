@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_netbsd.c,v 1.159 2009/10/25 01:14:03 rmind Exp $	*/
+/*	$NetBSD: netbsd32_netbsd.c,v 1.179 2012/02/01 05:43:54 dholland Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.159 2009/10/25 01:14:03 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.179 2012/02/01 05:43:54 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
@@ -37,8 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.159 2009/10/25 01:14:03 rmind 
 #include "opt_sysv.h"
 #include "opt_syscall_debug.h"
 #include "opt_sa.h"
-
-#include "fs_lfs.h"
 #endif
 
 /*
@@ -52,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.159 2009/10/25 01:14:03 rmind 
 #include <sys/systm.h>
 #include <sys/kernel.h>
 //#define msg __msg /* Don't ask me! */
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
@@ -71,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.159 2009/10/25 01:14:03 rmind 
 #include <sys/filedesc.h>
 #include <sys/namei.h>
 #include <sys/dirent.h>
+#include <sys/quotactl.h>
 #include <sys/kauth.h>
 #include <sys/vfs_syscalls.h>
 
@@ -91,8 +89,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.159 2009/10/25 01:14:03 rmind 
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/netbsd32/netbsd32_conv.h>
 #include <compat/netbsd32/netbsd32_sa.h>
-
-#include <machine/frame.h>
 
 #if defined(DDB)
 #include <ddb/ddbvar.h>
@@ -116,21 +112,6 @@ struct uvm_object *emul_netbsd32_object;
 #endif
 
 extern struct sysctlnode netbsd32_sysctl_root;
-
-const struct sa_emul saemul_netbsd32 = {
-	sizeof(ucontext32_t),
-	sizeof(struct netbsd32_sa_t),
-	sizeof(netbsd32_sa_tp),
-	netbsd32_sacopyout,  
-	netbsd32_upcallconv,
-	netbsd32_cpu_upcall,
-	(void (*)(struct lwp *, void *))getucontext32_sa,
-#ifdef KERN_SA
-	netbsd32_sa_ucsp
-#else
-	NULL
-#endif
-}; 
 
 struct emul emul_netbsd32 = {
 	.e_name =		"netbsd32",
@@ -174,7 +155,7 @@ struct emul emul_netbsd32 = {
 	.e_fault =		NULL,
 	.e_vm_default_addr =	netbsd32_vm_default_addr,
 	.e_usertrap =		NULL,
-#ifdef COMPAT_40
+#if defined(COMPAT_40) && defined(KERN_SA)
 	.e_sa =			&saemul_netbsd32,
 #else
 	.e_sa =			NULL,
@@ -369,7 +350,6 @@ netbsd32_break(struct lwp *l, const struct netbsd32_break_args *uap, register_t 
 	} */
 	struct sys_obreak_args ua;
 
-	SCARG(&ua, nsize) = SCARG_P32(uap, nsize);
 	NETBSD32TOP_UAP(nsize, char);
 	return (sys_obreak(l, &ua, retval));
 }
@@ -1112,7 +1092,7 @@ netbsd32_rename(struct lwp *l, const struct netbsd32_rename_args *uap, register_
 	struct sys_rename_args ua;
 
 	NETBSD32TOP_UAP(from, const char);
-	NETBSD32TOP_UAP(to, const char)
+	NETBSD32TOP_UAP(to, const char);
 
 	return (sys_rename(l, &ua, retval));
 }
@@ -1127,7 +1107,7 @@ netbsd32_flock(struct lwp *l, const struct netbsd32_flock_args *uap, register_t 
 	struct sys_flock_args ua;
 
 	NETBSD32TO64_UAP(fd);
-	NETBSD32TO64_UAP(how)
+	NETBSD32TO64_UAP(how);
 
 	return (sys_flock(l, &ua, retval));
 }
@@ -1141,7 +1121,7 @@ netbsd32_mkfifo(struct lwp *l, const struct netbsd32_mkfifo_args *uap, register_
 	} */
 	struct sys_mkfifo_args ua;
 
-	NETBSD32TOP_UAP(path, const char)
+	NETBSD32TOP_UAP(path, const char);
 	NETBSD32TO64_UAP(mode);
 	return (sys_mkfifo(l, &ua, retval));
 }
@@ -1155,7 +1135,7 @@ netbsd32_shutdown(struct lwp *l, const struct netbsd32_shutdown_args *uap, regis
 	} */
 	struct sys_shutdown_args ua;
 
-	NETBSD32TO64_UAP(s)
+	NETBSD32TO64_UAP(s);
 	NETBSD32TO64_UAP(how);
 	return (sys_shutdown(l, &ua, retval));
 }
@@ -1188,7 +1168,7 @@ netbsd32_mkdir(struct lwp *l, const struct netbsd32_mkdir_args *uap, register_t 
 	} */
 	struct sys_mkdir_args ua;
 
-	NETBSD32TOP_UAP(path, const char)
+	NETBSD32TOP_UAP(path, const char);
 	NETBSD32TO64_UAP(mode);
 	return (sys_mkdir(l, &ua, retval));
 }
@@ -1206,40 +1186,97 @@ netbsd32_rmdir(struct lwp *l, const struct netbsd32_rmdir_args *uap, register_t 
 }
 
 int
-netbsd32_quotactl(struct lwp *l, const struct netbsd32_quotactl_args *uap, register_t *retval)
+netbsd32___quotactl(struct lwp *l, const struct netbsd32___quotactl_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_charp) path;
-		syscallarg(int) cmd;
-		syscallarg(int) uid;
-		syscallarg(netbsd32_voidp) arg;
+		syscallarg(netbsd32_voidp) args;
 	} */
-	struct sys_quotactl_args ua;
+	struct netbsd32_quotactlargs args32;
+	struct quotactl_args args;
+	int error;
 
-	NETBSD32TOP_UAP(path, const char);
-	NETBSD32TO64_UAP(cmd);
-	NETBSD32TO64_UAP(uid);
-	NETBSD32TOP_UAP(arg, void *);
-	return (sys_quotactl(l, &ua, retval));
-}
+	error = copyin(SCARG_P32(uap, args), &args32, sizeof(args32));
+	if (error) {
+		return error;
+	}
 
-int
-netbsd32_nfssvc(struct lwp *l, const struct netbsd32_nfssvc_args *uap, register_t *retval)
-{
-#if 0
-	/* {
-		syscallarg(int) flag;
-		syscallarg(netbsd32_voidp) argp;
-	} */
-	struct sys_nfssvc_args ua;
+	args.qc_op = args32.qc_op;
+	switch (args.qc_op) {
+	    case QUOTACTL_STAT:
+		args.u.stat.qc_info = NETBSD32PTR64(args32.u.stat.qc_info);
+		break;
+	    case QUOTACTL_IDTYPESTAT:
+		args.u.idtypestat.qc_idtype = args32.u.idtypestat.qc_idtype;
+		args.u.idtypestat.qc_info =
+			NETBSD32PTR64(args32.u.idtypestat.qc_info);
+		break;
+	    case QUOTACTL_OBJTYPESTAT:
+		args.u.objtypestat.qc_objtype =
+			args32.u.objtypestat.qc_objtype;
+		args.u.objtypestat.qc_info =
+			NETBSD32PTR64(args32.u.objtypestat.qc_info);
+		break;
+	    case QUOTACTL_GET:
+		args.u.get.qc_key = NETBSD32PTR64(args32.u.get.qc_key);
+		args.u.get.qc_val = NETBSD32PTR64(args32.u.get.qc_val);
+		break;
+	    case QUOTACTL_PUT:
+		args.u.put.qc_key = NETBSD32PTR64(args32.u.put.qc_key);
+		args.u.put.qc_val = NETBSD32PTR64(args32.u.put.qc_val);
+		break;
+	    case QUOTACTL_DELETE:
+		args.u.delete.qc_key = NETBSD32PTR64(args32.u.delete.qc_key);
+		break;
+	    case QUOTACTL_CURSOROPEN:
+		args.u.cursoropen.qc_cursor =
+			NETBSD32PTR64(args32.u.cursoropen.qc_cursor);
+		break;
+	    case QUOTACTL_CURSORCLOSE:
+		args.u.cursorclose.qc_cursor =
+			NETBSD32PTR64(args32.u.cursorclose.qc_cursor);
+		break;
+	    case QUOTACTL_CURSORSKIPIDTYPE:
+		args.u.cursorskipidtype.qc_cursor =
+			NETBSD32PTR64(args32.u.cursorskipidtype.qc_cursor);
+		args.u.cursorskipidtype.qc_idtype =
+			args32.u.cursorskipidtype.qc_idtype;
+		break;
+	    case QUOTACTL_CURSORGET:
+		args.u.cursorget.qc_cursor =
+			NETBSD32PTR64(args32.u.cursorget.qc_cursor);
+		args.u.cursorget.qc_keys =
+			NETBSD32PTR64(args32.u.cursorget.qc_keys);
+		args.u.cursorget.qc_vals =
+			NETBSD32PTR64(args32.u.cursorget.qc_vals);
+		args.u.cursorget.qc_maxnum =
+			args32.u.cursorget.qc_maxnum;
+		args.u.cursorget.qc_ret =
+			NETBSD32PTR64(args32.u.cursorget.qc_ret);
+		break;
+	    case QUOTACTL_CURSORATEND:
+		args.u.cursoratend.qc_cursor =
+			NETBSD32PTR64(args32.u.cursoratend.qc_cursor);
+		args.u.cursoratend.qc_ret =
+			NETBSD32PTR64(args32.u.cursoratend.qc_ret);
+		break;
+	    case QUOTACTL_CURSORREWIND:
+		args.u.cursorrewind.qc_cursor =
+			NETBSD32PTR64(args32.u.cursorrewind.qc_cursor);
+		break;
+	    case QUOTACTL_QUOTAON:
+		args.u.quotaon.qc_idtype = args32.u.quotaon.qc_idtype;
+		args.u.quotaon.qc_quotafile =
+			NETBSD32PTR64(args32.u.quotaon.qc_quotafile);
+		break;
+	    case QUOTACTL_QUOTAOFF:
+		args.u.quotaoff.qc_idtype = args32.u.quotaoff.qc_idtype;
+		break;
+	    default:
+		return EINVAL;
+	}
 
-	NETBSD32TO64_UAP(flag);
-	NETBSD32TOP_UAP(argp, void);
-	return (sys_nfssvc(l, &ua, retval));
-#else
-	/* Why would we want to support a 32-bit nfsd? */
-	return (ENOSYS);
-#endif
+	return do_sys_quotactl(SCARG_P32(uap, path), &args);
 }
 
 int
@@ -1253,6 +1290,7 @@ netbsd32___getfh30(struct lwp *l, const struct netbsd32___getfh30_args *uap, reg
 	struct vnode *vp;
 	fhandle_t *fh;
 	int error;
+	struct pathbuf *pb;
 	struct nameidata nd;
 	netbsd32_size_t sz32;
 	size_t sz;
@@ -1265,32 +1303,45 @@ netbsd32___getfh30(struct lwp *l, const struct netbsd32___getfh30_args *uap, reg
 	if (error)
 		return (error);
 	fh = NULL;
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG_P32(uap, fname));
+
+	error = pathbuf_copyin(SCARG_P32(uap, fname), &pb);
+	if (error) {
+		return error;
+	}
+
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, pb);
 	error = namei(&nd);
-	if (error)
-		return (error);
+	if (error) {
+		pathbuf_destroy(pb);
+		return error;
+	}
 	vp = nd.ni_vp;
+	pathbuf_destroy(pb);
+
 	error = copyin(SCARG_P32(uap, fh_size), &sz32,
 	    sizeof(netbsd32_size_t));
-	if (!error) {
-		fh = malloc(sz32, M_TEMP, M_WAITOK);
-		if (fh == NULL) 
-			return EINVAL;
-		sz = sz32;
-		error = vfs_composefh(vp, fh, &sz);
-		sz32 = sz;
+	if (error) {
+		vput(vp);
+		return error;
 	}
+	fh = kmem_alloc(sz32, KM_SLEEP);
+	if (fh == NULL) 
+		return EINVAL;
+	sz = sz32;
+	error = vfs_composefh(vp, fh, &sz);
 	vput(vp);
-	if (error == E2BIG)
-		copyout(&sz, SCARG_P32(uap, fh_size), sizeof(size_t));
+
 	if (error == 0) {
-		error = copyout(&sz32, SCARG_P32(uap, fh_size),
+		const netbsd32_size_t nsz32 = sz;
+		error = copyout(&nsz32, SCARG_P32(uap, fh_size),
 		    sizeof(netbsd32_size_t));
-		if (!error)
+		if (!error) {
 			error = copyout(fh, SCARG_P32(uap, fhp), sz);
+		}
+	} else if (error == E2BIG) {
+		error = copyout(&sz, SCARG_P32(uap, fh_size), sizeof(size_t));
 	}
-	free(fh, M_TEMP);
+	kmem_free(fh, sz32);
 	return (error);
 }
 
@@ -1369,36 +1420,6 @@ netbsd32_seteuid(struct lwp *l, const struct netbsd32_seteuid_args *uap, registe
 	NETBSD32TO64_UAP(euid);
 	return (sys_seteuid(l, &ua, retval));
 }
-
-#ifdef LFS
-int
-netbsd32_lfs_bmapv(struct lwp *l, const struct netbsd32_lfs_bmapv_args *v, register_t *retval)
-{
-
-	return (ENOSYS);	/* XXX */
-}
-
-int
-netbsd32_lfs_markv(struct lwp *l, const struct netbsd32_lfs_markv_args *v, register_t *retval)
-{
-
-	return (ENOSYS);	/* XXX */
-}
-
-int
-netbsd32_lfs_segclean(struct lwp *l, const struct netbsd32_lfs_segclean_args *v, register_t *retval)
-{
-
-	return (ENOSYS);	/* XXX */
-}
-
-int
-netbsd32___lfs_segwait50(struct lwp *l, const struct netbsd32___lfs_segwait50_args *v, register_t *retval)
-{
-
-	return (ENOSYS);	/* XXX */
-}
-#endif
 
 int
 netbsd32_pathconf(struct lwp *l, const struct netbsd32_pathconf_args *uap, register_t *retval)
@@ -1901,7 +1922,7 @@ netbsd32___sigsuspend14(struct lwp *l, const struct netbsd32___sigsuspend14_args
 
 	NETBSD32TOP_UAP(set, sigset_t);
 	return (sys___sigsuspend14(l, &ua, retval));
-};
+}
 
 int
 netbsd32_fchroot(struct lwp *l, const struct netbsd32_fchroot_args *uap, register_t *retval)
@@ -1988,7 +2009,7 @@ netbsd32_adjust_limits(struct proc *p)
 			break;
 	}
 
-	lim_privatise(p, false);
+	lim_privatise(p);
 
 	lim = p->p_limit;
 	for (i = 0; i < __arraycount(lm); i++) {
@@ -2604,6 +2625,377 @@ netbsd32__sched_getaffinity(struct lwp *l,
 	NETBSD32TOX_UAP(size, size_t);
 	NETBSD32TOP_UAP(cpuset, cpuset_t *);
 	return sys__sched_getaffinity(l, &ua, retval);
+}
+
+int
+netbsd32_pipe2(struct lwp *l, const struct netbsd32_pipe2_args *uap,
+	       register_t *retval)
+{
+	/* {
+		syscallarg(netbsd32_intp) fildes;
+		syscallarg(int) flags;
+	} */
+	int fd[2], error;
+
+	error = pipe1(l, retval, SCARG(uap, flags));
+	if (error != 0)
+		return error;
+
+	fd[0] = retval[0];
+	fd[1] = retval[1];
+
+	error = copyout(fd, SCARG_P32(uap, fildes), sizeof(fd));
+	if (error != 0)
+		return error;
+
+	retval[0] = 0;
+	return 0;
+}
+
+int
+netbsd32_dup3(struct lwp *l, const struct netbsd32_dup3_args *uap,
+	      register_t *retval)
+{
+	/* {
+		syscallarg(int) from;
+		syscallarg(int) to;
+		syscallarg(int) flags;
+	} */
+	struct sys_dup3_args ua;
+
+	NETBSD32TO64_UAP(from);
+	NETBSD32TO64_UAP(to);
+	NETBSD32TO64_UAP(flags);
+
+	return sys_dup3(l, &ua, retval);
+}
+
+int
+netbsd32_kqueue1(struct lwp *l, const struct netbsd32_kqueue1_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+	} */
+	struct sys_kqueue1_args ua;
+
+	NETBSD32TO64_UAP(flags);
+
+	return sys_kqueue1(l, &ua, retval);
+}
+
+int
+netbsd32_paccept(struct lwp *l, const struct netbsd32_paccept_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) s;
+		syscallarg(netbsd32_sockaddrp_t) name;
+		syscallarg(netbsd32_socklenp_t) anamelen;
+		syscallarg(const netbsd32_sigsetp_t) mask;
+		syscallarg(int) flags;
+	} */
+	struct sys_paccept_args ua;
+
+	NETBSD32TO64_UAP(s);
+	NETBSD32TOP_UAP(name, struct sockaddr *);
+	NETBSD32TOP_UAP(anamelen, socklen_t *);
+	NETBSD32TOP_UAP(mask, const sigset_t *);
+	NETBSD32TO64_UAP(flags);
+
+	return sys_paccept(l, &ua, retval);
+}
+
+int
+netbsd32_linkat(struct lwp *l, const struct netbsd32_linkat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd1;
+		syscallarg(const netbsd32_charp) name1;
+		syscallarg(int) fd2;
+		syscallarg(const netbsd32_charp) name2;
+		syscallarg(int) flags;
+	} */
+	struct sys_linkat_args ua;
+
+	NETBSD32TO64_UAP(fd1);
+	NETBSD32TOP_UAP(name1, const char);
+	NETBSD32TO64_UAP(fd2);
+	NETBSD32TOP_UAP(name2, const char);
+	NETBSD32TO64_UAP(flags);
+
+	return sys_linkat(l, &ua, retval);
+}
+
+int
+netbsd32_renameat(struct lwp *l, const struct netbsd32_renameat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fromfd;
+		syscallarg(const netbsd32_charp) from;
+		syscallarg(int) tofd;
+		syscallarg(const netbsd32_charp) to;
+	} */
+	struct sys_renameat_args ua;
+
+	NETBSD32TO64_UAP(fromfd);
+	NETBSD32TOP_UAP(from, const char);
+	NETBSD32TO64_UAP(tofd);
+	NETBSD32TOP_UAP(to, const char);
+
+	return sys_renameat(l, &ua, retval);
+}
+
+int
+netbsd32_mkfifoat(struct lwp *l, const struct netbsd32_mkfifoat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(const netbsd32_charp) path;
+		syscallarg(mode_t) mode;
+	} */
+	struct sys_mkfifoat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(mode);
+
+	return sys_mkfifoat(l, &ua, retval);
+}
+
+int
+netbsd32_mknodat(struct lwp *l, const struct netbsd32_mknodat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(mode_t) mode;
+		syscallarg(uint32_t) dev;
+	} */
+	struct sys_mknodat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(mode);
+	NETBSD32TO64_UAP(dev);
+
+	return sys_mknodat(l, &ua, retval);
+}
+
+int
+netbsd32_mkdirat(struct lwp *l, const struct netbsd32_mkdirat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(mode_t) mode;
+	} */
+	struct sys_mkdirat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(mode);
+
+	return sys_mkdirat(l, &ua, retval);
+}
+
+int
+netbsd32_faccessat(struct lwp *l, const struct netbsd32_faccessat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(int) amode;
+		syscallarg(int) flag;
+	} */
+	struct sys_faccessat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(amode);
+	NETBSD32TO64_UAP(flag);
+
+	return sys_faccessat(l, &ua, retval);
+}
+
+int
+netbsd32_fchmodat(struct lwp *l, const struct netbsd32_fchmodat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(mode_t) mode;
+		syscallarg(int) flag;
+	} */
+	struct sys_fchmodat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(mode);
+	NETBSD32TO64_UAP(flag);
+
+	return sys_fchmodat(l, &ua, retval);
+}
+
+int
+netbsd32_fchownat(struct lwp *l, const struct netbsd32_fchownat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(uid_t) owner;
+		syscallarg(gid_t) group;
+		syscallarg(int) flag;
+	} */
+	struct sys_fchownat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(owner);
+	NETBSD32TO64_UAP(group);
+	NETBSD32TO64_UAP(flag);
+
+	return sys_fchownat(l, &ua, retval);
+}
+
+int
+netbsd32_fstatat(struct lwp *l, const struct netbsd32_fstatat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(netbsd32_statp_t) buf;
+		syscallarg(int) flag;
+	} */
+	struct sys_fstatat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TOP_UAP(buf, const struct stat);
+	NETBSD32TO64_UAP(flag);
+
+	return sys_fstatat(l, &ua, retval);
+}
+
+int
+netbsd32_utimensat(struct lwp *l, const struct netbsd32_utimensat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(netbsd32_timespecp_t) tptr;
+		syscallarg(int) flag;
+	} */
+	struct sys_utimensat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TOP_UAP(tptr, const struct timespec);
+	NETBSD32TO64_UAP(flag);
+
+	return sys_utimensat(l, &ua, retval);
+}
+
+int
+netbsd32_openat(struct lwp *l, const struct netbsd32_openat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(int) oflags;
+		syscallarg(mode_t) mode;
+	} */
+	struct sys_openat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char);
+	NETBSD32TO64_UAP(oflags);
+	NETBSD32TO64_UAP(mode);
+
+	return sys_openat(l, &ua, retval);
+}
+
+int
+netbsd32_readlinkat(struct lwp *l, const struct netbsd32_readlinkat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(netbsd32_charp) buf;
+		syscallarg(netbsd32_size_t) bufsize;
+	} */
+	struct sys_readlinkat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char *);
+	NETBSD32TOP_UAP(buf, char *);
+	NETBSD32TOX_UAP(bufsize, size_t);
+
+	return sys_readlinkat(l, &ua, retval);
+}
+
+int
+netbsd32_symlinkat(struct lwp *l, const struct netbsd32_symlinkat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(netbsd32_charp) path1;
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path2;
+	} */
+	struct sys_symlinkat_args ua;
+
+	NETBSD32TOP_UAP(path1, const char *);
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path2, const char *);
+
+	return sys_symlinkat(l, &ua, retval);
+}
+
+int
+netbsd32_unlinkat(struct lwp *l, const struct netbsd32_unlinkat_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(int) flag;
+	} */
+	struct sys_unlinkat_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(path, const char *);
+	NETBSD32TO64_UAP(flag);
+
+	return sys_unlinkat(l, &ua, retval);
+}
+
+int
+netbsd32_futimens(struct lwp *l, const struct netbsd32_futimens_args *uap,
+		 register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(netbsd32_timespecp_t) tptr;
+	} */
+	struct sys_futimens_args ua;
+
+	NETBSD32TO64_UAP(fd);
+	NETBSD32TOP_UAP(tptr, const struct timespec *);
+
+	return sys_futimens(l, &ua, retval);
 }
 
 /*

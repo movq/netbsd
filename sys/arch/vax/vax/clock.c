@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.51 2009/09/14 02:19:15 mhitch Exp $	 */
+/*	$NetBSD: clock.c,v 1.55 2010/12/14 23:44:49 matt Exp $	 */
 /*
  * Copyright (c) 1995 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -30,29 +30,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.51 2009/09/14 02:19:15 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.55 2010/12/14 23:44:49 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/timetc.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/timetc.h>
+#include <sys/kernel.h>
 
-#include <machine/mtpr.h>
 #include <machine/sid.h>
 #include <machine/clock.h>
-#include <machine/cpu.h>
-#include <machine/uvax.h>
 
 #include "opt_cputype.h"
+
+struct evcnt clock_misscnt =
+	EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, "clock", "intr miss");
+
+EVCNT_ATTACH_STATIC(clock_misscnt);
 
 struct evcnt clock_intrcnt =
 	EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "clock", "intr");
 
 EVCNT_ATTACH_STATIC(clock_intrcnt);
 
-static int vax_gettime(todr_chip_handle_t, volatile struct timeval *);
-static int vax_settime(todr_chip_handle_t, volatile struct timeval *);
+static int vax_gettime(todr_chip_handle_t, struct timeval *);
+static int vax_settime(todr_chip_handle_t, struct timeval *);
 
 static struct todr_chip_handle todr_handle = {
 	.todr_gettime = vax_gettime,
@@ -166,14 +169,14 @@ cpu_initclocks(void)
 }
 
 int
-vax_gettime(todr_chip_handle_t handle, volatile struct timeval *tvp)
+vax_gettime(todr_chip_handle_t handle, struct timeval *tvp)
 {
 	tvp->tv_sec = handle->base_time;
 	return (*dep_call->cpu_gettime)(tvp);
 }
 
 int
-vax_settime(todr_chip_handle_t handle, volatile struct timeval *tvp)
+vax_settime(todr_chip_handle_t handle, struct timeval *tvp)
 {
 	(*dep_call->cpu_settime)(tvp);
 	return 0;
@@ -194,18 +197,18 @@ yeartonum(int y)
 {
 	int n;
 
-	for (n = 0, y -= 1; y > 69; y--)
+	for (n = 0, y -= 1; y > 1969; y--)
 		n += SECPERYEAR(y);
 	return n;
 }
 
 /* 
- * Converts tick number to a year 70 ->
+ * Converts tick number to a year 1970 ->
  */
 int
 numtoyear(int num)
 {
-	int y = 70, j;
+	int y = 1970, j;
 	while(num >= (j = SECPERYEAR(y))) {
 		y++;
 		num -= j;
@@ -221,7 +224,7 @@ numtoyear(int num)
  * year; the TODR doesn't hold years.
  */
 int
-generic_gettime(volatile struct timeval *tvp)
+generic_gettime(struct timeval *tvp)
 {
 	unsigned klocka = mfpr(PR_TODR);
 
@@ -244,7 +247,7 @@ generic_gettime(volatile struct timeval *tvp)
  * Takes the current system time and writes it to the TODR.
  */
 void
-generic_settime(volatile struct timeval *tvp)
+generic_settime(struct timeval *tvp)
 {
 	unsigned tid = tvp->tv_sec, bastid;
 
@@ -263,7 +266,7 @@ int	clk_tweak;	/* Offset of time into word. */
 #define	REGPOKE(off, v)	(clk_page[off << clk_adrshift] = ((v) << clk_tweak))
 
 int
-chip_gettime(volatile struct timeval *tvp)
+chip_gettime(struct timeval *tvp)
 {
 	struct clock_ymdhms c;
 	int timeout = 1<<15, s;
@@ -300,7 +303,7 @@ chip_gettime(volatile struct timeval *tvp)
 }
 
 void
-chip_settime(volatile struct timeval *tvp)
+chip_settime(struct timeval *tvp)
 {
 	struct clock_ymdhms c;
 

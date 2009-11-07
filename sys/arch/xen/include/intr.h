@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.31 2009/07/29 12:02:06 cegger Exp $	*/
+/*	$NetBSD: intr.h,v 1.33.8.1 2012/02/22 18:56:46 riz Exp $	*/
 /*	NetBSD intr.h,v 1.15 2004/10/31 10:39:34 yamt Exp	*/
 
 /*-
@@ -39,12 +39,13 @@
 #include <xen/xen.h>
 #include <xen/hypervisor.h>
 #include <xen/evtchn.h>
-#include <machine/cpu.h>
 #include <machine/pic.h>
 #include <sys/evcnt.h>
 
 #include "opt_xen.h"
 
+
+struct cpu_info;
 /*
  * Struct describing an event channel. 
  */
@@ -54,6 +55,7 @@ struct evtsource {
 	uint32_t ev_imask;		/* interrupt mask */
 	struct intrhand *ev_handlers;	/* handler chain */
 	struct evcnt ev_evcnt;		/* interrupt counter */
+	struct cpu_info *ev_cpu;        /* cpu on which this event is bound */
 	char ev_evname[32];		/* event counter name */
 };
 
@@ -151,8 +153,6 @@ splraiseipl(ipl_cookie_t icookie)
  * Stub declarations.
  */
 
-struct cpu_info;
-
 struct pcibus_attach_args;
 
 #ifdef MULTIPROCESSOR
@@ -161,7 +161,6 @@ int intr_biglock_wrapper(void *);
 
 void intr_default_setup(void);
 int x86_nmi(void);
-void intr_calculatemasks(struct evtsource *);
 
 void *intr_establish(int, struct pic *, int, int, int, int (*)(void *), void *, bool);
 void intr_disestablish(struct intrhand *);
@@ -175,9 +174,15 @@ int intr_find_mpmapping(int, int, struct xen_intr_handle *);
 struct pic *intr_findpic(int);
 void intr_add_pcibus(struct pcibus_attach_args *);
 
-int x86_send_ipi(struct cpu_info *, int);
-void x86_broadcast_ipi(int);
-void x86_multicast_ipi(int, int);
+#ifdef MULTIPROCESSOR
+void xen_ipi_init(void);
+int xen_send_ipi(struct cpu_info *, uint32_t);
+void xen_broadcast_ipi(uint32_t);
+#else
+#define xen_ipi_init(_1) ((void) 0) /* nothing */
+#define xen_send_ipi(_i1, _i2) (0) /* nothing */
+#define xen_broadcast_ipi(_i1) ((void) 0) /* nothing */
+#endif /* MULTIPROCESSOR */
 
 #endif /* !_LOCORE */
 

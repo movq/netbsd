@@ -1,4 +1,4 @@
-/*	$NetBSD: gcscide.c,v 1.7 2008/03/18 20:46:36 cube Exp $	*/
+/*	$NetBSD: gcscide.c,v 1.9 2011/04/04 20:37:51 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.7 2008/03/18 20:46:36 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.9 2011/04/04 20:37:51 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.7 2008/03/18 20:46:36 cube Exp $");
 static int	gcscide_match(device_t, cfdata_t, void *);
 static void	gcscide_attach(device_t, device_t, void *);
 
-static void	gcscide_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void	gcscide_chip_map(struct pciide_softc *, const struct pci_attach_args *);
 static void	gcscide_setup_channel(struct ata_channel *);
 
 /* PIO Format 1 settings */
@@ -150,10 +150,9 @@ gcscide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-gcscide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+gcscide_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	pcireg_t interface;
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -184,7 +183,7 @@ gcscide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 
 	pciide_mapchan(pa, &sc->pciide_channels[0], interface,
-	    &cmdsize, &ctlsize, pciide_pci_intr);
+	    pciide_pci_intr);
 }
 
 static void

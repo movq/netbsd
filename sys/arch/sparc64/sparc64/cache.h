@@ -1,14 +1,8 @@
-/*	$NetBSD: cache.h,v 1.10 2006/10/21 23:49:29 mrg Exp $ */
+/*	$NetBSD: cache.h,v 1.22 2011/06/06 02:49:39 mrg Exp $ */
 
 /*
- * Copyright (c) 1996
- * 	The President and Fellows of Harvard College. All rights reserved.
- * Copyright (c) 1992, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This software was developed by the Computer Systems Engineering group
- * at Lawrence Berkeley Laboratory under DARPA contract BG 91-66 and
- * contributed to Berkeley.
+ * Copyright (c) 2011 Matthew R. Green
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -18,20 +12,36 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Aaron Brown and
- *	Harvard University.
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+/*
+ * Copyright (C) 1996-1999 Eduardo Horvath.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR  ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR  BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -40,7 +50,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)cache.h	8.1 (Berkeley) 6/11/93
  */
 
 /*
@@ -72,14 +81,79 @@
  * set-associative -- each bank is 8K.  No conflict there.)
  */
 
+#include <machine/psl.h>
+
+/* Various cache size/line sizes */
+extern	int	ecache_min_line_size;
+extern	int	dcache_line_size;
+extern	int	dcache_size;
+extern	int	icache_line_size;
+extern	int	icache_size;
+
 /* The following are for I$ and D$ flushes and are in locore.s */
-void 	dcache_flush_page(paddr_t);	/* flush page from D$ */
-void 	icache_flush_page(paddr_t);	/* flush page from I$ */
-void 	blast_dcache(void);		/* Clear entire D$ */
-void 	blast_icache(void);		/* Clear entire I$ */
+void 	dcache_flush_page_us(paddr_t);	/* flush page from D$ */
+void 	dcache_flush_page_usiii(paddr_t); /* flush page from D$ */
+void 	sp_blast_dcache(int, int);	/* Clear entire D$ */
+void 	blast_icache_us(void);		/* Clear entire I$ */
+void 	blast_icache_usiii(void);	/* Clear entire I$ */
 
 /* The following flush a range from the D$ and I$ but not E$. */
-void	cache_flush_phys(paddr_t, psize_t, int);
+void	cache_flush_phys_us(paddr_t, psize_t, int);
+void	cache_flush_phys_usiii(paddr_t, psize_t, int);
 
-/* Smallest E$ line size. */
-extern	int	ecache_min_line_size;
+static __inline__ void
+cache_flush_phys(paddr_t pa, psize_t size, int ecache)
+{
+	if (CPU_IS_USIII_UP() || CPU_IS_SPARC64_V_UP())
+		cache_flush_phys_usiii(pa, size, ecache);
+	else
+		cache_flush_phys_us(pa, size, ecache);
+}
+
+/* SPARC64 specific */
+/* Assembly routines to flush TLB mappings */
+void sp_tlb_flush_pte_us(vaddr_t, int);
+void sp_tlb_flush_pte_usiii(vaddr_t, int);
+void sp_tlb_flush_all_us(void);
+void sp_tlb_flush_all_usiii(void);
+
+static __inline__ void
+sp_tlb_flush_pte(vaddr_t va, int ctx)
+{
+	if (CPU_IS_USIII_UP() || CPU_IS_SPARC64_V_UP())
+		sp_tlb_flush_pte_usiii(va, ctx);
+	else
+		sp_tlb_flush_pte_us(va, ctx);
+}
+
+static __inline__ void
+sp_tlb_flush_all(void)
+{
+	if (CPU_IS_USIII_UP() || CPU_IS_SPARC64_V_UP())
+		sp_tlb_flush_all_usiii();
+	else
+		sp_tlb_flush_all_us();
+}
+
+extern	void	(*dcache_flush_page)(paddr_t);
+extern	void	(*dcache_flush_page_cpuset)(paddr_t, sparc64_cpuset_t);
+extern	void	(*blast_dcache)(void);
+extern	void	(*blast_icache)(void);
+
+void cache_setup_funcs(void);
+
+#ifdef MULTIPROCESSOR
+extern	void	(*sp_dcache_flush_page)(paddr_t);
+
+void smp_tlb_flush_pte(vaddr_t, struct pmap *);
+void smp_dcache_flush_page_cpuset(paddr_t pa, sparc64_cpuset_t);
+void smp_dcache_flush_page_allcpu(paddr_t pa);
+void smp_blast_dcache(void);
+#define	tlb_flush_pte(va,pm)		smp_tlb_flush_pte(va, pm)
+#define	dcache_flush_page_all(pa)	smp_dcache_flush_page_cpuset(pa, cpus_active)
+#define	dcache_flush_page_cpuset(pa,cs)	smp_dcache_flush_page_cpuset(pa, cs)
+#else
+#define	tlb_flush_pte(va,pm)		sp_tlb_flush_pte(va, (pm)->pm_ctx[0])
+#define	dcache_flush_page_all(pa)	dcache_flush_page(pa)
+#define	dcache_flush_page_cpuset(pa,cs)	dcache_flush_page(pa)
+#endif

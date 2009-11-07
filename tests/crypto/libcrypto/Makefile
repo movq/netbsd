@@ -1,9 +1,11 @@
-# $NetBSD: Makefile,v 1.3 2009/02/13 22:01:49 jmmv Exp $
+# $NetBSD: Makefile,v 1.8 2011/10/22 21:13:25 mrg Exp $
 
 .include <bsd.own.mk>
 
-SUBDIR+=bf bn cast conf des dh dsa ec ecdh ecdsa engine hmac lhash \
-	md2 md4 md5 rand rc2 rc4 ripemd rsa sha sha1 threads x509v3
+.if ${MKCRYPTO} != "no"
+
+SUBDIR+=bf bn cast conf des dh dsa ec ecdh ecdsa engine evp hmac lhash \
+	md2 md4 md5 rand rc2 rc4 ripemd rsa sha sha1 srp threads x509v3
 
 .if ${MKCRYPTO_IDEA} != "no"
 SUBDIR+=idea
@@ -17,13 +19,18 @@ SUBDIR+=mdc2
 
 TESTSDIR=	${TESTSBASE}/crypto/libcrypto
 
-TESTS_SH=	t_libcrypto
+TESTS_SH=	t_certs
+TESTS_SH+=	t_ciphers
+TESTS_SH+=	t_hashes
+TESTS_SH+=	t_libcrypto
+TESTS_SH+=	t_pubkey
 
-CLEANFILES+=	t_libcrypto.sh
-t_libcrypto.sh: t_libcrypto.awk t_libcrypto.in
-	${TOOL_AWK} -f ${.CURDIR}/t_libcrypto.awk ${.CURDIR}/t_libcrypto.in \
-	    >t_libcrypto.sh.tmp
-	mv t_libcrypto.sh.tmp t_libcrypto.sh
-
-.include <bsd.subdir.mk>
 .include <bsd.test.mk>
+
+.else
+
+NOPROG=
+
+.include <bsd.prog.mk>
+
+.endif

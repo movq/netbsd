@@ -1,4 +1,4 @@
-/*	$NetBSD: gdt.c,v 1.49 2009/11/07 07:27:44 cegger Exp $	*/
+/*	$NetBSD: gdt.c,v 1.52 2011/11/06 11:40:46 cherry Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.49 2009/11/07 07:27:44 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.52 2011/11/06 11:40:46 cherry Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_xen.h"
@@ -39,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.49 2009/11/07 07:27:44 cegger Exp $");
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
-#include <sys/user.h>
 #include <sys/cpu.h>
 
 #include <uvm/uvm.h>
@@ -208,17 +207,26 @@ gdt_init_cpu(struct cpu_info *ci)
 		KASSERT(va >= VM_MIN_KERNEL_ADDRESS);
 		ptp = kvtopte(va);
 		frames[f] = *ptp >> PAGE_SHIFT;
-		pmap_pte_clearbits(ptp, PG_RW);
+		{ 
+		   /* 
+		    * pmap_pte_clearbits(ptp, PG_RW);
+		    * but without spl(), since %fs is not setup
+		    * properly yet, ie; curcpu() won't work at this
+		    * point and spl() will break.
+		    */
+		   xpq_queue_pte_update(xpmap_ptetomach(ptp),
+					*ptp & ~PG_RW);
+		   xpq_flush_queue();
+		}
 	}
-	/* printk("loading gdt %x, %d entries, %d pages", */
-	    /* frames[0] << PAGE_SHIFT, gdt_size[0], len >> PAGE_SHIFT); */
+
 	if (HYPERVISOR_set_gdt(frames, gdt_size[0]))
 		panic("HYPERVISOR_set_gdt failed!\n");
 	lgdt_finish();
 #endif
 }
 
-#ifdef MULTIPROCESSOR
+#if defined(MULTIPROCESSOR) && !defined(XEN)
 
 void
 gdt_reload_cpu(struct cpu_info *ci)
@@ -256,15 +264,17 @@ gdt_grow(int which)
 			gdt_size[which] = MINGDTSIZ;
 			new_len = gdt_size[which] * sizeof(gdt[0]);
 		}
-		for(va = (vaddr_t)(cpu_info_primary.ci_gdt) + old_len + max_len;
-		    va < (vaddr_t)(cpu_info_primary.ci_gdt) + new_len + max_len;
-		    va += PAGE_SIZE) {
-			while ((pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO))
-			    == NULL) {
-				uvm_wait("gdt_grow");
+		for (CPU_INFO_FOREACH(cii, ci)) {
+			for(va = (vaddr_t)(ci->ci_gdt) + old_len + max_len;
+			    va < (vaddr_t)(ci->ci_gdt) + new_len + max_len;
+			    va += PAGE_SIZE) {
+				while ((pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO))
+				       == NULL) {
+					uvm_wait("gdt_grow");
+				}
+				pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
+					       VM_PROT_READ | VM_PROT_WRITE, 0);
 			}
-			pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
-			    VM_PROT_READ | VM_PROT_WRITE, 0);
 		}
 		return;
 	}

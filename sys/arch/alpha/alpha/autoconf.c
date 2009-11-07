@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.47 2009/03/18 07:42:36 cegger Exp $ */
+/* $NetBSD: autoconf.c,v 1.51.2.1 2012/08/08 15:51:11 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.47 2009/03/18 07:42:36 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.51.2.1 2012/08/08 15:51:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.47 2009/03/18 07:42:36 cegger Exp $")
 struct bootdev_data	*bootdev_data;
 
 void	parse_prom_bootdev(void);
-int	atoi(char *);
+static inline int atoi(const char *);
 
 /*
  * cpu_configure:
@@ -87,7 +87,7 @@ cpu_configure(void)
 	(void)spl0();
 
 	/*
-	 * Note that bootstrapping is finished, and set the HWRPB up  
+	 * Note that bootstrapping is finished, and set the HWRPB up
 	 * to do restarts.
 	 */
 	hwrpb_restart_setup();
@@ -100,7 +100,7 @@ cpu_rootconf(void)
 	if (booted_device == NULL)
 		printf("WARNING: can't figure what device matches \"%s\"\n",
 		    bootinfo.booted_dev);
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 void
@@ -163,32 +163,14 @@ parse_prom_bootdev(void)
 	bootdev_data = &bd;
 }
 
-int
-atoi(char *s)
+static inline int
+atoi(const char *s)
 {
-	int n, neg;
-
-	n = 0;
-	neg = 0;
-
-	while (*s == '-') {
-		s++;
-		neg = !neg;
-	}
-
-	while (*s != '\0') {
-		if (*s < '0' && *s > '9')
-			break;
-
-		n = (10 * n) + (*s - '0');
-		s++;
-	}
-
-	return (neg ? -n : n);
+	return (int)strtoll(s, NULL, 10);
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 	if (bootdev_data == NULL) {
 		/*

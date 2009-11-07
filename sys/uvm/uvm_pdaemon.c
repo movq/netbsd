@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdaemon.c,v 1.100 2009/10/21 21:12:07 rmind Exp $	*/
+/*	$NetBSD: uvm_pdaemon.c,v 1.105 2012/02/01 23:43:49 para Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -17,12 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Charles D. Cranor,
- *      Washington University, the University of California, Berkeley and
- *      its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -71,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.100 2009/10/21 21:12:07 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.105 2012/02/01 23:43:49 para Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -107,16 +102,12 @@ static void	uvmpd_scan(void);
 static void	uvmpd_scan_queue(void);
 static void	uvmpd_tune(void);
 
-unsigned int uvm_pagedaemon_waiters;
+static unsigned int uvm_pagedaemon_waiters;
 
 /*
  * XXX hack to avoid hangs when large processes fork.
  */
 u_int uvm_extrapages;
-
-static kmutex_t uvm_reclaim_lock;
-
-SLIST_HEAD(uvm_reclaim_hooks, uvm_reclaim_hook) uvm_reclaim_list;
 
 /*
  * uvm_wait: wait (sleep) for the page daemon to free some pages
@@ -182,7 +173,8 @@ uvm_kick_pdaemon(void)
 
 	if (uvmexp.free + uvmexp.paging < uvmexp.freemin ||
 	    (uvmexp.free + uvmexp.paging < uvmexp.freetarg &&
-	     uvmpdpol_needsscan_p())) {
+	     uvmpdpol_needsscan_p()) ||
+	     uvm_km_va_starved_p()) {
 		wakeup(&uvm.pagedaemon);
 	}
 }
@@ -237,7 +229,6 @@ uvm_pageout(void *arg)
 	int extrapages = 0;
 	struct pool *pp;
 	uint64_t where;
-	struct uvm_reclaim_hook *hook;
 	
 	UVMHIST_FUNC("uvm_pageout"); UVMHIST_CALLED(pdhist);
 
@@ -258,10 +249,13 @@ uvm_pageout(void *arg)
 	 */
 
 	for (;;) {
-		bool needsscan, needsfree;
+		bool needsscan, needsfree, kmem_va_starved;
+
+		kmem_va_starved = uvm_km_va_starved_p();
 
 		mutex_spin_enter(&uvm_fpageqlock);
-		if (uvm_pagedaemon_waiters == 0 || uvmexp.paging > 0) {
+		if ((uvm_pagedaemon_waiters == 0 || uvmexp.paging > 0) &&
+		    !kmem_va_starved) {
 			UVMHIST_LOG(pdhist,"  <<SLEEPING>>",0,0,0,0);
 			UVM_UNLOCK_AND_WAIT(&uvm.pagedaemon,
 			    &uvm_fpageqlock, false, "pgdaemon", 0);
@@ -330,7 +324,7 @@ uvm_pageout(void *arg)
 		 * if we don't need free memory, we're done.
 		 */
 
-		if (!needsfree) 
+		if (!needsfree && !kmem_va_starved)
 			continue;
 
 		/*
@@ -346,12 +340,6 @@ uvm_pageout(void *arg)
 		buf_drain(bufcnt << PAGE_SHIFT);
 		mutex_exit(&bufcache_lock);
 
-		mutex_enter(&uvm_reclaim_lock);
-		SLIST_FOREACH(hook, &uvm_reclaim_list, uvm_reclaim_next) {
-			(*hook->uvm_reclaim_hook)();
-		}
-		mutex_exit(&uvm_reclaim_lock);
-		
 		/*
 		 * complete draining the pools.
 		 */
@@ -426,12 +414,12 @@ uvmpd_trylockowner(struct vm_page *pg)
 	KASSERT(mutex_owned(&uvm_pageqlock));
 
 	if (uobj != NULL) {
-		slock = &uobj->vmobjlock;
+		slock = uobj->vmobjlock;
 	} else {
 		struct vm_anon *anon = pg->uanon;
 
 		KASSERT(anon != NULL);
-		slock = &anon->an_lock;
+		slock = anon->an_lock;
 	}
 
 	if (!mutex_tryenter(slock)) {
@@ -508,12 +496,12 @@ swapcluster_add(struct swapcluster *swc, struct vm_page *pg)
 	slot = swc->swc_slot + swc->swc_nused;
 	uobj = pg->uobject;
 	if (uobj == NULL) {
-		KASSERT(mutex_owned(&pg->uanon->an_lock));
+		KASSERT(mutex_owned(pg->uanon->an_lock));
 		pg->uanon->an_swslot = slot;
 	} else {
 		int result;
 
-		KASSERT(mutex_owned(&uobj->vmobjlock));
+		KASSERT(mutex_owned(uobj->vmobjlock));
 		result = uao_set_swslot(uobj, pg->offset >> PAGE_SHIFT, slot);
 		if (result == -1) {
 			return ENOMEM;
@@ -1037,43 +1025,3 @@ uvm_estimatepageable(int *active, int *inactive)
 	uvmpdpol_estimatepageable(active, inactive);
 }
 
-void
-uvm_reclaim_init(void)
-{
-	
-	/* Initialize UVM reclaim hooks. */
-	mutex_init(&uvm_reclaim_lock, MUTEX_DEFAULT, IPL_NONE);
-	SLIST_INIT(&uvm_reclaim_list);
-}
-
-void
-uvm_reclaim_hook_add(struct uvm_reclaim_hook *hook)
-{
-
-	KASSERT(hook != NULL);
-	
-	mutex_enter(&uvm_reclaim_lock);
-	SLIST_INSERT_HEAD(&uvm_reclaim_list, hook, uvm_reclaim_next);
-	mutex_exit(&uvm_reclaim_lock);
-}
-
-void
-uvm_reclaim_hook_del(struct uvm_reclaim_hook *hook_entry)
-{
-	struct uvm_reclaim_hook *hook;
-
-	KASSERT(hook_entry != NULL);
-	
-	mutex_enter(&uvm_reclaim_lock);
-	SLIST_FOREACH(hook, &uvm_reclaim_list, uvm_reclaim_next) {
-		if (hook != hook_entry) {
-			continue;
-		}
-
-		SLIST_REMOVE(&uvm_reclaim_list, hook, uvm_reclaim_hook,
-		    uvm_reclaim_next);
-		break;
-	}
-
-	mutex_exit(&uvm_reclaim_lock);
-}

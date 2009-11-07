@@ -1,4 +1,4 @@
-/*	$NetBSD: hex.c,v 1.1.1.1 2009/03/22 15:02:02 christos Exp $	*/
+/*	$NetBSD: hex.c,v 1.2.6.1 2012/06/05 21:15:07 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: hex.c,v 1.20 2008/09/25 04:02:39 tbox Exp */
+/* Id: hex.c,v 1.20 2008/09/25 04:02:39 tbox Exp  */
 
 /*! \file */
 
@@ -35,7 +35,7 @@
 	isc_result_t _r = (x); \
 	if (_r != ISC_R_SUCCESS) \
 		return (_r); \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 
 /*

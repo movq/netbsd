@@ -1,4 +1,4 @@
-/*	$NetBSD: dlfcn.h,v 1.20 2009/09/24 21:21:33 pooka Exp $	*/
+/*	$NetBSD: dlfcn.h,v 1.23 2011/06/25 05:45:11 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -55,6 +55,8 @@ void	*dlsym(void * __restrict, const char * __restrict);
 int	dladdr(const void * __restrict, Dl_info * __restrict);
 int	dlctl(void *, int, void *);
 int	dlinfo(void *, int, void *);
+void	*dlvsym(void * __restrict, const char * __restrict,
+	    const char * __restrict);
 #endif
 __aconst char *dlerror(void);
 __END_DECLS
@@ -64,6 +66,8 @@ __END_DECLS
 #define RTLD_NOW	2
 #define RTLD_GLOBAL	0x100		/* Allow global searches in object */
 #define RTLD_LOCAL	0x200
+#define RTLD_NODELETE	0x01000		/* Do not remove members. */
+#define RTLD_NOLOAD	0x02000		/* Do not load if not already loaded. */
 #if defined(_NETBSD_SOURCE)
 #define DL_LAZY		RTLD_LAZY	/* Compat */
 #endif
@@ -92,7 +96,7 @@ __END_DECLS
 /*
  * dlinfo() commands
  *
- * From Solarisa: http://docs.sun.com/app/docs/doc/816-5168/dlinfo-3c?a=view
+ * From Solaris: http://docs.sun.com/app/docs/doc/816-5168/dlinfo-3c?a=view
  */
 #if defined(_NETBSD_SOURCE)
 #define RTLD_DI_LINKMAP		3

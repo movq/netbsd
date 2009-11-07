@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.33 2009/04/14 22:15:23 lukem Exp $
+#	$NetBSD: Makefile,v 1.35 2011/08/16 11:49:17 christos Exp $
 #	@(#)Makefile	8.3 (Berkeley) 4/20/95
 
 .include <bsd.own.mk>
@@ -36,8 +36,8 @@ DPADD+=		${LIBUTIL}
 SRCS+=	complete.c
 
 CPPFLAGS+=	-DUSE_EDITLINE
-LDADD+=		-ledit -ltermcap
-DPADD+=		${LIBEDIT} ${LIBTERMCAP}
+LDADD+=		-ledit -lterminfo
+DPADD+=		${LIBEDIT} ${LIBTERMINFO}
 
 .if ${MIME_SUPPORT:Uno} == "yes"
 SRCS+=	mime_attach.c
@@ -77,6 +77,8 @@ SUBDIR+= USD.doc
 
 CONFIGFILES=		mail.rc
 FILESDIR_mail.rc=	/etc
+
+COPTS.format.c += -Wno-format-nonliteral
 
 .include <bsd.prog.mk>
 .include <bsd.subdir.mk>

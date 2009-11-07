@@ -1,4 +1,4 @@
-/*	$NetBSD: hunt.c,v 1.36 2009/08/12 07:42:11 dholland Exp $	*/
+/*	$NetBSD: hunt.c,v 1.41 2011/09/01 07:18:50 plunky Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hunt.c,v 1.36 2009/08/12 07:42:11 dholland Exp $");
+__RCSID("$NetBSD: hunt.c,v 1.41 2011/09/01 07:18:50 plunky Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -468,8 +468,13 @@ get_response:
 	set[0].events = POLLIN;
 	for (;;) {
 		if (listc + 1 >= listmax) {
+			SOCKET *newlistv;
+
 			listmax += 20;
-			listv = realloc(listv, listmax * sizeof(SOCKET));
+			newlistv = realloc(listv, listmax * sizeof(*listv));
+			if (newlistv == NULL)
+				leave(1, "realloc");
+			listv = newlistv;
 		}
 
 		if (poll(set, 1, 1000) == 1 &&
@@ -759,7 +764,7 @@ leave(int eval, const char *mesg)
 	int serrno = errno;
 	fincurs();
 	errno = serrno;
-	err(eval, mesg ? mesg : "");
+	err(eval, "%s", mesg ? mesg : "");
 }
 
 /*
@@ -771,7 +776,7 @@ void
 leavex(int eval, const char *mesg)
 {
 	fincurs();
-	errx(eval, mesg ? mesg : "");
+	errx(eval, "%s", mesg ? mesg : "");
 }
 
 static long

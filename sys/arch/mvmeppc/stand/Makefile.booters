@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.booters,v 1.8 2009/04/03 10:38:13 tsutsui Exp $
+#	$NetBSD: Makefile.booters,v 1.12 2011/01/22 19:19:20 joerg Exp $
 
 S?=		${.CURDIR}/../../../..
 MDEC_DIR?=	/usr/mdec
@@ -32,28 +32,14 @@ SRCS+= vers.c
 CLEANFILES+= vers.c
 
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh -DM ${.CURDIR}/version "mvmeppc"
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "mvmeppc"
 .endif
 
-CLEANFILES+= machine powerpc
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.NOPATH: machine powerpc
-.BEGIN: machine powerpc
-
-machine :
-	-rm -f ${.TARGET}
-	ln -s $S/arch/mvmeppc/include machine
-
-powerpc :
-	-rm -f ${.TARGET}
-	ln -s $S/arch/powerpc/include powerpc
-.endif
+.include <bsd.klinks.mk>
 
 .if defined(LIB)
 
-lib${LIB}.a:: machine powerpc ${OBJS}
-beforedepend:	machine powerpc
+lib${LIB}.a:: ${OBJS}
 
 .else
 
@@ -67,18 +53,8 @@ ${PROG}: machine powerpc ${PROGDEPENDS}
 
 LIB_SA_DIR=	${.CURDIR}/../libsa
 LIBSA_DIR!=	cd ${LIB_SA_DIR} && ${PRINTOBJDIR}
-LIBSA=${LIBSA_DIR}/libsa.a
-
-.PHONY: ${LIBSA}
-${LIBSA}:
-	@echo making sure libsa is up to date...
-	@cd ${LIB_SA_DIR} && ${MAKE}
-
-SRTOBJ?= ${LIBSA_DIR}/srt0.o
-.PHONY: ${SRTOBJ}
-${SRTOBJ}:
-	@echo making sure srt0 is up to date...
-	@cd ${LIB_SA_DIR} && ${MAKE} srt0.o
+LIBSA=		${LIBSA_DIR}/lib/sa/libsa.a
+LIBKERN=	${LIBSA_DIR}/lib/kern/libkern.a
 
 #WRTVID_BOOT_DIR=  ${.CURDIR}/../wrtvid
 #WRTVID_DIR!=	cd ${WRTVID_BOOT_DIR} && ${PRINTOBJDIR}

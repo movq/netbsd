@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.34 2008/04/28 20:23:38 martin Exp $	*/
+/*	$NetBSD: dvma.c,v 1.38 2012/01/29 16:24:01 para Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.34 2008/04/28 20:23:38 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.38 2012/01/29 16:24:01 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.34 2008/04/28 20:23:38 martin Exp $");
 #include <sys/extent.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
@@ -83,10 +82,12 @@ dvma_init(void)
 	 * dvma_extent manages things handled in interrupt
 	 * context.
 	 */
-	phys_map = uvm_map_create(pmap_kernel(),
-	    DVMA_MAP_BASE, DVMA_MAP_END, 0);
+	phys_map = kmem_alloc(sizeof(struct vm_map), KM_SLEEP);
 	if (phys_map == NULL)
 		panic("unable to create DVMA map");
+
+	uvm_map_setup(phys_map, DVMA_MAP_BASE, DVMA_MAP_END, 0);
+	phys_map->pmap = pmap_kernel();
 
 	/*
 	 * Reserve the DVMA space used for segment remapping.
@@ -103,7 +104,7 @@ dvma_init(void)
 	 * into DVMA space for the purpose of data transfer.
 	 */
 	dvma_extent = extent_create("dvma", segmap_addr,
-	    segmap_addr + (dvma_segmap_size - 1), M_DEVBUF,
+	    segmap_addr + (dvma_segmap_size - 1),
 	    NULL, 0, EX_NOCOALESCE|EX_NOWAIT);
 }
 
@@ -184,7 +185,7 @@ dvma_mapin(void *kva, int len, int canwait /* ignored */)
 	seg_len = (vsize_t)len;
 	seg_off = seg_kva & SEGOFSET;
 	seg_kva -= seg_off;
-	seg_len = m68k_round_seg(seg_len + seg_off);
+	seg_len = sun3_round_seg(seg_len + seg_off);
 
 	s = splvm();
 
@@ -246,7 +247,7 @@ dvma_mapout(void *dma, int len)
 	seg_len = (vsize_t)len;
 	seg_off = seg_dma & SEGOFSET;
 	seg_dma -= seg_off;
-	seg_len = m68k_round_seg(seg_len + seg_off);
+	seg_len = sun3_round_seg(seg_len + seg_off);
 
 	s = splvm();
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: amiga_init.c,v 1.110 2009/10/26 19:16:54 cegger Exp $	*/
+/*	$NetBSD: amiga_init.c,v 1.126 2012/02/12 16:34:06 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Michael L. Hitch
@@ -34,15 +34,14 @@
 #include "opt_amigaccgrf.h"
 #include "opt_p5ppc68kboard.h"
 #include "opt_devreload.h"
+#include "opt_m68k_arch.h"
+#include "ser.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.110 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.126 2012/02/12 16:34:06 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/proc.h>
-#include <uvm/uvm_extern.h>
-#include <sys/user.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/tty.h>
@@ -54,6 +53,10 @@ __KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.110 2009/10/26 19:16:54 cegger Exp 
 #include <sys/dkbad.h>
 #include <sys/reboot.h>
 #include <sys/exec.h>
+
+#include <dev/mm.h>
+#include <uvm/uvm_extern.h>
+
 #include <machine/pte.h>
 #include <machine/cpu.h>
 #include <amiga/amiga/cc.h>
@@ -68,11 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.110 2009/10/26 19:16:54 cegger Exp 
 #define RELOC(v, t)	*((t*)((u_int)&(v) + loadbase))
 
 extern u_int	lowram;
-extern u_int	Umap, proc0paddr;
-extern u_int	Sysseg_pa;
-#if defined(M68040) || defined(M68060)
-extern int	protostfree;
-#endif
+extern u_int	Umap;
 extern u_long boot_partition;
 vaddr_t		amiga_uptbase;
 #ifdef P5PPC68KBOARD
@@ -84,6 +83,10 @@ extern char *esym;
 #ifdef GRF_AGA
 extern u_long aga_enable;
 #endif
+
+#if NSER > 0
+extern int serconsole;
+#endif 
 
 extern u_long noncontig_enable;
 
@@ -190,15 +193,9 @@ int kernel_copyback = 1;
 
 __attribute__ ((no_instrument_function))
 void
-start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
-	boot_part, loadbase)
-	int id;
-	u_int fphystart, fphysize, cphysize;
-	char *esym_addr;
-	u_int flags;
-	u_long inh_sync;
-	u_long boot_part;
-	u_int loadbase;
+start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
+	char *esym_addr, u_int flags, u_long inh_sync, u_long boot_part,
+	u_int loadbase)
 {
 	extern char end[];
 	extern u_int protorp[2];
@@ -210,12 +207,15 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 	psize_t ptsize;
 	u_int ptextra, kstsize;
 	paddr_t Sysptmap_pa;
-	register st_entry_t sg_proto, *sg, *esg;
+	register st_entry_t sg_proto, *sg;
+#if defined(M68040) || defined(M68060)
+	register st_entry_t *esg;
+#endif
 	register pt_entry_t pg_proto, *pg, *epg;
 	vaddr_t end_loaded;
-	u_int ncd, i;
+	u_int ncd;
 #if defined(M68040) || defined(M68060)
-	u_int nl1desc, nl2desc;
+	u_int i, nl1desc, nl2desc;
 #endif
 	vaddr_t kva;
 	struct boot_memlist *ml;
@@ -256,6 +256,10 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 #endif
 	if (flags & (3 << 1))
 		RELOC(noncontig_enable, u_long) = (flags >> 1) & 3;
+#if NSER > 0
+	if (flags & (1 << 3))
+		RELOC(serconsole, int) = 0;
+#endif
 
 	RELOC(scsi_nosync, u_long) = inh_sync;
 
@@ -321,6 +325,16 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 	    ncd = RELOC(ncfdev, int); ncd > 0; ncd--, cd++) {
 		int bd_type = cd->rom.type & (ERT_TYPEMASK | ERTF_MEMLIST);
 
+		/*
+		 * Hack to support p5bus and p5pb on CyberStorm Mk-III / PPC
+		 * and Blizzard PPC. XXX: this hack should only be active if
+		 * non-autoconfiguring CyberVision PPC or BlizzardVision PPC
+		 * was found. 
+		 */
+		if (cd->rom.manid == 8512 && 
+		    (cd->rom.prodid == 100 || cd->rom.prodid == 110)) 
+			RELOC(ZBUSAVAIL, u_int) += m68k_round_page(0x1400000);
+
 		if (bd_type != ERT_ZORROIII &&
 		    (bd_type != ERT_ZORROII || isztwopa(cd->addr)))
 			continue;	/* It's not Z2 or Z3 I/O board */
@@ -335,6 +349,7 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 		    (cd->rom.flags & ERT_Z3_SSMASK) == 0)
 			cd->size = 0x10000 <<
 			    ((cd->rom.type - 1) & ERT_MEMMASK);
+
 		RELOC(ZBUSAVAIL, u_int) += m68k_round_page(cd->size);
 	}
 
@@ -352,9 +367,9 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 	avail -= vstart;
 
 	/*
-	 * save KVA of proc0 u-area and allocate it.
+	 * save KVA of lwp0 u-area and allocate it.
 	 */
-	RELOC(proc0paddr, u_int) = vstart;
+	RELOC(lwp0uarea, vaddr_t) = vstart;
 	pstart += USPACE;
 	vstart += USPACE;
 	avail -= USPACE;
@@ -408,7 +423,7 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 	/*
 	 * Sysmap is now placed at the end of Supervisor virtual address space.
 	 */
-	RELOC(Sysmap, u_int *) = (u_int *)-(NPTEPG * PAGE_SIZE);
+	RELOC(Sysmap, u_int *) = (u_int *)SYSMAP_VA;
 
 	/*
 	 * initialize segment table and page table map
@@ -494,7 +509,7 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 		while (pg < epg)
 			*pg++ = SG_NV;
 		pg = (pt_entry_t *)Sysptmap_pa;
-		pg = &pg[256 - 1];		/* XXX */
+		pg = &pg[SYSMAP_VA >> SEGSHIFT];
 		*pg = Sysptmap_pa | PG_RW | PG_CI | PG_V;
 	} else
 #endif /* M68040 */
@@ -517,12 +532,16 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 		/*
 		 * invalidate the remainder of each table
 		 */
-		/* XXX PAGE_SIZE dependent constant: 256 or 1024 */
-		epg = (pt_entry_t *)(Sysptmap_pa + (256 - 1) * sizeof(st_entry_t));
+		epg = (pt_entry_t *)Sysptmap_pa;
+		epg = &epg[TIA_SIZE];
 		while (pg < epg) {
 			*sg++ = SG_NV;
 			*pg++ = PG_NV;
 		}
+		sg = (st_entry_t *)RELOC(Sysseg_pa, u_int);
+		sg = &sg[SYSMAP_VA >> SEGSHIFT];
+		pg = (pt_entry_t *)Sysptmap_pa;
+		pg = &pg[SYSMAP_VA >> SEGSHIFT];
 		*sg = Sysptmap_pa | SG_RW | SG_V;
 		*pg = Sysptmap_pa | PG_RW | PG_CI | PG_V;
 		/* XXX zero out rest of page? */
@@ -546,9 +565,9 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 
 #if defined(M68040) || defined(M68060)
 	/*
-	 * map the kernel segment table cache invalidated for
-	 * these machines (for the 68040 not strictly necessary, but
-	 * recommended by Motorola; for the 68060 mandatory)
+	 * Map the kernel segment table cache invalidated for 68040/68060.
+	 * (for the 68040 not strictly necessary, but recommended by Motorola;
+	 *  for the 68060 mandatory)
 	 */
 	if (RELOC(mmutype, int) == MMU_68040) {
 
@@ -575,7 +594,7 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 #endif
 	/*
 	 * go till end of data allocated so far
-	 * plus proc0 u-area (to be allocated)
+	 * plus lwp0 u-area (to be allocated)
 	 */
 	for (; kva < vstart; kva += PAGE_SIZE, pg_proto += PAGE_SIZE)
 		*pg++ = pg_proto;
@@ -767,6 +786,7 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 void
 start_c_finish(void)
 {
+	extern u_int32_t delaydivisor;
 #ifdef	P5PPC68KBOARD
         struct cfdev *cdp, *ecdp;
 #endif
@@ -789,8 +809,8 @@ start_c_finish(void)
 ((volatile struct Custom *)CUSTOMADDR)->color[0] = 0x0a0;	/* GREEN */
 #endif
 
-	bzero ((u_char *)proc0paddr, USPACE);
 	pmap_bootstrap(start_c_pstart, start_c_fphystart);
+	pmap_bootstrap_finalize();
 
 	/*
 	 * to make life easier in locore.s, set these addresses explicitly
@@ -822,11 +842,6 @@ start_c_finish(void)
 		z2mem_end = ZTWOMEMADDR + NZTWOMEMPG * PAGE_SIZE;
 		z2mem_start = ZTWOMEMADDR;
 	}
-
-#if 0
-	i = *(int *)proc0paddr;
-	*(volatile int *)proc0paddr = i;
-#endif
 
 	/*
 	 * disable all interrupts but enable allow them to be enabled
@@ -902,6 +917,21 @@ start_c_finish(void)
 			}
         }
 #endif
+	/*
+	 * preliminary delay divisor value
+	 */
+
+	if (machineid & AMIGA_68060)
+		delaydivisor = (1024 * 1) / 80;	/* 80 MHz 68060 w. BTC */
+
+	else if (machineid & AMIGA_68040)
+		delaydivisor = (1024 * 3) / 40;	/* 40 MHz 68040 */
+
+	else if (machineid & AMIGA_68030)
+		delaydivisor = (1024 * 8) / 50;	/* 50 MHz 68030 */
+
+	else
+		delaydivisor = (1024 * 8) / 33; /* 33 MHz 68020 */
 }
 
 void
@@ -1110,3 +1140,19 @@ kernel_reload_write(struct uio *uio)
 	return(0);
 }
 #endif
+
+int
+mm_md_readwrite(dev_t dev, struct uio *uio)
+{
+
+	switch (minor(dev)) {
+#ifdef DEVRELOAD
+	case DEV_RELOAD:
+		if (uio->uio_rw == UIO_READ)
+			return 0;
+		return kernel_reload_write(uio);
+#endif
+	default:
+		return ENXIO;
+	}
+}

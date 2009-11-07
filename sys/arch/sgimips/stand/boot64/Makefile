@@ -1,12 +1,15 @@
-#	$NetBSD: Makefile,v 1.6 2009/03/15 15:20:13 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.11 2011/02/25 23:37:32 matt Exp $
 
 PROG=	ip30boot
+NOMAN=	# defined
 
-SRCS=	start64.S boot.c bootinfo.c conf.c devopen.c putchar.c getchar.c \
-	getopt.c disk.c
+SRCS=	start.S boot.c bootinfo.c conf.c devopen.c putchar.c getchar.c \
+	getopt.c disk.c arcbios_calls.S
+
 
 CLEANFILES+=	boot.map
 
+.include <bsd.own.mk>
 .include <bsd.sys.mk>		# for HOST_SH
 
 # $S must correspond to the top of the 'sys' tree
@@ -17,6 +20,7 @@ BINMODE?=	444
 realall: ${PROG}
 
 .PATH:		${.CURDIR}/../common
+.PATH.S:	${S}/dev/arcbios
 AFLAGS+=	-D_LOCORE -D_KERNEL -mno-abicalls -mabi=64 -D_LP64
 CPPFLAGS+=	-nostdinc -D_STANDALONE -DNO_ABICALLS -I${.OBJDIR} -I${S}
 # compiler flags for smallest code size
@@ -27,8 +31,10 @@ CPPFLAGS+=	-DNETBSD_VERS='"${NETBSD_VERS}"'
 
 CPPFLAGS+=	-Dsgimips
 
-# PROG set by parent.
-NOMAN=		# defined
+LDFLAGS+=       -m elf64btsmip
+LINKFORMAT+=    -m elf64btsmip
+
+.include "${S}/dev/arcbios/Makefile.inc"
 
 # We load the kernel at 420K in from the start of RAM to give the boot
 # loader plenty of breathing room.  Load the boot loader starting at
@@ -41,7 +47,8 @@ LOAD_ADDRESS_IP30?=	0xa800000020080000
 .if exists(version)
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "sgimips"
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/version "sgimips"
 
 SRCS+=	vers.c
 CLEANFILES+= vers.c
@@ -70,10 +77,12 @@ LIBSA=		${SALIB}
 LIBS=		${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN}
 
 ip30boot: ${OBJS} ${LIBS}
+	${_MKTARGET_LINK}
 	${LD} -m elf64btsmip -Map boot.map -x -Ttext ${LOAD_ADDRESS_IP30} \
 		${LDBUG} -e start -o ${.TARGET} ${OBJS} ${LIBS}
+	${SIZE} ${.TARGET}
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 cleanlibdir:
 	-rm -rf lib
 

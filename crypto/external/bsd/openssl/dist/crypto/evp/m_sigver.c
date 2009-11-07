@@ -137,7 +137,7 @@ int EVP_DigestSignFinal(EVP_MD_CTX *ctx, unsigned char *sigret, size_t *siglen)
 		sctx = 0;
 	if (sigret)
 		{
-		MS_STATIC EVP_MD_CTX tmp_ctx;
+		EVP_MD_CTX tmp_ctx;
 		unsigned char md[EVP_MAX_MD_SIZE];
 		unsigned int mdlen;
 		EVP_MD_CTX_init(&tmp_ctx);
@@ -173,14 +173,13 @@ int EVP_DigestSignFinal(EVP_MD_CTX *ctx, unsigned char *sigret, size_t *siglen)
 
 int EVP_DigestVerifyFinal(EVP_MD_CTX *ctx, unsigned char *sig, size_t siglen)
 	{
-	MS_STATIC EVP_MD_CTX tmp_ctx;
+	EVP_MD_CTX tmp_ctx;
 	unsigned char md[EVP_MAX_MD_SIZE];
 	int r;
 	unsigned int mdlen;
 	int vctx;
 
-	/* FIXME: surely this should test verifyctx? (Ben 29/12/08) */
-	if (ctx->pctx->pmeth->signctx)
+	if (ctx->pctx->pmeth->verifyctx)
 		vctx = 1;
 	else
 		vctx = 0;

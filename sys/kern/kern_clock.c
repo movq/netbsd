@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_clock.c,v 1.126 2008/10/05 21:57:20 pooka Exp $	*/
+/*	$NetBSD: kern_clock.c,v 1.130 2011/10/30 01:57:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.126 2008/10/05 21:57:20 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.130 2011/10/30 01:57:40 christos Exp $");
 
 #include "opt_ntp.h"
 #include "opt_perfctrs.h"
@@ -88,8 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_clock.c,v 1.126 2008/10/05 21:57:20 pooka Exp $
 #include <sys/timetc.h>
 #include <sys/cpu.h>
 #include <sys/atomic.h>
-
-#include <uvm/uvm_extern.h>
 
 #ifdef GPROF
 #include <sys/gmon.h>
@@ -317,18 +315,6 @@ proftick(struct clockframe *frame)
 void
 schedclock(struct lwp *l)
 {
-	struct cpu_info *ci;
-
-	ci = l->l_cpu;
-
-	/* Accumulate syscall and context switch counts. */
-	atomic_add_int((unsigned *)&uvmexp.swtch, ci->ci_data.cpu_nswtch);
-	ci->ci_data.cpu_nswtch = 0;
-	atomic_add_int((unsigned *)&uvmexp.syscalls, ci->ci_data.cpu_nsyscall);
-	ci->ci_data.cpu_nsyscall = 0;
-	atomic_add_int((unsigned *)&uvmexp.traps, ci->ci_data.cpu_ntrap);
-	ci->ci_data.cpu_ntrap = 0;
-
 	if ((l->l_flag & LW_IDLE) != 0)
 		return;
 

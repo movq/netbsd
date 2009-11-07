@@ -1,4 +1,4 @@
-/*	$NetBSD: relay.c,v 1.1.1.3 2006/04/04 16:09:52 martti Exp $	*/
+/*	$NetBSD: relay.c,v 1.2 2012/02/15 17:55:08 riz Exp $	*/
 
 /*
  * Sample program to be used as a transparent proxy.

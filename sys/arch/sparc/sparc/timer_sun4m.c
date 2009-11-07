@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_sun4m.c,v 1.17 2009/03/10 23:58:20 martin Exp $	*/
+/*	$NetBSD: timer_sun4m.c,v 1.28 2011/09/01 08:43:24 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,15 +58,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.17 2009/03/10 23:58:20 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.28 2011/09/01 08:43:24 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sparc/sparc/vaddrs.h>
 #include <sparc/sparc/cpuvar.h>
@@ -95,6 +96,31 @@ timer_init_4m(void)
 	icr_si_bic(SINTR_T);
 }
 
+void
+schedintr_4m(void *v)
+{
+
+	kpreempt_disable();
+#ifdef MULTIPROCESSOR
+	/*
+	 * We call hardclock() here so that we make sure it is called on
+	 * all CPUs.  This function ends up being called on sun4m systems
+	 * every tick.
+	 */
+	if (!CPU_IS_PRIMARY(curcpu()))
+		hardclock(v);
+
+	/*
+	 * The factor 8 is only valid for stathz==100.
+	 * See also clock.c
+	 */
+	if ((++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0 && schedhz != 0)
+#endif
+		schedclock(curlwp);
+	kpreempt_enable();
+}
+
+
 /*
  * Level 10 (clock) interrupts from system counter.
  */
@@ -102,6 +128,7 @@ int
 clockintr_4m(void *cap)
 {
 
+	KASSERT(CPU_IS_PRIMARY(curcpu()));
 	/*
 	 * XXX this needs to be fixed in a more general way
 	 * problem is that the kernel enables interrupts and THEN
@@ -109,13 +136,18 @@ clockintr_4m(void *cap)
 	 * a timer interrupt - if we call hardclock() at that point we'll
 	 * panic
 	 * so for now just bail when cold
+	 *
+	 * For MP, we defer calling hardclock() to the schedintr so
+	 * that we call it on all cpus.
 	 */
 	if (cold)
 		return 0;
+	kpreempt_disable();
 	/* read the limit register to clear the interrupt */
 	*((volatile int *)&timerreg4m->t_limit);
 	tickle_tc();
 	hardclock((struct clockframe *)cap);
+	kpreempt_enable();
 	return (1);
 }
 
@@ -127,6 +159,8 @@ statintr_4m(void *cap)
 {
 	struct clockframe *frame = cap;
 	u_long newint;
+
+	kpreempt_disable();
 
 	/* read the limit register to clear the interrupt */
 	*((volatile int *)&counterreg4m->t_limit);
@@ -149,25 +183,30 @@ statintr_4m(void *cap)
 	 * The factor 8 is only valid for stathz==100.
 	 * See also clock.c
 	 */
-	if (curlwp && (++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0) {
+#if !defined(MULTIPROCESSOR)
+	if ((++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0 && schedhz != 0) {
+#endif
 		if (CLKF_LOPRI(frame, IPL_SCHED)) {
 			/* No need to schedule a soft interrupt */
 			spllowerschedclock();
-			schedintr(cap);
+			schedintr_4m(cap);
 		} else {
 			/*
 			 * We're interrupting a thread that may have the
-			 * scheduler lock; run schedintr() on this CPU later.
+			 * scheduler lock; run schedintr_4m() on this CPU later.
 			 */
 			raise_ipi(&cpuinfo, IPL_SCHED); /* sched_cookie->pil */
 		}
+#if !defined(MULTIPROCESSOR)
 	}
+#endif
+	kpreempt_enable();
 
 	return (1);
 }
 
 void
-timerattach_obio_4m(struct device *parent, struct device *self, void *aux)
+timerattach_obio_4m(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;

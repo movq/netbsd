@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfbvar.h,v 1.7 2009/07/28 00:10:51 macallan Exp $ */
+/* $NetBSD: radeonfbvar.h,v 1.13.2.1 2012/03/21 16:12:19 riz Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -175,6 +175,8 @@ struct radeonfb_display {
 
 	struct callout          rd_bl_lvds_co;  /* delayed lvds operation */
 	uint32_t                rd_bl_lvds_val; /* value of delayed lvds */
+	int			rd_bl_on;
+	int			rd_bl_level;
 
 	int			rd_wsmode;
 
@@ -190,7 +192,7 @@ struct radeonfb_display {
 	struct wsscreen_descr	*rd_wsscreens;
 	struct vcons_screen	rd_vscreen;
 	struct vcons_data	rd_vd;
-
+	void (*rd_putchar)(void *, int, int, u_int, long);
 
 #if 0
 	uint8_t			rd_cmap_red[256];
@@ -201,10 +203,6 @@ struct radeonfb_display {
 #ifdef SPLASHSCREEN
 	struct splash_info	rd_splash;
 #endif
-
-#ifdef SPLASHSCREEN_PROGRESS
-	struct splash_progress	rd_progress;
-#endif
 };
 
 struct radeon_tmds_pll {
@@ -213,12 +211,10 @@ struct radeon_tmds_pll {
 };
 
 struct radeonfb_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	uint16_t		sc_family;
 	uint16_t		sc_flags;
 	pcireg_t		sc_id;
-
-	char			sc_devinfo[256];
 
 	bus_space_tag_t		sc_regt;
 	bus_space_handle_t	sc_regh;
@@ -273,6 +269,7 @@ struct radeonfb_softc {
 
 	uint8_t			*sc_bios;
 	bus_size_t		sc_biossz;
+	uint32_t		sc_fp_gen_cntl;
 
 	char			sc_modebuf[64];
 	const char		*sc_defaultmode;
@@ -346,7 +343,7 @@ struct radeonfb_softc {
 #define	GETBIOS32(sc, r)	\
 	((GETBIOS16(sc, (r) + 2) << 16) | GETBIOS16(sc, (r)))
 
-#define	XNAME(sc)	device_xname(&sc->sc_dev)
+#define	XNAME(sc)	device_xname(sc->sc_dev)
 
 #define	DIVIDE(x,y)	(((x) + (y / 2)) / (y))
 
@@ -362,9 +359,7 @@ uint32_t radeonfb_getpll(struct radeonfb_softc *, uint32_t);
 void radeonfb_putpll(struct radeonfb_softc *, uint32_t, uint32_t);
 void radeonfb_maskpll(struct radeonfb_softc *, uint32_t, uint32_t, uint32_t);
 
-#ifdef	RADEON_BIOS_INIT
 int	radeonfb_bios_init(struct radeonfb_softc *);
-#endif
 
 void	radeonfb_i2c_init(struct radeonfb_softc *);
 int	radeonfb_i2c_read_edid(struct radeonfb_softc *, int, uint8_t *);

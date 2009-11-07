@@ -1,4 +1,4 @@
-#	$NetBSD: files.amigappc,v 1.20 2009/07/21 09:49:15 phx Exp $
+#	$NetBSD: files.amigappc,v 1.25 2012/02/15 12:11:43 phx Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!
@@ -31,8 +31,10 @@ defflag				BB060STUPIDROM
 defflag				P5PPC68KBOARD
 defflag				LEV6_DEFER
 
-file	dev/cons.c				ite | ser
-file	dev/cninit.c				ite | ser
+defparam			IOBZCLOCK
+
+file	dev/cons.c
+file	dev/cninit.c
 file	arch/amigappc/amigappc/amiga_init.c
 file	arch/amigappc/amigappc/autoconf.c
 file	arch/amigappc/amigappc/machdep.c
@@ -54,7 +56,7 @@ file	arch/amiga/amiga/amiga_bus_simple_4.c
 define	amibus_ww
 file	arch/amiga/amiga/amiga_bus_simple_2word.c
 
-define amibus_wb
+define	amibus_wb
 file	arch/amiga/amiga/amiga_bus_simple_1word.c
 
 define	amibus_b16
@@ -147,11 +149,11 @@ file	arch/amiga/dev/ite.c		ite needs-flag
 file	arch/amiga/dev/kbdmap.c		ite
 file	arch/amiga/dev/kf_custom.c	kfont_custom
 file	arch/amiga/dev/kf_iso8859_1_8x8.c	kfont_cons_iso8859_1 &
-	( ite | amidisplaycc )
+	( ite | wsdisplay )
 file	arch/amiga/dev/kf_iso8859_1_8x11.c	kfont_cons_iso8859_1 &
 	kfont_8x11
 file	arch/amiga/dev/kf_iso8859_2_8x8.c	kfont_cons_iso8859_2 &
-	( ite | amidisplaycc )
+	( ite | wsdisplay )
 file	arch/amiga/dev/kf_iso8859_2_8x11.c	kfont_cons_iso8859_2 &
 	kfont_8x11
 
@@ -267,6 +269,11 @@ device	hyper: supio
 attach	hyper at zbus
 file	arch/amiga/dev/hyper.c		hyper
 
+# IOBlix
+device	iobl: supio, amibus_b16
+attach	iobl at zbus with iobl_zbus
+file	arch/amiga/dev/ioblix_zbus.c	iobl_zbus
+
 attach	com at supio with com_supio
 file	arch/amiga/dev/com_supio.c	com_supio
 
@@ -346,6 +353,11 @@ file	arch/amiga/dev/mgnsc.c		mgnsc needs-flag
 device	wesc: scsi, asiop
 attach	wesc at zbus
 file	arch/amiga/dev/wesc.c		wesc needs-flag
+
+# Phase5 Blizzard 603e+ SCSI
+device	bppcsc: scsi, asiop
+attach	bppcsc at zbus
+file	arch/amiga/dev/bppcsc.c		bppcsc needs-flag
 
 # C= A4091 & A4000T
 device	afsc: scsi, asiop
@@ -429,4 +441,4 @@ file	arch/amiga/dev/wdc_buddha.c	wdc_buddha
 # OSS audio driver compatibility
 #include "compat/ossaudio/files.ossaudio"
 
-include "arch/amiga/conf/majors.amiga"
+include "arch/amigappc/conf/majors.amigappc"

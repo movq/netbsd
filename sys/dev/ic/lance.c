@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.43 2009/09/04 16:21:24 tsutsui Exp $	*/
+/*	$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,10 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.43 2009/09/04 16:21:24 tsutsui Exp $");
-
-#include "bpfilter.h"
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.46 2012/02/02 19:43:03 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,9 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.43 2009/09/04 16:21:24 tsutsui Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -89,10 +84,8 @@ __KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.43 2009/09/04 16:21:24 tsutsui Exp $");
 #include <net/if_media.h>
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <dev/ic/lancereg.h>
 #include <dev/ic/lancevar.h>
@@ -261,10 +254,8 @@ lance_config(struct lance_softc *sc)
 	sc->sc_tbufaddr = malloc(sc->sc_ntbuf * sizeof(int), M_DEVBUF,
 					M_WAITOK);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 }
 
 void
@@ -481,14 +472,11 @@ lance_read(struct lance_softc *sc, int boff, int len)
 		return;
 	}
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);

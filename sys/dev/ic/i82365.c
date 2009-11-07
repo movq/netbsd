@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365.c,v 1.111 2009/09/17 18:14:41 tsutsui Exp $	*/
+/*	$NetBSD: i82365.c,v 1.114 2011/07/26 22:21:02 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.111 2009/09/17 18:14:41 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.114 2011/07/26 22:21:02 dyoung Exp $");
 
 #define	PCICDEBUG
 
@@ -407,8 +407,6 @@ pcic_attach_socket(struct pcic_handle *h)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t) sc->pct;
 	paa.pch = (pcmcia_chipset_handle_t) h;
-	paa.iobase = sc->iobase;
-	paa.iosize = sc->iosize;
 
 	locs[PCMCIABUSCF_CONTROLLER] = h->chip;
 	locs[PCMCIABUSCF_SOCKET] = h->socket;
@@ -974,7 +972,6 @@ pcic_chip_mem_map(pcmcia_chipset_handle_t pch, int kind, bus_addr_t card_addr,
 	bus_addr_t busaddr;
 	long card_offset;
 	int i, win;
-	struct pcic_softc *sc = device_private(h->ph_parent);
 
 	win = -1;
 	for (i = 0; i < (sizeof(mem_map_index) / sizeof(mem_map_index[0]));
@@ -993,8 +990,11 @@ pcic_chip_mem_map(pcmcia_chipset_handle_t pch, int kind, bus_addr_t card_addr,
 
 	/* XXX this is pretty gross */
 
-	if (sc->memt != pcmhp->memt)
+{
+	struct pcic_softc *sc = device_private(h->ph_parent);
+	if (!bus_space_is_equal(sc->memt, pcmhp->memt))
 		panic("pcic_chip_mem_map memt is bogus");
+}
 
 	busaddr = pcmhp->addr;
 
@@ -1203,7 +1203,7 @@ pcic_chip_io_map(pcmcia_chipset_handle_t pch, int width, bus_addr_t offset,
 
 	/* XXX this is pretty gross */
 
-	if (sc->iot != pcihp->iot)
+	if (!bus_space_is_equal(sc->iot, pcihp->iot))
 		panic("pcic_chip_io_map iot is bogus");
 
 	DPRINTF(("pcic_chip_io_map window %d %s port %lx+%lx\n",

@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.53 2009/10/13 22:00:31 pooka Exp $	*/
+/*	$NetBSD: util.h,v 1.61 2012/01/07 18:41:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -35,11 +35,13 @@
 #include <sys/cdefs.h>
 #include <sys/ttycom.h>
 #include <sys/types.h>
-#include <stdio.h>
 #include <pwd.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <termios.h>
 #include <utmp.h>
 #include <utmpx.h>
+#include <stdint.h>
 #include <machine/ansi.h>
 
 #ifdef  _BSD_TIME_T_
@@ -63,15 +65,15 @@ struct utmp;
 struct winsize;
 struct sockaddr;
 
-typedef struct pw_policy *pw_policy_t; 
-
 char	       *flags_to_string(unsigned long, const char *);
 pid_t		forkpty(int *, char *, struct termios *, struct winsize *);
 const char     *getbootfile(void);
 off_t		getlabeloffset(void);
 int		getlabelsector(void);
+int		getlabelusesmbr(void);
 int		getmaxpartitions(void);
 int		getrawpartition(void);
+const char     *getfstypename(int);
 #ifndef __LIBC12_SOURCE__
 void		login(const struct utmp *) __RENAME(__login50);
 void		loginx(const struct utmpx *) __RENAME(__loginx50);
@@ -100,7 +102,7 @@ int		pw_copyx(int, int, struct passwd *, struct passwd *,
     char *, size_t) __RENAME(__pw_copyx50);
 #endif
 void		pw_edit(int, const char *);
-void		pw_error(const char *, int, int);
+__dead void	pw_error(const char *, int, int);
 void		pw_getconf(char *, size_t, const char *, const char *);
 #ifndef __LIBC12_SOURCE__
 void		pw_getpwconf(char *, size_t, const struct passwd *,
@@ -110,9 +112,6 @@ const char     *pw_getprefix(void);
 void		pw_init(void);
 int		pw_lock(int);
 int		pw_mkdb(const char *, int);
-pw_policy_t	pw_policy_load(void *, int);
-int		pw_policy_test(pw_policy_t, char *);
-void		pw_policy_free(pw_policy_t);
 void		pw_prompt(void);
 int		pw_setprefix(const char *);
 int		raise_default_signal(int);
@@ -121,6 +120,8 @@ int		snprintb_m(char *, size_t, const char *, uint64_t, size_t);
 int		snprintb(char *, size_t, const char *, uint64_t);
 int		sockaddr_snprintf(char *, size_t, const char *,
     const struct sockaddr *);
+char 	       *strpct(char *, size_t, uintmax_t, uintmax_t, size_t);
+char 	       *strspct(char *, size_t, intmax_t, intmax_t, size_t);
 int		string_to_flags(char **, unsigned long *, unsigned long *);
 int		ttyaction(const char *, const char *, const char *);
 int		ttylock(const char *, int, pid_t *);
@@ -142,10 +143,9 @@ void 		*emalloc(size_t);
 void 		*erealloc(void *, size_t);
 struct __sFILE	*efopen(const char *, const char *);
 int	 	easprintf(char ** __restrict, const char * __restrict, ...)
-    __attribute__((__format__(__printf__, 2, 3)));
-int		evasprintf(char ** __restrict, const char * __restrict,
-    _BSD_VA_LIST_)
-    __attribute__((__format__(__printf__, 2, 0)));
+			__printflike(2, 3);
+int		evasprintf(char ** __restrict, const char * __restrict, va_list)
+			__printflike(2, 0);
 __END_DECLS
 
 #endif /* !_UTIL_H_ */

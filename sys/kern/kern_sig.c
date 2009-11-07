@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig.c,v 1.299 2009/10/02 23:24:15 elad Exp $	*/
+/*	$NetBSD: kern_sig.c,v 1.316 2011/09/16 22:07:17 reinoud Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -65,8 +65,12 @@
  *	@(#)kern_sig.c	8.14 (Berkeley) 5/14/95
  */
 
+/*
+ * Signal subsystem.
+ */
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.299 2009/10/02 23:24:15 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.316 2011/09/16 22:07:17 reinoud Exp $");
 
 #include "opt_ptrace.h"
 #include "opt_compat_sunos.h"
@@ -96,13 +100,25 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.299 2009/10/02 23:24:15 elad Exp $");
 #include <sys/atomic.h>
 #include <sys/cpu.h>
 #include <sys/module.h>
+#include <sys/sdt.h>
 
 #ifdef PAX_SEGVGUARD
 #include <sys/pax.h>
 #endif /* PAX_SEGVGUARD */
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
+
+static pool_cache_t	sigacts_cache	__read_mostly;
+static pool_cache_t	ksiginfo_cache	__read_mostly;
+static callout_t	proc_stop_ch	__cacheline_aligned;
+
+#ifdef KERN_SA
+static pool_cache_t	siginfo_cache;
+#endif
+
+sigset_t		contsigmask	__cacheline_aligned;
+static sigset_t		stopsigmask	__cacheline_aligned;
+sigset_t		sigcantmask	__cacheline_aligned;
 
 static void	ksiginfo_exechook(struct proc *, void *);
 static void	proc_stop_callout(void *);
@@ -112,21 +128,40 @@ static void	sigput(sigpend_t *, struct proc *, ksiginfo_t *);
 static int	sigunwait(struct proc *, const ksiginfo_t *);
 static void	sigswitch(bool, int, int);
 
-sigset_t	contsigmask, stopsigmask, sigcantmask;
-static pool_cache_t sigacts_cache; /* memory pool for sigacts structures */
 static void	sigacts_poolpage_free(struct pool *, void *);
 static void	*sigacts_poolpage_alloc(struct pool *, int);
-static callout_t proc_stop_ch;
-static pool_cache_t siginfo_cache;
-static pool_cache_t ksiginfo_cache;
 
 void (*sendsig_sigcontext_vec)(const struct ksiginfo *, const sigset_t *);
 int (*coredump_vec)(struct lwp *, const char *) =
     (int (*)(struct lwp *, const char *))enosys;
 
+/*
+ * DTrace SDT provider definitions
+ */
+SDT_PROBE_DEFINE(proc,,,signal_send, 
+	    "struct lwp *", NULL,	/* target thread */
+	    "struct proc *", NULL,	/* target process */
+	    "int", NULL, 		/* signal */
+	    NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,signal_discard, 
+	    "struct lwp *", NULL,	/* target thread */
+	    "struct proc *", NULL,	/* target process */
+	    "int", NULL, 		/* signal */
+	    NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,signal_clear, 
+	    "int", NULL,		/* signal */
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,signal_handle, 
+	    "int", NULL,		/* signal */
+	    "ksiginfo_t *", NULL,
+	    "void (*)(void)", NULL,	/* handler address */
+	    NULL, NULL, NULL, NULL);
+
+
 static struct pool_allocator sigactspool_allocator = {
-        .pa_alloc = sigacts_poolpage_alloc,
-	.pa_free = sigacts_poolpage_free,
+	.pa_alloc = sigacts_poolpage_alloc,
+	.pa_free = sigacts_poolpage_free
 };
 
 #ifdef DEBUG
@@ -135,9 +170,9 @@ int	kern_logsigexit = 1;
 int	kern_logsigexit = 0;
 #endif
 
-static	const char logcoredump[] =
+static const char logcoredump[] =
     "pid %d (%s), uid %d: exited on signal %d (core dumped)\n";
-static	const char lognocoredump[] =
+static const char lognocoredump[] =
     "pid %d (%s), uid %d: exited on signal %d (core not dumped, err = %d)\n";
 
 static kauth_listener_t signal_listener;
@@ -166,7 +201,7 @@ signal_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
 /*
  * signal_init:
  *
- * 	Initialize global signal-related data structures.
+ *	Initialize global signal-related data structures.
  */
 void
 signal_init(void)
@@ -177,10 +212,10 @@ signal_init(void)
 	sigacts_cache = pool_cache_init(sizeof(struct sigacts), 0, 0, 0,
 	    "sigacts", sizeof(struct sigacts) > PAGE_SIZE ?
 	    &sigactspool_allocator : NULL, IPL_NONE, NULL, NULL, NULL);
-
+#ifdef KERN_SA
 	siginfo_cache = pool_cache_init(sizeof(siginfo_t), 0, 0, 0,
 	    "siginfo", NULL, IPL_NONE, NULL, NULL, NULL);
-
+#endif
 	ksiginfo_cache = pool_cache_init(sizeof(ksiginfo_t), 0, 0, 0,
 	    "ksiginfo", NULL, IPL_VM, NULL, NULL, NULL);
 
@@ -196,14 +231,14 @@ signal_init(void)
 /*
  * sigacts_poolpage_alloc:
  *
- *	 Allocate a page for the sigacts memory pool.
+ *	Allocate a page for the sigacts memory pool.
  */
 static void *
 sigacts_poolpage_alloc(struct pool *pp, int flags)
 {
 
 	return (void *)uvm_km_alloc(kernel_map,
-	    (PAGE_SIZE)*2, (PAGE_SIZE)*2,
+	    PAGE_SIZE * 2, PAGE_SIZE * 2,
 	    ((flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK)
 	    | UVM_KMF_WIRED);
 }
@@ -211,64 +246,59 @@ sigacts_poolpage_alloc(struct pool *pp, int flags)
 /*
  * sigacts_poolpage_free:
  *
- *	 Free a page on behalf of the sigacts memory pool.
+ *	Free a page on behalf of the sigacts memory pool.
  */
 static void
 sigacts_poolpage_free(struct pool *pp, void *v)
 {
 
-        uvm_km_free(kernel_map, (vaddr_t)v, (PAGE_SIZE)*2, UVM_KMF_WIRED);
+	uvm_km_free(kernel_map, (vaddr_t)v, PAGE_SIZE * 2, UVM_KMF_WIRED);
 }
 
 /*
  * sigactsinit:
- * 
- *	 Create an initial sigctx structure, using the same signal state as
- *	 p.  If 'share' is set, share the sigctx_proc part, otherwise just
- *	 copy it from parent.
+ *
+ *	Create an initial sigacts structure, using the same signal state
+ *	as of specified process.  If 'share' is set, share the sigacts by
+ *	holding a reference, otherwise just copy it from parent.
  */
 struct sigacts *
 sigactsinit(struct proc *pp, int share)
 {
-	struct sigacts *ps, *ps2;
+	struct sigacts *ps = pp->p_sigacts, *ps2;
 
-	ps = pp->p_sigacts;
-
-	if (share) {
+	if (__predict_false(share)) {
 		atomic_inc_uint(&ps->sa_refcnt);
-		ps2 = ps;
-	} else {
-		ps2 = pool_cache_get(sigacts_cache, PR_WAITOK);
-		/* XXXAD get rid of this */
-		mutex_init(&ps2->sa_mutex, MUTEX_DEFAULT, IPL_SCHED);
-		mutex_enter(&ps->sa_mutex);
-		memcpy(&ps2->sa_sigdesc, ps->sa_sigdesc,
-		    sizeof(ps2->sa_sigdesc));
-		mutex_exit(&ps->sa_mutex);
-		ps2->sa_refcnt = 1;
+		return ps;
 	}
+	ps2 = pool_cache_get(sigacts_cache, PR_WAITOK);
+	mutex_init(&ps2->sa_mutex, MUTEX_DEFAULT, IPL_SCHED);
+	ps2->sa_refcnt = 1;
 
+	mutex_enter(&ps->sa_mutex);
+	memcpy(ps2->sa_sigdesc, ps->sa_sigdesc, sizeof(ps2->sa_sigdesc));
+	mutex_exit(&ps->sa_mutex);
 	return ps2;
 }
 
 /*
  * sigactsunshare:
- * 
- *	Make this process not share its sigctx, maintaining all
- *	signal state.
+ *
+ *	Make this process not share its sigacts, maintaining all signal state.
  */
 void
 sigactsunshare(struct proc *p)
 {
-	struct sigacts *ps, *oldps;
+	struct sigacts *ps, *oldps = p->p_sigacts;
 
-	oldps = p->p_sigacts;
-	if (oldps->sa_refcnt == 1)
+	if (__predict_true(oldps->sa_refcnt == 1))
 		return;
+
 	ps = pool_cache_get(sigacts_cache, PR_WAITOK);
-	/* XXXAD get rid of this */
 	mutex_init(&ps->sa_mutex, MUTEX_DEFAULT, IPL_SCHED);
-	memset(&ps->sa_sigdesc, 0, sizeof(ps->sa_sigdesc));
+	memcpy(ps->sa_sigdesc, oldps->sa_sigdesc, sizeof(ps->sa_sigdesc));
+	ps->sa_refcnt = 1;
+
 	p->p_sigacts = ps;
 	sigactsfree(oldps);
 }
@@ -276,7 +306,7 @@ sigactsunshare(struct proc *p)
 /*
  * sigactsfree;
  *
- *	Release a sigctx structure.
+ *	Release a sigacts structure.
  */
 void
 sigactsfree(struct sigacts *ps)
@@ -450,7 +480,7 @@ ksiginfo_alloc(struct proc *p, ksiginfo_t *ok, int flags)
 	if (ok != NULL) {
 		if ((ok->ksi_flags & (KSI_QUEUED | KSI_FROMPOOL)) ==
 		    KSI_FROMPOOL)
-		    	return ok;
+			return ok;
 		if (KSI_EMPTY_P(ok))
 			return ok;
 	}
@@ -509,6 +539,40 @@ ksiginfo_queue_drain0(ksiginfoq_t *kq)
 	}
 }
 
+static bool
+siggetinfo(sigpend_t *sp, ksiginfo_t *out, int signo)
+{
+	ksiginfo_t *ksi;
+
+	if (sp == NULL)
+		goto out;
+
+	/* Find siginfo and copy it out. */
+	CIRCLEQ_FOREACH(ksi, &sp->sp_info, ksi_list) {
+		if (ksi->ksi_signo != signo)
+			continue;
+		CIRCLEQ_REMOVE(&sp->sp_info, ksi, ksi_list);
+		KASSERT((ksi->ksi_flags & KSI_FROMPOOL) != 0);
+		KASSERT((ksi->ksi_flags & KSI_QUEUED) != 0);
+		ksi->ksi_flags &= ~KSI_QUEUED;
+		if (out != NULL) {
+			memcpy(out, ksi, sizeof(*out));
+			out->ksi_flags &= ~(KSI_FROMPOOL | KSI_QUEUED);
+		}
+		ksiginfo_free(ksi);	/* XXXSMP */
+		return true;
+	}
+
+out:
+	/* If there is no siginfo, then manufacture it. */
+	if (out != NULL) {
+		KSI_INIT(out);
+		out->ksi_info._signo = signo;
+		out->ksi_info._code = SI_NOINFO;
+	}
+	return false;
+}
+
 /*
  * sigget:
  *
@@ -519,7 +583,6 @@ ksiginfo_queue_drain0(ksiginfoq_t *kq)
 int
 sigget(sigpend_t *sp, ksiginfo_t *out, int signo, const sigset_t *mask)
 {
-        ksiginfo_t *ksi;
 	sigset_t tset;
 
 	/* If there's no pending set, the signal is from the debugger. */
@@ -533,8 +596,8 @@ sigget(sigpend_t *sp, ksiginfo_t *out, int signo, const sigset_t *mask)
 			__sigandset(&sp->sp_set, &tset);
 		} else
 			tset = sp->sp_set;
-		
-		/* If there are no signals pending, that's it. */
+
+		/* If there are no signals pending - return. */
 		if ((signo = firstsig(&tset)) == 0)
 			goto out;
 	} else {
@@ -542,37 +605,14 @@ sigget(sigpend_t *sp, ksiginfo_t *out, int signo, const sigset_t *mask)
 	}
 
 	sigdelset(&sp->sp_set, signo);
-
-	/* Find siginfo and copy it out. */
-	CIRCLEQ_FOREACH(ksi, &sp->sp_info, ksi_list) {
-		if (ksi->ksi_signo == signo) {
-			CIRCLEQ_REMOVE(&sp->sp_info, ksi, ksi_list);
-			KASSERT((ksi->ksi_flags & KSI_FROMPOOL) != 0);
-			KASSERT((ksi->ksi_flags & KSI_QUEUED) != 0);
-			ksi->ksi_flags &= ~KSI_QUEUED;
-			if (out != NULL) {
-				memcpy(out, ksi, sizeof(*out));
-				out->ksi_flags &= ~(KSI_FROMPOOL | KSI_QUEUED);
-			}
-			ksiginfo_free(ksi);
-			return signo;
-		}
-	}
-
 out:
-	/* If there's no siginfo, then manufacture it. */
-	if (out != NULL) {
-		KSI_INIT(out);
-		out->ksi_info._signo = signo;
-		out->ksi_info._code = SI_NOINFO;
-	}
-
+	(void)siggetinfo(sp, out, signo);
 	return signo;
 }
 
 /*
  * sigput:
- * 
+ *
  *	Append a new ksiginfo element to the list of pending ksiginfo's.
  */
 static void
@@ -660,10 +700,10 @@ sigclearall(struct proc *p, const sigset_t *mask, ksiginfoq_t *kq)
 /*
  * sigispending:
  *
- *	Return true if there are pending signals for the current LWP.  May
- *	be called unlocked provided that LW_PENDSIG is set, and that the
- *	signal has been posted to the appopriate queue before LW_PENDSIG is
- *	set.
+ *	Return the first signal number if there are pending signals for the
+ *	current LWP.  May be called unlocked provided that LW_PENDSIG is set,
+ *	and that the signal has been posted to the appopriate queue before
+ *	LW_PENDSIG is set.
  */ 
 int
 sigispending(struct lwp *l, int signo)
@@ -679,18 +719,17 @@ sigispending(struct lwp *l, int signo)
 	sigminusset(&l->l_sigmask, &tset);
 
 	if (signo == 0) {
-		if (firstsig(&tset) != 0)
-			return EINTR;
-	} else if (sigismember(&tset, signo))
-		return EINTR;
-
-	return 0;
+		return firstsig(&tset);
+	}
+	return sigismember(&tset, signo) ? signo : 0;
 }
+
+#ifdef KERN_SA
 
 /*
  * siginfo_alloc:
  *
- *	 Allocate a new siginfo_t structure from the pool.
+ *	Allocate a new siginfo_t structure from the pool.
  */
 siginfo_t *
 siginfo_alloc(int flags)
@@ -702,7 +741,7 @@ siginfo_alloc(int flags)
 /*
  * siginfo_free:
  *
- *	 Return a siginfo_t structure to the pool.
+ *	Return a siginfo_t structure to the pool.
  */
 void
 siginfo_free(void *arg)
@@ -710,6 +749,8 @@ siginfo_free(void *arg)
 
 	pool_cache_put(siginfo_cache, arg);
 }
+
+#endif
 
 void
 getucontext(struct lwp *l, ucontext_t *ucp)
@@ -818,8 +859,7 @@ setucontext(struct lwp *l, const ucontext_t *ucp)
 }
 
 /*
- * Common code for kill process group/broadcast kill.  cp is calling
- * process.
+ * killpg1: common code for kill process group/broadcast kill.
  */
 int
 killpg1(struct lwp *l, ksiginfo_t *ksi, int pgid, int all)
@@ -837,11 +877,11 @@ killpg1(struct lwp *l, ksiginfo_t *ksi, int pgid, int all)
 	mutex_enter(proc_lock);
 	if (all) {
 		/*
-		 * broadcast
+		 * Broadcast.
 		 */
 		PROCLIST_FOREACH(p, &allproc) {
 			if (p->p_pid <= 1 || p == cp ||
-			    p->p_flag & (PK_SYSTEM|PK_MARKER))
+			    (p->p_flag & PK_SYSTEM) != 0)
 				continue;
 			mutex_enter(p->p_lock);
 			if (kauth_authorize_process(pc,
@@ -855,12 +895,10 @@ killpg1(struct lwp *l, ksiginfo_t *ksi, int pgid, int all)
 		}
 	} else {
 		if (pgid == 0)
-			/*
-			 * zero pgid means send to my process group.
-			 */
+			/* Zero pgid means send to my process group. */
 			pgrp = cp->p_pgrp;
 		else {
-			pgrp = pg_find(pgid, PFIND_LOCKED);
+			pgrp = pgrp_find(pgid);
 			if (pgrp == NULL)
 				goto out;
 		}
@@ -877,13 +915,13 @@ killpg1(struct lwp *l, ksiginfo_t *ksi, int pgid, int all)
 			mutex_exit(p->p_lock);
 		}
 	}
-  out:
+out:
 	mutex_exit(proc_lock);
-	return (nfound ? 0 : ESRCH);
+	return nfound ? 0 : ESRCH;
 }
 
 /*
- * Send a signal to a process group. If checktty is 1, limit to members
+ * Send a signal to a process group.  If checktty is set, limit to members
  * which have a controlling terminal.
  */
 void
@@ -906,9 +944,8 @@ kpgsignal(struct pgrp *pgrp, ksiginfo_t *ksi, void *data, int checkctty)
 
 	KASSERT(!cpu_intr_p());
 	KASSERT(mutex_owned(proc_lock));
+	KASSERT(pgrp != NULL);
 
-	if (__predict_false(pgrp == 0))
-		return;
 	LIST_FOREACH(p, &pgrp->pg_members, p_pglist)
 		if (checkctty == 0 || p->p_lflag & PL_CONTROLT)
 			kpsignal(p, ksi, data);
@@ -943,8 +980,7 @@ trapsignal(struct lwp *l, ksiginfo_t *ksi)
 		l->l_ru.ru_nsignals++;
 		kpsendsig(l, ksi, mask);
 		mutex_exit(p->p_lock);
-		ktrpsig(signo, SIGACTION_PS(ps, signo).sa_handler,
-		    mask, ksi);
+		ktrpsig(signo, SIGACTION_PS(ps, signo).sa_handler, mask, ksi);
 	} else {
 		/* XXX for core dump/debugger */
 		p->p_sigctx.ps_lwp = l->l_lid;
@@ -1043,7 +1079,7 @@ kpsignal(struct proc *p, ksiginfo_t *ksi, void *data)
 /*
  * sigismasked:
  *
- *	 Returns true if signal is ignored or masked for the specified LWP.
+ *	Returns true if signal is ignored or masked for the specified LWP.
  */
 int
 sigismasked(struct lwp *l, int sig)
@@ -1061,8 +1097,8 @@ sigismasked(struct lwp *l, int sig)
 /*
  * sigpost:
  *
- *	 Post a pending signal to an LWP.  Returns non-zero if the LWP may
- *	 be able to take the signal.
+ *	Post a pending signal to an LWP.  Returns non-zero if the LWP may
+ *	be able to take the signal.
  */
 static int
 sigpost(struct lwp *l, sig_t action, int prop, int sig, int idlecheck)
@@ -1078,6 +1114,8 @@ sigpost(struct lwp *l, sig_t action, int prop, int sig, int idlecheck)
 	 */
 	if (l->l_refcnt == 0)
 		return 0;
+
+	SDT_PROBE(proc,,,signal_send, l, p, sig,  0, 0);
 
 	/*
 	 * Have the LWP check for signals.  This ensures that even if no LWP
@@ -1145,7 +1183,7 @@ sigpost(struct lwp *l, sig_t action, int prop, int sig, int idlecheck)
 		break;
 
 	case LSSUSPENDED:
-		if ((prop & SA_KILL) != 0) {
+		if ((prop & SA_KILL) != 0 && (l->l_flag & LW_WCORE) != 0) {
 			/* lwp_continue() will release the lock. */
 			lwp_continue(l);
 			return 1;
@@ -1259,15 +1297,13 @@ sigunwait(struct proc *p, const ksiginfo_t *ksi)
 void
 kpsignal2(struct proc *p, ksiginfo_t *ksi)
 {
-	int prop, lid, toall, signo = ksi->ksi_signo;
+	int prop, signo = ksi->ksi_signo;
 	struct sigacts *sa;
 	struct lwp *l;
 	ksiginfo_t *kp;
-	ksiginfoq_t kq;
+	lwpid_t lid;
 	sig_t action;
-#ifdef KERN_SA
-	struct sadata_vp *vp;
-#endif
+	bool toall;
 
 	KASSERT(!cpu_intr_p());
 	KASSERT(mutex_owned(proc_lock));
@@ -1284,7 +1320,7 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 
 	/*
 	 * Notify any interested parties of the signal.
-	 */	
+	 */
 	KNOTE(&p->p_klist, NOTE_SIGNAL | signo);
 
 	/*
@@ -1293,11 +1329,7 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 	kp = NULL;
 	prop = sigprop[signo];
 	toall = ((prop & SA_TOALL) != 0);
-
-	if (toall)
-		lid = 0;
-	else
-		lid = ksi->ksi_lid;
+	lid = toall ? 0 : ksi->ksi_lid;
 
 	/*
 	 * If proc is traced, always give parent a chance.
@@ -1362,6 +1394,8 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 	 * signals that would do the inverse.
 	 */
 	if ((prop & (SA_CONT | SA_STOP)) != 0) {
+		ksiginfoq_t kq;
+
 		ksiginfo_queue_init(&kq);
 		if ((prop & SA_CONT) != 0)
 			sigclear(&p->p_sigpend, &stopsigmask, &kq);
@@ -1418,15 +1452,13 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 			goto out;
 	} else {
 		/*
-		 * Process is stopped or stopping.  If traced, then no
-		 * further action is necessary.
+		 * Process is stopped or stopping.
+		 * - If traced, then no action is needed, unless killing.
+		 * - Run the process only if sending SIGCONT or SIGKILL.
 		 */
-		if ((p->p_slflag & PSL_TRACED) != 0 && signo != SIGKILL)
+		if ((p->p_slflag & PSL_TRACED) != 0 && signo != SIGKILL) {
 			goto out;
-
-		/*
-		 * Run the process only if sending SIGCONT or SIGKILL.
-		 */
+		}
 		if ((prop & SA_CONT) != 0 || signo == SIGKILL) {
 			/*
 			 * Re-adjust p_nstopchild if the process wasn't
@@ -1434,9 +1466,13 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 			 */
 			p->p_stat = SACTIVE;
 			p->p_sflag &= ~PS_STOPPING;
-			if (!p->p_waited)
+			if (!p->p_waited) {
 				p->p_pptr->p_nstopchild--;
-
+			}
+			if (p->p_slflag & PSL_TRACED) {
+				KASSERT(signo == SIGKILL);
+				goto deliver;
+			}
 			/*
 			 * Do not make signal pending if SIGCONT is default.
 			 *
@@ -1459,9 +1495,10 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 	/*
 	 * Make signal pending.
 	 */
+	KASSERT((p->p_slflag & PSL_TRACED) == 0);
 	sigput(&p->p_sigpend, p, kp);
 
- deliver:
+deliver:
 	/*
 	 * Before we set LW_PENDSIG on any LWP, ensure that the signal is
 	 * visible on the per process list (for sigispending()).  This
@@ -1474,6 +1511,7 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 	 */
 #if KERN_SA
 	if ((p->p_sa != NULL) && !toall) {
+		struct sadata_vp *vp;
 		/*
 		 * If we're in this delivery path, we are delivering a
 		 * signal that needs to go to one thread in the process.
@@ -1498,20 +1536,20 @@ kpsignal2(struct proc *p, ksiginfo_t *ksi)
 					break;
 			}
 		}
-	} else	/* Catch the brace below if we're defined */
-#endif /* KERN_SA */
-	    {
-		LIST_FOREACH(l, &p->p_lwps, l_sibling)
-			if (sigpost(l, action, prop, kp->ksi_signo, 0) && !toall)
-				break;
+		/* Delivered, skip next. */
+		goto out;
 	}
-
- out:
- 	/*
- 	 * If the ksiginfo wasn't used, then bin it.  XXXSMP freeing memory
- 	 * with locks held.  The caller should take care of this.
- 	 */
- 	ksiginfo_free(kp);
+#endif
+	LIST_FOREACH(l, &p->p_lwps, l_sibling) {
+		if (sigpost(l, action, prop, kp->ksi_signo, 0) && !toall)
+			break;
+	}
+out:
+	/*
+	 * If the ksiginfo wasn't used, then bin it.  XXXSMP freeing memory
+	 * with locks held.  The caller should take care of this.
+	 */
+	ksiginfo_free(kp);
 }
 
 void
@@ -1706,9 +1744,10 @@ sigchecktrace(void)
 
 	/*
 	 * If we are no longer being traced, or the parent didn't
-	 * give us a signal, look for more signals.
+	 * give us a signal, or we're stopping, look for more signals.
 	 */
-	if ((p->p_slflag & PSL_TRACED) == 0 || p->p_xstat == 0)
+	if ((p->p_slflag & PSL_TRACED) == 0 || p->p_xstat == 0 ||
+	    (p->p_sflag & PS_STOPPING) != 0)
 		return 0;
 
 	/*
@@ -1752,8 +1791,9 @@ issignal(struct lwp *l)
 
 	for (;;) {
 		/* Discard any signals that we have decided not to take. */
-		if (signo != 0)
+		if (signo != 0) {
 			(void)sigget(sp, NULL, signo, NULL);
+		}
 
 		/* Bail out if we do not own the virtual processor */
 		if (l->l_flag & LW_SA && l->l_savp->savp_lwp != l)
@@ -1823,8 +1863,13 @@ issignal(struct lwp *l)
 		 */
 		if ((p->p_slflag & PSL_TRACED) != 0 &&
 		    (p->p_lflag & PL_PPWAIT) == 0 && signo != SIGKILL) {
-			/* Take the signal. */
-			(void)sigget(sp, NULL, signo, NULL);
+			/*
+			 * Take the signal, but don't remove it from the
+			 * siginfo queue, because the debugger can send
+			 * it later.
+			 */
+			if (sp)
+				sigdelset(&sp->sp_set, signo);
 			p->p_xstat = signo;
 
 			/* Emulation-specific handling of signal trace */
@@ -1842,6 +1887,10 @@ issignal(struct lwp *l)
 		}
 
 		prop = sigprop[signo];
+
+		/* XXX no siginfo? */
+		SDT_PROBE(proc,,,signal_handle, signo, 0, 
+			SIGACTION(p, signo).sa_handler, 0, 0);
 
 		/*
 		 * Decide whether the signal should be returned.
@@ -1875,9 +1924,9 @@ issignal(struct lwp *l)
 				 * but it's not a big deal.
 				 */
 				if (p->p_slflag & PSL_TRACED ||
-		    		    ((p->p_lflag & PL_ORPHANPG) != 0 &&
+				    ((p->p_lflag & PL_ORPHANPG) != 0 &&
 				    prop & SA_TTYSTOP)) {
-				    	/* Ignore the signal. */
+					/* Ignore the signal. */
 					continue;
 				}
 				/* Take the signal. */
@@ -1962,7 +2011,12 @@ postsig(int signo)
 	 */
 	action = SIGACTION_PS(ps, signo).sa_handler;
 	l->l_ru.ru_nsignals++;
-	sigget(l->l_sigpendset, &ksi, signo, NULL);
+	if (l->l_sigpendset == NULL) {
+		/* From the debugger */
+		if (!siggetinfo(&l->l_sigpend, &ksi, signo))
+			(void)siggetinfo(&p->p_sigpend, &ksi, signo);
+	} else
+		sigget(l->l_sigpendset, &ksi, signo, NULL);
 
 	if (ktrpoint(KTR_PSIG)) {
 		mutex_exit(p->p_lock);
@@ -2260,8 +2314,6 @@ proc_stop_callout(void *cookie)
 
 		mutex_enter(proc_lock);
 		PROCLIST_FOREACH(p, &allproc) {
-			if ((p->p_flag & PK_MARKER) != 0)
-				continue;
 			mutex_enter(p->p_lock);
 
 			if ((p->p_sflag & PS_STOPPING) == 0) {
@@ -2336,8 +2388,8 @@ proc_unstop(struct proc *p)
 			continue;
 		}
 		if (sig && (l->l_flag & LW_SINTR) != 0) {
-		        setrunnable(l);
-		        sig = 0;
+			setrunnable(l);
+			sig = 0;
 		} else {
 			l->l_stat = LSSLEEP;
 			p->p_nrlwps++;
@@ -2352,13 +2404,13 @@ filt_sigattach(struct knote *kn)
 	struct proc *p = curproc;
 
 	kn->kn_obj = p;
-	kn->kn_flags |= EV_CLEAR;               /* automatically set */
+	kn->kn_flags |= EV_CLEAR;	/* automatically set */
 
 	mutex_enter(p->p_lock);
 	SLIST_INSERT_HEAD(&p->p_klist, kn, kn_selnext);
 	mutex_exit(p->p_lock);
 
-	return (0);
+	return 0;
 }
 
 static void
@@ -2372,7 +2424,7 @@ filt_sigdetach(struct knote *kn)
 }
 
 /*
- * signal knotes are shared with proc knotes, so we apply a mask to
+ * Signal knotes are shared with proc knotes, so we apply a mask to
  * the hint in order to differentiate them from process hints.  This
  * could be avoided by using a signal-specific knote list, but probably
  * isn't worth the trouble.

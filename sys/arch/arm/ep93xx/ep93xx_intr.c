@@ -1,4 +1,4 @@
-/* $NetBSD: ep93xx_intr.c,v 1.13 2008/04/28 20:23:14 martin Exp $ */
+/* $NetBSD: ep93xx_intr.c,v 1.16 2011/07/01 19:31:17 dyoung Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.13 2008/04/28 20:23:14 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.16 2011/07/01 19:31:17 dyoung Exp $");
 
 /*
  * Interrupt support for the Cirrus Logic EP93XX
@@ -44,9 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: ep93xx_intr.c,v 1.13 2008/04/28 20:23:14 martin Exp 
 #include <sys/malloc.h>
 #include <sys/termios.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -150,9 +148,17 @@ ep93xx_intr_calculate_masks(void)
 
 	KASSERT(vic1_imask[IPL_NONE] == 0);
 	KASSERT(vic2_imask[IPL_NONE] == 0);
+	KASSERT(vic1_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(vic2_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(vic1_imask[IPL_SOFTBIO] == 0);
+	KASSERT(vic2_imask[IPL_SOFTBIO] == 0);
+	KASSERT(vic1_imask[IPL_SOFTNET] == 0);
+	KASSERT(vic2_imask[IPL_SOFTNET] == 0);
+	KASSERT(vic1_imask[IPL_SOFTSERIAL] == 0);
+	KASSERT(vic2_imask[IPL_SOFTSERIAL] == 0);
 
 	/*
-	 * splclock() must block anything that uses the scheduler.
+	 * splsched() must block anything that uses the scheduler.
 	 */
 	vic1_imask[IPL_SCHED] |= vic1_imask[IPL_VM];
 	vic2_imask[IPL_SCHED] |= vic2_imask[IPL_VM];
@@ -345,7 +351,7 @@ ep93xx_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
+		curcpu()->ci_data.cpu_nintr++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			set_curcpl(ih->ih_ipl);
 			oldirqstate = enable_interrupts(I32_bit);
@@ -357,7 +363,7 @@ ep93xx_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq + VIC_NIRQ];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
+		curcpu()->ci_data.cpu_nintr++;
 		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
 			set_curcpl(ih->ih_ipl);
 			oldirqstate = enable_interrupts(I32_bit);

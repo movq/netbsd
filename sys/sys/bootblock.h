@@ -1,4 +1,4 @@
-/*	$NetBSD: bootblock.h,v 1.48 2009/10/26 14:22:47 tsutsui Exp $	*/
+/*	$NetBSD: bootblock.h,v 1.52.14.1 2012/07/05 18:16:15 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002-2004 The NetBSD Foundation, Inc.
@@ -168,6 +168,8 @@
  *
  *	400 - 439	MP	NetBSD: mbr_bootsel
  *
+ *	424 - 439	M	NetBSD: bootptn_guid (in GPT PMBR only)
+ *
  *	440 - 443	M	WinNT/2K/XP Drive Serial Number (NT DSN)
  *		http://www.geocities.com/thestarman3/asm/mbr/Win2kmbr.htm
  *
@@ -194,6 +196,9 @@
 #define	MBR_BOOTCODE_OFFSET	90	/* offsetof(mbr_sector, mbr_bootcode) */
 #define	MBR_BS_OFFSET		400	/* offsetof(mbr_sector, mbr_bootsel) */
 #define	MBR_BS_OLD_OFFSET	404	/* where mbr_bootsel used to be */
+#define	MBR_GPT_GUID_OFFSET	424	/* location of partition GUID to boot */
+#define	MBR_GPT_GUID_DEFAULT		/* default uninitialized GUID */ \
+	{0xeee69d04,0x02f4,0x11e0,0x8f,0x5d,{0x00,0xe0,0x81,0x52,0x9a,0x6b}}
 #define	MBR_DSN_OFFSET		440	/* offsetof(mbr_sector, mbr_dsn) */
 #define	MBR_BS_MAGIC_OFFSET	444	/* offsetof(mbr_sector, mbr_bootsel_magic) */
 #define	MBR_PART_OFFSET		446	/* offsetof(mbr_sector, mbr_part[0]) */
@@ -1064,10 +1069,14 @@ struct x86_boot_params {
 #define	X86_BOOT_MAGIC_2	X86_BOOT_MAGIC(2)	/* bootxx.S */
 #define	X86_BOOT_MAGIC_PXE	X86_BOOT_MAGIC(3)	/* start_pxe.S */
 #define	X86_BOOT_MAGIC_FAT	X86_BOOT_MAGIC(4)	/* fatboot.S */
+#define	X86_MBR_GPT_MAGIC	0xedb88320		/* gpt.S */
 
 		/* values for bp_flags */
 #define	X86_BP_FLAGS_RESET_VIDEO	1
 #define	X86_BP_FLAGS_PASSWORD		2
+#define	X86_BP_FLAGS_NOMODULES		4
+#define	X86_BP_FLAGS_NOBOOTCONF		8
+#define	X86_BP_FLAGS_LBA64VALID		0x10
 
 		/* values for bp_consdev */
 #define	X86_BP_CONSDEV_PC	0
@@ -1380,7 +1389,8 @@ struct vax_boot_block {
 	uint8_t		bb_mbone;	/* must be one */
 	uint16_t	bb_lbn_hi;	/* lbn (hi word) of bootstrap */
 	uint16_t	bb_lbn_low;	/* lbn (low word) of bootstrap */
-	uint8_t		pad1[332];
+	uint8_t		pad1[460];
+	/* disklabel offset is 64 from base, or 56 from start of pad1 */
 
 	/* The rest of these fields are identification area and describe
 	 * the secondary block for uVAX VMB.
@@ -1402,7 +1412,7 @@ struct vax_boot_block {
 
 	/* The rest is unused.
 	 */
-	uint8_t		pad2[148];
+	uint8_t		pad2[20];
 } __packed;
 
 #define	VAX_BOOT_MAGIC1			0x18	/* size of BB info? */

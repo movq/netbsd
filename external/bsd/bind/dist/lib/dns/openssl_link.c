@@ -1,7 +1,7 @@
-/*	$NetBSD: openssl_link.c,v 1.1.1.2 2009/10/25 00:02:31 christos Exp $	*/
+/*	$NetBSD: openssl_link.c,v 1.6.4.1 2012/06/05 21:15:04 bouyer Exp $	*/
 
 /*
- * Portions Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -33,7 +33,7 @@
 
 /*
  * Principal Author: Brian Wellington
- * Id: openssl_link.c,v 1.27 2009/10/05 17:30:49 fdupont Exp
+ * Id
  */
 #ifdef OPENSSL
 
@@ -51,16 +51,6 @@
 
 #include "dst_internal.h"
 #include "dst_openssl.h"
-
-#include <openssl/err.h>
-#include <openssl/rand.h>
-#include <openssl/evp.h>
-#include <openssl/conf.h>
-#include <openssl/crypto.h>
-
-#if defined(CRYPTO_LOCK_ENGINE) && (OPENSSL_VERSION_NUMBER >= 0x0090707f)
-#define USE_ENGINE 1
-#endif
 
 #ifdef USE_ENGINE
 #include <openssl/engine.h>
@@ -81,7 +71,7 @@ entropy_get(unsigned char *buf, int num) {
 	if (num < 0)
 		return (-1);
 	result = dst__entropy_getdata(buf, (unsigned int) num, ISC_FALSE);
-	return (result == ISC_R_SUCCESS ? num : -1);
+	return (result == ISC_R_SUCCESS ? 1 : -1);
 }
 
 static int
@@ -95,10 +85,14 @@ entropy_getpseudo(unsigned char *buf, int num) {
 	if (num < 0)
 		return (-1);
 	result = dst__entropy_getdata(buf, (unsigned int) num, ISC_TRUE);
-	return (result == ISC_R_SUCCESS ? num : -1);
+	return (result == ISC_R_SUCCESS ? 1 : -1);
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static void
+#else
+static int
+#endif
 entropy_add(const void *buf, int num, double entropy) {
 	/*
 	 * Do nothing.  The only call to this provides no useful data anyway.
@@ -106,6 +100,9 @@ entropy_add(const void *buf, int num, double entropy) {
 	UNUSED(buf);
 	UNUSED(num);
 	UNUSED(entropy);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	return 0;
+#endif
 }
 
 static void
@@ -310,19 +307,19 @@ dst__openssl_toresult(isc_result_t fallback) {
 	return (result);
 }
 
+#if defined(USE_ENGINE)
 ENGINE *
 dst__openssl_getengine(const char *engine) {
 
 	if (engine == NULL)
 		return (NULL);
-#if defined(USE_ENGINE)
 	if (e == NULL)
 		return (NULL);
 	if (strcmp(engine, ENGINE_get_id(e)) == 0)
 		return (e);
-#endif
 	return (NULL);
 }
+#endif
 
 #else /* OPENSSL */
 

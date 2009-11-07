@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.137 2009/11/03 05:23:28 dyoung Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.148 2011/11/24 01:45:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.137 2009/11/03 05:23:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.148 2011/11/24 01:45:39 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -59,7 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.137 2009/11/03 05:23:28 dyoung Exp $"
 #include <sys/tprintf.h>
 #include <sys/spldebug.h>
 #include <sys/syslog.h>
-#include <sys/malloc.h>
 #include <sys/kprintf.h>
 #include <sys/atomic.h>
 #include <sys/kernel.h>
@@ -82,14 +81,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.137 2009/11/03 05:23:28 dyoung Exp $"
 
 static kmutex_t kprintf_mtx;
 static bool kprintf_inited = false;
-
-/*
- * note that stdarg.h and the ansi style va_start macro is used for both
- * ansi and traditional c complers.
- * XXX: this requires that stdarg.h define: va_alist and va_dcl
- */
-#include <machine/stdarg.h>
-
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -202,17 +193,26 @@ twiddle(void)
  * panic: handle an unresolvable fatal error
  *
  * prints "panic: <message>" and reboots.   if called twice (i.e. recursive
- * call) we avoid trying to sync the disk and just reboot (to avoid
- * recursive panics).
+ * call) we avoid trying to dump and just reboot (to avoid recursive panics).
  */
 
 void
 panic(const char *fmt, ...)
 {
+	va_list ap;
+
+	va_start(ap, fmt);
+	vpanic(fmt, ap);
+	va_end(ap);
+}
+
+void
+vpanic(const char *fmt, va_list ap)
+{
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci, *oci;
 	int bootopt;
-	va_list ap;
+	static char scratchstr[256]; /* stores panic message */
 
 	spldebug_stop();
 
@@ -246,20 +246,29 @@ panic(const char *fmt, ...)
 	}
 
 	bootopt = RB_AUTOBOOT | RB_NOSYNC;
-	if (dumponpanic)
-		bootopt |= RB_DUMP;
-	if (!panicstr)
-		panicstr = fmt;
+	if (!doing_shutdown) {
+		if (dumponpanic)
+			bootopt |= RB_DUMP;
+	} else
+		printf("Skipping crash dump on recursive panic\n");
+
 	doing_shutdown = 1;
 
 	if (msgbufenabled && msgbufp->msg_magic == MSG_MAGIC)
 		panicstart = msgbufp->msg_bufx;
 
-	va_start(ap, fmt);
 	printf("panic: ");
-	vprintf(fmt, ap);
+	if (panicstr == NULL) {
+		/* first time in panic - store fmt first for precaution */
+		panicstr = fmt;
+
+		vsnprintf(scratchstr, sizeof(scratchstr), fmt, ap);
+		printf("%s", scratchstr);
+		panicstr = scratchstr;
+	} else {
+		vprintf(fmt, ap);
+	}
 	printf("\n");
-	va_end(ap);
 
 	if (msgbufenabled && msgbufp->msg_magic == MSG_MAGIC)
 		panicend = msgbufp->msg_bufx;
@@ -339,15 +348,18 @@ log(int level, const char *fmt, ...)
 void
 vlog(int level, const char *fmt, va_list ap)
 {
+	va_list cap;
 
+	va_copy(cap, ap);
 	kprintf_lock();
 
 	klogpri(level);		/* log the level first */
 	kprintf(fmt, TOLOG, NULL, NULL, ap);
 	if (!log_open)
-		kprintf(fmt, TOCONS, NULL, NULL, ap);
+		kprintf(fmt, TOCONS, NULL, NULL, cap);
 
 	kprintf_unlock();
+	va_end(cap);
 
 	logwakeup();		/* wake up anyone waiting for log msgs */
 }
@@ -618,11 +630,14 @@ db_printf(const char *fmt, ...)
 void
 db_vprintf(const char *fmt, va_list ap)
 {
+	va_list cap;
 
+	va_copy(cap, ap);
 	/* No mutex needed; DDB pauses all processors. */
 	kprintf(fmt, TODDB, NULL, NULL, ap);
 	if (db_tee_msgbuf)
-		kprintf(fmt, TOLOG, NULL, NULL, ap);
+		kprintf(fmt, TOLOG, NULL, NULL, cap);
+	va_end(cap);
 }
 
 #endif /* DDB */
@@ -1015,8 +1030,9 @@ sprintf(char *bf, const char *fmt, ...)
 	va_start(ap, fmt);
 	retval = kprintf(fmt, TOBUFONLY, NULL, bf, ap);
 	va_end(ap);
-	*(bf + retval) = 0;	/* null terminate */
-	return(retval);
+	if (bf)
+		bf[retval] = '\0';	/* nul terminate */
+	return retval;
 }
 
 /*
@@ -1029,8 +1045,9 @@ vsprintf(char *bf, const char *fmt, va_list ap)
 	int retval;
 
 	retval = kprintf(fmt, TOBUFONLY, NULL, bf, ap);
-	*(bf + retval) = 0;	/* null terminate */
-	return (retval);
+	if (bf)
+		bf[retval] = '\0';	/* nul terminate */
+	return retval;
 }
 
 /*
@@ -1041,16 +1058,12 @@ snprintf(char *bf, size_t size, const char *fmt, ...)
 {
 	int retval;
 	va_list ap;
-	char *p;
 
-	if (size < 1)
-		return (-1);
-	p = bf + size - 1;
 	va_start(ap, fmt);
-	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
+	retval = vsnprintf(bf, size, fmt, ap);
 	va_end(ap);
-	*(p) = 0;	/* null terminate */
-	return(retval);
+
+	return retval;
 }
 
 /*
@@ -1062,12 +1075,16 @@ vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
 	int retval;
 	char *p;
 
-	if (size < 1)
-		return (-1);
-	p = bf + size - 1;
+	p = bf + size;
 	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
-	*(p) = 0;	/* null terminate */
-	return(retval);
+	if (bf && size > 0) {
+		/* nul terminate */
+		if (size <= (size_t)retval)
+			bf[size - 1] = '\0';
+		else
+			bf[retval] = '\0';
+	}
+	return retval;
 }
 
 /*
@@ -1125,14 +1142,23 @@ vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
 
 #define KPRINTF_PUTCHAR(C) {						\
 	if (oflags == TOBUFONLY) {					\
-		if ((vp != NULL) && (sbuf == tailp)) {			\
-			ret += 1;		/* indicate error */	\
-			goto overflow;					\
-		}							\
-		*sbuf++ = (C);						\
+		if (sbuf && ((vp == NULL) || (sbuf < tailp))) 		\
+			*sbuf++ = (C);					\
 	} else {							\
-		putchar((C), oflags, (struct tty *)vp);			\
+		putchar((C), oflags, vp);				\
 	}								\
+}
+
+void
+device_printf(device_t dev, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	printf("%s: ", device_xname(dev));
+	vprintf(fmt, ap);
+	va_end(ap);
+	return;
 }
 
 /*
@@ -1160,9 +1186,10 @@ kprintf(const char *fmt0, int oflags, void *vp, char *sbuf, va_list ap)
 	char bf[KPRINTF_BUFSIZE]; /* space for %c, %[diouxX] */
 	char *tailp;		/* tail pointer for snprintf */
 
-	tailp = NULL;	/* XXX: shutup gcc */
 	if (oflags == TOBUFONLY && (vp != NULL))
 		tailp = *(char **)vp;
+	else
+		tailp = NULL;
 
 	cp = NULL;	/* XXX: shutup gcc */
 	size = 0;	/* XXX: shutup gcc */
@@ -1176,9 +1203,9 @@ kprintf(const char *fmt0, int oflags, void *vp, char *sbuf, va_list ap)
 	 * Scan the format for conversions (`%' character).
 	 */
 	for (;;) {
-		while (*fmt != '%' && *fmt) {
+		for (; *fmt != '%' && *fmt; fmt++) {
 			ret++;
-			KPRINTF_PUTCHAR(*fmt++);
+			KPRINTF_PUTCHAR(*fmt);
 		}
 		if (*fmt == 0)
 			goto done;
@@ -1491,8 +1518,8 @@ number:			if ((dprec = prec) >= 0)
 			KPRINTF_PUTCHAR('0');
 
 		/* the string or number proper */
-		while (size--)
-			KPRINTF_PUTCHAR(*cp++);
+		for (; size--; cp++)
+			KPRINTF_PUTCHAR(*cp);
 		/* left-adjusting padding (always blank) */
 		if (flags & LADJUST) {
 			n = width - realsz;
@@ -1505,7 +1532,5 @@ done:
 	if ((oflags == TOBUFONLY) && (vp != NULL))
 		*(char **)vp = sbuf;
 	(*v_flush)();
-overflow:
-	return (ret);
-	/* NOTREACHED */
+	return ret;
 }

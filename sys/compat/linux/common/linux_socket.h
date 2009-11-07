@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.h,v 1.18 2009/06/17 14:18:51 njoly Exp $	*/
+/*	$NetBSD: linux_socket.h,v 1.21 2011/06/30 20:09:39 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  * the rest matches IPPROTO_XXX
  */
 
-/* SOL_SOCKET is machine dependant on Linux */
+/* SOL_SOCKET is machine dependent on Linux */
 #define LINUX_SOL_IP		0
 #define LINUX_SOL_TCP		6
 #define LINUX_SOL_UDP		17
@@ -94,7 +94,7 @@
 #define LINUX_SOL_AAL		265
 
 /*
- * Options for [gs]etsockopt(2), socket level are machine dependant.
+ * Options for [gs]etsockopt(2), socket level are machine dependent.
  */
 
 /*
@@ -103,6 +103,7 @@
 
 #define LINUX_IP_TOS		1
 #define LINUX_IP_TTL		2
+#define LINUX_IP_HDRINCL	3
 #define	LINUX_IP_MULTICAST_IF	32
 #define	LINUX_IP_MULTICAST_TTL	33
 #define	LINUX_IP_MULTICAST_LOOP	34
@@ -213,6 +214,17 @@ struct linux_cmsghdr {
 #include <compat/linux/arch/amd64/linux_socket.h>
 #else
 #error Undefined linux_socket.h machine type.
+#endif
+
+/*
+ * Flags for socket().
+ * These are provided in the "type" parameter.
+ */
+
+#define LINUX_SOCK_TYPE_MASK	0xf
+#define LINUX_SOCK_CLOEXEC	LINUX_O_CLOEXEC
+#ifndef LINUX_SOCK_NONBLOCK
+#define LINUX_SOCK_NONBLOCK	LINUX_O_NONBLOCK
 #endif
 
 #endif /* !_LINUX_SOCKET_H */

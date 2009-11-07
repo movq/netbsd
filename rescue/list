@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.35 2009/01/07 00:39:24 mrg Exp $
+#	$NetBSD: list,v 1.42.4.1 2012/06/05 15:38:02 jdc Exp $
 
 SRCDIRS	bin
 
@@ -45,6 +45,7 @@ PROG	atactl
 PROG	badsect
 PROG	brconfig
 PROG	ccdconfig
+PROG	chown		chgrp
 PROG	clri
 PROG	disklabel
 PROG	dkctl
@@ -59,6 +60,7 @@ PROG	fsck_lfs
 PROG	fsck_msdos
 PROG	fsdb
 PROG	fsirand
+PROG	gpt
 PROG	ifconfig
 PROG	init		init.bak
 PROG	lmcconfig
@@ -82,7 +84,6 @@ PROG	mount_nfs
 PROG	mount_ntfs
 PROG	mount_null
 PROG	mount_overlay
-PROG	mount_portal
 PROG	mount_procfs
 PROG	mount_smbfs
 PROG	mount_tmpfs
@@ -126,14 +127,13 @@ PROG	ktrace
 PROG	ktruss
 
 PROG	less		more
-SPECIAL	less		srcdir	usr.bin/less/less
+SPECIAL	less		srcdir	external/bsd/less/bin/less
 
 PROG	vi		ex
 SPECIAL vi        	srcdir  usr.bin/nvi/build
 
 SRCDIRS	usr.sbin
 
-PROG	chown		chgrp
 PROG	chroot
 PROG	dumpfs
 PROG	dumplfs
@@ -148,6 +148,5 @@ SRCDIRS	libexec
 
 PROG	lfs_cleanerd
 
-
 LIBS	liboverride.o
-LIBS	-lbz2 -lcrypt -ledit -lipsec -lkvm -ll -lm -lrmt -lcurses -ltermcap -lutil -lz -levent -lprop
+LIBS	-lbz2 -llzma -lcrypt -ledit -lipsec -lkvm -ll -lm -lrmt -lcurses -lterminfo -lutil -lz -levent -lprop

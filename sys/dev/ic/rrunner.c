@@ -1,4 +1,4 @@
-/*	$NetBSD: rrunner.c,v 1.72 2009/10/21 21:12:05 rmind Exp $	*/
+/*	$NetBSD: rrunner.c,v 1.74 2010/04/05 07:19:35 joerg Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -35,11 +35,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.72 2009/10/21 21:12:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.74 2010/04/05 07:19:35 joerg Exp $");
 
 #include "opt_inet.h"
 
-#include "bpfilter.h"
 #include "esh.h"
 
 #include <sys/param.h>
@@ -76,10 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: rrunner.c,v 1.72 2009/10/21 21:12:05 rmind Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -1913,7 +1910,6 @@ eshstart(struct ifnet *ifp)
 		if (m == 0)		/* not really needed */
 			break;
 
-#if NBPFILTER > 0
 		if (ifp->if_bpf) {
 			/*
 			 * On output, the raw packet has a eight-byte CCI
@@ -1930,12 +1926,11 @@ eshstart(struct ifnet *ifp)
 			m->m_len -= 8;
 			m->m_data += 8;
 			m->m_pkthdr.len -= 8;
-			bpf_mtap(ifp->if_bpf, m);
+			bpf_mtap(ifp, m);
 			m->m_len += 8;
 			m->m_data -= 8;
 			m->m_pkthdr.len += 8;
 		}
-#endif
 
 		send->ec_len = m->m_pkthdr.len;
 		m = send->ec_cur_mbuf = esh_adjust_mbufs(sc, m);
@@ -2364,21 +2359,12 @@ esh_read_snap_ring(struct esh_softc *sc, u_int16_t consumer, int error)
 				 */
 				ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 				/*
 				 * Check if there's a BPF listener on this
 				 * interface.  If so, hand off the raw packet
 				 * to BPF.
 				 */
-				if (ifp->if_bpf) {
-					/*
-					 * Incoming packets start with the FP
-					 * data, so no alignment problems
-					 * here...
-					 */
-					bpf_mtap(ifp->if_bpf, m);
-				}
-#endif
+				bpf_mtap(ifp, m);
 				if ((ifp->if_flags & IFF_RUNNING) == 0) {
 					m_freem(m);
 				} else {

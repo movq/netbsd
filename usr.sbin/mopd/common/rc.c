@@ -1,4 +1,4 @@
-/*	$NetBSD: rc.c,v 1.5 2009/10/20 00:51:13 snj Exp $	*/
+/*	$NetBSD: rc.c,v 1.7 2011/05/24 13:08:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -26,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rc.c,v 1.5 2009/10/20 00:51:13 snj Exp $");
+__RCSID("$NetBSD: rc.c,v 1.7 2011/05/24 13:08:16 joerg Exp $");
 #endif
 
 #include "os.h"
@@ -36,10 +36,7 @@ __RCSID("$NetBSD: rc.c,v 1.5 2009/10/20 00:51:13 snj Exp $");
 #include "rc.h"
 
 void
-mopDumpRC(fd, pkt, trans)
-	FILE	*fd;
-	u_char 	*pkt;
-	int	 trans;
+mopDumpRC(FILE *fd, const u_char *pkt, int trans)
 {
 	int	i,idx = 0;
 	int32_t	tmpl;
@@ -71,7 +68,7 @@ mopDumpRC(fd, pkt, trans)
 		break;
 	case MOP_K_CODE_BOT:
 		
-		if ((moplen == 5)) {
+		if (moplen == 5) {
 			tmps = mopGetShort(pkt,&idx);
 			(void)fprintf(fd,"Verification : %04x\n",tmps);
 		} else {
@@ -114,18 +111,18 @@ mopDumpRC(fd, pkt, trans)
 			
 			tmpc = mopGetChar(pkt,&idx);      /* Software ID */
 			(void)fprintf(fd,"Software ID  :   %02x ",tmpc);
-			if ((tmpc == 0)) {
+			if (tmpc == 0) {
 				(void)fprintf(fd,"No software id");
 			}
-			if ((tmpc == 254)) {
+			if (tmpc == 254) {
 				(void)fprintf(fd,"Maintenance system");
 				tmpc = 0;
 			}
-			if ((tmpc == 255)) {
+			if (tmpc == 255) {
 				(void)fprintf(fd,"Standard operating system");
 				tmpc = 0;
 			}
-			if ((tmpc > 0)) {
+			if (tmpc > 0) {
 				(void)fprintf(fd,"'");
 				for (i = 0; i < ((int) tmpc); i++) {
 					(void)fprintf(fd,"%c",

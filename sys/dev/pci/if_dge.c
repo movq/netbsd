@@ -1,4 +1,4 @@
-/*	$NetBSD: if_dge.c,v 1.27 2009/09/27 12:52:59 tsutsui Exp $ */
+/*	$NetBSD: if_dge.c,v 1.34 2012/02/02 19:43:05 tls Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -80,10 +80,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.27 2009/09/27 12:52:59 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.34 2012/02/02 19:43:05 tls Exp $");
 
-#include "bpfilter.h"
-#include "rnd.h"
+
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,20 +96,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.27 2009/09/27 12:52:59 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
-
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <netinet/in.h>			/* XXX for struct ip */
 #include <netinet/in_systm.h>		/* XXX for struct ip */
@@ -338,9 +331,7 @@ struct dge_softc {
 
 	uint16_t sc_eeprom[EEPROM_SIZE];
 
-#if NRND > 0
-	rndsource_element_t rnd_source; /* random source */
-#endif
+	krndsource_t rnd_source; /* random source */
 #ifdef DGE_OFFBYONE_RXBUG
 	void *sc_bugbuf;
 	SLIST_HEAD(, rxbugentry) sc_buglist;
@@ -684,9 +675,8 @@ dge_attach(device_t parent, device_t self, void *aux)
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_pt = pa->pa_tag;
 
-	preg = PCI_REVISION(pci_conf_read(pc, pa->pa_tag, PCI_CLASS_REG));
-	aprint_naive(": Ethernet controller\n");
-	aprint_normal(": Intel i82597EX 10GbE-LR Ethernet, rev. %d\n", preg);
+	pci_aprint_devinfo_fancy(pa, "Ethernet controller",
+		"Intel i82597EX 10GbE-LR Ethernet", 1);
 
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, DGE_PCI_BAR);
         if (pci_mapreg_map(pa, DGE_PCI_BAR, memtype, 0,
@@ -712,8 +702,8 @@ dge_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
@@ -903,10 +893,8 @@ dge_attach(device_t parent, device_t self, void *aux)
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
 
 #ifdef DGE_EVENT_COUNTERS
 	/* Fix segment event naming */
@@ -1351,11 +1339,8 @@ dge_start(struct ifnet *ifp)
 		sc->sc_txsfree--;
 		sc->sc_txsnext = DGE_NEXTTXS(sc->sc_txsnext);
 
-#if NBPFILTER > 0
 		/* Pass the packet to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txsfree == 0 || sc->sc_txfree <= 2) {
@@ -1499,10 +1484,7 @@ dge_intr(void *arg)
 		if ((icr & sc->sc_icr) == 0)
 			break;
 
-#if 0 /*NRND > 0*/
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, icr);
-#endif
+		rnd_add_uint32(&sc->rnd_source, icr);
 
 		handled = 1;
 
@@ -1776,11 +1758,8 @@ dge_rxintr(struct dge_softc *sc)
 
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 		/* Pass this up to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);

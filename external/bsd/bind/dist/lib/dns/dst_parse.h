@@ -1,7 +1,7 @@
-/*	$NetBSD: dst_parse.h,v 1.1.1.2 2009/10/25 00:02:29 christos Exp $	*/
+/*	$NetBSD: dst_parse.h,v 1.2.6.1 2012/06/05 21:15:03 bouyer Exp $	*/
 
 /*
- * Portions Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 2004-2010  Internet Systems Consortium, Inc. ("ISC")
  * Portions Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -31,7 +31,7 @@
  * IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dst_parse.h,v 1.14 2009/09/02 06:29:01 each Exp */
+/* Id: dst_parse.h,v 1.17 2010/12/23 23:47:08 tbox Exp  */
 
 /*! \file */
 #ifndef DST_DST_PARSE_H
@@ -40,9 +40,6 @@
 #include <isc/lang.h>
 
 #include <dst/dst.h>
-
-#define MAJOR_VERSION		1
-#define MINOR_VERSION		3
 
 #define MAXFIELDSIZE		512
 
@@ -82,6 +79,9 @@
 #define TAG_DSA_BASE		((DST_ALG_DSA << TAG_SHIFT) + 2)
 #define TAG_DSA_PRIVATE		((DST_ALG_DSA << TAG_SHIFT) + 3)
 #define TAG_DSA_PUBLIC		((DST_ALG_DSA << TAG_SHIFT) + 4)
+
+#define GOST_NTAGS		1
+#define TAG_GOST_PRIVASN1	((DST_ALG_ECCGOST << TAG_SHIFT) + 0)
 
 #define OLD_HMACMD5_NTAGS	1
 #define HMACMD5_NTAGS		2

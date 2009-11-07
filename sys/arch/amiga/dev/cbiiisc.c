@@ -1,4 +1,4 @@
-/*	$NetBSD: cbiiisc.c,v 1.17 2009/01/09 19:37:37 mhitch Exp $ */
+/*	$NetBSD: cbiiisc.c,v 1.20 2012/01/10 20:29:50 rkujawa Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,14 +58,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cbiiisc.c,v 1.17 2009/01/09 19:37:37 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cbiiisc.c,v 1.20 2012/01/10 20:29:50 rkujawa Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/cpu.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -80,6 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: cbiiisc.c,v 1.17 2009/01/09 19:37:37 mhitch Exp $");
 #include <amiga/dev/siopreg.h>
 #include <amiga/dev/siopvar.h>
 #include <amiga/dev/zbusvar.h>
+#include <amiga/dev/p5busvar.h>
 
 void cbiiiscattach(struct device *, struct device *, void *);
 int  cbiiiscmatch(struct device *, struct cfdata *, void *);
@@ -100,26 +100,25 @@ CFATTACH_DECL(cbiiisc, sizeof(struct siop_softc),
 int
 cbiiiscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
-	struct zbus_args *zap;
+	struct p5bus_attach_args *p5baa;
 
-	zap = auxp;
-	if (zap->manid == 8512 && zap->prodid == 100)
-		return(1);
-	return(0);
+	p5baa = (struct p5bus_attach_args *) auxp;
+
+	if (strcmp(p5baa->p5baa_name, "cbiiisc") == 0)
+		return 1;
+
+	return 0;
 }
 
 void
 cbiiiscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct siop_softc *sc = (struct siop_softc *)dp;
-	struct zbus_args *zap;
 	siop_regmap_p rp;
         struct scsipi_adapter *adapt = &sc->sc_adapter;
         struct scsipi_channel *chan = &sc->sc_channel;
 
-	printf("\n");
-
-	zap = auxp;
+	aprint_normal(": CyberStorm PPC/Mk-III SCSI host adapter\n");
 
 	sc->sc_siopp = rp = ztwomap(0xf40000);
 	/* siopng_dump_registers(sc); */
@@ -179,6 +178,7 @@ cbiiisc_dmaintr(void *arg)
 	if (sc->sc_flags & SIOP_INTSOFF)
 		return (0);	/* interrupts are not active */
 	rp = sc->sc_siopp;
+	amiga_membarrier();
 	istat = rp->siop_istat;
 	if ((istat & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0)
 		return(0);
@@ -189,6 +189,7 @@ cbiiisc_dmaintr(void *arg)
 	sc->sc_sist = rp->siop_sist;
 	sc->sc_istat = istat;
 	sc->sc_dstat = rp->siop_dstat;
+	amiga_membarrier();
 	siopngintr(sc);
 	return(1);
 }

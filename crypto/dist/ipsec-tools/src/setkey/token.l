@@ -1,4 +1,4 @@
-/*	$NetBSD: token.l,v 1.14 2009/10/29 14:34:27 christos Exp $	*/
+/*	$NetBSD: token.l,v 1.17 2012/01/09 15:25:13 drochner Exp $	*/
 
 /*	$KAME: token.l,v 1.44 2003/10/21 07:20:58 itojun Exp $	*/
 
@@ -127,6 +127,7 @@ bye		{ return(EXIT); }
 
 	/* for management SPD */
 spdadd		{ return(SPDADD); }
+spdupdate	{ return(SPDUPDATE); }
 spddelete	{ return(SPDDELETE); }
 spddump		{ return(SPDDUMP); }
 spdflush	{ return(SPDFLUSH); }
@@ -222,6 +223,16 @@ tcp		{
 	yylval.num = SADB_X_EALG_CAMELLIACBC; BEGIN INITIAL; return(ALG_ENC); 
 #endif
 }
+<S_ENCALG>aes-gcm-16	{
+#ifdef SADB_X_EALG_AESGCM16
+	yylval.num = SADB_X_EALG_AESGCM16; BEGIN INITIAL; return(ALG_ENC);
+#endif
+}
+<S_ENCALG>aes-gmac	{
+#ifdef SADB_X_EALG_AESGMAC
+	yylval.num = SADB_X_EALG_AESGMAC; BEGIN INITIAL; return(ALG_ENC);
+#endif
+}
 
 	/* compression algorithms */
 {hyphen}C	{ return(F_COMP); }
@@ -246,6 +257,7 @@ nocyclic-seq	{ return(NOCYCLICSEQ); }
 {hyphen}bh	{ return(F_LIFEBYTE_HARD); }
 {hyphen}bs	{ return(F_LIFEBYTE_SOFT); }
 {hyphen}ctx	{ return(SECURITY_CTX); }
+{hyphen}esp_frag { return(F_ESPFRAG); }
 
 	/* ... */
 any		{ return(ANY); }

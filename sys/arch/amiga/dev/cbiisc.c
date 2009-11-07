@@ -1,4 +1,4 @@
-/*	$NetBSD: cbiisc.c,v 1.28 2009/10/21 23:53:38 snj Exp $ */
+/*	$NetBSD: cbiisc.c,v 1.32 2010/12/20 00:25:25 matt Exp $ */
 
 /*
  * Copyright (c) 1997 Michael L. Hitch
@@ -31,8 +31,12 @@
  *
  */
 
+#ifdef __m68k__
+#include "opt_m68k_arch.h"
+#endif
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.28 2009/10/21 23:53:38 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.32 2010/12/20 00:25:25 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,10 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.28 2009/10/21 23:53:38 snj Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>

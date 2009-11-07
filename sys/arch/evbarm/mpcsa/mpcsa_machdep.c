@@ -1,5 +1,5 @@
-/*	$Id: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp $	*/
-/*	$NetBSD: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp $	*/
+/*	$Id: mpcsa_machdep.c,v 1.6 2011/07/01 20:44:20 dyoung Exp $	*/
+/*	$NetBSD: mpcsa_machdep.c,v 1.6 2011/07/01 20:44:20 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -73,11 +73,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup for Iyonix.
+ * Machine dependent functions for kernel setup for Iyonix.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.6 2011/07/01 20:44:20 dyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp
 
 #define	DRAM_BLOCKS	1
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -159,7 +159,7 @@ __KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
+ * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
 
@@ -383,7 +383,7 @@ static void mpcsa_device_register(device_t dev, void *aux)
 				eth_addr, ETHER_ADDR_LEN);
 			KASSERT(pd != NULL);
 			if (prop_dictionary_set(device_properties(dev),
-						"mac-addr", pd) == FALSE) {
+						"mac-address", pd) == FALSE) {
 				printf("WARNING: unable to set mac-addr property "
 				       "for %s\n", dev->dv_xname);
 			}

@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.h,v 1.54 2009/05/20 03:26:21 dyoung Exp $	*/
+/*	$NetBSD: disk.h,v 1.56.2.1 2012/07/05 18:12:48 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2004 The NetBSD Foundation, Inc.
@@ -217,19 +217,35 @@ __link_set_add_data(dkwedge_methods, name ## _ddm)
 #define	DKW_PTYPE_UNKNOWN	""
 #define	DKW_PTYPE_UNUSED	"unused"
 #define	DKW_PTYPE_SWAP		"swap"
+#define	DKW_PTYPE_V6		"v6"
+#define	DKW_PTYPE_V7		"v7"
+#define	DKW_PTYPE_SYSV		"sysv"
+#define	DKW_PTYPE_V71K		"v71k"
+#define	DKW_PTYPE_V8		"v8"
 #define	DKW_PTYPE_FFS		"ffs"
-#define	DKW_PTYPE_LFS		"lfs"
-#define	DKW_PTYPE_EXT2FS	"ext2fs"
-#define	DKW_PTYPE_ISO9660	"cd9660"
-#define	DKW_PTYPE_AMIGADOS	"ados"
-#define	DKW_PTYPE_APPLEHFS	"hfs"
 #define	DKW_PTYPE_FAT		"msdos"
+#define	DKW_PTYPE_LFS		"lfs"
+#define	DKW_PTYPE_OTHER		"other"
+#define	DKW_PTYPE_HPFS		"hpfs"
+#define	DKW_PTYPE_ISO9660	"cd9660"
+#define	DKW_PTYPE_BOOT		"boot"
+#define	DKW_PTYPE_AMIGADOS	"ados"
+#define	DKW_PTYPE_HFS		"hfs"
 #define	DKW_PTYPE_FILECORE	"filecore"
+#define	DKW_PTYPE_EXT2FS	"ext2fs"
+#define	DKW_PTYPE_NTFS		"ntfs"
 #define	DKW_PTYPE_RAIDFRAME	"raidframe"
 #define	DKW_PTYPE_CCD		"ccd"
+#define	DKW_PTYPE_JFS2		"jfs2"
 #define	DKW_PTYPE_APPLEUFS	"appleufs"
-#define	DKW_PTYPE_NTFS		"ntfs"
+#define	DKW_PTYPE_VINUM		"vinum"
+#define	DKW_PTYPE_UDF		"udf"
+#define	DKW_PTYPE_APPLEHFS	"hfs"
+#define	DKW_PTYPE_SYSVBFS	"sysvbfs"
+#define	DKW_PTYPE_EFS		"efs"
+#define	DKW_PTYPE_NILFS		"nilfs"
 #define	DKW_PTYPE_CGD		"cgd"
+#define	DKW_PTYPE_MINIXFS3	"minixfs3"
 
 /*
  * Disk geometry dictionary.
@@ -514,10 +530,10 @@ int	dkwedge_del(struct dkwedge_info *);
 void	dkwedge_delall(struct disk *);
 int	dkwedge_list(struct disk *, struct dkwedge_list *, struct lwp *);
 void	dkwedge_discover(struct disk *);
-void	dkwedge_set_bootwedge(device_t, daddr_t, uint64_t);
 int	dkwedge_read(struct disk *, struct vnode *, daddr_t, void *, size_t);
 device_t dkwedge_find_by_wname(const char *);
 void	dkwedge_print_wnames(void);
+device_t dkwedge_find_partition(device_t, daddr_t, uint64_t);
 #endif
 
 #endif /* _SYS_DISK_H_ */

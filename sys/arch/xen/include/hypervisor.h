@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.31 2009/10/19 18:41:10 bouyer Exp $	*/
+/*	$NetBSD: hypervisor.h,v 1.36.2.2 2012/02/22 18:56:46 riz Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -79,17 +79,17 @@ struct xen_npx_attach_args {
 #define	s32 int32_t
 #define	s64 int64_t
 
-#include <xen/xen3-public/xen.h>
-#include <xen/xen3-public/sched.h>
-#include <xen/xen3-public/platform.h>
+#include <xen/xen-public/xen.h>
+#include <xen/xen-public/sched.h>
+#include <xen/xen-public/platform.h>
 #if __XEN_INTERFACE_VERSION__ < 0x00030204
-#include <xen/xen3-public/dom0_ops.h>
+#include <xen/xen-public/dom0_ops.h>
 #endif
-#include <xen/xen3-public/event_channel.h>
-#include <xen/xen3-public/physdev.h>
-#include <xen/xen3-public/memory.h>
-#include <xen/xen3-public/io/netif.h>
-#include <xen/xen3-public/io/blkif.h>
+#include <xen/xen-public/event_channel.h>
+#include <xen/xen-public/physdev.h>
+#include <xen/xen-public/memory.h>
+#include <xen/xen-public/io/netif.h>
+#include <xen/xen-public/io/blkif.h>
 
 #include <machine/hypercalls.h>
 
@@ -128,16 +128,24 @@ extern volatile shared_info_t *HYPERVISOR_shared_info;
 
 /* hypervisor.c */
 struct intrframe;
+struct cpu_info;
 void do_hypervisor_callback(struct intrframe *regs);
 void hypervisor_enable_event(unsigned int);
 
+extern int xen_version;
+#define XEN_MAJOR(x) (((x) & 0xffff0000) >> 16)
+#define XEN_MINOR(x) ((x) & 0x0000ffff)
+
 /* hypervisor_machdep.c */
+void hypervisor_send_event(struct cpu_info *, unsigned int);
 void hypervisor_unmask_event(unsigned int);
 void hypervisor_mask_event(unsigned int);
 void hypervisor_clear_event(unsigned int);
 void hypervisor_enable_ipl(unsigned int);
-void hypervisor_set_ipending(uint32_t, int, int);
+void hypervisor_set_ipending(struct cpu_info *, 
+			     uint32_t, int, int);
 void hypervisor_machdep_attach(void);
+void hypervisor_machdep_resume(void);
 
 /* 
  * Force a proper event-channel callback from Xen after clearing the

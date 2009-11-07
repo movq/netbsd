@@ -1,4 +1,4 @@
-# $NetBSD: t_vnd.sh,v 1.3 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_vnd.sh,v 1.8 2011/04/21 22:26:46 haad Exp $
 #
 # Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -28,7 +28,7 @@
 # Verifies that vnd works with files stored in tmpfs.
 #
 
-atf_test_case basic
+atf_test_case basic cleanup
 basic_head() {
 	atf_set "descr" "Verifies that vnd works with files stored in tmpfs"
 	atf_set "require.user" "root"
@@ -46,12 +46,12 @@ basic_body() {
 	atf_check -s eq:0 -o empty -e empty mount /dev/vnd3a mnt
 
 	echo "Creating test files"
-	for f in $(jot 100); do
+	for f in $(jot -w %u 100 | uniq); do
 		jot 1000 >mnt/${f} || atf_fail "Failed to create file ${f}"
 	done
 
 	echo "Verifying created files"
-	for f in $(jot 100); do
+	for f in $(jot -w %u 100 | uniq); do
 		[ $(md5 mnt/${f} | cut -d ' ' -f 4) = \
 		    53d025127ae99ab79e8502aae2d9bea6 ] || \
 		    atf_fail "Invalid checksum for file ${f}"
@@ -61,10 +61,13 @@ basic_body() {
 	atf_check -s eq:0 -o empty -e empty vnconfig -u /dev/vnd3
 
 	test_unmount
+	touch done
 }
 basic_cleanup() {
-	umount mnt 2>/dev/null 1>&2
-	vnconfig -u /dev/vnd3 2>/dev/null 1>&2
+	if [ ! -f done ]; then
+		umount mnt 2>/dev/null 1>&2
+		vnconfig -u /dev/vnd3 2>/dev/null 1>&2
+	fi
 }
 
 atf_init_test_cases() {

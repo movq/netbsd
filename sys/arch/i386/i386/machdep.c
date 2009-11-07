@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.673 2009/11/07 07:27:44 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.717.2.7 2012/05/21 15:25:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006, 2008, 2009
@@ -67,11 +67,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.673 2009/11/07 07:27:44 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.717.2.7 2012/05/21 15:25:58 riz Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
-#include "opt_compat_mach.h"	/* need to get the right segment def */
+#include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
 #include "opt_cpureset_delay.h"
@@ -86,11 +86,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.673 2009/11/07 07:27:44 cegger Exp $")
 #include "opt_realmem.h"
 #include "opt_user_ldt.h"
 #include "opt_vm86.h"
-#include "opt_xbox.h"
 #include "opt_xen.h"
 #include "isa.h"
 #include "pci.h"
-
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,11 +96,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.673 2009/11/07 07:27:44 cegger Exp $")
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/cpu.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/fcntl.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
-#include <sys/malloc.h>
+#include <sys/kauth.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
 #include <sys/mount.h>
@@ -125,8 +123,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.673 2009/11/07 07:27:44 cegger Exp $")
 #endif
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 #include <uvm/uvm_page.h>
 
 #include <sys/sysctl.h>
@@ -179,13 +178,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.673 2009/11/07 07:27:44 cegger Exp $")
 #include <machine/vm86.h>
 #endif
 
-#ifdef XBOX
-#include <machine/xbox.h>
-
-int arch_i386_is_xbox = 0;
-uint32_t arch_i386_xbox_memsize = 0;
-#endif
-
 #include "acpica.h"
 #include "apmbios.h"
 #include "bioscall.h"
@@ -212,7 +204,7 @@ uint32_t arch_i386_xbox_memsize = 0;
 #include "cardbus.h"
 #if NCARDBUS > 0
 /* For rbus_min_start hint. */
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/cardbus/rbus.h>
 #include <machine/rbus_machdep.h>
 #endif
@@ -245,11 +237,8 @@ struct mtrr_funcs *mtrr_funcs;
 
 int	physmem;
 
-unsigned int cpu_feature;
-unsigned int cpu_feature2;
-unsigned int cpu_feature_padlock;
-
 int	cpu_class;
+int	use_pae;
 int	i386_fpu_present;
 int	i386_fpu_exception;
 int	i386_fpu_fdivbug;
@@ -269,7 +258,6 @@ vaddr_t	idt_vaddr;
 paddr_t	idt_paddr;
 vaddr_t	pentium_idt_vaddr;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 extern	paddr_t avail_start, avail_end;
@@ -326,7 +314,7 @@ int	biosmem_implicit;
  * boot loader.  Only be used by native_loader(). */
 struct bootinfo_source {
 	uint32_t bs_naddrs;
-	paddr_t bs_addrs[1]; /* Actually longer. */
+	void *bs_addrs[1]; /* Actually longer. */
 };
 
 /* Only called by locore.h; no need to be in a header file. */
@@ -390,10 +378,10 @@ native_loader(int bl_boothowto, int bl_bootdev,
 		for (i = 0; i < bl_bootinfo->bs_naddrs; i++) {
 			struct btinfo_common *bc;
 
-			bc = (struct btinfo_common *)(bl_bootinfo->bs_addrs[i]);
+			bc = bl_bootinfo->bs_addrs[i];
 
-			if ((paddr_t)(data + bc->len) >
-			    (paddr_t)(&bidest->bi_data[0] + BOOTINFO_MAXSIZE))
+			if ((data + bc->len) >
+			    (&bidest->bi_data[0] + BOOTINFO_MAXSIZE))
 				break;
 
 			memcpy(data, bc, bc->len);
@@ -444,10 +432,6 @@ cpu_startup(void)
 	 */
 	consinit();
 
-#ifdef XBOX
-	xbox_startup();
-#endif
-
 	/*
 	 * Initialize error message buffer (et end of core).
 	 */
@@ -483,7 +467,7 @@ cpu_startup(void)
 
 #if NCARDBUS > 0
 	/* Tell RBUS how much RAM we have, so it can use heuristics. */
-	rbus_min_start_hint(ptoa(physmem));
+	rbus_min_start_hint(ctob((psize_t)physmem));
 #endif
 
 	minaddr = 0;
@@ -493,12 +477,6 @@ cpu_startup(void)
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
 
 	/* Say hello. */
 	banner();
@@ -515,6 +493,8 @@ cpu_startup(void)
 	cpu_init_tss(&cpu_info_primary);
 	ltr(cpu_info_primary.ci_tss_sel);
 #endif
+
+	x86_startup();
 }
 
 /*
@@ -523,24 +503,21 @@ cpu_startup(void)
 void
 i386_proc0_tss_ldt_init(void)
 {
-	struct lwp *l;
-	struct pcb *pcb;
-
-	l = &lwp0;
-	pcb = &l->l_addr->u_pcb;
+	struct lwp *l = &lwp0;
+	struct pcb *pcb = lwp_getpcb(l);
 
 	pmap_kernel()->pm_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
 	pcb->pcb_cr0 = rcr0() & ~CR0_TS;
-	pcb->pcb_esp0 = USER_TO_UAREA(l->l_addr) + KSTACK_SIZE - 16;
+	pcb->pcb_esp0 = uvm_lwp_getuarea(l) + KSTACK_SIZE - 16;
 	pcb->pcb_iopl = SEL_KPL;
 	l->l_md.md_regs = (struct trapframe *)pcb->pcb_esp0 - 1;
-	memcpy(pcb->pcb_fsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_fsd));
-	memcpy(pcb->pcb_gsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_gsd));
+	memcpy(&pcb->pcb_fsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_fsd));
+	memcpy(&pcb->pcb_gsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_gsd));
 
 #ifndef XEN
 	lldt(pmap_kernel()->pm_ldt_sel);
 #else
-	HYPERVISOR_fpu_taskswitch();
+	HYPERVISOR_fpu_taskswitch(1);
 	XENPRINTF(("lwp tss sp %p ss %04x/%04x\n",
 	    (void *)pcb->pcb_esp0,
 	    GSEL(GDATA_SEL, SEL_KPL),
@@ -550,29 +527,67 @@ i386_proc0_tss_ldt_init(void)
 }
 
 #ifdef XEN
+/* Shim for curcpu() until %fs is ready */
+extern struct cpu_info	* (*xpq_cpu)(void);
+
+/* used in assembly */
+void i386_switch_context(lwp_t *);
+void i386_tls_switch(lwp_t *);
+
 /*
  * Switch context:
- * - honor CR0_TS in saved CR0 and request DNA exception on FPU use
  * - switch stack pointer for user->kernel transition
  */
 void
 i386_switch_context(lwp_t *l)
 {
 	struct cpu_info *ci;
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb;
 	struct physdev_op physop;
 
+	pcb = lwp_getpcb(l);
 	ci = curcpu();
-	if (ci->ci_fpused) {
-		HYPERVISOR_fpu_taskswitch();
-		ci->ci_fpused = 0;
-	}
 
 	HYPERVISOR_stack_switch(GSEL(GDATA_SEL, SEL_KPL), pcb->pcb_esp0);
 
 	physop.cmd = PHYSDEVOP_SET_IOPL;
 	physop.u.set_iopl.iopl = pcb->pcb_iopl;
 	HYPERVISOR_physdev_op(&physop);
+}
+
+void
+i386_tls_switch(lwp_t *l)
+{
+	struct cpu_info *ci = curcpu();
+	struct pcb *pcb = lwp_getpcb(l);
+	/*
+         * Raise the IPL to IPL_HIGH.
+	 * FPU IPIs can alter the LWP's saved cr0.  Dropping the priority
+	 * is deferred until mi_switch(), when cpu_switchto() returns.
+	 */
+	(void)splhigh();
+
+        /*
+	 * If our floating point registers are on a different CPU,
+	 * set CR0_TS so we'll trap rather than reuse bogus state.
+	 */
+
+	if (l != ci->ci_fpcurlwp) {
+		HYPERVISOR_fpu_taskswitch(1);
+	}
+
+	/* Update TLS segment pointers */
+	update_descriptor(&ci->ci_gdt[GUFS_SEL],
+			  (union descriptor *) &pcb->pcb_fsd);
+	update_descriptor(&ci->ci_gdt[GUGS_SEL], 
+			  (union descriptor *) &pcb->pcb_gsd);
+
+	/* setup curcpu() to use %fs now */
+	/* XXX: find a way to do this, just once */
+	if (__predict_false(xpq_cpu != x86_curcpu)) {
+		xpq_cpu = x86_curcpu;
+	}
+
 }
 #endif /* XEN */
 
@@ -704,6 +719,12 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_QUAD, "tsc_freq", NULL,
 		       NULL, 0, &tsc_freq, 0,
 		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_INT, "pae", 
+		       SYSCTL_DESCR("Whether the kernel uses PAE"),
+		       NULL, 0, &use_pae, 0,
+		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 }
 
 void *
@@ -736,13 +757,8 @@ buildcontext(struct lwp *l, int sel, void *catcher, void *fp)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 
-#ifndef XEN
 	tf->tf_gs = GSEL(GUGS_SEL, SEL_UPL);
 	tf->tf_fs = GSEL(GUFS_SEL, SEL_UPL);
-#else
-	tf->tf_gs = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_fs = GSEL(GUDATA_SEL, SEL_UPL);
-#endif
 	tf->tf_es = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_eip = (int)catcher;
@@ -868,9 +884,7 @@ void
 cpu_reboot(int howto, char *bootstr)
 {
 	static bool syncdone = false;
-	struct lwp *l;
-
-	l = (curlwp == NULL) ? &lwp0 : curlwp;
+	int s = IPL_NONE;
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -892,7 +906,7 @@ cpu_reboot(int howto, char *bootstr)
 		if (!syncdone) {
 			syncdone = true;
 			/* XXX used to force unmount as well, here */
-			vfs_sync_all(l);
+			vfs_sync_all(curlwp);
 			/*
 			 * If we've been adjusting the clock, the todr
 			 * will be out of synch; adjust it now.
@@ -904,34 +918,32 @@ cpu_reboot(int howto, char *bootstr)
 				resettodr();
 		}
 
-		while (vfs_unmountall1(l, false, false) ||
+		while (vfs_unmountall1(curlwp, false, false) ||
 		       config_detach_all(boothowto) ||
-		       vfs_unmount_forceone(l))
+		       vfs_unmount_forceone(curlwp))
 			;	/* do nothing */
 	} else
 		suspendsched();
 
 	pmf_system_shutdown(boothowto);
 
-	splhigh();
+	s = splhigh();
+
+	/* amd64 maybe_dump() */
+
 haltsys:
+	doshutdownhooks();
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 #ifdef XEN
 		HYPERVISOR_shutdown();
 		for (;;);
 #endif
-#ifdef XBOX
-		if (arch_i386_is_xbox) {
-			xbox_poweroff();
-			for (;;);
-		}
-#endif
 #if NACPICA > 0
-		if (acpi_softc != NULL) {
-			acpi_enter_sleep_state(acpi_softc, ACPI_STATE_S5);
-			printf("WARNING: ACPI powerdown failed!\n");
-		}
+		if (s != IPL_NONE)
+			splx(s);
+
+		acpi_enter_sleep_state(ACPI_STATE_S5);
 #endif
 #if NAPMBIOS > 0 && !defined(APM_NO_POWEROFF)
 		/* turn off, if we can.  But try to turn disk off and
@@ -951,12 +963,12 @@ haltsys:
 	}
 
 #ifdef MULTIPROCESSOR
-	x86_broadcast_ipi(X86_IPI_HALT);
-#endif
+	cpu_broadcast_halt();
+#endif /* MULTIPROCESSOR */
 
 	if (howto & RB_HALT) {
 #if NACPICA > 0
-		AcpiDisable();
+		acpi_disable();
 #endif
 
 		printf("\n");
@@ -998,16 +1010,17 @@ haltsys:
  * Clear registers on exec
  */
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
 	struct pmap *pmap = vm_map_pmap(&l->l_proc->p_vmspace->vm_map);
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct trapframe *tf;
 
 #if NNPX > 0
 	/* If we were using the FPU, forget about it. */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+	if (pcb->pcb_fpcpu != NULL) {
 		npxsave_lwp(l, false);
+	}
 #endif
 
 #ifdef USER_LDT
@@ -1020,23 +1033,18 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 		pcb->pcb_savefpu.sv_xmm.sv_env.en_mxcsr = __INITIAL_MXCSR__;
 	} else
 		pcb->pcb_savefpu.sv_87.sv_env.en_cw = __NetBSD_NPXCW__;
-	memcpy(pcb->pcb_fsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_fsd));
-	memcpy(pcb->pcb_gsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_gsd));
+	memcpy(&pcb->pcb_fsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_fsd));
+	memcpy(&pcb->pcb_gsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_gsd));
 
 	tf = l->l_md.md_regs;
-#ifndef XEN
 	tf->tf_gs = GSEL(GUGS_SEL, SEL_UPL);
 	tf->tf_fs = GSEL(GUFS_SEL, SEL_UPL);
-#else
-	tf->tf_gs = LSEL(LUDATA_SEL, SEL_UPL);
-	tf->tf_fs = LSEL(LUDATA_SEL, SEL_UPL);
-#endif
 	tf->tf_es = LSEL(LUDATA_SEL, SEL_UPL);
 	tf->tf_ds = LSEL(LUDATA_SEL, SEL_UPL);
 	tf->tf_edi = 0;
 	tf->tf_esi = 0;
 	tf->tf_ebp = 0;
-	tf->tf_ebx = (int)l->l_proc->p_psstr;
+	tf->tf_ebx = l->l_proc->p_psstrp;
 	tf->tf_edx = 0;
 	tf->tf_ecx = 0;
 	tf->tf_eax = 0;
@@ -1054,8 +1062,7 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 
 union	descriptor *gdt, *ldt;
 union	descriptor *pentium_idt;
-struct user *proc0paddr;
-extern vaddr_t proc0uarea;
+extern vaddr_t lwp0uarea;
 
 void
 setgate(struct gate_descriptor *gd, void *func, int args, int type, int dpl,
@@ -1119,23 +1126,24 @@ extern vector *IDTVEC(exceptions)[];
 extern vector IDTVEC(svr4_fasttrap);
 void (*svr4_fasttrap_vec)(void) = (void (*)(void))nullop;
 krwlock_t svr4_fasttrap_lock;
-#ifdef COMPAT_MACH
-extern vector IDTVEC(mach_trap);
-#endif
 #ifdef XEN
 #define MAX_XEN_IDT 128
 trap_info_t xen_idt[MAX_XEN_IDT];
 int xen_idt_idx;
 #endif
 
-#ifndef XEN
 void cpu_init_idt(void)
 {
+#ifndef XEN
 	struct region_descriptor region;
 	setregion(&region, pentium_idt, NIDT * sizeof(idt[0]) - 1);
 	lidt(&region);
-}
+#else /* XEN */
+	XENPRINTF(("HYPERVISOR_set_trap_table %p\n", xen_idt));
+	if (HYPERVISOR_set_trap_table(xen_idt))
+		panic("HYPERVISOR_set_trap_table %p failed\n", xen_idt);
 #endif /* !XEN */
+}
 
 void
 initgdt(union descriptor *tgdt)
@@ -1156,10 +1164,6 @@ initgdt(union descriptor *tgdt)
 	    SDT_MEMERA, SEL_UPL, 1, 1);
 	setsegment(&gdt[GUDATA_SEL].sd, 0, 0xfffff,
 	    SDT_MEMRWA, SEL_UPL, 1, 1);
-#ifdef COMPAT_MACH
-	setgate(&gdt[GMACHCALLS_SEL].gd, &IDTVEC(mach_trap), 1,
-	    SDT_SYS386CGT, SEL_UPL, GSEL(GCODE_SEL, SEL_KPL));
-#endif
 #if NBIOSCALL > 0
 	/* bios trampoline GDT entries */
 	setsegment(&gdt[GBIOSCODE_SEL].sd, 0, 0xfffff, SDT_MEMERA, SEL_KPL, 0,
@@ -1175,7 +1179,28 @@ initgdt(union descriptor *tgdt)
 	lgdt(&region);
 #else /* !XEN */
 	frames[0] = xpmap_ptom((uint32_t)gdt - KERNBASE) >> PAGE_SHIFT;
-	pmap_kenter_pa((vaddr_t)gdt, (uint32_t)gdt - KERNBASE, VM_PROT_READ, 0);
+	{	/*
+		 * Enter the gdt page RO into the kernel map. We can't
+		 * use pmap_kenter_pa() here, because %fs is not
+		 * usable until the gdt is loaded, and %fs is used as
+		 * the base pointer for curcpu() and curlwp(), both of
+		 * which are in the callpath of pmap_kenter_pa().
+		 * So we mash up our own - this is MD code anyway.
+		 *
+		 * XXX: review this once we have finegrained locking
+		 * for xpq.
+		 */
+		pt_entry_t *pte, npte;
+		pt_entry_t pg_nx = (cpu_feature[2] & CPUID_NOX ? PG_NX : 0);
+
+		pte = kvtopte((vaddr_t)gdt);
+		npte = pmap_pa2pte((vaddr_t)gdt - KERNBASE);
+		npte |= PG_RO | pg_nx | PG_V;
+
+		xpq_queue_pte_update(xpmap_ptetomach(pte), npte);
+		xpq_flush_queue();
+	}
+
 	XENPRINTK(("loading gdt %lx, %d entries\n", frames[0] << PAGE_SHIFT,
 	    NGDT));
 	if (HYPERVISOR_set_gdt(frames, NGDT /* XXX is it right ? */))
@@ -1197,8 +1222,8 @@ init386_msgbuf(void)
  search_again:
 	vps = NULL;
 	for (x = 0; x < vm_nphysseg; ++x) {
-		vps = &vm_physmem[x];
-		if (ptoa(vps->avail_end) == avail_end) {
+		vps = VM_PHYSMEM_PTR(x);
+		if (ctob(vps->avail_end) == avail_end) {
 			break;
 		}
 	}
@@ -1207,24 +1232,24 @@ init386_msgbuf(void)
 
 	/* Shrink so it'll fit in the last segment. */
 	if (vps->avail_end - vps->avail_start < atop(sz))
-		sz = ptoa(vps->avail_end - vps->avail_start);
+		sz = ctob(vps->avail_end - vps->avail_start);
 
 	vps->avail_end -= atop(sz);
 	vps->end -= atop(sz);
 	msgbuf_p_seg[msgbuf_p_cnt].sz = sz;
-	msgbuf_p_seg[msgbuf_p_cnt++].paddr = ptoa(vps->avail_end);
+	msgbuf_p_seg[msgbuf_p_cnt++].paddr = ctob(vps->avail_end);
 
 	/* Remove the last segment if it now has no pages. */
 	if (vps->start == vps->end) {
 		for (--vm_nphysseg; x < vm_nphysseg; x++)
-			vm_physmem[x] = vm_physmem[x + 1];
+			VM_PHYSMEM_PTR_SWAP(x, x + 1);
 	}
 
 	/* Now find where the new avail_end is. */
 	for (avail_end = 0, x = 0; x < vm_nphysseg; x++)
-		if (vm_physmem[x].avail_end > avail_end)
-			avail_end = vm_physmem[x].avail_end;
-	avail_end = ptoa(avail_end);
+		if (VM_PHYSMEM_PTR(x)->avail_end > avail_end)
+			avail_end = VM_PHYSMEM_PTR(x)->avail_end;
+	avail_end = ctob(avail_end);
 
 	if (sz == reqsz)
 		return;
@@ -1250,7 +1275,7 @@ init386_pte0(void)
 
 	paddr = 4 * PAGE_SIZE;
 	vaddr = (vaddr_t)vtopte(0);
-	pmap_kenter_pa(vaddr, paddr, VM_PROT_READ | VM_PROT_WRITE, 0);
+	pmap_kenter_pa(vaddr, paddr, VM_PROT_ALL, 0);
 	pmap_update(pmap_kernel());
 	/* make sure it is clean before using */
 	memset((void *)vaddr, 0, PAGE_SIZE);
@@ -1288,6 +1313,7 @@ void
 init386(paddr_t first_avail)
 {
 	extern void consinit(void);
+	struct pcb *pcb;
 	int x;
 #ifndef XEN
 	union descriptor *tgdt;
@@ -1307,60 +1333,43 @@ init386(paddr_t first_avail)
 	cpu_info_primary.ci_vcpu = &HYPERVISOR_shared_info->vcpu_info[0];
 #endif
 	cpu_probe(&cpu_info_primary);
-	cpu_feature = cpu_info_primary.ci_feature_flags;
-	cpu_feature2 = cpu_info_primary.ci_feature2_flags;
-	cpu_feature_padlock = cpu_info_primary.ci_padlock_flags;
 
-	proc0paddr = UAREA_TO_USER(proc0uarea);
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, lwp0uarea);
+	pcb = lwp_getpcb(&lwp0);
+
+	cpu_init_msrs(&cpu_info_primary, true);
+
+#ifdef PAE
+	use_pae = 1;
+#else
+	use_pae = 0;
+#endif
 
 #ifdef XEN
-	/* not on Xen... */
-	cpu_feature &= ~(CPUID_PGE|CPUID_PSE|CPUID_MTRR|CPUID_FXSR|CPUID_NOX);
-	lwp0.l_addr->u_pcb.pcb_cr3 = PDPpaddr - KERNBASE;
+	pcb->pcb_cr3 = PDPpaddr;
 	__PRINTK(("pcb_cr3 0x%lx cr3 0x%lx\n",
-	    PDPpaddr - KERNBASE, xpmap_ptom(PDPpaddr - KERNBASE)));
-	XENPRINTK(("proc0paddr %p first_avail %p\n",
-	    proc0paddr, (void *)(long)first_avail));
+	    PDPpaddr, xpmap_ptom(PDPpaddr)));
+	XENPRINTK(("lwp0uarea %p first_avail %p\n",
+	    lwp0uarea, (void *)(long)first_avail));
 	XENPRINTK(("ptdpaddr %p atdevbase %p\n", (void *)PDPpaddr,
 	    (void *)atdevbase));
 #endif
 
-
-#ifdef XBOX
+#if defined(PAE) && !defined(XEN)
 	/*
-	 * From Rink Springer @ FreeBSD:
-	 *
-	 * The following code queries the PCI ID of 0:0:0. For the XBOX,
-	 * This should be 0x10de / 0x02a5.
-	 *
-	 * This is exactly what Linux does.
+	 * Save VA and PA of L3 PD of boot processor (for Xen, this is done
+	 * in xen_pmap_bootstrap())
 	 */
-	outl(0xcf8, 0x80000000);
-	if (inl(0xcfc) == 0x02a510de) {
-		arch_i386_is_xbox = 1;
-		xbox_lcd_init();
-		xbox_lcd_writetext("NetBSD/i386 ");
+	cpu_info_primary.ci_pae_l3_pdirpa = rcr3();
+	cpu_info_primary.ci_pae_l3_pdir = (pd_entry_t *)(rcr3() + KERNBASE);
+#endif /* PAE && !XEN */
 
-		/*
-		 * We are an XBOX, but we may have either 64MB or 128MB of
-		 * memory. The PCI host bridge should be programmed for this,
-		 * so we just query it. 
-		 */
-		outl(0xcf8, 0x80000084);
-		arch_i386_xbox_memsize = (inl(0xcfc) == 0x7FFFFFF) ? 128 : 64;
-	}
-#endif /* XBOX */
-
-#if NISA > 0 || NPCI > 0
-	x86_bus_space_init();
-#endif
 #ifdef XEN
 	xen_parse_cmdline(XEN_PARSE_BOOTFLAGS, NULL);
 #endif
 
 	/*
-	 * Initailize PAGE_SIZE-dependent variables.
+	 * Initialize PAGE_SIZE-dependent variables.
 	 */
 	uvm_setpagesize();
 
@@ -1368,8 +1377,7 @@ init386(paddr_t first_avail)
 	 * Saving SSE registers won't work if the save area isn't
 	 * 16-byte aligned.
 	 */
-	if (offsetof(struct user, u_pcb.pcb_savefpu) & 0xf)
-		panic("init386: pcb_savefpu not 16-byte aligned");
+	KASSERT((offsetof(struct pcb, pcb_savefpu) & 0xf) == 0);
 
 	/*
 	 * Start with 2 color bins -- this is just a guess to get us
@@ -1396,9 +1404,9 @@ init386(paddr_t first_avail)
 	/* Make sure the end of the space used by the kernel is rounded. */
 	first_avail = round_page(first_avail);
 	avail_start = first_avail;
-	avail_end = ptoa(xen_start_info.nr_pages) + XPMAP_OFFSET;
+	avail_end = ctob((paddr_t)xen_start_info.nr_pages) + XPMAP_OFFSET;
 	pmap_pa_start = (KERNTEXTOFF - KERNBASE);
-	pmap_pa_end = avail_end;
+	pmap_pa_end = pmap_pa_start + ctob((paddr_t)xen_start_info.nr_pages);
 	mem_clusters[0].start = avail_start;
 	mem_clusters[0].size = avail_end - avail_start;
 	mem_cluster_cnt++;
@@ -1410,7 +1418,14 @@ init386(paddr_t first_avail)
 	 * before the above variables are set.
 	 */
 	initgdt(NULL);
+
+	mutex_init(&pte_lock, MUTEX_DEFAULT, IPL_VM);
 #endif /* XEN */
+
+#if NISA > 0 || NPCI > 0
+	x86_bus_space_init();
+#endif /* NISA > 0 || NPCI > 0 */
+	
 	consinit();	/* XXX SHOULD NOT BE DONE HERE */
 
 #ifdef DEBUG_MEMLOAD
@@ -1443,9 +1458,10 @@ init386(paddr_t first_avail)
 	initx86_load_memmap(first_avail);
 
 #else /* !XEN */
-	XENPRINTK(("load the memory cluster %p(%d) - %p(%ld)\n",
-	    (void *)(long)avail_start, (int)atop(avail_start),
-	    (void *)(long)avail_end, (int)atop(avail_end)));
+	XENPRINTK(("load the memory cluster 0x%" PRIx64 " (%" PRId64 ") - "
+	    "0x%" PRIx64 " (%" PRId64 ")\n",
+	    (uint64_t)avail_start, (uint64_t)atop(avail_start),
+	    (uint64_t)avail_end, (uint64_t)atop(avail_end)));
 	uvm_page_physload(atop(avail_start), atop(avail_end),
 	    atop(avail_start), atop(avail_end),
 	    VM_FREELIST_DEFAULT);
@@ -1472,6 +1488,9 @@ init386(paddr_t first_avail)
 		       VM_PROT_ALL, 0);		/* protection */
 	pmap_update(pmap_kernel());
 	memcpy((void *)BIOSTRAMP_BASE, biostramp_image, biostramp_image_size);
+
+	/* Needed early, for bioscall() and kvm86_call() */
+	cpu_info_primary.ci_pmap = pmap_kernel();
 #endif
 #endif /* !XEN */
 
@@ -1574,10 +1593,7 @@ init386(paddr_t first_avail)
 	xen_idt[xen_idt_idx].address = (uint32_t)&IDTVEC(svr4_fasttrap);
 	xen_idt_idx++;
 	lldt(GSEL(GLDT_SEL, SEL_KPL));
-
-	XENPRINTF(("HYPERVISOR_set_trap_table %p\n", xen_idt));
-	if (HYPERVISOR_set_trap_table(xen_idt))
-		panic("HYPERVISOR_set_trap_table %p failed\n", xen_idt);
+	cpu_init_idt();
 #endif /* XEN */
 
 	init386_ksyms();
@@ -1596,7 +1612,7 @@ init386(paddr_t first_avail)
 	intr_default_setup();
 #endif
 
-	splraise(IPL_IPI);
+	splraise(IPL_HIGH);
 	x86_enable_intr();
 
 #ifdef DDB
@@ -1621,7 +1637,7 @@ init386(paddr_t first_avail)
 		       "have %lu bytes, want %lu bytes\n"
 		       "running in degraded mode\n"
 		       "press a key to confirm\n\n",
-		       ptoa(physmem), 2*1024*1024UL);
+		       (unsigned long)ptoa(physmem), 2*1024*1024UL);
 		cngetc();
 	}
 
@@ -1641,12 +1657,6 @@ cpu_reset(void)
 	struct region_descriptor region;
 
 	x86_disable_intr();
-#ifdef XBOX
-	if (arch_i386_is_xbox) {
-		xbox_reboot();
-		for (;;);
-	}
-#endif
 
 	/*
 	 * Ensure the NVRAM reset byte contains something vaguely sane.
@@ -1744,33 +1754,58 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 
 	*flags |= _UC_CPU;
 
+	mcp->_mc_tlsbase = (uintptr_t)l->l_private;
+	*flags |= _UC_TLSBASE;
+
 	/* Save floating point register context, if any. */
 	if ((l->l_md.md_flags & MDL_USEDFPU) != 0) {
+		struct pcb *pcb = lwp_getpcb(l);
 #if NNPX > 0
+
 		/*
 		 * If this process is the current FP owner, dump its
 		 * context to the PCB first.
 		 */
-		if (l->l_addr->u_pcb.pcb_fpcpu) {
+		if (pcb->pcb_fpcpu) {
 			npxsave_lwp(l, true);
 		}
 #endif
 		if (i386_use_fxsave) {
 			memcpy(&mcp->__fpregs.__fp_reg_set.__fp_xmm_state.__fp_xmm,
-			    &l->l_addr->u_pcb.pcb_savefpu.sv_xmm,
+			    &pcb->pcb_savefpu.sv_xmm,
 			    sizeof (mcp->__fpregs.__fp_reg_set.__fp_xmm_state.__fp_xmm));
 			*flags |= _UC_FXSAVE;
 		} else {
 			memcpy(&mcp->__fpregs.__fp_reg_set.__fpchip_state.__fp_state,
-			    &l->l_addr->u_pcb.pcb_savefpu.sv_87,
+			    &pcb->pcb_savefpu.sv_87,
 			    sizeof (mcp->__fpregs.__fp_reg_set.__fpchip_state.__fp_state));
 		}
 #if 0
 		/* Apparently nothing ever touches this. */
-		ucp->mcp.mc_fp.fp_emcsts = l->l_addr->u_pcb.pcb_saveemc;
+		ucp->mcp.mc_fp.fp_emcsts = pcb->pcb_saveemc;
 #endif
 		*flags |= _UC_FPU;
 	}
+}
+
+int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+{
+	const __greg_t *gr = mcp->__gregs;
+	struct trapframe *tf = l->l_md.md_regs;
+
+	/*
+	 * Check for security violations.  If we're returning
+	 * to protected mode, the CPU will validate the segment
+	 * registers automatically and generate a trap on
+	 * violations.  We handle the trap, rather than doing
+	 * all of the checking here.
+	 */
+	if (((gr[_REG_EFL] ^ tf->tf_eflags) & PSL_USERSTATIC) ||
+	    !USERMODE(gr[_REG_CS], gr[_REG_EFL]))
+		return EINVAL;
+
+	return 0;
 }
 
 int
@@ -1778,7 +1813,9 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 	const __greg_t *gr = mcp->__gregs;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct proc *p = l->l_proc;
+	int error;
 
 	/* Restore register context, if any. */
 	if ((flags & _UC_CPU) != 0) {
@@ -1796,20 +1833,10 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		} else
 #endif
 		{
-			/*
-			 * Check for security violations.  If we're returning
-			 * to protected mode, the CPU will validate the segment
-			 * registers automatically and generate a trap on
-			 * violations.  We handle the trap, rather than doing
-			 * all of the checking here.
-			 */
-			if (((gr[_REG_EFL] ^ tf->tf_eflags) & PSL_USERSTATIC) ||
-			    !USERMODE(gr[_REG_CS], gr[_REG_EFL])) {
-				printf("cpu_setmcontext error: uc EFL: 0x%08x"
-				    " tf EFL: 0x%08x uc CS: 0x%x\n",
-				    gr[_REG_EFL], tf->tf_eflags, gr[_REG_CS]);
-				return (EINVAL);
-			}
+			error = cpu_mcontext_validate(l, mcp);
+			if (error)
+				return error;
+
 			tf->tf_gs = gr[_REG_GS];
 			tf->tf_fs = gr[_REG_FS];
 			tf->tf_es = gr[_REG_ES];
@@ -1831,12 +1858,16 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_ss     = gr[_REG_SS];
 	}
 
+	if ((flags & _UC_TLSBASE) != 0)
+		lwp_setprivate(l, (void *)(uintptr_t)mcp->_mc_tlsbase);
+
 #if NNPX > 0
 	/*
 	 * If we were using the FPU, forget that we were.
 	 */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+	if (pcb->pcb_fpcpu != NULL) {
 		npxsave_lwp(l, false);
+	}
 #endif
 
 	/* Restore floating point register context, if any. */
@@ -1844,24 +1875,24 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		if (flags & _UC_FXSAVE) {
 			if (i386_use_fxsave) {
 				memcpy(
-					&l->l_addr->u_pcb.pcb_savefpu.sv_xmm,
+					&pcb->pcb_savefpu.sv_xmm,
 					&mcp->__fpregs.__fp_reg_set.__fp_xmm_state.__fp_xmm,
-					sizeof (&l->l_addr->u_pcb.pcb_savefpu.sv_xmm));
+					sizeof (pcb->pcb_savefpu.sv_xmm));
 			} else {
 				/* This is a weird corner case */
 				process_xmm_to_s87((struct savexmm *)
 				    &mcp->__fpregs.__fp_reg_set.__fp_xmm_state.__fp_xmm,
-				    &l->l_addr->u_pcb.pcb_savefpu.sv_87);
+				    &pcb->pcb_savefpu.sv_87);
 			}
 		} else {
 			if (i386_use_fxsave) {
 				process_s87_to_xmm((struct save87 *)
 				    &mcp->__fpregs.__fp_reg_set.__fpchip_state.__fp_state,
-				    &l->l_addr->u_pcb.pcb_savefpu.sv_xmm);
+				    &pcb->pcb_savefpu.sv_xmm);
 			} else {
-				memcpy(&l->l_addr->u_pcb.pcb_savefpu.sv_87,
+				memcpy(&pcb->pcb_savefpu.sv_87,
 				    &mcp->__fpregs.__fp_reg_set.__fpchip_state.__fp_state,
-				    sizeof (l->l_addr->u_pcb.pcb_savefpu.sv_87));
+				    sizeof (pcb->pcb_savefpu.sv_87));
 			}
 		}
 		l->l_md.md_flags |= MDL_USEDFPU;
@@ -1881,3 +1912,69 @@ cpu_initclocks(void)
 
 	(*initclock_func)();
 }
+
+#define	DEV_IO 14		/* iopl for compat_10 */
+
+int
+mm_md_open(dev_t dev, int flag, int mode, struct lwp *l)
+{
+
+	switch (minor(dev)) {
+	case DEV_IO:
+		/*
+		 * This is done by i386_iopl(3) now.
+		 *
+		 * #if defined(COMPAT_10) || defined(COMPAT_FREEBSD)
+		 */
+		if (flag & FWRITE) {
+			struct trapframe *fp;
+			int error;
+
+			error = kauth_authorize_machdep(l->l_cred,
+			    KAUTH_MACHDEP_IOPL, NULL, NULL, NULL, NULL);
+			if (error)
+				return (error);
+			fp = curlwp->l_md.md_regs;
+			fp->tf_eflags |= PSL_IOPL;
+		}
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+
+#ifdef PAE
+void
+cpu_alloc_l3_page(struct cpu_info *ci)
+{
+	int ret;
+	struct pglist pg;
+	struct vm_page *vmap;
+
+	KASSERT(ci != NULL);
+	/*
+	 * Allocate a page for the per-CPU L3 PD. cr3 being 32 bits, PA musts
+	 * resides below the 4GB boundary.
+	 */
+	ret = uvm_pglistalloc(PAGE_SIZE, 0, 0x100000000ULL, 32, 0, &pg, 1, 0);
+	vmap = TAILQ_FIRST(&pg);
+
+	if (ret != 0 || vmap == NULL)
+		panic("%s: failed to allocate L3 pglist for CPU %d (ret %d)\n",
+			__func__, cpu_index(ci), ret);
+
+	ci->ci_pae_l3_pdirpa = vmap->phys_addr;
+
+	ci->ci_pae_l3_pdir = (paddr_t *)uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
+		UVM_KMF_VAONLY | UVM_KMF_NOWAIT);
+	if (ci->ci_pae_l3_pdir == NULL)
+		panic("%s: failed to allocate L3 PD for CPU %d\n",
+			__func__, cpu_index(ci));
+
+	pmap_kenter_pa((vaddr_t)ci->ci_pae_l3_pdir, ci->ci_pae_l3_pdirpa,
+		VM_PROT_READ | VM_PROT_WRITE, 0);
+
+	pmap_update(pmap_kernel());
+}
+#endif /* PAE */

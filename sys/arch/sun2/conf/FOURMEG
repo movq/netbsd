@@ -1,4 +1,4 @@
-# $NetBSD: FOURMEG,v 1.44 2008/11/24 11:41:14 ad Exp $
+# $NetBSD: FOURMEG,v 1.49 2011/11/22 21:25:38 tls Exp $
 
 # FOURMEG Sun2 (2/120, 2/170, 2/50, ...)
 # Supports root on: ie0, sd*, ...
@@ -7,7 +7,7 @@ include "arch/sun2/conf/std.sun2"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"FOURMEG-$Revision: 1.44 $"
+#ident 		"FOURMEG-$Revision: 1.49 $"
 
 makeoptions	COPTS="-Os"	# optimize for size
 
@@ -69,8 +69,9 @@ file-system	CD9660		# ISO 9660 + Rock Ridge file system
 #file-system	PTYFS		# /dev/pts/N support
 
 #options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# FFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -188,7 +189,7 @@ xyc1	at vme0 addr 0xee48 irq 2 vect 0x49
 xy*	at xyc? drive ?
 
 ## Memory-disk device.
-pseudo-device	md		2
+pseudo-device	md		
 
 #### Network interfaces.
 
@@ -226,12 +227,11 @@ pseudo-device	loop		1	# network loopback
 #pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 #pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
-pseudo-device	rnd			# /dev/random and in-kernel generator
 
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	vnd			# paging to files
 #pseudo-device	ccd		4	# concatenated disks
 #pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	clockctl		# user control of clock subsystem

@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.47 2008/03/25 00:49:20 cube Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.49 2011/06/29 03:11:59 macallan Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -149,13 +149,6 @@ struct wsemuldisplaydev_attach_args {
 	void	*accesscookie;				/* access cookie */
 };
 
-#include "locators.h"
-
-#define	wsemuldisplaydevcf_console	cf_loc[WSEMULDISPLAYDEVCF_CONSOLE]	/* spec'd as console? */
-#define	WSEMULDISPLAYDEVCF_CONSOLE_UNK	(WSEMULDISPLAYDEVCF_CONSOLE_DEFAULT)
-#define	wsemuldisplaydevcf_kbdmux	cf_loc[WSEMULDISPLAYDEVCF_KBDMUX]
-#define	wsdisplaydevcf_kbdmux		cf_loc[WSDISPLAYDEVCF_KBDMUX]
-
 struct wscons_syncops {
 	int (*detach)(void *, int, void (*)(void *, int, int), void *);
 	int (*attach)(void *, int, void (*)(void *, int, int), void *);
@@ -210,6 +203,9 @@ int wsdisplay_stat_ioctl(struct wsdisplay_softc *, u_long, void *,
 
 int wsdisplay_cfg_ioctl(struct wsdisplay_softc *, u_long, void *,
 			int, struct lwp *);
+
+struct wsdisplayio_edid_info;
+int wsdisplayio_get_edid(device_t, struct wsdisplayio_edid_info *);
 
 #ifdef WSDISPLAY_SCROLLSUPPORT
 void wsdisplay_scroll(void *, int);

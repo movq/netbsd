@@ -1,4 +1,4 @@
-/* $NetBSD: sgmap_common.c,v 1.24 2008/04/28 20:23:11 martin Exp $ */
+/* $NetBSD: sgmap_common.c,v 1.26 2012/01/27 18:52:48 para Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sgmap_common.c,v 1.24 2008/04/28 20:23:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sgmap_common.c,v 1.26 2012/01/27 18:52:48 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: sgmap_common.c,v 1.24 2008/04/28 20:23:11 martin Exp
 #include <uvm/uvm_extern.h>
 
 #define	_ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <alpha/common/sgmapvar.h>
 
@@ -107,7 +107,7 @@ alpha_sgmap_init(bus_dma_tag_t t, struct alpha_sgmap *sgmap, const char *name,
 	 * space.
 	 */
 	sgmap->aps_ex = extent_create(name, sgvabase, sgvasize - 1,
-	    M_DMAMAP, NULL, 0, EX_NOWAIT|EX_NOCOALESCE);
+	    NULL, 0, EX_NOWAIT|EX_NOCOALESCE);
 	if (sgmap->aps_ex == NULL) {
 		printf("unable to create extent map for sgmap `%s'\n",
 		    name);

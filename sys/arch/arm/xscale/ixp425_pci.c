@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_pci.c,v 1.6 2009/10/21 14:15:50 rmind Exp $ */
+/*	$NetBSD: ixp425_pci.c,v 1.8 2012/01/27 18:52:51 para Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.6 2009/10/21 14:15:50 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.8 2012/01/27 18:52:51 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_pci.c,v 1.6 2009/10/21 14:15:50 rmind Exp $")
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -89,12 +89,12 @@ ixp425_pci_init(struct ixp425_softc *sc)
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	ioext  = extent_create("pciio", 0, IXP425_PCI_IO_SIZE - 1,
-				M_DEVBUF, NULL, 0, EX_NOWAIT);
+				NULL, 0, EX_NOWAIT);
 	/* PCI MEM space is mapped same address as real memory */
 	memext = extent_create("pcimem", IXP425_PCI_MEM_HWBASE,
 				IXP425_PCI_MEM_HWBASE +
 				IXP425_PCI_MEM_SIZE - 1,
-				M_DEVBUF, NULL, 0, EX_NOWAIT);
+				NULL, 0, EX_NOWAIT);
 	printf("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, 0 /* XXX bus = 0 */,
 			  arm_dcache_align);

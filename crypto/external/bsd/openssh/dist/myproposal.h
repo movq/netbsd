@@ -1,5 +1,5 @@
-/*	$NetBSD: myproposal.h,v 1.2 2009/06/07 22:38:47 christos Exp $	*/
-/* $OpenBSD: myproposal.h,v 1.23 2009/01/23 07:58:11 djm Exp $ */
+/*	$NetBSD: myproposal.h,v 1.5 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: myproposal.h,v 1.28 2011/08/02 01:22:11 djm Exp $ */
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -24,12 +24,29 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #define KEX_DEFAULT_KEX		\
+	"ecdh-sha2-nistp256," \
+	"ecdh-sha2-nistp384," \
+	"ecdh-sha2-nistp521," \
 	"diffie-hellman-group-exchange-sha256," \
 	"diffie-hellman-group-exchange-sha1," \
 	"diffie-hellman-group14-sha1," \
 	"diffie-hellman-group1-sha1"
-#define	KEX_DEFAULT_PK_ALG	"ssh-rsa,ssh-dss"
+
+#define	KEX_DEFAULT_PK_ALG	\
+	"ecdsa-sha2-nistp256-cert-v01@openssh.com," \
+	"ecdsa-sha2-nistp384-cert-v01@openssh.com," \
+	"ecdsa-sha2-nistp521-cert-v01@openssh.com," \
+	"ssh-rsa-cert-v01@openssh.com," \
+	"ssh-dss-cert-v01@openssh.com," \
+	"ssh-rsa-cert-v00@openssh.com," \
+	"ssh-dss-cert-v00@openssh.com," \
+	"ecdsa-sha2-nistp256," \
+	"ecdsa-sha2-nistp384," \
+	"ecdsa-sha2-nistp521," \
+	"ssh-rsa," \
+	"ssh-dss"
 
 #define	KEX_DEFAULT_ENCRYPT \
 	"aes128-ctr,aes192-ctr,aes256-ctr," \
@@ -41,7 +58,14 @@
 
 #ifdef UMAC_HAS_BEEN_UNBROKEN
 #define	KEX_DEFAULT_MAC \
-	"hmac-md5,hmac-sha1,umac-64@openssh.com,hmac-ripemd160," \
+	"hmac-md5," \
+	"hmac-sha1," \
+	"umac-64@openssh.com," \
+	"hmac-sha2-256," \
+	"hmac-sha2-256-96," \
+	"hmac-sha2-512," \
+	"hmac-sha2-512-96," \
+	"hmac-ripemd160," \
 	"hmac-ripemd160@openssh.com," \
 	"hmac-sha1-96,hmac-md5-96"
 #else
@@ -55,7 +79,7 @@
 #define	KEX_DEFAULT_LANG	""
 
 
-static char *myproposal[PROPOSAL_MAX] = {
+static const char *myproposal[PROPOSAL_MAX] = {
 	KEX_DEFAULT_KEX,
 	KEX_DEFAULT_PK_ALG,
 	KEX_DEFAULT_ENCRYPT,

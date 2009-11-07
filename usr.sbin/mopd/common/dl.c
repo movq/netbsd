@@ -1,4 +1,4 @@
-/*	$NetBSD: dl.c,v 1.6 2009/10/20 00:51:13 snj Exp $	*/
+/*	$NetBSD: dl.c,v 1.8 2011/05/24 13:08:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -26,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dl.c,v 1.6 2009/10/20 00:51:13 snj Exp $");
+__RCSID("$NetBSD: dl.c,v 1.8 2011/05/24 13:08:16 joerg Exp $");
 #endif
 
 #include "os.h"
@@ -36,14 +36,12 @@ __RCSID("$NetBSD: dl.c,v 1.6 2009/10/20 00:51:13 snj Exp $");
 #include "print.h"
 
 void
-mopDumpDL(fd, pkt, trans)
-	FILE	*fd;
-	u_char 	*pkt;
-	int	 trans;
+mopDumpDL(FILE *fd, const u_char *pkt, int trans)
 {
 	int	i,idx = 0;
 	u_int32_t tmpl;
-	u_char	tmpc,c,program[257],code,*ucp;
+	u_char	tmpc,c,program[257],code;
+	const u_char *ucp;
 	u_short	len,tmps,moplen;
 
 	len = mopGetLength(pkt, trans);
@@ -191,7 +189,7 @@ mopDumpDL(fd, pkt, trans)
 		
 		tmpc = mopGetChar(pkt,&idx);	/* Error */
 		(void)fprintf(fd,"Error        :   %02x (",tmpc);
-		if ((tmpc == 0)) {
+		if (tmpc == 0) {
 			(void)fprintf(fd,"no error)\n");
 		} else {
 		  	(void)fprintf(fd,"error)\n");

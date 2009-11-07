@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.52 2009/03/14 15:36:01 dsl Exp $ */
+/*	$NetBSD: kbd.c,v 1.54 2011/06/03 00:52:22 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.52 2009/03/14 15:36:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.54 2011/06/03 00:52:22 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -143,14 +143,14 @@ struct kbd_softc {
 
 	int k_console;		/* true if used as console keyboard */
 #if NWSKBD>0
-	struct device *k_wskbddev; /* pointer to wskbd for sending strokes */
+	device_t k_wskbddev; /* pointer to wskbd for sending strokes */
 	int k_pollingmode;         /* polling mode on? whatever it isss... */
 #endif
 };
 struct kbd_softc kbd_softc;
 
-int kbdmatch(struct device *, struct cfdata *, void *);
-void kbdattach(struct device *, struct device *, void *);
+int kbdmatch(device_t, cfdata_t, void *);
+void kbdattach(device_t, device_t, void *);
 void kbdintr(int);
 void kbdstuffchar(u_char);
 
@@ -160,7 +160,7 @@ int drkbdputc(u_int8_t);
 int drkbdputc2(u_int8_t, u_int8_t);
 int drkbdwaitfor(int);
 
-CFATTACH_DECL(kbd, sizeof(struct device),
+CFATTACH_DECL_NEW(kbd, 0,
     kbdmatch, kbdattach, NULL, NULL);
 
 dev_type_open(kbdopen);
@@ -177,7 +177,7 @@ const struct cdevsw kbd_cdevsw = {
 
 /*ARGSUSED*/
 int
-kbdmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+kbdmatch(device_t pdp, cfdata_t cfp, void *auxp)
 {
 
 	if (matchname((char *)auxp, "kbd"))
@@ -187,7 +187,7 @@ kbdmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 
 /*ARGSUSED*/
 void
-kbdattach(struct device *pdp, struct device *dp, void *auxp)
+kbdattach(device_t pdp, device_t dp, void *auxp)
 {
 #ifdef DRACO
 	kbdenable();
@@ -560,7 +560,7 @@ kbdintr(int mask)
 	}
 #endif
 	/* wait 200 microseconds (for bloody Cherry keyboards..) */
-	DELAY(2000);			/* fudge delay a bit for some keyboards */
+	DELAY(200);			/* fudge delay a bit for some keyboards */
 	ciaa.cra &= ~(1 << 6);
 
 	/* process the character */
@@ -652,7 +652,7 @@ kbdgetcn(void)
 	ciaa.cra |= (1 << 6);	/* serial line output */
 	ciaa.sdr = 0xff;	/* ack */
 	/* wait 200 microseconds */
-	DELAY(2000);	/* XXXX only works as long as DELAY doesn't
+	DELAY(200);	/* XXXX only works as long as DELAY doesn't
 			 * use a timer and waits.. */
 	ciaa.cra &= ~(1 << 6);
 	ciaa.sdr = in;

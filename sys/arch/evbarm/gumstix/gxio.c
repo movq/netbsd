@@ -1,4 +1,4 @@
-/*	$NetBSD: gxio.c,v 1.11 2009/08/15 10:18:17 kiyohara Exp $ */
+/*	$NetBSD: gxio.c,v 1.18 2010/09/23 06:43:32 kiyohara Exp $ */
 /*
  * Copyright (C) 2005, 2006, 2007 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -31,9 +31,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gxio.c,v 1.11 2009/08/15 10:18:17 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gxio.c,v 1.18 2010/09/23 06:43:32 kiyohara Exp $");
 
+#include "opt_cputypes.h"
+#include "opt_gumstix.h"
 #include "opt_gxio.h"
+#if defined(OVERO)
+#include "opt_omap.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -44,12 +49,22 @@ __KERNEL_RCSID(0, "$NetBSD: gxio.c,v 1.11 2009/08/15 10:18:17 kiyohara Exp $");
 
 #include <machine/bootconfig.h>
 
+#include <arm/omap/omap2_gpmcreg.h>
+#include <arm/omap/omap2_reg.h>
+#if defined(OMAP3530)
+#include <arm/omap/omap2_intr.h>
+#endif
+#include <arm/omap/omap_var.h>
+#if defined(CPU_XSCALE_PXA270) || defined(CPU_XSCALE_PXA250)
 #include <arm/xscale/pxa2x0cpu.h>
+#endif
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0var.h>
 #include <arm/xscale/pxa2x0_gpio.h>
+#include <evbarm/gumstix/gumstixreg.h>
 #include <evbarm/gumstix/gumstixvar.h>
 
+#include "ioconf.h"
 #include "locators.h"
 
 
@@ -58,18 +73,25 @@ struct gxioconf {
 	void (*config)(void);
 };
 
+#if defined(GUMSTIX)
 static int gxiomatch(device_t, cfdata_t, void *);
 static void gxioattach(device_t, device_t, void *);
 static int gxiosearch(device_t, cfdata_t, const int *, void *);
 static int gxioprint(void *, const char *);
 
+CFATTACH_DECL_NEW(gxio, sizeof(struct gxio_softc),
+    gxiomatch, gxioattach, NULL, NULL);
+#endif
+
 void gxio_config_pin(void);
 void gxio_config_expansion(char *);
 static void gxio_config_gpio(const struct gxioconf *, char *);
+#if defined(GUMSTIX)
 static void basix_config(void);
 static void cfstix_config(void);
 static void etherstix_config(void);
 static void netcf_config(void);
+static void netcf_vx_config(void);
 static void netduommc_config(void);
 static void netduo_config(void);
 static void netmicrosd_config(void);
@@ -77,11 +99,13 @@ static void netwifimicrosd_config(void);
 static void netmmc_config(void);
 static void wifistix_config(void);
 static void wifistix_cf_config(void);
-
-CFATTACH_DECL_NEW(
-    gxio, sizeof(struct gxio_softc), gxiomatch, gxioattach, NULL, NULL);
-
-char busheader[MAX_BOOT_STRING];
+#elif defined(OVERO)
+static void eth0_config(void);
+static void eth1_config(void);
+static void chestnut_config(void);
+static void tobi_config(void);
+static void tobiduo_config(void);
+#endif
 
 #if defined(CPU_XSCALE_PXA250)
 static struct pxa2x0_gpioconf pxa255dep_gpioconf[] = {
@@ -123,12 +147,14 @@ static struct pxa2x0_gpioconf pxa255dep_gpioconf[] = {
 static struct pxa2x0_gpioconf verdexdep_gpioconf[] = {
 	/* Bluetooth module configuration */
 	{   9, GPIO_ALT_FN_3_OUT },	/* CHOUT<0> */
+	{  12, GPIO_OUT | GPIO_SET },
+
+	/* LCD configuration */
+	{  17, GPIO_IN },		/* backlight on */
 
 	/* FFUART configuration */
-	{  27, GPIO_ALT_FN_3_OUT },	/* FFRTS */
 	{  34, GPIO_ALT_FN_1_IN },	/* FFRXD */
 	{  39, GPIO_ALT_FN_2_OUT },	/* FFTXD */
-	{ 100, GPIO_ALT_FN_3_IN },	/* FFCTS */
 
 	/* BTUART configuration */
 	{  42, GPIO_ALT_FN_1_IN },	/* BTRXD */
@@ -144,11 +170,12 @@ static struct pxa2x0_gpioconf verdexdep_gpioconf[] = {
 #endif
 
 static const struct gxioconf busheader_conf[] = {
+#if defined(GUMSTIX)
 	{ "basix",		basix_config },
 	{ "cfstix",		cfstix_config },
 	{ "etherstix",		etherstix_config },
 	{ "netcf",		netcf_config },
-	{ "netcf-vx",		netcf_config },
+	{ "netcf-vx",		netcf_vx_config },
 	{ "netduo-mmc",		netduommc_config },
 	{ "netduo",		netduo_config },
 	{ "netmicrosd",		netmicrosd_config },
@@ -158,6 +185,11 @@ static const struct gxioconf busheader_conf[] = {
 	{ "netpro-vx",		netwifimicrosd_config },
 	{ "wifistix-cf",	wifistix_cf_config },
 	{ "wifistix",		wifistix_config },
+#elif defined(OVERO)
+	{ "chestnut43",		chestnut_config },
+	{ "tobi",		tobi_config },
+	{ "tobi-duo",		tobiduo_config },
+#endif
 	{ NULL }
 };
 
@@ -165,10 +197,12 @@ int gxpcic_gpio_reset;
 struct gxpcic_slot_irqs gxpcic_slot_irqs[2] = { { 0, -1, -1 }, { 0, -1, -1 } };
 
 
+#if defined(GUMSTIX)
 /* ARGSUSED */
 static int
 gxiomatch(device_t parent, cfdata_t match, void *aux)
 {
+
 	struct pxaip_attach_args *pxa = aux;
 	bus_space_tag_t iot = &pxa2x0_bs_tag;
 	bus_space_handle_t ioh;
@@ -179,11 +213,11 @@ gxiomatch(device_t parent, cfdata_t match, void *aux)
 
 	if (bus_space_map(iot,
 	    PXA2X0_MEMCTL_BASE, PXA2X0_MEMCTL_SIZE, 0, &ioh))
-		return (0);
+		return 0;
 	bus_space_unmap(iot, ioh, PXA2X0_MEMCTL_SIZE);
 
 	/* nothing */
-	return (1);
+	return 1;
 }
 
 /* ARGSUSED */
@@ -203,7 +237,7 @@ gxioattach(device_t parent, device_t self, void *aux)
 		return;
 
 	/*
-	 *  Attach each gumstix expansion of busheader side devices
+	 *  Attach each gumstix(busheader)/overo expansion board devices.
 	 */
 	config_search_ia(gxiosearch, self, "gxio", NULL);
 }
@@ -223,7 +257,7 @@ gxiosearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 	if (config_match(parent, cf, &gxa))
 		config_attach(parent, cf, &gxa, gxioprint);
 
-	return (0);
+	return 0;
 }
 
 /* ARGSUSED */
@@ -236,8 +270,9 @@ gxioprint(void *aux, const char *name)
 		printf(" addr 0x%lx", gxa->gxa_addr);
 	if (gxa->gxa_gpirq > 0)
 		printf(" gpirq %d", gxa->gxa_gpirq);
-	return (UNCONF);
+	return UNCONF;
 }
+#endif
 
 
 /*
@@ -275,13 +310,17 @@ gxio_config_pin(void)
 #endif
 
 	/* XXX: turn off for power of bluetooth module */
+#if defined(CPU_XSCALE_PXA250)
 	pxa2x0_gpio_set_function(7, GPIO_OUT | GPIO_CLR);
+#elif defined(CPU_XSCALE_PXA270)
+	pxa2x0_gpio_set_function(12, GPIO_OUT | GPIO_CLR);
+#endif
 	delay(100);
 
 #if defined(CPU_XSCALE_PXA270) && defined(CPU_XSCALE_PXA250)
 	pxa2x0_gpio_config(
 	    (CPU_IS_PXA250) ? gumstix_gpioconf : verdex_gpioconf);
-#else
+#elif defined(CPU_XSCALE_PXA270) || defined(CPU_XSCALE_PXA250)
 #if defined(CPU_XSCALE_PXA270)
 	pxa2x0_gpio_config(verdex_gpioconf);
 #else
@@ -295,7 +334,7 @@ gxio_config_expansion(char *expansion)
 {
 
 	if (expansion == NULL) {
-		printf("not specified 'busheader=' in the boot args.\n");
+		printf("not specified 'expansion=' in the boot args.\n");
 #ifdef GXIO_DEFAULT_EXPANSION
 		printf("configure default expansion (%s)\n",
 		    GXIO_DEFAULT_EXPANSION);
@@ -324,6 +363,8 @@ gxio_config_gpio(const struct gxioconf *gxioconflist, char *expansion)
 	}
 }
 
+
+#if defined(GUMSTIX)
 
 static void
 basix_config(void)
@@ -431,6 +472,23 @@ netcf_config(void)
 
 	etherstix_config();
 	cfstix_config();
+}
+
+static void
+netcf_vx_config(void)
+{
+
+	/*
+	 * XXXX: More power is necessary for NIC and USB???
+	 * (no document.  from Linux)
+	 */
+
+	pxa2x0_gpio_set_function(27, GPIO_IN);
+	pxa2x0_gpio_set_function(107, GPIO_OUT | GPIO_CLR);
+	pxa2x0_gpio_set_function(118, GPIO_ALT_FN_1_IN | GPIO_CLR);
+
+	etherstix_config();
+	cfstix_config();
 	if (CPU_IS_PXA270) {
 		/* Overwrite */
 		gxpcic_slot_irqs[0].cd = 104;
@@ -483,7 +541,7 @@ netwifimicrosd_config(void)
 	cfstix_config();
 	/* However use pxamci. */
 	pxa2x0_gpio_set_function(111, GPIO_CLR | GPIO_ALT_FN_1_IN);
-	/* XXXX: Power to Marvell 88W8385??? */
+	/* Power to Marvell 88W8385 */
 	pxa2x0_gpio_set_function(80, GPIO_OUT | GPIO_SET);
 }
 
@@ -501,7 +559,7 @@ wifistix_config(void)
 
 	cfstix_config();
 
-	/* XXXX: Power to Marvell 88W8385??? */
+	/* Power to Marvell 88W8385 */
 	pxa2x0_gpio_set_function(80, GPIO_OUT | GPIO_SET);
 }
 
@@ -523,6 +581,88 @@ wifistix_cf_config(void)
 
 	cfstix_config();
 
-	/* XXXX: Power to Marvell 88W8385??? */
+	/* Power to Marvell 88W8385 */
 	pxa2x0_gpio_set_function(80, GPIO_OUT | GPIO_SET);
 }
+
+#elif defined(OVERO)
+
+static void
+eth0_config(void)
+{
+	extern struct cfdata cfdata[];
+	cfdata_t cf = &cfdata[0];
+
+	/*
+	 * ETH0 connects via CS5.  It use GPIO 176 for IRQ.
+	 */
+
+	while (cf->cf_name != NULL) {
+		if (strcmp(cf->cf_name, "smsh") == 0 &&
+		    cf->cf_loc[GPMCCF_INTR] == PIC_MAXSOURCES + 176)
+			break;
+		cf++;
+	}
+	if (cf->cf_name == NULL ||
+	    cf->cf_loc[GPMCCF_ADDR] == GPMCCF_ADDR_DEFAULT)
+		return;
+
+	ioreg_write(OVERO_GPMC_VBASE + GPMC_CONFIG7_5,
+	    GPMC_CONFIG7_CSVALID |
+	    GPMC_CONFIG7(GPMC_CONFIG7_MASK_16M, cf->cf_loc[GPMCCF_ADDR]));
+
+	/*
+	 * Maybe need NRESET and delay(9).
+	 * However delay(9) needs to attach mputmr.
+	 */
+}
+
+static void
+eth1_config(void)
+{
+	extern struct cfdata cfdata[];
+	cfdata_t cf = &cfdata[0];
+
+	/*
+	 * ETH1 connects via CS4.  It use GPIO 65 for IRQ.
+	 */
+
+	while (cf->cf_name != NULL) {
+		if (strcmp(cf->cf_name, "smsh") == 0 &&
+		    cf->cf_loc[GPMCCF_INTR] == PIC_MAXSOURCES + 65)
+			break;
+		cf++;
+	}
+	if (cf->cf_name == NULL ||
+	    cf->cf_loc[GPMCCF_ADDR] == GPMCCF_ADDR_DEFAULT)
+		return;
+
+	ioreg_write(OVERO_GPMC_VBASE + GPMC_CONFIG7_4,
+	    GPMC_CONFIG7_CSVALID |
+	    GPMC_CONFIG7(GPMC_CONFIG7_MASK_16M, cf->cf_loc[GPMCCF_ADDR]));
+
+	/* ETH1 is sure to be reset with ETH0. */
+}
+
+static void
+chestnut_config(void)
+{
+
+	eth0_config();
+}
+
+static void
+tobi_config(void)
+{
+
+	eth0_config();
+}
+
+static void
+tobiduo_config(void)
+{
+
+	eth0_config();
+	eth1_config();
+}
+#endif

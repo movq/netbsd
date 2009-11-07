@@ -1,4 +1,4 @@
-/*	$NetBSD: tsc.c,v 1.25 2009/03/27 19:53:20 drochner Exp $	*/
+/*	$NetBSD: tsc.c,v 1.30 2011/08/08 17:00:23 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.25 2009/03/27 19:53:20 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsc.c,v 1.30 2011/08/08 17:00:23 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,7 +69,7 @@ tsc_tc_init(void)
 	uint32_t descs[4];
 	bool safe;
 
-	if ((cpu_feature & CPUID_TSC) == 0) {
+	if (!cpu_hascounter()) {
 		return;
 	}
 
@@ -128,7 +128,7 @@ tsc_tc_init(void)
 		case 0x0f:
 			/* Check for "invariant TSC", bit 8 of %edx. */
 			x86_cpuid(0x80000007, descs);
-			safe = (descs[3] & (1 << 8)) != 0;
+			safe = (descs[3] & CPUID_APM_TSC) != 0;
 			break;
 		}
 	}
@@ -177,13 +177,13 @@ tsc_read_bp(struct cpu_info *ci, uint64_t *bptscp, uint64_t *aptscp)
 
 	/* Flag it and read our TSC. */
 	atomic_or_uint(&ci->ci_flags, CPUF_SYNCTSC);
-	bptsc = rdmsr(MSR_TSC) >> 1;
+	bptsc = cpu_counter_serializing() >> 1;
 
 	/* Wait for remote to complete, and read ours again. */
 	while ((ci->ci_flags & CPUF_SYNCTSC) != 0) {
 		__insn_barrier();
 	}
-	bptsc += (rdmsr(MSR_TSC) >> 1);
+	bptsc += (cpu_counter_serializing() >> 1);
 
 	/* Wait for the results to come in. */
 	while (tsc_sync_cpu == ci) {
@@ -222,11 +222,11 @@ tsc_post_ap(struct cpu_info *ci)
 	while ((ci->ci_flags & CPUF_SYNCTSC) == 0) {
 		__insn_barrier();
 	}
-	tsc = (rdmsr(MSR_TSC) >> 1);
+	tsc = (cpu_counter_serializing() >> 1);
 
 	/* Instruct primary to read its counter. */
 	atomic_and_uint(&ci->ci_flags, ~CPUF_SYNCTSC);
-	tsc += (rdmsr(MSR_TSC) >> 1);
+	tsc += (cpu_counter_serializing() >> 1);
 
 	/* Post result.  Ensure the whole value goes out atomically. */
 	(void)atomic_swap_64(&tsc_sync_val, tsc);
@@ -255,5 +255,14 @@ int
 cpu_hascounter(void)
 {
 
-	return cpu_feature & CPUID_TSC;
+	return cpu_feature[0] & CPUID_TSC;
+}
+
+uint64_t
+cpu_counter_serializing(void)
+{
+	if (cpu_feature[0] & CPUID_MSR)
+		return rdmsr(MSR_TSC);
+	else
+		return cpu_counter();
 }

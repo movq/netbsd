@@ -1,9 +1,9 @@
-/*	$NetBSD: daemon-bozo.c,v 1.7 2009/05/23 02:26:03 mrg Exp $	*/
+/*	$NetBSD: daemon-bozo.c,v 1.15 2011/11/18 09:51:31 mrg Exp $	*/
 
-/*	$eterna: daemon-bozo.c,v 1.17 2009/05/22 21:51:38 mrg Exp $	*/
+/*	$eterna: daemon-bozo.c,v 1.24 2011/11/18 09:21:15 mrg Exp $	*/
 
 /*
- * Copyright (c) 1997-2009 Matthew R. Green
+ * Copyright (c) 1997-2011 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,23 +40,17 @@
 
 #include <netinet/in.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <netdb.h>
 #include <poll.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "bozohttpd.h"
 
-	char	*iflag;		/* bind address; default INADDR_ANY */
-static	int	*sock;		/* bound sockets */
-static	int	nsock;		/* number of above */
-static	struct pollfd *fds;	/* current poll fd set */
-static	int	request_times;	/* how many times this proc has processed
-				   a request */
-
-static	void	daemon_runchild(int);
 static	void	sigchild(int);	/* SIGCHLD handler */
 
 #ifndef POLLRDNORM
@@ -69,81 +63,138 @@ static	void	sigchild(int);	/* SIGCHLD handler */
 #define INFTIM -1
 #endif
 
+static const char* pidfile_path = NULL;
+static pid_t pidfile_pid = 0;
+
 /* ARGSUSED */
 static void
-sigchild(signo)
-	int signo;
+sigchild(int signo)
 {
-	while (waitpid(-1, NULL, WNOHANG) > 0)
-		;
+	while (waitpid(-1, NULL, WNOHANG) > 0) {
+	}
+}
+
+/* Signal handler to exit in a controlled manner.  This ensures that
+ * any atexit(3) handlers are properly executed. */
+/* ARGSUSED */
+BOZO_DEAD static void
+controlled_exit(int signo)
+{
+
+	exit(EXIT_SUCCESS);
+}
+
+static void
+remove_pidfile(void)
+{
+
+	if (pidfile_path != NULL && pidfile_pid == getpid()) {
+		(void)unlink(pidfile_path);
+		pidfile_path = NULL;
+	}
+}
+
+static void
+create_pidfile(bozohttpd_t *httpd)
+{
+	FILE *file;
+
+	assert(pidfile_path == NULL);
+
+	if (httpd->pidfile == NULL)
+		return;
+
+	if (atexit(remove_pidfile) == -1)
+		bozo_err(httpd, 1, "Failed to install pidfile handler");
+
+	if ((file = fopen(httpd->pidfile, "w")) == NULL)
+		bozo_err(httpd, 1, "Failed to create pidfile '%s'",
+		    httpd->pidfile);
+	(void)fprintf(file, "%d\n", getpid());
+	(void)fclose(file);
+
+	pidfile_path = httpd->pidfile;
+	pidfile_pid = getpid();
+
+	debug((httpd, DEBUG_FAT, "Created pid file '%s' for pid %d",
+	    pidfile_path, pidfile_pid));
 }
 
 void
-daemon_init()
+bozo_daemon_init(bozohttpd_t *httpd)
 {
 	struct addrinfo h, *r, *r0;
+	const char	*portnum;
 	int e, i, on = 1;
 
-	if (!bflag) 
+	if (!httpd->background)
 		return;
 
-	if (fflag == 0)
-		daemon(1, 0);
-
-	warning("started in daemon mode as `%s' port `%s' root `%s'",
-	    myname, Iflag, slashdir);
+	portnum = (httpd->bindport) ? httpd->bindport : "http";
 	
-	memset(&h, 0, sizeof h);
+	memset(&h, 0, sizeof(h));
 	h.ai_family = PF_UNSPEC;
 	h.ai_socktype = SOCK_STREAM;
 	h.ai_flags = AI_PASSIVE;
-	e = getaddrinfo(iflag, Iflag, &h, &r0);
+	e = getaddrinfo(httpd->bindaddress, portnum, &h, &r0);
 	if (e)
-		error(1, "getaddrinfo([%s]:%s): %s",
-		    iflag ? iflag : "*", Iflag, gai_strerror(e));
+		bozo_err(httpd, 1, "getaddrinfo([%s]:%s): %s",
+		    httpd->bindaddress ? httpd->bindaddress : "*",
+		    portnum, gai_strerror(e));
 	for (r = r0; r != NULL; r = r->ai_next)
-		nsock++;
-	sock = bozomalloc(nsock * sizeof *sock);
-	fds = bozomalloc(nsock * sizeof *fds);
+		httpd->nsock++;
+	httpd->sock = bozomalloc(httpd, httpd->nsock * sizeof(*httpd->sock));
+	httpd->fds = bozomalloc(httpd, httpd->nsock * sizeof(*httpd->fds));
 	for (i = 0, r = r0; r != NULL; r = r->ai_next) {
-		sock[i] = socket(r->ai_family, SOCK_STREAM, 0);
-		if (sock[i] == -1)
+		httpd->sock[i] = socket(r->ai_family, SOCK_STREAM, 0);
+		if (httpd->sock[i] == -1)
 			continue;
-		if (setsockopt(sock[i], SOL_SOCKET, SO_REUSEADDR, &on,
+		if (setsockopt(httpd->sock[i], SOL_SOCKET, SO_REUSEADDR, &on,
 		    sizeof(on)) == -1)
-			warning("setsockopt SO_REUSEADDR: %s",
+			bozo_warn(httpd, "setsockopt SO_REUSEADDR: %s",
 			    strerror(errno));
-		if (bind(sock[i], r->ai_addr, r->ai_addrlen) == -1)
+		if (bind(httpd->sock[i], r->ai_addr, r->ai_addrlen) == -1)
 			continue;
-		if (listen(sock[i], SOMAXCONN) == -1)
+		if (listen(httpd->sock[i], SOMAXCONN) == -1)
 			continue;
-		fds[i].events = POLLIN | POLLPRI | POLLRDNORM |
+		httpd->fds[i].events = POLLIN | POLLPRI | POLLRDNORM |
 				POLLRDBAND | POLLERR;
-		fds[i].fd = sock[i];
+		httpd->fds[i].fd = httpd->sock[i];
 		i++;
 	}
 	if (i == 0)
-		error(1, "could not find any addresses to bind");
-	nsock = i;
+		bozo_err(httpd, 1, "could not find any addresses to bind");
+	httpd->nsock = i;
 	freeaddrinfo(r0);
+
+	if (httpd->foreground == 0)
+		daemon(1, 0);
+
+	create_pidfile(httpd);
+
+	bozo_warn(httpd, "started in daemon mode as `%s' port `%s' root `%s'",
+	    httpd->virthostname, portnum, httpd->slashdir);
+
+	signal(SIGHUP, controlled_exit);
+	signal(SIGINT, controlled_exit);
+	signal(SIGTERM, controlled_exit);
 
 	signal(SIGCHLD, sigchild);
 }
 
 void
-daemon_closefds(void)
+bozo_daemon_closefds(bozohttpd_t *httpd)
 {
 	int i;
 
-	for (i = 0; i < nsock; i++)
-		close(sock[i]);
+	for (i = 0; i < httpd->nsock; i++)
+		close(httpd->sock[i]);
 }
 
 static void
-daemon_runchild(int fd)
+daemon_runchild(bozohttpd_t *httpd, int fd)
 {
-
-	request_times++;
+	httpd->request_times++;
 
 	/* setup stdin/stdout/stderr */
 	dup2(fd, 0);
@@ -152,27 +203,61 @@ daemon_runchild(int fd)
 	close(fd);
 }
 
+static int
+daemon_poll_err(bozohttpd_t *httpd, int fd, int idx)
+{
+	if ((httpd->fds[idx].revents & (POLLNVAL|POLLERR|POLLHUP)) == 0)
+		return 0;
+
+	bozo_warn(httpd, "poll on fd %d pid %d revents %d: %s",
+	    httpd->fds[idx].fd, getpid(), httpd->fds[idx].revents,
+	    strerror(errno));
+	bozo_warn(httpd, "nsock = %d", httpd->nsock);
+	close(httpd->sock[idx]);
+	httpd->nsock--;
+	bozo_warn(httpd, "nsock now = %d", httpd->nsock);
+	/* no sockets left */
+	if (httpd->nsock == 0)
+		exit(0);
+	/* last socket closed is the easy case */
+	if (httpd->nsock != idx) {
+		memmove(&httpd->fds[idx], &httpd->fds[idx+1],
+			(httpd->nsock - idx) * sizeof(*httpd->fds));
+		memmove(&httpd->sock[idx], &httpd->sock[idx+1],
+			(httpd->nsock - idx) * sizeof(*httpd->sock));
+	}
+
+	return 1;
+}
+
 /*
  * the parent never returns from this function, only children that
  * are ready to run... XXXMRG - still true in fork-lesser bozo?
  */
-void
-daemon_fork()
+int
+bozo_daemon_fork(bozohttpd_t *httpd)
 {
 	int i;
 
-	debug((DEBUG_FAT, "%s: pid %u request_times %d", __func__, getpid(),
-	       request_times));
+	debug((httpd, DEBUG_FAT, "%s: pid %u request_times %d",
+		__func__, getpid(),
+		httpd->request_times));
 	/* if we've handled 5 files, exit and let someone else work */
-	if (request_times > 5 || (bflag == 2 && request_times > 0))
-		exit(0);
+	if (httpd->request_times > 5 ||
+	    (httpd->background == 2 && httpd->request_times > 0))
+		_exit(0);
 
-	while (bflag) {
+#if 1
+	if (httpd->request_times > 0)
+		_exit(0);
+#endif
+
+	while (httpd->background) {
 		struct	sockaddr_storage ss;
 		socklen_t slen;
 		int fd;
 
-		if (nsock == 0)
+		if (httpd->nsock == 0)
 			exit(0);
 
 		/*
@@ -182,11 +267,12 @@ daemon_fork()
 		 * it, for processing.
 		 */
 again:
-		if (poll(fds, nsock, INFTIM) == -1) {
+		if (poll(httpd->fds, (unsigned)httpd->nsock, INFTIM) == -1) {
 			/* fail on programmer errors */
 			if (errno == EFAULT ||
 			    errno == EINVAL)
-				error(1, "poll: %s", strerror(errno));
+				bozo_err(httpd, 1, "poll: %s",
+					strerror(errno));
 
 			/* sleep on some temporary kernel failures */
 			if (errno == ENOMEM ||
@@ -196,36 +282,20 @@ again:
 			goto again;
 		}
 
-		for (i = 0; i < nsock; i++) {
-			if (fds[i].revents & (POLLNVAL|POLLERR|POLLHUP)) {
-				warning("poll on fd %d pid %d revents %d: %s",
-				    fds[i].fd, getpid(), fds[i].revents,
-				    strerror(errno));
-				warning("nsock = %d", nsock);
-				close(sock[i]);
-				nsock--;
-				warning("nsock now = %d", nsock);
-				/* no sockets left */
-				if (nsock == 0)
-					exit(0);
-				/* last socket; easy case */
-				if (nsock == i)
-					break;
-				memmove(&fds[i], &fds[i+i],
-					(nsock - i) * sizeof(*fds));
-				memmove(&sock[i], &sock[i+i],
-					(nsock - i) * sizeof(*sock));
+		for (i = 0; i < httpd->nsock; i++) {
+			if (daemon_poll_err(httpd, fd, i))
 				break;
-			}
-			if (fds[i].revents == 0)
+			if (httpd->fds[i].revents == 0)
 				continue;
 
 			slen = sizeof(ss);
-			fd = accept(fds[i].fd, (struct sockaddr *)&ss, &slen);
+			fd = accept(httpd->fds[i].fd,
+					(struct sockaddr *)(void *)&ss, &slen);
 			if (fd == -1) {
 				if (errno == EFAULT ||
 				    errno == EINVAL)
-					error(1, "accept: %s", strerror(errno));
+					bozo_err(httpd, 1, "accept: %s",
+						strerror(errno));
 
 				if (errno == ENOMEM ||
 				    errno == EAGAIN)
@@ -234,22 +304,28 @@ again:
 				continue;
 			}
 
-			if (request_times > 0) {
-				daemon_runchild(fd);
-				return;
+#if 0
+			/*
+			 * This code doesn't work.  It interacts very poorly
+			 * with ~user translation and needs to be fixed.
+			 */
+			if (httpd->request_times > 0) {
+				daemon_runchild(httpd, fd);
+				return 0;
 			}
+#endif
 
 			switch (fork()) {
 			case -1: /* eep, failure */
-				warning("fork() failed, sleeping for "
+				bozo_warn(httpd, "fork() failed, sleeping for "
 					"10 seconds: %s", strerror(errno));
 				close(fd);
 				sleep(10);
 				break;
 
 			case 0: /* child */
-				daemon_runchild(fd);
-				return;
+				daemon_runchild(httpd, fd);
+				return 0;
 
 			default: /* parent */
 				close(fd);
@@ -257,6 +333,7 @@ again:
 			}
 		}
 	}
+	return 0;
 }
 
 #endif /* NO_DAEMON_MODE */

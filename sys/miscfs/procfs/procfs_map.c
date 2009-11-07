@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_map.c,v 1.37 2009/01/11 02:45:53 christos Exp $	*/
+/*	$NetBSD: procfs_map.c,v 1.41 2011/10/16 12:26:16 hannken Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.37 2009/01/11 02:45:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.41 2011/10/16 12:26:16 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -162,7 +162,9 @@ again:
 			if (UVM_ET_ISOBJ(entry) &&
 			    UVM_OBJ_IS_VNODE(entry->object.uvm_obj)) {
 				vp = (struct vnode *)entry->object.uvm_obj;
+				vn_lock(vp, LK_SHARED | LK_RETRY);
 				error = VOP_GETATTR(vp, &va, curl->l_cred);
+				VOP_UNLOCK(vp);
 				if (error == 0 && vp != pfs->pfs_vnode) {
 					fileid = va.va_fileid;
 					dev = va.va_fsid;
@@ -171,9 +173,10 @@ again:
 				}
 			}
 			pos += snprintf(buffer + pos, bufsize - pos,
-			    "%0*lx-%0*lx %c%c%c%c %0*lx %llx:%llx %ld     %s\n",
-			    (int)sizeof(void *) * 2,(unsigned long)entry->start,
-			    (int)sizeof(void *) * 2,(unsigned long)entry->end,
+			    "%#0*"PRIxVADDR"-%#0*"PRIxVADDR" %c%c%c%c "
+			    "%0*lx %llx:%llx %ld     %s\n",
+			    (int)sizeof(void *) * 2,entry->start,
+			    (int)sizeof(void *) * 2,entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',
 			    (entry->protection & VM_PROT_EXECUTE) ? 'x' : '-',
@@ -184,7 +187,8 @@ again:
 			    (unsigned long long)minor(dev), fileid, path);
 		} else {
 			pos += snprintf(buffer + pos, bufsize - pos,
-			    "0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d\n",
+			    "%#"PRIxVADDR" %#"PRIxVADDR" "
+			    "%c%c%c %c%c%c %s %s %d %d %d\n",
 			    entry->start, entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',

@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_read.c,v 1.2 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: ex_read.c,v 1.4 2009/11/14 23:40:11 christos Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -133,10 +133,12 @@ ex_read(SCR *sp, EXCMD *cmdp)
 			if (F_ISSET(cmdp, E_MODIFY))
 				(void)vs_update(sp, "!", cmdp->argv[argc]->bp);
 		} else {
-			if (F_ISSET(cmdp, E_MODIFY))
+			if (F_ISSET(cmdp, E_MODIFY)) {
+				INT2CHAR(sp, cmdp->argv[argc]->bp,
+				    cmdp->argv[argc]->len + 1, name, nlen);
 				(void)ex_printf(sp,
-				    "!%s\n", cmdp->argv[argc]->bp);
-			else
+				    "!%s\n", name);
+			} else
 				(void)ex_puts(sp, "!\n");
 			(void)ex_fflush(sp);
 		}
@@ -345,7 +347,8 @@ ex_readfp(SCR *sp, const char *name, FILE *fp, MARK *fm, db_recno_t *nlinesp, in
 	if (!silent) {
 		char *q = msg_print(sp, name, &nf);
 		msgq(sp, M_INFO,
-		    "148|%s: %lu lines, %lu characters", q, lcnt, ccnt);
+		    "148|%s: %lu lines, %lu characters", q, (unsigned long)lcnt,
+		    (unsigned long)ccnt);
 		if (nf)
 			FREE_SPACE(sp, q, 0);
 	}

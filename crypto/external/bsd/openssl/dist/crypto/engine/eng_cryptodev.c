@@ -33,10 +33,12 @@
 #include <openssl/bn.h>
 
 #if (defined(__unix__) || defined(unix)) && !defined(USG) && \
-	(defined(OpenBSD) || defined(__FreeBSD__))
+	(defined(OpenBSD) || defined(__FreeBSD__)) || defined(__NetBSD__)
 #include <sys/param.h>
 # if (OpenBSD >= 200112) || ((__FreeBSD_version >= 470101 && __FreeBSD_version < 500000) || __FreeBSD_version >= 500041) || defined(__NetBSD__)
-#  define HAVE_CRYPTODEV
+#  ifndef HAVE_CRYPTODEV
+#   define HAVE_CRYPTODEV
+#  endif
 # endif
 # if (OpenBSD >= 200110)
 #  define HAVE_SYSLOG_R
@@ -56,6 +58,10 @@ ENGINE_load_cryptodev(void)
  
 #include <sys/types.h>
 #include <crypto/cryptodev.h>
+#include <crypto/dh/dh.h>
+#include <crypto/dsa/dsa.h>
+#include <crypto/err/err.h>
+#include <crypto/rsa/rsa.h>
 #include <sys/ioctl.h>
 #include <errno.h>
 #include <stdio.h>
@@ -76,8 +82,6 @@ struct dev_crypto_state {
 	unsigned char digest_res[HASH_MAX_LEN];
 	char *mac_data;
 	int mac_len;
-
-	int copy;
 #endif
 };
 
@@ -86,7 +90,9 @@ static u_int32_t cryptodev_asymfeat = 0;
 static int open_dev_crypto(void);
 static int get_dev_crypto(void);
 static int get_cryptodev_ciphers(const int **cnids);
-/*static int get_cryptodev_digests(const int **cnids);*/
+#ifdef USE_CRYPTODEV_DIGESTS
+static int get_cryptodev_digests(const int **cnids);
+#endif
 static int cryptodev_usable_ciphers(const int **nids);
 static int cryptodev_usable_digests(const int **nids);
 static int cryptodev_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
@@ -149,7 +155,7 @@ static struct {
 	{ 0,				NID_undef,		0,	 0, },
 };
 
-#if 0  /* not (yet?) used */
+#ifdef USE_CRYPTODEV_DIGESTS
 static struct {
 	int	id;
 	int	nid;
@@ -164,7 +170,7 @@ static struct {
 	{ CRYPTO_SHA1,			NID_sha1,		20},
 	{ 0,				NID_undef,		0},
 };
-#endif  /* 0 */
+#endif
 
 /*
  * Return a fd if /dev/crypto seems usable, 0 otherwise.
@@ -190,10 +196,38 @@ open_dev_crypto(void)
 static int
 get_dev_crypto(void)
 {
+	int fd, retfd;
+
+	if ((fd = open_dev_crypto()) == -1)
+		return (-1);
+#ifndef CRIOGET_NOT_NEEDED
+	if (ioctl(fd, CRIOGET, &retfd) == -1)
+		return (-1);
+
+	/* close on exec */
+	if (fcntl(retfd, F_SETFD, 1) == -1) {
+		close(retfd);
+		return (-1);
+	}
+#else
+        retfd = fd;
+#endif
+	return (retfd);
+}
+
+static void put_dev_crypto(int fd)
+{
+#ifndef CRIOGET_NOT_NEEDED
+	close(fd);
+#endif
+}
+
+/* Caching version for asym operations */
+static int
+get_asym_dev_crypto(void)
+{
 	static int fd = -1;
 
-	if (fd == -1)
-		fd = get_dev_crypto();
 	if (fd == -1)
 		fd = open_dev_crypto();
 	return fd;
@@ -229,6 +263,7 @@ get_cryptodev_ciphers(const int **cnids)
 		    ioctl(fd, CIOCFSESSION, &sess.ses) != -1)
 			nids[count++] = ciphers[i].nid;
 	}
+	put_dev_crypto(fd);
 
 	if (count > 0)
 		*cnids = nids;
@@ -237,13 +272,13 @@ get_cryptodev_ciphers(const int **cnids)
 	return (count);
 }
 
+#ifdef USE_CRYPTODEV_DIGESTS
 /*
  * Find out what digests /dev/crypto will let us have a session for.
  * XXX note, that some of these openssl doesn't deal with yet!
  * returning them here is harmless, as long as we return NULL
  * when asked for a handler in the cryptodev_engine_digests routine
  */
-#if 0  /* not (yet?) used */
 static int
 get_cryptodev_digests(const int **cnids)
 {
@@ -267,6 +302,7 @@ get_cryptodev_digests(const int **cnids)
 		    ioctl(fd, CIOCFSESSION, &sess.ses) != -1)
 			nids[count++] = digests[i].nid;
 	}
+	put_dev_crypto(fd);
 
 	if (count > 0)
 		*cnids = nids;
@@ -411,6 +447,7 @@ cryptodev_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
 	sess->cipher = cipher;
 
 	if (ioctl(state->d_fd, CIOCGSESSION, sess) == -1) {
+		put_dev_crypto(state->d_fd);
 		state->d_fd = -1;
 		return (0);
 	}
@@ -447,6 +484,7 @@ cryptodev_cleanup(EVP_CIPHER_CTX *ctx)
 	} else {
 		ret = 1;
 	}
+	put_dev_crypto(state->d_fd);
 	state->d_fd = -1;
 
 	return (ret);
@@ -659,6 +697,7 @@ static int cryptodev_digest_init(EVP_MD_CTX *ctx)
 	sess->mac = digest;
 
 	if (ioctl(state->d_fd, CIOCGSESSION, sess) < 0) {
+		put_dev_crypto(state->d_fd);
 		state->d_fd = -1;
 		printf("cryptodev_digest_init: Open session failed\n");
 		return (0);
@@ -730,14 +769,12 @@ static int cryptodev_digest_final(EVP_MD_CTX *ctx, unsigned char *md)
 	if (! (ctx->flags & EVP_MD_CTX_FLAG_ONESHOT) ) {
 		/* if application doesn't support one buffer */
 		memset(&cryp, 0, sizeof(cryp));
-
 		cryp.ses = sess->ses;
 		cryp.flags = 0;
 		cryp.len = state->mac_len;
 		cryp.src = state->mac_data;
 		cryp.dst = NULL;
-		cryp.mac = (void *)md;
-
+		cryp.mac = (caddr_t)md;
 		if (ioctl(state->d_fd, CIOCCRYPT, &cryp) < 0) {
 			printf("cryptodev_digest_final: digest failed\n");
 			return (0);
@@ -758,6 +795,9 @@ static int cryptodev_digest_cleanup(EVP_MD_CTX *ctx)
 	struct dev_crypto_state *state = ctx->md_data;
 	struct session_op *sess = &state->d_sess;
 
+	if (state == NULL)
+	  return 0;
+
 	if (state->d_fd < 0) {
 		printf("cryptodev_digest_cleanup: illegal input\n");
 		return (0);
@@ -769,15 +809,13 @@ static int cryptodev_digest_cleanup(EVP_MD_CTX *ctx)
 		state->mac_len = 0;
 	}
 
-	if (state->copy)
-		return 1;
-
 	if (ioctl(state->d_fd, CIOCFSESSION, &sess->ses) < 0) {
 		printf("cryptodev_digest_cleanup: failed to close session\n");
 		ret = 0;
 	} else {
 		ret = 1;
 	}
+	put_dev_crypto(state->d_fd);	
 	state->d_fd = -1;
 
 	return (ret);
@@ -787,15 +825,39 @@ static int cryptodev_digest_copy(EVP_MD_CTX *to,const EVP_MD_CTX *from)
 {
 	struct dev_crypto_state *fstate = from->md_data;
 	struct dev_crypto_state *dstate = to->md_data;
+	struct session_op *sess;
+	int digest;
 
-	memcpy(dstate, fstate, sizeof(struct dev_crypto_state));
+	if (dstate == NULL || fstate == NULL)
+	  return 1;
 
-	if (fstate->mac_len != 0) {
-		dstate->mac_data = OPENSSL_malloc(fstate->mac_len);
-		memcpy(dstate->mac_data, fstate->mac_data, fstate->mac_len);
+       	memcpy(dstate, fstate, sizeof(struct dev_crypto_state));
+
+	sess = &dstate->d_sess;
+
+	digest = digest_nid_to_cryptodev(to->digest->type);
+
+	sess->mackey = dstate->dummy_mac_key;
+	sess->mackeylen = digest_key_length(to->digest->type);
+	sess->mac = digest;
+
+	dstate->d_fd = get_dev_crypto();
+
+	if (ioctl(dstate->d_fd, CIOCGSESSION, sess) < 0) {
+		put_dev_crypto(dstate->d_fd);
+		dstate->d_fd = -1;
+		printf("cryptodev_digest_init: Open session failed\n");
+		return (0);
 	}
 
-	dstate->copy = 1;
+	if (fstate->mac_len != 0) {
+	        if (fstate->mac_data != NULL)
+	                {
+        		dstate->mac_data = OPENSSL_malloc(fstate->mac_len);
+	        	memcpy(dstate->mac_data, fstate->mac_data, fstate->mac_len);
+           		dstate->mac_len = fstate->mac_len;
+	        	}
+	}
 
 	return 1;
 }
@@ -910,7 +972,7 @@ crparam2bn(struct crparam *crp, BIGNUM *a)
 		return (-1);
 
 	for (i = 0; i < bytes; i++)
-		pd[i] = crp->crp_p[bytes - i - 1];
+		pd[i] = ((char *)crp->crp_p)[bytes - i - 1];
 
 	BN_bin2bn(pd, bytes, a);
 	free(pd);
@@ -936,7 +998,7 @@ cryptodev_asym(struct crypt_kop *kop, int rlen, BIGNUM *r, int slen, BIGNUM *s)
 {
 	int fd, ret = -1;
 
-	if ((fd = get_asym_dev_crypto()) < 0)
+	if ((fd = get_dev_crypto()) < 0)
 		return (ret);
 
 	if (r) {
@@ -988,10 +1050,18 @@ cryptodev_bn_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 		goto err;
 	kop.crk_iparams = 3;
 
-	if (cryptodev_asym(&kop, BN_num_bytes(m), r, 0, NULL) == -1) {
+	if (cryptodev_asym(&kop, BN_num_bytes(m), r, 0, NULL)) {
 		const RSA_METHOD *meth = RSA_PKCS1_SSLeay();
+		printf("OCF asym process failed, Running in software\n");
+		ret = meth->bn_mod_exp(r, a, p, m, ctx, in_mont);
+
+	} else if (ECANCELED == kop.crk_status) {
+		const RSA_METHOD *meth = RSA_PKCS1_SSLeay();
+		printf("OCF hardware operation cancelled. Running in Software\n");
 		ret = meth->bn_mod_exp(r, a, p, m, ctx, in_mont);
 	}
+	/* else cryptodev operation worked ok ==> ret = 1*/
+
 err:
 	zapparams(&kop);
 	return (ret);
@@ -1035,10 +1105,18 @@ cryptodev_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
 		goto err;
 	kop.crk_iparams = 6;
 
-	if (cryptodev_asym(&kop, BN_num_bytes(rsa->n), r0, 0, NULL) == -1) {
+	if (cryptodev_asym(&kop, BN_num_bytes(rsa->n), r0, 0, NULL)) {
 		const RSA_METHOD *meth = RSA_PKCS1_SSLeay();
+		printf("OCF asym process failed, running in Software\n");
+		ret = (*meth->rsa_mod_exp)(r0, I, rsa, ctx);
+
+	} else if (ECANCELED == kop.crk_status) {
+		const RSA_METHOD *meth = RSA_PKCS1_SSLeay();
+		printf("OCF hardware operation cancelled. Running in Software\n");
 		ret = (*meth->rsa_mod_exp)(r0, I, rsa, ctx);
 	}
+	/* else cryptodev operation worked ok ==> ret = 1*/
+
 err:
 	zapparams(&kop);
 	return (ret);
@@ -1174,7 +1252,8 @@ cryptodev_dsa_verify(const unsigned char *dgst, int dlen,
 	kop.crk_iparams = 7;
 
 	if (cryptodev_asym(&kop, 0, NULL, 0, NULL) == 0) {
-		dsaret = kop.crk_status;
+/*OCF success value is 0, if not zero, change dsaret to fail*/
+		if(0 != kop.crk_status) dsaret  = 0;
 	} else {
 		const DSA_METHOD *meth = DSA_OpenSSL();
 
@@ -1301,9 +1380,11 @@ ENGINE_load_cryptodev(void)
 	 * find out what asymmetric crypto algorithms we support
 	 */
 	if (ioctl(fd, CIOCASYMFEAT, &cryptodev_asymfeat) == -1) {
+		put_dev_crypto(fd);
 		ENGINE_free(engine);
 		return;
 	}
+	put_dev_crypto(fd);
 
 	if (!ENGINE_set_id(engine, "cryptodev") ||
 	    !ENGINE_set_name(engine, "BSD cryptodev engine") ||

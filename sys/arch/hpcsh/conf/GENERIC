@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.86 2009/01/24 05:06:06 mrg Exp $
+# $NetBSD: GENERIC,v 1.95.2.1 2012/06/12 17:48:03 riz Exp $
 #
 # GENERIC machine description file
 #
@@ -31,6 +31,7 @@ options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
 maxusers	32			# estimated number of users
 
+options 	HZ=64			# default clock rate
 
 # System options specific to hpcsh
 
@@ -67,12 +68,12 @@ options 	KLOADER
 
 options 	KTRACE		# system call tracing via ktrace(1)
 
-#options 	SYSVMSG		# System V-like message queues
-#options 	SYSVSEM		# System V-like semaphores
-#options 	SYSVSHM		# System V-like memory sharing
+options 	SYSVMSG		# System V-like message queues
+options 	SYSVSEM		# System V-like semaphores
+options 	SYSVSHM		# System V-like memory sharing
 #options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
-#options 	MODULAR		# new style module framework
+#options 	MODULAR		# new style module(7) framework
 
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -112,7 +113,7 @@ options 	EXEC_COFF	# 32-bit COFF executables
 
 # File systems
 file-system 	FFS		# UFS
-#file-system 	MFS		# memory file system (requires FFS)
+file-system 	MFS		# memory file system (requires FFS)
 #file-system 	EXT2FS		# second extended file system (linux)
 file-system 	MSDOSFS		# MS-DOS file system
 file-system	NFS		# Sun NFS-compatible filesystem client
@@ -120,7 +121,6 @@ file-system	NFS		# Sun NFS-compatible filesystem client
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	PROCFS		# /proc
@@ -133,7 +133,7 @@ file-system	PTYFS		# /dev/pts/N support
 # File system options
 #options 	FFS_EI		# FFS Endian Independent support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 
@@ -192,7 +192,7 @@ options 	WS_KERNEL_BG=WSCOL_BLUE
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# VT handling
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 
 options 	FONT_VT220L8x10			# the console font
@@ -333,6 +333,10 @@ bthub*	at btuart?
 #btkbd*	at bthidev? reportid ?
 #wskbd*	at btkbd? console ? mux 1
 
+# Bluetooth Apple Magic Mouse
+#btmagic* at bthub?
+#wsmouse* at btmagic? mux 0
+
 # Bluetooth Audio support
 #btsco*	at bthub?
 
@@ -342,7 +346,7 @@ bthub*	at btuart?
 # disk/mass storage pseudo-devices
 #pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 
 # network pseudo-devices
 pseudo-device	loop			# network loopback
@@ -360,7 +364,6 @@ pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 #pseudo-device	irframetty		# IrDA frame line discipline
 pseudo-device	ksyms			# kernel symbol table interface

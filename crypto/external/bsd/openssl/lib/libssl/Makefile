@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/07/19 23:30:58 christos Exp $
+#	$NetBSD: Makefile,v 1.3.6.1 2012/08/14 07:57:27 riz Exp $
 
 # RCSid:
 #	Id: Makefile,v 1.33 1998/11/11 11:53:53 sjg Exp
@@ -22,6 +22,7 @@ USE_FORT?=yes	# cryptographic software and network library
 
 # XXX There's a bit of work to do before we can enable warnings.
 WARNS=0
+CWARNFLAGS.clang+=	-Wno-unused-value
 
 LIB=	ssl
 CPPFLAGS+= -Dlib${LIB} -I${OPENSSLSRC} -I${OPENSSLSRC}/crypto
@@ -35,15 +36,10 @@ CRYPTODIST=	${NETBSDSRCDIR}/crypto
 
 LIBDPLIBS+=crypto ${.CURDIR}/../libcrypto
 
-# XXX
-.if ${OBJECT_FMT} == "ELF"
 AFLAGS+=-DELF
-.else
-AFLAGS+=-DOUT
-.endif
 
 # This is from the include/openssl directory; see ../libcrypto/Makefile
-INCS=	dtls1.h ssl.h ssl2.h ssl3.h ssl23.h tls1.h kssl.h
+INCS=	dtls1.h ssl.h ssl2.h ssl3.h ssl23.h tls1.h kssl.h srtp.h
 INCSDIR=/usr/include/openssl
 
 # this rebuilds the `srcs.inc' and the .inc files it reads.

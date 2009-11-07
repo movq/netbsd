@@ -1,4 +1,4 @@
-/*      $NetBSD: jmide_reg.h,v 1.2 2009/10/19 18:41:15 bouyer Exp $    */
+/*      $NetBSD: jmide_reg.h,v 1.4 2011/10/24 16:06:43 njoly Exp $    */
 
 /*
  * Copyright (c) 2007 Manuel Bouyer.
@@ -27,11 +27,6 @@
 
 /* registers definitions for the JMicon JMB36x IDE/SATA controllers */
 
-/* special bits in command/status register (PCI_COMMAND_STATUS_REG) */
-#define PCI_STATUS_INT_STATUS	0x00080000 /* interrupt pending */
-#define PCI_COMMAND_INT_DIS 	0x00000400 /* interrupt disable */
-
-
 #define PCI_JM_CONTROL0	0x40 /* controller control register 0 */
 #define JM_CONTROL0_ROM_EN	0x80000000 /* external ROM enable */
 #define JM_CONTROL0_ID_WR	0x40000000 /* device ID write enable */
@@ -44,7 +39,7 @@
 #define JM_CONTROL0_SATA0_AHCI	0x00002000 /* SATA port 0 AHCI enable */
 #define JM_CONTROL0_SATA0_IDE	0x00001000 /* SATA port 0 PCIIDE enable */
 #define JM_CONTROL0_AHCI_F1	0x00000200 /* AHCI on function 1 */
-#define JM_CONTROL0_AHCI_EN	0x00000100 /* ACHI enable */
+#define JM_CONTROL0_AHCI_EN	0x00000100 /* AHCI enable */
 #define JM_CONTROL0_PATA0_RST	0x00000040 /* PATA port 0 reset */
 #define JM_CONTROL0_PATA0_EN	0x00000020 /* PATA port 0 enable */
 #define JM_CONTROL0_PATA0_SEC	0x00000010 /* PATA 0 enable on secondary chan */

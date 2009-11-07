@@ -1,4 +1,4 @@
-/*	$NetBSD: kthread.h,v 1.8 2009/01/29 22:00:26 ad Exp $	*/
+/*	$NetBSD: kthread.h,v 1.12 2011/11/21 04:36:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.
@@ -33,24 +33,28 @@
 #ifndef _SYS_KTHREAD_H_
 #define	_SYS_KTHREAD_H_
 
+#if !defined(_KERNEL)
+#error "not supposed to be exposed to userland"
+#endif
+
 /*
  * Kernel thread handling.
  */
 
-#ifdef _KERNEL
 #include <sys/proc.h>
 
-#define	KTHREAD_IDLE	0x01	/* do not set runnable */
-#define	KTHREAD_MPSAFE	0x02	/* does not need kernel_lock */
-#define	KTHREAD_INTR	0x04	/* interrupt handler */
-#define	KTHREAD_TS	0x08	/* timeshared */
+#define	KTHREAD_IDLE		0x01	/* Do not run on creation */
+#define	KTHREAD_MPSAFE		0x02	/* Do not acquire kernel_lock */
+#define	KTHREAD_INTR		0x04	/* Software interrupt handler */
+#define	KTHREAD_TS		0x08	/* Time-sharing priority range */
+#define	KTHREAD_MUSTJOIN	0x10	/* Must join on exit */
+
+void	kthread_sysinit(void);
 
 int	kthread_create(pri_t, int, struct cpu_info *,
-		       void (*)(void *), void *,
-		       lwp_t **, const char *, ...)
-	    __attribute__((__format__(__printf__,7,8)));
+    void (*)(void *), void *, lwp_t **, const char *, ...) __printflike(7, 8);
 void	kthread_exit(int) __dead;
 void	kthread_destroy(lwp_t *);
-#endif /* _KERNEL */
+int	kthread_join(lwp_t *);
 
 #endif /* _SYS_KTHREAD_H_ */

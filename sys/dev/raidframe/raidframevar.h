@@ -1,4 +1,4 @@
-/*	$NetBSD: raidframevar.h,v 1.12 2008/04/28 20:23:56 martin Exp $ */
+/*	$NetBSD: raidframevar.h,v 1.15 2011/02/19 07:11:09 enami Exp $ */
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -265,6 +265,9 @@ typedef struct RF_StripeLockDesc_s RF_StripeLockDesc_t;
 typedef struct RF_ThreadGroup_s RF_ThreadGroup_t;
 typedef struct RF_ThroughputStats_s RF_ThroughputStats_t;
 
+struct rf_paritymap;
+struct rf_paritymap_ondisk;
+
 /*
  * Important assumptions regarding ordering of the states in this list
  * have been made!!!  Before disturbing this ordering, look at code in
@@ -441,12 +444,21 @@ typedef struct RF_ComponentLabel_s {
 	int maxOutstanding;   /* maxOutstanding disk requests */
 	int blockSize;        /* size of component block.
 				 (disklabel->d_secsize) */
-	u_int numBlocks;      /* number of blocks on this component.  May
+	u_int __numBlocks;    /* number of blocks on this component.  May
 			         be smaller than the partition size. */
-	u_int partitionSize;  /* number of blocks on this *partition*.
+	u_int __partitionSize;/* number of blocks on this *partition*.
 				 Must exactly match the partition size
 				 from the disklabel. */
-	int future_use[33];   /* Future expansion */
+	/* Parity map stuff. */
+	int parity_map_modcount; /* If equal to mod_counter, then the last
+				    kernel to touch this label was
+				    parity-map-enabled. */
+	u_int parity_map_flags;  /* See top of rf_paritymap.h */
+	int parity_map_tickms; /* Length of parity map cooldown ticks. */
+	int parity_map_ntick;  /* Number of parity map cooldown ticks. */
+	u_int parity_map_regions; /* Number of parity map regions. */
+	int future_use[28];   /* Future expansion */
+
 	int autoconfigure;    /* automatically configure this RAID set.
 				 0 == no, 1 == yes */
 	int root_partition;   /* Use this set as /
@@ -459,8 +471,47 @@ typedef struct RF_ComponentLabel_s {
 				 done first, (and would become raid0).
 				 This may be in conflict with last_unit!!?! */
 	                      /* Not currently used. */
-	int future_use2[44];  /* More future expansion */
+	u_int numBlocksHi;    /* The top 32-bits of the numBlocks member. */
+	u_int partitionSizeHi;/* The top 32-bits of the partitionSize member. */
+	int future_use2[42];  /* More future expansion */
 } RF_ComponentLabel_t;
+
+/*
+ * Following four functions are access macros for the number of blocks
+ * and partition size in component label.
+ */
+static inline RF_SectorCount_t
+rf_component_label_numblocks(const RF_ComponentLabel_t *cl)
+{
+
+	return ((RF_SectorCount_t)cl->numBlocksHi << 32) |
+	    cl->__numBlocks;
+}
+
+static inline void
+rf_component_label_set_numblocks(RF_ComponentLabel_t *cl, RF_SectorCount_t siz)
+{
+
+	cl->numBlocksHi = siz >> 32;
+	cl->__numBlocks = siz;
+}
+
+static inline RF_SectorCount_t
+rf_component_label_partitionsize(const RF_ComponentLabel_t *cl)
+{
+
+	return ((RF_SectorCount_t)cl->partitionSizeHi << 32) |
+	    cl->__partitionSize;
+}
+
+static inline void
+rf_component_label_set_partitionsize(RF_ComponentLabel_t *cl,
+    RF_SectorCount_t siz)
+{
+
+	cl->partitionSizeHi = siz >> 32;
+	cl->__partitionSize = siz;
+}
 
 typedef struct RF_SingleComponent_s {
 	int row;
@@ -568,5 +619,29 @@ typedef struct RF_LayoutSW_s {
 #endif				/* !KERNEL */
 }       RF_LayoutSW_t;
 #endif
+
+
+/* Parity map declarations. */
+#define RF_PARITYMAP_NREG 4096
+#define RF_PARITYMAP_NBYTE howmany(RF_PARITYMAP_NREG, NBBY)
+
+struct rf_pmctrs {
+	uint64_t nwrite, ncachesync, nclearing;
+};
+
+struct rf_pmparams {
+	int cooldown, tickms;
+	u_int regions;
+};
+
+struct rf_pmstat {
+	int enabled; /* if not set, rest of struct is zeroed */
+	struct rf_pmparams params;
+	daddr_t region_size;
+	char dirty[RF_PARITYMAP_NBYTE];
+	struct rf_pmctrs ctrs;
+};
+
+
 
 #endif				/* !_RF_RAIDFRAMEVAR_H_ */

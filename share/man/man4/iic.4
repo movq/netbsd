@@ -1,4 +1,4 @@
-.\"	$NetBSD: iic.4,v 1.3 2009/08/22 00:17:03 joerg Exp $
+.\"	$NetBSD: iic.4,v 1.10 2011/10/15 16:35:45 jruoho Exp $
 .\"	$OpenBSD: iic.4,v 1.74 2008/09/10 16:13:43 reyk Exp $
 .\"
 .\" Copyright (c) 2004, 2006 Alexander Yurchenko <grange@openbsd.org>
@@ -16,7 +16,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd June 4, 2009
+.Dd October 15, 2011
 .Dt IIC 4
 .Os
 .Sh NAME
@@ -30,12 +30,14 @@
 .\" cat /tmp/x
 .\"
 .Cd "iic* at alipm?               # sparc64 "
+.Cd "iic* at acpismbus?           # amd64 i386"
 .Cd "iic* at amdpm?               # amd64 i386 "
 .Cd "iic* at armadillo9iic?       # evbarm "
 .Cd "iic0 at at91twi?             # evbarm "
 .Cd "iic0 at ausmbus0             # evbmips "
 .Cd "iic0 at cuda0                # macppc "
 .Cd "iic0 at gpiic?               # evbppc "
+.Cd "iic* at gpioiic?             # amd64 i386 "
 .Cd "iic* at gtiic?               # evbppc "
 .Cd "iic* at gxiic?               # evbarm "
 .Cd "iic* at ichsmb?              # amd64 i386 "
@@ -85,17 +87,19 @@ it with the
 .Tn I2C
 commands.
 .Sh SUPPORTED MASTERS
-A wide list of I2C masters are supported, among them
-are:
+A wide list of I2C masters are supported, among them are:
+.Pp
 .\"
 .\" Generate the following list with these (t)csh commands:
 .\" cd .../src/sys/arch
 .\" grep -h '^iic.*at' */conf/* | awk '{print $3}' | sed 's,.$,,' | sort -u | sh -c 'while read i ; do echo .It Xr $i 4; n=`grep -h ^.Nd ../../share/man/man4/$i* | sed "s,^.Nd ,,"`; if [ -n "$n" ]; then echo $n ; else echo "" ; fi ; done' | tee /tmp/x
 .\" cat /tmp/x
 .\"
-.Bl -tag -width 18n -compact
+.Bl -tag -width 18n -compact -offset indent
 .It Xr alipm 4
 Acer Labs M7101 SMBus controller
+.It Xr acpismbus 4
+ACPI SMBus Control Method Interface
 .It Xr amdpm 4
 AMD768 Power Management Controller and AMD8111 System Management Controller
 .It Xr armadillo9iic 4
@@ -113,6 +117,8 @@ Intel ICH SMBus controller
 .It Xr iomdiic 4
 .It Xr iopiic 4
 .It Xr ki2c 4
+.It Xr gpioiic 4
+GPIO bit-banging
 .It Xr nfsmb 4
 NVIDIA nForce 2/3/4 SMBus controller and SMBus driver
 .It Xr ociic 4
@@ -123,13 +129,14 @@ Intel PIIX and compatible Power Management controller
 .El
 .Sh SUPPORTED SLAVES
 A wide list of slaves are supported, among them:
+.Pp
 .\"
 .\" Create the following list with these commands:
 .\" cd .../src/sys/arch
 .\" grep -h '.* at iic.*' */conf/* | sed -e 's,^#,,' -e 's, .*,,' -e 's,.$,,' | sort -u | sh -c 'while read i ; do echo .It Xr $i 4 ; n=`grep ^.Nd ../../share/man/man4/$i* | sed "s,^.Nd ,,"` ; if [ -n "$n" ]; then echo $n ; else echo "" ; fi ; done' | tee /tmp/x
 .\" cat /tmp/x
 .\"
-.Bl -tag -width 13n -compact
+.Bl -tag -width 13n -compact -offset indent
 .It Xr dbcool 4
 dbCool(tm) family of environmental monitors and fan controllers
 .It Xr rs5c372rtc 4
@@ -140,7 +147,9 @@ driver for SGS 7433 Basic Audio Processor found in some Apple machines
 Generic Memory Module Serial Presence Detect
 .El
 .Sh SEE ALSO
+.Xr dtviic 4 ,
 .Xr intro 4 ,
+.Xr i2cscan 8 ,
 .Xr iic 9
 .Sh HISTORY
 The

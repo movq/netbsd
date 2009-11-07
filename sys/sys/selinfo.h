@@ -1,8 +1,11 @@
-/*	$NetBSD: selinfo.h,v 1.6 2008/04/28 20:24:11 martin Exp $	*/
+/*	$NetBSD: selinfo.h,v 1.8 2010/07/08 12:23:31 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -67,13 +70,11 @@
  * Used to maintain information about processes that wish to be
  * notified when I/O becomes possible.
  */
-#if MAXCPUS > 32
-#error adjust this code
-#endif
 struct selinfo {
 	struct klist	sel_klist;	/* knotes attached to this selinfo */
-	void		*sel_cpu;	/* current CPU association */
+	void		*sel_cluster;	/* current cluster association */
 	struct lwp	*sel_lwp;	/* first LWP to be notified */
+	uintptr_t	sel_fdinfo;	/* selected descriptor by first LWP */
 	SLIST_ENTRY(selinfo) sel_chain;	/* entry on LWP's list of selinfo */
 	uint32_t	sel_collision;	/* mask of colliding cpus */
 	uint32_t	sel_reserved[3];/* reserved for future expansion */

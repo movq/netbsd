@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_extern.h,v 1.75 2009/02/22 20:28:06 ad Exp $	*/
+/*	$NetBSD: ffs_extern.h,v 1.78 2011/06/17 14:23:52 manu Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -42,7 +42,8 @@
 #define FFS_REALLOCBLKS		3	/* block reallocation enabled */
 #define FFS_ASYNCFREE		4	/* asynchronous block freeing enabled */
 #define FFS_LOG_CHANGEOPT	5	/* log optimalization strategy change */
-#define FFS_MAXID		6	/* number of valid ffs ids */
+#define FFS_EXTATTR_AUTOCREATE	6	/* size for backing file autocreation */
+#define FFS_MAXID		7	/* number of valid ffs ids */
 
 struct buf;
 struct fid;
@@ -99,7 +100,6 @@ int	ffs_blkalloc_ump(struct ufsmount *, daddr_t, long);
 void	ffs_blkfree(struct fs *, struct vnode *, daddr_t, long, ino_t);
 void	ffs_blkfree_snap(struct fs *, struct vnode *, daddr_t, long, ino_t);
 int	ffs_vfree(struct vnode *, ino_t, int);
-void	ffs_clusteracct(struct fs *, struct cg *, int32_t, int);
 int	ffs_checkfreefile(struct fs *, struct vnode *, ino_t);
 int	ffs_freefile(struct mount *, ino_t, int);
 int	ffs_freefile_snap(struct fs *, struct vnode *, ino_t, int);
@@ -126,6 +126,7 @@ int	ffs_cgupdate(struct ufsmount *, int);
 int	ffs_read(void *);
 int	ffs_write(void *);
 int	ffs_fsync(void *);
+int	ffs_spec_fsync(void *);
 int	ffs_reclaim(void *);
 int	ffs_getpages(void *);
 void	ffs_gop_size(struct vnode *, off_t, off_t *, int);
@@ -200,6 +201,10 @@ void	ffs_clrblock(struct fs *, u_char *, int32_t);
 void	ffs_setblock(struct fs *, u_char *, int32_t);
 void	ffs_itimes(struct inode *, const struct timespec *,
     const struct timespec *, const struct timespec *);
+void	ffs_clusteracct(struct fs *, struct cg *, int32_t, int);
+
+/* ffs_quota2.c */
+int	ffs_quota2_mount(struct mount *);
 
 __END_DECLS
 

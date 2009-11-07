@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.16 2008/05/16 09:21:59 hannken Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.19.8.1 2012/08/12 12:59:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.16 2008/05/16 09:21:59 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.19.8.1 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -116,7 +116,7 @@ cd9660_lookup(void *v)
 	ino_t ino = 0;
 	int reclen;
 	u_short namelen;
-	char altname[NAME_MAX];
+	char altname[ISO_MAXNAMLEN];
 	int res;
 	int assoc, len;
 	const char *name;
@@ -336,11 +336,8 @@ notfound:
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	if (cnp->cn_flags & MAKEENTRY)
-		cache_enter(vdp, *vpp, cnp);
-	if (nameiop == CREATE || nameiop == RENAME)
-		return (EROFS);
-	return (ENOENT);
+	cache_enter(vdp, *vpp, cnp);
+	return (nameiop == CREATE || nameiop == RENAME) ? EROFS : ENOENT;
 
 found:
 	if (numdirpasses == 2)
@@ -381,7 +378,7 @@ found:
 	 */
 	brelse(bp, 0);
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
+		VOP_UNLOCK(pdp);	/* race to get the inode */
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
 					     dp->i_ino != ino, ep);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
@@ -389,7 +386,7 @@ found:
 			return error;
 		*vpp = tdp;
 	} else if (dp->i_number == dp->i_ino) {
-		VREF(vdp);	/* we want ourself, ie "." */
+		vref(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
@@ -402,9 +399,8 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	if (cnp->cn_flags & MAKEENTRY)
-		cache_enter(vdp, *vpp, cnp);
-	return (0);
+	cache_enter(vdp, *vpp, cnp);
+	return 0;
 }
 
 /*

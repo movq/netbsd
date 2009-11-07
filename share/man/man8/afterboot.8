@@ -1,4 +1,4 @@
-.\"	$NetBSD: afterboot.8,v 1.42 2009/10/24 12:18:05 reed Exp $
+.\"	$NetBSD: afterboot.8,v 1.47 2010/06/26 11:26:17 jmmv Exp $
 .\"	$OpenBSD: afterboot.8,v 1.72 2002/02/22 02:02:33 miod Exp $
 .\"
 .\" Originally created by Marshall M. Midden -- 1997-10-20, m4@umn.edu
@@ -59,7 +59,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 18, 2009
+.Dd June 26, 2010
 .Dt AFTERBOOT 8
 .Os
 .Sh NAME
@@ -94,16 +94,31 @@ bugs in the release have been found.
 All significant and easily fixed problems will be reported at
 .Pa http://www.NetBSD.org/support/security/ .
 It is recommended that you check this page regularly.
+.Pp
+Additionally, you should set
+.Dq fetch_pkg_vulnerabilities=YES
+in
+.Pa /etc/daily.conf
+to allow your system to automatically update the local database of known
+vulnerable packages to the latest version available on-line.
+The system will later check, on a daily basis, if any of your installed
+packages are vulnerable based on the contents of this database.
+See
+.Xr daily.conf 5
+and
+.Xr security.conf 5
+for more details.
 .Ss Login
 Login as
 .Dq Ic root .
 You can do so on the console, or over the network using
 .Xr ssh 1 .
-If you have enabled the ssh daemon and wish to allow root logins over
-the network, edit the
+If you have enabled the SSH daemon (see
+.Xr sshd 8 )
+and wish to allow root logins over the network, edit the
 .Pa /etc/ssh/sshd_config
 file and set
-.Cm PermitRootLogin
+.Dq PermitRootLogin
 to
 .Dq yes
 (see
@@ -339,16 +354,16 @@ is required) to
 .Dl net.inet6.ip6.forwarding=1
 .Pp
 As an alternative, compile a new kernel with the
-.Cm GATEWAY
+.Dq GATEWAY
 option.
 Packets are not forwarded by default, due to RFC requirements.
-.Ss Secure Shell (ssh)
+.Ss Secure Shell (SSH)
 By default, all services are disabled in a fresh
 .Nx
-installation, and ssh is no exception.
+installation, and SSH is no exception.
 You may wish to enable it so you can remotely control your system.
 Set
-.Dq Va sshd=yes
+.Dq Va sshd=YES
 in
 .Pa /etc/rc.conf
 and then starting the server with the command
@@ -379,7 +394,9 @@ mechanism.
 .Pp
 If using a caching name server add the line "nameserver 127.0.0.1" first.
 To get a local caching name server to run
-you will need to set "named=yes" in
+you will need to set
+.Dq named=YES
+in
 .Pa /etc/rc.conf
 and create the
 .Pa named.conf
@@ -544,8 +561,8 @@ make sure that
 .Pa /etc/rc.conf
 contains the following:
 .Pp
-.Dl ntpdate=yes
-.Dl ntpd=yes
+.Dl ntpdate=YES
+.Dl ntpd=YES
 .Pp
 See
 .Xr date 1 ,
@@ -577,7 +594,7 @@ at the top, or your message will be overwritten.
 To add new users and groups, there are
 .Xr useradd 8
 and
-.Xr groupadd 8 ,
+.Xr groupadd 8 ;
 see also
 .Xr user 8
 for further programs for user and group manipulation.
@@ -644,16 +661,14 @@ directly, edit only
 See
 .Xr rc.conf 5
 for further information.
-.Pp
+.Ss X Display Manager
 If you've installed X, you may want to turn on
 .Xr xdm 1 ,
 the X Display Manager.
-To do this, set the variable
-.Dq xdm
-to yes in
-.Pa /etc/rc.conf ,
-i.e.:
-.Dq xdm=yes
+To do this, set
+.Dq xdm=YES
+in
+.Pa /etc/rc.conf .
 .Ss Printers
 Edit
 .Pa /etc/printcap
@@ -716,7 +731,8 @@ and
 as needed.
 You will have to make sure
 .Pa /etc/rc.conf
-has "dhcpd=yes"
+has
+.Dq dhcpd=YES
 or run
 .Xr dhcpd 8
 manually.
@@ -728,15 +744,16 @@ server, edit
 as needed.
 You will have to turn it on in
 .Pa /etc/rc.conf
-by adding "bootparamd=yes".
+by adding
+.Dq bootparamd=YES .
 .Ss NFS server
 If this is an NFS server, make sure
 .Pa /etc/rc.conf
 has:
 .Bd -literal -offset indent
-nfs_server=yes
-mountd=yes
-rpcbind=yes
+nfs_server=YES
+mountd=YES
+rpcbind=YES
 .Ed
 .Pp
 Edit
@@ -939,45 +956,10 @@ $ ./build.sh kernel=SOMEFILE
 At this point, the system should be fully configured to your liking.
 It is now a good time to ensure that the system behaves according to
 its specifications and that it is stable on your hardware.
-You can easily do so by running the test suites available at
-.Pa /usr/tests/ ,
-assuming that you installed the
-.Pa tests.tgz
-set.
-If not, you can install it now by running:
-.Bd -literal -offset indent
-# cd /
-# tar xzpf /path/to/tests.tgz
-.Ed
-.Pp
-Once done, edit the
-.Pa /etc/atf/NetBSD.conf
-file to tune the configuration of the test suite, go to
-.Pa /usr/tests/
-hierarchy and use the
-.Xr atf-run 1
-and
-.Xr atf-report 1
-utilities to run all the tests in an automated way:
-.Bd -literal -offset indent
-# cd /usr/tests/
-# atf-run | atf-report
-.Ed
-.Pp
-Should any problems appear when running the test suite, please let the
-.Nx
-developers know by sending a message to the appropriate mailing list or
-by sending a problem report.
-For more details see:
-.Bl -bullet -offset indent
-.It
-.Pa http://www.netbsd.org/mailinglists/
-.It
-.Pa http://www.netbsd.org/support/send-pr.html
-.El
+Please refer to
+.Xr tests 7
+for details on how to do so.
 .Sh SEE ALSO
-.Xr atf-report 1 ,
-.Xr atf-run 1 ,
 .Xr chgrp 1 ,
 .Xr chmod 1 ,
 .Xr config 1 ,
@@ -985,46 +967,71 @@ For more details see:
 .Xr date 1 ,
 .Xr df 1 ,
 .Xr domainname 1 ,
+.Xr fstat 1 ,
 .Xr hostname 1 ,
 .Xr make 1 ,
 .Xr man 1 ,
 .Xr netstat 1 ,
 .Xr newaliases 1 ,
 .Xr passwd 1 ,
+.Xr pkg_add 1 ,
+.Xr ps 1 ,
+.Xr ssh 1 ,
 .Xr su 1 ,
+.Xr systat 1 ,
+.Xr top 1 ,
+.Xr xdm 1 ,
 .Xr ccd 4 ,
 .Xr aliases 5 ,
 .Xr crontab 5 ,
+.Xr dhclient.conf 5 ,
 .Xr exports 5 ,
 .Xr fstab 5 ,
 .Xr group 5 ,
+.Xr ifconfig.if 5 ,
 .Xr mailer.conf 5 ,
+.Xr nsswitch.conf 5 ,
 .Xr passwd 5 ,
+.Xr printcap 5 ,
 .Xr rc.conf 5 ,
 .Xr resolv.conf 5 ,
+.Xr sshd_config 5 ,
+.Xr wscons.conf 5 ,
 .Xr hier 7 ,
 .Xr hostname 7 ,
 .Xr pkgsrc 7 ,
+.Xr tests 7 ,
 .Xr amd 8 ,
 .Xr ccdconfig 8 ,
 .Xr chown 8 ,
+.Xr dhclient 8 ,
 .Xr dhcpd 8 ,
+.Xr dmesg 8 ,
+.Xr groupadd 8 ,
 .Xr ifconfig 8 ,
 .Xr inetd 8 ,
 .Xr kerberos 8 ,
+.Xr lpd 8 ,
 .Xr mount 8 ,
 .Xr mrouted 8 ,
 .Xr mtree 8 ,
 .Xr named 8 ,
-.Xr nis 8 .
+.Xr nis 8 ,
+.Xr ntpd 8 ,
+.Xr ntpdate 8 ,
 .Xr rbootd 8 ,
 .Xr rc 8 ,
+.Xr rdate 8 ,
 .Xr rmt 8 ,
 .Xr route 8 ,
 .Xr rpc.bootparamd 8 ,
+.Xr rpcbind 8 ,
+.Xr sshd 8 ,
+.Xr timed 8 ,
 .Xr umount 8 ,
 .Xr useradd 8 ,
 .Xr vipw 8 ,
+.Xr yp 8 ,
 .Xr ypbind 8
 .Sh HISTORY
 This document first appeared in

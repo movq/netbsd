@@ -1,42 +1,57 @@
-#	$NetBSD: Makefile,v 1.183 2009/10/29 01:01:17 christos Exp $
+#	$NetBSD: Makefile,v 1.207 2012/02/07 19:13:31 joerg Exp $
 #	from: @(#)Makefile	8.3 (Berkeley) 1/7/94
 
 .include <bsd.own.mk>
 
-SUBDIR= apply apropos asa at audio awk \
+SUBDIR= apply asa at audio audiocfg \
 	banner basename biff bthset btkey btpin \
 	bzip2 bzip2recover cal calendar cap_mkdb cdplay \
-	checknr chflags chpass cksum cmp col colcrt colrm \
-	column comm compress config crontab crunch csplit ctags cut \
+	checknr chflags chpass cksum cmp cleantags col colcrt colrm \
+	column comm compress config crunch csplit ctags cut \
 	deroff db dirname du \
 	eject elf2aout elf2ecoff env error expand extattr \
-	false fdformat fgen find finger fmt fold fpr from \
+	false fdformat fgen fincore find finger fmt fold fpr from \
 	fsplit fstat ftp gcore genassym gencat getconf getent getopt gprof \
-	gzip head hexdump iconv id indent innetgr ipcrm ipcs join jot \
-	kdump ktrace ktruss lam last lastcomm ldd leave less \
+	head hexdump iconv id indent infocmp innetgr ipcrm ipcs join jot \
+	kdump ktrace ktruss lam last lastcomm ldd leave \
 	locale locate lock logger login logname look lorder m4 \
 	machine mail make man menuc mesg midiplay mixerctl mkcsmapper \
-	mkdep mkesdb mkfifo mklocale mkstr mktemp moduli msgc msgs \
+	mkdep mkesdb mkfifo mklocale mkstr mktemp mkubootimage moduli \
+	msgc msgs \
 	nbperf netgroup netstat newgrp newsyslog nfsstat nice nl nohup nvi \
 	pagesize passwd paste patch pathchk pkill pmap pmc pr \
 	printenv printf progress pwhash qsubst quota radioctl rdist \
-	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh rup \
-	ruptime rusers rwall rwho script sdiff sdpquery sed seq shar shlock \
+	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh \
+	rump_allserver rump_dhcpclient rump_halt rump_server rup ruptime \
+	rusers rwall rwho \
+	script sdiff sdpquery sed seq shar shlock shmif_dumpbus \
 	showmount shuffle sockstat soelim sort spell split stat su systat \
-	tabs tail talk tcopy tee telnet tftp time tip tn3270 touch tput \
+	tabs tail talk tcopy tee telnet tftp tic time tip touch tpfmt tput \
 	tr true tset tsort tty ul uname unexpand unifdef \
 	uniq units unvis unzip usbhidaction usbhidctl users utoppya \
-	uudecode uuencode uuidgen vacation vgrind vis vmstat vndcompress w \
-	wall wc what whatis whereis who whois window \
+	uudecode uuencode uuidgen vacation vgrind videoctl vis \
+	vmstat vndcompress w \
+	wall wc what whereis who whois window \
 	write xargs xinstall xlint xstr yes
+
+SUBDIR+= ../external/zlib/pigz/bin/pigz
+
+.if MKMAKEMANDB == "no"
+SUBDIR+= apropos whatis
+.endif
+
+.if (${MKBSDGREP} != "no")
+SUBDIR+= grep
+.endif
+
+.if (${MKPIGZGZIP} != "no")
+# nothing
+.else
+SUBDIR+= gzip 
+.endif
 
 .if (${MKHESIOD} != "no")
 SUBDIR+= hesinfo
-.endif
-
-.if (${MKKERBEROS} != "no")
-SUBDIR+= compile_et kdestroy kgetcred kinit klist mk_cmds string2key
-SUBDIR+= hxtool verify_krb5_conf gss krb5-config
 .endif
 
 .if (${MKSKEY} != "no")

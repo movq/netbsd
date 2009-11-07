@@ -32,7 +32,7 @@
 #if 0
 static char sccsid[] = "@(#)yyerror.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: yyerror.c,v 1.8 2003/08/07 16:45:01 agc Exp $");
+__RCSID("$NetBSD: yyerror.c,v 1.8.56.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif /* not lint */
 

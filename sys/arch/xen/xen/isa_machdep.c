@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.22 2009/08/19 15:05:01 dyoung Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.26 2011/09/01 15:10:31 christos Exp $	*/
 /*	NetBSD isa_machdep.c,v 1.11 2004/06/20 18:04:08 thorpej Exp 	*/
 
 /*-
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.22 2009/08/19 15:05:01 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.26 2011/09/01 15:10:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.22 2009/08/19 15:05:01 dyoung Exp 
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bus_private.h>
 
 #include <machine/pio.h>
@@ -97,26 +97,11 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.22 2009/08/19 15:05:01 dyoung Exp 
 static int _isa_dma_may_bounce(bus_dma_tag_t, bus_dmamap_t, int, int *);
 
 struct x86_bus_dma_tag isa_bus_dma_tag = {
-	0,				/* _tag_needs_free */
-	ISA_DMA_BOUNCE_THRESHOLD,	/* _bounce_thresh */
-	0,				/* _bounce_alloc_lo */
-	ISA_DMA_BOUNCE_THRESHOLD,	/* _bounce_alloc_hi */
-	_isa_dma_may_bounce,
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._tag_needs_free	= 0,
+	._bounce_thresh		= ISA_DMA_BOUNCE_THRESHOLD,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= ISA_DMA_BOUNCE_THRESHOLD,
+	._may_bounce		= _isa_dma_may_bounce,
 };
 
 #define	IDTVEC(name)	__CONCAT(X,name)
@@ -145,7 +130,7 @@ isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level,
 	int (*ih_fun)(void *), void *ih_arg)
 {
 	int evtch;
-	char evname[8];
+	char evname[16];
 	struct xen_intr_handle ih;
 #if NIOAPIC > 0
 	struct ioapic_softc *pic = NULL;

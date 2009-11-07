@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.35 2008/11/13 11:09:45 ad Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.37 2011/11/24 15:51:32 ahoka Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -81,12 +81,14 @@ struct ufsmount {
 	union {					/* pointer to superblock */
 		struct	fs *fs;			/* FFS */
 		struct	lfs *lfs;		/* LFS */
-		struct  m_ext2fs *e2fs; /* EXT2FS */
+		struct  m_ext2fs *e2fs;		/* EXT2FS */
+		struct  chfs_mount *chfs;	/* CHFS */
 	} ufsmount_u;
 #define	um_fs	ufsmount_u.fs
 #define	um_lfs	ufsmount_u.lfs
 #define um_e2fs	ufsmount_u.e2fs
 #define um_e2fsb ufsmount_u.e2fs->s_es
+#define um_chfs	ufsmount_u.chfs
 
 	/* Extended attribute information. */
 	struct ufs_extattr_per_mount um_extattr;
@@ -98,9 +100,23 @@ struct ufsmount {
 	u_long	um_bptrtodb;			/* indir ptr to disk block */
 	u_long	um_seqinc;			/* inc between seq blocks */
 	kmutex_t um_lock;			/* lock on global data */
-	time_t	um_btime[MAXQUOTAS];		/* block quota time limit */
-	time_t	um_itime[MAXQUOTAS];		/* inode quota time limit */
-	char	um_qflags[MAXQUOTAS];		/* quota specific flags */
+	union {
+	    struct um_q1 {
+		time_t	q1_btime[MAXQUOTAS];	/* block quota time limit */
+		time_t	q1_itime[MAXQUOTAS];	/* inode quota time limit */
+		char	q1_qflags[MAXQUOTAS];	/* quota specific flags */
+	    } um_q1;
+	    struct um_q2 {
+		uint64_t q2_bsize;		/* block size of quota file */
+		uint64_t q2_bmask;		/* mask for above */
+	    } um_q2;
+	} um_q;
+#define umq1_btime  um_q.um_q1.q1_btime
+#define umq1_itime  um_q.um_q1.q1_itime
+#define umq1_qflags um_q.um_q1.q1_qflags
+#define umq2_bsize  um_q.um_q2.q2_bsize
+#define umq2_bmask  um_q.um_q2.q2_bmask
+
 	void	*um_oldfscompat;		/* save 4.2 rotbl */
 	int	um_maxsymlinklen;
 	int	um_dirblksiz;
@@ -143,6 +159,8 @@ struct ufs_ops {
 /* UFS-specific flags */
 #define UFS_NEEDSWAP	0x01	/* filesystem metadata need byte-swapping */
 #define UFS_ISAPPLEUFS	0x02	/* filesystem is Apple UFS */
+#define UFS_QUOTA	0x04	/* filesystem has QUOTA (v1) */
+#define UFS_QUOTA2	0x08	/* filesystem has QUOTA2 */
 
 /*
  * Filesystem types

@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2009 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2011 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -37,13 +37,13 @@
 
 /* Don't set any optional arguments here so we retain POSIX
  * compatibility with getopt */
-#define IF_OPTS "bc:de:f:gh:i:kl:m:no:pqr:s:t:u:v:wxy:z:ABC:DEF:GI:KLN:O:Q:TVW:X:Z:"
+#define IF_OPTS "bc:de:f:gh:i:kl:m:no:pqr:s:t:u:v:wxy:z:ABC:DEF:GHI:JKLO:Q:S:TUVW:X:Z:"
 
 #define DEFAULT_TIMEOUT		30
-#define DEFAULT_REBOOT		10
+#define DEFAULT_REBOOT		5
 
 #define HOSTNAME_MAX_LEN	250	/* 255 - 3 (FQDN) - 2 (DNS enc) */
-#define VENDORCLASSID_MAX_LEN	48
+#define VENDORCLASSID_MAX_LEN	255
 #define CLIENTID_MAX_LEN	48
 #define USERCLASS_MAX_LEN	255
 #define VENDOR_MAX_LEN		255
@@ -72,6 +72,12 @@
 #define DHCPCD_VENDORRAW	(1 << 23)
 #define DHCPCD_TIMEOUT_IPV4LL	(1 << 24)
 #define DHCPCD_WAITIP		(1 << 25)
+#define DHCPCD_WAITUP		(1 << 26)
+#define DHCPCD_CSR_WARNED	(1 << 27)
+#define DHCPCD_XID_HWADDR	(1 << 28)
+#define DHCPCD_BROADCAST	(1 << 29)
+#define DHCPCD_DUMPLEASE	(1 << 30)
+#define DHCPCD_IPV6RS		(1 << 31)
 
 extern const struct option cf_options[];
 

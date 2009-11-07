@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2009/04/03 10:38:12 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.15 2011/12/25 06:09:08 tsutsui Exp $
 
 WARNS		?= 1
 NOMAN		=
@@ -52,7 +52,7 @@ SRCS		+= pdinfo.c vtoc.c
 .PHONY: vers.c
 vers.c: version
 	${_MKTARGET_CREATE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh -DM ${.CURDIR}/version ${MACHINE}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version ${MACHINE}
 
 SRCS+=	vers.c
 CLEANFILES+= vers.c
@@ -89,7 +89,8 @@ LIBKERN=	${KERNLIB}
 .include "${S}/lib/libz/Makefile.inc"
 LIBZ=		${ZLIB}
 
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes
+CPPFLAGS+= -DLIBSA_ENABLE_LS_OP
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes SA_ENABLE_LS_OP=yes
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
@@ -99,7 +100,7 @@ LIBS		= ${LIBSA} ${LIBZ} ${LIBKERN}
 coffhdrfix:	${COMMON}/coffhdrfix.c
 	${HOST_CC} -o ${COFFHDRFIX} ${COMMON}/coffhdrfix.c
 
-clean cleandir distclean: cleanlibdir
+clean cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
@@ -138,6 +139,8 @@ ${BOOT_KERNEL}.gz: ${BINKERNEL_O} ${OBJS} ${LIBS}
 	    ${BINKERNEL_O}
 	mv ${BOOT_KERNEL}.elf ${BOOT_KERNEL}
 	${OBJDUMP} -h ${BOOT_KERNEL}
-	gzip -9c ${BOOT_KERNEL} > ${.TARGET}.tmp
+	${TOOL_GZIP} -9c ${BOOT_KERNEL} > ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 	ls -al ${.TARGET}
+
+COPTS.ustarfs.c+=	-fno-strict-aliasing

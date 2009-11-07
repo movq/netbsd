@@ -1,4 +1,4 @@
-/*	$NetBSD: bwivar.h,v 1.4 2009/04/26 10:07:48 cegger Exp $	*/
+/*	$NetBSD: bwivar.h,v 1.8 2011/10/15 19:50:20 dholland Exp $	*/
 /*	$OpenBSD: bwivar.h,v 1.23 2008/02/25 20:36:54 mglocker Exp $	*/
 
 /*
@@ -636,7 +636,6 @@ struct bwi_softc {
 	int			 sc_txpwr_calib;
 	int			 sc_debug;	/* BWI_DBG_ */
 
-#if NBPFILTER > 0
 	struct bpf_if		*sc_drvbpf;
  
 	union {
@@ -652,7 +651,6 @@ struct bwi_softc {
 	}			 sc_txtapu;
 #define sc_txtap		 sc_txtapu.th
 	int			 sc_txtap_len;
-#endif
 };
 
 #define BWI_F_BUS_INITED	0x1
@@ -772,7 +770,7 @@ bwi_rf_calc_rssi(struct bwi_mac *_mac, const struct bwi_rxbuf_hdr *_hdr)
 static __inline void
 bwi_rf_lo_update(struct bwi_mac *_mac)
 {
-	return (_mac->mac_rf.rf_lo_update(_mac));
+	_mac->mac_rf.rf_lo_update(_mac);
 }
 
 #define RF_WRITE(mac, ofs, val)		bwi_rf_write((mac), (ofs), (val))
@@ -792,7 +790,7 @@ int		bwi_attach(struct bwi_softc *);
 void		bwi_detach(struct bwi_softc *);
 
 /* Power Management Framework */
-bool		bwi_suspend(device_t db PMF_FN_ARGS);
-bool		bwi_resume(device_t db PMF_FN_ARGS);
+bool		bwi_suspend(device_t, const pmf_qual_t *);
+bool		bwi_resume(device_t, const pmf_qual_t *);
 
 #endif	/* !_DEV_IC_BWIVAR_H */

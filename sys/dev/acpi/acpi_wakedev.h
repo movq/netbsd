@@ -1,7 +1,7 @@
-/* $NetBSD: acpi_wakedev.h,v 1.1 2009/08/04 14:20:40 jmcneill Exp $ */
+/* $NetBSD: acpi_wakedev.h,v 1.6 2011/02/19 09:52:32 jruoho Exp $ */
 
 /*-
- * Copyright (c) 2009 Jared D. McNeill <jmcneill@invisible.ca>
+ * Copyright (c) 2009, 2011 Jared D. McNeill <jmcneill@invisible.ca>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,16 @@
 #ifndef _SYS_DEV_ACPI_ACPI_WAKEDEV_H
 #define _SYS_DEV_ACPI_ACPI_WAKEDEV_H
 
-int	acpi_wakedev_scan(struct acpi_softc *);
-void	acpi_wakedev_commit(struct acpi_softc *);
+struct acpi_wakedev {
+	ACPI_HANDLE	aw_power[8];	/* Power resources */
+	ACPI_HANDLE	aw_handle;	/* Wake GPE handle */
+	ACPI_INTEGER	aw_number;	/* Wake GPE number */
+	ACPI_INTEGER	aw_state;	/* Highest sleep state for wake */
+	bool		aw_enable;	/* Wake enabled (sysctl)? */
+};
 
-#endif /* !_SYS_DEV_ACPI_ACPI_WAKEDEV_H */
+void	 acpi_wakedev_init(struct acpi_devnode *);
+void	 acpi_wakedev_add(struct acpi_devnode *);
+void	 acpi_wakedev_commit(struct acpi_softc *, int);
+
+#endif	/* !_SYS_DEV_ACPI_ACPI_WAKEDEV_H */

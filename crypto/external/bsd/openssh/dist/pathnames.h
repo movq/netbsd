@@ -1,5 +1,5 @@
-/*	$NetBSD: pathnames.h,v 1.3 2009/06/10 16:14:29 njoly Exp $	*/
-/* $OpenBSD: pathnames.h,v 1.17 2008/12/29 02:23:26 stevesk Exp $ */
+/*	$NetBSD: pathnames.h,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: pathnames.h,v 1.22 2011/05/23 03:30:07 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -33,6 +33,7 @@
 #define _PATH_HOST_CONFIG_FILE		SSHDIR "/ssh_config"
 #define _PATH_HOST_KEY_FILE		SSHDIR "/ssh_host_key"
 #define _PATH_HOST_DSA_KEY_FILE		SSHDIR "/ssh_host_dsa_key"
+#define _PATH_HOST_ECDSA_KEY_FILE	SSHDIR "/ssh_host_ecdsa_key"
 #define _PATH_HOST_RSA_KEY_FILE		SSHDIR "/ssh_host_rsa_key"
 #define _PATH_DH_MODULI			ETCDIR "/moduli"
 /* Backwards compatibility */
@@ -67,6 +68,7 @@
  */
 #define _PATH_SSH_CLIENT_IDENTITY	".ssh/identity"
 #define _PATH_SSH_CLIENT_ID_DSA		".ssh/id_dsa"
+#define _PATH_SSH_CLIENT_ID_ECDSA	".ssh/id_ecdsa"
 #define _PATH_SSH_CLIENT_ID_RSA		".ssh/id_rsa"
 
 /*
@@ -120,6 +122,9 @@
 
 /* Location of ssh-keysign for hostbased authentication */
 #define _PATH_SSH_KEY_SIGN		"/usr/libexec/ssh-keysign"
+
+/* Location of ssh-pkcs11-helper to support keys in tokens */
+#define _PATH_SSH_PKCS11_HELPER		"/usr/libexec/ssh-pkcs11-helper"
 
 /* xauth for X11 forwarding */
 #define _PATH_XAUTH			X11BASE "/bin/xauth"

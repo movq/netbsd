@@ -1,9 +1,25 @@
-#	$NetBSD: Makefile,v 1.1 2008/07/29 13:17:41 pooka Exp $
+#	$NetBSD: Makefile,v 1.5 2010/11/30 14:23:24 pooka Exp $
 #
 
-.PATH:		${.CURDIR}/../../sys/rump/librump/rumpuser
+WARNS=		4
 
-LIBDPLIBS+=     pthread ${.CURDIR}/../libpthread
+# rumpuser.h is in sys/rump for inclusion by kernel components
+.PATH:		${.CURDIR}/../../sys/rump/include/rump
+
+LIB=		rumpuser
+LIBDPLIBS+=	pthread ${.CURDIR}/../libpthread
+#CPPFLAGS+=	-D_DIAGNOSTIC
+
+SRCS=		rumpuser.c rumpuser_net.c
+SRCS+=		rumpuser_pth.c
+SRCS+=		rumpuser_dl.c rumpuser_sp.c rumpuser_daemonize.c
+
+INCSDIR=	/usr/include/rump
+INCS=		rumpuser.h
+
 MAN=		rumpuser.3
 
-.include "${.CURDIR}/../../sys/rump/librump/rumpuser/Makefile"
+CPPFLAGS+=	-D_REENTRANT
+
+
+.include <bsd.lib.mk>

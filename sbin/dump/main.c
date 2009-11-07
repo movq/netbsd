@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.64 2008/07/20 01:20:22 lukem Exp $	*/
+/*	$NetBSD: main.c,v 1.66 2010/03/11 01:32:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.64 2008/07/20 01:20:22 lukem Exp $");
+__RCSID("$NetBSD: main.c,v 1.66 2010/03/11 01:32:59 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -134,7 +134,7 @@ main(int argc, char *argv[])
 
 	obsolete(&argc, &argv);
 	while ((ch = getopt(argc, argv,
-	    "0123456789aB:b:cd:eFf:h:k:l:L:nr:s:StT:uWwx:X")) != -1)
+	    "0123456789aB:b:cd:eFf:h:ik:l:L:nr:s:StT:uWwx:X")) != -1)
 		switch (ch) {
 		/* dump level */
 		case '0': case '1': case '2': case '3': case '4':
@@ -179,6 +179,11 @@ main(int argc, char *argv[])
 
 		case 'h':
 			honorlevel = numarg("honor level", 0L, 10L);
+			break;
+
+		case 'i':	/* "true incremental" regardless level */
+			level = 'i';
+			trueinc = 1;
 			break;
 
 		case 'k':
@@ -465,7 +470,8 @@ main(int argc, char *argv[])
 
 	needswap = fs_read_sblock(sblock_buf);
 
-	spcl.c_level = iswap32(level - '0');
+	/* true incremental is always a level 10 dump */
+	spcl.c_level = trueinc? iswap32(10): iswap32(level - '0');
 	spcl.c_type = iswap32(TS_TAPE);
 	spcl.c_date = iswap32(spcl.c_date);
 	spcl.c_ddate = iswap32(spcl.c_ddate);

@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_priv.h,v 1.41 2008/08/11 16:23:37 pooka Exp $	*/
+/*	$NetBSD: puffs_priv.h,v 1.44.4.1 2012/04/23 16:48:58 riz Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007, 2008 Antti Kantee.  All Rights Reserved.
@@ -31,19 +31,13 @@
 #include <sys/types.h>
 #include <fs/puffs/puffs_msgif.h>
 
+#include <pthread.h>
 #include <puffs.h>
 #include <ucontext.h>
-
-#ifdef PUFFS_WITH_THREADS
-#include <pthread.h>
 
 extern pthread_mutex_t pu_lock;
 #define PU_LOCK() pthread_mutex_lock(&pu_lock)
 #define PU_UNLOCK() pthread_mutex_unlock(&pu_lock)
-#else
-#define PU_LOCK()
-#define PU_UNLOCK()
-#endif
 
 #define PU_CMAP(pu, c) (pu->pu_cmap ? pu->pu_cmap(pu,c) : (struct puffs_node*)c)
 
@@ -116,10 +110,11 @@ struct puffs_usermount {
 #define PU_HASKQ	0x0400
 #define PU_PUFFSDAEMON	0x0800
 #define PU_MAINRESTORE	0x1000
+#define PU_DONEXIT	0x2000
 #define PU_SETSTATE(pu, s) (pu->pu_state = (s) | (pu->pu_state & ~PU_STATEMASK))
 #define PU_SETSFLAG(pu, s) (pu->pu_state |= (s))
 #define PU_CLRSFLAG(pu, s) \
-    (pu->pu_state = ((pu->pu_state &= ~(s)) | (pu->pu_state & PU_STATEMASK)))
+    (pu->pu_state = ((pu->pu_state & ~(s)) | (pu->pu_state & PU_STATEMASK)))
 	int			pu_dpipe[2];
 
 	struct puffs_node	*pu_pn_root;
@@ -149,7 +144,7 @@ struct puffs_usermount {
 	LIST_HEAD(, puffs_fctrl_io) pu_ios;
 	LIST_HEAD(, puffs_fctrl_io) pu_ios_rmlist;
 	struct kevent		*pu_evs;
-	size_t			pu_nfds;
+	size_t			pu_nevs;
 
 	puffs_ml_loop_fn	pu_ml_lfn;
 	struct timespec		pu_ml_timeout;
@@ -204,6 +199,9 @@ struct puffs_newinfo {
 	enum vtype	*pni_vtype;
 	voff_t		*pni_size;
 	dev_t		*pni_rdev;
+	struct vattr	*pni_va;
+	struct timespec	*pni_va_ttl;
+	struct timespec	*pni_cn_ttl;
 };
 
 #define PUFFS_MAKEKCRED(to, from)					\

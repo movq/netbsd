@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2009/09/24 21:04:45 he Exp $
+#	$NetBSD: Makefile,v 1.15 2010/02/11 09:06:47 roy Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -16,7 +16,7 @@ MTREECONF=	${DISTRIBDIR}/common/mtree.common
 IMAGEENDIAN=	le
 MAKEDEVTARGETS=	ramdisk
 IMAGEDEPENDS=	${CRUNCHBIN} \
-		dot.profile ${DISTRIBDIR}/common/termcap \
+		dot.profile \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
 		${DISTRIBDIR}/common/services

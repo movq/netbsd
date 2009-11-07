@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.eat.c,v 1.9 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: hack.eat.c,v 1.12 2011/08/07 06:03:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.eat.c,v 1.9 2009/08/12 07:28:40 dholland Exp $");
+__RCSID("$NetBSD: hack.eat.c,v 1.12 2011/08/07 06:03:45 dholland Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -138,7 +138,7 @@ opentin(void)
 	useup(tin.tin);
 	r = rn2(2 * TTSZ);
 	if (r < TTSZ) {
-		pline(tintxts[r].txt);
+		pline("%s", tintxts[r].txt);
 		lesshungry(tintxts[r].nut);
 		if (r == 1) {	/* SALMON */
 			Glib = rnd(15);
@@ -212,7 +212,7 @@ gotit:
 				goto no_opener;
 			}
 			pline("Using your %s you try to open the tin.",
-			      aobjnam(uwep, (char *) 0));
+			      aobjnam(uwep, NULL));
 		} else {
 	no_opener:
 			pline("It is not so easy to open this tin.");
@@ -495,11 +495,11 @@ eatcorpse(struct obj *otmp)
 	case 'n':
 		u.uhp = u.uhpmax;
 		flags.botl = 1;
-		/* fall into next case */
+		/* FALLTHROUGH */
 	case '@':
 		pline("You cannibal! You will be sorry for this!");
 		/* not tp++; */
-		/* fall into next case */
+		/* FALLTHROUGH */
 	case 'd':
 		Aggravate_monster |= INTRINSIC;
 		break;
@@ -512,12 +512,12 @@ eatcorpse(struct obj *otmp)
 			Invis |= INTRINSIC;
 			See_invisible |= INTRINSIC;
 		}
-		/* fall into next case */
+		/* FALLTHROUGH */
 	case 'y':
 #ifdef QUEST
 		u.uhorizon++;
 #endif	/* QUEST */
-		/* fall into next case */
+		/* FALLTHROUGH */
 	case 'B':
 		Confusion = 50;
 		break;

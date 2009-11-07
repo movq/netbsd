@@ -1,4 +1,4 @@
-.\" $NetBSD: usermgmt.conf.5,v 1.5 2008/07/18 21:03:03 apb Exp $
+.\" $NetBSD: usermgmt.conf.5,v 1.7 2009/12/31 20:14:19 wiz Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -29,7 +29,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd July 18, 2008
+.Dd December 31, 2009
 .Dt USERMGMT.CONF 5
 .Os
 .\" turn off hyphenation
@@ -120,6 +120,14 @@ If unspecified, the default is
 It has the format:
 .Bd -unfilled -offset indent -compact
 .Ic range Ar starting-uid Ns Li .. Ns Ar ending-uid
+.Ed
+.It Ic gid_range
+specifies the gid boundaries for new groups.
+If unspecified, the default is
+.Dq 1000..60000 .
+It has the format:
+.Bd -unfilled -offset indent -compact
+.Ic gid_range Ar starting-gid Ns Li .. Ns Ar ending-gid
 .Ed
 .It Ic shell
 sets the default login shell for new users.

@@ -1,4 +1,4 @@
-/*	$NetBSD: kernel.c,v 1.1 2009/08/07 20:57:56 haad Exp $	*/
+/*     $NetBSD: kernel.c,v 1.5 2010/12/28 13:36:09 haad Exp $  */
 
 /*
  * CDDL HEADER START
@@ -29,7 +29,7 @@
 #pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: kernel.c,v 1.1 2009/08/07 20:57:56 haad Exp $");
+__RCSID("$NetBSD: kernel.c,v 1.5 2010/12/28 13:36:09 haad Exp $");
 
 #include <sys/zfs_context.h>
 #include <sys/sysctl.h>
@@ -54,6 +54,7 @@ __RCSID("$NetBSD: kernel.c,v 1.1 2009/08/07 20:57:56 haad Exp $");
 #ifdef XXXNETBSD
 int hz = 119;	/* frequency when using gethrtime() >> 23 for lbolt */
 #endif
+int aok;
 uint64_t physmem;
 vnode_t *rootdir = (vnode_t *)0xabcd1234;
 char hw_serial[11];
@@ -62,6 +63,9 @@ size_t pgsize;
 struct utsname utsname = {
 	"userland"
 };
+
+/* this only exists to have its address taken */
+struct proc p0;
 
 /*
  * =========================================================================
@@ -208,6 +212,24 @@ vn_openat(char *path, int x1, int flags, int mode, vnode_t **vpp, int x2,
 
 	return (ret);
 }
+
+int
+vn_getattr(vnode_t *vp, vattr_t *va)
+{
+	int fd;
+	struct stat64 st;
+
+	fd = vp->v_fd;
+
+	if (fstat64(fd, &st) == -1)
+		return (errno);
+
+	vp->v_size = st.st_size;
+	va->va_size = st.st_size;
+
+	return 0;
+}
+
 
 /*ARGSUSED*/
 int
@@ -593,6 +615,8 @@ kernel_init(int mode)
 
 	snprintf(hw_serial, sizeof (hw_serial), "%ld", gethostid());
 
+	system_taskq_init();
+
 	spa_init(mode);
 }
 
@@ -691,4 +715,35 @@ ptob(size_t npg)
 {
 
 	return npg * pgsize;
+}
+
+void
+print_timestamp(int fmt)
+{
+
+	return;
+}
+
+/*
+ * Do not change the length of the returned string; it must be freed
+ * with strfree().
+ */
+char *
+kmem_asprintf(const char *fmt, ...)
+{
+	int size;
+	va_list adx;
+	char *buf;
+
+	va_start(adx, fmt);
+	size = vsnprintf(NULL, 0, fmt, adx) + 1;
+	va_end(adx);
+
+	buf = kmem_alloc(size, KM_SLEEP);
+
+	va_start(adx, fmt);
+	size = vsnprintf(buf, size, fmt, adx);
+	va_end(adx);
+
+	return (buf);
 }

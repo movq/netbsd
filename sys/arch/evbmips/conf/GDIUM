@@ -1,4 +1,4 @@
-# $NetBSD: GDIUM,v 1.6 2009/08/12 19:39:51 macallan Exp $
+# $NetBSD: GDIUM,v 1.15 2011/12/18 05:49:26 dholland Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/evbmips/conf/std.gdium"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GDIUM-$Revision: 1.6 $"
+#ident 		"GDIUM-$Revision: 1.15 $"
 
 maxusers	16
 
@@ -75,7 +75,6 @@ file-system 	MSDOSFS		# MS-DOS file system
 file-system 	KERNFS		# /kern (kernel informational filesystem)
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION
@@ -84,9 +83,10 @@ file-system	PTYFS		# /dev/pts/N support
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 options 	NFSSERVER	# Sun NFS-compatible filesystem (server)
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -102,6 +102,11 @@ options 	INET6		# IPV6
 #options 	ISO		# OSI networking
 #options 	TPIP		# TPIP
 #options 	EON		# OSI tunneling over IP
+options 	PFIL_HOOKS	# pfil(9) packet filter hooks
+options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
 #options 	ALTQ_BLUE	# Stochastic Fair Blue
@@ -151,7 +156,13 @@ mainbus0	at root
 cpu0		at mainbus0
 bonito0		at mainbus0
 pci0		at bonito0
-voyagerfb0	at pci0 dev ? function ?
+voyager0	at pci0 dev ? function ?
+voyagerfb0	at voyager0
+iic*		at voyager0
+strtc*	at iic? addr 0x68
+options	STRTC_NO_USERRAM
+lmtemp*	at iic? addr 0x48
+#stvii*	at iic? addr 0x40
 #genfb0		at pci0 dev ? function ?
 wsdisplay0	at wsemuldisplaydev?
 ehci*		at pci0 dev ? function ?
@@ -194,6 +205,9 @@ ulpt*		at uhub? port ? configuration ? interface ?
 umodem*		at uhub? port ? configuration ?
 ucom*		at umodem?
 
+# Option N.V. Wireless WAN modems
+uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 umass*		at uhub? port ? configuration ? interface ?
 scsibus*	 at umass? channel ?
@@ -229,13 +243,12 @@ pseudo-device	ipfilter		# IP filter, NAT
 pseudo-device	vnd			# virtual disk ick
 #options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	ccd		4	# concatenated disks
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 #pseudo-device	cgd		4	# cryptographic disks
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 
 pseudo-device	wsmux			# mouse & keyboard multiplexor
-#pseudo-device	md		1	# memory disk device (ramdisk)
+#pseudo-device	md			# memory disk device (ramdisk)
 
 #pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components

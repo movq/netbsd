@@ -1,22 +1,86 @@
-.\"	$NetBSD: install,v 1.4 2008/09/06 22:22:39 tsutsui Exp $
+.\"	$NetBSD: install,v 1.10 2011/05/30 06:19:54 wiz Exp $
+.
+.Ss2 Prepare the NFS or TFTP server
+.
+Set up an NFS server and copy the install kernel renamed into
+.Pa netbsd
+to its root partition. Optionally copy the kernel into your TFTP directory
+and make sure the
+.Pa tftpd
+service is running.
+.
+.Ss2 The altboot bootloader
+The
+.Pa altboot.bin
+binary file loads a
+.Nx
+kernel from the root partition of a local disk, from TFTP or from NFS.
+This bootloader binary should be made available by one of the following
+methods (depending on the firmware):
+.(bullet -compact
+TFTP server
+.It
+NFS server
+.It
+Serial line upload
+.It
+Flash ROM
+.bullet)
+.Pp
+When your firmware is restricted to
+.Pa bootm
+as the only command to run a program you should use
+.Pa altboot.img
+, which fakes a Linux kernel module.
 .
 .Ss2 Booting the installer
-.
-Once the kernel is downloaded, type "go 90000" to start the kernel.
-.
-.Ss2 Example of a normal boot
-.
-Of course, a lot of the information in this example depends on your model
-and what your boot method is, but we'll include this anyways just so you
-get an idea of what to expect (user-typed commands are in
-.Ic bold ) .
-.(disp
-.No DINK32\*[Gt]\*[Gt] Ic go 90000
-[ XXX - insert boot w/ installer on ramdisk instead of this example ]
-.disp)
-.
-.Ss2 Common Problems and Error Messages
-.
-Insufficient data.
+Depending on whether the serial console is attached to the first or the
+second UART you will have to boot
+.Pa netbsd-INSTALL
+(1st UART at 0x4500)
+or
+.Pa netbsd-INSTALL_KURO
+(2nd UART at 0x4600).
+KuroBox and LinkStation systems are known to have the console on the
+second UART.
+.Pp
+In most cases your NAS will run
+.Tn "PPCBoot"
+or
+.Tn "U-Boot"
+as firmware. You can access its command line via the serial adapter cable.
+When auto-booting is enabled this will usually require to press a key
+quickly after the system was switched on.
+Then load the
+.Pa altboot.bin
+file into memory at
+.Pa 0x1000000
+and boot the installation kernel with
+.Pp
+.Dl > Ic "go 0x1000000 tftp:"
+.Pp
+for TFTP, or with
+.Pp
+.Dl > Ic "go 0x1000000 nfs:"
+.Pp
+when the kernel resides on NFS.
+.Pp
+Note, that when using
+.Pa altboot.img
+with
+.Pa bootm
+instead of
+.Pa altboot.bin
+you have to pass arguments like
+.Pa tftp:
+or
+.Pa nfs:
+in the
+.Pa bootargs
+environment variable.
+.Pp
+The installation kernel will run
+.Pa sysinst
+from an internal memory disk image.
 .
 .so ../common/sysinst

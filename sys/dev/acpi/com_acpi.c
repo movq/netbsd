@@ -1,4 +1,4 @@
-/* $NetBSD: com_acpi.c,v 1.29 2009/07/13 12:57:04 kiyohara Exp $ */
+/* $NetBSD: com_acpi.c,v 1.32 2010/07/22 16:35:24 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,27 +26,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_acpi.c,v 1.29 2009/07/13 12:57:04 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_acpi.c,v 1.32 2010/07/22 16:35:24 pgoyette Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/proc.h>
+#include <sys/systm.h>
 #include <sys/termios.h>
 
-#include <sys/bus.h>
-
-#include <dev/isa/isavar.h>
-#include <dev/isa/isadmavar.h>
-
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/ic/comvar.h>
+
+#include <dev/isa/isadmavar.h>
 
 static int	com_acpi_match(device_t, cfdata_t , void *);
 static void	com_acpi_attach(device_t, device_t, void *);
@@ -57,7 +48,7 @@ struct com_acpi_softc {
 };
 
 CFATTACH_DECL_NEW(com_acpi, sizeof(struct com_acpi_softc), com_acpi_match,
-    com_acpi_attach, NULL, com_activate);
+    com_acpi_attach, NULL, NULL);
 
 /*
  * Supported device IDs
@@ -166,7 +157,16 @@ com_acpi_attach(device_t parent, device_t self, void *aux)
 
 	if (!pmf_device_register(self, NULL, com_resume))
 		aprint_error_dev(self, "couldn't establish a power handler\n");
+	goto cleanup;
 
+	/*
+	 * In case of irq resource or i/o space mapping error, just set
+	 * a NULL power handler.  This may allow us to sleep later on.
+	 */
  out:
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish a power handler\n");
+
+ cleanup:
 	acpi_resource_cleanup(&res);
 }

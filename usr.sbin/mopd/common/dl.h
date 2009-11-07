@@ -1,4 +1,4 @@
-/*	$NetBSD: dl.h,v 1.5 2009/10/20 00:51:13 snj Exp $	*/
+/*	$NetBSD: dl.h,v 1.7 2011/08/30 19:49:10 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -23,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$NetBSD: dl.h,v 1.5 2009/10/20 00:51:13 snj Exp $
+ *	$NetBSD: dl.h,v 1.7 2011/08/30 19:49:10 joerg Exp $
  *
  */
 
@@ -31,7 +31,7 @@
 #define _DL_H_
 
 __BEGIN_DECLS
-void	mopDumpDL       __P((FILE *, u_char *, int));
+void	mopDumpDL(FILE *, const u_char *, int);
 __END_DECLS
 
 #endif /* _DL_H_ */

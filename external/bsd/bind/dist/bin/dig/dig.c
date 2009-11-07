@@ -1,7 +1,7 @@
-/*	$NetBSD: dig.c,v 1.1.1.3 2009/10/25 00:01:30 christos Exp $	*/
+/*	$NetBSD: dig.c,v 1.3.4.1 2012/06/05 21:15:40 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dig.c,v 1.233 2009/10/03 18:03:53 each Exp */
+/* Id: dig.c,v 1.245 2011/12/07 17:23:28 each Exp  */
 
 /*! \file */
 
@@ -46,8 +46,6 @@
 #include <dns/result.h>
 #include <dns/tsig.h>
 
-#include <bind9/getaddresses.h>
-
 #include <dig/dig.h>
 
 #define ADD_STRING(b, s) { 				\
@@ -70,7 +68,9 @@ static char domainopt[DNS_NAME_MAXTEXT];
 
 static isc_boolean_t short_form = ISC_FALSE, printcmd = ISC_TRUE,
 	ip6_int = ISC_FALSE, plusquest = ISC_FALSE, pluscomm = ISC_FALSE,
-	multiline = ISC_FALSE, nottl = ISC_FALSE, noclass = ISC_FALSE;
+	multiline = ISC_FALSE, nottl = ISC_FALSE, noclass = ISC_FALSE,
+	onesoa = ISC_FALSE, rrcomments = ISC_FALSE;
+static isc_uint32_t splitwidth = 0xffffffff;
 
 /*% opcode text */
 static const char * const opcodetext[] = {
@@ -189,7 +189,7 @@ help(void) {
 "                 +domain=###         (Set default domainname)\n"
 "                 +bufsize=###        (Set EDNS0 Max UDP packet size)\n"
 "                 +ndots=###          (Set NDOTS value)\n"
-"                 +edns=###           (Set EDNS version)\n"
+"                 +edns=###           (Set EDNS version) [0]\n"
 "                 +[no]search         (Set whether to use searchlist)\n"
 "                 +[no]showsearch     (Search with intermediate results)\n"
 "                 +[no]defname        (Ditto)\n"
@@ -204,6 +204,8 @@ help(void) {
 "                 +[no]cl             (Control display of class in records)\n"
 "                 +[no]cmd            (Control display of command line)\n"
 "                 +[no]comments       (Control display of comment lines)\n"
+"                 +[no]rrcomments     (Control display of per-record "
+				       "comments)\n"
 "                 +[no]question       (Control display of question)\n"
 "                 +[no]answer         (Control display of answer)\n"
 "                 +[no]authority      (Control display of authority)\n"
@@ -216,7 +218,7 @@ help(void) {
 "                 +[no]qr             (Print question before sending)\n"
 "                 +[no]nssearch       (Search all authoritative nameservers)\n"
 "                 +[no]identify       (ID responders in short answers)\n"
-"                 +[no]trace          (Trace delegation down from root)\n"
+"                 +[no]trace          (Trace delegation down from root [+dnssec])\n"
 "                 +[no]dnssec         (Request DNSSEC records)\n"
 "                 +[no]nsid           (Request Name Server ID)\n"
 #ifdef DIG_SIGCHASE
@@ -226,7 +228,9 @@ help(void) {
 "                 +[no]topdown        (Do DNSSEC validation top down mode)\n"
 #endif
 #endif
+"                 +[no]split=##       (Split hex/base64 fields into chunks)\n"
 "                 +[no]multiline      (Print records in an expanded format)\n"
+"                 +[no]onesoa         (AXFR prints only one soa record)\n"
 "        global d-opts and servers (before host name) affect all queries.\n"
 "        local d-opts and servers (after host name) affect only that lookup.\n"
 "        -h                           (print help and exit)\n"
@@ -311,6 +315,8 @@ say_message(dns_rdata_t *rdata, dig_query_t *query, isc_buffer_t *buf) {
 		ADD_STRING(buf, " ");
 	}
 	result = dns_rdata_totext(rdata, NULL, buf);
+	if (result == ISC_R_NOSPACE)
+		return (result);
 	check_result(result, "dns_rdata_totext");
 	if (query->lookup->identify) {
 		TIME_NOW(&now);
@@ -333,10 +339,8 @@ short_answer(dns_message_t *msg, dns_messagetextflag_t flags,
 {
 	dns_name_t *name;
 	dns_rdataset_t *rdataset;
-	isc_buffer_t target;
 	isc_result_t result, loopresult;
 	dns_name_t empty_name;
-	char t[4096];
 	dns_rdata_t rdata = DNS_RDATA_INIT;
 
 	UNUSED(flags);
@@ -352,8 +356,6 @@ short_answer(dns_message_t *msg, dns_messagetextflag_t flags,
 		name = NULL;
 		dns_message_currentname(msg, DNS_SECTION_ANSWER, &name);
 
-		isc_buffer_init(&target, t, sizeof(t));
-
 		for (rdataset = ISC_LIST_HEAD(name->list);
 		     rdataset != NULL;
 		     rdataset = ISC_LIST_NEXT(rdataset, link)) {
@@ -362,6 +364,8 @@ short_answer(dns_message_t *msg, dns_messagetextflag_t flags,
 				dns_rdataset_current(rdataset, &rdata);
 				result = say_message(&rdata, query,
 						     buf);
+				if (result == ISC_R_NOSPACE)
+					return (result);
 				check_result(result, "say_message");
 				loopresult = dns_rdataset_next(rdataset);
 				dns_rdata_reset(&rdata);
@@ -393,6 +397,8 @@ printrdataset(dns_name_t *owner_name, dns_rdataset_t *rdataset,
 		styleflags |= DNS_STYLEFLAG_NO_TTL;
 	if (noclass)
 		styleflags |= DNS_STYLEFLAG_NO_CLASS;
+	if (rrcomments)
+		styleflags |= DNS_STYLEFLAG_RRCOMMENT;
 	if (multiline) {
 		styleflags |= DNS_STYLEFLAG_OMIT_OWNER;
 		styleflags |= DNS_STYLEFLAG_OMIT_CLASS;
@@ -401,16 +407,21 @@ printrdataset(dns_name_t *owner_name, dns_rdataset_t *rdataset,
 		styleflags |= DNS_STYLEFLAG_TTL;
 		styleflags |= DNS_STYLEFLAG_MULTILINE;
 		styleflags |= DNS_STYLEFLAG_COMMENT;
+		styleflags |= DNS_STYLEFLAG_RRCOMMENT;
 	}
+
 	if (multiline || (nottl && noclass))
-		result = dns_master_stylecreate(&style, styleflags,
-						24, 24, 24, 32, 80, 8, mctx);
+		result = dns_master_stylecreate2(&style, styleflags,
+						24, 24, 24, 32, 80, 8,
+						splitwidth, mctx);
 	else if (nottl || noclass)
-		result = dns_master_stylecreate(&style, styleflags,
-						24, 24, 32, 40, 80, 8, mctx);
+		result = dns_master_stylecreate2(&style, styleflags,
+						24, 24, 32, 40, 80, 8,
+						splitwidth, mctx);
 	else
-		result = dns_master_stylecreate(&style, styleflags,
-						24, 32, 40, 48, 80, 8, mctx);
+		result = dns_master_stylecreate2(&style, styleflags,
+						24, 32, 40, 48, 80, 8,
+						splitwidth, mctx);
 	check_result(result, "dns_master_stylecreate");
 
 	result = dns_master_rdatasettotext(owner_name, rdataset, style, target);
@@ -435,6 +446,10 @@ printmessage(dig_query_t *query, dns_message_t *msg, isc_boolean_t headers) {
 	unsigned int styleflags = 0;
 
 	styleflags |= DNS_STYLEFLAG_REL_OWNER;
+	if (query->lookup->comments)
+		styleflags |= DNS_STYLEFLAG_COMMENT;
+	if (rrcomments)
+		styleflags |= DNS_STYLEFLAG_RRCOMMENT;
 	if (nottl)
 		styleflags |= DNS_STYLEFLAG_NO_TTL;
 	if (noclass)
@@ -446,17 +461,20 @@ printmessage(dig_query_t *query, dns_message_t *msg, isc_boolean_t headers) {
 		styleflags |= DNS_STYLEFLAG_OMIT_TTL;
 		styleflags |= DNS_STYLEFLAG_TTL;
 		styleflags |= DNS_STYLEFLAG_MULTILINE;
-		styleflags |= DNS_STYLEFLAG_COMMENT;
+		styleflags |= DNS_STYLEFLAG_RRCOMMENT;
 	}
 	if (multiline || (nottl && noclass))
-		result = dns_master_stylecreate(&style, styleflags,
-						24, 24, 24, 32, 80, 8, mctx);
+		result = dns_master_stylecreate2(&style, styleflags,
+						 24, 24, 24, 32, 80, 8,
+						 splitwidth, mctx);
 	else if (nottl || noclass)
-		result = dns_master_stylecreate(&style, styleflags,
-						24, 24, 32, 40, 80, 8, mctx);
+		result = dns_master_stylecreate2(&style, styleflags,
+						 24, 24, 32, 40, 80, 8,
+						 splitwidth, mctx);
 	else
-		result = dns_master_stylecreate(&style, styleflags,
-						24, 32, 40, 48, 80, 8, mctx);
+		result = dns_master_stylecreate2(&style, styleflags,
+						 24, 32, 40, 48, 80, 8,
+						 splitwidth, mctx);
 	check_result(result, "dns_master_stylecreate");
 
 	if (query->lookup->cmdline[0] != 0) {
@@ -473,10 +491,11 @@ printmessage(dig_query_t *query, dns_message_t *msg, isc_boolean_t headers) {
 		flags |= DNS_MESSAGETEXTFLAG_NOHEADERS;
 		flags |= DNS_MESSAGETEXTFLAG_NOCOMMENTS;
 	}
+	if (onesoa && query->lookup->rdtype == dns_rdatatype_axfr)
+		flags |= (query->msg_count == 0) ? DNS_MESSAGETEXTFLAG_ONESOA :
+						   DNS_MESSAGETEXTFLAG_OMITSOA;
 	if (!query->lookup->comments)
 		flags |= DNS_MESSAGETEXTFLAG_NOCOMMENTS;
-
-	result = ISC_R_SUCCESS;
 
 	result = isc_buffer_allocate(mctx, &buf, len);
 	check_result(result, "isc_buffer_allocate");
@@ -510,6 +529,8 @@ printmessage(dig_query_t *query, dns_message_t *msg, isc_boolean_t headers) {
 				printf(" ad");
 			if ((msg->flags & DNS_MESSAGEFLAG_CD) != 0)
 				printf(" cd");
+			if ((msg->flags & 0x0040U) != 0)
+				printf("; MBZ: 0x4");
 
 			printf("; QUERY: %u, ANSWER: %u, "
 			       "AUTHORITY: %u, ADDITIONAL: %u\n",
@@ -715,14 +736,14 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 		size_t _l = strlen(cmd); \
 		if (_l >= sizeof(A) || strncasecmp(cmd, A, _l) != 0) \
 			goto invalid_option; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #define FULLCHECK2(A, B) \
 	do { \
 		size_t _l = strlen(cmd); \
 		if ((_l >= sizeof(A) || strncasecmp(cmd, A, _l) != 0) && \
 		    (_l >= sizeof(B) || strncasecmp(cmd, B, _l) != 0)) \
 			goto invalid_option; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 	switch (cmd[0]) {
 	case 'a':
@@ -753,6 +774,7 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 			lookup->section_answer = state;
 			lookup->section_additional = state;
 			lookup->comments = state;
+			rrcomments = state;
 			lookup->stats = state;
 			printcmd = state;
 			break;
@@ -911,6 +933,7 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 					lookup->identify = ISC_TRUE;
 					lookup->stats = ISC_FALSE;
 					lookup->comments = ISC_FALSE;
+					rrcomments = ISC_FALSE;
 					lookup->section_additional = ISC_FALSE;
 					lookup->section_authority = ISC_FALSE;
 					lookup->section_question = ISC_FALSE;
@@ -926,6 +949,10 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 		default:
 			goto invalid_option;
 		}
+		break;
+	case 'o':
+		FULLCHECK("onesoa");
+		onesoa = state;
 		break;
 	case 'q':
 		switch (cmd[1]) {
@@ -967,6 +994,10 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 				goto invalid_option;
 			}
 			break;
+		case 'r': /* rrcomments */
+			FULLCHECK("rrcomments");
+			rrcomments = state;
+			break;
 		default:
 			goto invalid_option;
 		}
@@ -993,6 +1024,7 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 					lookup->section_authority = ISC_FALSE;
 					lookup->section_question = ISC_FALSE;
 					lookup->comments = ISC_FALSE;
+					rrcomments = ISC_FALSE;
 					lookup->stats = ISC_FALSE;
 				}
 				break;
@@ -1015,6 +1047,36 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 				lookup->dnssec = ISC_TRUE;
 			break;
 #endif
+		case 'p': /* split */
+			FULLCHECK("split");
+			if (value != NULL && !state)
+				goto invalid_option;
+			if (!state) {
+				splitwidth = 0;
+				break;
+			} else if (value == NULL)
+				break;
+
+			result = parse_uint(&splitwidth, value,
+					    1023, "split");
+			if (splitwidth % 4 != 0) {
+				splitwidth = ((splitwidth + 3) / 4) * 4;
+				fprintf(stderr, ";; Warning, split must be "
+						"a multiple of 4; adjusting "
+						"to %d\n", splitwidth);
+			}
+			/*
+			 * There is an adjustment done in the
+			 * totext_<rrtype>() functions which causes
+			 * splitwidth to shrink.  This is okay when we're
+			 * using the default width but incorrect in this
+			 * case, so we correct for it
+			 */
+			if (splitwidth)
+				splitwidth += 3;
+			if (result != ISC_R_SUCCESS)
+				fatal("Couldn't parse retries");
+			break;
 		case 't': /* stats */
 			FULLCHECK("stats");
 			lookup->stats = state;
@@ -1059,10 +1121,12 @@ plus_option(char *option, isc_boolean_t is_batchfile,
 					lookup->recurse = ISC_FALSE;
 					lookup->identify = ISC_TRUE;
 					lookup->comments = ISC_FALSE;
+					rrcomments = ISC_FALSE;
 					lookup->stats = ISC_FALSE;
 					lookup->section_additional = ISC_FALSE;
 					lookup->section_authority = ISC_TRUE;
 					lookup->section_question = ISC_FALSE;
+					lookup->dnssec = ISC_TRUE;
 					usesearch = ISC_FALSE;
 				}
 				break;
@@ -1429,30 +1493,6 @@ preparse_args(int argc, char **argv) {
 }
 
 static void
-getaddresses(dig_lookup_t *lookup, const char *host) {
-	isc_result_t result;
-	isc_sockaddr_t sockaddrs[DIG_MAX_ADDRESSES];
-	isc_netaddr_t netaddr;
-	int count, i;
-	dig_server_t *srv;
-	char tmp[ISC_NETADDR_FORMATSIZE];
-
-	result = bind9_getaddresses(host, 0, sockaddrs,
-				    DIG_MAX_ADDRESSES, &count);
-	if (result != ISC_R_SUCCESS)
-	fatal("couldn't get address for '%s': %s",
-	      host, isc_result_totext(result));
-
-	for (i = 0; i < count; i++) {
-		isc_netaddr_fromsockaddr(&netaddr, &sockaddrs[i]);
-		isc_netaddr_format(&netaddr, tmp, sizeof(tmp));
-		srv = make_server(tmp, host);
-		ISC_LIST_APPEND(lookup->my_server_list, srv, link);
-	}
-	addresscount = count;
-}
-
-static void
 parse_args(isc_boolean_t is_batchfile, isc_boolean_t config_only,
 	   int argc, char **argv) {
 	isc_result_t result;
@@ -1490,6 +1530,8 @@ parse_args(isc_boolean_t is_batchfile, isc_boolean_t config_only,
 	if (!is_batchfile) {
 		debug("making new lookup");
 		default_lookup = make_empty_lookup();
+		default_lookup->adflag = ISC_TRUE;
+		default_lookup->edns = 0;
 
 #ifndef NOPOSIX
 		/*
@@ -1546,7 +1588,7 @@ parse_args(isc_boolean_t is_batchfile, isc_boolean_t config_only,
 		if (strncmp(rv[0], "%", 1) == 0)
 			break;
 		if (strncmp(rv[0], "@", 1) == 0) {
-			getaddresses(lookup, &rv[0][1]);
+			addresscount = getaddresses(lookup, &rv[0][1], NULL);
 		} else if (rv[0][0] == '+') {
 			plus_option(&rv[0][1], is_batchfile,
 				    lookup);
@@ -1583,7 +1625,6 @@ parse_args(isc_boolean_t is_batchfile, isc_boolean_t config_only,
 						(isc_textregion_t *)&tr);
 					if (result == ISC_R_SUCCESS &&
 					    rdtype == dns_rdatatype_ixfr) {
-						result = DNS_R_UNKNOWN;
 						fprintf(stderr, ";; Warning, "
 							"ixfr requires a "
 							"serial number\n");

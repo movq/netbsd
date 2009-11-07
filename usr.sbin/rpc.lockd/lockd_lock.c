@@ -1,4 +1,4 @@
-/*	$NetBSD: lockd_lock.c,v 1.30 2009/10/19 18:41:17 bouyer Exp $	*/
+/*	$NetBSD: lockd_lock.c,v 1.32 2011/08/30 17:06:21 plunky Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -57,11 +57,7 @@ typedef struct {
 static int
 fhcmp(const nfs_fhandle_t *fh1, const nfs_fhandle_t *fh2)
 {
-
-	if (fh1->fhsize != fh2->fhsize) {
-		return 1;
-	}
-	return memcmp(fh1->fhdata, fh2->fhdata, fh1->fhsize);
+	return memcmp(fh1->fhdata, fh2->fhdata, MIN(fh1->fhsize, fh2->fhsize));
 }
 
 static int
@@ -795,8 +791,9 @@ do_mon(const char *hostname)
 	my_mon.mon_id.my_id.my_prog = NLM_PROG;
 	my_mon.mon_id.my_id.my_vers = NLM_SM;
 	my_mon.mon_id.my_id.my_proc = NLM_SM_NOTIFY;
-	if ((retval = callrpc(localhost, SM_PROG, SM_VERS, SM_MON, xdr_mon,
-	    (void *)&my_mon, xdr_sm_stat_res, (void *)&result)) != 0) {
+	if ((retval = callrpc(localhost, SM_PROG, SM_VERS, SM_MON,
+	    (xdrproc_t)xdr_mon, (void *)&my_mon,
+	    (xdrproc_t)xdr_sm_stat_res, (void *)&result)) != 0) {
 		syslog(LOG_WARNING, "rpc to statd failed (%s)",
 		    clnt_sperrno((enum clnt_stat)retval));
 		free(hp);

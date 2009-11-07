@@ -1,4 +1,4 @@
-/*	$NetBSD: master_ent.c,v 1.1.1.1 2009/06/23 10:08:49 tron Exp $	*/
+/*	$NetBSD: master_ent.c,v 1.1.1.3 2011/07/31 10:02:42 tron Exp $	*/
 
 /*++
 /* NAME
@@ -274,7 +274,7 @@ MASTER_SERV *get_master_ent()
     /*
      * Skip blank lines and comment lines.
      */
-    do {
+    for (;;) {
 	if (readlline(buf, master_fp, &master_line) == 0) {
 	    vstring_free(buf);
 	    vstring_free(junk);
@@ -286,7 +286,9 @@ MASTER_SERV *get_master_ent()
 	name = cp;
 	transport = get_str_ent(&bufp, "transport type", (char *) 0);
 	vstring_sprintf(junk, "%s.%s", name, transport);
-    } while (match_service_match(master_disable, vstring_str(junk)) != 0);
+	if (match_service_match(master_disable, vstring_str(junk)) == 0)
+	    break;
+    }
 
     /*
      * Parse one logical line from the configuration file. Initialize service
@@ -528,7 +530,7 @@ MASTER_SERV *get_master_ent()
 	argv_add(serv->args, "-u", (char *) 0);
     if (chroot)
 	argv_add(serv->args, "-c", (char *) 0);
-    if ((serv->flags & MASTER_FLAG_LOCAL_ONLY) == 0) {
+    if ((serv->flags & MASTER_FLAG_LOCAL_ONLY) == 0 && serv->max_proc > 1) {
 	argv_add(serv->args, "-o", "stress=" CONFIG_BOOL_YES, (char *) 0);
 	serv->stress_param_val =
 	    serv->args->argv[serv->args->argc - 1] + sizeof("stress=") - 1;

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.21 2009/08/11 17:04:19 matt Exp $	*/
+/*	$NetBSD: locore2.c,v 1.25 2011/07/17 20:54:48 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.21 2009/08/11 17:04:19 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.25 2011/07/17 20:54:48 joerg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_modular.h"
@@ -39,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.21 2009/08/11 17:04:19 matt Exp $");
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/user.h>
 #define ELFSIZE 32
 #include <sys/exec_elf.h>
 
@@ -53,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.21 2009/08/11 17:04:19 matt Exp $");
 #include <machine/promlib.h>
 #include <machine/pmap.h>
 #include <machine/pte.h>
-
-#include <machine/stdarg.h>
 
 #include <sun2/sun2/control.h>
 #include <sun2/sun2/machdep.h>
@@ -94,7 +91,6 @@ int cpu_has_vme = 0;
  */
 int delay_divisor = 82;		/* assume the fastest (3/260) */
 
-struct user *proc0paddr;	/* proc[0] pcb address (u-area VA) */
 extern struct pcb *curpcb;
 
 /* First C code called by locore.s */
@@ -188,16 +184,16 @@ _vm_init(void)
 	 * fault handler works in case we hit an early bug.
 	 * (The fault handler may reference lwp0 stuff.)
 	 */
-	proc0paddr = (struct user *) nextva;
+	uvm_lwp_setuarea(&lwp0, nextva);
+	memset((void *)nextva, 0, USPACE);
+
 	nextva += USPACE;
-	memset((void *)proc0paddr, 0, USPACE);
-	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * Now that lwp0 exists, make it the "current" one.
 	 */
 	curlwp = &lwp0;
-	curpcb = &proc0paddr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
 
 	/* This does most of the real work. */
 	pmap_bootstrap(nextva);

@@ -1,7 +1,7 @@
-/*	$NetBSD: master.c,v 1.3 2009/10/25 00:14:33 christos Exp $	*/
+/*	$NetBSD: master.c,v 1.5.4.1 2012/06/05 21:15:04 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: master.c,v 1.178 2009/09/01 00:22:26 jinmei Exp */
+/* Id */
 
 /*! \file */
 
@@ -135,6 +135,7 @@ struct dns_loadctx {
 	/* Members specific to the raw format: */
 	FILE			*f;
 	isc_boolean_t		first;
+	dns_masterrawheader_t	header;
 
 	/* Which fixed buffers we are using? */
 	unsigned int		loop_cnt;		/*% records per quantum,
@@ -234,7 +235,7 @@ loadctx_destroy(dns_loadctx_t *lctx);
 			} else \
 				goto log_and_cleanup; \
 		} \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define COMMITALL \
 	do { \
@@ -255,7 +256,7 @@ loadctx_destroy(dns_loadctx_t *lctx);
 		isc_buffer_init(&target, target_mem, target_size); \
 		rdcount_save = rdcount; \
 		rdlcount_save = rdlcount; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define WARNUNEXPECTEDEOF(lexer) \
 	do { \
@@ -263,7 +264,7 @@ loadctx_destroy(dns_loadctx_t *lctx);
 			(*callbacks->warn)(callbacks, \
 				"%s: file does not end with newline", \
 				source); \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define EXPECTEOL \
 	do { \
@@ -275,11 +276,10 @@ loadctx_destroy(dns_loadctx_t *lctx);
 				SETRESULT(lctx, result); \
 				LOGIT(result); \
 				read_till_eol = ISC_TRUE; \
-				/* continue; */ \
 			} else if (result != ISC_R_SUCCESS) \
 				goto log_and_cleanup; \
 		} \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define MANYERRS(lctx, result) \
 		((result != ISC_R_SUCCESS) && \
@@ -290,7 +290,7 @@ loadctx_destroy(dns_loadctx_t *lctx);
 		do { \
 			if ((lctx)->result == ISC_R_SUCCESS) \
 				(lctx)->result = r; \
-		} while (0)
+		} while (/*CONSTCOND*/0)
 
 #define LOGITFILE(result, filename) \
 	if (result == ISC_R_INVALIDFILE || result == ISC_R_FILENOTFOUND || \
@@ -597,6 +597,7 @@ loadctx_create(dns_masterformat_t format, isc_mem_t *mctx,
 
 	lctx->f = NULL;
 	lctx->first = ISC_TRUE;
+	dns_master_initrawheader(&lctx->header);
 
 	lctx->loop_cnt = (done != NULL) ? 100 : 0;
 	lctx->callbacks = callbacks;
@@ -1207,9 +1208,10 @@ load_text(dns_loadctx_t *lctx) {
 						goto insist_and_cleanup;
 					}
 					ictx = lctx->inc;
-					line = isc_lex_getsourceline(lctx->lex);
 					source =
 					       isc_lex_getsourcename(lctx->lex);
+					line = isc_lex_getsourceline(lctx->lex);
+					POST(line);
 					continue;
 				}
 				/*
@@ -1419,8 +1421,9 @@ load_text(dns_loadctx_t *lctx) {
 					goto insist_and_cleanup;
 				}
 				ictx = lctx->inc;
-				line = isc_lex_getsourceline(lctx->lex);
 				source = isc_lex_getsourcename(lctx->lex);
+				line = isc_lex_getsourceline(lctx->lex);
+				POST(line);
 				continue;
 			}
 
@@ -2086,47 +2089,72 @@ load_raw(dns_loadctx_t *lctx) {
 	int target_size = TSIZ;
 	isc_buffer_t target;
 	unsigned char *target_mem = NULL;
+	dns_masterrawheader_t header;
 
 	REQUIRE(DNS_LCTX_VALID(lctx));
 	callbacks = lctx->callbacks;
 
+	dns_master_initrawheader(&header);
+
 	if (lctx->first) {
-		dns_masterrawheader_t header;
-		isc_uint32_t format, version, dumptime;
-		size_t hdrlen = sizeof(format) + sizeof(version) +
-			sizeof(dumptime);
+		unsigned char data[sizeof(header)];
+		size_t commonlen =
+			sizeof(header.format) + sizeof(header.version);
+		size_t remainder;
 
-		INSIST(hdrlen <= sizeof(header));
-		isc_buffer_init(&target, &header, sizeof(header));
+		INSIST(commonlen <= sizeof(header));
+		isc_buffer_init(&target, data, sizeof(data));
 
-		result = isc_stdio_read(&header, 1, hdrlen, lctx->f, NULL);
+		result = isc_stdio_read(data, 1, commonlen, lctx->f, NULL);
 		if (result != ISC_R_SUCCESS) {
 			UNEXPECTED_ERROR(__FILE__, __LINE__,
 					 "isc_stdio_read failed: %s",
 					 isc_result_totext(result));
 			return (result);
 		}
-		isc_buffer_add(&target, hdrlen);
-		format = isc_buffer_getuint32(&target);
-		if (format != dns_masterformat_raw) {
+		isc_buffer_add(&target, commonlen);
+		header.format = isc_buffer_getuint32(&target);
+		if (header.format != dns_masterformat_raw) {
 			(*callbacks->error)(callbacks,
 					    "dns_master_load: "
 					    "file format mismatch");
 			return (ISC_R_NOTIMPLEMENTED);
 		}
 
-		version = isc_buffer_getuint32(&target);
-		if (version > DNS_RAWFORMAT_VERSION) {
+		header.version = isc_buffer_getuint32(&target);
+		switch (header.version) {
+		case 0:
+			remainder = sizeof(header.dumptime);
+			break;
+		case DNS_RAWFORMAT_VERSION:
+			remainder = sizeof(header) - commonlen;
+			break;
+		default:
 			(*callbacks->error)(callbacks,
 					    "dns_master_load: "
 					    "unsupported file format version");
 			return (ISC_R_NOTIMPLEMENTED);
 		}
 
-		/* Empty read: currently, we do not use dumptime */
-		dumptime = isc_buffer_getuint32(&target);
+		result = isc_stdio_read(data + commonlen, 1, remainder,
+					lctx->f, NULL);
+		if (result != ISC_R_SUCCESS) {
+			UNEXPECTED_ERROR(__FILE__, __LINE__,
+					 "isc_stdio_read failed: %s",
+					 isc_result_totext(result));
+			return (result);
+		}
+
+		isc_buffer_add(&target, remainder);
+		header.dumptime = isc_buffer_getuint32(&target);
+		if (header.version == DNS_RAWFORMAT_VERSION) {
+			header.flags = isc_buffer_getuint32(&target);
+			header.sourceserial = isc_buffer_getuint32(&target);
+			header.lastxfrin = isc_buffer_getuint32(&target);
+		}
 
 		lctx->first = ISC_FALSE;
+		lctx->header = header;
 	}
 
 	ISC_LIST_INIT(head);
@@ -2256,14 +2284,14 @@ load_raw(dns_loadctx_t *lctx) {
 		if (rdcount > rdata_size) {
 			dns_rdata_t *new_rdata = NULL;
 
-			new_rdata = grow_rdata(rdata_size + RDSZ, rdata,
+			new_rdata = grow_rdata(rdcount + RDSZ, rdata,
 					       rdata_size, &head,
 					       &dummy, mctx);
 			if (new_rdata == NULL) {
 				result = ISC_R_NOMEMORY;
 				goto cleanup;
 			}
-			rdata_size += RDSZ;
+			rdata_size = rdcount + RDSZ;
 			rdata = new_rdata;
 		}
 
@@ -2297,7 +2325,6 @@ load_raw(dns_loadctx_t *lctx) {
 				isc_buffer_forward(&target, consumed_name);
 
 				rdcount -= i;
-				i = 0;
 
 				goto continue_read;
 			}
@@ -2352,6 +2379,9 @@ load_raw(dns_loadctx_t *lctx) {
 		result = DNS_R_CONTINUE;
 	} else if (result == ISC_R_SUCCESS && lctx->result != ISC_R_SUCCESS)
 		result = lctx->result;
+
+	if (result == ISC_R_SUCCESS && callbacks->rawdata != NULL)
+		(*callbacks->rawdata)(callbacks->zone, &header);
 
  cleanup:
 	if (rdata != NULL)
@@ -2681,26 +2711,26 @@ grow_rdatalist(int new_len, dns_rdatalist_t *old, int old_len,
 		return (NULL);
 
 	ISC_LIST_INIT(save);
-	this = ISC_LIST_HEAD(*current);
 	while ((this = ISC_LIST_HEAD(*current)) != NULL) {
 		ISC_LIST_UNLINK(*current, this, link);
 		ISC_LIST_APPEND(save, this, link);
 	}
 	while ((this = ISC_LIST_HEAD(save)) != NULL) {
 		ISC_LIST_UNLINK(save, this, link);
+		INSIST(rdlcount < new_len);
 		new[rdlcount] = *this;
 		ISC_LIST_APPEND(*current, &new[rdlcount], link);
 		rdlcount++;
 	}
 
 	ISC_LIST_INIT(save);
-	this = ISC_LIST_HEAD(*glue);
 	while ((this = ISC_LIST_HEAD(*glue)) != NULL) {
 		ISC_LIST_UNLINK(*glue, this, link);
 		ISC_LIST_APPEND(save, this, link);
 	}
 	while ((this = ISC_LIST_HEAD(save)) != NULL) {
 		ISC_LIST_UNLINK(save, this, link);
+		INSIST(rdlcount < new_len);
 		new[rdlcount] = *this;
 		ISC_LIST_APPEND(*glue, &new[rdlcount], link);
 		rdlcount++;
@@ -2744,6 +2774,7 @@ grow_rdata(int new_len, dns_rdata_t *old, int old_len,
 		}
 		while ((rdata = ISC_LIST_HEAD(save)) != NULL) {
 			ISC_LIST_UNLINK(save, rdata, link);
+			INSIST(rdcount < new_len);
 			new[rdcount] = *rdata;
 			ISC_LIST_APPEND(this->rdata, &new[rdcount], link);
 			rdcount++;
@@ -2763,13 +2794,14 @@ grow_rdata(int new_len, dns_rdata_t *old, int old_len,
 		}
 		while ((rdata = ISC_LIST_HEAD(save)) != NULL) {
 			ISC_LIST_UNLINK(save, rdata, link);
+			INSIST(rdcount < new_len);
 			new[rdcount] = *rdata;
 			ISC_LIST_APPEND(this->rdata, &new[rdcount], link);
 			rdcount++;
 		}
 		this = ISC_LIST_NEXT(this, link);
 	}
-	INSIST(rdcount == old_len);
+	INSIST(rdcount == old_len || rdcount == 0);
 	if (old != NULL)
 		isc_mem_put(mctx, old, old_len * sizeof(*old));
 	return (new);
@@ -2936,4 +2968,9 @@ dns_loadctx_cancel(dns_loadctx_t *lctx) {
 	LOCK(&lctx->lock);
 	lctx->canceled = ISC_TRUE;
 	UNLOCK(&lctx->lock);
+}
+
+void
+dns_master_initrawheader(dns_masterrawheader_t *header) {
+	memset(header, 0, sizeof(dns_masterrawheader_t));
 }

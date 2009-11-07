@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.19 2009/03/18 16:00:13 cegger Exp $	*/
+/*	$NetBSD: isr.c,v 1.21 2011/11/26 04:40:51 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.19 2009/03/18 16:00:13 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.21 2011/11/26 04:40:51 tsutsui Exp $");
 
 /*
  * Link and dispatch interrupts.
@@ -206,7 +206,7 @@ isrdispatch_autovec(int evec)
 	ipl = vec - ISRAUTOVEC;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	list = &isr_autovec[ipl];
 	if (list->lh_first == NULL) {
@@ -245,7 +245,7 @@ isrdispatch_vectored(int pc, int evec, void *frame)
 	ipl = (getsr() >> 8) & 7;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	if ((vec < ISRVECTORED) || (vec >= (ISRVECTORED + NISRVECTORED)))
 		panic("isrdispatch_vectored: bad vec 0x%x", vec);
@@ -279,7 +279,7 @@ const uint16_t ipl2psl_table[NIPL] = {
 	[IPL_SOFTBIO]    = PSL_S|PSL_IPL1,
 	[IPL_SOFTNET]    = PSL_S|PSL_IPL1,
 	[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1,
-	[IPL_VM]         = PSL_S|PSL_IPL7,
-	[IPL_SCHED]      = PSL_S|PSL_IPL7,
+	[IPL_VM]         = PSL_S|PSL_IPL4,
+	[IPL_SCHED]      = PSL_S|PSL_IPL5,
 	[IPL_HIGH]       = PSL_S|PSL_IPL7,
 };

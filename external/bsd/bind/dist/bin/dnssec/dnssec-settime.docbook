@@ -2,7 +2,7 @@
                "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
                [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -17,7 +17,7 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Id: dnssec-settime.docbook,v 1.5 2009/10/05 17:30:49 fdupont Exp -->
+<!-- Id: dnssec-settime.docbook,v 1.15 2011/11/03 20:21:37 each Exp  -->
 <refentry id="man.dnssec-settime">
   <refentryinfo>
     <date>July 15, 2009</date>
@@ -37,6 +37,8 @@
   <docinfo>
     <copyright>
       <year>2009</year>
+      <year>2010</year>
+      <year>2011</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
@@ -46,6 +48,7 @@
       <command>dnssec-settime</command>
       <arg><option>-f</option></arg>
       <arg><option>-K <replaceable class="parameter">directory</replaceable></option></arg>
+      <arg><option>-L <replaceable class="parameter">ttl</replaceable></option></arg>
       <arg><option>-P <replaceable class="parameter">date/offset</replaceable></option></arg>
       <arg><option>-A <replaceable class="parameter">date/offset</replaceable></option></arg>
       <arg><option>-R <replaceable class="parameter">date/offset</replaceable></option></arg>
@@ -80,7 +83,8 @@
       <filename>Knnnn.+aaa+iiiii.private</filename>) are regenerated.
       Metadata fields are stored in the private file.  A human-readable
       description of the metadata is also placed in comments in the key
-      file.
+      file.  The private file's permissions are always set to be
+      inaccessible to anyone other than the owner (mode 0600).
     </para>
   </refsect1>
 
@@ -97,7 +101,9 @@
             fail when attempting to update a legacy key.  With this option,
             the key will be recreated in the new format, but with the
             original key data retained.  The key's creation date will be
-            set to the present time. 
+            set to the present time.  If no other values are specified, 
+            then the key's publication and activation dates will also 
+            be set to the present time.
 	  </para>
         </listitem>
       </varlistentry>
@@ -107,6 +113,20 @@
         <listitem>
           <para>
             Sets the directory in which the key files are to reside.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>-L <replaceable class="parameter">ttl</replaceable></term>
+        <listitem>
+          <para>
+            Sets the default TTL to use for this key when it is converted
+            into a DNSKEY RR.  If the key is imported into a zone,
+            this is the TTL that will be used for it, unless there was
+            already a DNSKEY RRset in place, in which case the existing TTL
+            would take precedence.  Setting the default TTL to
+            <literal>0</literal> or <literal>none</literal> removes it.
           </para>
         </listitem>
       </varlistentry>
@@ -134,7 +154,7 @@
         <listitem>
           <para>
             Use the given OpenSSL engine. When compiled with PKCS#11 support
-            it defaults to pcks11, the empty name resets it to no engine.
+            it defaults to pkcs11; the empty name resets it to no engine.
           </para>
         </listitem>
       </varlistentry>
@@ -171,7 +191,7 @@
         <listitem>
           <para>
             Sets the date on which the key is to be activated.  After that
-            date, the key will be included and the zone and used to sign
+            date, the key will be included in the zone and used to sign
             it.
           </para>
         </listitem>
@@ -210,6 +230,47 @@
         </listitem>
       </varlistentry>
 
+      <varlistentry>
+        <term>-S <replaceable class="parameter">predecessor key</replaceable></term>
+        <listitem>
+          <para>
+            Select a key for which the key being modified will be an
+            explicit successor.  The name, algorithm, size, and type of the
+            predecessor key must exactly match those of the key being
+            modified.  The activation date of the successor key will be set
+            to the inactivation date of the predecessor.  The publication
+            date will be set to the activation date minus the prepublication
+            interval, which defaults to 30 days.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>-i <replaceable class="parameter">interval</replaceable></term>
+        <listitem>
+          <para>
+            Sets the prepublication interval for a key.  If set, then
+            the publication and activation dates must be separated by at least
+            this much time.  If the activation date is specified but the
+            publication date isn't, then the publication date will default
+            to this much time before the activation date; conversely, if
+            the publication date is specified but activation date isn't,
+            then activation will be set to this much time after publication.
+          </para>
+          <para>
+            If the key is being set to be an explicit successor to another
+            key, then the default prepublication interval is 30 days; 
+            otherwise it is zero.
+          </para>
+          <para>
+            As with date offsets, if the argument is followed by one of
+            the suffixes 'y', 'mo', 'w', 'd', 'h', or 'mi', then the
+            interval is measured in years, months, weeks, days, hours,
+            or minutes, respectively.  Without a suffix, the interval is
+            measured in seconds.
+          </para>
+        </listitem>
+      </varlistentry>
     </variablelist>
   </refsect1>
 
@@ -231,7 +292,7 @@
       </varlistentry>
 
       <varlistentry>
-        <term>-p <replaceable class="parameter">C/P/A/R/U/D/all</replaceable></term>
+        <term>-p <replaceable class="parameter">C/P/A/R/I/D/all</replaceable></term>
         <listitem>
 	  <para>
 	    Print a specific metadata value or set of metadata values.
@@ -240,8 +301,8 @@
             <option>C</option> for the creation date,
             <option>P</option> for the publication date,
             <option>A</option> for the activation date,
-            <option>R</option> for the revokation date,
-            <option>U</option> for the unpublication date, or
+            <option>R</option> for the revocation date,
+            <option>I</option> for the inactivation date, or
             <option>D</option> for the deletion date.
             To print all of the metadata, use <option>-p all</option>.
 	  </para>

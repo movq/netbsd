@@ -88,9 +88,15 @@ NETDB_DEFINE_CONTEXT
 static int wsa_init_done=0;
 #endif
 
-#if defined(OPENSSL_SYS_BEOS_BONE)		
-/* BONE's IP6 support is incomplete */
-#undef AF_INET6
+/*
+ * WSAAPI specifier is required to make indirect calls to run-time
+ * linked WinSock 2 functions used in this module, to be specific
+ * [get|free]addrinfo and getnameinfo. This is because WinSock uses
+ * uses non-C calling convention, __stdcall vs. __cdecl, on x86
+ * Windows. On non-WinSock platforms WSAAPI needs to be void.
+ */
+#ifndef WSAAPI
+#define WSAAPI
 #endif
 
 #if 0
@@ -545,7 +551,30 @@ int BIO_socket_ioctl(int fd, long type, void *arg)
 #ifdef __DJGPP__
 	i=ioctlsocket(fd,type,(char *)arg);
 #else
-	i=ioctlsocket(fd,type,arg);
+# if defined(OPENSSL_SYS_VMS)
+	/* 2011-02-18 SMS.
+	 * VMS ioctl() can't tolerate a 64-bit "void *arg", but we
+	 * observe that all the consumers pass in an "unsigned long *",
+	 * so we arrange a local copy with a short pointer, and use
+	 * that, instead.
+	 */
+#  if __INITIAL_POINTER_SIZE == 64
+#   define ARG arg_32p
+#   pragma pointer_size save
+#   pragma pointer_size 32
+	unsigned long arg_32;
+	unsigned long *arg_32p;
+#   pragma pointer_size restore
+	arg_32p = &arg_32;
+	arg_32 = *((unsigned long *) arg);
+#  else /* __INITIAL_POINTER_SIZE == 64 */
+#   define ARG arg
+#  endif /* __INITIAL_POINTER_SIZE == 64 [else] */
+# else /* defined(OPENSSL_SYS_VMS) */
+#  define ARG arg
+# endif /* defined(OPENSSL_SYS_VMS) [else] */
+
+	i=ioctlsocket(fd,type,ARG);
 #endif /* __DJGPP__ */
 	if (i < 0)
 		SYSerr(SYS_F_IOCTLSOCKET,get_last_socket_error());
@@ -593,9 +622,14 @@ static int get_ip(const char *str, unsigned char ip[4])
 int BIO_get_accept_socket(char *host, int bind_mode)
 	{
 	int ret=0;
-	struct sockaddr server,client;
-	struct sockaddr_in *sa_in;
-	int s=INVALID_SOCKET,cs;
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sa_in;
+#if OPENSSL_USE_IPV6
+		struct sockaddr_in6 sa_in6;
+#endif
+	} server,client;
+	int s=INVALID_SOCKET,cs,addrlen;
 	unsigned char ip[4];
 	unsigned short port;
 	char *str=NULL,*e;
@@ -627,12 +661,12 @@ int BIO_get_accept_socket(char *host, int bind_mode)
 #ifdef EAI_FAMILY
 	do {
 	static union {	void *p;
-			int (*f)(const char *,const char *,
+			int (WSAAPI *f)(const char *,const char *,
 				 const struct addrinfo *,
 				 struct addrinfo **);
 			} p_getaddrinfo = {NULL};
 	static union {	void *p;
-			void (*f)(struct addrinfo *);
+			void (WSAAPI *f)(struct addrinfo *);
 			} p_freeaddrinfo = {NULL};
 	struct addrinfo *res,hint;
 
@@ -649,25 +683,34 @@ int BIO_get_accept_socket(char *host, int bind_mode)
 	 * note that commonly IPv6 wildchard socket can service
 	 * IPv4 connections just as well...  */
 	memset(&hint,0,sizeof(hint));
+	hint.ai_flags = AI_PASSIVE;
 	if (h)
 		{
 		if (strchr(h,':'))
 			{
 			if (h[1]=='\0') h=NULL;
-#ifdef AF_INET6
+#if OPENSSL_USE_IPV6
 			hint.ai_family = AF_INET6;
 #else
 			h=NULL;
 #endif
 			}
 	    	else if (h[0]=='*' && h[1]=='\0')
+			{
+			hint.ai_family = AF_INET;
 			h=NULL;
+			}
 		}
 	/* XXX: below we cast to sockaddr_in! */
 	hint.ai_family = AF_INET;
 
 	if ((*p_getaddrinfo.f)(h,p,&hint,&res)) break;
-	server = *res->ai_addr;
+
+	addrlen = res->ai_addrlen<=sizeof(server) ?
+			res->ai_addrlen :
+			sizeof(server);
+	memcpy(&server, res->ai_addr, addrlen);
+
 	(*p_freeaddrinfo.f)(res);
 	goto again;
 	} while (0);
@@ -676,12 +719,12 @@ int BIO_get_accept_socket(char *host, int bind_mode)
 	if (!BIO_get_port(p,&port)) goto err;
 
 	memset((char *)&server,0,sizeof(server));
-	sa_in = (struct sockaddr_in *)&server;
-	sa_in->sin_family=AF_INET;
-	sa_in->sin_port=htons(port);
+	server.sa_in.sin_family=AF_INET;
+	server.sa_in.sin_port=htons(port);
+	addrlen = sizeof(server.sa_in);
 
 	if (h == NULL || strcmp(h,"*") == 0)
-		sa_in->sin_addr.s_addr=INADDR_ANY;
+		server.sa_in.sin_addr.s_addr=INADDR_ANY;
 	else
 		{
                 if (!BIO_get_host_ip(h,&(ip[0]))) goto err;
@@ -690,11 +733,11 @@ int BIO_get_accept_socket(char *host, int bind_mode)
 			((unsigned long)ip[1]<<16L)|
 			((unsigned long)ip[2]<< 8L)|
 			((unsigned long)ip[3]);
-		sa_in->sin_addr.s_addr=htonl(l);
+		server.sa_in.sin_addr.s_addr=htonl(l);
 		}
 
 again:
-	s=socket(server.sa_family,SOCK_STREAM,SOCKET_PROTOCOL);
+	s=socket(server.sa.sa_family,SOCK_STREAM,SOCKET_PROTOCOL);
 	if (s == INVALID_SOCKET)
 		{
 		SYSerr(SYS_F_SOCKET,get_last_socket_error());
@@ -712,40 +755,42 @@ again:
 		bind_mode=BIO_BIND_NORMAL;
 		}
 #endif
-	if (bind(s,&server,sizeof(server)) == -1)
+	if (bind(s,&server.sa,addrlen) == -1)
 		{
 #ifdef SO_REUSEADDR
 		err_num=get_last_socket_error();
 		if ((bind_mode == BIO_BIND_REUSEADDR_IF_UNUSED) &&
+#ifdef OPENSSL_SYS_WINDOWS
+			/* Some versions of Windows define EADDRINUSE to
+			 * a dummy value.
+			 */
+			(err_num == WSAEADDRINUSE))
+#else
 			(err_num == EADDRINUSE))
+#endif
 			{
 			client = server;
 			if (h == NULL || strcmp(h,"*") == 0)
 				{
-#ifdef AF_INET6
-				if (client.sa_family == AF_INET6)
+#if OPENSSL_USE_IPV6
+				if (client.sa.sa_family == AF_INET6)
 					{
-					struct sockaddr_in6 *sin6 =
-						(struct sockaddr_in6 *)&client;
-					memset(&sin6->sin6_addr,0,sizeof(sin6->sin6_addr));
-					sin6->sin6_addr.s6_addr[15]=1;
+					memset(&client.sa_in6.sin6_addr,0,sizeof(client.sa_in6.sin6_addr));
+					client.sa_in6.sin6_addr.s6_addr[15]=1;
 					}
 				else
 #endif
-				if (client.sa_family == AF_INET)
+				if (client.sa.sa_family == AF_INET)
 					{
-					struct sockaddr_in *sin4 =
-						(struct sockaddr_in *)&client;
-					sin4->sin_addr.s_addr=htonl(0x7F000001);
+					client.sa_in.sin_addr.s_addr=htonl(0x7F000001);
 					}
 				else	goto err;
 				}
-			cs=socket(client.sa_family,SOCK_STREAM,SOCKET_PROTOCOL);
+			cs=socket(client.sa.sa_family,SOCK_STREAM,SOCKET_PROTOCOL);
 			if (cs != INVALID_SOCKET)
 				{
 				int ii;
-				ii=connect(cs,(struct sockaddr *)&client,
-					sizeof(client));
+				ii=connect(cs,&client.sa,addrlen);
 				closesocket(cs);
 				if (ii == INVALID_SOCKET)
 					{
@@ -784,21 +829,52 @@ err:
 int BIO_accept(int sock, char **addr)
 	{
 	int ret=INVALID_SOCKET;
-	struct sockaddr from;
-	struct sockaddr_in *sa_in;
 	unsigned long l;
 	unsigned short port;
-	int len;
 	char *p;
 
-	memset(&from,0,sizeof(from));
-	len=sizeof(from);
-	/* Note: under VMS with SOCKETSHR the fourth parameter is currently
-	 * of type (int *) whereas under other systems it is (void *) if
-	 * you don't have a cast it will choke the compiler: if you do
-	 * have a cast then you can either go for (int *) or (void *).
+	struct {
+	/*
+	 * As for following union. Trouble is that there are platforms
+	 * that have socklen_t and there are platforms that don't, on
+	 * some platforms socklen_t is int and on some size_t. So what
+	 * one can do? One can cook #ifdef spaghetti, which is nothing
+	 * but masochistic. Or one can do union between int and size_t.
+	 * One naturally does it primarily for 64-bit platforms where
+	 * sizeof(int) != sizeof(size_t). But would it work? Note that
+	 * if size_t member is initialized to 0, then later int member
+	 * assignment naturally does the job on little-endian platforms
+	 * regardless accept's expectations! What about big-endians?
+	 * If accept expects int*, then it works, and if size_t*, then
+	 * length value would appear as unreasonably large. But this
+	 * won't prevent it from filling in the address structure. The
+	 * trouble of course would be if accept returns more data than
+	 * actual buffer can accomodate and overwrite stack... That's
+	 * where early OPENSSL_assert comes into picture. Besides, the
+	 * only 64-bit big-endian platform found so far that expects
+	 * size_t* is HP-UX, where stack grows towards higher address.
+	 * <appro>
 	 */
-	ret=accept(sock,&from,(void *)&len);
+	union { size_t s; int i; } len;
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sa_in;
+#if OPENSSL_USE_IPV6
+		struct sockaddr_in6 sa_in6;
+#endif
+		} from;
+	} sa;
+
+	sa.len.s=0;
+	sa.len.i=sizeof(sa.from);
+	memset(&sa.from,0,sizeof(sa.from));
+	ret=accept(sock,&sa.from.sa,(void *)&sa.len);
+	if (sizeof(sa.len.i)!=sizeof(sa.len.s) && sa.len.i==0)
+		{
+		OPENSSL_assert(sa.len.s<=sizeof(sa.from));
+		sa.len.i = (int)sa.len.s;
+		/* use sa.len.i from this point */
+		}
 	if (ret == INVALID_SOCKET)
 		{
 		if(BIO_sock_should_retry(ret)) return -2;
@@ -814,7 +890,7 @@ int BIO_accept(int sock, char **addr)
 	char   h[NI_MAXHOST],s[NI_MAXSERV];
 	size_t nl;
 	static union {	void *p;
-			int (*f)(const struct sockaddr *,size_t/*socklen_t*/,
+			int (WSAAPI *f)(const struct sockaddr *,size_t/*socklen_t*/,
 				 char *,size_t,char *,size_t,int);
 			} p_getnameinfo = {NULL};
 			/* 2nd argument to getnameinfo is specified to
@@ -830,9 +906,9 @@ int BIO_accept(int sock, char **addr)
 		}
 	if (p_getnameinfo.p==(void *)-1) break;
 
-	if ((*p_getnameinfo.f)(&from,sizeof(from),h,sizeof(h),s,sizeof(s),
+	if ((*p_getnameinfo.f)(&sa.from.sa,sa.len.i,h,sizeof(h),s,sizeof(s),
 	    NI_NUMERICHOST|NI_NUMERICSERV)) break;
-	nl = strlen(h)+strlen(s)+2; if (len<24) len=24;
+	nl = strlen(h)+strlen(s)+2;
 	p = *addr;
 	if (p)	{ *p = '\0'; p = OPENSSL_realloc(p,nl);	}
 	else	{ p = OPENSSL_malloc(nl);		}
@@ -846,10 +922,9 @@ int BIO_accept(int sock, char **addr)
 	goto end;
 	} while(0);
 #endif
-	if (from.sa_family != AF_INET) goto end;
-	sa_in = (struct sockaddr_in *)&from;
-	l=ntohl(sa_in->sin_addr.s_addr);
-	port=ntohs(sa_in->sin_port);
+	if (sa.from.sa.sa_family != AF_INET) goto end;
+	l=ntohl(sa.from.sa_in.sin_addr.s_addr);
+	port=ntohs(sa.from.sa_in.sin_port);
 	if (*addr == NULL)
 		{
 		if ((p=OPENSSL_malloc(24)) == NULL)
@@ -887,7 +962,6 @@ int BIO_set_tcp_ndelay(int s, int on)
 #endif
 	return(ret == 0);
 	}
-#endif
 
 int BIO_socket_nbio(int s, int mode)
 	{
@@ -900,3 +974,4 @@ int BIO_socket_nbio(int s, int mode)
 #endif
 	return(ret == 0);
 	}
+#endif

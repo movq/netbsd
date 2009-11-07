@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312_space.c,v 1.9 2005/11/24 13:08:32 yamt Exp $	*/
+/*	$NetBSD: i80312_space.c,v 1.11 2011/07/01 20:32:51 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,14 +40,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80312_space.c,v 1.9 2005/11/24 13:08:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80312_space.c,v 1.11 2011/07/01 20:32:51 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/i80312reg.h>
 #include <arm/xscale/i80312var.h>
@@ -309,7 +309,7 @@ i80312_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags,
 		return (EINVAL);
 
 	/*
-	 * Found the window -- PCI MEM space is not mapped by allocating
+	 * Found the window -- PCI MEM space is now mapped by allocating
 	 * some kernel VA space and mapping the pages with pmap_enter().
 	 * pmap_enter() will map unmanaged pages as non-cacheable.
 	 */

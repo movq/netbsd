@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.base,v 1.5 2009/11/02 10:15:45 plunky Exp $
+#	$NetBSD: NetBSD.dist.base,v 1.97.2.3 2012/08/13 23:18:23 riz Exp $
 #	@(#)4.4BSD.dist	8.1 (Berkeley) 6/13/93
 
 # Do not customize this file as it may be overwritten on upgrades.
@@ -51,6 +51,11 @@
 ./etc/racoon
 ./etc/rc.conf.d
 ./etc/rc.d
+./etc/saslc.d
+./etc/saslc.d/saslc
+./etc/saslc.d/saslc/mech
+./etc/saslc.d/postfix
+./etc/saslc.d/postfix/mech
 ./etc/skel
 ./etc/sliphome
 ./etc/ssh
@@ -61,12 +66,17 @@
 ./libdata/firmware/if_ipw
 ./libdata/firmware/if_iwi
 ./libdata/firmware/if_iwn
+./libdata/firmware/if_otus
+./libdata/firmware/if_urtwn
 ./libdata/firmware/if_wpi
 ./libdata/firmware/ral
 ./libdata/firmware/rum
+./libdata/firmware/upgt
 ./libdata/firmware/zyd
 ./libexec
 ./libexec/dhcpcd-hooks
+./libexec/devpubd-hooks
+./libexec/resolvconf
 ./mnt
 ./rescue
 ./root
@@ -83,13 +93,16 @@
 ./usr/include/arpa
 ./usr/include/atf-c
 ./usr/include/atf-c++
+./usr/include/clang-3.0
 ./usr/include/crypto
 ./usr/include/dev
 ./usr/include/dev/apm
 ./usr/include/dev/ata
 ./usr/include/dev/dec
 ./usr/include/dev/dmover
+./usr/include/dev/dtv
 ./usr/include/dev/hpc
+./usr/include/dev/i2c
 ./usr/include/dev/i2o
 ./usr/include/dev/ic
 ./usr/include/dev/ieee1394
@@ -111,18 +124,22 @@
 ./usr/include/fs
 ./usr/include/fs/smbfs
 ./usr/include/g++
-# remove me when gcc3.3 upgrade is complete
-./usr/include/g++/std
 ./usr/include/g++/backward
-./usr/include/g++/ext
 ./usr/include/g++/bits
-./usr/include/g++/tr1
 ./usr/include/g++/debug
+./usr/include/g++/decimal
+./usr/include/g++/ext
+./usr/include/g++/parallel
+./usr/include/g++/tr1
+./usr/include/g++/tr1_impl
+./usr/include/gcc-4.1
+./usr/include/gcc-4.5
 ./usr/include/gssapi
 ./usr/include/isofs
 ./usr/include/isofs/cd9660
 ./usr/include/kadm5
 ./usr/include/krb5
+./usr/include/lzma
 ./usr/include/miscfs
 ./usr/include/miscfs/fdesc
 ./usr/include/miscfs/fifofs
@@ -130,7 +147,6 @@
 ./usr/include/miscfs/kernfs
 ./usr/include/miscfs/nullfs
 ./usr/include/miscfs/overlay
-./usr/include/miscfs/portal
 ./usr/include/miscfs/procfs
 ./usr/include/miscfs/specfs
 ./usr/include/miscfs/syncfs
@@ -153,6 +169,8 @@
 ./usr/include/ntfs
 ./usr/include/objc
 ./usr/include/openssl
+./usr/include/pcap
+./usr/include/ppath
 ./usr/include/prop
 ./usr/include/protocols
 ./usr/include/readline
@@ -162,6 +180,8 @@
 ./usr/include/security
 ./usr/include/sys
 ./usr/include/ssp
+./usr/include/trousers
+./usr/include/tss
 ./usr/include/ufs
 ./usr/include/ufs/ext2fs
 ./usr/include/ufs/ffs
@@ -171,6 +191,8 @@
 ./usr/include/uvm
 ./usr/lib
 ./usr/lib/i18n
+./usr/lib/lua
+./usr/lib/lua/5.1
 ./usr/lib/pkgconfig
 ./usr/lib/security
 ./usr/libdata
@@ -181,47 +203,16 @@
 ./usr/libdata/debug/usr
 ./usr/libdata/debug/usr/bin
 ./usr/libdata/debug/usr/games
+./usr/libdata/debug/usr/lib
+./usr/libdata/debug/usr/lib/i18n
 ./usr/libdata/debug/usr/libexec
 ./usr/libdata/debug/usr/libexec/ching
 ./usr/libdata/debug/usr/libexec/lpr
 ./usr/libdata/debug/usr/libexec/postfix
 ./usr/libdata/debug/usr/mdec
 ./usr/libdata/debug/usr/sbin
-./usr/libdata/debug/usr/tests
-./usr/libdata/debug/usr/tests/atf
-./usr/libdata/debug/usr/tests/atf/atf-c
-./usr/libdata/debug/usr/tests/atf/atf-c++
-./usr/libdata/debug/usr/tests/atf/formats
-./usr/libdata/debug/usr/tests/atf/test_programs
-./usr/libdata/debug/usr/tests/atf/tools
-./usr/libdata/debug/usr/tests/crypto
-./usr/libdata/debug/usr/tests/crypto/libcrypto
-./usr/libdata/debug/usr/tests/fs
-./usr/libdata/debug/usr/tests/fs/ffs
-./usr/libdata/debug/usr/tests/fs/puffs
-./usr/libdata/debug/usr/tests/fs/tmpfs
-./usr/libdata/debug/usr/tests/ipf
-./usr/libdata/debug/usr/tests/kernel
-./usr/libdata/debug/usr/tests/kernel/kqueue
-./usr/libdata/debug/usr/tests/kernel/kqueue/read
-./usr/libdata/debug/usr/tests/kernel/kqueue/write
-./usr/libdata/debug/usr/tests/lib
-./usr/libdata/debug/usr/tests/lib/libc
-./usr/libdata/debug/usr/tests/lib/libc/stdlib
-./usr/libdata/debug/usr/tests/lib/libc/string
-./usr/libdata/debug/usr/tests/lib/libevent
-./usr/libdata/debug/usr/tests/libexec
-./usr/libdata/debug/usr/tests/libexec/ld.elf_so
-./usr/libdata/debug/usr/tests/modules
-./usr/libdata/debug/usr/tests/net
-./usr/libdata/debug/usr/tests/net/sys
-./usr/libdata/debug/usr/tests/rump
-./usr/libdata/debug/usr/tests/rump/rumpkern
-./usr/libdata/debug/usr/tests/syscall
-./usr/libdata/debug/usr/tests/util
-./usr/libdata/debug/usr/tests/util/df
-./usr/libdata/debug/usr/tests/util/id
 ./usr/libdata/firmware
+./usr/libdata/firmware/radeon
 ./usr/libdata/ldscripts
 ./usr/libdata/lint
 ./usr/libexec
@@ -240,14 +231,17 @@
 ./usr/share/dict/special
 ./usr/share/doc
 ./usr/share/doc/atf
+./usr/share/doc/groff
+./usr/share/doc/groff/mom
 ./usr/share/doc/html
 ./usr/share/doc/html/bind9
 ./usr/share/doc/html/bind9/arm
 ./usr/share/doc/html/bzip2
+./usr/share/doc/html/groff
+./usr/share/doc/html/groff/mom
 ./usr/share/doc/html/postfix
 ./usr/share/doc/html/ntp
 ./usr/share/doc/html/ntp/build
-./usr/share/doc/html/ntp/build/scripts
 ./usr/share/doc/html/ntp/drivers
 ./usr/share/doc/html/ntp/drivers/icons
 ./usr/share/doc/html/ntp/drivers/scripts
@@ -325,6 +319,8 @@
 ./usr/share/examples
 ./usr/share/examples/amd
 ./usr/share/examples/apm
+./usr/share/examples/asm
+./usr/share/examples/asm/hello
 ./usr/share/examples/atf
 ./usr/share/examples/dhcp
 ./usr/share/examples/emul
@@ -342,6 +338,9 @@
 ./usr/share/examples/ipf
 ./usr/share/examples/isdn
 ./usr/share/examples/kerberos
+./usr/share/examples/libsaslc
+./usr/share/examples/libsaslc/mech
+./usr/share/examples/lua
 ./usr/share/examples/mount_portal
 ./usr/share/examples/openssl
 ./usr/share/examples/pf
@@ -355,6 +354,7 @@
 ./usr/share/examples/smbfs
 ./usr/share/examples/supfiles
 ./usr/share/examples/syslogd
+./usr/share/examples/tmux
 ./usr/share/examples/wsmoused
 ./usr/share/games
 ./usr/share/games/atc
@@ -387,6 +387,7 @@
 ./usr/share/i18n/csmapper/APPLE
 ./usr/share/i18n/csmapper/AST
 ./usr/share/i18n/csmapper/BIG5
+./usr/share/i18n/csmapper/CBM
 ./usr/share/i18n/csmapper/CNS
 ./usr/share/i18n/csmapper/CP
 ./usr/share/i18n/csmapper/EBCDIC
@@ -404,6 +405,7 @@
 ./usr/share/i18n/esdb/APPLE
 ./usr/share/i18n/esdb/AST
 ./usr/share/i18n/esdb/BIG5
+./usr/share/i18n/esdb/CBM
 ./usr/share/i18n/esdb/CP
 ./usr/share/i18n/esdb/DEC
 ./usr/share/i18n/esdb/EBCDIC
@@ -706,6 +708,8 @@
 ./usr/share/locale/zh_TW.Big5/LC_MESSAGES
 ./usr/share/locale/zh_TW.eucTW
 ./usr/share/locale/zh_TW.eucTW/LC_MESSAGES
+./usr/share/lua
+./usr/share/lua/5.1
 ./usr/share/man
 ./usr/share/man/cat1
 ./usr/share/man/cat1/atari
@@ -713,7 +717,6 @@
 ./usr/share/man/cat1/x68k
 ./usr/share/man/cat2
 ./usr/share/man/cat3
-./usr/share/man/cat3f
 ./usr/share/man/cat4
 ./usr/share/man/cat4/acorn26
 ./usr/share/man/cat4/acorn32
@@ -723,6 +726,7 @@
 ./usr/share/man/cat4/atari
 ./usr/share/man/cat4/cobalt
 ./usr/share/man/cat4/dreamcast
+./usr/share/man/cat4/emips
 ./usr/share/man/cat4/evbarm
 ./usr/share/man/cat4/evbmips
 ./usr/share/man/cat4/evbppc
@@ -737,6 +741,7 @@
 ./usr/share/man/cat4/mvme68k
 ./usr/share/man/cat4/pmax
 ./usr/share/man/cat4/prep
+./usr/share/man/cat4/sandpoint
 ./usr/share/man/cat4/sgimips
 ./usr/share/man/cat4/sparc
 ./usr/share/man/cat4/sparc64
@@ -744,6 +749,7 @@
 ./usr/share/man/cat4/sun3
 ./usr/share/man/cat4/vax
 ./usr/share/man/cat4/x68k
+./usr/share/man/cat4/x86
 ./usr/share/man/cat5
 ./usr/share/man/cat6
 ./usr/share/man/cat7
@@ -752,6 +758,7 @@
 ./usr/share/man/cat8/acorn32
 ./usr/share/man/cat8/algor
 ./usr/share/man/cat8/alpha
+./usr/share/man/cat8/amd64
 ./usr/share/man/cat8/amiga
 ./usr/share/man/cat8/arc
 ./usr/share/man/cat8/atari
@@ -760,6 +767,7 @@
 ./usr/share/man/cat8/cesfic
 ./usr/share/man/cat8/cobalt
 ./usr/share/man/cat8/dreamcast
+./usr/share/man/cat8/emips
 ./usr/share/man/cat8/evbarm
 ./usr/share/man/cat8/evbmips
 ./usr/share/man/cat8/evbppc
@@ -783,7 +791,6 @@
 ./usr/share/man/cat8/newsmips
 ./usr/share/man/cat8/next68k
 ./usr/share/man/cat8/ofppc
-./usr/share/man/cat8/playstation2
 ./usr/share/man/cat8/pmax
 ./usr/share/man/cat8/prep
 ./usr/share/man/cat8/sandpoint
@@ -796,12 +803,13 @@
 ./usr/share/man/cat8/sun3
 ./usr/share/man/cat8/vax
 ./usr/share/man/cat8/x68k
-./usr/share/man/cat8/amd64
+./usr/share/man/cat8/x86
 ./usr/share/man/cat9
 ./usr/share/man/cat9/acorn26
 ./usr/share/man/cat9/alpha
 ./usr/share/man/cat9/amiga
 ./usr/share/man/cat9/atari
+./usr/share/man/cat9/emips
 ./usr/share/man/cat9/hp300
 ./usr/share/man/cat9/i386
 ./usr/share/man/cat9/mac68k
@@ -810,6 +818,7 @@
 ./usr/share/man/cat9/sun3
 ./usr/share/man/cat9/vax
 ./usr/share/man/cat9/x68k
+./usr/share/man/cat9/x86
 ./usr/share/man/man1
 ./usr/share/man/man1/atari
 ./usr/share/man/man1/hp300
@@ -826,6 +835,7 @@
 ./usr/share/man/man4/atari
 ./usr/share/man/man4/cobalt
 ./usr/share/man/man4/dreamcast
+./usr/share/man/man4/emips
 ./usr/share/man/man4/evbarm
 ./usr/share/man/man4/evbmips
 ./usr/share/man/man4/evbppc
@@ -840,6 +850,7 @@
 ./usr/share/man/man4/mvme68k
 ./usr/share/man/man4/pmax
 ./usr/share/man/man4/prep
+./usr/share/man/man4/sandpoint
 ./usr/share/man/man4/sgimips
 ./usr/share/man/man4/sparc
 ./usr/share/man/man4/sparc64
@@ -847,6 +858,7 @@
 ./usr/share/man/man4/sun3
 ./usr/share/man/man4/vax
 ./usr/share/man/man4/x68k
+./usr/share/man/man4/x86
 ./usr/share/man/man5
 ./usr/share/man/man6
 ./usr/share/man/man7
@@ -855,6 +867,7 @@
 ./usr/share/man/man8/acorn32
 ./usr/share/man/man8/algor
 ./usr/share/man/man8/alpha
+./usr/share/man/man8/amd64
 ./usr/share/man/man8/amiga
 ./usr/share/man/man8/arc
 ./usr/share/man/man8/atari
@@ -863,6 +876,7 @@
 ./usr/share/man/man8/cesfic
 ./usr/share/man/man8/cobalt
 ./usr/share/man/man8/dreamcast
+./usr/share/man/man8/emips
 ./usr/share/man/man8/evbarm
 ./usr/share/man/man8/evbmips
 ./usr/share/man/man8/evbppc
@@ -886,7 +900,6 @@
 ./usr/share/man/man8/newsmips
 ./usr/share/man/man8/next68k
 ./usr/share/man/man8/ofppc
-./usr/share/man/man8/playstation2
 ./usr/share/man/man8/pmax
 ./usr/share/man/man8/prep
 ./usr/share/man/man8/sandpoint
@@ -899,12 +912,13 @@
 ./usr/share/man/man8/sun3
 ./usr/share/man/man8/vax
 ./usr/share/man/man8/x68k
-./usr/share/man/man8/amd64
+./usr/share/man/man8/x86
 ./usr/share/man/man9
 ./usr/share/man/man9/acorn26
 ./usr/share/man/man9/alpha
 ./usr/share/man/man9/amiga
 ./usr/share/man/man9/atari
+./usr/share/man/man9/emips
 ./usr/share/man/man9/hp300
 ./usr/share/man/man9/i386
 ./usr/share/man/man9/mac68k
@@ -913,6 +927,7 @@
 ./usr/share/man/man9/sun3
 ./usr/share/man/man9/vax
 ./usr/share/man/man9/x68k
+./usr/share/man/man9/x86
 ./usr/share/man/html1
 ./usr/share/man/html1/atari
 ./usr/share/man/html1/hp300
@@ -929,6 +944,7 @@
 ./usr/share/man/html4/atari
 ./usr/share/man/html4/cobalt
 ./usr/share/man/html4/dreamcast
+./usr/share/man/html4/emips
 ./usr/share/man/html4/evbarm
 ./usr/share/man/html4/evbmips
 ./usr/share/man/html4/evbppc
@@ -943,6 +959,7 @@
 ./usr/share/man/html4/mvme68k
 ./usr/share/man/html4/pmax
 ./usr/share/man/html4/prep
+./usr/share/man/html4/sandpoint
 ./usr/share/man/html4/sgimips
 ./usr/share/man/html4/sparc
 ./usr/share/man/html4/sparc64
@@ -950,6 +967,7 @@
 ./usr/share/man/html4/sun3
 ./usr/share/man/html4/vax
 ./usr/share/man/html4/x68k
+./usr/share/man/html4/x86
 ./usr/share/man/html5
 ./usr/share/man/html6
 ./usr/share/man/html7
@@ -958,6 +976,7 @@
 ./usr/share/man/html8/acorn32
 ./usr/share/man/html8/algor
 ./usr/share/man/html8/alpha
+./usr/share/man/html8/amd64
 ./usr/share/man/html8/amiga
 ./usr/share/man/html8/arc
 ./usr/share/man/html8/atari
@@ -966,6 +985,7 @@
 ./usr/share/man/html8/cesfic
 ./usr/share/man/html8/cobalt
 ./usr/share/man/html8/dreamcast
+./usr/share/man/html8/emips
 ./usr/share/man/html8/evbarm
 ./usr/share/man/html8/evbmips
 ./usr/share/man/html8/evbppc
@@ -989,7 +1009,6 @@
 ./usr/share/man/html8/newsmips
 ./usr/share/man/html8/next68k
 ./usr/share/man/html8/ofppc
-./usr/share/man/html8/playstation2
 ./usr/share/man/html8/pmax
 ./usr/share/man/html8/prep
 ./usr/share/man/html8/sandpoint
@@ -1002,12 +1021,13 @@
 ./usr/share/man/html8/sun3
 ./usr/share/man/html8/vax
 ./usr/share/man/html8/x68k
-./usr/share/man/html8/amd64
+./usr/share/man/html8/x86
 ./usr/share/man/html9
 ./usr/share/man/html9/acorn26
 ./usr/share/man/html9/alpha
 ./usr/share/man/html9/amiga
 ./usr/share/man/html9/atari
+./usr/share/man/html9/emips
 ./usr/share/man/html9/hp300
 ./usr/share/man/html9/i386
 ./usr/share/man/html9/mac68k
@@ -1016,6 +1036,7 @@
 ./usr/share/man/html9/sun3
 ./usr/share/man/html9/vax
 ./usr/share/man/html9/x68k
+./usr/share/man/html9/x86
 ./usr/share/me
 ./usr/share/misc
 ./usr/share/mk
@@ -1027,13 +1048,23 @@
 ./usr/share/nls/cs
 ./usr/share/nls/de
 ./usr/share/nls/es
+./usr/share/nls/es_ES.ISO8859-1
 ./usr/share/nls/fi
 ./usr/share/nls/fr
+./usr/share/nls/gl_ES.ISO8859-1
+./usr/share/nls/hu_HU.ISO8859-2
+./usr/share/nls/ja_JP.SJIS
+./usr/share/nls/ja_JP.UTF-8
+./usr/share/nls/ja_JP.eucJP
 ./usr/share/nls/nl
 ./usr/share/nls/no
 ./usr/share/nls/pl
+./usr/share/nls/pt_BR.ISO8859-1
+./usr/share/nls/ru_RU.KOI8-R
 ./usr/share/nls/sk
 ./usr/share/nls/sv
+./usr/share/nls/uk_UA.UTF-8
+./usr/share/nls/zh_CN.UTF-8
 ./usr/share/nvi
 ./usr/share/nvi/catalog
 ./usr/share/tabset
@@ -1069,62 +1100,6 @@
 ./usr/share/zoneinfo/Mideast
 ./usr/share/zoneinfo/Pacific
 ./usr/share/zoneinfo/US
-./usr/tests
-./usr/tests/atf
-./usr/tests/atf/atf-c
-./usr/tests/atf/atf-c++
-./usr/tests/atf/atf-sh
-./usr/tests/atf/data
-./usr/tests/atf/formats
-./usr/tests/atf/test_programs
-./usr/tests/atf/tools
-./usr/tests/crypto
-./usr/tests/crypto/libcrypto
-./usr/tests/fs
-./usr/tests/fs/ffs
-./usr/tests/fs/puffs
-./usr/tests/fs/tmpfs
-./usr/tests/games
-./usr/tests/ipf
-./usr/tests/ipf/expected
-./usr/tests/ipf/input
-./usr/tests/ipf/regress
-./usr/tests/kernel
-./usr/tests/kernel/kqueue
-./usr/tests/kernel/kqueue/read
-./usr/tests/kernel/kqueue/write
-./usr/tests/lib
-./usr/tests/lib/libc
-./usr/tests/lib/libc/stdlib
-./usr/tests/lib/libc/string
-./usr/tests/lib/libevent
-./usr/tests/libexec
-./usr/tests/libexec/ld.elf_so
-./usr/tests/modules
-./usr/tests/net
-./usr/tests/net/sys
-./usr/tests/rump
-./usr/tests/rump/rumpkern
-./usr/tests/syscall
-./usr/tests/util
-./usr/tests/util/awk
-./usr/tests/util/bzip2
-./usr/tests/util/config
-./usr/tests/util/config/support
-./usr/tests/util/config/support/arch
-./usr/tests/util/config/support/arch/regress
-./usr/tests/util/config/support/arch/regress/conf
-./usr/tests/util/config/support/conf
-./usr/tests/util/cut
-./usr/tests/util/df
-./usr/tests/util/grep
-./usr/tests/util/id
-./usr/tests/util/m4
-./usr/tests/util/make
-./usr/tests/util/mtree
-./usr/tests/util/ps
-./usr/tests/util/sdiff
-./usr/tests/util/sh
 ./var
 ./var/account
 ./var/at
@@ -1138,6 +1113,7 @@
 ./var/chroot/named/etc
 ./var/chroot/named/etc/namedb
 ./var/chroot/named/etc/namedb/cache	mode=0775 uname=named gname=named
+./var/chroot/named/etc/namedb/keys	type=dir mode=0775 uname=named gname=named
 ./var/chroot/named/usr
 ./var/chroot/named/usr/libexec
 ./var/chroot/named/var
@@ -1152,6 +1128,7 @@
 ./var/chroot/ntpd/var/run	mode=0775 gname=ntpd
 ./var/chroot/pflogd		mode=0755
 ./var/chroot/sshd		mode=0755
+./var/chroot/tcpdump		mode=0755
 ./var/chroot/tftp-proxy		mode=0755
 ./var/crash			mode=0770
 ./var/cron
@@ -1192,6 +1169,7 @@
 ./var/spool/sockets		mode=0777
 ./var/tmp			mode=01777
 ./var/tmp/vi.recover		mode=01777
+./var/tpm			uname=_tss gname=_tss mode=0750
 ./var/www
 ./var/yp
 ./var/yp/binding

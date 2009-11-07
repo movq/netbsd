@@ -1,4 +1,4 @@
-.\"	$NetBSD: netstat.1,v 1.54 2009/09/13 09:17:26 wiz Exp $
+.\"	$NetBSD: netstat.1,v 1.62 2011/11/11 15:09:33 gdt Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)netstat.1	8.8 (Berkeley) 4/18/94
 .\"
-.Dd September 12, 2009
+.Dd June 29, 2010
 .Dt NETSTAT 1
 .Os
 .Sh NAME
@@ -42,7 +42,7 @@
 .Op Fl M Ar core
 .Op Fl N Ar system
 .Nm
-.Op Fl bdgiLmnqrSsv
+.Op Fl bdghiLmnqrSsTv
 .Op Fl f Ar address_family
 .Op Fl M Ar core
 .Op Fl N Ar system
@@ -151,6 +151,9 @@ for
 .Ar atalk ,
 for
 .Dv AF_APPLETALK ;
+.Ar mpls ,
+for
+.Dv AF_MPLS ;
 and
 .Ar local
 or
@@ -181,6 +184,14 @@ for the specified
 or
 .Ar protocol ,
 respectively.
+.It Fl h
+When used with
+.Fl b
+in combination with either
+.Fl i
+or
+.Fl I ,
+output "human-readable" byte counts.
 .It Fl i
 Show the state of interfaces which have been auto-configured
 (interfaces statically configured into a system, but not
@@ -210,7 +221,7 @@ Extract values associated with the name list from the specified core
 instead of the default
 .Pa /dev/kmem .
 .It Fl m
-Show statistics recorded by the memory management routines
+Show statistics recorded by the mbuf memory management routines
 (the network manages a private pool of memory buffers).
 .It Fl N
 Extract the name list from the specified system instead of the default
@@ -256,6 +267,10 @@ but show ports symbolically).
 .It Fl s
 Show per-protocol statistics.
 If this option is repeated, counters with a value of zero are suppressed.
+.It Fl T
+Show MPLS Tags for the routing tables.
+If multiple tags exists, they will
+be comma separated, first tag being the BoS one.
 .It Fl v
 Show extra (verbose) detail for the routing tables
 .Pq Fl r ,
@@ -333,6 +348,7 @@ The mapping between letters and flags is:
 .It H	RTF_HOST	Host entry (net otherwise)
 .It L	RTF_LLINFO	Valid protocol to link address translation.
 .It M	RTF_MODIFIED	Modified dynamically (by redirect)
+.It p	RTF_ANNOUNCE	Link level proxy
 .It R	RTF_REJECT	Host or net unreachable
 .It S	RTF_STATIC	Manually added
 .It U	RTF_UP	Route usable

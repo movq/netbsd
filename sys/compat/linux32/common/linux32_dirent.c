@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_dirent.c,v 1.9 2009/07/22 15:49:29 njoly Exp $ */
+/*	$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.9 2009/07/22 15:49:29 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.13 2011/10/14 09:23:29 hannken Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -130,7 +130,10 @@ linux32_sys_getdents(struct lwp *l, const struct linux32_sys_getdents_args *uap,
 		goto out1;
 	}
 
-	if ((error = VOP_GETATTR(vp, &va, l->l_cred)))
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error)
 		goto out1;
 
 	nbytes = SCARG(uap, count);
@@ -213,6 +216,7 @@ again:
 			idb.d_reclen = (u_short)linux32_reclen;
 		}
 		strcpy(idb.d_name, bdp->d_name);
+		idb.d_name[strlen(idb.d_name) + 1] = bdp->d_type;
 		if ((error = copyout((void *)&idb, outp, linux32_reclen)))
 			goto out;
 		/* advance past this real entry */
@@ -229,8 +233,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG_P32(uap, dent))
+	if (outp == (void *)SCARG_P32(uap, dent)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 	if (oldcall)
@@ -239,7 +247,7 @@ again:
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);

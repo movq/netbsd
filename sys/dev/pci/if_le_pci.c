@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_pci.c,v 1.49 2008/04/28 20:23:55 martin Exp $	*/
+/*	$NetBSD: if_le_pci.c,v 1.51 2011/07/26 20:51:24 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_pci.c,v 1.49 2008/04/28 20:23:55 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_pci.c,v 1.51 2011/07/26 20:51:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,8 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_le_pci.c,v 1.49 2008/04/28 20:23:55 martin Exp $"
 #include <sys/syslog.h>
 #include <sys/socket.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -106,7 +104,7 @@ CFATTACH_DECL_NEW(le_pci, sizeof(struct le_softc),
  * PCI constants.
  * XXX These should be in a common file!
  */
-#define PCI_CBIO	0x10		/* Configuration Base IO Address */
+#define PCI_CBIO PCI_BAR(0)		/* Configuration Base IO Address */
 
 #define	LE_PCI_MEMSIZE	16384
 

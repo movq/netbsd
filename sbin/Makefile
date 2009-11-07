@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.114 2009/07/18 16:31:41 reinoud Exp $
+#	$NetBSD: Makefile,v 1.123 2011/11/24 15:54:54 ahoka Exp $
 #	@(#)Makefile	8.5 (Berkeley) 3/31/94
 
 # Not ported: XNSrouted enpload scsiformat startslip
@@ -7,8 +7,8 @@
 .include <bsd.own.mk>
 
 SUBDIR=	amrctl apmlabel atactl badsect bioctl brconfig ccdconfig \
-	disklabel dkctl dkscan_bsdlabel dmesg \
-	drvctl edlabel fastboot fdisk fsck fsirand gpt ifconfig init ldconfig \
+	chown devpubd disklabel dkctl dkscan_bsdlabel dmesg dmctl \
+	drvctl fastboot fdisk fsck fsirand gpt ifconfig init ldconfig \
 	mbrlabel mknod modload modstat modunload mount newbtconf nologin \
 	pdisk ping pppoectl raidctl reboot rcorder rndctl route routed \
 	savecore scan_ffs scsictl shutdown slattach svhlabel swapctl sysctl \
@@ -16,13 +16,15 @@ SUBDIR=	amrctl apmlabel atactl badsect bioctl brconfig ccdconfig \
 
 # support for various file systems
 SUBDIR+= newfs_ext2fs fsck_ext2fs
-SUBDIR+= newfs fsck_ffs fsdb dump restore clri tunefs
+SUBDIR+= newfs fsck_ffs fsdb dump restore clri tunefs resize_ffs
 SUBDIR+= newfs_lfs fsck_lfs dump_lfs resize_lfs
 SUBDIR+= newfs_msdos fsck_msdos
 SUBDIR+= newfs_sysvbfs
 SUBDIR+= newfs_udf
+SUBDIR+= newfs_v7fs fsck_v7fs
 SUBDIR+= mount_ados
 SUBDIR+= mount_cd9660
+SUBDIR+= mount_chfs
 SUBDIR+= mount_efs
 SUBDIR+= mount_ext2fs
 SUBDIR+= mount_fdesc
@@ -41,11 +43,13 @@ SUBDIR+= mount_overlay
 SUBDIR+= mount_portal
 SUBDIR+= mount_procfs
 SUBDIR+= mount_ptyfs
+SUBDIR+= mount_puffs
 SUBDIR+= mount_smbfs
 SUBDIR+= mount_sysvbfs
 SUBDIR+= mount_tmpfs
 SUBDIR+= mount_umap
 SUBDIR+= mount_union
+SUBDIR+= mount_v7fs
 
 .if (${MKCRYPTO} != "no")
 SUBDIR+= cgdconfig
@@ -53,6 +57,10 @@ SUBDIR+= cgdconfig
 
 .if (${USE_INET6} != "no")
 SUBDIR+= ping6 rtsol
+.endif
+
+.if (${MKISCSI} != "no")
+SUBDIR+= iscsictl iscsid
 .endif
 
 # IPsec

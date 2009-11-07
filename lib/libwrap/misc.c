@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $	*/
+/*	$NetBSD: misc.c,v 1.9.56.2 2012/04/23 23:40:41 riz Exp $	*/
 
  /*
   * Misc routines that are used by tcpd and by tcpdchk.
@@ -11,7 +11,7 @@
 #if 0
 static char sccsic[] = "@(#) misc.c 1.2 96/02/11 17:01:29";
 #else
-__RCSID("$NetBSD: misc.c,v 1.9 2002/12/02 22:08:44 jdolecek Exp $");
+__RCSID("$NetBSD: misc.c,v 1.9.56.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif
 

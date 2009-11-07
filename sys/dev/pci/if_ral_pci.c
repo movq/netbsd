@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ral_pci.c,v 1.13 2009/08/08 20:44:36 matt Exp $	*/
+/*	$NetBSD: if_ral_pci.c,v 1.19 2012/01/30 19:41:20 drochner Exp $	*/
 /*	$OpenBSD: if_ral_pci.c,v 1.6 2006/01/09 20:03:43 damien Exp $  */
 
 /*-
@@ -22,9 +22,8 @@
  * PCI front-end for the Ralink RT2560/RT2561/RT2561S/RT2661 driver.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ral_pci.c,v 1.13 2009/08/08 20:44:36 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ral_pci.c,v 1.19 2012/01/30 19:41:20 drochner Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -88,7 +87,7 @@ struct ral_pci_softc {
 };
 
 /* Base Address Register */
-#define RAL_PCI_BAR0	0x10
+#define RAL_PCI_BAR0 PCI_BAR(0)
 
 int	ral_pci_match(device_t, cfdata_t, void *);
 void	ral_pci_attach(device_t, device_t, void *);
@@ -123,17 +122,14 @@ ral_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct ral_pci_softc *psc = device_private(self);
 	struct rt2560_softc *sc = &psc->sc_sc;
-	struct pci_attach_args *pa = aux;
+	const struct pci_attach_args *pa = aux;
 	const char *intrstr;
-	char devinfo[256];
 	bus_addr_t base;
 	pci_intr_handle_t ih;
 	pcireg_t reg;
-	int error, revision;
+	int error;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	revision = PCI_REVISION(pa->pa_class);
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
+	pci_aprint_devinfo(pa, NULL);
 
 	psc->sc_opns = (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_RALINK_RT2560) ?
 	    &ral_rt2560_opns : &ral_rt2661_opns;
@@ -145,7 +141,6 @@ ral_pci_attach(device_t parent, device_t self, void *aux)
 	reg = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
 	reg |= PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_MEM_ENABLE;
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, reg);
-	pa->pa_flags |= PCI_FLAGS_MEM_ENABLED;
 
 	/* map control/status registers */
 	error = pci_mapreg_map(pa, RAL_PCI_BAR0, PCI_MAPREG_TYPE_MEM |
@@ -169,7 +164,7 @@ ral_pci_attach(device_t parent, device_t self, void *aux)
 	if (psc->sc_ih == NULL) {
 		aprint_error(": could not establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
+			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
 		return;
 	}

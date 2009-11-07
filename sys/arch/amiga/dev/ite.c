@@ -1,6 +1,7 @@
-/*	$NetBSD: ite.c,v 1.89 2009/10/26 19:16:54 cegger Exp $ */
+/*	$NetBSD: ite.c,v 1.93 2011/12/15 14:25:13 phx Exp $ */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -35,44 +36,6 @@
  *	from: Utah Hdr: ite.c 1.1 90/07/09
  *	@(#)ite.c 7.6 (Berkeley) 5/16/91
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah Hdr: ite.c 1.1 90/07/09
- *	@(#)ite.c 7.6 (Berkeley) 5/16/91
- */
 
 /*
  * ite - bitmaped terminal.
@@ -83,7 +46,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.89 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.93 2011/12/15 14:25:13 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -291,11 +254,6 @@ void
 itecnprobe(struct consdev *cd)
 {
 	/*
-	 * bring graphics layer up.
-	 */
-	config_console();
-
-	/*
 	 * return priority of the best ite (already picked from attach)
 	 * or CN_DEAD.
 	 */
@@ -434,6 +392,8 @@ iteinit(dev_t dev)
 
 	ip->cursorx = 0;
 	ip->cursory = 0;
+	if (ip->grf->g_iteinit == NULL)
+		return;  /* grf has no console */
 	SUBR_INIT(ip);
 	SUBR_CURSOR(ip, DRAW_CURSOR);
 	if (ip->tabs == NULL)
@@ -461,7 +421,7 @@ iteopen(dev_t dev, int mode, int devtype, struct lwp *l)
 		return ENXIO;
 
 	if (ip->tp == NULL) {
-		tp = ip->tp = ttymalloc();
+		tp = ip->tp = tty_alloc();
 		tty_attach(tp);
 	} else
 		tp = ip->tp;

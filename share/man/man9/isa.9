@@ -1,4 +1,4 @@
-.\"     $NetBSD: isa.9,v 1.18 2009/03/12 12:48:56 joerg Exp $
+.\"     $NetBSD: isa.9,v 1.20 2011/05/30 01:48:40 dyoung Exp $
 .\"
 .\" Copyright (c) 2001, 2005, 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -56,7 +56,7 @@
 .Nm isa_mappage
 .Nd Industry-standard Architecture
 .Sh SYNOPSIS
-.In machine/bus.h
+.In sys/bus.h
 .In dev/isa/isareg.h
 .In dev/isa/isavar.h
 .Ft int
@@ -474,13 +474,6 @@ using
 and
 .Fn isa_dmamap_destroy .
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing or using the
-machine-independent ISA subsystem can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The ISA subsystem itself is implemented within the files
 .Pa sys/dev/isa/isa.c
 and

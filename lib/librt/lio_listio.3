@@ -1,4 +1,4 @@
-.\" $NetBSD: lio_listio.3,v 1.2 2007/08/07 20:45:04 wiz Exp $
+.\" $NetBSD: lio_listio.3,v 1.5 2011/08/12 23:40:43 wiz Exp $
 .\"
 .\" Copyright (c) 2003 Tim J. Robbins
 .\" All rights reserved.
@@ -26,7 +26,7 @@
 .\"
 .\" $FreeBSD: /repoman/r/ncvs/src/lib/libc/sys/lio_listio.2,v 1.6 2006/10/07 05:13:32 trhodes Exp $
 .\"
-.Dd May 4, 2007
+.Dd August 12, 2011
 .Dt LIO_LISTIO 3
 .Os
 .Sh NAME
@@ -64,7 +64,7 @@ field of each
 .Vt aiocb
 specifies the operation to be performed.
 The following operations are supported:
-.Bl -tag -width ".Dv LIO_WRITE"
+.Bl -tag -width ".Dv LIO_WRITE" -offset indent
 .It Dv LIO_READ
 Read data as if by a call to
 .Xr aio_read 3 .
@@ -120,9 +120,8 @@ The
 function will fail if:
 .Bl -tag -width Er
 .It Bq Er EAGAIN
-There are not enough resources to enqueue the requests.
-.It Bq Er EAGAIN
-The request would cause the system-wide limit
+There are not enough resources to enqueue the requests; or
+the request would cause the system-wide limit
 .Dv AIO_MAX
 to be exceeded.
 .It Bq Er EINTR
@@ -164,9 +163,8 @@ structure individually by calling
 .Xr read 2 ,
 .Xr siginfo 2 ,
 .Xr write 2 ,
-.Xr aio_error 3 ,
-.Xr aio_read 3 ,
-.Xr aio_write 3
+.Xr aio 3 ,
+.Xr sigevent 3
 .Sh STANDARDS
 The
 .Fn lio_listio

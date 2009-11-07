@@ -1,8 +1,10 @@
+/*	$NetBSD: trace.c,v 1.1.1.3 2010/12/12 15:19:16 adam Exp $	*/
+
 /* trace.c - traces overlay invocation */
-/* $OpenLDAP: pkg/ldap/contrib/slapd-modules/trace/trace.c,v 1.2.2.3 2008/02/11 23:26:38 kurt Exp $ */
+/* OpenLDAP: pkg/ldap/contrib/slapd-modules/trace/trace.c,v 1.2.2.5 2010/04/13 20:22:31 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2006-2008 The OpenLDAP Foundation.
+ * Copyright 2006-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

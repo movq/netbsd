@@ -1,4 +1,4 @@
-.\" $NetBSD: bwi.4,v 1.5 2009/08/21 23:46:20 joerg Exp $
+.\" $NetBSD: bwi.4,v 1.8 2011/10/13 11:12:05 njoly Exp $
 .\"
 .\" Copyright (c) 2007 The DragonFly Project.  All rights reserved.
 .\"
@@ -37,6 +37,8 @@
 .Sh NAME
 .Nm bwi
 .Nd Broadcom BCM430x/4318 IEEE 802.11b/g wireless network driver
+.Sh SYNOPSIS
+.Cd "bwi* at pci? dev ? function ?"
 .Sh DESCRIPTION
 The
 .Nm
@@ -68,7 +70,7 @@ The following cards are among those supported by the
 .Nm
 driver:
 .Pp
-.Bl -column -compact "Apple AirPort Extreme" "BCM4318" "Mini PCI" "b/g" -offset 6n
+.Bl -column -offset 6n -compact "Apple AirPort Extreme" "BCM4318" "Mini PCI" "b/g"
 .It Em "Card	Chip	Bus	Standard"
 .It Buffalo WLI-PCI-G54S	BCM4306	PCI	b/g
 .It Dell Wireless 1370	BCM4318	Mini PCI	b/g
@@ -100,9 +102,9 @@ node.
 .Xr arp 4 ,
 .Xr ifmedia 4 ,
 .Xr pci 4 ,
-.Xr wiconfig 4 ,
 .Xr ifconfig 8 ,
 .Xr sysctl 8 ,
+.Xr wiconfig 8 ,
 .Xr wpa_supplicant 8
 .Sh HISTORY
 The

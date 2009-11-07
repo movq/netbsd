@@ -1,4 +1,4 @@
-/*	$NetBSD: unifdef.c,v 1.15 2009/07/13 19:05:41 roy Exp $	*/
+/*	$NetBSD: unifdef.c,v 1.20.4.1 2012/03/05 19:12:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -77,7 +77,7 @@ static const char copyright[] =
 #endif
 #ifdef __IDSTRING
 __IDSTRING(Berkeley, "@(#)unifdef.c	8.1 (Berkeley) 6/6/93");
-__IDSTRING(NetBSD, "$NetBSD: unifdef.c,v 1.15 2009/07/13 19:05:41 roy Exp $");
+__IDSTRING(NetBSD, "$NetBSD: unifdef.c,v 1.20.4.1 2012/03/05 19:12:07 sborrill Exp $");
 __IDSTRING(dotat, "$dotat: things/unifdef.c,v 1.161 2003/07/01 15:32:48 fanf2 Exp $");
 #endif
 #endif /* not lint */
@@ -241,9 +241,9 @@ static bool             keepthis;		/* don't delete constant #if */
 static int              exitstat;		/* program exit status */
 
 static void             addsym(bool, bool, char *);
-static void             debug(const char *, ...);
-static void             done(void);
-static void             error(const char *);
+static void             debug(const char *, ...) __printflike(1, 2);
+__dead static void      done(void);
+__dead static void      error(const char *);
 static int              findsym(const char *);
 static void             flushline(bool);
 static Linetype         get_line(void);
@@ -252,12 +252,12 @@ static void             ignoreoff(void);
 static void             ignoreon(void);
 static void             keywordedit(const char *);
 static void             nest(void);
-static void             process(void);
+__dead static void      process(void);
 static const char      *skipcomment(const char *);
 static const char      *skipsym(const char *);
 static void             state(Ifstate);
 static int              strlcmp(const char *, const char *, size_t);
-static void             usage(void);
+__dead static void      usage(void);
 
 #define endsym(c) (!isalpha((unsigned char)c) && !isdigit((unsigned char)c) && c != '_')
 
@@ -342,13 +342,13 @@ main(int argc, char *argv[])
 	if (ofilename == NULL) {
 		output = stdout;
 	} else {
-		if (stat(ofilename, &osb) != 0)
-			err(2, "can't stat %s", ofilename);
-		if (fstat(fileno(input), &isb) != 0)
-			err(2, "can't fstat %s", filename);
+		if (stat(ofilename, &osb) == 0) {
+			if (fstat(fileno(input), &isb) != 0)
+				err(2, "can't fstat %s", filename);
 
-		overwriting = (osb.st_dev == isb.st_dev &&
-		    osb.st_ino == osb.st_ino);
+			overwriting = (osb.st_dev == isb.st_dev &&
+			    osb.st_ino == isb.st_ino);
+		}
 		if (overwriting) {
 			int ofd;
 
@@ -409,11 +409,11 @@ usage(void)
 typedef void state_fn(void);
 
 /* report an error */
-static void Eelif (void) { error("Inappropriate #elif"); }
-static void Eelse (void) { error("Inappropriate #else"); }
-static void Eendif(void) { error("Inappropriate #endif"); }
-static void Eeof  (void) { error("Premature EOF"); }
-static void Eioccc(void) { error("Obfuscated preprocessor control line"); }
+__dead static void Eelif (void) { error("Inappropriate #elif"); }
+__dead static void Eelse (void) { error("Inappropriate #else"); }
+__dead static void Eendif(void) { error("Inappropriate #endif"); }
+__dead static void Eeof  (void) { error("Premature EOF"); }
+__dead static void Eioccc(void) { error("Obfuscated preprocessor control line"); }
 /* plain line handling */
 static void print (void) { flushline(true); }
 static void drop  (void) { flushline(false); }
@@ -506,12 +506,12 @@ done(void)
 	if (fclose(output)) {
 		if (overwriting) {
 			unlink(tmpname);
-			errx(2, "%s unchanged", filename);
+			errx(2, "%s unchanged", ofilename);
 		}
 	}
-	if (overwriting && rename(tmpname, filename)) {
+	if (overwriting && rename(tmpname, ofilename)) {
 		unlink(tmpname);
-		errx(2, "%s unchanged", filename);
+		errx(2, "%s unchanged", ofilename);
 	}
 	exit(exitstat);
 }
@@ -736,31 +736,31 @@ eval_unary(const struct ops *ops, int *valp, const char **cpp)
 
 	cp = skipcomment(*cpp);
 	if (*cp == '!') {
-		debug("eval%d !", ops - eval_ops);
+		debug("eval%td !", ops - eval_ops);
 		cp++;
 		if (eval_unary(ops, valp, &cp) == LT_IF)
 			return (LT_IF);
 		*valp = !*valp;
 	} else if (*cp == '(') {
 		cp++;
-		debug("eval%d (", ops - eval_ops);
+		debug("eval%td (", ops - eval_ops);
 		if (eval_table(eval_ops, valp, &cp) == LT_IF)
 			return (LT_IF);
 		cp = skipcomment(cp);
 		if (*cp++ != ')')
 			return (LT_IF);
 	} else if (isdigit((unsigned char)*cp)) {
-		debug("eval%d number", ops - eval_ops);
+		debug("eval%td number", ops - eval_ops);
 		*valp = strtol(cp, &ep, 0);
 		cp = skipsym(cp);
 	} else if (strncmp(cp, "defined", 7) == 0 && endsym(cp[7])) {
 		cp = skipcomment(cp+7);
-		debug("eval%d defined", ops - eval_ops);
+		debug("eval%td defined", ops - eval_ops);
 		if (*cp++ != '(')
 			return (LT_IF);
 		cp = skipcomment(cp);
 		sym = findsym(cp);
-		if (sym < 0 || !symlist)
+		if (sym < 0 || symlist)
 			return (LT_IF);
 		*valp = (value[sym] != NULL);
 		cp = skipsym(cp);
@@ -769,9 +769,9 @@ eval_unary(const struct ops *ops, int *valp, const char **cpp)
 			return (LT_IF);
 		keepthis = false;
 	} else if (!endsym(*cp)) {
-		debug("eval%d symbol", ops - eval_ops);
+		debug("eval%td symbol", ops - eval_ops);
 		sym = findsym(cp);
-		if (sym < 0 || !symlist)
+		if (sym < 0 || symlist)
 			return (LT_IF);
 		if (value[sym] == NULL)
 			*valp = 0;
@@ -783,12 +783,12 @@ eval_unary(const struct ops *ops, int *valp, const char **cpp)
 		cp = skipsym(cp);
 		keepthis = false;
 	} else {
-		debug("eval%d bad expr", ops - eval_ops);
+		debug("eval%td bad expr", ops - eval_ops);
 		return (LT_IF);
 	}
 
 	*cpp = cp;
-	debug("eval%d = %d", ops - eval_ops, *valp);
+	debug("eval%td = %d", ops - eval_ops, *valp);
 	return (*valp ? LT_TRUE : LT_FALSE);
 }
 
@@ -802,7 +802,7 @@ eval_table(const struct ops *ops, int *valp, const char **cpp)
 	const char *cp;
 	int val;
 
-	debug("eval%d", ops - eval_ops);
+	debug("eval%td", ops - eval_ops);
 	cp = *cpp;
 	if (ops->inner(ops+1, valp, &cp) == LT_IF)
 		return (LT_IF);
@@ -814,14 +814,14 @@ eval_table(const struct ops *ops, int *valp, const char **cpp)
 		if (op->str == NULL)
 			break;
 		cp += strlen(op->str);
-		debug("eval%d %s", ops - eval_ops, op->str);
+		debug("eval%td %s", ops - eval_ops, op->str);
 		if (ops->inner(ops+1, &val, &cp) == LT_IF)
 			return (LT_IF);
 		*valp = op->fn(*valp, val);
 	}
 
 	*cpp = cp;
-	debug("eval%d = %d", ops - eval_ops, *valp);
+	debug("eval%td = %d", ops - eval_ops, *valp);
 	return (*valp ? LT_TRUE : LT_FALSE);
 }
 
@@ -936,7 +936,7 @@ skipsym(const char *cp)
 }
 
 /*
- * Look for the symbol in the symbol table. If is is found, we return
+ * Look for the symbol in the symbol table. If it is found, we return
  * the symbol table index, else we return -1.
  */
 static int
@@ -1034,7 +1034,7 @@ error(const char *msg)
 	fclose(output);
 	if (overwriting) {
 		unlink(tmpname);
-		errx(2, "%s unchanged", filename);
+		errx(2, "%s unchanged", ofilename);
 	}
 	errx(2, "output may be truncated");
 }

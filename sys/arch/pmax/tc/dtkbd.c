@@ -1,4 +1,4 @@
-/*	$NetBSD: dtkbd.c,v 1.8 2008/04/28 20:23:31 martin Exp $	*/
+/*	$NetBSD: dtkbd.c,v 1.10 2011/07/09 17:32:31 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -30,15 +30,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dtkbd.c,v 1.8 2008/04/28 20:23:31 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dtkbd.c,v 1.10 2011/07/09 17:32:31 matt Exp $");
 
 #include "locators.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h> 
+#include <sys/callout.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
-#include <sys/callout.h>
+#include <sys/systm.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
@@ -47,21 +48,19 @@ __KERNEL_RCSID(0, "$NetBSD: dtkbd.c,v 1.8 2008/04/28 20:23:31 martin Exp $");
 #include <dev/dec/wskbdmap_lk201.h>
 #include <dev/tc/tcvar.h>
 
-#include <machine/bus.h> 
-
 #include <pmax/tc/dtreg.h>
 #include <pmax/tc/dtvar.h>
 
 #include <pmax/pmax/cons.h>
 
 struct dtkbd_softc {
-	struct device	sc_dv;
-	struct device	*sc_wskbddev;
+	device_t	sc_dev;
+	device_t	sc_wskbddev;
 	int		sc_enabled;
 };
 
-int	dtkbd_match(struct device *, struct cfdata *, void *);
-void	dtkbd_attach(struct device *, struct device *, void *);
+int	dtkbd_match(device_t, cfdata_t, void *);
+void	dtkbd_attach(device_t, device_t, void *);
 int	dtkbd_enable(void *, int);
 int	dtkbd_ioctl(void *, u_long, void *, int, struct lwp *);
 void	dtkbd_cngetc(void *, u_int *, int *);
@@ -81,7 +80,7 @@ const struct wskbd_consops dtkbd_consops = {
 	dtkbd_cnpollc,
 };
 
-CFATTACH_DECL(dtkbd, sizeof(struct dtkbd_softc),
+CFATTACH_DECL_NEW(dtkbd, sizeof(struct dtkbd_softc),
     dtkbd_match, dtkbd_attach, NULL, NULL);
 
 const struct wskbd_mapdata dtkbd_keymapdata = {
@@ -98,7 +97,7 @@ uint8_t	dtkbd_map[10];
 int	dtkbd_maplen;
 
 int
-dtkbd_match(struct device *parent, struct cfdata *cf, void *aux)
+dtkbd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dt_attach_args *dta;
 
@@ -107,19 +106,20 @@ dtkbd_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-dtkbd_attach(struct device *parent, struct device *self, void *aux)
+dtkbd_attach(device_t parent, device_t self, void *aux)
 {
 	struct dt_softc *dt;
 	struct dtkbd_softc *sc;
 	struct wskbddev_attach_args a;
 
-	dt = (struct dt_softc *)parent;
-	sc = (struct dtkbd_softc *)self;
+	dt = device_private(parent);
+	sc = device_private(self);
+	sc->sc_dev = self;
 
 	printf("\n");
 
-	if (dt_establish_handler(dt, &dt_kbd_dv, self, dtkbd_handler)) {
-		printf("%s: unable to establish handler\n", self->dv_xname);
+	if (dt_establish_handler(dt, &dt_kbd_dv, sc, dtkbd_handler)) {
+		printf("%s: unable to establish handler\n", device_xname(self));
 		return;
 	}
 
@@ -189,7 +189,7 @@ dtkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct dtkbd_softc *sc;
 
-	sc = (struct dtkbd_softc *)v;
+	sc = v;
 
 	switch (cmd) {
 	case WSKBDIO_GTYPE:

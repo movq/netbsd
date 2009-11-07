@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp.c,v 1.60 2009/09/03 09:29:07 tteras Exp $	*/
+/*	$NetBSD: isakmp.c,v 1.74 2012/01/01 15:57:31 tteras Exp $	*/
 
 /* Id: isakmp.c,v 1.74 2006/05/07 21:32:59 manubsd Exp */
 
@@ -468,8 +468,8 @@ isakmp_main(msg, remote, local)
 		/* Floating ports for NAT-T */
 		if (NATT_AVAILABLE(iph1) &&
 		    ! (iph1->natt_flags & NAT_PORTS_CHANGED) &&
-		    ((cmpsaddr(iph1->remote, remote) != 0) ||
-		     (cmpsaddr(iph1->local, local) != 0)))
+		    ((cmpsaddr(iph1->remote, remote) != CMPSADDR_MATCH) ||
+		     (cmpsaddr(iph1->local, local) != CMPSADDR_MATCH)))
 		{
 			/* prevent memory leak */
 			racoon_free(iph1->remote);
@@ -510,7 +510,7 @@ isakmp_main(msg, remote, local)
 #endif
 
 		/* must be same addresses in one stream of a phase at least. */
-		if (cmpsaddr(iph1->remote, remote) != 0) {
+		if (cmpsaddr(iph1->remote, remote) != CMPSADDR_MATCH) {
 			char *saddr_db, *saddr_act;
 
 			saddr_db = racoon_strdup(saddr2str(iph1->remote));
@@ -624,7 +624,7 @@ isakmp_main(msg, remote, local)
 		/*
 		 * iph1 must be present for Information message.
 		 * if iph1 is null then trying to get the phase1 status
-		 * as the packet from responder againt initiator's 1st
+		 * as the packet from responder again initiator's 1st
 		 * exchange in phase 1.
 		 * NOTE: We think such informational exchange should be ignored.
 		 */
@@ -636,7 +636,7 @@ isakmp_main(msg, remote, local)
 					"exchange received.\n");
 				return -1;
 			}
-			if (cmpsaddr(iph1->remote, remote) != 0) {
+			if (cmpsaddr(iph1->remote, remote) != CMPSADDR_MATCH) {
 				plog(LLV_WARNING, LOCATION, remote,
 					"remote address mismatched. "
 					"db=%s\n",
@@ -810,7 +810,8 @@ ph1_main(iph1, msg)
 
 		if (iph1->side == RESPONDER && iph1->status == PHASE1ST_START) {
 			plog(LLV_ERROR, LOCATION, iph1->remote,
-				"failed to pre-process packet.\n");
+				"failed to pre-process ph1 packet (side: %d, status %d).\n",
+				iph1->side, iph1->status);
 			return -1;
 		} else {
 			/* ignore the error and keep phase 1 handler */
@@ -838,7 +839,8 @@ ph1_main(iph1, msg)
 			[iph1->side]
 			[iph1->status])(iph1, msg) != 0) {
 		plog(LLV_ERROR, LOCATION, iph1->remote,
-			"failed to process packet.\n");
+			"failed to process ph1 packet (side: %d, status: %d).\n",
+			iph1->side, iph1->status);
 		return -1;
 	}
 
@@ -864,13 +866,7 @@ ph1_main(iph1, msg)
 		migrate_dying_ph12(iph1);
 
 		/* add to the schedule to expire, and seve back pointer. */
-		if ((iph1->rmconf->rekey == REKEY_FORCE)
-#ifdef ENABLE_DPD
-			||
-		    (iph1->rmconf->rekey == REKEY_ON && iph1->dpd_support &&
-		     iph1->rmconf->dpd_interval)
-#endif
-			) {
+		if (ph1_rekey_enabled(iph1)) {
 			sched_schedule(&iph1->sce,
 				       iph1->approval->lifetime *
 				       PFKEY_SOFT_LIFETIME_RATE / 100,
@@ -990,7 +986,8 @@ quick_main(iph2, msg)
 			    [iph2->status])(iph2, msg);
 	if (error != 0) {
 		plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
-			"failed to pre-process packet.\n");
+			"failed to pre-process ph2 packet (side: %d, status %d).\n",
+			iph2->side, iph2->status);
 		if (error == ISAKMP_INTERNAL_ERROR)
 			return 0;
 		isakmp_info_send_n1(iph2->ph1, error, NULL);
@@ -1018,7 +1015,8 @@ quick_main(iph2, msg)
 			[iph2->side]
 			[iph2->status])(iph2, msg) != 0) {
 		plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
-			"failed to process packet.\n");
+			"failed to process ph2 packet (side: %d, status: %d).\n",
+			iph2->side, iph2->status);
 		return -1;
 	}
 
@@ -1226,7 +1224,8 @@ isakmp_ph1begin_r(msg, remote, local, etype)
 			[iph1->side]
 			[iph1->status])(iph1, msg) < 0) {
 		plog(LLV_ERROR, LOCATION, remote,
-			"failed to process packet.\n");
+			"failed to process ph1 packet (side: %d, status: %d).\n",
+			iph1->side, iph1->status);
 		remph1(iph1);
 		delph1(iph1);
 		return -1;
@@ -1379,7 +1378,8 @@ isakmp_ph2begin_r(iph1, msg)
 	                   [iph2->status])(iph2, msg);
 	if (error != 0) {
 		plog(LLV_ERROR, LOCATION, iph1->remote,
-			"failed to pre-process packet.\n");
+			"failed to pre-process ph2 packet (side: %d, status: %d).\n",
+			iph2->side, iph2->status);
 		if (error != ISAKMP_INTERNAL_ERROR)
 			isakmp_info_send_n1(iph2->ph1, error, NULL);
 		/*
@@ -1397,7 +1397,8 @@ isakmp_ph2begin_r(iph1, msg)
 			[iph2->side]
 			[iph2->status])(iph2, msg) < 0) {
 		plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
-			"failed to process packet.\n");
+			"failed to process ph2 packet (side: %d, status: %d).\n",
+			iph2->side, iph2->status);
 		/* don't release handler */
 		return -1;
 	}
@@ -1720,7 +1721,7 @@ isakmp_open(struct sockaddr *addr, int udp_encap)
 	     "%s used as isakmp port (fd=%d)\n",
 	     saddr2str(addr), fd);
 
-	monitor_fd(fd, isakmp_handler, NULL);
+	monitor_fd(fd, isakmp_handler, NULL, 1);
 	return fd;
 
 err:
@@ -1839,6 +1840,8 @@ isakmp_ph1resend(iph1)
 		plog(LLV_ERROR, LOCATION, NULL,
 			"phase1 negotiation failed due to time up. %s\n",
 			isakmp_pindex(&iph1->index, iph1->msgid));
+		/* XXX is the peer really "dead" here ??? */
+		script_hook(iph1, SCRIPT_PHASE1_DEAD);
 		evt_phase1(iph1, EVT_PHASE1_NO_RESPONSE, NULL);
 
 		return -1;
@@ -2015,7 +2018,7 @@ isakmp_ph1expire(iph1)
 		iph1->status = PHASE1ST_EXPIRED;
 	}
 
-	sched_schedule(&iph1->sce, 1, isakmp_ph1delete_stub);
+	isakmp_ph1delete(iph1);
 }
 
 /* called from scheduler */
@@ -2043,16 +2046,15 @@ isakmp_ph1delete(iph1)
 	/* Discard any left phase2s */
 	for (p = LIST_FIRST(&iph1->ph2tree); p; p = next) {
 		next = LIST_NEXT(p, ph1bind);
-		if (p->status >= PHASE2ST_ESTABLISHED)
-			unbindph12(p);
+		if (p->status == PHASE2ST_ESTABLISHED)
+			isakmp_info_send_d2(p);
+		/* remove all ph2 handles,
+		 * as ph1handle will be expired soon
+		 */
+		delete_spd(p, 1);
+		remph2(p);
+		delph2(p);
 	}
-
-	if (LIST_FIRST(&iph1->ph2tree) != NULL) {
-		sched_schedule(&iph1->sce, 1, isakmp_ph1delete_stub);
-		return;
-	}
-
-	/* don't re-negosiation when the phase 1 SA expires. */
 
 	src = racoon_strdup(saddr2str(iph1->local));
 	dst = racoon_strdup(saddr2str(iph1->remote));
@@ -2062,7 +2064,11 @@ isakmp_ph1delete(iph1)
 	plog(LLV_INFO, LOCATION, NULL,
 		"ISAKMP-SA deleted %s-%s spi:%s\n",
 		src, dst, isakmp_pindex(&iph1->index, 0));
+
 	evt_phase1(iph1, EVT_PHASE1_DOWN, NULL);
+	if (new_iph1 == NULL && ph1_rekey_enabled(iph1))
+		script_hook(iph1, SCRIPT_PHASE1_DEAD);
+
 	racoon_free(src);
 	racoon_free(dst);
 
@@ -2143,9 +2149,10 @@ isakmp_ph2delete(iph2)
  * if phase1 has been finished, begin phase2.
  */
 int
-isakmp_post_acquire(iph2, iph1hint)
+isakmp_post_acquire(iph2, iph1hint, nopassive)
 	struct ph2handle *iph2;
 	struct ph1handle *iph1hint;
+	int nopassive;
 {
 	struct remoteconf *rmconf;
 	struct ph1handle *iph1 = NULL;
@@ -2162,7 +2169,7 @@ isakmp_post_acquire(iph2, iph1hint)
 	 * so no need to bother yet. --arno */
 
 	if (iph1hint == NULL || iph1hint->rmconf == NULL) {
-		rmconf = getrmconf(iph2->dst, GETRMCONF_F_NO_PASSIVE);
+		rmconf = getrmconf(iph2->dst, nopassive ? GETRMCONF_F_NO_PASSIVE : 0);
 		if (rmconf == NULL) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"no configuration found for %s.\n",
@@ -2174,12 +2181,12 @@ isakmp_post_acquire(iph2, iph1hint)
 	}
 
 	/* if passive mode, ignore the acquire message */
-	if (rmconf->passive) {
+	if (nopassive && rmconf->passive) {
 		plog(LLV_DEBUG, LOCATION, NULL,
 			"because of passive mode, "
 			"ignore the acquire message for %s.\n",
 			saddrwop2str(iph2->dst));
-		return 0;
+		return -1;
 	}
 
 	/*
@@ -2238,7 +2245,7 @@ isakmp_get_sainfo(iph2, sp_out, sp_in)
 	struct secpolicy *sp_out, *sp_in;
 {
 	struct remoteconf *conf;
-	int remoteid = 0;
+	uint32_t remoteid = 0;
 
 	plog(LLV_DEBUG, LOCATION, NULL,
 		"new acquire %s\n", spidx2str(&sp_out->spidx));
@@ -2351,7 +2358,7 @@ isakmp_chkph1there(iph2)
 		plog(LLV_ERROR, LOCATION, iph2->dst,
 			"phase2 negotiation failed "
 			"due to time up waiting for phase1. %s\n",
-			sadbsecas2str(iph2->dst, iph2->src,
+			sadbsecas2str(iph2->src, iph2->dst,
 				iph2->satype, 0, 0));
 		plog(LLV_INFO, LOCATION, NULL,
 			"delete phase 2 handler.\n");
@@ -2902,7 +2909,7 @@ copy_ph1addresses(iph1, rmconf, remote, local)
 	struct remoteconf *rmconf;
 	struct sockaddr *remote, *local;
 {
-	u_int16_t port;
+	u_int16_t port = 0;
 
 	/* address portion must be grabbed from real remote address "remote" */
 	iph1->remote = dupsaddr(remote);
@@ -2912,7 +2919,7 @@ copy_ph1addresses(iph1, rmconf, remote, local)
 	/*
 	 * if remote has no port # (in case of initiator - from ACQUIRE msg)
 	 * - if remote.conf specifies port #, use that
-	 * - if remote.conf does not, use 500
+	 * - if remote.conf does not, use lcconf->port_isakmp
 	 * if remote has port # (in case of responder - from recvfrom(2))
 	 * respect content of "remote".
 	 */
@@ -2921,7 +2928,7 @@ copy_ph1addresses(iph1, rmconf, remote, local)
 		if (rmconf != NULL)
 			port = extract_port(rmconf->remote);
 		if (port == 0)
-			port = PORT_ISAKMP;
+			port = lcconf->port_isakmp;
 		set_port(iph1->remote, port);
 	}
 
@@ -2936,7 +2943,7 @@ copy_ph1addresses(iph1, rmconf, remote, local)
 		port = myaddr_getsport(iph1->local);
 		if (port == 0)
 			port = PORT_ISAKMP;
-		set_port(iph1->local, PORT_ISAKMP);
+		set_port(iph1->local, port);
 	}
 
 #ifdef ENABLE_NATT
@@ -3314,10 +3321,10 @@ purge_remote(iph1)
 		 * Select only SAs where src == local and dst == remote (outgoing)
 		 * or src == remote and dst == local (incoming).
 		 */
-		if ((cmpsaddr(iph1->local, src) ||
-		     cmpsaddr(iph1->remote, dst)) &&
-		    (cmpsaddr(iph1->local, dst) ||
-		     cmpsaddr(iph1->remote, src))) {
+		if ((cmpsaddr(iph1->local, src) != CMPSADDR_MATCH ||
+		     cmpsaddr(iph1->remote, dst) != CMPSADDR_MATCH) &&
+		    (cmpsaddr(iph1->local, dst) != CMPSADDR_MATCH ||
+		     cmpsaddr(iph1->remote, src) != CMPSADDR_MATCH)) {
 			msg = next;
 			continue;
 		}
@@ -3386,7 +3393,7 @@ purge_remote(iph1)
 		 "purged ISAKMP-SA spi=%s.\n",
 		 isakmp_pindex(&(iph1->index), iph1->msgid));
 
-	sched_schedule(&iph1->sce, 1, isakmp_ph1delete_stub);
+	isakmp_ph1delete(iph1);
 }
 
 void
@@ -3414,7 +3421,7 @@ delete_spd(iph2, created)
 	dst = iph2->dst;
 
 	plog(LLV_INFO, LOCATION, NULL,
-		 "generated policy, deleting it.\n");
+		 "deleting a generated policy.\n");
 
 	memset(&spidx, 0, sizeof(spidx));
 	iph2->spidx_gen = (caddr_t )&spidx;
@@ -3497,7 +3504,7 @@ delete_spd(iph2, created)
 		}
 	}
 
-	/* make source address in spidx */
+		/* make source address in spidx */
 	if (iph2->id_p != NULL
 		&& (_XIDT(iph2->id_p) == IPSECDOI_ID_IPV4_ADDR
 			|| _XIDT(iph2->id_p) == IPSECDOI_ID_IPV6_ADDR

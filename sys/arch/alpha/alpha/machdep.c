@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.321 2009/10/25 20:39:45 mhitch Exp $ */
+/* $NetBSD: machdep.c,v 1.337.2.1 2012/05/21 15:25:57 riz Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -68,7 +68,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.321 2009/10/25 20:39:45 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.337.2.1 2012/05/21 15:25:57 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,7 +87,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.321 2009/10/25 20:39:45 mhitch Exp $")
 #include <sys/msgbuf.h>
 #include <sys/ioctl.h>
 #include <sys/tty.h>
-#include <sys/user.h>
 #include <sys/exec.h>
 #include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/exec_ecoff.h>
@@ -106,10 +105,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.321 2009/10/25 20:39:45 mhitch Exp $")
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 #include <sys/sysctl.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/autoconf.h>
 #include <machine/reg.h>
@@ -138,7 +138,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.321 2009/10/25 20:39:45 mhitch Exp $")
 
 #include "ksyms.h"
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 void *msgbufaddr;
@@ -159,17 +158,15 @@ int	bootdev_debug = 0;	/* patchable, or from DDB */
  * XXX We need an address to which we can assign things so that they
  * won't be optimized away because we didn't use the value.
  */
-u_int32_t no_optimize;
+uint32_t no_optimize;
 
 /* the following is used externally (sysctl_hw) */
 char	machine[] = MACHINE;		/* from <machine/param.h> */
 char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 char	cpu_model[128];
 
-struct	user *proc0paddr;
-
 /* Number of machine cycles per microsecond */
-u_int64_t	cycles_per_usec;
+uint64_t	cycles_per_usec;
 
 /* number of CPUs in the box.  really! */
 int		ncpus;
@@ -178,7 +175,7 @@ struct bootinfo_kernel bootinfo;
 
 /* For built-in TCDS */
 #if defined(DEC_3000_300) || defined(DEC_3000_500)
-u_int8_t	dec_3000_scsiid[2], dec_3000_scsifast[2];
+uint8_t	dec_3000_scsiid[2], dec_3000_scsifast[2];
 #endif
 
 struct platform platform;
@@ -209,6 +206,17 @@ void	dumpsys(void);
 void	identifycpu(void);
 void	printregs(struct reg *);
 
+const pcu_ops_t fpu_ops = {
+	.pcu_id = PCU_FPU,
+	.pcu_state_load = fpu_state_load,
+	.pcu_state_save = fpu_state_save,
+	.pcu_state_release = fpu_state_release,
+};
+
+const pcu_ops_t * const pcu_ops_md_defs[PCU_UNIT_COUNT] = {
+	[PCU_FPU] = &fpu_ops,
+};
+
 void
 alpha_init(u_long pfn, u_long ptb, u_long bim, u_long bip, u_long biv)
 	/* pfn:		 first free PFN number */
@@ -222,7 +230,8 @@ alpha_init(u_long pfn, u_long ptb, u_long bim, u_long bip, u_long biv)
 	struct mddt_cluster *memc;
 	int i, mddtweird;
 	struct vm_physseg *vps;
-	vaddr_t kernstart, kernend;
+	struct pcb *pcb0;
+	vaddr_t kernstart, kernend, v;
 	paddr_t kernstartpfn, kernendpfn, pfn0, pfn1;
 	cpuid_t cpu_id;
 	struct cpu_info *ci;
@@ -294,7 +303,7 @@ alpha_init(u_long pfn, u_long ptb, u_long bim, u_long bip, u_long biv)
 			/* booted dev not provided in bootinfo */
 			init_prom_interface((struct rpb *)
 			    ALPHA_PHYS_TO_K0SEG(bootinfo.hwrpb_phys));
-                	prom_getenv(PROM_E_BOOTED_DEV, bootinfo.booted_dev,
+	        	prom_getenv(PROM_E_BOOTED_DEV, bootinfo.booted_dev,
 			    sizeof bootinfo.booted_dev);
 			break;
 		}
@@ -335,7 +344,7 @@ nobootinfo:
 #endif
 
 	/*
-	 * Remember how many cycles there are per microsecond, 
+	 * Remember how many cycles there are per microsecond,
 	 * so that we can use delay().  Round up, for safety.
 	 */
 	cycles_per_usec = (hwrpb->rpb_cc_freq + 999999) / 1000000;
@@ -607,7 +616,7 @@ nobootinfo:
 		vsize_t sz = (vsize_t)round_page(MSGBUFSIZE);
 		vsize_t reqsz = sz;
 
-		vps = &vm_physmem[vm_nphysseg - 1];
+		vps = VM_PHYSMEM_PTR(vm_nphysseg - 1);
 
 		/* shrink so that it'll fit in the last segment */
 		if ((vps->avail_end - vps->avail_start) < atop(sz))
@@ -636,10 +645,10 @@ nobootinfo:
 	 */
 
 	/*
-	 * Init mapping for u page(s) for proc 0
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	lwp0.l_addr = proc0paddr =
-	    (struct user *)uvm_pageboot_alloc(UPAGES * PAGE_SIZE);
+	v = uvm_pageboot_alloc(UPAGES * PAGE_SIZE);
+	uvm_lwp_setuarea(&lwp0, v);
 
 	/*
 	 * Initialize the virtual memory system, and set the
@@ -649,23 +658,19 @@ nobootinfo:
 	    hwrpb->rpb_max_asn, hwrpb->rpb_pcs_cnt);
 
 	/*
-	 * Initialize the rest of proc 0's PCB, and cache its physical
-	 * address.
+	 * Initialize the rest of lwp0's PCB and cache its physical address.
 	 */
-	lwp0.l_md.md_pcbpaddr =
-	    (struct pcb *)ALPHA_K0SEG_TO_PHYS((vaddr_t)&proc0paddr->u_pcb);
+	pcb0 = lwp_getpcb(&lwp0);
+	lwp0.l_md.md_pcbpaddr = (void *)ALPHA_K0SEG_TO_PHYS((vaddr_t)pcb0);
 
 	/*
 	 * Set the kernel sp, reserving space for an (empty) trapframe,
-	 * and make proc0's trapframe pointer point to it for sanity.
+	 * and make lwp0's trapframe pointer point to it for sanity.
 	 */
-	proc0paddr->u_pcb.pcb_hw.apcb_ksp =
-	    (u_int64_t)proc0paddr + USPACE - sizeof(struct trapframe);
-	lwp0.l_md.md_tf =
-	    (struct trapframe *)proc0paddr->u_pcb.pcb_hw.apcb_ksp;
-	simple_lock_init(&proc0paddr->u_pcb.pcb_fpcpu_slock);
+	pcb0->pcb_hw.apcb_ksp = v + USPACE - sizeof(struct trapframe);
+	lwp0.l_md.md_tf = (struct trapframe *)pcb0->pcb_hw.apcb_ksp;
 
-	/* Indicate that proc0 has a CPU. */
+	/* Indicate that lwp0 has a CPU. */
 	lwp0.l_cpu = ci;
 
 	/*
@@ -769,7 +774,7 @@ nobootinfo:
 	 * Initialize debuggers, and break into them if appropriate.
 	 */
 #if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)((u_int64_t)ksym_end - (u_int64_t)ksym_start),
+	ksyms_addsyms_elf((int)((uint64_t)ksym_end - (uint64_t)ksym_start),
 	    ksym_start, ksym_end);
 #endif
 
@@ -809,6 +814,7 @@ consinit(void)
 void
 cpu_startup(void)
 {
+	extern struct evcnt fpevent_use, fpevent_reuse;
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
 #if defined(DEBUG)
@@ -871,6 +877,14 @@ cpu_startup(void)
 	 * CPUs.
 	 */
 	hwrpb_primary_init();
+
+	/*
+	 * Initialize some trap event counters.
+	 */
+	evcnt_attach_dynamic_nozero(&fpevent_use, EVCNT_TYPE_MISC, NULL,
+	    "FP", "proc use");
+	evcnt_attach_dynamic_nozero(&fpevent_reuse, EVCNT_TYPE_MISC, NULL,
+	    "FP", "proc re-use");
 }
 
 /*
@@ -890,7 +904,7 @@ alpha_dsr_sysname(void)
 
 	dsr = (struct dsrdb *)(((char *)hwrpb) + hwrpb->rpb_dsrdb_off);
 	sysname = (const char *)((char *)dsr + (dsr->dsr_sysname_off +
-	    sizeof(u_int64_t)));
+	    sizeof(uint64_t)));
 	return (sysname);
 }
 
@@ -899,7 +913,7 @@ alpha_dsr_sysname(void)
  * returning the model string on match.
  */
 const char *
-alpha_variation_name(u_int64_t variation, const struct alpha_variation_table *avtp)
+alpha_variation_name(uint64_t variation, const struct alpha_variation_table *avtp)
 {
 	int i;
 
@@ -1058,7 +1072,7 @@ haltsys:
 /*
  * These variables are needed by /sbin/savecore
  */
-u_int32_t dumpmag = 0x8fca0101;	/* magic number */
+uint32_t dumpmag = 0x8fca0101;	/* magic number */
 int 	dumpsize = 0;		/* pages */
 long	dumplo = 0; 		/* blocks */
 
@@ -1151,19 +1165,11 @@ cpu_dump(void)
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks, dumpblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		goto bad;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		goto bad;
-	}
-	if (bdev->d_psize == NULL)
-		goto bad;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	if (nblks <= ctod(1))
 		goto bad;
 
@@ -1227,7 +1233,7 @@ dumpsys(void)
 	printf("\ndumping to dev %u,%u offset %ld\n",
 	    major(dumpdev), minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -1429,9 +1435,9 @@ buildcontext(struct lwp *l, const void *catcher, const void *tramp, const void *
 {
 	struct trapframe *tf = l->l_md.md_tf;
 
-	tf->tf_regs[FRAME_RA] = (u_int64_t)tramp;
-	tf->tf_regs[FRAME_PC] = (u_int64_t)catcher;
-	tf->tf_regs[FRAME_T12] = (u_int64_t)catcher;
+	tf->tf_regs[FRAME_RA] = (uint64_t)tramp;
+	tf->tf_regs[FRAME_PC] = (uint64_t)catcher;
+	tf->tf_regs[FRAME_T12] = (uint64_t)catcher;
 	alpha_pal_wrusp((unsigned long)fp);
 }
 
@@ -1503,8 +1509,8 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	 */
 	
 	tf->tf_regs[FRAME_A0] = sig;
-	tf->tf_regs[FRAME_A1] = (u_int64_t)&fp->sf_si;
-	tf->tf_regs[FRAME_A2] = (u_int64_t)&fp->sf_uc;
+	tf->tf_regs[FRAME_A1] = (uint64_t)&fp->sf_si;
+	tf->tf_regs[FRAME_A2] = (uint64_t)&fp->sf_uc;
 
 	buildcontext(l,catcher,ps->sa_sigdesc[sig].sd_tramp,fp);
 
@@ -1523,21 +1529,21 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 }
 
 
-void 
+void
 cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas, void *ap, void *sp, sa_upcall_t upcall)
 {
        	struct trapframe *tf;
 
 	tf = l->l_md.md_tf;
 
-	tf->tf_regs[FRAME_PC] = (u_int64_t)upcall;
+	tf->tf_regs[FRAME_PC] = (uint64_t)upcall;
 	tf->tf_regs[FRAME_RA] = 0;
 	tf->tf_regs[FRAME_A0] = type;
-	tf->tf_regs[FRAME_A1] = (u_int64_t)sas;
+	tf->tf_regs[FRAME_A1] = (uint64_t)sas;
 	tf->tf_regs[FRAME_A2] = nevents;
 	tf->tf_regs[FRAME_A3] = ninterrupted;
-	tf->tf_regs[FRAME_A4] = (u_int64_t)ap;
-	tf->tf_regs[FRAME_T12] = (u_int64_t)upcall;  /* t12 is pv */
+	tf->tf_regs[FRAME_A4] = (uint64_t)ap;
+	tf->tf_regs[FRAME_T12] = (uint64_t)upcall;  /* t12 is pv */
 	alpha_pal_wrusp((unsigned long)sp);
 }
 
@@ -1594,9 +1600,10 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
  * Set registers on exec.
  */
 void
-setregs(register struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(register struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
 	struct trapframe *tfp = l->l_md.md_tf;
+	struct pcb *pcb;
 #ifdef DEBUG
 	int i;
 #endif
@@ -1615,7 +1622,8 @@ setregs(register struct lwp *l, struct exec_package *pack, u_long stack)
 #else
 	memset(tfp->tf_regs, 0, FRAME_SIZE * sizeof tfp->tf_regs[0]);
 #endif
-	memset(&l->l_addr->u_pcb.pcb_fp, 0, sizeof l->l_addr->u_pcb.pcb_fp);
+	pcb = lwp_getpcb(l);
+	memset(&pcb->pcb_fp, 0, sizeof(pcb->pcb_fp));
 	alpha_pal_wrusp(stack);
 	tfp->tf_regs[FRAME_PS] = ALPHA_PSL_USERSET;
 	tfp->tf_regs[FRAME_PC] = pack->ep_entry & ~3;
@@ -1623,116 +1631,15 @@ setregs(register struct lwp *l, struct exec_package *pack, u_long stack)
 	tfp->tf_regs[FRAME_A0] = stack;			/* a0 = sp */
 	tfp->tf_regs[FRAME_A1] = 0;			/* a1 = rtld cleanup */
 	tfp->tf_regs[FRAME_A2] = 0;			/* a2 = rtld object */
-	tfp->tf_regs[FRAME_A3] = (u_int64_t)l->l_proc->p_psstr;	/* a3 = ps_strings */
+	tfp->tf_regs[FRAME_A3] = l->l_proc->p_psstrp;	/* a3 = ps_strings */
 	tfp->tf_regs[FRAME_T12] = tfp->tf_regs[FRAME_PC];	/* a.k.a. PV */
 
-	l->l_md.md_flags &= ~MDP_FPUSED;
+	l->l_md.md_flags &= ~MDLWP_FPUSED;
 	if (__predict_true((l->l_md.md_flags & IEEE_INHERIT) == 0)) {
-		l->l_md.md_flags &= ~MDP_FP_C;
-		l->l_addr->u_pcb.pcb_fp.fpr_cr = FPCR_DYN(FP_RN);
+		l->l_md.md_flags &= ~MDLWP_FP_C;
+		pcb->pcb_fp.fpr_cr = FPCR_DYN(FP_RN);
 	}
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l, 0);
-}
-
-/*
- * Release the FPU.
- */
-void
-fpusave_cpu(struct cpu_info *ci, int save)
-{
-	struct lwp *l;
-#if defined(MULTIPROCESSOR)
-	int s;
-#endif
-
-	KDASSERT(ci == curcpu());
-
-#if defined(MULTIPROCESSOR)
-	s = splhigh();		/* block IPIs for the duration */
-	atomic_or_ulong(&ci->ci_flags, CPUF_FPUSAVE);
-#endif
-
-	l = ci->ci_fpcurlwp;
-	if (l == NULL)
-		goto out;
-
-	if (save) {
-		alpha_pal_wrfen(1);
-		savefpstate(&l->l_addr->u_pcb.pcb_fp);
-	}
-
-	alpha_pal_wrfen(0);
-
-	FPCPU_LOCK(&l->l_addr->u_pcb);
-
-	l->l_addr->u_pcb.pcb_fpcpu = NULL;
-	ci->ci_fpcurlwp = NULL;
-
-	FPCPU_UNLOCK(&l->l_addr->u_pcb);
-
- out:
-#if defined(MULTIPROCESSOR)
-	atomic_and_ulong(&ci->ci_flags, ~CPUF_FPUSAVE);
-	splx(s);
-#endif
-	return;
-}
-
-/*
- * Synchronize FP state for this process.
- */
-void
-fpusave_proc(struct lwp *l, int save)
-{
-	struct cpu_info *ci = curcpu();
-	struct cpu_info *oci;
-#if defined(MULTIPROCESSOR)
-	u_long ipi = save ? ALPHA_IPI_SYNCH_FPU : ALPHA_IPI_DISCARD_FPU;
-	int s, spincount;
-#endif
-
-	KDASSERT(l->l_addr != NULL);
-
-#if defined(MULTIPROCESSOR)
-	s = splhigh();		/* block IPIs for the duration */
-#endif
-	FPCPU_LOCK(&l->l_addr->u_pcb);
-
-	oci = l->l_addr->u_pcb.pcb_fpcpu;
-	if (oci == NULL) {
-		FPCPU_UNLOCK(&l->l_addr->u_pcb);
-#if defined(MULTIPROCESSOR)
-		splx(s);
-#endif
-		return;
-	}
-
-#if defined(MULTIPROCESSOR)
-	if (oci == ci) {
-		KASSERT(ci->ci_fpcurlwp == l);
-		FPCPU_UNLOCK(&l->l_addr->u_pcb);
-		splx(s);
-		fpusave_cpu(ci, save);
-		return;
-	}
-
-	KASSERT(oci->ci_fpcurlwp == l);
-	alpha_send_ipi(oci->ci_cpuid, ipi);
-	FPCPU_UNLOCK(&l->l_addr->u_pcb);
-
-	spincount = 0;
-	while (l->l_addr->u_pcb.pcb_fpcpu != NULL) {
-		spincount++;
-		delay(1000);	/* XXX */
-		if (spincount > 10000)
-			panic("fpsave ipi didn't");
-	}
-#else
-	KASSERT(ci->ci_fpcurlwp == l);
-	FPCPU_UNLOCK(&l->l_addr->u_pcb);
-	fpusave_cpu(ci, save);
-#endif /* MULTIPROCESSOR */
+	fpu_discard();
 }
 
 /*
@@ -1778,7 +1685,7 @@ delay(unsigned long n)
 
 #ifdef EXEC_ECOFF
 void
-cpu_exec_ecoff_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+cpu_exec_ecoff_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 	struct ecoff_exechdr *execp = (struct ecoff_exechdr *)epp->ep_hdr;
 
@@ -1788,7 +1695,7 @@ cpu_exec_ecoff_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 /*
  * cpu_exec_ecoff_hook():
  *	cpu-dependent ECOFF format hook for execve().
- * 
+ *
  * Do any machine-dependent diddling of the exec package when doing ECOFF.
  *
  */
@@ -1808,36 +1715,48 @@ cpu_exec_ecoff_probe(struct lwp *l, struct exec_package *epp)
 #endif /* EXEC_ECOFF */
 
 int
-alpha_pa_access(u_long pa)
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
 {
+	u_quad_t size;
 	int i;
 
 	for (i = 0; i < mem_cluster_cnt; i++) {
 		if (pa < mem_clusters[i].start)
 			continue;
-		if ((pa - mem_clusters[i].start) >=
-		    (mem_clusters[i].size & ~PAGE_MASK))
+		size = mem_clusters[i].size & ~PAGE_MASK;
+		if (pa >= (mem_clusters[i].start + size))
 			continue;
-		return (mem_clusters[i].size & PAGE_MASK);	/* prot */
+		if ((prot & mem_clusters[i].size & PAGE_MASK) == prot)
+			return 0;
 	}
+	return EFAULT;
+}
 
-	/*
-	 * Address is not a memory address.  If we're secure, disallow
-	 * access.  Otherwise, grant read/write.
-	 */
-	if (kauth_authorize_machdep(kauth_cred_get(),
-	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL) != 0)
-		return (PROT_NONE);
-	else
-		return (PROT_READ | PROT_WRITE);
+bool
+mm_md_direct_mapped_io(void *addr, paddr_t *paddr)
+{
+	vaddr_t va = (vaddr_t)addr;
+
+	if (va >= ALPHA_K0SEG_BASE && va <= ALPHA_K0SEG_END) {
+		*paddr = ALPHA_K0SEG_TO_PHYS(va);
+		return true;
+	}
+	return false;
+}
+
+bool
+mm_md_direct_mapped_phys(paddr_t paddr, vaddr_t *vaddr)
+{
+
+	*vaddr = ALPHA_PHYS_TO_K0SEG(paddr);
+	return true;
 }
 
 /* XXX XXX BEGIN XXX XXX */
 paddr_t alpha_XXX_dmamap_or;					/* XXX */
 								/* XXX */
 paddr_t								/* XXX */
-alpha_XXX_dmamap(v)						/* XXX */
-	vaddr_t v;						/* XXX */
+alpha_XXX_dmamap(vaddr_t v)					/* XXX */
 {								/* XXX */
 								/* XXX */
 	return (vtophys(v) | alpha_XXX_dmamap_or);		/* XXX */
@@ -1869,6 +1788,7 @@ void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
 	struct trapframe *frame = l->l_md.md_tf;
+	struct pcb *pcb = lwp_getpcb(l);
 	__greg_t *gr = mcp->__gregs;
 	__greg_t ras_pc;
 
@@ -1882,8 +1802,8 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 		gr[_REG_SP] = alpha_pal_rdusp();
 		gr[_REG_UNIQUE] = alpha_pal_rdunique();
 	} else {
-		gr[_REG_SP] = l->l_addr->u_pcb.pcb_hw.apcb_usp;
-		gr[_REG_UNIQUE] = l->l_addr->u_pcb.pcb_hw.apcb_unique;
+		gr[_REG_SP] = pcb->pcb_hw.apcb_usp;
+		gr[_REG_UNIQUE] = pcb->pcb_hw.apcb_unique;
 	}
 	gr[_REG_PC] = frame->tf_regs[FRAME_PC];
 	gr[_REG_PS] = frame->tf_regs[FRAME_PS];
@@ -1895,52 +1815,60 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	*flags |= _UC_CPU | _UC_UNIQUE;
 
 	/* Save floating point register context, if any, and copy it. */
-	if (l->l_md.md_flags & MDP_FPUSED) {
-		fpusave_proc(l, 1);
-		(void)memcpy(&mcp->__fpregs, &l->l_addr->u_pcb.pcb_fp,
+	if (fpu_used_p(l)) {
+		fpu_save();
+		(void)memcpy(&mcp->__fpregs, &pcb->pcb_fp,
 		    sizeof (mcp->__fpregs));
 		mcp->__fpregs.__fp_fpcr = alpha_read_fp_c(l);
 		*flags |= _UC_FPU;
 	}
 }
 
+int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+{
+	const __greg_t *gr = mcp->__gregs;
+
+	if ((gr[_REG_PS] & ALPHA_PSL_USERSET) != ALPHA_PSL_USERSET ||
+	    (gr[_REG_PS] & ALPHA_PSL_USERCLR) != 0)
+		return EINVAL;
+
+	return 0;
+}
 
 int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	struct trapframe *frame = l->l_md.md_tf;
+	struct pcb *pcb = lwp_getpcb(l);
 	const __greg_t *gr = mcp->__gregs;
+	int error;
 
 	/* Restore register context, if any. */
 	if (flags & _UC_CPU) {
 		/* Check for security violations first. */
-		if ((gr[_REG_PS] & ALPHA_PSL_USERSET) != ALPHA_PSL_USERSET ||
-		    (gr[_REG_PS] & ALPHA_PSL_USERCLR) != 0)
-			return (EINVAL);
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
 
 		regtoframe((const struct reg *)gr, l->l_md.md_tf);
 		if (l == curlwp)
 			alpha_pal_wrusp(gr[_REG_SP]);
 		else
-			l->l_addr->u_pcb.pcb_hw.apcb_usp = gr[_REG_SP];
+			pcb->pcb_hw.apcb_usp = gr[_REG_SP];
 		frame->tf_regs[FRAME_PC] = gr[_REG_PC];
 		frame->tf_regs[FRAME_PS] = gr[_REG_PS];
 	}
-	if (flags & _UC_UNIQUE) {
-		if (l == curlwp)
-			alpha_pal_wrunique(gr[_REG_UNIQUE]);
-		else
-			l->l_addr->u_pcb.pcb_hw.apcb_unique = gr[_REG_UNIQUE];
-	}
+	if (flags & _UC_UNIQUE)
+		lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_UNIQUE]);
 	/* Restore floating point register context, if any. */
 	if (flags & _UC_FPU) {
 		/* If we have an FP register context, get rid of it. */
-		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-			fpusave_proc(l, 0);
-		(void)memcpy(&l->l_addr->u_pcb.pcb_fp, &mcp->__fpregs,
-		    sizeof (l->l_addr->u_pcb.pcb_fp));
-		l->l_md.md_flags = mcp->__fpregs.__fp_fpcr & MDP_FP_C;
-		l->l_md.md_flags |= MDP_FPUSED;
+		fpu_discard();
+		(void)memcpy(&pcb->pcb_fp, &mcp->__fpregs,
+		    sizeof (pcb->pcb_fp));
+		l->l_md.md_flags = mcp->__fpregs.__fp_fpcr & MDLWP_FP_C;
+		fpu_mark_used(l);
 	}
 
 	return (0);

@@ -1,5 +1,5 @@
-/*	$Id: at91usart.c,v 1.3 2009/10/23 06:53:13 snj Exp $	*/
-/*	$NetBSD: at91usart.c,v 1.3 2009/10/23 06:53:13 snj Exp $ */
+/*	$Id: at91usart.c,v 1.6 2012/02/02 19:42:57 tls Exp $	*/
+/*	$NetBSD: at91usart.c,v 1.6 2012/02/02 19:42:57 tls Exp $ */
 
 /*
  * Copyright (c) 2007 Embedtronics Oy. All rights reserved.
@@ -77,13 +77,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91usart.c,v 1.3 2009/10/23 06:53:13 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91usart.c,v 1.6 2012/02/02 19:42:57 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
@@ -109,14 +109,13 @@ __KERNEL_RCSID(0, "$NetBSD: at91usart.c,v 1.3 2009/10/23 06:53:13 snj Exp $");
 #include <sys/file.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/tty.h>
 #include <sys/uio.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/at91/at91reg.h>
 #include <arm/at91/at91var.h>
@@ -278,7 +277,7 @@ at91usart_attach_subr(struct at91usart_softc *sc, struct at91bus_attach_args *sa
 	}
 #endif	// NOTYET
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = at91usart_start;
 	tp->t_param = at91usart_param;
 	tp->t_hwiflow = at91usart_hwiflow;
@@ -304,7 +303,7 @@ at91usart_attach_subr(struct at91usart_softc *sc, struct at91bus_attach_args *sa
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, at91usart_soft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif

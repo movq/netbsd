@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_misc.c,v 1.67 2009/11/05 18:39:38 rafal Exp $	 */
+/*	$NetBSD: svr4_32_misc.c,v 1.74 2011/09/27 00:56:14 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.67 2009/11/05 18:39:38 rafal Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.74 2011/09/27 00:56:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,8 +100,6 @@ static int svr4_to_bsd_mmap_flags(int);
 
 static inline clock_t timeval_to_clock_t(struct timeval *);
 static int svr4_32_setinfo(int, struct rusage *, int, svr4_32_siginfo_tp);
-
-#define svr4_32_pfind(pid) p_find((pid), PFIND_UNLOCK | PFIND_ZOMBIE)
 
 static int svr4_32_mknod(struct lwp *, register_t *, const char *,
     svr4_32_mode_t, svr4_32_dev_t);
@@ -304,14 +302,18 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG_P32(uap, dp))
+	if (outp == SCARG_P32(uap, dp)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(sbuf, M_TEMP);
@@ -425,14 +427,18 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG_P32(uap, buf))
+	if (outp == SCARG_P32(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(sbuf, M_TEMP);
@@ -820,6 +826,7 @@ int
 svr4_32_sys_pgrpsys(struct lwp *l, const struct svr4_32_sys_pgrpsys_args *uap, register_t *retval)
 {
 	struct proc *p = l->l_proc;
+	pid_t pid;
 
 	switch (SCARG(uap, cmd)) {
 	case 1:			/* setpgrp() */
@@ -838,9 +845,13 @@ svr4_32_sys_pgrpsys(struct lwp *l, const struct svr4_32_sys_pgrpsys_args *uap, r
 		return 0;
 
 	case 2:			/* getsid(pid) */
-		if (SCARG(uap, pid) != 0 &&
-		    (p = svr4_32_pfind(SCARG(uap, pid))) == NULL)
+		mutex_enter(proc_lock);
+		pid = SCARG(uap, pid);
+		if (pid && (p = proc_find(pid)) == NULL) {
+			mutex_exit(proc_lock);
 			return ESRCH;
+		}
+		mutex_exit(proc_lock);
 		/*
 		 * This has already been initialized to the pid of
 		 * the session leader.
@@ -852,12 +863,14 @@ svr4_32_sys_pgrpsys(struct lwp *l, const struct svr4_32_sys_pgrpsys_args *uap, r
 		return sys_setsid(l, NULL, retval);
 
 	case 4:			/* getpgid(pid) */
-
-		if (SCARG(uap, pid) != 0 &&
-		    (p = svr4_32_pfind(SCARG(uap, pid))) == NULL)
+		mutex_enter(proc_lock);
+		pid = SCARG(uap, pid);
+		if (pid && (p = proc_find(pid)) == NULL) {
+			mutex_exit(proc_lock);
 			return ESRCH;
-
+		}
 		*retval = (int) p->p_pgrp->pg_id;
+		mutex_exit(proc_lock);
 		return 0;
 
 	case 5:			/* setpgid(pid, pgid); */
@@ -1071,7 +1084,7 @@ svr4_32_copyout_statvfs(const struct statvfs *bfs, struct svr4_32_statvfs *sufs)
 		sfs->f_flag |= SVR4_ST_RDONLY;
 	if (bfs->f_flag & MNT_NOSUID)
 		sfs->f_flag |= SVR4_ST_NOSUID;
-	sfs->f_namemax = MAXNAMLEN;
+	sfs->f_namemax = bfs->f_namemax;
 	memcpy(sfs->f_fstr, bfs->f_fstypename, sizeof(sfs->f_fstr)); /* XXX */
 	memset(sfs->f_filler, 0, sizeof(sfs->f_filler));
 
@@ -1103,7 +1116,7 @@ svr4_32_copyout_statvfs64(const struct statvfs *bfs, struct svr4_32_statvfs64 *s
 		sfs->f_flag |= SVR4_ST_RDONLY;
 	if (bfs->f_flag & MNT_NOSUID)
 		sfs->f_flag |= SVR4_ST_NOSUID;
-	sfs->f_namemax = MAXNAMLEN;
+	sfs->f_namemax = bfs->f_namemax;
 	memcpy(sfs->f_fstr, bfs->f_fstypename, sizeof(sfs->f_fstr)); /* XXX */
 	memset(sfs->f_filler, 0, sizeof(sfs->f_filler));
 
@@ -1310,17 +1323,23 @@ svr4_32_sys_nice(struct lwp *l, const struct svr4_32_sys_nice_args *uap, registe
 int
 svr4_32_sys_resolvepath(struct lwp *l, const struct svr4_32_sys_resolvepath_args *uap, register_t *retval)
 {
+	struct pathbuf *pb;
 	struct nameidata nd;
 	int error;
 	size_t len;
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW | SAVENAME | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG_P32(uap, path));
-
-	if ((error = namei(&nd)) != 0)
+	error = pathbuf_copyin(SCARG_P32(uap, path), &pb);
+	if (error) {
 		return error;
+	}
 
-	if ((error = copyoutstr(nd.ni_cnd.cn_pnbuf,
+	NDINIT(&nd, LOOKUP, NOFOLLOW | TRYEMULROOT, pb);
+	if ((error = namei(&nd)) != 0) {
+		pathbuf_destroy(pb);
+		return error;
+	}
+
+	if ((error = copyoutstr(nd.ni_pnbuf,
 	    SCARG_P32(uap, buf),
 	    SCARG(uap, bufsiz), &len)) != 0)
 		goto bad;
@@ -1328,6 +1347,6 @@ svr4_32_sys_resolvepath(struct lwp *l, const struct svr4_32_sys_resolvepath_args
 	*retval = len;
 bad:
 	vrele(nd.ni_vp);
-	PNBUF_PUT(nd.ni_cnd.cn_pnbuf);
+	pathbuf_destroy(pb);
 	return error;
 }

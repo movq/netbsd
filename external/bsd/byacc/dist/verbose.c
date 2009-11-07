@@ -1,10 +1,10 @@
-/*	$NetBSD: verbose.c,v 1.2 2009/10/29 00:56:20 christos Exp $	*/
-/* Id: verbose.c,v 1.8 2009/10/27 09:12:43 tom Exp  */
+/*	$NetBSD: verbose.c,v 1.6 2011/09/10 21:29:04 christos Exp $	*/
+/* Id: verbose.c,v 1.9 2010/06/09 08:58:29 tom Exp */
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: verbose.c,v 1.2 2009/10/29 00:56:20 christos Exp $");
+__RCSID("$NetBSD: verbose.c,v 1.6 2011/09/10 21:29:04 christos Exp $");
 
 static void log_conflicts(void);
 static void log_unused(void);
@@ -28,8 +28,8 @@ verbose(void)
 	return;
 
     null_rules = (short *)MALLOC((unsigned)nrules * sizeof(short));
-    if (null_rules == 0)
-	no_space();
+    NO_SPACE(null_rules);
+
     fprintf(verbose_file, "\f\n");
     for (i = 0; i < nstates; i++)
 	print_state(i);

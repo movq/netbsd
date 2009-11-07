@@ -1,4 +1,4 @@
-/*	$NetBSD: ichsmb.c,v 1.21 2009/05/06 09:25:15 cegger Exp $	*/
+/*	$NetBSD: ichsmb.c,v 1.27 2012/02/14 15:08:07 pgoyette Exp $	*/
 /*	$OpenBSD: ichiic.c,v 1.18 2007/05/03 09:36:26 dlg Exp $	*/
 
 /*
@@ -22,13 +22,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.21 2009/05/06 09:25:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.27 2012/02/14 15:08:07 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/errno.h>
 #include <sys/kernel.h>
-#include <sys/rwlock.h>
+#include <sys/mutex.h>
 #include <sys/proc.h>
 
 #include <sys/bus.h>
@@ -59,7 +59,7 @@ struct ichsmb_softc {
 	int			sc_poll;
 
 	struct i2c_controller	sc_i2c_tag;
-	krwlock_t 		sc_i2c_rwlock;
+	kmutex_t 		sc_i2c_mutex;
 	struct {
 		i2c_op_t     op;
 		void *       buf;
@@ -104,8 +104,10 @@ ichsmb_match(device_t parent, cfdata_t match, void *aux)
 		case PCI_PRODUCT_INTEL_82801G_SMB:
 		case PCI_PRODUCT_INTEL_82801H_SMB:
 		case PCI_PRODUCT_INTEL_82801I_SMB:
-		case PCI_PRODUCT_INTEL_ICH10_SMB1:
-		case PCI_PRODUCT_INTEL_ICH10_SMB2:
+		case PCI_PRODUCT_INTEL_82801JD_SMB:
+		case PCI_PRODUCT_INTEL_82801JI_SMB:
+		case PCI_PRODUCT_INTEL_3400_SMB:
+		case PCI_PRODUCT_INTEL_6SERIES_SMB:
 			return 1;
 		}
 	}
@@ -122,14 +124,10 @@ ichsmb_attach(device_t parent, device_t self, void *aux)
 	bus_size_t iosize;
 	pci_intr_handle_t ih;
 	const char *intrstr = NULL;
-	char devinfo[256];
 
 	sc->sc_dev = self;
 
-	aprint_naive("\n");
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	/* Read configuration */
 	conf = pci_conf_read(pa->pa_pc, pa->pa_tag, LPCIB_SMB_HOSTC);
@@ -168,7 +166,7 @@ ichsmb_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Attach I2C bus */
-	rw_init(&sc->sc_i2c_rwlock);
+	mutex_init(&sc->sc_i2c_mutex, MUTEX_DEFAULT, IPL_NONE);
 	sc->sc_i2c_tag.ic_cookie = sc;
 	sc->sc_i2c_tag.ic_acquire_bus = ichsmb_i2c_acquire_bus;
 	sc->sc_i2c_tag.ic_release_bus = ichsmb_i2c_release_bus;
@@ -188,10 +186,10 @@ ichsmb_i2c_acquire_bus(void *cookie, int flags)
 {
 	struct ichsmb_softc *sc = cookie;
 
-	if (cold || sc->sc_poll || (flags & I2C_F_POLL))
+	if (cold)
 		return 0;
 
-	rw_enter(&sc->sc_i2c_rwlock, RW_WRITER);
+	mutex_enter(&sc->sc_i2c_mutex);
 	return 0;
 }
 
@@ -200,10 +198,10 @@ ichsmb_i2c_release_bus(void *cookie, int flags)
 {
 	struct ichsmb_softc *sc = cookie;
 
-	if (cold || sc->sc_poll || (flags & I2C_F_POLL))
+	if (cold)
 		return;
 
-	rw_exit(&sc->sc_i2c_rwlock);
+	mutex_exit(&sc->sc_i2c_mutex);
 }
 
 static int
@@ -237,7 +235,8 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	if (cold || sc->sc_poll)
 		flags |= I2C_F_POLL;
 
-	if (!I2C_OP_STOP_P(op) || cmdlen > 1 || len > 2)
+	if (!I2C_OP_STOP_P(op) || cmdlen > 1 || len > 2 ||
+	    (cmdlen == 0 && len > 1))
 		return (1);
 
 	/* Setup transfer */
@@ -260,7 +259,10 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	if (I2C_OP_WRITE_P(op)) {
 		/* Write data */
 		b = buf;
-		if (len > 0)
+		if (cmdlen == 0 && len == 1)
+			bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+			    LPCIB_SMB_HCMD, b[0]);
+		else if (len > 0)
 			bus_space_write_1(sc->sc_iot, sc->sc_ioh,
 			    LPCIB_SMB_HD0, b[0]);
 		if (len > 1)
@@ -269,8 +271,8 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	}
 
 	/* Set SMBus command */
-	if (len == 0) {
-		if (cmdlen == 0)
+	if (cmdlen == 0) {
+		if (len == 0)
 			ctl = LPCIB_SMB_HC_CMD_QUICK;
 		else
 			ctl = LPCIB_SMB_HC_CMD_BYTE;

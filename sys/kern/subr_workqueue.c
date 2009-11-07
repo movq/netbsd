@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_workqueue.c,v 1.29 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: subr_workqueue.c,v 1.32 2011/10/23 21:41:23 jym Exp $	*/
 
 /*-
  * Copyright (c)2002, 2005, 2006, 2007 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_workqueue.c,v 1.29 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_workqueue.c,v 1.32 2011/10/23 21:41:23 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>
@@ -39,8 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_workqueue.c,v 1.29 2009/10/21 21:12:06 rmind Ex
 #include <sys/mutex.h>
 #include <sys/condvar.h>
 #include <sys/queue.h>
-
-#include <uvm/uvm_extern.h>
 
 typedef struct work_impl {
 	SIMPLEQ_ENTRY(work_impl) wk_entry;
@@ -60,7 +58,7 @@ struct workqueue {
 	void *wq_arg;
 	int wq_flags;
 
-	const char *wq_name;
+	char wq_name[MAXCOMLEN];
 	pri_t wq_prio;
 	void *wq_ptr;
 };
@@ -144,8 +142,9 @@ workqueue_init(struct workqueue *wq, const char *name,
     pri_t prio, int ipl)
 {
 
+	strncpy(wq->wq_name, name, sizeof(wq->wq_name));
+
 	wq->wq_prio = prio;
-	wq->wq_name = name;
 	wq->wq_func = callback_func;
 	wq->wq_arg = callback_arg;
 }
@@ -205,14 +204,12 @@ static void
 workqueue_finiqueue(struct workqueue *wq, struct workqueue_queue *q)
 {
 	struct workqueue_exitargs wqe;
-	lwp_t *l;
 
 	KASSERT(wq->wq_func == workqueue_exit);
 
 	wqe.wqe_q = q;
 	KASSERT(SIMPLEQ_EMPTY(&q->q_queue));
 	KASSERT(q->q_worker != NULL);
-	l = curlwp;
 	mutex_enter(&q->q_mutex);
 	SIMPLEQ_INSERT_TAIL(&q->q_queue, &wqe.wqe_wk, wk_entry);
 	cv_signal(&q->q_cv);

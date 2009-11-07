@@ -1,4 +1,4 @@
-/*	$NetBSD: com_ebus.c,v 1.28 2008/05/29 14:51:26 mrg Exp $	*/
+/*	$NetBSD: com_ebus.c,v 1.33 2011/07/01 18:48:36 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_ebus.c,v 1.28 2008/05/29 14:51:26 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_ebus.c,v 1.33 2011/07/01 18:48:36 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_ebus.c,v 1.28 2008/05/29 14:51:26 mrg Exp $");
 #include <sys/tty.h>
 #include <sys/conf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/openfirm.h>
 
@@ -63,6 +63,7 @@ CFATTACH_DECL_NEW(com_ebus, sizeof(struct com_softc),
 static const char *com_names[] = {
 	"su",
 	"su_pnp",
+	"rsc-console",
 	NULL
 };
 
@@ -82,7 +83,9 @@ com_ebus_match(device_t parent, cfdata_t match, void *aux)
 		/* Could be anything. */
 		compat = prom_getpropstring(ea->ea_node, "compatible");
 		if (strcmp(compat, "su16550") == 0 ||
-		    strcmp(compat, "su") == 0) {
+		    strcmp(compat, "su16552") == 0 ||
+		    strcmp(compat, "su") == 0 ||
+		    strcmp(compat, "FJSV,su") == 0) {
 			return (1);
 		}
 	}
@@ -107,6 +110,8 @@ com_ebus_attach(device_t parent, device_t self, void *aux)
 	bus_space_handle_t ioh;
 	bus_space_tag_t iot;
 	bus_addr_t iobase;
+	int node, port;
+	char buf[32];
 
 	sc->sc_dev = self;
 	iot = ea->ea_bustag;
@@ -143,16 +148,43 @@ com_ebus_attach(device_t parent, device_t self, void *aux)
 
 	kma.kmta_consdev = NULL;
 
-	/* Figure out if we're the console. */
-	com_is_input = (ea->ea_node == prom_instance_to_package(prom_stdin()));
-	com_is_output = (ea->ea_node == prom_instance_to_package(prom_stdout()));
+	/*
+	 * Figure out if we're the console.
+	 *
+	 * The Fujitsu SPARC Enterprise M4000/M5000/M8000/M9000 has a
+	 * serial port on each I/O board and a pseudo console that is
+	 * redirected to one of these serial ports.  The board number
+	 * of the serial port in question is encoded in the "tty-port#"
+	 * property of the pseudo console, so we figure out what our
+	 * board number is by walking up the device tree, and check
+	 * for a match.
+	 */
+	node = prom_instance_to_package(prom_stdin());
+	com_is_input = (ea->ea_node == node);
+	if (OF_getprop(node, "name", buf, sizeof(buf)) > 0 &&
+	    strcmp(buf, "pseudo-console") == 0) {
+		port = prom_getpropint(node, "tty-port#", -1);
+		node = OF_parent(OF_parent(ea->ea_node));
+		com_is_input = (prom_getpropint(node, "board#", -2) == port);
+	}
+
+	node = prom_instance_to_package(prom_stdout());
+	com_is_output = (ea->ea_node == node);
+	if (OF_getprop(node, "name", buf, sizeof(buf)) > 0 &&
+	   strcmp(buf, "pseudo-console") == 0) {
+		port = prom_getpropint(node, "tty-port#", -1);
+		node = OF_parent(OF_parent(ea->ea_node));
+		com_is_output = (prom_getpropint(node, "board#", -2) == port);
+	}
 
 	if (com_is_input || com_is_output) {
-		extern struct consdev comcons;
 		struct consdev *cn_orig;
 
 		/* Record some info to attach console. */
-		kma.kmta_baud = 9600;
+		if (strcmp(ea->ea_name, "rsc-console") == 0)
+			kma.kmta_baud = 115200;
+		else
+			kma.kmta_baud = 9600;
 		kma.kmta_cflag = (CREAD | CS8 | HUPCL);
 
 		/* Attach com as the console. */
@@ -161,19 +193,31 @@ com_ebus_attach(device_t parent, device_t self, void *aux)
 			sc->sc_frequency, COM_TYPE_NORMAL, kma.kmta_cflag)) {
 			aprint_error("Error: comcnattach failed\n");
 		}
-		cn_tab = cn_orig;
 		if (com_is_input) {
-			cn_tab->cn_dev = comcons.cn_dev;
-			cn_tab->cn_probe = comcons.cn_probe;
-			cn_tab->cn_init = comcons.cn_init;
-			cn_tab->cn_getc = comcons.cn_getc;
-			cn_tab->cn_pollc = comcons.cn_pollc;
+			cn_orig->cn_dev = cn_tab->cn_dev;
+			cn_orig->cn_probe = cn_tab->cn_probe;
+			cn_orig->cn_init = cn_tab->cn_init;
+			cn_orig->cn_getc = cn_tab->cn_getc;
+			cn_orig->cn_pollc = cn_tab->cn_pollc;
 		}
 		if (com_is_output) {
-			cn_tab->cn_putc = comcons.cn_putc;
+			cn_orig->cn_putc = cn_tab->cn_putc;
 		}
+		cn_tab = cn_orig;
 		kma.kmta_consdev = cn_tab;
 	}
+
+	/*
+	 * Apparently shoving too much data down the TX FIFO on the
+	 * Fujitsu SPARC Enterprise M4000/M5000 causes a hardware
+	 * fault.  Avoid this issue by setting the FIFO depth to 1.
+	 * This will effectively disable the TX FIFO, but will still
+	 * enable the RX FIFO, which is what we really care about.
+	 */
+	if (OF_getprop(ea->ea_node, "compatible", buf, sizeof(buf)) > 0 &&
+	    strcmp(buf, "FJSV,su") == 0)
+		sc->sc_fifolen = 1;
+
 	/* Now attach the driver */
 	com_attach_subr(sc);
 

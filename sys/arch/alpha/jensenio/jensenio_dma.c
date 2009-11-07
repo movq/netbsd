@@ -1,4 +1,4 @@
-/* $NetBSD: jensenio_dma.c,v 1.2 2008/04/28 20:23:11 martin Exp $ */
+/* $NetBSD: jensenio_dma.c,v 1.5 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: jensenio_dma.c,v 1.2 2008/04/28 20:23:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jensenio_dma.c,v 1.5 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: jensenio_dma.c,v 1.2 2008/04/28 20:23:11 martin Exp 
 #include <sys/mbuf.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/eisa/eisavar.h>
 
@@ -108,7 +108,7 @@ jensenio_dma_init(struct jensenio_config *jcp)
 	t->_next_window = NULL;
 	t->_boundary = 0;
 	t->_sgmap = NULL;
-	t->_get_tag = jensenio_dma_get_tag; 
+	t->_get_tag = jensenio_dma_get_tag;
 	t->_dmamap_create = isadma_bounce_dmamap_create;
 	t->_dmamap_destroy = isadma_bounce_dmamap_destroy;
 	t->_dmamap_load = isadma_bounce_dmamap_load;
@@ -132,7 +132,7 @@ jensenio_dma_init(struct jensenio_config *jcp)
 }
 
 /*
- * Return the bus dma tag to be used fo rthe specified bus type.
+ * Return the bus dma tag to be used for the specified bus type.
  * INTERNAL USE ONLY!
  */
 bus_dma_tag_t

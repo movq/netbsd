@@ -1,4 +1,4 @@
-/*	$NetBSD: am7990.c,v 1.71 2008/04/28 20:23:49 martin Exp $	*/
+/*	$NetBSD: am7990.c,v 1.74 2012/02/02 19:43:02 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,10 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: am7990.c,v 1.71 2008/04/28 20:23:49 martin Exp $");
-
-#include "bpfilter.h"
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: am7990.c,v 1.74 2012/02/02 19:43:02 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,19 +76,15 @@ __KERNEL_RCSID(0, "$NetBSD: am7990.c,v 1.71 2008/04/28 20:23:49 martin Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <dev/ic/lancereg.h>
 #include <dev/ic/lancevar.h>
@@ -152,11 +145,9 @@ am7990_meminit(struct lance_softc *sc)
 	struct letmd tmd;
 	uint8_t *myaddr;
 
-#if NBPFILTER > 0
 	if (ifp->if_flags & IFF_PROMISC)
 		init.init_mode = LE_MODE_NORMAL | LE_MODE_PROM;
 	else
-#endif
 		init.init_mode = LE_MODE_NORMAL;
 	if (sc->sc_initmodemedia == 1)
 		init.init_mode |= LE_MODE_PSEL0;
@@ -454,9 +445,7 @@ am7990_intr(void *arg)
 	if (isr & LE_C0_TINT)
 		am7990_tint(sc);
 
-#if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, isr);
-#endif
 
 	return (1);
 }
@@ -498,14 +487,11 @@ am7990_start(struct ifnet *ifp)
 		if (m == 0)
 			break;
 
-#if NBPFILTER > 0
 		/*
 		 * If BPF is listening on this interface, let it see the packet
 		 * before we commit it to the wire.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/*
 		 * Copy the mbuf chain into the transmit buffer.

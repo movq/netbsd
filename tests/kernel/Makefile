@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2009/09/08 20:37:45 pooka Exp $
+# $NetBSD: Makefile,v 1.24 2012/02/13 21:03:06 martin Exp $
 
 NOMAN=		# defined
 
@@ -6,27 +6,36 @@ NOMAN=		# defined
 
 TESTSDIR=	${TESTSBASE}/kernel
 
-SUBDIR=		kqueue
+TESTS_SUBDIRS=	kqueue tty
 
 TESTS_C=	t_lock
 TESTS_C+=	t_lwpctl
-TESTS_C+=	t_mkdir
-TESTS_C+=	t_pipe
-TESTS_C+=	t_poll3w
-TESTS_C+=	t_posix_fadvise
+TESTS_C+=	t_pty
 TESTS_C+=	t_rnd
-TESTS_C+=	t_time
-TESTS_C+=	t_ucontext
-TESTS_C+=	t_writev
+TESTS_C+=	t_extattrctl
+TESTS_C+=	t_filedesc
+TESTS_C+=	t_subr_prf
 
 TESTS_SH=	t_umount
+TESTS_SH+=	t_ps_strings
+
+BINDIR=		${TESTSDIR}
+PROGS=		h_ps_strings1
+PROGS+=		h_ps_strings2
 
 LDADD.t_rnd+=  -lrumpvfs -lrumpdev_rnd -lrumpdev -lrump -lrumpuser -lpthread
+LDADD.t_filedesc+=  ${LDADD.t_rnd}
+LDADD.t_extattrctl+= -lrumpvfs -lrump -lrumpuser -lpthread
 
 .PATH:			${NETBSDSRCDIR}/sys/kern
 TESTS_C+=		t_extent
 SRCS.t_extent=		t_extent.c subr_extent.c
-CPPFLAGS.t_extent+=	-D_EXTENT_TESTING -D__POOL_EXPOSE
+CPPFLAGS.t_extent.c=	-D_EXTENT_TESTING -D__POOL_EXPOSE
+CPPFLAGS.subr_extent.c=	-D_EXTENT_TESTING -D__POOL_EXPOSE
+
+t_subr_prf.c: gen_t_subr_prf ${NETBSDSRCDIR}/sys/kern/subr_prf.c
+	${HOST_SH} ${.ALLSRC} ${.TARGET}
+
+CLEANFILES+=	t_subr_prf.c
 
 .include <bsd.test.mk>
-.include <bsd.subdir.mk>

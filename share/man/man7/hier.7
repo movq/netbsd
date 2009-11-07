@@ -1,4 +1,4 @@
-.\"	$NetBSD: hier.7,v 1.88 2009/06/09 17:43:27 cegger Exp $
+.\"	$NetBSD: hier.7,v 1.99.6.1 2012/06/23 22:54:56 riz Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)hier.7	8.5 (Berkeley) 6/1/94
 .\"
-.Dd June 9, 2009
+.Dd June 3, 2012
 .Dt HIER 7
 .Os
 .Sh NAME
@@ -327,11 +327,6 @@ terminal type database; see
 .It Sy ttys
 terminal initialization information; see
 .Xr ttys 5
-.It Sy uucp/
-UUCP configuration files; see
-.Xr uucp 1
-and
-.Xr uucico 8 .
 .It Sy weekly
 script run each week by
 .Xr cron 8
@@ -428,7 +423,7 @@ standard C include files
 include files for Internet service protocols
 .It Sy atf/
 include files for the Automated Testing Framework; see
-.Xr atf 1
+.Xr atf 7
 .It Sy g++/
 include files for the C++ compiler
 .It Sy machine/
@@ -465,15 +460,19 @@ C include files for UFS (The U-word File System)
 .Pp
 .It Sy lib/
 archive, profiled, position independent archive, and shared libraries
+.Pp
+.Bl -tag -width "lua/" -compact
+.It Sy lua/
+.Bl -tag -width "5.1/" -compact
+.It Sy 5.1/
+Lua 5.1 modules
+.El
+.El
+.Pp
 .It Sy libdata/
 miscellaneous utility data files
 .It Sy libexec/
 system daemons \*[Am] system utilities (executed by other programs)
-.Pp
-.Bl -tag -width "uucp/" -compact
-.It Sy uucp/
-UUCP binaries and scripts (historically placed; to be moved)
-.El
 .Pp
 .It Sy mdec/
 boot blocks, etc.
@@ -573,11 +572,23 @@ macro package
 .It Sy misc/
 miscellaneous system-wide text files
 .Pp
+<<<<<<< hier.7
 .Bl -tag -width "termcap" -compact
 .It Sy termcap
+=======
+.Bl -tag -width "terminfo.cdb" -compact
+.It Sy terminfo
+>>>>>>> 1.101
 terminal characteristics database;
 see
+<<<<<<< hier.7
 .Xr termcap 5
+=======
+.Xr terminfo 5
+.It Sy terminfo.cdb
+database form of terminfo file; see
+.Xr tic 1
+>>>>>>> 1.101
 .El
 .Pp
 .It Sy mk/
@@ -629,7 +640,9 @@ cryptographic source, which may have import or export restrictions
 .It Sy dist/
 third-party
 .Sq virgin
-source code, referenced by other parts of the source tree
+source code, referenced by other parts of the source tree (deprecated, use
+.Sy external/
+instead)
 .It Sy distrib/
 tools and data-files for making distributions
 .It Sy doc/
@@ -645,11 +658,36 @@ source for programs from external third parties
 is the not the primary maintainer),
 grouped by license, and then products per license
 .Pp
-.Bl -tag -width "bsd/" -compact
+.Bl -tag -width "intel-fw-public/" -compact
+.It Sy apache2/
+Apache 2.0 license.
 .It Sy bsd/
 BSD (or equivalent) licensed software,
 possibly with the
-.Dq advertising clause
+.Dq advertising clause .
+.It Sy cddl/
+Common Development and Distribution License (the Sun license which is
+based on the Mozilla Public License version 1.1).
+.It Sy gpl2/
+GNU Public License, version 2 (or earlier).
+.It Sy gpl3/
+GNU Public License, version 3.
+.It Sy historical/
+Lucent's old license.
+.It Sy ibm-public/
+IBM's public license.
+.It Sy intel-fw-eula/
+Intel firmware license with redistribution restricted to OEM.
+.It Sy intel-fw-public/
+Intel firmware license permitting redistribution with
+terms similar to BSD licensed software.
+.It Sy intel-public/
+Intel license permitting redistribution with terms similar to
+BSD licensed software.
+.It Sy mit/
+MIT (X11) style license.
+.It Sy zlib/
+BSD-like zlib license.
 .El
 .Pp
 .It Sy games/
@@ -658,7 +696,11 @@ source for utilities/files in
 .It Sy gnu/
 source for programs covered by the
 .Tn GNU
-license (or similar)
+license (or similar) (deprecated; use
+.Sy external/gpl2/
+or
+.Sy external/gpl3/
+as appropriate)
 .It Sy include/
 source for files in
 .Pa /usr/include
@@ -701,7 +743,7 @@ kernel source files
 .It Sy arch/
 architecture-specific support
 .Pp
-.Bl -tag -width "playstation2/" -compact
+.Bl -tag -width "ews4800mips/" -compact
 .It Sy acorn26/
 Acorn Archimedes, A-series and R-series systems
 .It Sy acorn32/
@@ -732,6 +774,8 @@ CES FIC8234 VME processor board
 Cobalt Networks' MIPS-based Microserver
 .It Sy dreamcast/
 Sega Dreamcast game console
+.It Sy emips/
+Machines based on Extensible MIPS
 .It Sy evbarm/
 ARM based evaluation boards
 .It Sy evbmips/
@@ -788,8 +832,6 @@ Sony's MIPS-based NEWS workstations
 NeXT 68k "black" hardware
 .It Sy ofppc/
 Open Firmware PowerPC workstations
-.It Sy playstation2/
-SONY PlayStation 2
 .It Sy pmax/
 Digital MIPS-based DECstations and DECsystems
 .It Sy powerpc/
@@ -867,11 +909,6 @@ formerly
 binaries
 .It Sy ossaudio/
 support for OSS audio
-.It Sy pecoff/
-support for
-.Tn Win32
-binaries; see
-.Xr compat_pecoff 8
 .It Sy sunos/
 support for
 .Tn SunOS 4.x
@@ -967,9 +1004,6 @@ loop back file system; see
 .It Sy overlay/
 overlay file system; see
 .Xr mount_overlay 8
-.It Sy portal/
-portal file system; see
-.Xr mount_portal 8
 .It Sy procfs/
 process file system; see
 .Xr mount_procfs 8
@@ -1208,7 +1242,8 @@ Databases and configuration for the NIS (YP) system; see
 .Xr ls 1 ,
 .Xr whatis 1 ,
 .Xr whereis 1 ,
-.Xr which 1
+.Xr which 1 ,
+.Xr paths 3
 .Sh HISTORY
 A
 .Nm

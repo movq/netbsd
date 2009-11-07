@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hs.c,v 1.23 2009/05/12 14:25:18 cegger Exp $	*/
+/*	$NetBSD: sl811hs.c,v 1.31 2011/11/27 14:36:20 rmind Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -13,7 +13,7 @@
  * Cypress/ScanLogic SL811HS/T USB Host Controller
  * Datasheet, Errata, and App Note available at www.cypress.com
  *
- * Uses: Ratoc CFU1U PCMCIA USB Host Controller, Nereid Mac 68k USB HC, ISA 
+ * Uses: Ratoc CFU1U PCMCIA USB Host Controller, Nereid X68k USB HC, ISA 
  * HCs.  The Ratoc CFU2 uses a different chip.
  *
  * This chip puts the serial in USB.  It implements USB by means of an eight 
@@ -59,9 +59,7 @@
  * This driver does fine grained locking for its own data structures, however 
  * the general USB code does not yet have locks, some of which would need to 
  * be used in this driver.  This is mostly for debug use on single processor 
- * systems.  Actual MP use of this driver would be unreliable on ports where 
- * splipi is above splhigh unless splipi can be safely blocked when 
- * calculating remaining bus time prior to transfers.
+ * systems.
  *
  * The theory of the wait lock is that start is the only function that would 
  * be frequently called from arbitrary processors, so it should not need to 
@@ -86,7 +84,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.23 2009/05/12 14:25:18 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.31 2011/11/27 14:36:20 rmind Exp $");
+
+#include "opt_slhci.h"
 
 #include <sys/cdefs.h>
 #include <sys/param.h>
@@ -561,35 +561,42 @@ struct slhci_softc *ssc;
 int slhci_usbdebug = -1; /* value to set usbdebug on attach, -1 = leave alone */
 #endif
 
-/* Add UVMHIST history for debugging: 
- *
- *   Before uvm_hist in sys/uvm/uvm_stat.c add:
- *      UVMHIST_DECL(slhcihist);
- *
- *   In uvm_hist add:
- *      if ((bitmask & UVMHIST_SLHCI))
- *              hists[i++] = &slhcihist;
- *
- *   In sys/uvm/uvm_stat.h add UVMHIST_SLHCI define.
+/*
+ * XXXMRG the SLHCI UVMHIST code has been converted to KERNHIST, but it has
+ * not been tested.  the extra instructions to enable it can probably be
+ * commited to the kernhist code, and these instructions reduced to simply
+ * enabling SLHCI_DEBUG.
  */
 
-#include <uvm/uvm_stat.h>
-UVMHIST_DECL(slhcihist);
+/* Add KERNHIST history for debugging: 
+ *
+ *   Before kern_hist in sys/kern/subr_kernhist.c add:
+ *      KERNHIST_DECL(slhcihist);
+ *
+ *   In kern_hist add:
+ *      if ((bitmask & KERNHIST_SLHCI))
+ *              hists[i++] = &slhcihist;
+ *
+ *   In sys/sys/kernhist.h add KERNHIST_SLHCI define.
+ */
 
-#if !defined(UVMHIST) || !defined(UVMHIST_SLHCI)
-#error "SLHCI_DEBUG requires UVMHIST (with modifications, see sys/dev/ic/sl81hs.c)"
+#include <sys/kernhist.h>
+KERNHIST_DECL(slhcihist);
+
+#if !defined(KERNHIST) || !defined(KERNHIST_SLHCI)
+#error "SLHCI_DEBUG requires KERNHIST (with modifications, see sys/dev/ic/sl81hs.c)"
 #endif
 
 #ifndef SLHCI_NHIST
 #define SLHCI_NHIST 409600
 #endif
-const unsigned int SLHCI_HISTMASK = UVMHIST_SLHCI;
-struct uvm_history_ent slhci_he[SLHCI_NHIST];
+const unsigned int SLHCI_HISTMASK = KERNHIST_SLHCI;
+struct kern_history_ent slhci_he[SLHCI_NHIST];
 
 #define SLHCI_DEXEC(x, y) do { if ((slhci_debug & SLHCI_ ## x)) { y; } \
 } while (/*CONSTCOND*/ 0)
-#define DDOLOG(f, a, b, c, d) do { const char *_uvmhist_name = __func__; \
-    u_long _uvmhist_call = 0; UVMHIST_LOG(slhcihist, f, a, b, c, d);	     \
+#define DDOLOG(f, a, b, c, d) do { const char *_kernhist_name = __func__; \
+    u_long _kernhist_call = 0; KERNHIST_LOG(slhcihist, f, a, b, c, d);	     \
 } while (/*CONSTCOND*/0)
 #define DLOG(x, f, a, b, c, d) SLHCI_DEXEC(x, DDOLOG(f, a, b, c, d))
 /* DLOGFLAG8 is a macro not a function so that flag name expressions are not 
@@ -597,10 +604,10 @@ struct uvm_history_ent slhci_he[SLHCI_NHIST];
  * x is debug mask, y is flag identifier, z is flag variable, 
  * a-h are flag names (must evaluate to string constants, msb first). */
 #define DDOLOGFLAG8(y, z, a, b, c, d, e, f, g, h) do { uint8_t _DLF8 = (z);   \
-    const char *_uvmhist_name = __func__; u_long _uvmhist_call = 0;	      \
-    if (_DLF8 & 0xf0) UVMHIST_LOG(slhcihist, y " %s %s %s %s", _DLF8 & 0x80 ?  \
+    const char *_kernhist_name = __func__; u_long _kernhist_call = 0;	      \
+    if (_DLF8 & 0xf0) KERNHIST_LOG(slhcihist, y " %s %s %s %s", _DLF8 & 0x80 ?  \
     (a) : "", _DLF8 & 0x40 ? (b) : "", _DLF8 & 0x20 ? (c) : "", _DLF8 & 0x10 ? \
-    (d) : ""); if (_DLF8 & 0x0f) UVMHIST_LOG(slhcihist, y " %s %s %s %s",      \
+    (d) : ""); if (_DLF8 & 0x0f) KERNHIST_LOG(slhcihist, y " %s %s %s %s",      \
     _DLF8 & 0x08 ? (e) : "", _DLF8 & 0x04 ? (f) : "", _DLF8 & 0x02 ? (g) : "", \
     _DLF8 & 0x01 ? (h) : "");		      				       \
 } while (/*CONSTCOND*/ 0)
@@ -874,9 +881,9 @@ slhci_transfer(struct usbd_xfer *xfer)
 	 * so start it first.
 	 */
 
-	/* Start next is always done at splsoftusb, so we do this here so 
+	/* Start next is always done at splusb, so we do this here so 
 	 * start functions are always called at softusb. XXX */
-	s = splsoftusb();
+	s = splusb();
 	error = xfer->pipe->methods->start(SIMPLEQ_FIRST(&xfer->pipe->queue));
 	splx(s);
 
@@ -1135,7 +1142,7 @@ slhci_supported_rev(uint8_t rev)
  * Note max_current argument is actual current, but stored as current/2 */
 void
 slhci_preinit(struct slhci_softc *sc, PowerFunc pow, bus_space_tag_t iot, 
-    bus_space_handle_t ioh, uint16_t max_current, uint8_t stride)
+    bus_space_handle_t ioh, uint16_t max_current, uint32_t stride)
 {
 	struct slhci_transfers *t;
 	int i;
@@ -1143,7 +1150,7 @@ slhci_preinit(struct slhci_softc *sc, PowerFunc pow, bus_space_tag_t iot,
 	t = &sc->sc_transfers;
 
 #ifdef SLHCI_DEBUG
-	UVMHIST_INIT_STATIC(slhcihist, slhci_he);
+	KERNHIST_INIT_STATIC(slhcihist, slhci_he);
 #endif
 	simple_lock_init(&sc->sc_lock);
 #ifdef SLHCI_WAITLOCK
@@ -1231,19 +1238,15 @@ slhci_detach(struct slhci_softc *sc, int flags)
 int
 slhci_activate(device_t self, enum devact act)
 {
-	struct slhci_softc *sc;
+	struct slhci_softc *sc = device_private(self);
 
-	sc = device_private(self);
-
-	if (act != DVACT_DEACTIVATE)
-		return EOPNOTSUPP;
-
-	slhci_lock_call(sc, &slhci_halt, NULL, NULL);
-
-	if (sc->sc_child)
-		return config_deactivate(sc->sc_child);
-	else
+	switch (act) {
+	case DVACT_DEACTIVATE:
+		slhci_lock_call(sc, &slhci_halt, NULL, NULL);
 		return 0;
+	default:
+		return EOPNOTSUPP;
+	}
 }
 
 void
@@ -1266,7 +1269,7 @@ slhci_abort(struct usbd_xfer *xfer)
 
 callback:
 	xfer->status = USBD_CANCELLED;
-	/* Abort happens at splsoftusb. */
+	/* Abort happens at splusb. */
 	usb_transfer_complete(xfer);
 }
 
@@ -1379,7 +1382,7 @@ slhci_lock_call(struct slhci_softc *sc, LockCallFunc lcf, struct slhci_pipe
 	usbd_status ret;
 	int x, s;
 
-	x = splsoftusb(); 
+	x = splusb();
 	s = splhardusb();
 	simple_lock(&sc->sc_lock);
 	ret = (*lcf)(sc, spipe, xfer);
@@ -1428,7 +1431,7 @@ slhci_callback_entry(void *arg)
 
 	sc = (struct slhci_softc *)arg;
 
-	x = splsoftusb();
+	x = splusb();
 	s = splhardusb();
 	simple_lock(&sc->sc_lock);
 	t = &sc->sc_transfers;
@@ -2208,8 +2211,8 @@ slhci_tstart(struct slhci_softc *sc)
 	/* We have about 6 us to get from the bus time check to 
 	 * starting the transfer or we might babble or the chip might fail to 
 	 * signal transfer complete.  This leaves no time for any other 
-	 * interrupts.  Some ports have splipi (MP only) higher than splhigh 
-	 * which might cause longer delays. */
+	 * interrupts.
+	 */
 	s = splhigh();
 	remaining_bustime = (int)(slhci_read(sc, SL811_CSOF)) << 6;
 	remaining_bustime -= SLHCI_END_BUSTIME;
@@ -2325,8 +2328,8 @@ slhci_dotransfer(struct slhci_softc *sc)
 	}
 }
 
-/* slhci_callback is called after the lock is taken from splsoftusb.
- * s is pointer to old spl (splsoftusb). */
+/* slhci_callback is called after the lock is taken from splusb.
+ * s is pointer to old spl (splusb). */
 static void
 slhci_callback(struct slhci_softc *sc, int *s)
 {
@@ -2492,7 +2495,7 @@ slhci_do_callback_schedule(struct slhci_softc *sc)
 }
 
 #if 0
-/* must be called with lock taken from splsoftusb */
+/* must be called with lock taken from splusb */
 /* XXX static */ void
 slhci_pollxfer(struct slhci_softc *sc, struct usbd_xfer *xfer, int *s)
 {
@@ -2805,7 +2808,7 @@ slhci_drain(struct slhci_softc *sc)
 	/* Cancel all pipes.  Note that not all of these may be on the 
 	 * callback queue yet; some could be in slhci_start, for example. */
 	FOREACH_AP(q, t, spipe) {
-		spipe->pflags = PF_GONE;
+		spipe->pflags |= PF_GONE;
 		spipe->pipe.repeat = 0;
 		spipe->pipe.aborting = 1;
 		if (spipe->xfer != NULL)
@@ -2832,6 +2835,8 @@ void
 slhci_reset(struct slhci_softc *sc)
 {
 	struct slhci_transfers *t;
+	struct slhci_pipe *spipe;
+	struct gcq *q;
 	uint8_t r, pol, ctrl;
 
 	t = &sc->sc_transfers;
@@ -2918,6 +2923,10 @@ slhci_reset(struct slhci_softc *sc)
 
 	t->flags &= ~(F_UDISABLED|F_RESET);
 	t->flags |= F_CRESET|F_ROOTINTR;
+	FOREACH_AP(q, t, spipe) {
+		spipe->pflags &= ~PF_GONE;
+		spipe->pipe.aborting = 0;
+	}
 	DLOG(D_MSG, "RESET done flags %#x", t->flags, 0,0,0);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lwp.c,v 1.136 2009/10/27 02:58:28 rmind Exp $	*/
+/*	$NetBSD: kern_lwp.c,v 1.166 2012/02/11 23:16:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -153,9 +153,11 @@
  *	each field are documented in sys/lwp.h.
  *
  *	State transitions must be made with the LWP's general lock held,
- *	and may cause the LWP's lock pointer to change. Manipulation of
+ *	and may cause the LWP's lock pointer to change.  Manipulation of
  *	the general lock is not performed directly, but through calls to
- *	lwp_lock(), lwp_relock() and similar.
+ *	lwp_lock(), lwp_unlock() and others.  It should be noted that the
+ *	adaptive locks are not allowed to be released while the LWP's lock
+ *	is being held (unlike for other spin-locks).
  *
  *	States and their associated locks:
  *
@@ -209,11 +211,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.136 2009/10/27 02:58:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.166 2012/02/11 23:16:17 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_lockdebug.h"
 #include "opt_sa.h"
+#include "opt_dtrace.h"
 
 #define _LWP_API_PRIVATE
 
@@ -227,8 +230,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.136 2009/10/27 02:58:28 rmind Exp $")
 #include <sys/syscallargs.h>
 #include <sys/syscall_stats.h>
 #include <sys/kauth.h>
+#include <sys/pserialize.h>
 #include <sys/sleepq.h>
-#include <sys/user.h>
 #include <sys/lockdebug.h>
 #include <sys/kmem.h>
 #include <sys/pset.h>
@@ -236,28 +239,108 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.136 2009/10/27 02:58:28 rmind Exp $")
 #include <sys/lwpctl.h>
 #include <sys/atomic.h>
 #include <sys/filedesc.h>
+#include <sys/dtrace_bsd.h>
+#include <sys/sdt.h>
+#include <sys/xcall.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_object.h>
 
-struct lwplist	alllwp = LIST_HEAD_INITIALIZER(alllwp);
+static pool_cache_t	lwp_cache	__read_mostly;
+struct lwplist		alllwp		__cacheline_aligned;
 
-struct pool lwp_uc_pool;
+static void		lwp_dtor(void *, void *);
 
-static pool_cache_t lwp_cache;
-static specificdata_domain_t lwp_specificdata_domain;
+/* DTrace proc provider probes */
+SDT_PROBE_DEFINE(proc,,,lwp_create,
+	"struct lwp *", NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,lwp_start,
+	"struct lwp *", NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,lwp_exit,
+	"struct lwp *", NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL);
+
+struct turnstile turnstile0;
+struct lwp lwp0 __aligned(MIN_LWP_ALIGNMENT) = {
+#ifdef LWP0_CPU_INFO
+	.l_cpu = LWP0_CPU_INFO,
+#endif
+#ifdef LWP0_MD_INITIALIZER
+	.l_md = LWP0_MD_INITIALIZER,
+#endif
+	.l_proc = &proc0,
+	.l_lid = 1,
+	.l_flag = LW_SYSTEM,
+	.l_stat = LSONPROC,
+	.l_ts = &turnstile0,
+	.l_syncobj = &sched_syncobj,
+	.l_refcnt = 1,
+	.l_priority = PRI_USER + NPRI_USER - 1,
+	.l_inheritedprio = -1,
+	.l_class = SCHED_OTHER,
+	.l_psid = PS_NONE,
+	.l_pi_lenders = SLIST_HEAD_INITIALIZER(&lwp0.l_pi_lenders),
+	.l_name = __UNCONST("swapper"),
+	.l_fd = &filedesc0,
+};
 
 void
 lwpinit(void)
 {
 
-	pool_init(&lwp_uc_pool, sizeof(ucontext_t), 0, 0, 0, "lwpucpl",
-	    &pool_allocator_nointr, IPL_NONE);
-	lwp_specificdata_domain = specificdata_domain_create();
-	KASSERT(lwp_specificdata_domain != NULL);
+	LIST_INIT(&alllwp);
+	lwpinit_specificdata();
 	lwp_sys_init();
 	lwp_cache = pool_cache_init(sizeof(lwp_t), MIN_LWP_ALIGNMENT, 0, 0,
-	    "lwppl", NULL, IPL_NONE, NULL, NULL, NULL);
+	    "lwppl", NULL, IPL_NONE, NULL, lwp_dtor, NULL);
+}
+
+void
+lwp0_init(void)
+{
+	struct lwp *l = &lwp0;
+
+	KASSERT((void *)uvm_lwp_getuarea(l) != NULL);
+	KASSERT(l->l_lid == proc0.p_nlwpid);
+
+	LIST_INSERT_HEAD(&alllwp, l, l_list);
+
+	callout_init(&l->l_timeout_ch, CALLOUT_MPSAFE);
+	callout_setfunc(&l->l_timeout_ch, sleepq_timeout, l);
+	cv_init(&l->l_sigcv, "sigwait");
+
+	kauth_cred_hold(proc0.p_cred);
+	l->l_cred = proc0.p_cred;
+
+	kdtrace_thread_ctor(NULL, l);
+	lwp_initspecific(l);
+
+	SYSCALL_TIME_LWP_INIT(l);
+}
+
+static void
+lwp_dtor(void *arg, void *obj)
+{
+	lwp_t *l = obj;
+	uint64_t where;
+	(void)l;
+
+	/*
+	 * Provide a barrier to ensure that all mutex_oncpu() and rw_oncpu()
+	 * calls will exit before memory of LWP is returned to the pool, where
+	 * KVA of LWP structure might be freed and re-used for other purposes.
+	 * Kernel preemption is disabled around mutex_oncpu() and rw_oncpu()
+	 * callers, therefore cross-call to all CPUs will do the job.  Also,
+	 * the value of l->l_cpu must be still valid at this point.
+	 */
+	KASSERT(l->l_cpu != NULL);
+	where = xc_broadcast(0, (xcfunc_t)nullop, NULL, NULL);
+	xc_wait(where);
 }
 
 /*
@@ -356,6 +439,47 @@ lwp_continue(struct lwp *l)
 
 	/* setrunnable() will release the lock. */
 	setrunnable(l);
+}
+
+/*
+ * Restart a stopped LWP.
+ *
+ * Must be called with p_lock held, and the LWP NOT locked.  Will unlock the
+ * LWP before return.
+ */
+void
+lwp_unstop(struct lwp *l)
+{
+	struct proc *p = l->l_proc;
+    
+	KASSERT(mutex_owned(proc_lock));
+	KASSERT(mutex_owned(p->p_lock));
+
+	lwp_lock(l);
+
+	/* If not stopped, then just bail out. */
+	if (l->l_stat != LSSTOP) {
+		lwp_unlock(l);
+		return;
+	}
+
+	p->p_stat = SACTIVE;
+	p->p_sflag &= ~PS_STOPPING;
+
+	if (!p->p_waited)
+		p->p_pptr->p_nstopchild--;
+
+	if (l->l_wchan == NULL) {
+		/* setrunnable() will release the lock. */
+		setrunnable(l);
+	} else if (p->p_xstat && (l->l_flag & LW_SINTR) != 0) {
+		/* setrunnable() so we can receive the signal */
+		setrunnable(l);
+	} else {
+		l->l_stat = LSSLEEP;
+		p->p_nrlwps++;
+		lwp_unlock(l);
+	}
 }
 
 /*
@@ -551,6 +675,7 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 {
 	struct lwp *l2, *isfree;
 	turnstile_t *ts;
+	lwpid_t lid;
 
 	KASSERT(l1 == curlwp || l1->l_proc == &proc0);
 
@@ -600,6 +725,15 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	TAILQ_INIT(&l2->l_ld_locks);
 
 	/*
+	 * For vfork, borrow parent's lwpctl context if it exists.
+	 * This also causes us to return via lwp_userret.
+	 */
+	if (flags & LWP_VFORK && l1->l_lwpctl) {
+		l2->l_lwpctl = l1->l_lwpctl;
+		l2->l_flag |= LW_LWPCTL;
+	}
+
+	/*
 	 * If not the first LWP in the process, grab a reference to the
 	 * descriptor table.
 	 */
@@ -621,6 +755,7 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	l2->l_cpu = l1->l_cpu;
 	kpreempt_enable();
 
+	kdtrace_thread_ctor(NULL, l2);
 	lwp_initspecific(l2);
 	sched_lwp_fork(l1, l2);
 	lwp_update_creds(l2);
@@ -632,9 +767,22 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	if (rnewlwpp != NULL)
 		*rnewlwpp = l2;
 
-	l2->l_addr = UAREA_TO_USER(uaddr);
+	/*
+	 * PCU state needs to be saved before calling uvm_lwp_fork() so that
+	 * the MD cpu_lwp_fork() can copy the saved state to the new LWP.
+	 */
+	pcu_save_all(l1);
+
+	uvm_lwp_setuarea(l2, uaddr);
 	uvm_lwp_fork(l1, l2, stack, stacksize, func,
 	    (arg != NULL) ? arg : l2);
+
+	if ((flags & LWP_PIDLID) != 0) {
+		lid = proc_alloc_pid(p2);
+		l2->l_pflag |= LP_PIDLID;
+	} else {
+		lid = 0;
+	}
 
 	mutex_enter(p2->p_lock);
 
@@ -644,29 +792,35 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	} else
 		l2->l_prflag = 0;
 
+	l2->l_sigstk = l1->l_sigstk;
 	l2->l_sigmask = l1->l_sigmask;
 	CIRCLEQ_INIT(&l2->l_sigpend.sp_info);
 	sigemptyset(&l2->l_sigpend.sp_set);
 
-	p2->p_nlwpid++;
-	if (p2->p_nlwpid == 0)
+	if (lid == 0) {
 		p2->p_nlwpid++;
-	l2->l_lid = p2->p_nlwpid;
+		if (p2->p_nlwpid == 0)
+			p2->p_nlwpid++;
+		lid = p2->p_nlwpid;
+	}
+	l2->l_lid = lid;
 	LIST_INSERT_HEAD(&p2->p_lwps, l2, l_sibling);
 	p2->p_nlwps++;
+	p2->p_nrlwps++;
+
+	KASSERT(l2->l_affinity == NULL);
 
 	if ((p2->p_flag & PK_SYSTEM) == 0) {
-		/* Inherit an affinity */
-		if (l1->l_flag & LW_AFFINITY) {
+		/* Inherit the affinity mask. */
+		if (l1->l_affinity) {
 			/*
 			 * Note that we hold the state lock while inheriting
 			 * the affinity to avoid race with sched_setaffinity().
 			 */
 			lwp_lock(l1);
-			if (l1->l_flag & LW_AFFINITY) {
+			if (l1->l_affinity) {
 				kcpuset_use(l1->l_affinity);
 				l2->l_affinity = l1->l_affinity;
-				l2->l_flag |= LW_AFFINITY;
 			}
 			lwp_unlock(l1);
 		}
@@ -678,6 +832,8 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 		lwp_unlock_to(l2, l2->l_cpu->ci_schedstate.spc_mutex);
 	}
 	mutex_exit(p2->p_lock);
+
+	SDT_PROBE(proc,,,lwp_create, l2, 0,0,0,0);
 
 	mutex_enter(proc_lock);
 	LIST_INSERT_HEAD(&alllwp, l2, l_list);
@@ -700,6 +856,8 @@ void
 lwp_startup(struct lwp *prev, struct lwp *new)
 {
 
+	SDT_PROBE(proc,,,lwp_start, new, 0,0,0,0);
+
 	KASSERT(kpreempt_disabled());
 	if (prev != NULL) {
 		/*
@@ -713,7 +871,12 @@ lwp_startup(struct lwp *prev, struct lwp *new)
 	}
 	KPREEMPT_DISABLE(new);
 	spl0();
-	pmap_activate(new);
+	if (__predict_true(new->l_proc->p_vmspace))
+		pmap_activate(new);
+
+	/* Note trip through cpu_switchto(). */
+	pserialize_switchpoint();
+
 	LOCKDEBUG_BARRIER(NULL, 0);
 	KPREEMPT_ENABLE(new);
 	if ((new->l_pflag & LP_MPSAFE) == 0) {
@@ -735,6 +898,8 @@ lwp_exit(struct lwp *l)
 
 	KASSERT(current || (l->l_stat == LSIDL && l->l_target_cpu == NULL));
 	KASSERT(p == curproc);
+
+	SDT_PROBE(proc,,,lwp_exit, l, 0,0,0,0);
 
 	/*
 	 * Verify that we hold no locks other than the kernel lock.
@@ -768,7 +933,7 @@ lwp_exit(struct lwp *l)
 	fd_free();
 
 	/* Delete the specificdata while it's still safe to sleep. */
-	specificdata_fini(lwp_specificdata_domain, &l->l_specdataref);
+	lwp_finispecific(l);
 
 	/*
 	 * Release our cached credentials.
@@ -778,9 +943,13 @@ lwp_exit(struct lwp *l)
 
 	/*
 	 * Remove the LWP from the global list.
+	 * Free its LID from the PID namespace if needed.
 	 */
 	mutex_enter(proc_lock);
 	LIST_REMOVE(l, l_list);
+	if ((l->l_pflag & LP_PIDLID) != 0 && l->l_lid != p->p_pid) {
+		proc_free_pid(l->l_lid);
+	}
 	mutex_exit(proc_lock);
 
 	/*
@@ -806,7 +975,7 @@ lwp_exit(struct lwp *l)
 
 	/*
 	 * If we find a pending signal for the process and we have been
-	 * asked to check for signals, then we loose: arrange to have
+	 * asked to check for signals, then we lose: arrange to have
 	 * all other LWPs in the process check for signals.
 	 */
 	if ((l->l_flag & LW_PENDSIG) != 0 &&
@@ -818,14 +987,15 @@ lwp_exit(struct lwp *l)
 		}
 	}
 
+	/*
+	 * Release any PCU resources before becoming a zombie.
+	 */
+	pcu_discard_all(l);
+
 	lwp_lock(l);
 	l->l_stat = LSZOMB;
-	if (l->l_name != NULL)
+	if (l->l_name != NULL) {
 		strcpy(l->l_name, "(zombie)");
-	if (l->l_flag & LW_AFFINITY) {
-		l->l_flag &= ~LW_AFFINITY;
-	} else {
-		KASSERT(l->l_affinity == NULL);
 	}
 	lwp_unlock(l);
 	p->p_nrlwps--;
@@ -833,12 +1003,6 @@ lwp_exit(struct lwp *l)
 	if (l->l_lwpctl != NULL)
 		l->l_lwpctl->lc_curcpu = LWPCTL_CPU_EXITED;
 	mutex_exit(p->p_lock);
-
-	/* Safe without lock since LWP is in zombie state */
-	if (l->l_affinity) {
-		kcpuset_unuse(l->l_affinity, NULL);
-		l->l_affinity = NULL;
-	}
 
 	/*
 	 * We can no longer block.  At this point, lwp_free() may already
@@ -878,6 +1042,7 @@ lwp_free(struct lwp *l, bool recycle, bool last)
 	ksiginfoq_t kq;
 
 	KASSERT(l != curlwp);
+	KASSERT(last || mutex_owned(p->p_lock));
 
 	/*
 	 * If this was not the last LWP in the process, then adjust
@@ -935,6 +1100,17 @@ lwp_free(struct lwp *l, bool recycle, bool last)
 	cv_destroy(&l->l_sigcv);
 
 	/*
+	 * Free lwpctl structure and affinity.
+	 */
+	if (l->l_lwpctl) {
+		lwp_ctl_free(l);
+	}
+	if (l->l_affinity) {
+		kcpuset_unuse(l->l_affinity, NULL);
+		l->l_affinity = NULL;
+	}
+
+	/*
 	 * Free the LWP's turnstile and the LWP structure itself unless the
 	 * caller wants to recycle them.  Also, free the scheduler specific
 	 * data.
@@ -944,8 +1120,6 @@ lwp_free(struct lwp *l, bool recycle, bool last)
 	 *
 	 * We don't recycle the VM resources at this time.
 	 */
-	if (l->l_lwpctl != NULL)
-		lwp_ctl_free(l);
 
 	if (!recycle && l->l_ts != &turnstile0)
 		pool_cache_put(turnstile_cache, l->l_ts);
@@ -957,6 +1131,8 @@ lwp_free(struct lwp *l, bool recycle, bool last)
 
 	KASSERT(SLIST_EMPTY(&l->l_pi_lenders));
 	KASSERT(l->l_inheritedprio == -1);
+	KASSERT(l->l_blcnt == 0);
+	kdtrace_thread_dtor(NULL, l);
 	if (!recycle)
 		pool_cache_put(lwp_cache, l);
 }
@@ -1036,32 +1212,39 @@ lwp_find2(pid_t pid, lwpid_t lid)
 	proc_t *p;
 	lwp_t *l;
 
-	/* Find the process */
-	p = (pid == 0) ? curlwp->l_proc : p_find(pid, PFIND_UNLOCK_FAIL);
-	if (p == NULL)
-		return NULL;
-	mutex_enter(p->p_lock);
+	/* Find the process. */
 	if (pid != 0) {
-		/* Case of p_find */
+		mutex_enter(proc_lock);
+		p = proc_find(pid);
+		if (p == NULL) {
+			mutex_exit(proc_lock);
+			return NULL;
+		}
+		mutex_enter(p->p_lock);
 		mutex_exit(proc_lock);
+	} else {
+		p = curlwp->l_proc;
+		mutex_enter(p->p_lock);
 	}
-
-	/* Find the thread */
-	l = (lid == 0) ? LIST_FIRST(&p->p_lwps) : lwp_find(p, lid);
+	/* Find the thread. */
+	if (lid != 0) {
+		l = lwp_find(p, lid);
+	} else {
+		l = LIST_FIRST(&p->p_lwps);
+	}
 	if (l == NULL) {
 		mutex_exit(p->p_lock);
 	}
-
 	return l;
 }
 
 /*
- * Look up a live LWP within the speicifed process, and return it locked.
+ * Look up a live LWP within the specified process, and return it locked.
  *
  * Must be called with p->p_lock held.
  */
 struct lwp *
-lwp_find(struct proc *p, int id)
+lwp_find(struct proc *p, lwpid_t id)
 {
 	struct lwp *l;
 
@@ -1121,40 +1304,6 @@ lwp_locked(struct lwp *l, kmutex_t *mtx)
 }
 
 /*
- * Lock an LWP.
- */
-kmutex_t *
-lwp_lock_retry(struct lwp *l, kmutex_t *old)
-{
-
-	/*
-	 * XXXgcc ignoring kmutex_t * volatile on i386
-	 *
-	 * gcc version 4.1.2 20061021 prerelease (NetBSD nb1 20061021)
-	 */
-#if 1
-	while (l->l_mutex != old) {
-#else
-	for (;;) {
-#endif
-		mutex_spin_exit(old);
-		old = l->l_mutex;
-		mutex_spin_enter(old);
-
-		/*
-		 * mutex_enter() will have posted a read barrier.  Re-test
-		 * l->l_mutex.  If it has changed, we need to try again.
-		 */
-#if 1
-	}
-#else
-	} while (__predict_false(l->l_mutex != old));
-#endif
-
-	return old;
-}
-
-/*
  * Lend a new mutex to an LWP.  The old mutex must be held.
  */
 void
@@ -1176,31 +1325,12 @@ lwp_unlock_to(struct lwp *l, kmutex_t *new)
 {
 	kmutex_t *old;
 
-	KASSERT(mutex_owned(l->l_mutex));
+	KASSERT(lwp_locked(l, NULL));
 
 	old = l->l_mutex;
 	membar_exit();
 	l->l_mutex = new;
 	mutex_spin_exit(old);
-}
-
-/*
- * Acquire a new mutex, and donate it to an LWP.  The LWP must already be
- * locked.
- */
-void
-lwp_relock(struct lwp *l, kmutex_t *new)
-{
-	kmutex_t *old;
-
-	KASSERT(mutex_owned(l->l_mutex));
-
-	old = l->l_mutex;
-	if (old != new) {
-		mutex_spin_enter(new);
-		l->l_mutex = new;
-		mutex_spin_exit(old);
-	}
 }
 
 int
@@ -1225,7 +1355,6 @@ lwp_unsleep(lwp_t *l, bool cleanup)
 	(*l->l_syncobj->sobj_unsleep)(l, cleanup);
 }
 
-
 /*
  * Handle exceptions for mi_userret().  Called if a member of LW_USERRET is
  * set.
@@ -1234,7 +1363,6 @@ void
 lwp_userret(struct lwp *l)
 {
 	struct proc *p;
-	void (*hook)(void);
 	int sig;
 
 	KASSERT(l == curlwp);
@@ -1279,14 +1407,16 @@ lwp_userret(struct lwp *l)
 		/*
 		 * Core-dump or suspend pending.
 		 *
-		 * In case of core dump, suspend ourselves, so that the
-		 * kernel stack and therefore the userland registers saved
-		 * in the trapframe are around for coredump() to write them
-		 * out.  We issue a wakeup on p->p_lwpcv so that sigexit()
-		 * will write the core file out once all other LWPs are
-		 * suspended.
+		 * In case of core dump, suspend ourselves, so that the kernel
+		 * stack and therefore the userland registers saved in the
+		 * trapframe are around for coredump() to write them out.
+		 * We also need to save any PCU resources that we have so that
+		 * they accessible for coredump().  We issue a wakeup on
+		 * p->p_lwpcv so that sigexit() will write the core file out
+		 * once all other LWPs are suspended.  
 		 */
 		if ((l->l_flag & LW_WSUSPEND) != 0) {
+			pcu_save_all(l);
 			mutex_enter(p->p_lock);
 			p->p_nrlwps--;
 			cv_broadcast(&p->p_lwpcv);
@@ -1305,14 +1435,14 @@ lwp_userret(struct lwp *l)
 			/* NOTREACHED */
 		}
 
-		/* Call userret hook; used by Linux emulation. */
-		if ((l->l_flag & LW_WUSERRET) != 0) {
+		/* update lwpctl processor (for vfork child_return) */
+		if (l->l_flag & LW_LWPCTL) {
 			lwp_lock(l);
-			l->l_flag &= ~LW_WUSERRET;
+			KASSERT(kpreempt_disabled());
+			l->l_lwpctl->lc_curcpu = (int)cpu_index(l->l_cpu);
+			l->l_lwpctl->lc_pctr++;
+			l->l_flag &= ~LW_LWPCTL;
 			lwp_unlock(l);
-			hook = p->p_userret;
-			p->p_userret = NULL;
-			(*hook)();
 		}
 	}
 
@@ -1372,11 +1502,25 @@ lwp_delref(struct lwp *l)
 	struct proc *p = l->l_proc;
 
 	mutex_enter(p->p_lock);
+	lwp_delref2(l);
+	mutex_exit(p->p_lock);
+}
+
+/*
+ * Remove one reference to an LWP.  If this is the last reference,
+ * then we must finalize the LWP's death.  The proc mutex is held
+ * on entry.
+ */
+void
+lwp_delref2(struct lwp *l)
+{
+	struct proc *p = l->l_proc;
+
+	KASSERT(mutex_owned(p->p_lock));
 	KASSERT(l->l_stat != LSZOMB);
 	KASSERT(l->l_refcnt > 0);
 	if (--l->l_refcnt == 0)
 		cv_broadcast(&p->p_lwpcv);
-	mutex_exit(p->p_lock);
 }
 
 /*
@@ -1437,91 +1581,6 @@ lwp_find_first(proc_t *p)
 }
 
 /*
- * lwp_specific_key_create --
- *	Create a key for subsystem lwp-specific data.
- */
-int
-lwp_specific_key_create(specificdata_key_t *keyp, specificdata_dtor_t dtor)
-{
-
-	return (specificdata_key_create(lwp_specificdata_domain, keyp, dtor));
-}
-
-/*
- * lwp_specific_key_delete --
- *	Delete a key for subsystem lwp-specific data.
- */
-void
-lwp_specific_key_delete(specificdata_key_t key)
-{
-
-	specificdata_key_delete(lwp_specificdata_domain, key);
-}
-
-/*
- * lwp_initspecific --
- *	Initialize an LWP's specificdata container.
- */
-void
-lwp_initspecific(struct lwp *l)
-{
-	int error;
-
-	error = specificdata_init(lwp_specificdata_domain, &l->l_specdataref);
-	KASSERT(error == 0);
-}
-
-/*
- * lwp_finispecific --
- *	Finalize an LWP's specificdata container.
- */
-void
-lwp_finispecific(struct lwp *l)
-{
-
-	specificdata_fini(lwp_specificdata_domain, &l->l_specdataref);
-}
-
-/*
- * lwp_getspecific --
- *	Return lwp-specific data corresponding to the specified key.
- *
- *	Note: LWP specific data is NOT INTERLOCKED.  An LWP should access
- *	only its OWN SPECIFIC DATA.  If it is necessary to access another
- *	LWP's specifc data, care must be taken to ensure that doing so
- *	would not cause internal data structure inconsistency (i.e. caller
- *	can guarantee that the target LWP is not inside an lwp_getspecific()
- *	or lwp_setspecific() call).
- */
-void *
-lwp_getspecific(specificdata_key_t key)
-{
-
-	return (specificdata_getspecific_unlocked(lwp_specificdata_domain,
-						  &curlwp->l_specdataref, key));
-}
-
-void *
-_lwp_getspecific_by_lwp(struct lwp *l, specificdata_key_t key)
-{
-
-	return (specificdata_getspecific_unlocked(lwp_specificdata_domain,
-						  &l->l_specdataref, key));
-}
-
-/*
- * lwp_setspecific --
- *	Set lwp-specific data corresponding to the specified key.
- */
-void
-lwp_setspecific(specificdata_key_t key, void *data)
-{
-
-	specificdata_setspecific(lwp_specificdata_domain,
-				 &curlwp->l_specdataref, key, data);
-}
-
-/*
  * Allocate a new lwpctl structure for a user LWP.
  */
 int
@@ -1538,10 +1597,14 @@ lwp_ctl_alloc(vaddr_t *uaddr)
 	l = curlwp;
 	p = l->l_proc;
 
+	/* don't allow a vforked process to create lwp ctls */
+	if (p->p_lflag & PL_PPWAIT)
+		return EBUSY;
+
 	if (l->l_lcpage != NULL) {
 		lcp = l->l_lcpage;
 		*uaddr = lcp->lcp_uaddr + (vaddr_t)l->l_lwpctl - lcp->lcp_kaddr;
-		return (EINVAL);
+		return 0;
 	}
 
 	/* First time around, allocate header structure for the process. */
@@ -1662,11 +1725,18 @@ lwp_ctl_alloc(vaddr_t *uaddr)
 void
 lwp_ctl_free(lwp_t *l)
 {
+	struct proc *p = l->l_proc;
 	lcproc_t *lp;
 	lcpage_t *lcp;
 	u_int map, offset;
 
-	lp = l->l_proc->p_lwpctl;
+	/* don't free a lwp context we borrowed for vfork */
+	if (p->p_lflag & PL_PPWAIT) {
+		l->l_lwpctl = NULL;
+		return;
+	}
+
+	lp = p->p_lwpctl;
 	KASSERT(lp != NULL);
 
 	lcp = l->l_lcpage;
@@ -1736,7 +1806,24 @@ lwp_pctr(void)
 	return curlwp->l_ncsw;
 }
 
+/*
+ * Set an LWP's private data pointer.
+ */
+int
+lwp_setprivate(struct lwp *l, void *ptr)
+{
+	int error = 0;
+
+	l->l_private = ptr;
+#ifdef __HAVE_CPU_LWP_SETPRIVATE
+	error = cpu_lwp_setprivate(l, ptr);
+#endif
+	return error;
+}
+
 #if defined(DDB)
+#include <machine/pcb.h>
+
 void
 lwp_whatis(uintptr_t addr, void (*pr)(const char *, ...))
 {

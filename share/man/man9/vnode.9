@@ -1,4 +1,4 @@
-.\"     $NetBSD: vnode.9,v 1.40 2009/04/22 20:53:44 elad Exp $
+.\"     $NetBSD: vnode.9,v 1.56 2012/02/08 09:32:47 wiz Exp $
 .\"
 .\" Copyright (c) 2001, 2005, 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,21 +27,18 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 22, 2009
+.Dd February 8, 2012
 .Dt VNODE 9
 .Os
 .Sh NAME
 .Nm vnode ,
-.Nm vcount ,
 .Nm vref ,
-.Nm VREF ,
 .Nm vrele ,
+.Nm vrele_async ,
 .Nm vget ,
 .Nm vput ,
 .Nm vhold ,
-.Nm VHOLD ,
 .Nm holdrele ,
-.Nm HOLDRELE ,
 .Nm getnewvnode ,
 .Nm ungetnewvnode ,
 .Nm vrecycle ,
@@ -49,7 +46,6 @@
 .Nm vgonel ,
 .Nm vflush ,
 .Nm vaccess ,
-.Nm checkalias ,
 .Nm bdevvp ,
 .Nm cdevvp ,
 .Nm vfinddev ,
@@ -63,14 +59,12 @@
 .Sh SYNOPSIS
 .In sys/param.h
 .In sys/vnode.h
-.Ft int
-.Fn vcount "struct vnode *vp"
 .Ft void
 .Fn vref "struct vnode *vp"
 .Ft void
-.Fn VREF "struct vnode *vp"
-.Ft void
 .Fn vrele "struct vnode *vp"
+.Ft void
+.Fn vrele_async "struct vnode *vp"
 .Ft int
 .Fn vget "struct vnode *vp" "int lockflag"
 .Ft void
@@ -78,13 +72,10 @@
 .Ft void
 .Fn vhold "struct vnode *vp"
 .Ft void
-.Fn VHOLD "struct vnode *vp"
-.Ft void
 .Fn holdrele "struct vnode *vp"
-.Ft void
-.Fn HOLDRELE "struct vnode *vp"
 .Ft int
-.Fn getnewvnode "enum vtagtype tag" "struct mount *mp" "int (**vops)(void *)" "struct vnode **vpp"
+.Fn getnewvnode "enum vtagtype tag" "struct mount *mp" "int (**vops)(void *)" \
+"kmutex_t *slock" "struct vnode **vpp"
 .Ft void
 .Fn ungetnewvnode "struct vnode *vp"
 .Ft int
@@ -97,8 +88,6 @@
 .Fn vflush "struct mount *mp" "struct vnode *skipvp" "int flags"
 .Ft int
 .Fn vaccess "enum vtype type" "mode_t file_mode" "uid_t uid" "gid_t gid" "mode_t acc_mode" "kauth_cred_t cred"
-.Ft struct vnode *
-.Fn checkalias "struct vnode *vp" "dev_t nvp_rdev" "struct mount *mp"
 .Ft int
 .Fn bdevvp "dev_t dev" "struct vnode **vpp"
 .Ft int
@@ -109,7 +98,7 @@
 .Fn vdevgone "int maj" "int minl" "int minh" "enum vtype type"
 .Ft void
 .Fn vwakeup "struct buf *bp"
-.Ft void
+.Ft int
 .Fn vflushbuf "struct vnode *vp" "int sync"
 .Ft int
 .Fn vinvalbuf "struct vnode *vp" "int flags" "kauth_cred_t cred" "struct lwp *l" "int slpflag" "int slptimeo"
@@ -142,40 +131,39 @@ longer needed and can be recycled.
 The vnode has the following structure:
 .Bd -literal
 struct vnode {
-        struct uvm_object v_uobj;               /* uvm object */
-#define v_usecount      v_uobj.uo_refs
-#define v_interlock     v_uobj.vmobjlock
-        voff_t          v_size;                 /* size of file */
-        int             v_flag;                 /* flags */
-        int             v_numoutput;            /* num pending writes */
-        long            v_writecount;           /* ref count of writers */
-        long            v_holdcnt;              /* page \*[Am] buffer refs */
-        struct mount    *v_mount;               /* ptr to vfs we are in */
-        int             (**v_op)(void *);       /* vnode ops vector */
-        TAILQ_ENTRY(vnode) v_freelist;          /* vnode freelist */
-        LIST_ENTRY(vnode) v_mntvnodes;          /* vnodes for mount pt */
-        struct buflists v_cleanblkhd;           /* clean blocklist head */
-        struct buflists v_dirtyblkhd;           /* dirty blocklist head */
-        LIST_ENTRY(vnode) v_synclist;           /* dirty vnodes */
-        LIST_HEAD(, namecache) v_dnclist;       /* namecaches for children */
-        LIST_HEAD(, namecache) v_nclist;        /* namecaches for our parent */
-        union {
-                struct mount    *vu_mountedhere;/* ptr to mounted vfs */
-                struct socket   *vu_socket;     /* unix ipc (VSOCK) */
-                struct specinfo *vu_specinfo;   /* device (VCHR, VBLK) */
-                struct fifoinfo *vu_fifoinfo;   /* fifo (VFIFO) */
-        } v_un;
-#define v_mountedhere   v_un.vu_mountedhere
-#define v_socket        v_un.vu_socket
-#define v_specinfo      v_un.vu_specinfo
-#define v_fifoinfo      v_un.vu_fifoinfo
-        struct nqlease  *v_lease;               /* Soft ref to lease */
-        enum vtype      v_type;                 /* vnode type */
-        enum vtagtype   v_tag;                  /* underlying data type */
-        struct lock     v_lock;                 /* lock for this vnode */
-        struct lock     *v_vnlock;              /* ptr to vnode lock */
-        void            *v_data;                /* private data for fs */
-        struct klist    v_klist;                /* knotes attached to vnode */
+	struct uvm_object v_uobj;		/* the VM object */
+	kcondvar_t	v_cv;			/* synchronization */
+	voff_t		v_size;			/* size of file */
+	voff_t		v_writesize;		/* new size after write */
+	int		v_iflag;		/* VI_* flags */
+	int		v_vflag;		/* VV_* flags */
+	int		v_uflag;		/* VU_* flags */
+	int		v_numoutput;		/* # of pending writes */
+	int		v_writecount;		/* ref count of writers */
+	int		v_holdcnt;		/* page & buffer refs */
+	int		v_synclist_slot;	/* synclist slot index */
+	struct mount	*v_mount;		/* ptr to vfs we are in */
+	int		(**v_op)(void *);	/* vnode operations vector */
+	TAILQ_ENTRY(vnode) v_freelist;		/* vnode freelist */
+	struct vnodelst	*v_freelisthd;		/* which freelist? */
+	TAILQ_ENTRY(vnode) v_mntvnodes;		/* vnodes for mount point */
+	struct buflists	v_cleanblkhd;		/* clean blocklist head */
+	struct buflists	v_dirtyblkhd;		/* dirty blocklist head */
+	TAILQ_ENTRY(vnode) v_synclist;		/* vnodes with dirty bufs */
+	LIST_HEAD(, namecache) v_dnclist;	/* namecaches (children) */
+	LIST_HEAD(, namecache) v_nclist;	/* namecaches (parent) */
+	union {
+		struct mount	*vu_mountedhere;/* ptr to vfs (VDIR) */
+		struct socket	*vu_socket;	/* unix ipc (VSOCK) */
+		struct specnode	*vu_specnode;	/* device (VCHR, VBLK) */
+		struct fifoinfo	*vu_fifoinfo;	/* fifo (VFIFO) */
+		struct uvm_ractx *vu_ractx;	/* read-ahead ctx (VREG) */
+	} v_un;
+	enum vtype	v_type;			/* vnode type */
+	enum vtagtype	v_tag;			/* type of underlying data */
+	struct vnlock	v_lock;			/* lock for this vnode */
+	void 		*v_data;		/* private data for fs */
+	struct klist	v_klist;		/* notes attached to vnode */
 };
 .Ed
 .Pp
@@ -261,6 +249,7 @@ kernel to the vnode.
 This count is maintained by
 .Fn vref ,
 .Fn vrele ,
+.Fn vrele_async ,
 and
 .Fn vput .
 The second is the number of active references within the kernel to the
@@ -404,8 +393,6 @@ log-structured file system
 loopback file system
 .It VT_FDESC
 file descriptor file system
-.It VT_PORTAL
-portal daemon
 .It VT_NULL
 null file system layer
 .It VT_UMAP
@@ -423,7 +410,7 @@ union file system
 .It VT_ADOSFS
 Amiga file system
 .It VT_EXT2FS
-Linux's EXT2 file system
+Linux's ext2 file system
 .It VT_CODA
 Coda file system
 .It VT_FILECORE
@@ -447,7 +434,7 @@ systemV boot file system
 .El
 .Pp
 All vnode locking operations use
-.Em v_vnlock .
+.Em v_lock .
 This lock is acquired by calling
 .Xr vn_lock 9
 and released by calling
@@ -475,30 +462,13 @@ Multiple-reader locking functions equivalently only in the presence
 of big-lock SMP locking or a uni-processor machine.
 The lock may be held while sleeping.
 While the
-.Em v_vnlock
+.Em v_lock
 is acquired, the holder is guaranteed that the vnode will not be
 reclaimed or invalidated.
 Most file system functions require that you hold the vnode lock on entry.
 See
 .Xr lock 9
 for details on the kernel locking API.
-.Pp
-For leaf file systems (such as ffs, lfs, msdosfs, etc),
-.Em v_vnlock
-will point to
-.Em v_lock .
-For stacked file systems,
-.Em v_vnlock
-will generally point to
-.Em v_vlock
-of the lowest file system.
-Additionally, the implementation of the vnode lock is the
-responsibility of the individual file systems and
-.Em v_vnlock
-may also be NULL indicating that a leaf node does not export a lock
-for vnode locking.
-In this case, stacked file systems (such as nullfs) must call the
-underlying file system directly for locking.
 .Pp
 Each file system underlying a vnode allocates its own private area and
 hangs it from
@@ -521,10 +491,6 @@ modify them.
 The vnode lock must not be acquired within interrupt context.
 .Sh FUNCTIONS
 .Bl -tag -width compact
-.It Fn vcount "vp"
-Calculate the total number of reference counts to a special device
-with vnode
-.Fa vp .
 .It Fn vref "vp"
 Increment
 .Em v_usecount
@@ -532,9 +498,6 @@ of the vnode
 .Em vp .
 Any kernel thread system which uses a vnode (e.g., during the operation
 of some algorithm or to store in a data structure) should call
-.Fn vref .
-.It Fn VREF "vp"
-This function is an alias for
 .Fn vref .
 .It Fn vrele "vp"
 Decrement
@@ -554,6 +517,9 @@ If both
 and
 .Em v_holdcnt
 are zero, the vnode is placed on the freelist.
+.It Fn vrele_async "vp"
+Will asychronously release the vnode in different context than the caller,
+sometime after the call.
 .It Fn vget "vp" "lockflags"
 Reclaim vnode
 .Fa vp
@@ -561,7 +527,7 @@ from the freelist, increment its reference count and lock it.
 The argument
 .Fa lockflags
 specifies the
-.Xr lockmgr 9
+.Xr rwlock 9
 flags used to lock the vnode.
 If the VXLOCK is set in
 .Fa vp Ns 's
@@ -593,19 +559,13 @@ and moving the vnode from the freelist to the holdlist.
 Once on the holdlist, the vnode will not be recycled until it is
 released with
 .Fn holdrele .
-.It Fn VHOLD "vp"
-This function is an alias for
-.Fn vhold .
 .It Fn holdrele "vp"
 Mark the vnode
 .Fa vp
 as inactive by decrementing
 .Em vp-\*[Gt]v_holdcnt
 and moving the vnode from the holdlist to the freelist.
-.It Fn HOLDRELE "vp"
-This function is an alias for
-.Fn holdrele .
-.It Fn getnewvnode "tag" "mp" "vops" "vpp"
+.It Fn getnewvnode "tag" "mp" "vops" "slock" "vpp"
 Retrieve the next vnode from the freelist.
 .Fn getnewvnode
 must choose whether to allocate a new vnode or recycle an existing
@@ -636,6 +596,17 @@ is the vnode operations vector of the file system requesting the new
 vnode.
 If a vnode is successfully retrieved zero is returned, otherwise an
 appropriate error code is returned.
+If
+.Fa slock
+is not
+.Dv NULL ,
+it specifies the lock to share for
+.Em v_interlock .
+The reference will be held on the lock and sharing noted.
+Reference will be released and lock unshared when the vnode gets recycled.
+If
+.Dv NULL
+(regular case), vnode will use its own interlock.
 .It Fn ungetnewvnode "vp"
 Undo the operation of
 .Fn getnewvnode .
@@ -665,7 +636,9 @@ Remove any vnodes in the vnode table belonging to mount point
 .Fa mp .
 If
 .Fa skipvp
-is not NULL it is exempt from being flushed.
+is not
+.Dv NULL
+it is exempt from being flushed.
 The argument
 .Fa flags
 is a set of flags modifying the operation of
@@ -684,14 +657,6 @@ desired access type
 .Fa acc_mode
 and credentials
 .Fa cred .
-.It Fn checkalias "vp" "nvp_rdev" "mp"
-Check to see if the new vnode
-.Fa vp
-represents a special device for which another vnode represents the
-same device.
-If such an alias exists, the existing contents and the aliased vnode
-are deallocated.
-The caller is responsible for filling the new vnode with its new contents.
 .It Fn bdevvp "dev" "vpp"
 Create a vnode for a block device.
 .Fn bdevvp
@@ -703,7 +668,7 @@ Create a vnode for a character device.
 is used for the console and kernfs special devices.
 .It Fn vfinddev "dev" "vtype" "vpp"
 Lookup a vnode by device number.
-The vnode is returned in the address specified by
+The vnode is referenced and returned in the address specified by
 .Fa vpp .
 .It Fn vdevgone "int maj" "int min" "int minh" "enum vtype type"
 Reclaim all vnodes that correspond to the specified minor number range
@@ -775,13 +740,6 @@ is a string to prefix the information dump of vnode
 .Fa vp .
 .El
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing or using the vnode
-framework can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The vnode framework is implemented within the file
 .Pa sys/kern/vfs_subr.c .
 .Sh SEE ALSO

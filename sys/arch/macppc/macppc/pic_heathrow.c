@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_heathrow.c,v 1.4 2008/04/29 06:53:02 martin Exp $ */
+/*	$NetBSD: pic_heathrow.c,v 1.7 2011/07/07 01:26:37 mrg Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,15 +27,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_heathrow.c,v 1.4 2008/04/29 06:53:02 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_heathrow.c,v 1.7 2011/07/07 01:26:37 mrg Exp $");
 
 #include "opt_interrupt.h"
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
 
@@ -62,7 +60,7 @@ struct heathrow_ops {
 };
 
 static struct heathrow_ops *setup_heathrow(uint32_t);
-inline void heathrow_read_events(struct heathrow_ops *);
+static inline void heathrow_read_events(struct heathrow_ops *);
 
 #define INT_STATE_REG_H		((uint32_t)pic->pic_cookie + 0x10)
 #define INT_ENABLE_REG_H	((uint32_t)pic->pic_cookie + 0x14)
@@ -195,7 +193,7 @@ heathrow_disable_irq(struct pic_ops *pic, int irq)
 	}
 }
 
-inline void
+static inline void
 heathrow_read_events(struct heathrow_ops *heathrow)
 {
 	struct pic_ops *pic = &heathrow->pic;
@@ -234,14 +232,14 @@ heathrow_get_irq(struct pic_ops *pic, int mode)
 		return 255;
 
 	if (heathrow->pending_events_l != 0) {
-		bit = 31 - cntlzw(heathrow->pending_events_l);
+		bit = 31 - __builtin_clz(heathrow->pending_events_l);
 		mask = 1 << bit;
 		heathrow->pending_events_l &= ~mask;
 		return bit;
 	}
 
 	if (heathrow->pending_events_h != 0) {
-		bit = 31 - cntlzw(heathrow->pending_events_h);
+		bit = 31 - __builtin_clz(heathrow->pending_events_h);
 		mask = 1 << bit;
 		heathrow->pending_events_h &= ~mask;
 		return bit + 32;

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32.h,v 1.82 2009/03/16 20:48:13 njoly Exp $	*/
+/*	$NetBSD: netbsd32.h,v 1.92.2.1 2012/04/12 17:05:37 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008 Matthew R. Green
@@ -36,6 +36,7 @@
  * NetBSD 32-bit compatibility module.
  */
 
+#include <sys/param.h> /* precautionary upon removal from ucred.h */
 #include <sys/systm.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -44,6 +45,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/ucontext.h>
+#include <sys/ucred.h>
 #include <compat/sys/ucontext.h>
 #include <compat/sys/mount.h>
 
@@ -63,10 +65,10 @@ typedef int32_t netbsd32_key_t;
 typedef int32_t netbsd32_intptr_t;
 typedef uint32_t netbsd32_uintptr_t;
 
-/* netbsd32_[u]int64 are machine dependant and defined below */
+/* netbsd32_[u]int64 are machine dependent and defined below */
 
 /*
- * machine depedant section; must define:
+ * machine dependant section; must define:
  *	netbsd32_pointer_t
  *		- 32-bit pointer type, normally uint32_t but can be int32_t
  *		  for platforms which rely on sign-extension of pointers
@@ -86,7 +88,7 @@ typedef uint32_t netbsd32_uintptr_t;
  *	char netbsd32_esigcode[], netbsd32_sigcode[]
  *		- the above are abvious
  *
- * pull in the netbsd32 machine dependant header, that may help with the
+ * pull in the netbsd32 machine dependent header, that may help with the
  * above, or it may be provided via the MD layer itself.
  */
 #include <machine/netbsd32_machdep.h>
@@ -149,6 +151,10 @@ typedef netbsd32_pointer_t netbsd32_lwpidp;
 typedef netbsd32_pointer_t netbsd32_ucontextp;
 typedef netbsd32_pointer_t netbsd32_caddr_t;
 typedef netbsd32_pointer_t netbsd32_lwpctlp;
+typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actionsp;
+typedef netbsd32_pointer_t netbsd32_posix_spawnattrp;
+typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actions_entryp;
+typedef netbsd32_pointer_t netbsd32_pid_tp;
 
 /*
  * now, the compatibility structures and their fake pointer types.
@@ -252,8 +258,80 @@ struct netbsd32_statfs {
 	char	f_mntfromname[MNAMELEN];  /* mounted file system */
 };
 
+struct netbsd32_export_args30 {
+	int	ex_flags;		/* export related flags */
+	uid_t	ex_root;		/* mapping for root uid */
+	struct	uucred ex_anon;		/* mapping for anonymous user */
+	netbsd32_pointer_t ex_addr;	/* net address to which exported */
+	int	ex_addrlen;		/* and the net address length */
+	netbsd32_pointer_t ex_mask;	/* mask of valid bits in saddr */
+	int	ex_masklen;		/* and the smask length */
+	netbsd32_charp ex_indexfile;	/* index file for WebNFS URLs */ 
+};
+
 /* from <sys/poll.h> */
 typedef netbsd32_pointer_t netbsd32_pollfdp_t;
+
+/* from <sys/quotactl.h> */
+typedef netbsd32_pointer_t netbsd32_quotactlargsp_t;
+struct netbsd32_quotactlargs {
+	unsigned qc_op;
+	union {
+		struct {
+			netbsd32_pointer_t qc_info;
+		} stat;
+		struct {
+			int qc_idtype;
+			netbsd32_pointer_t qc_info;
+		} idtypestat;
+		struct {
+			int qc_objtype;
+			netbsd32_pointer_t qc_info;
+		} objtypestat;
+		struct {
+			netbsd32_pointer_t qc_key;
+			netbsd32_pointer_t qc_val;
+		} get;
+		struct {
+			netbsd32_pointer_t qc_key;
+			netbsd32_pointer_t qc_val;
+		} put;
+		struct {
+			netbsd32_pointer_t qc_key;
+		} delete;
+		struct {
+			netbsd32_pointer_t qc_cursor;
+		} cursoropen;
+		struct {
+			netbsd32_pointer_t qc_cursor;
+		} cursorclose;
+		struct {
+			netbsd32_pointer_t qc_cursor;
+			int qc_idtype;
+		} cursorskipidtype;
+		struct {
+			netbsd32_pointer_t qc_cursor;
+			netbsd32_pointer_t qc_keys;
+			netbsd32_pointer_t qc_vals;
+			unsigned qc_maxnum;
+			netbsd32_pointer_t qc_ret;
+		} cursorget;
+		struct {
+			netbsd32_pointer_t qc_cursor;
+			netbsd32_pointer_t qc_ret;
+		} cursoratend;
+		struct {
+			netbsd32_pointer_t qc_cursor;
+		} cursorrewind;
+		struct {
+			int qc_idtype;
+			netbsd32_pointer_t qc_quotafile;
+		} quotaon;
+		struct {
+			int qc_idtype;
+		} quotaoff;
+	} u;
+};
 
 /* from <sys/resource.h> */
 typedef netbsd32_pointer_t netbsd32_rusage50p_t;
@@ -570,6 +648,7 @@ typedef netbsd32_pointer_t netbsd32_stackp_t;
 /* from <sys/socket.h> */
 typedef netbsd32_pointer_t netbsd32_sockaddrp_t;
 typedef netbsd32_pointer_t netbsd32_osockaddrp_t;
+typedef netbsd32_pointer_t netbsd32_socklenp_t;
 
 typedef netbsd32_pointer_t netbsd32_msghdrp_t;
 struct netbsd32_msghdr {
@@ -777,6 +856,12 @@ struct netbsd32_timex {
 	netbsd32_long stbcnt;	/* stability limit exceeded (ro) */
 };
 
+/* <prop/plistref.h> */
+struct netbsd32_plistref {
+	netbsd32_pointer_t pref_plist;
+	netbsd32_size_t pref_len;
+};
+
 /* from <ufs/lfs/lfs.h> */
 typedef netbsd32_pointer_t netbsd32_block_infop_t;  /* XXX broken */
 
@@ -813,6 +898,69 @@ struct netbsd32_kevent {
 typedef netbsd32_pointer_t netbsd32_sched_paramp_t;
 typedef netbsd32_pointer_t netbsd32_cpusetp_t;
 
+/* from <fs/cd9660/cd9660_mount.h> */
+struct netbsd32_iso_args {
+	netbsd32_charp fspec;
+	struct export_args30 _pad1;
+	int	flags;
+};
+
+/* from <ufs/ufs/ufs_mount.h> */
+struct netbsd32_ufs_args {
+	netbsd32_charp		fspec;
+};
+
+struct netbsd32_mfs_args {
+	netbsd32_charp		fspec;
+	struct netbsd32_export_args30	_pad1;
+	netbsd32_voidp		base;
+	netbsd32_u_long		size;
+};
+
+/* from <nfs/nfsmount,h> */
+struct netbsd32_nfs_args {
+	int32_t		version;	/* args structure version number */
+	netbsd32_sockaddrp_t addr;	/* file server address */
+	int32_t		addrlen;	/* length of address */
+	int32_t		sotype;		/* Socket type */
+	int32_t		proto;		/* and Protocol */
+	netbsd32_u_charp fh;		/* File handle to be mounted */
+	int32_t		fhsize;		/* Size, in bytes, of fh */
+	int32_t		flags;		/* flags */
+	int32_t		wsize;		/* write size in bytes */
+	int32_t		rsize;		/* read size in bytes */
+	int32_t		readdirsize;	/* readdir size in bytes */
+	int32_t		timeo;		/* initial timeout in .1 secs */
+	int32_t		retrans;	/* times to retry send */
+	int32_t		maxgrouplist;	/* Max. size of group list */
+	int32_t		readahead;	/* # of blocks to readahead */
+	int32_t		leaseterm;	/* Ignored; Term (sec) of lease */
+	int32_t		deadthresh;	/* Retrans threshold */
+	netbsd32_charp	hostname;	/* server's name */
+};
+
+struct netbsd32_posix_spawn_file_actions_entry {
+	enum { FAE32_OPEN, FAE32_DUP2, FAE32_CLOSE } fae_action;
+
+	int fae_fildes;
+	union {
+		struct {
+			netbsd32_charp path;
+			int oflag;
+			mode_t mode;
+		} open;
+		struct {
+			int newfildes;
+		} dup2;
+	} fae_data;
+};
+
+struct netbsd32_posix_spawn_file_actions {
+	unsigned int size;	/* size of fae array */
+	unsigned int len;	/* how many slots are used */
+	netbsd32_posix_spawn_file_actions_entryp fae;
+};
+
 #if 0
 int	netbsd32_kevent(struct lwp *, void *, register_t *);
 #endif
@@ -832,10 +980,10 @@ int	netbsd32_kevent(struct lwp *, void *, register_t *);
 	    SCARG(uap, name) = (type)(long)SCARG(s32uap, name)
 
 /* and some standard versions */
-#define	NETBSD32TO64_UAP(name)		NETBSD32TO64(uap, &ua, name);
-#define	NETBSD32TOP_UAP(name, type)	NETBSD32TOP(uap, &ua, name, type);
-#define	NETBSD32TOX_UAP(name, type)	NETBSD32TOX(uap, &ua, name, type);
-#define	NETBSD32TOX64_UAP(name, type)	NETBSD32TOX64(uap, &ua, name, type);
+#define	NETBSD32TO64_UAP(name)		NETBSD32TO64(uap, &ua, name)
+#define	NETBSD32TOP_UAP(name, type)	NETBSD32TOP(uap, &ua, name, type)
+#define	NETBSD32TOX_UAP(name, type)	NETBSD32TOX(uap, &ua, name, type)
+#define	NETBSD32TOX64_UAP(name, type)	NETBSD32TOX64(uap, &ua, name, type)
 
 #define	SCARG_P32(uap, name) NETBSD32PTR64(SCARG(uap, name))
 

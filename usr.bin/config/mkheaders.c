@@ -1,4 +1,4 @@
-/*	$NetBSD: mkheaders.c,v 1.16 2009/05/13 18:54:34 cube Exp $	*/
+/*	$NetBSD: mkheaders.c,v 1.18 2010/03/22 14:40:54 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,9 +58,7 @@
 #include <crc_extern.h>
 
 static int emitcnt(struct nvlist *);
-static int emitlocs(void);
 static int emitopts(void);
-static int emitioconfh(void);
 static int emittime(void);
 static int herr(const char *, const char *, FILE *);
 static int defopts_print(const char *, void *, void *);
@@ -350,7 +348,7 @@ locators_print(const char *name, void *value, void *arg)
  * locators in the configuration.  Do this by enumerating the attribute
  * hash table and emitting all the locators for each attribute.
  */
-static int
+int
 emitlocs(void)
 {
 	const char *tfname;
@@ -377,7 +375,7 @@ emitlocs(void)
  * Build the "ioconf.h" file with extern declarations for all configured
  * cfdrivers.
  */
-static int
+int
 emitioconfh(void)
 {
 	const char *tfname;

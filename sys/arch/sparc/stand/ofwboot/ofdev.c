@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.c,v 1.24 2009/10/26 19:16:57 cegger Exp $	*/
+/*	$NetBSD: ofdev.c,v 1.32.10.1 2012/07/21 00:04:56 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -41,6 +41,7 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/ufs.h>
+#include <lib/libsa/lfs.h>
 #include <lib/libsa/cd9660.h>
 #ifdef NETBOOT
 #include <lib/libsa/nfs.h>
@@ -55,8 +56,10 @@
 
 #include "ofdev.h"
 #include "boot.h"
+#include "net.h"
 
 extern char bootdev[];
+extern bool root_fs_quickseekable;
 
 /*
  * This is ugly.  A path on a sparc machine is something like this:
@@ -122,7 +125,7 @@ filename(char *str, char *ppart)
 				sizeof devtype) < 0)
 			devtype[0] = 0;
 	}
-	DPRINTF(("filename: not found\n",lp));
+	DPRINTF(("filename: not found\n"));
 	return 0;
 }
 
@@ -177,19 +180,24 @@ devclose(struct open_file *of)
 #endif
 	prom_close(op->handle);
 	op->handle = -1;
+	return 0;
 }
 
 static struct devsw ofdevsw[1] = {
-	"OpenFirmware",
-	strategy,
-	(int (*)(struct open_file *, ...))nodev,
-	devclose,
-	noioctl
+	{
+		"OpenFirmware",
+		strategy,
+		(int (*)(struct open_file *, ...))nodev,
+		devclose,
+		noioctl
+	}
 };
 int ndevs = sizeof ofdevsw / sizeof ofdevsw[0];
 
+
 #ifdef SPARC_BOOT_UFS
-static struct fs_ops file_system_ufs = FS_OPS(ufs);
+static struct fs_ops file_system_ufs[] = 
+{ FS_OPS(ufs), FS_OPS(ffsv2), FS_OPS(lfsv1), FS_OPS(lfsv2) };
 #endif
 #ifdef SPARC_BOOT_CD9660
 static struct fs_ops file_system_cd9660 = FS_OPS(cd9660);
@@ -199,7 +207,7 @@ static struct fs_ops file_system_nfs = FS_OPS(nfs);
 static struct fs_ops file_system_tftp = FS_OPS(tftp);
 #endif
 
-struct fs_ops file_system[3];
+struct fs_ops file_system[7];
 int nfsys;
 
 static struct of_dev ofdev = {
@@ -209,13 +217,6 @@ static struct of_dev ofdev = {
 char opened_name[256];
 int floppyboot;
 
-static u_long
-get_long(const void *p)
-{
-	const unsigned char *cp = p;
-
-	return cp[0] | (cp[1] << 8) | (cp[2] << 16) | (cp[3] << 24);
-}
 /************************************************************************
  *
  * The rest of this was taken from arch/sparc64/scsi/sun_disklabel.c
@@ -321,15 +322,9 @@ static char *
 search_label(struct of_dev *devp, u_long off, char *buf,
 	     struct disklabel *lp, u_long off0)
 {
-	size_t read;
-	struct mbr_partition *p;
-	int i;
-	u_long poff;
-	static int recursion;
-
+	size_t readsize;
 	struct disklabel *dlp;
 	struct sun_disklabel *slp;
-	int error;
 
 	/* minimal requirements for archtypal disk label */
 	if (lp->d_secperunit == 0)
@@ -339,8 +334,8 @@ search_label(struct of_dev *devp, u_long off, char *buf,
 		lp->d_partitions[0].p_size = 0x1fffffff;
 	lp->d_partitions[0].p_offset = 0;
 
-	if (strategy(devp, F_READ, LABELSECTOR, DEV_BSIZE, buf, &read)
-	    || read != DEV_BSIZE)
+	if (strategy(devp, F_READ, LABELSECTOR, DEV_BSIZE, buf, &readsize)
+	    || readsize != DEV_BSIZE)
 		return ("Cannot read label");
 	/* Check for a NetBSD disk label. */
 	dlp = (struct disklabel *) (buf + LABELOFFSET);
@@ -374,8 +369,8 @@ devopen(struct open_file *of, const char *name, char **file)
 	} b;
 	struct disklabel label;
 	int handle, part, try = 0;
-	size_t read;
-	char *errmsg = NULL, *pp, savedpart = 0;
+	size_t readsize;
+	char *errmsg = NULL, *pp = NULL, savedpart = 0;
 	int error = 0;
 
 	if (ofdev.handle != -1)
@@ -470,10 +465,13 @@ open_again:
 		/* First try to find a disklabel without MBR partitions */
 		DPRINTF(("devopen: trying to read disklabel\n"));
 		if (strategy(&ofdev, F_READ,
-			     LABELSECTOR, DEV_BSIZE, b.buf, &read) != 0
-		    || read != DEV_BSIZE
+			     LABELSECTOR, DEV_BSIZE, b.buf, &readsize) != 0
+		    || readsize != DEV_BSIZE
 		    || (errmsg = getdisklabel(b.buf, &label))) {
-			if (errmsg) printf("devopen: getdisklabel returned %s\n", errmsg);
+			if (errmsg) {
+				DPRINTF(("devopen: getdisklabel returned %s\n",
+					errmsg));
+			}
 			/* Else try MBR partitions */
 			errmsg = search_label(&ofdev, 0, b.buf, &label, 0);
 			if (errmsg) {
@@ -502,12 +500,12 @@ open_again:
 		} else {
 			part = partition ? partition - 'a' : 0;
 			ofdev.partoff = label.d_partitions[part].p_offset;
-			DPRINTF(("devopen: setting partition %d offset %x\n",
+			DPRINTF(("devopen: setting partition %d offset %lx\n",
 			       part, ofdev.partoff));
 			if (label.d_partitions[part].p_fstype == FS_RAID) {
 				ofdev.partoff += RF_PROTECTED_SECTORS;
 				DPRINTF(("devopen: found RAID partition, "
-				    "adjusting offset to %x\n", ofdev.partoff));
+				    "adjusting offset to %lx\n", ofdev.partoff));
 			}
 		}
 
@@ -515,34 +513,37 @@ open_again:
 		of->f_dev = ofdevsw;
 		of->f_devdata = &ofdev;
 #ifdef SPARC_BOOT_UFS
-		memcpy(&file_system[nfsys++], &file_system_ufs, sizeof file_system[0]);
+		memcpy(&file_system[nfsys++], &file_system_ufs[0], sizeof file_system[0]);
+		memcpy(&file_system[nfsys++], &file_system_ufs[1], sizeof file_system[0]);
+		memcpy(&file_system[nfsys++], &file_system_ufs[2], sizeof file_system[0]);
+		memcpy(&file_system[nfsys++], &file_system_ufs[3], sizeof file_system[0]);
 #endif
 #ifdef SPARC_BOOT_CD9660
-		memcpy(&file_system[nfsys++], &file_system_cd9660,
-		    sizeof file_system[0]);
+		memcpy(&file_system[nfsys++], &file_system_cd9660, sizeof file_system[0]);
 #endif
 		DPRINTF(("devopen: return 0\n"));
 		return 0;
 	}
 #ifdef NETBOOT
 	if (!strcmp(b.buf, "network")) {
-		if (error = net_open(&ofdev))
+		if ((error = net_open(&ofdev)) != 0)
 			goto bad;
 
 		ofdev.type = OFDEV_NET;
 		of->f_dev = ofdevsw;
-		of->f_devdata = NULL;
+		of->f_devdata = &ofdev;
 
 		if (!strncmp(*file,"/tftp:",6)) {
 			*file += 6;
 			memcpy(&file_system[0], &file_system_tftp, sizeof file_system[0]);
-			if (net_tftp_bootp(&of->f_devdata)) {
+			if (net_tftp_bootp((int **)&of->f_devdata)) {
 				net_close(&ofdev);
 				goto bad;
 			}
+			root_fs_quickseekable = false;
 		} else {
 			memcpy(&file_system[0], &file_system_nfs, sizeof file_system[0]);
-			if (error = net_mountroot()) {
+			if ((error = net_mountroot()) != 0) {
 				net_close(&ofdev);
 				goto bad;
 			}

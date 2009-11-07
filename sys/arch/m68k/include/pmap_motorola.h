@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_motorola.h,v 1.21 2009/08/26 00:30:02 thorpej Exp $	*/
+/*	$NetBSD: pmap_motorola.h,v 1.34 2011/10/29 18:26:19 tsutsui Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -76,11 +76,12 @@
 #ifndef	_M68K_PMAP_MOTOROLA_H_
 #define	_M68K_PMAP_MOTOROLA_H_
 
-#include <sys/simplelock.h>
+#ifdef _KERNEL_OPT
+#include "opt_m68k_arch.h"
+#endif
+
 #include <machine/cpu.h>
 #include <machine/pte.h>
-
-#define M68K_SEG_SIZE	NBSEG
 
 /*
  * Pmap stuff
@@ -88,14 +89,64 @@
 struct pmap {
 	pt_entry_t		*pm_ptab;	/* KVA of page table */
 	st_entry_t		*pm_stab;	/* KVA of segment table */
-	int			pm_stfree;	/* 040: free lev2 blocks */
+	u_int			pm_stfree;	/* 040: free lev2 blocks */
 	st_entry_t		*pm_stpa;	/* 040: ST phys addr */
 	uint16_t		pm_sref;	/* segment table ref count */
-	uint16_t		pm_count;	/* pmap reference count */
-	struct simplelock	pm_lock;	/* lock on pmap */
+	u_int			pm_count;	/* pmap reference count */
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 	int			pm_ptpages;	/* more stats: PT pages */
 };
+
+/*
+ * MMU specific segment values
+ *
+ * We are using following segment layout in m68k pmap_motorola.c:
+ * 68020/030 4KB/page: l1,l2,page    == 10,10,12	(%tc = 0x82c0aa00)
+ * 68020/030 8KB/page: l1,l2,page    ==  8,11,13	(%tc = 0x82d08b00)
+ * 68040/060 4KB/page: l1,l2,l3,page == 7,7,6,12	(%tc = 0x8000)
+ * 68040/060 8KB/page: l1,l2,l3,page == 7,7,5,13	(%tc = 0xc000)
+ *
+ * 68020/030 l2 size is chosen per NPTEPG, a number of page table entries
+ * per page, to use one whole page for PTEs per one segment table entry,
+ * and maybe also because 68020 HP MMU machines use simlar structures.
+ *
+ * 68040/060 layout is defined by hardware design and not configurable,
+ * as defined in <m68k/pte_motorola.h>.
+ *
+ * Even on 68040/060, we still appropriate 2-level ste-pte pmap structures
+ * for 68020/030 (derived from 4.4BSD/hp300) to handle 040's 3-level MMU.
+ * TIA_SIZE and TIB_SIZE are used to represent such pmap structures and
+ * they are also refered on 040/060.
+ *
+ * NBSEG and SEGOFSET are used to check l2 STE of the specified VA,
+ * so they have different values between 020/030 and 040/060.
+ */
+							/*  8KB /  4KB	*/
+#define TIB_SHIFT	(PG_SHIFT - 2)			/*   11 /   10	*/
+#define TIB_SIZE	(1U << TIB_SHIFT)		/* 2048 / 1024	*/
+#define TIA_SHIFT	(32 - TIB_SHIFT - PG_SHIFT)	/*    8 /   10	*/
+#define TIA_SIZE	(1U << TIA_SHIFT)		/*  256 / 1024	*/
+
+#define SEGSHIFT	(TIB_SHIFT + PG_SHIFT)		/*   24 /   22	*/
+
+#define NBSEG30		(1U << SEGSHIFT)
+#define NBSEG40		(1U << SG4_SHIFT2)
+
+#if   ( defined(M68020) ||  defined(M68030)) &&	\
+      (!defined(M68040) && !defined(M68060))
+#define NBSEG		NBSEG30
+#elif ( defined(M68040) ||  defined(M68060)) &&	\
+      (!defined(M68020) && !defined(M68030))
+#define NBSEG		NBSEG40
+#else
+#define NBSEG		((mmutype == MMU_68040) ? NBSEG40 : NBSEG30)
+#endif
+
+#define SEGOFSET	(NBSEG - 1)	/* byte offset into segment */ 
+
+#define	m68k_round_seg(x)	((((vaddr_t)(x)) + SEGOFSET) & ~SEGOFSET)
+#define	m68k_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
+#define	m68k_seg_offset(x)	((vaddr_t)(x) & SEGOFSET)
 
 /*
  * On the 040, we keep track of which level 2 blocks are already in use
@@ -103,18 +154,20 @@ struct pmap {
  * (block 31).  For convenience, the level 1 table is considered to be
  * block 0.
  *
- * MAX[KU]L2SIZE control how many pages of level 2 descriptors are allowed.
- * for the kernel and users.  8 implies only the initial "segment table"
- * page is used.  WARNING: don't change MAXUL2SIZE unless you can allocate
- * physically contiguous pages for the ST in pmap.c!
+ * MAX[KU]L2SIZE control how many pages of level 2 descriptors are allowed
+ * for the kernel and users.
+ * 16 or 8 implies only the initial "segment table" page is used,
+ * i.e. it means PAGE_SIZE / (SG4_LEV1SIZE * sizeof(st_entry_t)).
+ * WARNING: don't change MAXUL2SIZE unless you can allocate
+ * physically contiguous pages for the ST in pmap_motorola.c!
  */
 #define MAXKL2SIZE	32
-#if PAGE_SIZE == 8192
+#if PAGE_SIZE == 8192	/* NBPG / (SG4_LEV1SIZE * sizeof(st_entry_t)) */
 #define MAXUL2SIZE	16
 #else
 #define MAXUL2SIZE	8
 #endif
-#define l2tobm(n)	(1 << (n))
+#define l2tobm(n)	(1U << (n))
 #define bmtol2(n)	(ffs(n) - 1)
 
 /*
@@ -138,29 +191,6 @@ struct pv_entry {
 	struct pmap	*pv_ptpmap;	/* if pv_ptste, pmap for PT page */
 };
 
-struct pv_page;
-
-struct pv_page_info {
-	TAILQ_ENTRY(pv_page) pgi_list;
-	struct pv_entry *pgi_freelist;
-	int pgi_nfree;
-};
-
-/*
- * This is basically:
- * ((PAGE_SIZE - sizeof(struct pv_page_info)) / sizeof(struct pv_entry))
- */
-#if PAGE_SIZE == 8192
-#define	NPVPPG	340
-#else
-#define	NPVPPG	170
-#endif
-
-struct pv_page {
-	struct pv_page_info pvp_pgi;
-	struct pv_entry pvp_pv[NPVPPG];
-};
-
 #define	active_pmap(pm) \
 	((pm) == pmap_kernel() || (pm) == curproc->p_vmspace->vm_map.pmap)
 #define	active_user_pmap(pm) \
@@ -180,16 +210,28 @@ pmap_remove_all(struct pmap *pmap)
 	/* Nothing. */
 }
 
+extern paddr_t		Sysseg_pa;
 extern st_entry_t	*Sysseg;
 extern pt_entry_t	*Sysmap, *Sysptmap;
+#define	SYSMAP_VA	VM_MAX_KERNEL_ADDRESS
 extern vsize_t		Sysptsize;
 extern vsize_t		mem_size;
 extern vaddr_t		virtual_avail, virtual_end;
 extern u_int		protection_codes[];
+#if defined(M68040) || defined(M68060)
+extern u_int		protostfree;
+#endif
+#ifdef CACHE_HAVE_VAC
+extern u_int		pmap_aliasmask;
+#endif
 
 extern char		*vmmap;		/* map for mem, dumps, etc. */
 extern void		*CADDR1, *CADDR2;
 extern void		*msgbufaddr;
+
+/* for lwp0 uarea initialization after MMU enabled */
+extern vaddr_t		lwp0uarea;
+void	pmap_bootstrap_finalize(void);
 
 vaddr_t	pmap_map(vaddr_t, paddr_t, paddr_t, int);
 void	pmap_procwr(struct proc *, vaddr_t, size_t);

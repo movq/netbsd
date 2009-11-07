@@ -1,4 +1,4 @@
-/* $NetBSD: au1000.c,v 1.7 2007/02/28 04:21:52 thorpej Exp $ */
+/* $NetBSD: au1000.c,v 1.10 2011/07/10 23:13:23 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -100,12 +100,12 @@
 __KERNEL_RCSID(0, "$NetBSD");
 
 #include <sys/param.h>
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/bus.h>
+#include <mips/locore.h>
 #include <mips/alchemy/include/aureg.h>
 #include <mips/alchemy/include/auvar.h>
 
-static const char *au1000_irqnames[] = {
+static const char * const au1000_irqnames[] = {
 	"uart0",
 	"uart1",
 	"uart2",
@@ -205,7 +205,7 @@ bool
 au1000_match(struct au_chipdep **cpp)
 {
 
-	if (MIPS_PRID_COPTS(cpu_id) == MIPS_AU1000) {
+	if (MIPS_PRID_COPTS(mips_options.mips_cpu_id) == MIPS_AU1000) {
 		*cpp = &au1000_chipdep;
 		return true;
 	}
