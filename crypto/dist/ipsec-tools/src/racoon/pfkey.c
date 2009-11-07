@@ -1,6 +1,6 @@
-/*	$NetBSD: pfkey.c,v 1.51 2009/09/03 09:29:07 tteras Exp $	*/
+/*	$NetBSD: pfkey.c,v 1.58 2012/01/01 15:57:31 tteras Exp $	*/
 
-/* $Id: pfkey.c,v 1.51 2009/09/03 09:29:07 tteras Exp $ */
+/* $Id: pfkey.c,v 1.58 2012/01/01 15:57:31 tteras Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -231,7 +231,7 @@ pfkey_handler(ctx, fd)
 		}
 	}
 
-	plog(LLV_DEBUG, LOCATION, NULL, "get pfkey %s message\n",
+	plog(LLV_DEBUG, LOCATION, NULL, "got pfkey %s message\n",
 		s_pfkey_type(msg->sadb_msg_type));
 	plogdump(LLV_DEBUG2, msg, msg->sadb_msg_len << 3);
 
@@ -487,7 +487,7 @@ pfkey_init()
 		return -1;
 	}
 #endif
-	monitor_fd(lcconf->sock_pfkey, pfkey_handler, NULL);
+	monitor_fd(lcconf->sock_pfkey, pfkey_handler, NULL, 0);
 	return 0;
 }
 
@@ -1686,7 +1686,7 @@ pk_recvexpire(mhp)
 		iph2->status = PHASE2ST_STATUS2;
 
 		/* start quick exchange */
-		if (isakmp_post_acquire(iph2, iph1hint) < 0) {
+		if (isakmp_post_acquire(iph2, iph1hint, FALSE) < 0) {
 			plog(LLV_ERROR, LOCATION, iph2->dst,
 				"failed to begin ipsec sa "
 				"re-negotication.\n");
@@ -1853,8 +1853,8 @@ pk_recvacquire(mhp)
 	 *       should ignore such a acquire message because the phase 2
 	 *       is just negotiating.
 	 *    2. its state is equal to PHASE2ST_ESTABLISHED, then racoon
-	 *       has to prcesss such a acquire message because racoon may
-	 *       lost the expire message.
+	 *       has to process such an acquire message because racoon may
+	 *       have lost the expire message.
 	 */
 	iph2 = getph2byid(src, dst, xpl->sadb_x_policy_id);
 	if (iph2 != NULL) {
@@ -1962,7 +1962,7 @@ pk_recvacquire(mhp)
 
 	/* start isakmp initiation by using ident exchange */
 	/* XXX should be looped if there are multiple phase 2 handler. */
-	if (isakmp_post_acquire(iph2, NULL) < 0) {
+	if (isakmp_post_acquire(iph2, NULL, TRUE) < 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"failed to begin ipsec sa negotication.\n");
 		remph2(iph2);
@@ -2344,8 +2344,8 @@ pk_recvspdupdate(mhp)
 
 	sp = getsp(&spidx);
 	if (sp == NULL) {
-		plog(LLV_ERROR, LOCATION, NULL,
-			"such policy does not already exist: \"%s\"\n",
+		plog(LLV_DEBUG, LOCATION, NULL,
+			"this policy did not exist for removal: \"%s\"\n",
 			spidx2str(&spidx));
 	} else {
 		/* preserve hints before deleting the SP */
@@ -2882,8 +2882,8 @@ migrate_ph1_ike_addresses(iph1, arg)
 	u_int16_t port;
 
 	/* Already up-to-date? */
-	if (cmpsaddr(iph1->local, ma->local) == 0 &&
-	    cmpsaddr(iph1->remote, ma->remote) == 0)
+	if (cmpsaddr(iph1->local, ma->local) == CMPSADDR_MATCH &&
+	    cmpsaddr(iph1->remote, ma->remote) == CMPSADDR_MATCH)
 		return 0;
 
 	if (iph1->status < PHASE1ST_ESTABLISHED) {
@@ -2901,7 +2901,7 @@ migrate_ph1_ike_addresses(iph1, arg)
 		rmconf = getrmconf(ma->remote, 0);
 		if (rmconf == NULL || !rmconf->passive) {
 			iph1->status = PHASE1ST_EXPIRED;
-			sched_schedule(&iph1->sce, 1, isakmp_ph1delete_stub);
+			isakmp_ph1delete(iph1);
 
 			/* This is unlikely, but let's just check if a Phase 1
 			 * for the new addresses already exist */
@@ -2983,8 +2983,8 @@ migrate_ph2_ike_addresses(iph2, arg)
 		migrate_ph1_ike_addresses(iph2->ph1, arg);
 
 	/* Already up-to-date? */
-	if (cmpsaddr(iph2->src, ma->local) == 0 &&
-	    cmpsaddr(iph2->dst, ma->remote) == 0)
+	if (cmpsaddr(iph2->src, ma->local) == CMPSADDR_MATCH &&
+	    cmpsaddr(iph2->dst, ma->remote) == CMPSADDR_MATCH)
 		return 0;
 
 	/* save src/dst as sa_src/sa_dst before rewriting */
@@ -3088,7 +3088,7 @@ migrate_ph2_sa_addresses(iph2, args)
 			iph2->status = PHASE2ST_STATUS2;
 
 			/* and start a new negotiation */
-			if (isakmp_post_acquire(iph2, iph1hint) < 0) {
+			if (isakmp_post_acquire(iph2, iph1hint, FALSE) < 0) {
 				plog(LLV_ERROR, LOCATION, iph2->dst, "failed "
 				     "to begin IPsec SA renegotiation after "
 				     "MIGRATE reception.\n");
@@ -3207,8 +3207,8 @@ migrate_ph2_one_isr(spid, isr_cur, xisr_old, xisr_new)
 		     "changing address families (%d to %d) for endpoints.\n",
 		     osaddr->sa_family, nsaddr->sa_family);
 
-	if (cmpsaddr(osaddr, (struct sockaddr *) &saidx->src) ||
-	    cmpsaddr(odaddr, (struct sockaddr *) &saidx->dst)) {
+	if (cmpsaddr(osaddr, (struct sockaddr *) &saidx->src) != CMPSADDR_MATCH ||
+	    cmpsaddr(odaddr, (struct sockaddr *) &saidx->dst) != CMPSADDR_MATCH) {
 		plog(LLV_DEBUG, LOCATION, NULL, "SADB_X_MIGRATE: "
 		     "mismatch of addresses in saidx and xisr.\n");
 		return -1;
@@ -3554,7 +3554,7 @@ pk_recvmigrate(mhp)
 #endif
 
 /*
- * send error against acquire message to kenrel.
+ * send error against acquire message to kernel.
  */
 int
 pk_sendeacquire(iph2)
@@ -3611,8 +3611,8 @@ pk_checkalg(class, calg, keylen)
 		break;
 	case IPSECDOI_PROTO_IPCOMP:
 		plog(LLV_DEBUG, LOCATION, NULL,
-			"compression algorithm can not be checked "
-			"because sadb message doesn't support it.\n");
+			"no check of compression algorithm; "
+			"not supported in sadb message.\n");
 		return 0;
 	default:
 		plog(LLV_ERROR, LOCATION, NULL,

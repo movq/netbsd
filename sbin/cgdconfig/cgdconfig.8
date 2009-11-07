@@ -1,4 +1,4 @@
-.\" $NetBSD: cgdconfig.8,v 1.29 2009/10/19 14:35:04 wiz Exp $
+.\" $NetBSD: cgdconfig.8,v 1.31 2011/07/03 19:05:10 dholland Exp $
 .\"
 .\" Copyright (c) 2002, The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -190,7 +190,7 @@ determines if the generated key is correct.
 If the newly configured disk fails to verify, then
 .Nm
 will regenerate the key and re-configure the device.
-It only makes sense to specify a verification method if at least of the
+It only makes sense to specify a verification method if at least one of the
 key generation methods is error prone, e.g., uses a user-entered passphrase.
 The following verification methods are supported:
 .Pp
@@ -367,7 +367,7 @@ An example parameters file which uses PKCS#5 PBKDF2:
 	verify_method none;
 	keygen pkcs5_pbkdf2/sha1 {
 		iterations 39361;
-		salt AAAAgMoHiYonye6Kog \\
+		salt AAAAgMoHiYonye6Kog \e
 		     dYJAobCHE=;
 	};
 .Ed
@@ -378,7 +378,7 @@ An example parameters file which stores its key locally:
 	iv-method       encblkno1;
 	keylength       256;
 	verify_method   none;
-	keygen storedkey key AAABAK3QO6d7xzLfrXTdsgg4 \\
+	keygen storedkey key AAABAK3QO6d7xzLfrXTdsgg4 \e
 			     ly2TdxkFqOkYYcbyUKu/f60L;
 .Ed
 .Pp

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcivar.h,v 1.83 2008/07/22 04:52:19 bjs Exp $	*/
+/*	$NetBSD: pcivar.h,v 1.98 2012/01/29 11:31:38 drochner Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -45,12 +45,13 @@
 #include <sys/pmf.h>
 #include <sys/bus.h>
 #include <dev/pci/pcireg.h>
+#include <dev/pci/pci_verbose.h>
 
 /*
  * Structures and definitions needed by the machine-dependent header.
  */
-typedef u_int32_t pcireg_t;		/* configuration space register XXX */
 struct pcibus_attach_args;
+struct pci_attach_args;
 struct pci_softc;
 
 #ifdef _KERNEL
@@ -58,6 +59,37 @@ struct pci_softc;
  * Machine-dependent definitions.
  */
 #include <machine/pci_machdep.h>
+
+enum pci_override_idx {
+	  PCI_OVERRIDE_CONF_READ		= __BIT(0)
+	, PCI_OVERRIDE_CONF_WRITE		= __BIT(1)
+	, PCI_OVERRIDE_INTR_MAP			= __BIT(2)
+	, PCI_OVERRIDE_INTR_STRING		= __BIT(3)
+	, PCI_OVERRIDE_INTR_EVCNT		= __BIT(4)
+	, PCI_OVERRIDE_INTR_ESTABLISH		= __BIT(5)
+	, PCI_OVERRIDE_INTR_DISESTABLISH	= __BIT(6)
+	, PCI_OVERRIDE_MAKE_TAG			= __BIT(7)
+	, PCI_OVERRIDE_DECOMPOSE_TAG		= __BIT(8)
+};
+
+/* Only add new fields to the end of this structure! */
+struct pci_overrides {
+	pcireg_t (*ov_conf_read)(void *, pci_chipset_tag_t, pcitag_t, int);
+	void (*ov_conf_write)(void *, pci_chipset_tag_t, pcitag_t, int,
+	    pcireg_t);
+	int (*ov_intr_map)(void *, const struct pci_attach_args *,
+	   pci_intr_handle_t *);
+	const char *(*ov_intr_string)(void *, pci_chipset_tag_t,
+	    pci_intr_handle_t);
+	const struct evcnt *(*ov_intr_evcnt)(void *, pci_chipset_tag_t,
+	    pci_intr_handle_t);
+	void *(*ov_intr_establish)(void *, pci_chipset_tag_t, pci_intr_handle_t,
+	    int, int (*)(void *), void *);
+	void (*ov_intr_disestablish)(void *, pci_chipset_tag_t, void *);
+	pcitag_t (*ov_make_tag)(void *, pci_chipset_tag_t, int, int, int);
+	void (*ov_decompose_tag)(void *, pci_chipset_tag_t, pcitag_t,
+	    int *, int *, int *);
+};
 
 /*
  * PCI bus attach arguments.
@@ -72,6 +104,14 @@ struct pcibus_attach_args {
 	int		pba_flags;	/* flags; see below */
 
 	int		pba_bus;	/* PCI bus number */
+	int		pba_sub;	/* pba_bus >= pba_sub: no
+					 * buses are subordinate to
+					 * pba_bus.
+					 *
+					 * pba_bus < pba_sub: buses
+					 * [pba_bus + 1, pba_sub] are
+					 * subordinate to pba_bus.
+					 */
 
 	/*
 	 * Pointer to the pcitag of our parent bridge.  If there is no
@@ -86,6 +126,16 @@ struct pcibus_attach_args {
 	u_int		pba_intrswiz;	/* how to swizzle pins */
 	pcitag_t	pba_intrtag;	/* intr. appears to come from here */
 };
+
+/*
+ * This is used by <machine/pci_machdep.h> to access the pba_pc member.  It
+ * can't use it directly since pcibus_attach_args has yet to be defined.
+ */
+static inline pci_chipset_tag_t
+pcibus_attach_args_pc(struct pcibus_attach_args *pba)
+{
+	return pba->pba_pc;
+}
 
 /*
  * PCI device attach arguments.
@@ -120,14 +170,28 @@ struct pci_attach_args {
 };
 
 /*
+ * This is used by <machine/pci_machdep.h> to access the pa_pc member.  It
+ * can't use it directly since pci_attach_args has yet to be defined.
+ */
+static inline pci_chipset_tag_t
+pci_attach_args_pc(const struct pci_attach_args *pa)
+{
+	return pa->pa_pc;
+}
+
+/*
  * Flags given in the bus and device attachment args.
  */
-#define	PCI_FLAGS_IO_ENABLED	0x01		/* I/O space is enabled */
-#define	PCI_FLAGS_MEM_ENABLED	0x02		/* memory space is enabled */
+#define	PCI_FLAGS_IO_OKAY	0x01		/* I/O space is okay */
+#define	PCI_FLAGS_MEM_OKAY	0x02		/* memory space is okay */
 #define	PCI_FLAGS_MRL_OKAY	0x04		/* Memory Read Line okay */
 #define	PCI_FLAGS_MRM_OKAY	0x08		/* Memory Read Multiple okay */
 #define	PCI_FLAGS_MWI_OKAY	0x10		/* Memory Write and Invalidate
 						   okay */
+#define	PCI_FLAGS_MSI_OKAY	0x20		/* Message Signaled Interrupts
+						   okay */
+#define	PCI_FLAGS_MSIX_OKAY	0x40		/* Message Signaled Interrupts
+						   (Extended) okay */
 
 /*
  * PCI device 'quirks'.
@@ -160,11 +224,18 @@ struct pci_conf_state {
 	pcireg_t reg[16];
 };
 
+struct pci_range {
+	bus_addr_t		r_offset;
+	bus_size_t		r_size;
+	int			r_flags;
+};
+
 struct pci_child {
 	device_t		c_dev;
 	bool			c_psok;
 	pcireg_t		c_powerstate;
 	struct pci_conf_state	c_conf;
+	struct pci_range	c_range[8];
 };
 
 struct pci_softc {
@@ -195,14 +266,12 @@ int	pci_mapreg_probe(pci_chipset_tag_t, pcitag_t, int, pcireg_t *);
 pcireg_t pci_mapreg_type(pci_chipset_tag_t, pcitag_t, int);
 int	pci_mapreg_info(pci_chipset_tag_t, pcitag_t, int, pcireg_t,
 	    bus_addr_t *, bus_size_t *, int *);
-int	pci_mapreg_map(struct pci_attach_args *, int, pcireg_t, int,
+int	pci_mapreg_map(const struct pci_attach_args *, int, pcireg_t, int,
 	    bus_space_tag_t *, bus_space_handle_t *, bus_addr_t *,
 	    bus_size_t *);
-int	pci_mapreg_submap(struct pci_attach_args *, int, pcireg_t, int,
-	    bus_size_t, bus_size_t, bus_space_tag_t *, bus_space_handle_t *, 
-	    bus_addr_t *, bus_size_t *);
 
-int pci_find_rom(struct pci_attach_args *, bus_space_tag_t, bus_space_handle_t,
+int pci_find_rom(const struct pci_attach_args *, bus_space_tag_t,
+	    bus_space_handle_t,
 	    int, bus_space_handle_t *, bus_size_t *);
 
 int pci_get_capability(pci_chipset_tag_t, pcitag_t, int, int *, pcireg_t *);
@@ -211,8 +280,13 @@ int pci_get_capability(pci_chipset_tag_t, pcitag_t, int, int *, pcireg_t *);
  * Helper functions for autoconfiguration.
  */
 int	pci_probe_device(struct pci_softc *, pcitag_t tag,
-	    int (*)(struct pci_attach_args *), struct pci_attach_args *);
+	    int (*)(const struct pci_attach_args *),
+	    struct pci_attach_args *);
 void	pci_devinfo(pcireg_t, pcireg_t, int, char *, size_t);
+void	pci_aprint_devinfo_fancy(const struct pci_attach_args *,
+				 const char *, const char *, int);
+#define pci_aprint_devinfo(pap, naive) \
+	pci_aprint_devinfo_fancy(pap, naive, NULL, 0);
 void	pci_conf_print(pci_chipset_tag_t, pcitag_t,
 	    void (*)(pci_chipset_tag_t, pcitag_t, const pcireg_t *));
 const struct pci_quirkdata *
@@ -244,11 +318,9 @@ int	pci_vpd_write(pci_chipset_tag_t, pcitag_t, int, int, pcireg_t *);
 /*
  * Misc.
  */
-const char *pci_findvendor(pcireg_t);
-const char *pci_findproduct(pcireg_t);
 int	pci_find_device(struct pci_attach_args *pa,
-			int (*match)(struct pci_attach_args *));
-int	pci_dma64_available(struct pci_attach_args *);
+			int (*match)(const struct pci_attach_args *));
+int	pci_dma64_available(const struct pci_attach_args *);
 void	pci_conf_capture(pci_chipset_tag_t, pcitag_t, struct pci_conf_state *);
 void	pci_conf_restore(pci_chipset_tag_t, pcitag_t, struct pci_conf_state *);
 int	pci_get_powerstate(pci_chipset_tag_t, pcitag_t, pcireg_t *);
@@ -256,7 +328,11 @@ int	pci_set_powerstate(pci_chipset_tag_t, pcitag_t, pcireg_t);
 int	pci_activate(pci_chipset_tag_t, pcitag_t, device_t,
     int (*)(pci_chipset_tag_t, pcitag_t, device_t, pcireg_t));
 int	pci_activate_null(pci_chipset_tag_t, pcitag_t, device_t, pcireg_t);
-void	pci_disable_retry(pci_chipset_tag_t, pcitag_t);
+int	pci_chipset_tag_create(pci_chipset_tag_t, uint64_t,
+	                       const struct pci_overrides *,
+	                       void *, pci_chipset_tag_t *);
+void	pci_chipset_tag_destroy(pci_chipset_tag_t);
+int	pci_bus_devorder(pci_chipset_tag_t, int, uint8_t *, int);
 
 /*
  * Device abstraction for inheritance by elanpci(4), for example.

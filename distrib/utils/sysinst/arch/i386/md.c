@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.123 2009/09/19 14:57:28 abs Exp $ */
+/*	$NetBSD: md.c,v 1.129 2011/11/04 11:27:03 martin Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -77,9 +73,9 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	(void)flags;
 
 	/* Default to install same type of kernel as we are running */
 	set_kernel_set(get_bootmodel());
@@ -165,7 +161,7 @@ edit:
 	if (fl & NETBSD_NAMED && fl & NETBSD_ACTIVE)
 		fl |= ACTIVE_NAMED;
 
-	if ((names > 0 || !(fl & NETBSD_ACTIVE)) && 
+	if ((names > 0 || !(fl & NETBSD_ACTIVE)) &&
 	    (!(fl & NETBSD_NAMED) || !(fl & ACTIVE_NAMED))) {
 		/*
 		 * There appear to be multiple bootable partitions, but they
@@ -335,7 +331,7 @@ md_post_newfs(void)
 
 	process_menu(MENU_getboottype, &boottype);
 	msg_display(MSG_dobootblks, diskdev);
-	if (bp.bp_consdev == ~0)
+	if (bp.bp_consdev == ~0u)
 		return 0;
 
 	ret = cp_to_target("/usr/mdec/boot", "/boot");
@@ -368,7 +364,7 @@ md_post_newfs(void)
 	if (pwrite(td, bootxx, 512, 0) != 512)
 		goto bad_bootxx;
 	len -= 512 * 2;
-	if (pwrite(td, bootxx + 512 * 2, len, 2 * (off_t)512) != len)
+	if (pwrite(td, bootxx + 512 * 2, len, 2 * (off_t)512) - len != 0)
 		goto bad_bootxx;
 	ret = 0;
 
@@ -471,8 +467,10 @@ get_bios_info(char *dev)
 	}
 	if (nip == NULL || nip->ni_nmatches == 0) {
 nogeom:
-		msg_display(MSG_nobiosgeom, dlcyl, dlhead, dlsec);
-		if (guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec) >= 0)
+		if (nip != NULL)
+			msg_display(MSG_nobiosgeom, dlcyl, dlhead, dlsec);
+		if (guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec) >= 0
+		    && nip != NULL)
 			msg_display_add(MSG_biosguess, cyl, head, sec);
 		biosdisk = NULL;
 	} else {
@@ -507,9 +505,15 @@ nogeom:
 							nip->ni_biosmatches[i]];
 		}
 	}
-	if (biosdisk == NULL)
-		set_bios_geom(cyl, head, sec);
-	else {
+	if (biosdisk == NULL) {
+		if (nip != NULL) {
+			set_bios_geom(cyl, head, sec);
+		} else {
+			bcyl = cyl;
+			bhead = head;
+			bsec = sec;
+		}
+	} else {
 		bcyl = biosdisk->bi_cyl;
 		bhead = biosdisk->bi_head;
 		bsec = biosdisk->bi_sec;
@@ -627,3 +631,9 @@ get_bootmodel(void)
 	return SET_KERNEL_GENERIC;
 }
 
+
+int
+md_pre_mount()
+{
+	return 0;
+}

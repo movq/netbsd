@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.13 2009/11/03 05:07:26 snj Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.17 2011/03/03 09:37:21 skrll Exp $	*/
 
 /*	$OpenBSD: process_machdep.c,v 1.3 1999/06/18 05:19:52 mickey Exp $	*/
 
@@ -29,19 +29,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.13 2009/11/03 05:07:26 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.17 2011/03/03 09:37:21 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/ptrace.h>
-#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpufunc.h>
 #include <machine/pmap.h>
 #include <machine/frame.h>
+#include <machine/pcb.h>
 
 #include <hppa/hppa/machdep.h>
 
@@ -99,9 +99,9 @@ process_read_regs(struct lwp *l, struct reg *regs)
 	regs->r_sr6 = tf->tf_sr6;
 	regs->r_sr7 = tf->tf_sr7;
 
+	regs->r_cr27 = tf->tf_cr27;
 #if 0
-	regs->r_cr26      = tf->tf_xxx;
-	regs->r_cr27      = tf->tf_xxx;
+	regs->r_cr26 = tf->tf_cr26;
 #endif
 
 	return 0;
@@ -110,10 +110,10 @@ process_read_regs(struct lwp *l, struct reg *regs)
 int
 process_read_fpregs(struct lwp *l, struct fpreg *fpregs)
 {
+	struct pcb *pcb = lwp_getpcb(l);
+
 	hppa_fpu_flush(l);
-	memcpy(fpregs, l->l_addr->u_pcb.pcb_fpregs, sizeof(*fpregs));
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)&l->l_addr->u_pcb.pcb_fpregs,
-		sizeof(*fpregs));
+	memcpy(fpregs, pcb->pcb_fpregs, sizeof(*fpregs));
 	return 0;
 }
 
@@ -168,25 +168,29 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 	tf->tf_sr3 = regs->r_sr3;
 	tf->tf_sr4 = regs->r_sr4;
 
+	tf->tf_cr27 = regs->r_cr27;
+#if 0
+	tf->tf_cr26 = regs->r_cr26;
+#endif
+
 	return 0;
 }
 
 int
 process_write_fpregs(struct lwp *l, const struct fpreg *fpregs)
 {
+	struct pcb *pcb = lwp_getpcb(l);
+
 	hppa_fpu_flush(l);
-	memcpy(l->l_addr->u_pcb.pcb_fpregs, fpregs, sizeof(*fpregs));
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)&l->l_addr->u_pcb.pcb_fpregs,
-		sizeof(*fpregs));
+	memcpy(pcb->pcb_fpregs, fpregs, sizeof(*fpregs));
 	return 0;
 }
 
 int
 process_set_pc(struct lwp *l, void *addr)
 {
+
 	l->l_md.md_regs->tf_iioq_head = (register_t)addr | HPPA_PC_PRIV_USER;
 	l->l_md.md_regs->tf_iioq_tail = l->l_md.md_regs->tf_iioq_head + 4;
-
 	return 0;
 }
-

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.247 2009/11/07 07:27:47 cegger Exp $ */
+/*	$NetBSD: machdep.c,v 1.265.2.1 2012/05/21 15:25:56 riz Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,10 +71,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.247 2009/11/07 07:27:47 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.265.2.1 2012/05/21 15:25:56 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
+#include "opt_modular.h"
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
 #include "opt_compat_sunos.h"
@@ -84,7 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.247 2009/11/07 07:27:47 cegger Exp $")
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
 #include <sys/buf.h>
@@ -104,8 +104,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.247 2009/11/07 07:27:47 cegger Exp $")
 #include <sys/ucontext.h>
 #include <sys/cpu.h>
 #include <sys/module.h>
+#include <sys/ksyms.h>
 
 #include <sys/exec_aout.h>
+
+#include <dev/mm.h>
 
 #include <uvm/uvm.h>
 
@@ -121,9 +124,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.247 2009/11/07 07:27:47 cegger Exp $")
 
 #define _SPARC_BUS_DMA_PRIVATE
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/frame.h>
 #include <machine/cpu.h>
+#include <machine/pcb.h>
 #include <machine/pmap.h>
 #include <machine/openfirm.h>
 #include <machine/sparc64.h>
@@ -131,6 +135,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.247 2009/11/07 07:27:47 cegger Exp $")
 #include <sparc64/sparc64/cache.h>
 
 /* #include "fb.h" */
+#include "ksyms.h"
 
 int bus_space_debug = 0; /* This may be used by macros elsewhere. */
 #ifdef DEBUG
@@ -147,8 +152,12 @@ int sigpid = 0;
 #endif
 #endif
 
-struct vm_map *mb_map = NULL;
 extern vaddr_t avail_end;
+#ifdef MODULAR
+vaddr_t module_start, module_end;
+static struct vm_map module_map_store;
+extern struct vm_map *module_map;
+#endif
 
 int	physmem;
 
@@ -182,7 +191,6 @@ cpu_startup(void)
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 #endif
-	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
 
 #ifdef DEBUG
@@ -197,14 +205,6 @@ cpu_startup(void)
 	format_bytes(pbuf, sizeof(pbuf), ctob((uint64_t)physmem));
 	printf("total memory = %s\n", pbuf);
 
-	minaddr = 0;
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-        mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, FALSE, NULL);
-
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
@@ -213,6 +213,12 @@ cpu_startup(void)
 
 #if 0
 	pmap_redzone();
+#endif
+
+#ifdef MODULAR
+	uvm_map_setup(&module_map_store, module_start, module_end, 0);
+	module_map_store.pmap = pmap_kernel();
+	module_map = &module_map_store;
 #endif
 }
 
@@ -250,7 +256,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	 * Set the registers to 0 except for:
 	 *	%o6: stack pointer, built in exec())
 	 *	%tstate: (retain icc and xcc and cwp bits)
-	 *	%g1: address of p->p_psstr (used by crt0)
+	 *	%g1: p->p_psstrp (used by crt0)
 	 *	%tpc,%tnpc: entry point of program
 	 */
 #ifdef __arch64__
@@ -271,9 +277,8 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 		break;
 	}
 #endif
-	tstate = (ASI_PRIMARY_NO_FAULT<<TSTATE_ASI_SHIFT) |
-		((pstate)<<TSTATE_PSTATE_SHIFT) | 
-		(tf->tf_tstate & TSTATE_CWP);
+	tstate = ((int64_t)ASI_PRIMARY_NO_FAULT << TSTATE_ASI_SHIFT) |
+	    (pstate << TSTATE_PSTATE_SHIFT) | (tf->tf_tstate & TSTATE_CWP);
 	if ((fs = l->l_md.md_fpstate) != NULL) {
 		/*
 		 * We hold an FPU state.  If we own *the* FPU chip state
@@ -286,7 +291,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	}
 	memset(tf, 0, sizeof *tf);
 	tf->tf_tstate = tstate;
-	tf->tf_global[1] = (vaddr_t)l->l_proc->p_psstr;
+	tf->tf_global[1] = l->l_proc->p_psstrp;
 	/* %g4 needs to point to the start of the data segment */
 	tf->tf_global[4] = 0; 
 	tf->tf_pc = pack->ep_entry & ~3;
@@ -705,18 +710,12 @@ long	dumplo = 0;
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks, dumpblks;
 
 	if (dumpdev == NODEV)
 		/* No usable dump device */
 		return;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL || bdev->d_psize == NULL)
-		/* No usable dump device */
-		return;
-
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 
 	dumpblks = ctod(physmem) + pmap_dumpsize();
 	if (dumpblks > (nblks - ctod(1)))
@@ -791,7 +790,7 @@ dumpsys(void)
 	printf("\ndumping to dev %" PRId32 ",%" PRId32 " offset %ld\n",
 	    major(dumpdev), minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	if (psize == -1) {
 		printf("dump area unavailable\n");
 		return;
@@ -823,7 +822,6 @@ dumpsys(void)
 			for (off = 0; off < n; off += PAGE_SIZE)
 				pmap_kenter_pa(dumpspace+off, maddr+off,
 				    VM_PROT_READ, 0);
-			pmap_update(pmap_kernel());
 			error = (*dump)(dumpdev, blkno,
 					(void *)dumpspace, (size_t)n);
 			pmap_kremove(dumpspace, n);
@@ -834,7 +832,6 @@ dumpsys(void)
 			blkno += btodb(n);
 		}
 	}
-	pmap_update(pmap_kernel());
 
 	switch (error) {
 
@@ -892,6 +889,31 @@ trapdump(struct trapframe64* tf)
 	       (unsigned long long)tf->tf_out[6],
 	       (unsigned long long)tf->tf_out[7]);
 }
+
+static void
+get_symbol_and_offset(const char **mod, const char **sym, vaddr_t *offset, vaddr_t pc)
+{
+	static char symbuf[256];
+	unsigned long symaddr;
+
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	if (ksyms_getname(mod, sym, pc,
+			  KSYMS_CLOSEST|KSYMS_PROC|KSYMS_ANY) == 0) {
+		if (ksyms_getval(*mod, *sym, &symaddr,
+				 KSYMS_CLOSEST|KSYMS_PROC|KSYMS_ANY) != 0)
+			goto failed;
+
+		*offset = (vaddr_t)(pc - symaddr);
+		return;
+	}
+#endif
+ failed:
+	snprintf(symbuf, sizeof symbuf, "%llx", (unsigned long long)pc);
+	*mod = "netbsd";
+	*sym = symbuf;
+	*offset = 0;
+}
+
 /*
  * get the fp and dump the stack as best we can.  don't leave the
  * current stack page
@@ -901,6 +923,8 @@ stackdump(void)
 {
 	struct frame32 *fp = (struct frame32 *)getfp(), *sfp;
 	struct frame64 *fp64;
+	const char *mod, *sym;
+	vaddr_t offset;
 
 	sfp = fp;
 	printf("Frame pointer is at %p\n", fp);
@@ -909,24 +933,32 @@ stackdump(void)
 		if( ((long)fp) & 1 ) {
 			fp64 = (struct frame64*)(((char*)fp)+BIAS);
 			/* 64-bit frame */
-			printf("%llx(%llx, %llx, %llx, %llx, %llx, %llx, %llx) fp = %llx\n",
-			       (unsigned long long)fp64->fr_pc,
+			get_symbol_and_offset(&mod, &sym, &offset, fp64->fr_pc);
+			printf(" %s:%s+%#llx(%llx, %llx, %llx, %llx, %llx, %llx) fp = %llx\n",
+			       mod, sym,
+			       (unsigned long long)offset,
 			       (unsigned long long)fp64->fr_arg[0],
 			       (unsigned long long)fp64->fr_arg[1],
 			       (unsigned long long)fp64->fr_arg[2],
 			       (unsigned long long)fp64->fr_arg[3],
 			       (unsigned long long)fp64->fr_arg[4],
 			       (unsigned long long)fp64->fr_arg[5],	
-			       (unsigned long long)fp64->fr_arg[6],
 			       (unsigned long long)fp64->fr_fp);
 			fp = (struct frame32 *)(u_long)fp64->fr_fp;
 		} else {
 			/* 32-bit frame */
-			printf("  pc = %x  args = (%x, %x, %x, %x, %x, %x, %x) fp = %x\n",
-			       fp->fr_pc, fp->fr_arg[0], fp->fr_arg[1], fp->fr_arg[2],
-			       fp->fr_arg[3], fp->fr_arg[4], fp->fr_arg[5], fp->fr_arg[6],
+			get_symbol_and_offset(&mod, &sym, &offset, fp->fr_pc);
+			printf(" %s:%s+%#lx(%x, %x, %x, %x, %x, %x) fp = %x\n",
+			       mod, sym,
+			       (unsigned long)offset,
+			       fp->fr_arg[0],
+			       fp->fr_arg[1],
+			       fp->fr_arg[2],
+			       fp->fr_arg[3],
+			       fp->fr_arg[4],
+			       fp->fr_arg[5],
 			       fp->fr_fp);
-			fp = (struct frame32*)(u_long)(u_short)fp->fr_fp;
+			fp = (struct frame32*)(u_long)fp->fr_fp;
 		}
 	}
 }
@@ -1039,7 +1071,6 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *sbuf,
 	/*
 	 * We always use just one segment.
 	 */
-	map->dm_mapsize = buflen;
 	i = 0;
 	map->dm_segs[i].ds_addr = 0UL;
 	map->dm_segs[i].ds_len = 0;
@@ -1051,23 +1082,24 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *sbuf,
 		incr = min(sgsize, incr);
 
 		(void) pmap_extract(pmap_kernel(), vaddr, &pa);
-		sgsize -= incr;
-		vaddr += incr;
 		if (map->dm_segs[i].ds_len == 0)
 			map->dm_segs[i].ds_addr = pa;
 		if (pa == (map->dm_segs[i].ds_addr + map->dm_segs[i].ds_len)
 		    && ((map->dm_segs[i].ds_len + incr) <= map->dm_maxsegsz)) {
 			/* Hey, waddyaknow, they're contiguous */
 			map->dm_segs[i].ds_len += incr;
-			incr = PAGE_SIZE;
-			continue;
+		} else {
+			if (++i >= map->_dm_segcnt)
+				return (EFBIG);
+			map->dm_segs[i].ds_addr = pa;
+			map->dm_segs[i].ds_len = incr;
 		}
-		if (++i >= map->_dm_segcnt)
-			return (EFBIG);
-		map->dm_segs[i].ds_addr = pa;
-		map->dm_segs[i].ds_len = incr = PAGE_SIZE;
+		sgsize -= incr;
+		vaddr += incr;
+		incr = PAGE_SIZE;
 	}
 	map->dm_nsegs = i + 1;
+	map->dm_mapsize = buflen;
 	/* Mapping is bus dependent */
 	return (0);
 }
@@ -1083,7 +1115,14 @@ _bus_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m,
 	int i;
 	size_t len;
 
+	/*
+	 * Make sure that on error condition we return "no valid mappings".
+	 */
+	map->dm_nsegs = 0;
 	KASSERT(map->dm_maxsegsz <= map->_dm_maxmaxsegsz);
+
+	if (m->m_pkthdr.len > map->_dm_size)
+		return EINVAL;
 
 	/* Record mbuf for *_unload */
 	map->_dm_type = _DM_TYPE_MBUF;
@@ -1196,6 +1235,10 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 	struct proc *p = uio->uio_lwp->l_proc;
 	struct pmap *pm;
 
+	/*
+	 * Make sure that on error condition we return "no valid mappings".
+	 */
+	map->dm_nsegs = 0;
 	KASSERT(map->dm_maxsegsz <= map->_dm_maxmaxsegsz);
 
 	if (uio->uio_segflg == UIO_USERSPACE) {
@@ -1300,7 +1343,7 @@ _bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 			 * We should be flushing a subrange, but we
 			 * don't know where the segments starts.
 			 */
-			dcache_flush_page(pa);
+			dcache_flush_page_all(pa);
 		}
 	}
 
@@ -1334,7 +1377,7 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 		 * Don't really need to do anything, but flush any pending
 		 * writes anyway. 
 		 */
-		membar_sync();
+		membar_Sync();
 	}
 	if (ops & BUS_DMASYNC_POSTREAD) {
 		/* Invalidate the vcache */
@@ -1348,16 +1391,21 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 
 				if (offset < PAGE_SIZE) {
 					start = VM_PAGE_TO_PHYS(pg) + offset;
+					size -= offset;
 					if (size > len)
 						size = len;
 					cache_flush_phys(start, size, 0);
 					len -= size;
+					if (len == 0)
+						goto done;
+					offset = 0;
 					continue;
 				}
 				offset -= size;
 			}
 		}
 	}
+ done:
 	if (ops & BUS_DMASYNC_POSTWRITE) {
 		/* Nothing to do.  Handled by the bus controller. */
 	}
@@ -1452,14 +1500,13 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	size_t size, void **kvap, int flags)
 {
 	vaddr_t va, sva;
-	int r, cbit;
+	int r;
 	size_t oversize;
 	u_long align;
 
 	if (nsegs != 1)
 		panic("_bus_dmamem_map: nsegs = %d", nsegs);
 
-	cbit = PMAP_NC;
 	align = PAGE_SIZE;
 
 	size = round_page(size);
@@ -1576,6 +1623,634 @@ static void	sparc_bus_free(bus_space_tag_t, bus_space_handle_t, bus_size_t);
 
 struct extent *io_space = NULL;
 
+void
+bus_space_barrier(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, bus_size_t s, int f)
+{
+	/*
+	 * We have a bit of a problem with the bus_space_barrier()
+	 * interface.  It defines a read barrier and a write barrier
+	 * which really don't map to the 7 different types of memory
+	 * barriers in the SPARC v9 instruction set.
+	 */
+	if (f == BUS_SPACE_BARRIER_READ)
+		/* A load followed by a load to the same location? */
+		__asm volatile("membar #Lookaside");
+	else if (f == BUS_SPACE_BARRIER_WRITE)
+		/* A store followed by a store? */
+		__asm volatile("membar #StoreStore");
+	else 
+		/* A store followed by a load? */
+		__asm volatile("membar #StoreLoad|#MemIssue|#Lookaside");
+}
+
+int
+bus_space_alloc(bus_space_tag_t t, bus_addr_t rs, bus_addr_t re, bus_size_t s,
+	bus_size_t a, bus_size_t b, int f, bus_addr_t *ap,
+	bus_space_handle_t *hp)
+{
+	_BS_CALL(t, sparc_bus_alloc)(t, rs, re, s, a, b, f, ap, hp);
+}
+
+void
+bus_space_free(bus_space_tag_t t, bus_space_handle_t h, bus_size_t s)
+{
+	_BS_CALL(t, sparc_bus_free)(t, h, s);
+}
+
+int
+bus_space_map(bus_space_tag_t t, bus_addr_t a, bus_size_t s, int f,
+	bus_space_handle_t *hp)
+{
+	_BS_CALL(t, sparc_bus_map)(t, a, s, f, 0, hp);
+}
+
+void
+bus_space_unmap(bus_space_tag_t t, bus_space_handle_t h, bus_size_t s)
+{
+	_BS_VOID_CALL(t, sparc_bus_unmap)(t, h, s);
+}
+
+int
+bus_space_subregion(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	bus_size_t s, bus_space_handle_t *hp)
+{
+	_BS_CALL(t, sparc_bus_subregion)(t, h, o, s, hp);
+}
+
+paddr_t
+bus_space_mmap(bus_space_tag_t t, bus_addr_t a, off_t o, int p, int f)
+{
+	_BS_CALL(t, sparc_bus_mmap)(t, a, o, p, f);
+}
+
+/*
+ *	void bus_space_read_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ * Read `count' 1, 2, 4, or 8 byte quantities from bus space
+ * described by tag/handle/offset and copy into buffer provided.
+ */
+void
+bus_space_read_multi_1(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint8_t * a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_1(t, h, o);
+}
+
+void
+bus_space_read_multi_2(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint16_t * a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_2(t, h, o);
+}
+
+void
+bus_space_read_multi_4(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint32_t * a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_4(t, h, o);
+}
+
+void
+bus_space_read_multi_8(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint64_t * a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_8(t, h, o);
+}
+
+/*
+ *	void bus_space_write_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    const uintN_t *addr, bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
+ * provided to bus space described by tag/handle/offset.
+ */
+void
+bus_space_write_multi_1(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint8_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_1(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_2(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint16_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_2(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_4(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint32_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_4(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_8(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint64_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_8(t, h, o, *a++);
+}
+
+/*
+ *	void bus_space_set_multi_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
+ *	    bus_size_t count);
+ *
+ * Write the 1, 2, 4, or 8 byte value `val' to bus space described
+ * by tag/handle/offset `count' times.
+ */
+void
+bus_space_set_multi_stream_1(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint8_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_1(t, h, o, v);
+}
+
+void
+bus_space_set_multi_stream_2(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint16_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_2(t, h, o, v);
+}
+
+void
+bus_space_set_multi_stream_4(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint32_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_4(t, h, o, v);
+}
+
+void
+bus_space_set_multi_stream_8(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint64_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_8(t, h, o, v);
+}
+
+/*
+ *	void bus_space_copy_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh1, bus_size_t off1,
+ *	    bus_space_handle_t bsh2, bus_size_t off2,
+ *	    bus_size_t count);
+ *
+ * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
+ * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
+ */
+void
+bus_space_copy_region_stream_1(bus_space_tag_t t, bus_space_handle_t h1,
+	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1++, o2++)
+	    bus_space_write_stream_1(t, h1, o1, bus_space_read_stream_1(t, h2, o2));
+}
+
+void
+bus_space_copy_region_stream_2(bus_space_tag_t t, bus_space_handle_t h1,
+	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1+=2, o2+=2)
+	    bus_space_write_stream_2(t, h1, o1, bus_space_read_stream_2(t, h2, o2));
+}
+
+void
+bus_space_copy_region_stream_4(bus_space_tag_t t, bus_space_handle_t h1,
+	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1+=4, o2+=4)
+	    bus_space_write_stream_4(t, h1, o1, bus_space_read_stream_4(t, h2, o2));
+}
+
+void
+bus_space_copy_region_stream_8(bus_space_tag_t t, bus_space_handle_t h1,
+	bus_size_t o1, bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1+=8, o2+=8)
+	    bus_space_write_stream_8(t, h1, o1, bus_space_read_8(t, h2, o2));
+}
+
+/*
+ *	void bus_space_set_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_set_region_stream_1(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint8_t v, bus_size_t c)
+{
+	for (; c; c--, o++)
+		bus_space_write_stream_1(t, h, o, v);
+}
+
+void
+bus_space_set_region_stream_2(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint16_t v, bus_size_t c)
+{
+	for (; c; c--, o+=2)
+		bus_space_write_stream_2(t, h, o, v);
+}
+
+void
+bus_space_set_region_stream_4(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint32_t v, bus_size_t c)
+{
+	for (; c; c--, o+=4)
+		bus_space_write_stream_4(t, h, o, v);
+}
+
+void
+bus_space_set_region_stream_8(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint64_t v, bus_size_t c)
+{
+	for (; c; c--, o+=8)
+		bus_space_write_stream_8(t, h, o, v);
+}
+
+
+/*
+ *	void bus_space_read_multi_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ * Read `count' 1, 2, 4, or 8 byte quantities from bus space
+ * described by tag/handle/offset and copy into buffer provided.
+ */
+void
+bus_space_read_multi_stream_1(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	uint8_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_stream_1(t, h, o);
+}
+
+void
+bus_space_read_multi_stream_2(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	uint16_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_stream_2(t, h, o);
+}
+
+void
+bus_space_read_multi_stream_4(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	uint32_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_stream_4(t, h, o);
+}
+
+void
+bus_space_read_multi_stream_8(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	uint64_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		*a++ = bus_space_read_stream_8(t, h, o);
+}
+
+/*
+ *	void bus_space_read_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_read_region_stream_1(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint8_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o++)
+		*a = bus_space_read_stream_1(t, h, o);
+}
+void
+bus_space_read_region_stream_2(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint16_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=2)
+		*a = bus_space_read_stream_2(t, h, o);
+ }
+void
+bus_space_read_region_stream_4(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint32_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=4)
+		*a = bus_space_read_stream_4(t, h, o);
+}
+void
+bus_space_read_region_stream_8(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, uint64_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=8)
+		*a = bus_space_read_stream_8(t, h, o);
+}
+
+/*
+ *	void bus_space_write_multi_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    const uintN_t *addr, bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
+ * provided to bus space described by tag/handle/offset.
+ */
+void
+bus_space_write_multi_stream_1(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint8_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_1(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_stream_2(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint16_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_2(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_stream_4(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint32_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_4(t, h, o, *a++);
+}
+
+void
+bus_space_write_multi_stream_8(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o,
+	const uint64_t *a, bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_stream_8(t, h, o, *a++);
+}
+
+/*
+ *	void bus_space_copy_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh1, bus_size_t off1,
+ *	    bus_space_handle_t bsh2, bus_size_t off2,
+ *	    bus_size_t count);
+ *
+ * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
+ * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
+ */
+void
+bus_space_copy_region_1(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
+	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1++, o2++)
+	    bus_space_write_1(t, h1, o1, bus_space_read_1(t, h2, o2));
+}
+
+void
+bus_space_copy_region_2(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
+	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1+=2, o2+=2)
+	    bus_space_write_2(t, h1, o1, bus_space_read_2(t, h2, o2));
+}
+
+void
+bus_space_copy_region_4(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
+	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1+=4, o2+=4)
+	    bus_space_write_4(t, h1, o1, bus_space_read_4(t, h2, o2));
+}
+
+void
+bus_space_copy_region_8(bus_space_tag_t t, bus_space_handle_t h1, bus_size_t o1,
+	bus_space_handle_t h2, bus_size_t o2, bus_size_t c)
+{
+	for (; c; c--, o1+=8, o2+=8)
+	    bus_space_write_8(t, h1, o1, bus_space_read_8(t, h2, o2));
+}
+
+/*
+ *	void bus_space_set_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_set_region_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint8_t v, bus_size_t c)
+{
+	for (; c; c--, o++)
+		bus_space_write_1(t, h, o, v);
+}
+
+void
+bus_space_set_region_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint16_t v, bus_size_t c)
+{
+	for (; c; c--, o+=2)
+		bus_space_write_2(t, h, o, v);
+}
+
+void
+bus_space_set_region_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint32_t v, bus_size_t c)
+{
+	for (; c; c--, o+=4)
+		bus_space_write_4(t, h, o, v);
+}
+
+void
+bus_space_set_region_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint64_t v, bus_size_t c)
+{
+	for (; c; c--, o+=8)
+		bus_space_write_8(t, h, o, v);
+}
+
+
+/*
+ *	void bus_space_set_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
+ *	    bus_size_t count);
+ *
+ * Write the 1, 2, 4, or 8 byte value `val' to bus space described
+ * by tag/handle/offset `count' times.
+ */
+void
+bus_space_set_multi_1(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint8_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_1(t, h, o, v);
+}
+
+void
+bus_space_set_multi_2(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint16_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_2(t, h, o, v);
+}
+
+void
+bus_space_set_multi_4(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint32_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_4(t, h, o, v);
+}
+
+void
+bus_space_set_multi_8(bus_space_tag_t t,
+	bus_space_handle_t h, bus_size_t o, uint64_t v,
+	bus_size_t c)
+{
+	while (c-- > 0)
+		bus_space_write_8(t, h, o, v);
+}
+
+/*
+ *	void bus_space_write_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_write_region_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint8_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o++)
+		bus_space_write_1(t, h, o, *a);
+}
+
+void
+bus_space_write_region_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint16_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=2)
+		bus_space_write_2(t, h, o, *a);
+}
+
+void
+bus_space_write_region_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint32_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=4)
+		bus_space_write_4(t, h, o, *a);
+}
+
+void
+bus_space_write_region_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	const uint64_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=8)
+		bus_space_write_8(t, h, o, *a);
+}
+
+
+/*
+ *	void bus_space_read_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_read_region_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	uint8_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o++)
+		*a = bus_space_read_1(t, h, o);
+}
+void
+bus_space_read_region_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	uint16_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=2)
+		*a = bus_space_read_2(t, h, o);
+ }
+void
+bus_space_read_region_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	uint32_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=4)
+		*a = bus_space_read_4(t, h, o);
+}
+void
+bus_space_read_region_8(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+	uint64_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=8)
+		*a = bus_space_read_8(t, h, o);
+}
+
+/*
+ *	void bus_space_write_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t off,
+ *	    uintN_t *addr, bus_size_t count);
+ *
+ */
+void
+bus_space_write_region_stream_1(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint8_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o++)
+		bus_space_write_stream_1(t, h, o, *a);
+}
+
+void
+bus_space_write_region_stream_2(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint16_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=2)
+		bus_space_write_stream_2(t, h, o, *a);
+}
+
+void
+bus_space_write_region_stream_4(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint32_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=4)
+		bus_space_write_stream_4(t, h, o, *a);
+}
+
+void
+bus_space_write_region_stream_8(bus_space_tag_t t, bus_space_handle_t h,
+	bus_size_t o, const uint64_t *a, bus_size_t c)
+{
+	for (; c; a++, c--, o+=8)
+		bus_space_write_stream_8(t, h, o, *a);
+}
+
 /*
  * Allocate a new bus tag and have it inherit the methods of the
  * given parent.
@@ -1641,7 +2316,7 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 		 */
 		io_space = extent_create("IOSPACE",
 					 (u_long)IODEV_BASE, (u_long)IODEV_END,
-					 M_DEVBUF, 0, 0, EX_NOWAIT);
+					 0, 0, EX_NOWAIT);
 
 
 	size = round_page(size);
@@ -1728,7 +2403,6 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 		v += PAGE_SIZE;
 		pa += PAGE_SIZE;
 	} while ((size -= PAGE_SIZE) > 0);
-	pmap_update(pmap_kernel());
 	return (0);
 }
 
@@ -1901,11 +2575,29 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 }
 
 int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mc)
+{
+	const __greg_t *gr = mc->__gregs;
+
+	/*
+ 	 * Only the icc bits in the psr are used, so it need not be
+ 	 * verified.  pc and npc must be multiples of 4.  This is all
+ 	 * that is required; if it holds, just do it.
+	 */
+	if (((gr[_REG_PC] | gr[_REG_nPC]) & 3) != 0 ||
+	    gr[_REG_PC] == 0 || gr[_REG_nPC] == 0)
+		return EINVAL;
+
+	return 0;
+}
+
+int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	const __greg_t *gr = mcp->__gregs;
 	struct trapframe64 *tf = l->l_md.md_tf;
 	struct proc *p = l->l_proc;
+	int error;
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
@@ -1915,14 +2607,9 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	}
 
 	if ((flags & _UC_CPU) != 0) {
-		/*
-	 	 * Only the icc bits in the psr are used, so it need not be
-	 	 * verified.  pc and npc must be multiples of 4.  This is all
-	 	 * that is required; if it holds, just do it.
-		 */
-		if (((gr[_REG_PC] | gr[_REG_nPC]) & 3) != 0 ||
-		    gr[_REG_PC] == 0 || gr[_REG_nPC] == 0)
-			return (EINVAL);
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
 
 		/* Restore general register context. */
 		/* take only tstate CCR (and ASI) fields */
@@ -1997,7 +2684,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	mutex_exit(p->p_lock);
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -2049,3 +2736,31 @@ module_init_md(void)
 {
 }
 #endif
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return pmap_pa_exists(pa) ? 0 : EFAULT;
+}
+
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+	/* XXX: Don't know where PROMs are on Ultras.  Think it's at f000000 */
+	const vaddr_t prom_vstart = 0xf000000, prom_vend = 0xf0100000;
+	const vaddr_t msgbufpv = (vaddr_t)msgbufp, v = (vaddr_t)ptr;
+	const size_t msgbufsz = msgbufp->msg_bufs +
+	    offsetof(struct kern_msgbuf, msg_bufc);
+
+	*handled = (v >= msgbufpv && v < msgbufpv + msgbufsz) ||
+	    (v >= prom_vstart && v < prom_vend && (prot & VM_PROT_WRITE) == 0);
+	return 0;
+}
+
+int
+mm_md_readwrite(dev_t dev, struct uio *uio)
+{
+
+	return ENXIO;
+}

@@ -30,7 +30,7 @@
 #ifndef _RS6000_IOPLANAR_H_
 #define _RS6000_IOPLANAR_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/mca_machdep.h>
 
 /*
@@ -48,7 +48,7 @@ struct ioplanar_dev_attach_args {
 
 /* Master bus */
 struct ioplanar_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	mca_chipset_tag_t sc_ic;
 	bus_space_tag_t sc_iot;
 	bus_space_tag_t sc_memt;

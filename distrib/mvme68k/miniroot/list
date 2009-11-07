@@ -1,8 +1,7 @@
-#	$NetBSD: list,v 1.17 2009/09/20 23:19:54 abs Exp $
+#	$NetBSD: list,v 1.22 2011/07/03 23:11:33 tron Exp $
 
 # mvme68k's extras
 PROG	sbin/disklabel
-PROG	sbin/edlabel
 PROG	sbin/mount_kernfs
 
 PROG	usr/bin/basename
@@ -16,7 +15,7 @@ PROG	usr/bin/vi
 PROG	usr/bin/less usr/bin/more
 
 # crunchgen source directory specials
-SPECIAL	less	srcdir usr.bin/less/less
+SPECIAL	less	srcdir external/bsd/less/bin/less
 SPECIAL	vi	srcdir usr.bin/nvi/build
 
 # Minimize use of MFS
@@ -26,12 +25,6 @@ SYMLINK	/tmp	var/tmp
 COPYDIR	${DESTDIR}/usr/mdec		usr/mdec
 # ensure installboot is executable
 MTREE	./usr/mdec/installboot	mode=0555
-
-# the zoneinfo
-COPYDIR	${DESTDIR}/usr/share/zoneinfo	usr/share/zoneinfo
-
-# and the termcap file
-COPY	${DISTRIBDIR}/common/termcap	usr/share/misc/termcap
 
 # copy the kernel
 COPY	${KERNOBJDIR}/GENERIC/netbsd	netbsd

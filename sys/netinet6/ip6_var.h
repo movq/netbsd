@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_var.h,v 1.53 2009/05/06 21:41:59 elad Exp $	*/
+/*	$NetBSD: ip6_var.h,v 1.58 2012/01/19 13:19:34 liamjfoy Exp $	*/
 /*	$KAME: ip6_var.h,v 1.33 2000/06/11 14:59:20 jinmei Exp $	*/
 
 /*
@@ -241,7 +241,6 @@ struct ip6flow {
 	u_quad_t ip6f_dropped;            /* ENOBUFS returned by if_output */
 	u_quad_t ip6f_forwarded;          /* packets forwarded */
 	u_int ip6f_timer;               /* lifetime timer */
-	time_t ip6f_start;              /* creation time */
 };
 
 #ifdef _KERNEL
@@ -281,6 +280,7 @@ extern int	ip6_maxfrags;	/* Maximum fragments in reassembly queue */
 extern int	ip6_sourcecheck;	/* Verify source interface */
 extern int	ip6_sourcecheck_interval; /* Interval between log messages */
 extern int	ip6_accept_rtadv;	/* Acts as a host not a router */
+extern int	ip6_rtadv_maxroutes;	/* maximum number of routes via rtadv */
 extern int	ip6_keepfaith;		/* Firewall Aided Internet Translator */
 extern int	ip6_log_interval;
 extern time_t	ip6_log_time;
@@ -326,8 +326,7 @@ struct m_tag *ip6_findaux(struct mbuf *);
 void	ip6_delaux(struct mbuf *);
 
 int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *);
-int	ip6_process_hopopts(struct mbuf *, u_int8_t *, int, u_int32_t *,
-				 u_int32_t *);
+int	ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
 void	ip6_savecontrol(struct in6pcb *, struct mbuf **, struct ip6_hdr *,
 		struct mbuf *);
 void	ip6_notify_pmtu(struct in6pcb *, const struct sockaddr_in6 *,
@@ -357,8 +356,11 @@ int	route6_input(struct mbuf **, int *, int);
 
 void	frag6_init(void);
 int	frag6_input(struct mbuf **, int *, int);
+int	ip6_reass_packet(struct mbuf **, int);
 void	frag6_slowtimo(void);
+void	frag6_fasttimo(void);
 void	frag6_drain(void);
+void	frag6_drainstub(void);
 
 int	ip6flow_init(int);
 void	ip6flow_poolinit(void);

@@ -1,4 +1,4 @@
-/* $NetBSD: arckbd.c,v 1.18 2009/02/16 21:36:09 bjh21 Exp $ */
+/* $NetBSD: arckbd.c,v 1.22 2012/02/02 19:42:57 tls Exp $ */
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arckbd.c,v 1.18 2009/02/16 21:36:09 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arckbd.c,v 1.22 2012/02/02 19:42:57 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -52,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: arckbd.c,v 1.18 2009/02/16 21:36:09 bjh21 Exp $");
 #include <sys/reboot.h>	/* For bootverbose */
 #include <sys/syslog.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/irq.h>
 
@@ -70,10 +70,8 @@ __KERNEL_RCSID(0, "$NetBSD: arckbd.c,v 1.18 2009/02/16 21:36:09 bjh21 Exp $");
 #include "wskbd.h"
 #include "wsmouse.h"
 
-#include "rnd.h"
-#if NRND > 0
+
 #include <sys/rnd.h>
-#endif
 
 /* #define ARCKBD_DEBUG */
 
@@ -124,8 +122,8 @@ struct arckbd_softc {
 	enum arckbd_state	sc_state;
 	u_char			sc_byteone;
 	u_char			sc_kbid;
-	struct device		*sc_wskbddev;
-	struct device		*sc_wsmousedev;
+	device_t		sc_wskbddev;
+	device_t		sc_wsmousedev;
 	struct wskbd_mapdata	sc_mapdata;
 	int			sc_cmdqueue;  /* Single-command queue */
 	enum arckbd_state	sc_statequeue;
@@ -138,9 +136,7 @@ struct arckbd_softc {
 	struct evcnt		sc_xev;
 	struct irq_handler	*sc_rirq;
 	struct evcnt		sc_rev;
-#if NRND > 0
-	rndsource_element_t	sc_rnd_source;
-#endif
+	krndsource_t	sc_rnd_source;
 };
 
 #define AKF_WANTKBD	0x01
@@ -223,10 +219,8 @@ arckbd_attach(device_t parent, device_t self, void *aux)
 
 	aprint_normal("\n");
 
-#if NRND > 0
 	rnd_attach_source(&sc->sc_rnd_source, device_xname(self),
 	    RND_TYPE_TTY, 0);
-#endif
 
 	wskbdargs.console = 1; /* XXX FIXME */
 	wskbdargs.keymap = &sc->sc_mapdata;
@@ -460,13 +454,9 @@ arckbd_rint(void *cookie)
 static void
 arckbd_mousemoved(device_t self, int byte1, int byte2)
 {
-#if NRND > 0 || NWSMOUSE > 0
 	struct arckbd_softc *sc = device_private(self);
-#endif
 
-#if NRND > 0
 	rnd_add_uint32(&sc->sc_rnd_source, byte1);
-#endif
 #if NWSMOUSE > 0
 	if (sc->sc_wsmousedev != NULL) {
 		int dx, dy;
@@ -489,9 +479,7 @@ arckbd_keyupdown(device_t self, int byte1, int byte2)
 	u_int type;
 	int value;
 
-#if NRND > 0
 	rnd_add_uint32(&sc->sc_rnd_source, byte1);
-#endif
 	if ((byte1 & 0x0f) == 7) {
 		/* Mouse button event */
 		/*

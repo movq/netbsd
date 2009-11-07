@@ -1,4 +1,4 @@
-/*	$NetBSD: mem1.c,v 1.13 2009/08/05 19:08:28 wiz Exp $	*/
+/*	$NetBSD: mem1.c,v 1.15 2011/06/24 01:10:31 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: mem1.c,v 1.13 2009/08/05 19:08:28 wiz Exp $");
+__RCSID("$NetBSD: mem1.c,v 1.15 2011/06/24 01:10:31 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -192,9 +192,9 @@ xgetblk(mbl_t **mbp, size_t s)
 	void	*p;
 	size_t	t = 0;
 
-	s = ALIGN(s);
+	s = WORST_ALIGN(s);
 	if ((mb = *mbp) == NULL || mb->nfree < s) {
-		if ((mb = frmblks) == NULL) {
+		if ((mb = frmblks) == NULL || mb->size < s) {
 			if (s > mblklen) {
 				t = mblklen;
 				mblklen = s;

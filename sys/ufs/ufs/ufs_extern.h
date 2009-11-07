@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.62 2009/09/13 05:17:37 tsutsui Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.71 2012/02/01 05:34:43 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -49,7 +49,9 @@ struct mbuf;
 struct mount;
 struct nameidata;
 struct lwp;
+struct ufid;
 struct ufs_args;
+struct ufs_lookup_results;
 struct ufsmount;
 struct uio;
 struct vattr;
@@ -124,12 +126,17 @@ void	ufs_dirbad(struct inode *, doff_t, const char *);
 int	ufs_dirbadentry(struct vnode *, struct direct *, int);
 void	ufs_makedirentry(struct inode *, struct componentname *,
 			 struct direct *);
-int	ufs_direnter(struct vnode *, struct vnode *, struct direct *,
+int	ufs_direnter(struct vnode *, const struct ufs_lookup_results *,
+		     struct vnode *, struct direct *,
 		     struct componentname *, struct buf *);
-int	ufs_dirremove(struct vnode *, struct inode *, int, int);
-int	ufs_dirrewrite(struct inode *, struct inode *, ino_t, int, int, int);
+int	ufs_dirremove(struct vnode *, const struct ufs_lookup_results *,
+		      struct inode *, int, int);
+int	ufs_dirrewrite(struct inode *, off_t,
+		       struct inode *, ino_t, int, int, int);
 int	ufs_dirempty(struct inode *, ino_t, kauth_cred_t);
 int	ufs_checkpath(struct inode *, struct inode *, kauth_cred_t);
+int	ufs_parentcheck(struct vnode *, struct vnode *, kauth_cred_t,
+			int *, struct vnode **);
 int	ufs_blkatoff(struct vnode *, off_t, char **, struct buf **, bool);
 
 /* ufs_quota.c */
@@ -139,15 +146,18 @@ int	ufs_blkatoff(struct vnode *, off_t, char **, struct buf **, bool);
 #define	FORCE	0x01	/* force usage changes independent of limits */
 void	ufsquota_init(struct inode *);
 void	ufsquota_free(struct inode *);
-int	getinoquota(struct inode *);
 int	chkdq(struct inode *, int64_t, kauth_cred_t, int);
 int	chkiq(struct inode *, int32_t, kauth_cred_t, int);
-int	quotaon(struct lwp *, struct mount *, int, void *);
-int	quotaoff(struct lwp *, struct mount *, int);
-int	getquota(struct mount *, u_long, int, void *);
-int	setquota(struct mount *, u_long, int, void *);
-int	setuse(struct mount *, u_long, int, void *);
+int	quota_handle_cmd(struct mount *, struct lwp *,
+			 struct quotactl_args *);
+
 int	qsync(struct mount *);
+
+/* ufs_quota1.c */
+int	quota1_umount(struct mount *, int);
+
+/* ufs_quota2.c */
+int	quota2_umount(struct mount *, int);
 
 /* ufs_vfsops.c */
 void	ufs_init(void);
@@ -155,14 +165,14 @@ void	ufs_reinit(void);
 void	ufs_done(void);
 int	ufs_start(struct mount *, int);
 int	ufs_root(struct mount *, struct vnode **);
-int	ufs_quotactl(struct mount *, int, uid_t, void *);
+int	ufs_quotactl(struct mount *, struct quotactl_args *);
 int	ufs_fhtovp(struct mount *, struct ufid *, struct vnode **);
 
 /* ufs_vnops.c */
 void	ufs_vinit(struct mount *, int (**)(void *),
 		  int (**)(void *), struct vnode **);
-int	ufs_makeinode(int, struct vnode *, struct vnode **,
-		      struct componentname *);
+int	ufs_makeinode(int, struct vnode *, const struct ufs_lookup_results *,
+		      struct vnode **, struct componentname *);
 int	ufs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 void	ufs_gop_markupdate(struct vnode *, int);
 

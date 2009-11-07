@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4231_ebus.c,v 1.33 2009/05/12 14:20:45 cegger Exp $ */
+/*	$NetBSD: cs4231_ebus.c,v 1.35 2011/11/23 23:07:31 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2002 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.33 2009/05/12 14:20:45 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.35 2011/11/23 23:07:31 jmcneill Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sparc_arch.h"
@@ -38,8 +38,9 @@ __KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.33 2009/05/12 14:20:45 cegger Exp 
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/cpu.h>
+#include <sys/kmem.h>
+#include <sys/malloc.h>
 
 #include <machine/autoconf.h>
 
@@ -79,7 +80,7 @@ int	cs4231_ebus_match(device_t, cfdata_t, void *);
 static int	cs4231_ebus_pint(void *);
 static int	cs4231_ebus_rint(void *);
 
-CFATTACH_DECL(audiocs_ebus, sizeof(struct cs4231_ebus_softc),
+CFATTACH_DECL_NEW(audiocs_ebus, sizeof(struct cs4231_ebus_softc),
     cs4231_ebus_match, cs4231_ebus_attach, NULL, NULL);
 
 /* audio_hw_if methods specific to ebus DMA */
@@ -122,7 +123,7 @@ const struct audio_hw_if audiocs_ebus_hw_if = {
 	cs4231_ebus_trigger_output,
 	cs4231_ebus_trigger_input,
 	NULL,			/* dev_ioctl */
-	NULL,			/* powerstate */
+	ad1848_get_locks,
 };
 
 #ifdef AUDIO_DEBUG
@@ -247,17 +248,19 @@ cs4231_ebus_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
+	ad1848_init_locks(&sc->sc_ad1848, IPL_SCHED);
+
 	/* establish interrupt channels */
 	for (i = 0; i < ea->ea_nintr; ++i)
 		bus_intr_establish(ea->ea_bustag,
 				   ea->ea_intr[i], IPL_SCHED,
 				   cs4231_ebus_intr, ebsc);
 
-	cs4231_common_attach(sc, bh);
+	cs4231_common_attach(sc, self, bh);
 	printf("\n");
 
 	/* XXX: todo: move to cs4231_common_attach, pass hw_if as arg? */
-	audio_attach_mi(&audiocs_ebus_hw_if, sc, &sc->sc_ad1848.sc_dev);
+	audio_attach_mi(&audiocs_ebus_hw_if, sc, sc->sc_ad1848.sc_dev);
 }
 
 
@@ -540,6 +543,8 @@ cs4231_ebus_intr(void *arg)
 
 	ebsc = arg;
 	sc = &ebsc->sc_cs4231;
+	mutex_spin_enter(&sc->sc_ad1848.sc_intr_lock);
+
 	status = ADREAD(&sc->sc_ad1848, AD1848_STATUS);
 
 #ifdef AUDIO_DEBUG
@@ -547,7 +552,7 @@ cs4231_ebus_intr(void *arg)
 		cs4231_ebus_regdump("audiointr", ebsc);
 
 	snprintb(bits, sizeof(bits), AD_R2_BITS, status);
-	DPRINTF(("%s: status: %s\n", device_xname(&sc->sc_ad1848.sc_dev),
+	DPRINTF(("%s: status: %s\n", device_xname(sc->sc_ad1848.sc_dev),
 	    bits));
 #endif
 
@@ -557,7 +562,7 @@ cs4231_ebus_intr(void *arg)
 
 		reason = ad_read(&sc->sc_ad1848, CS_IRQ_STATUS);
 	        snprintb(bits, sizeof(bits), CS_I24_BITS, reason);
-		DPRINTF(("%s: i24: %s\n", device_xname(&sc->sc_ad1848.sc_dev),
+		DPRINTF(("%s: i24: %s\n", device_xname(sc->sc_ad1848.sc_dev),
 		    bits));
 #endif
 		/* clear interrupt from ad1848 */
@@ -580,6 +585,7 @@ cs4231_ebus_intr(void *arg)
 		ret = 1;
 	}
 
+	mutex_spin_exit(&sc->sc_ad1848.sc_intr_lock);
 
 	return ret;
 }
@@ -590,10 +596,10 @@ cs4231_ebus_pint(void *cookie)
 	struct cs4231_softc *sc = cookie;
 	struct cs_transfer *t = &sc->sc_playback;
 
-	KERNEL_LOCK(1, NULL);
+	mutex_spin_enter(&sc->sc_ad1848.sc_intr_lock);
 	if (t->t_intr != NULL)
 		(*t->t_intr)(t->t_arg);
-	KERNEL_UNLOCK_ONE(NULL);
+	mutex_spin_exit(&sc->sc_ad1848.sc_intr_lock);
 	return 0;
 }
 
@@ -603,9 +609,9 @@ cs4231_ebus_rint(void *cookie)
 	struct cs4231_softc *sc = cookie;
 	struct cs_transfer *t = &sc->sc_capture;
 
-	KERNEL_LOCK(1, NULL);
+	mutex_spin_enter(&sc->sc_ad1848.sc_intr_lock);
 	if (t->t_intr != NULL)
 		(*t->t_intr)(t->t_arg);
-	KERNEL_UNLOCK_ONE(NULL);
+	mutex_spin_exit(&sc->sc_ad1848.sc_intr_lock);
 	return 0;
 }

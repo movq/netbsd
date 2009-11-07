@@ -1,4 +1,4 @@
-/* $NetBSD: if_ath_arbus.c,v 1.16 2009/07/06 00:43:23 alc Exp $ */
+/* $NetBSD: if_ath_arbus.c,v 1.22 2012/02/12 16:34:09 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Jared D. McNeill <jmcneill@invisible.ca>
@@ -34,18 +34,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ath_arbus.c,v 1.16 2009/07/06 00:43:23 alc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ath_arbus.c,v 1.22 2012/02/12 16:34:09 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/device.h>
-#include <sys/mbuf.h>
-#include <sys/malloc.h>
-#include <sys/kernel.h>
 #include <sys/errno.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
+#include <sys/kernel.h>
+#include <sys/malloc.h>
+#include <sys/mbuf.h>
+#include <sys/systm.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -58,8 +57,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ath_arbus.c,v 1.16 2009/07/06 00:43:23 alc Exp $"
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 
-#include <mips/atheros/include/ar531xvar.h>
 #include <mips/atheros/include/arbusvar.h>
+#include <mips/atheros/include/platform.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/ic/ath_netbsd.h>
@@ -96,7 +95,7 @@ ath_arbus_match(device_t parent, cfdata_t cf, void *opaque)
 }
 
 static bool
-ath_arbus_resume(device_t dv PMF_FN_ARGS)
+ath_arbus_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct ath_arbus_softc *asc = device_private(dv);
 	ath_resume(&asc->sc_ath);
@@ -144,7 +143,7 @@ ath_arbus_attach(device_t parent, device_t self, void *opaque)
 	/*
 	 * Setup HAL configuration state for use by the driver.
 	 */
-	rv = ar531x_board_config(&asc->sc_config);
+	rv = atheros_get_board_config(&asc->sc_config);
 	if (rv) {
 		aprint_error_dev(self, "unable to locate board configuration\n");
 		return;
@@ -164,7 +163,7 @@ ath_arbus_attach(device_t parent, device_t self, void *opaque)
 		return;
 	}
 
-	ATH_LOCK_INIT(sc);
+	//ATH_LOCK_INIT(sc);
 
 	if (!pmf_device_register(self, NULL, ath_arbus_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");

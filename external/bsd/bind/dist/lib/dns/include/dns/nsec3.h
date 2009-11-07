@@ -1,7 +1,7 @@
-/*	$NetBSD: nsec3.h,v 1.1.1.2 2009/10/25 00:02:38 christos Exp $	*/
+/*	$NetBSD: nsec3.h,v 1.2.6.1 2012/06/05 21:14:57 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2008, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2008-2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: nsec3.h,v 1.10 2009/10/08 23:48:10 tbox Exp */
+/* Id: nsec3.h,v 1.14 2011/10/28 12:20:31 tbox Exp  */
 
 #ifndef DNS_NSEC3_H
 #define DNS_NSEC3_H 1
@@ -240,6 +240,16 @@ dns_nsec3param_toprivate(dns_rdata_t *src, dns_rdata_t *target,
  *
  * 'buf' should be at least src->length + 1 in size.
  */
+
+isc_result_t
+dns_nsec3param_deletechains(dns_db_t *db, dns_dbversion_t *ver,
+			    dns_zone_t *zone, isc_boolean_t nonsec,
+			    dns_diff_t *diff);
+
+/*%<
+ * Mark NSEC3PARAM for deletion.
+ */
+
 
 ISC_LANG_ENDDECLS
 

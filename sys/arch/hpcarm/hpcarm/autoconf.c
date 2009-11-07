@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.17 2008/06/13 13:24:10 rafal Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.19.8.1 2012/08/08 15:51:11 martin Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2008/06/13 13:24:10 rafal Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19.8.1 2012/08/08 15:51:11 martin Exp $");
 
 #include "opt_md.h"
 
@@ -54,7 +54,10 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2008/06/13 13:24:10 rafal Exp $");
 #include <machine/intr.h>
 #include <arm/arm32/machdep.h>
 
+#include "opt_cputypes.h"
+#if defined(CPU_SA1100) || defined(CPU_SA1110)
 #include "sacom.h"
+#endif
 
 extern dev_t dumpdev;
 
@@ -126,7 +129,7 @@ cpu_rootconf(void)
 	printf("boot device: %s\n",
 	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 #endif
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 
@@ -163,9 +166,11 @@ cpu_configure(void)
 		panic("configure: mainbus not configured");
 
 	/* Debugging information */
-#ifdef 	DIAGNOSTIC
+#if defined(DIAGNOSTIC)
+#if defined(CPU_SA1100) || defined(CPU_SA1110)
 	dump_spl_masks();
 #endif
+#endif	/* DIAGNOSTIC */
 
 	/* Time to start taking interrupts so lets open the flood gates .... */
 	(void)spl0();
@@ -183,14 +188,20 @@ device_register(struct device *dev, void *aux)
  * known algorithm unless we see a pressing need otherwise.
  */
 
+#include "biconsdev.h"
+
 #include <dev/cons.h>
 
-cons_decl(com);   
 cons_decl(sacom);
+#define biconscnpollc	nullcnpollc
+cons_decl(bicons);   
 
 struct consdev constab[] = {
 #if (NSACOM > 0)
 	cons_init(sacom),
+#endif
+#if (NBICONSDEV > 0)
+	cons_init(bicons),
 #endif
 	{ NULL },
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.12 2009/08/11 17:04:18 matt Exp $	*/
+/*	$NetBSD: machdep.h,v 1.15 2011/01/23 21:53:40 skrll Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -44,6 +44,9 @@
 
 #ifdef _KERNEL
 
+/* The primary (aka monarch) CPU HPA */
+extern hppa_hpa_t hppa_mcpuhpa;
+
 /*
  * cache configuration, for most machines is the same
  * numbers, so it makes sense to do defines w/ numbers depending
@@ -70,13 +73,11 @@ extern u_int hppa_btlb_size_max;
 extern int fpu_present;
 extern u_int fpu_version;
 extern u_int fpu_csw;
-extern paddr_t fpu_cur_uspace;
 void hppa_fpu_bootstrap(u_int);
 void hppa_fpu_flush(struct lwp *);
 void hppa_fpu_emulate(struct trapframe *, struct lwp *, u_int);
 
 /* Interrupt dispatching. */
-extern u_int hppa_intr_depth;
 void hppa_intr(struct trapframe *);
 
 /* Special pmap functions. */

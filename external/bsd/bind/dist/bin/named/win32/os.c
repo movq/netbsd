@@ -1,7 +1,7 @@
-/*	$NetBSD: os.c,v 1.1.1.2 2009/10/25 00:01:34 christos Exp $	*/
+/*	$NetBSD: os.c,v 1.2.6.1 2012/06/05 21:15:50 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: os.c,v 1.37 2009/08/05 18:43:37 each Exp */
+/* Id */
 
 #include <config.h>
 #include <stdarg.h>
@@ -220,6 +220,7 @@ ns_os_openfile(const char *filename, int mode, isc_boolean_t switch_user) {
 		isc__strerror(errno, strbuf, sizeof(strbuf));
 		ns_main_earlywarning("could not open file '%s': %s",
 				     filename, strbuf);
+		return (NULL);
 	}
 
 	fp = fdopen(fd, "w");

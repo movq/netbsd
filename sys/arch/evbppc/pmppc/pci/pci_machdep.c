@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.2 2007/10/17 19:54:20 garbled Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.5 2011/06/30 00:52:56 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,35 +43,34 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.2 2007/10/17 19:54:20 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.5 2011/06/30 00:52:56 matt Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #include <sys/errno.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
 #include <sys/time.h>
-#include <machine/pcb.h>
 
 #include <uvm/uvm.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <machine/pio.h>
-#include <machine/intr.h>
 
 #include <dev/ic/cpc700reg.h>
+
 #include <machine/pmppc.h>
+#include <machine/pio.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pciconf.h>
 
-#include <machine/pmppc_pci_machdep.h>
+#include <evbppc/pmppc/dev/mainbus.h>
 
 /*
  * Address conversion as seen from a PCI master.
@@ -104,13 +103,14 @@ pmppc_pci_get_chipset_tag(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
 
 	pc->pc_conf_interrupt = pmppc_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
 	pc->pc_conf_hook = genppc_pci_conf_hook;
 
-	pc->pc_addr = mapiodev(CPC_PCICFGADR, 4);
-	pc->pc_data = mapiodev(CPC_PCICFGDATA, 4);
+	pc->pc_addr = mapiodev(CPC_PCICFGADR, 4, false);
+	pc->pc_data = mapiodev(CPC_PCICFGDATA, 4, false);
 	pc->pc_bus = 0;
 	pc->pc_node = 0;
 	pc->pc_memt = 0;
@@ -137,7 +137,7 @@ static bus_addr_t pci_to_phys(bus_dma_tag_t t, bus_addr_t a)
 }
 
 int
-pmppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pmppc_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int	pin = pa->pa_intrpin;
 	int	line = pa->pa_intrline;
@@ -172,8 +172,8 @@ bad:
 }
 
 void
-pmppc_pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
-    int swiz, int *iline)
+pmppc_pci_conf_interrupt(void *v, int bus, int dev, int pin, int swiz,
+    int *iline)
 {
 	int line;
 

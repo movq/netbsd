@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.21 2008/06/13 20:46:09 martin Exp $	*/
+/*	$NetBSD: main.c,v 1.23 2011/06/09 21:23:29 christos Exp $	*/
 
 /*
  * Copyright (C) 1995 Wolfgang Solfrank
@@ -28,18 +28,20 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.21 2008/06/13 20:46:09 martin Exp $");
+__RCSID("$NetBSD: main.c,v 1.23 2011/06/09 21:23:29 christos Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <err.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <signal.h>
 
 #include "fsutil.h"
+#include "snapshot.h"
 #include "ext.h"
 #include "exitvalues.h"
 
@@ -53,24 +55,20 @@ static void usage(void) __dead;
 static void
 usage(void)
 {
-    	(void)fprintf(stderr, "Usage: %s [-fnpy] filesystem ... \n",
+    	(void)fprintf(stderr,
+	    "Usage: %s [-fnpy] [-x snap_backup] filesystem ... \n",
 	    getprogname());
 	exit(FSCK_EXIT_USAGE);
-}
-
-static void
-catch(int n)
-{
-	exit(FSCK_EXIT_SIGNALLED);
 }
 
 int
 main(int argc, char **argv)
 {
 	int ret = FSCK_EXIT_OK, erg;
-	int ch;
+	int ch, snapfd;
+	char *snap_backup = NULL, *snap_dev;
 
-	while ((ch = getopt(argc, argv, "pPqynf")) != -1) {
+	while ((ch = getopt(argc, argv, "pPqynfx:")) != -1) {
 		switch (ch) {
 		case 'f':
 			/*
@@ -98,10 +96,18 @@ main(int argc, char **argv)
 		case 'q':		/* Quiet not implemented. */
 			break;
 
+		case 'x':
+			snap_backup = optarg;
+			break;
+
 		default:
 			usage();
 			break;
 		}
+	}
+	if (snap_backup != NULL && (!alwaysno || alwaysyes)) {
+		warnx("Cannot use -x without -n\n");
+		snap_backup = NULL;
 	}
 	argc -= optind;
 	argv += optind;
@@ -116,7 +122,18 @@ main(int argc, char **argv)
 
 	while (--argc >= 0) {
 		setcdevname(*argv, preen);
-		erg = checkfilesys(*argv++);
+		if (snap_backup != NULL) {
+			snapfd = snap_open(*argv, snap_backup, NULL, &snap_dev);
+			if (snapfd < 0) {
+				warn("can't take snapshot of %s", *argv);
+				erg = checkfilesys(*argv);
+			} else {
+				erg = checkfilesys(snap_dev);
+				close(snapfd);
+			}
+			argv++;
+		} else
+			erg = checkfilesys(*argv++);
 		if (erg > ret)
 			ret = erg;
 	}

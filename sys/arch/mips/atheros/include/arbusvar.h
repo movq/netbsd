@@ -1,4 +1,4 @@
-/* $Id: arbusvar.h,v 1.2 2006/09/04 05:17:26 gdamore Exp $ */
+/* $Id: arbusvar.h,v 1.4 2011/07/10 06:26:02 matt Exp $ */
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
  * Copyright (c) 2006 Garrett D'Amore.
@@ -43,11 +43,12 @@
 #ifndef	_MIPS_ATHEROS_ARBUSVAR_H_
 #define	_MIPS_ATHEROS_ARBUSVAR_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct arbus_attach_args {
 	const char	*aa_name;
 	bus_space_tag_t	aa_bst;
+	bus_space_tag_t	aa_bst_le;
 	bus_dma_tag_t	aa_dmat;
 
 	bus_addr_t	aa_addr;
@@ -57,6 +58,7 @@ struct arbus_attach_args {
 };
 
 void arbus_init(void);
+void arbusle_bus_mem_init(bus_space_tag_t, void *);
 bus_space_tag_t arbus_get_bus_space_tag(void);
 bus_dma_tag_t arbus_get_bus_dma_tag(void);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: label.c,v 1.53 2009/02/22 11:21:56 ad Exp $	*/
+/*	$NetBSD: label.c,v 1.61.2.1 2012/07/05 17:38:27 riz Exp $	*/
 
 /*
  * Copyright 1997 Jonathan Stone
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: label.c,v 1.53 2009/02/22 11:21:56 ad Exp $");
+__RCSID("$NetBSD: label.c,v 1.61.2.1 2012/07/05 17:38:27 riz Exp $");
 #endif
 
 #include <sys/types.h>
@@ -63,9 +63,11 @@ struct ptn_menu_info {
  * local prototypes
  */
 static int boringpart(partinfo *, int, int, int);
+static uint32_t getpartoff(uint32_t);
+static uint32_t getpartsize(uint32_t, uint32_t);
 
 static int	checklabel(partinfo *, int, int, int, int *, int *);
-static void	atofsb(const char *, int *, int *);
+static int	atofsb(const char *, uint32_t *, uint32_t *);
 
 
 /*
@@ -102,7 +104,7 @@ checklabel(partinfo *lp, int nparts, int rawpart, int bsdpart,
 
 	for (i = 0; i < nparts - 1; i ++ ) {
 		partinfo *ip = &lp[i];
-		int istart, istop;
+		uint32_t istart, istop;
 
 		/* skip unused or reserved partitions */
 		if (boringpart(lp, i, rawpart, bsdpart))
@@ -117,7 +119,7 @@ checklabel(partinfo *lp, int nparts, int rawpart, int bsdpart,
 
 		for (j = i+1; j < nparts; j++) {
 			partinfo *jp = &lp[j];
-			int jstart, jstop;
+			uint32_t jstart, jstop;
 
 			/* skip unused or reserved partitions */
 			if (boringpart(lp, j, rawpart, bsdpart))
@@ -168,16 +170,16 @@ static int
 edit_fs_start(menudesc *m, void *arg)
 {
 	partinfo *p = arg;
-	int start, size;
+	uint32_t start, end;
 
 	start = getpartoff(p->pi_offset);
-	size = p->pi_size;
-	if (size != 0) {
+	if (p->pi_size != 0) {
 		/* Try to keep end in the same place */
-		size += p->pi_offset - start;
-		if (size < 0)
-			size = 0;
-		p->pi_size = size;
+		end = p->pi_offset + p->pi_size;
+		if (end < start)
+			p->pi_size = 0;
+		else
+			p->pi_size = end - start;
 	}
 	p->pi_offset = start;
 	return 0;
@@ -187,12 +189,16 @@ static int
 edit_fs_size(menudesc *m, void *arg)
 {
 	partinfo *p = arg;
-	int size;
+	uint32_t size;
 
 	size = getpartsize(p->pi_offset, p->pi_size);
-	if (size == -1)
+	if (size == ~0u)
 		size = dlsize - p->pi_offset;
 	p->pi_size = size;
+	if (size == 0) {
+		p->pi_offset = 0;
+		p->pi_fstype = FS_UNUSED;
+	}
 	return 0;
 }
 
@@ -207,8 +213,23 @@ set_ptype(partinfo *p, int fstype, int flag)
 	p->pi_fstype = fstype;
 	if (fstype == FS_BSDFFS || fstype == FS_BSDLFS) {
 		p->pi_frag = 8;
-		/* match newfs defaults for fragments size (2k if >= 1024MB) */
-		p->pi_fsize = p->pi_size > 1024*1024*1024 / 512 ? 2048 : 1024;
+		/*
+		 * match newfs defaults for fragments size:
+		 * fs size	frag size
+		 * < 20 MB	0.5 KB
+		 * < 1000 MB	1 KB
+		 * < 128 GB	2 KB
+		 * >= 128 GB	4 KB
+		 */
+	 	/* note pi_size is uint32_t so we have to avoid overflow */
+		if (p->pi_size < (20 * 1024 * (1024 / 512)))
+			p->pi_fsize = 512;
+		else if (p->pi_size < (1000 * 1024 * (1024 / 512)))
+			p->pi_fsize = 1024;
+		else if (p->pi_size < (128 * 1024 * 1024 * (1024 / 512)))
+			p->pi_fsize = 2048;
+		else
+			p->pi_fsize = 4096;
 	} else {
 		/* zero - fields not used */
 		p->pi_frag = 0;
@@ -369,7 +390,7 @@ edit_ptn(menudesc *menu, void *arg)
 	static int fspart_menu = -1;
 	static menu_ent all_fstypes[FSMAXTYPES];
 	partinfo *p, p_save;
-	int i;
+	unsigned int i;
 
 	if (fspart_menu == -1) {
 		fspart_menu = new_menu(NULL, fs_fields, nelem(fs_fields),
@@ -381,7 +402,7 @@ edit_ptn(menudesc *menu, void *arg)
 
 	if (all_fstype_menu == -1) {
 		for (i = 0; i < nelem(all_fstypes); i++) {
-			all_fstypes[i].opt_name = fstypenames[i];
+			all_fstypes[i].opt_name = getfslabelname(i);
 			all_fstypes[i].opt_menu = OPT_NOMENU;
 			all_fstypes[i].opt_flags = 0;
 			all_fstypes[i].opt_action = set_fstype;
@@ -481,7 +502,7 @@ set_ptn_label(menudesc *m, int opt, void *arg)
 			else
 				c = "FFSv1";
 		else
-			c = fstypenames[p->pi_fstype];
+			c = getfslabelname(p->pi_fstype);
 		wprintw(m->mw, msg_string(MSG_fstype_fmt), c);
 		break;
 	case PTN_MENU_START:
@@ -513,7 +534,7 @@ set_ptn_label(menudesc *m, int opt, void *arg)
 			msg_string(p->pi_flags & PIF_MOUNT ? MSG_Yes : MSG_No));
 		break;
 	case PTN_MENU_MOUNTOPT:
-		wprintw(m->mw, msg_string(MSG_mount_options_fmt));
+		wprintw(m->mw, "%s", msg_string(MSG_mount_options_fmt));
 		if (p->pi_flags & PIF_ASYNC)
 			wprintw(m->mw, "async ");
 		if (p->pi_flags & PIF_NOATIME)
@@ -704,7 +725,7 @@ const char *
 get_last_mounted(int fd, int partstart, partinfo *lp)
 {
 	static char sblk[SBLOCKSIZE];		/* is this enough? */
-	#define SB ((struct fs *)sblk)
+	struct fs *SB = (struct fs *)sblk;
 	static const int sblocks[] = SBLOCKSEARCH;
 	const int *sbp;
 	char *cp;
@@ -720,7 +741,7 @@ get_last_mounted(int fd, int partstart, partinfo *lp)
 		    partstart * (off_t)512 + *sbp) != sizeof sblk)
 			continue;
 		/* Maybe we should validate the checksum??? */
-		switch (((struct fs *)sblk)->fs_magic) {
+		switch (SB->fs_magic) {
 		case FS_UFS1_MAGIC:
 		case FS_UFS1_MAGIC_SWAPPED:
 			if (!(SB->fs_old_flags & FS_FLAGS_UPDATED)) {
@@ -779,11 +800,13 @@ get_last_mounted(int fd, int partstart, partinfo *lp)
 }
 
 /* Ask for a partition offset, check bounds and do the needed roundups */
-int
-getpartoff(int defpartstart)
+static uint32_t
+getpartoff(uint32_t defpartstart)
 {
 	char defsize[20], isize[20], maxpartc;
-	int i, localsizemult, partn;
+	uint32_t i;
+	uint32_t localsizemult;
+	int partn;
 	const char *errmsg = "\n";
 
 	maxpartc = 'a' + getmaxpartitions() - 1;
@@ -803,11 +826,11 @@ getpartoff(int defpartstart)
 		} else if (atoi(isize) == -1) {
 			i = ptstart;
 			localsizemult = 1;
-		} else
-			atofsb(isize, &i, &localsizemult);
-		if (i < 0) {
-			errmsg = msg_string(MSG_invalid_sector_number);
-			continue;
+		} else {
+			if (atofsb(isize, &i, &localsizemult)) {
+				errmsg = msg_string(MSG_invalid_sector_number);
+				continue;
+			}
 		}
 		/* round to cylinder size if localsizemult != 1 */
 		i = NUMSEC(i/localsizemult, localsizemult, dlcylsize);
@@ -825,13 +848,13 @@ getpartoff(int defpartstart)
 
 
 /* Ask for a partition size, check bounds and do the needed roundups */
-int
-getpartsize(int partstart, int defpartsize)
+static uint32_t
+getpartsize(uint32_t partstart, uint32_t defpartsize)
 {
 	char dsize[20], isize[20], maxpartc;
 	const char *errmsg = "\n";
-	int i, partend, localsizemult;
-	int fsptend = ptstart + ptsize;
+	uint32_t i, partend, localsizemult;
+	uint32_t fsptend = ptstart + ptsize;
 	int partn;
 
 	maxpartc = 'a' + getmaxpartitions() - 1;
@@ -850,11 +873,11 @@ getpartsize(int partstart, int defpartsize)
 		} else if (atoi(isize) == -1) {
 			i = fsptend - partstart;
 			localsizemult = 1;
-		} else
-			atofsb(isize, &i, &localsizemult);
-		if (i < 0) {
-			errmsg = msg_string(MSG_invalid_sector_number);
-			continue;
+		} else {
+			if (atofsb(isize, &i, &localsizemult)) {
+				errmsg = msg_string(MSG_invalid_sector_number);
+				continue;
+			}
 		}
 		/*
 		 * partend is aligned to a cylinder if localsizemult
@@ -863,11 +886,11 @@ getpartsize(int partstart, int defpartsize)
 		partend = NUMSEC((partstart + i) / localsizemult,
 		    localsizemult, dlcylsize);
 		/* Align to end-of-disk or end-of-slice if close enough */
-		i = dlsize - partend;
-		if (i > -localsizemult && i < localsizemult)
+		if (partend > (dlsize - localsizemult)
+		    && partend < (dlsize + localsizemult))
 			partend = dlsize;
-		i = fsptend - partend;
-		if (i > -localsizemult && i < localsizemult)
+		if (partend > (fsptend - localsizemult)
+		    && partend < (fsptend + localsizemult))
 			partend = fsptend;
 		/* sanity checks */
 		if (partend > dlsize) {
@@ -876,7 +899,8 @@ getpartsize(int partstart, int defpartsize)
 			    NULL, isize, 1,
 			    (partend - partstart) / sizemult, multname);
 		}
-		/* return value */
+		if (partend < partstart)
+			return 0;
 		return (partend - partstart);
 	}
 	/* NOTREACHED */
@@ -891,16 +915,15 @@ getpartsize(int partstart, int defpartsize)
  * returns the number of sectors, and the unit used (for roundups).
  */
 
-static void
-atofsb(const char *str, int *p_val, int *localsizemult)
+static int
+atofsb(const char *str, uint32_t *p_val, uint32_t *localsizemult)
 {
 	int i;
-	int val;
+	uint32_t val;
 
 	*localsizemult = sizemult;
 	if (str[0] == '\0') {
-		*p_val = -1;
-		return;
+		return 1;
 	}
 	val = 0;
 	for (i = 0; str[i] != '\0'; i++) {
@@ -910,8 +933,7 @@ atofsb(const char *str, int *p_val, int *localsizemult)
 		}
 		if (str[i + 1] != '\0') {
 			/* A non-digit caracter, not at the end */
-			*p_val = -1;
-			return;
+			return 1;
 		}
 		if (str[i] == 'G' || str[i] == 'g') {
 			val *= 1024;
@@ -931,9 +953,8 @@ atofsb(const char *str, int *p_val, int *localsizemult)
 			break;
 		}
 		/* not a known unit */
-		*p_val = -1;
-		return;
+		return 1;
 	}
 	*p_val = val * (*localsizemult);
-	return;
+	return 0;
 }

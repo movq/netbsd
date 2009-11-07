@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.61 2008/03/29 05:47:53 tsutsui Exp $	*/
+/*	$NetBSD: clock.c,v 1.63 2010/12/20 00:25:45 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.61 2008/03/29 05:47:53 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.63 2010/12/20 00:25:45 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -294,7 +294,7 @@ setstatclockrate(int newhz)
 }
 
 /*
- * This is is called by the "custom" interrupt handler.
+ * This is called by the "custom" interrupt handler.
  * Note that we can get ZS interrupts while this runs,
  * and zshard may touch the interrupt_reg, so we must
  * be careful to use the single_inst_* macros to modify
@@ -317,7 +317,7 @@ clock_intr(struct clockframe cf)
 	intersil_clear();
 
 	intrcnt[CLOCK_PRI]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	{ /* Entertainment! */
 #ifdef	LED_IDLE_CHECK

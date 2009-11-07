@@ -1,4 +1,4 @@
-/*	$NetBSD: local.h,v 1.21 2009/09/24 20:38:53 roy Exp $	*/
+/*	$NetBSD: local.h,v 1.31 2012/01/22 18:36:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,6 +37,10 @@
 #include "wcio.h"
 #include "fileext.h"
 
+#include <limits.h>
+#include <stdarg.h>
+#include <stdbool.h>
+
 /*
  * Information local to this implementation of stdio,
  * in particular, macros and private variables.
@@ -44,10 +48,11 @@
 
 extern int	__sflush __P((FILE *));
 extern FILE	*__sfp __P((void));
+extern void	__sfpinit __P((FILE *));
 extern int	__srefill __P((FILE *));
 extern int	__sread __P((void *, char *, int));
 extern int	__swrite __P((void *, char const *, int));
-extern fpos_t	__sseek __P((void *, fpos_t, int));
+extern off_t	__sseek __P((void *, off_t, int));
 extern int	__sclose __P((void *));
 extern void	__sinit __P((void));
 extern void	_cleanup __P((void));
@@ -59,13 +64,13 @@ extern char	*_mktemp __P((char *));
 extern int	__swsetup __P((FILE *));
 extern int	__sflags __P((const char *, int *));
 extern int	__svfscanf __P((FILE * __restrict, const char * __restrict,
-		    _BSD_VA_LIST_))
+		    va_list))
 		    __attribute__((__format__(__scanf__, 2, 0)));
 extern int	__svfscanf_unlocked __P((FILE * __restrict, const char * __restrict,
-		    _BSD_VA_LIST_))
+		    va_list))
 		    __attribute__((__format__(__scanf__, 2, 0)));
 extern int	__vfprintf_unlocked __P((FILE * __restrict, const char * __restrict,
-		    _BSD_VA_LIST_));
+		    va_list));
 
 
 extern int	__sdidinit;
@@ -75,13 +80,13 @@ extern int	__gettemp __P((char *, int *, int));
 extern wint_t	__fgetwc_unlock __P((FILE *));
 extern wint_t	__fputwc_unlock __P((wchar_t, FILE *));
 
-extern ssize_t	__getdelim __P((char ** __restrict, size_t * __restrict, int,
-    FILE * __restrict));
+extern ssize_t	__getdelim(char **__restrict, size_t *__restrict, int,
+    FILE *__restrict);
 extern char	*__fgetstr __P((FILE * __restrict, size_t * __restrict, int));
 extern int 	 __vfwprintf_unlocked __P((FILE *, const wchar_t *,
-    _BSD_VA_LIST_));
+    va_list));
 extern int	 __vfwscanf_unlocked __P((FILE * __restrict,
-    const wchar_t * __restrict, _BSD_VA_LIST_));
+    const wchar_t * __restrict, va_list));
 
 /*
  * Return true iff the given FILE cannot be written now.
@@ -104,11 +109,21 @@ extern int	 __vfwscanf_unlocked __P((FILE * __restrict,
 /*
  * test for an fgetln() buffer.
  */
-#define	HASLB(fp) ((fp)->_lb._base != NULL)
 #define	FREELB(fp) { \
-	free((char *)(fp)->_lb._base); \
-	(fp)->_lb._base = NULL; \
+	free(_EXT(fp)->_fgetstr_buf); \
+	_EXT(fp)->_fgetstr_buf = NULL; \
+	_EXT(fp)->_fgetstr_len = 0; \
 }
 
 extern void __flockfile_internal __P((FILE *, int));
 extern void __funlockfile_internal __P((FILE *, int));
+
+/*
+ * Detect if the current file position fits in a long int.
+ */
+
+static __inline bool
+__long_overflow(off_t pos)
+{
+	return (pos < LONG_MIN) || (pos > LONG_MAX);
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_mysql_driver.c,v 1.1.1.2 2009/10/25 00:01:40 christos Exp $	*/
+/*	$NetBSD: dlz_mysql_driver.c,v 1.2.6.1 2012/06/05 21:15:35 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
@@ -745,12 +745,15 @@ mysql_authority(const char *zone, void *driverarg, void *dbdata,
 /*% if zone is supported, lookup up a (or multiple) record(s) in it */
 static isc_result_t
 mysql_lookup(const char *zone, const char *name, void *driverarg,
-	     void *dbdata, dns_sdlzlookup_t *lookup)
+	     void *dbdata, dns_sdlzlookup_t *lookup,
+	     dns_clientinfomethods_t *methods, dns_clientinfo_t *clientinfo)
 {
 	isc_result_t result;
 	MYSQL_RES *rs = NULL;
 
 	UNUSED(driverarg);
+	UNUSED(methods);
+	UNUSED(clientinfo);
 
 	/* run the query and get the result set from the database. */
 	result = mysql_get_resultset(zone, name, NULL, LOOKUP, dbdata, &rs);
@@ -794,7 +797,7 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 	char *endp;
 	int j;
 	unsigned int flags = 0;
-#ifdef MYSQL_OPT_RECONNECT
+#if MYSQL_VERSION_ID >= 50000
         my_bool auto_reconnect = 1;
 #endif
 
@@ -885,7 +888,7 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 			      "mysql driver could not create "
 			      "database instance object.");
 		result = ISC_R_FAILURE;
-		goto full_cleanup;
+		goto cleanup;
 	}
 
 	/* create and set db connection */
@@ -928,7 +931,7 @@ mysql_create(const char *dlzname, unsigned int argc, char *argv[],
 	pass = getParameterValue(argv[1], "pass=");
 	socket = getParameterValue(argv[1], "socket=");
 
-#ifdef MYSQL_OPT_RECONNECT
+#if MYSQL_VERSION_ID >= 50000
 	/* enable automatic reconnection. */
         if (mysql_options((MYSQL *) dbi->dbconn, MYSQL_OPT_RECONNECT,
 			  &auto_reconnect) != 0) {
@@ -1015,7 +1018,14 @@ static dns_sdlzmethods_t dlz_mysql_methods = {
 	mysql_lookup,
 	mysql_authority,
 	mysql_allnodes,
-	mysql_allowzonexfr
+	mysql_allowzonexfr,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
 };
 
 /*%

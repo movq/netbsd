@@ -1,4 +1,4 @@
-/*	$NetBSD: p9100.c,v 1.50 2009/09/19 11:58:06 tsutsui Exp $ */
+/*	$NetBSD: p9100.c,v 1.56 2012/01/11 16:08:57 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998, 2005, 2006 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: p9100.c,v 1.50 2009/09/19 11:58:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: p9100.c,v 1.56 2012/01/11 16:08:57 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,8 +110,9 @@ struct p9100_softc {
 
 	bus_addr_t	sc_fb_paddr;	/* phys address description */
 	bus_size_t	sc_fb_psize;	/*   for device mmap() */
+#ifdef PNOZZ_USE_LATCH
 	bus_space_handle_t sc_fb_memh;	/*   bus space handle */
-
+#endif
 	volatile uint32_t sc_junk;
 	uint32_t 	sc_mono_width;	/* for setup_mono */
 
@@ -236,8 +237,8 @@ static int	p9100_intr(void *);
 #endif
 
 /* power management stuff */
-static bool p9100_suspend(device_t PMF_FN_PROTO);
-static bool p9100_resume(device_t PMF_FN_PROTO);
+static bool p9100_suspend(device_t, const pmf_qual_t *);
+static bool p9100_resume(device_t, const pmf_qual_t *);
 
 #if NTCTRL > 0
 static void p9100_set_extvga(void *, int);
@@ -256,10 +257,14 @@ struct wsdisplay_accessops p9100_accessops = {
 };
 #endif
 
-#define PNOZZ_LATCH(sc, off) if(sc->sc_last_offset == (off & 0xffffff80)) { \
+#ifdef PNOZZ_USE_LATCH
+#define PNOZZ_LATCH(sc, off) if(sc->sc_last_offset != (off & 0xffffff80)) { \
 		sc->sc_junk = bus_space_read_4(sc->sc_bustag, sc->sc_fb_memh, \
 		    off); \
 		sc->sc_last_offset = off & 0xffffff80; }
+#else
+#define PNOZZ_LATCH(a, b)
+#endif
 
 /*
  * Match a p9100.
@@ -338,7 +343,9 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 	 * P9100 - all register accesses need to be 'latched in' whenever we
 	 * go to another 0x80 aligned 'page' by reading the framebuffer at the
 	 * same offset
+	 * XXX apparently the latter isn't true - my SP3GX works fine without
 	 */
+#ifdef PNOZZ_USE_LATCH
 	if (fb->fb_pixels == NULL) {
 		if (sbus_bus_map(sc->sc_bustag,
 		    sa->sa_reg[2].oa_space,
@@ -354,6 +361,7 @@ p9100_sbus_attach(device_t parent, device_t self, void *args)
 	} else {
 		sc->sc_fb_memh = (bus_space_handle_t) fb->fb_pixels;
 	}
+#endif
 	sc->sc_width = prom_getpropint(node, "width", 800);
 	sc->sc_height = prom_getpropint(node, "height", 600);
 	sc->sc_depth = prom_getpropint(node, "depth", 8) >> 3;
@@ -925,7 +933,7 @@ p9100_get_video(struct p9100_softc *sc)
 }
 
 static bool
-p9100_suspend(device_t dev PMF_FN_ARGS)
+p9100_suspend(device_t dev, const pmf_qual_t *qual)
 {
 	struct p9100_softc *sc = device_private(dev);
 
@@ -946,7 +954,7 @@ p9100_suspend(device_t dev PMF_FN_ARGS)
 }
 
 static bool
-p9100_resume(device_t dev PMF_FN_ARGS)
+p9100_resume(device_t dev, const pmf_qual_t *qual)
 {
 	struct p9100_softc *sc = device_private(dev);
 
@@ -1077,6 +1085,7 @@ static void
 p9100_putchar(void *cookie, int row, int col, u_int c, long attr)
 {
 	struct rasops_info *ri = cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, c);
 	struct vcons_screen *scr = ri->ri_hw;
 	struct p9100_softc *sc = scr->scr_cookie;
 
@@ -1084,10 +1093,10 @@ p9100_putchar(void *cookie, int row, int col, u_int c, long attr)
 	uint8_t *data;
 	int x, y, wi, he;
 
-	wi = ri->ri_font->fontwidth;
-	he = ri->ri_font->fontheight;
+	wi = font->fontwidth;
+	he = font->fontheight;
 
-	if (!CHAR_IN_FONT(c, ri->ri_font))
+	if (!CHAR_IN_FONT(c, font))
 		return;
 
 	bg = (u_char)ri->ri_devcmap[(attr >> 16) & 0xff];
@@ -1098,15 +1107,15 @@ p9100_putchar(void *cookie, int row, int col, u_int c, long attr)
 	if (c == 0x20) {
 		p9100_rectfill(sc, x, y, wi, he, bg);
 	} else {
-		uc = c-ri->ri_font->firstchar;
-		data = (uint8_t *)ri->ri_font->data + uc *
+		uc = c - font->firstchar;
+		data = (uint8_t *)font->data + uc *
 		    ri->ri_fontscale;
 
 		p9100_setup_mono(sc, x, y, wi, 1, fg, bg);
 		for (i = 0; i < he; i++) {
-			p9100_feed_line(sc, ri->ri_font->stride,
+			p9100_feed_line(sc, font->stride,
 			    data);
-			data += ri->ri_font->stride;
+			data += font->stride;
 		}
 	}
 }
@@ -1217,11 +1226,12 @@ p9100_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_stride = sc->sc_stride;
 	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
 
+#ifdef PNOZZ_USE_LATCH
 	ri->ri_bits = bus_space_vaddr(sc->sc_bustag, sc->sc_fb_memh);
-
 	DPRINTF("addr: %08lx\n",(ulong)ri->ri_bits);
+#endif
 
-	rasops_init(ri, sc->sc_height/8, sc->sc_width/8);
+	rasops_init(ri, 0, 0);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);

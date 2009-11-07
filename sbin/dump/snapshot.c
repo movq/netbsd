@@ -1,4 +1,4 @@
-/*	$NetBSD: snapshot.c,v 1.4 2008/04/28 20:23:08 martin Exp $	*/
+/*	$NetBSD: snapshot.c,v 1.6 2011/02/24 09:38:57 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -54,25 +54,51 @@
  * snapshot device path.
  */
 int
-snap_open(char *mountpoint, char *backup, time_t *snap_date, char **snap_dev)
+snap_open(char *file, char *backup, time_t *snap_date, char **snap_dev)
 {
-	int i, fd, israw, fsinternal, dounlink, flags;
-	char path[MAXPATHLEN], fss_dev[14];
+	int i, n, fd, israw, fsinternal, dounlink;
+	char path[MAXPATHLEN], fss_dev[14], *cp;
 	dev_t mountdev;
 	struct fss_set fss;
 	struct fss_get fsg;
 	struct stat sb;
-	struct statvfs fsb;
+	struct statvfs *mntbuf, *fs, fsb;
 
 	dounlink = 0;
 	fd = -1;
+	mntbuf = NULL;
 
-	fss.fss_mount = mountpoint;
+	/*
+	 * Lookup the mount point. `file' is either a directory or a raw
+	 * character device.
+	 */
+	if (lstat(file, &sb) < 0)
+		goto fail;
+	fss.fss_mount = NULL;
+	if (S_ISCHR(sb.st_mode)) {
+		if ((cp = strrchr(file, '/')) == NULL || cp[1] != 'r') {
+			errno = EINVAL;
+			goto fail;
+		}
+		snprintf(path, sizeof(path), "%.*s/%s",
+		    (int)(cp - file), file, cp + 2);
+		n = getmntinfo(&mntbuf, MNT_NOWAIT);
+		for (fs = mntbuf, i = 0; i < n; i++, fs++) {
+			if (strcmp(fs->f_mntfromname, path) == 0) {
+				fss.fss_mount = fs->f_mntonname;
+				if (stat(fss.fss_mount, &sb) < 0)
+					goto fail;
+				break;
+			}
+		}
+	} else if (S_ISDIR(sb.st_mode))
+		fss.fss_mount = file;
+	if (fss.fss_mount == NULL) {
+		errno = EINVAL;
+		goto fail;
+	}
 	fss.fss_bstore = backup ? backup : fss.fss_mount;
 	fss.fss_csize = 0;
-
-	if (stat(fss.fss_mount, &sb) < 0)
-		goto fail;
 	mountdev = sb.st_dev;
 
 	/*
@@ -118,15 +144,15 @@ snap_open(char *mountpoint, char *backup, time_t *snap_date, char **snap_dev)
 	if (close(fd) < 0)
 		goto fail;
 
+	fss.fss_flags = FSS_UNCONFIG_ON_CLOSE;
+	if (dounlink)
+		fss.fss_flags |= FSS_UNLINK_ON_CREATE;
 	/*
 	 * Create the snapshot on the first free snapshot device.
 	 */
 	for (i = 0; ; i++) {
 		snprintf(fss_dev, sizeof(fss_dev), "/dev/rfss%d", i);
 		if ((fd = open(fss_dev, O_RDWR, 0)) < 0)
-			goto fail;
-
-		if (ioctl(fd, FSSIOFGET, &flags) < 0)
 			goto fail;
 
 		if (ioctl(fd, FSSIOCSET, &fss) < 0) {
@@ -136,6 +162,7 @@ snap_open(char *mountpoint, char *backup, time_t *snap_date, char **snap_dev)
 			fd = -1;
 			continue;
 		}
+		dounlink = 0;
 
 		if (snap_dev != NULL) {
 			*snap_dev = strdup(fss_dev);
@@ -145,20 +172,21 @@ snap_open(char *mountpoint, char *backup, time_t *snap_date, char **snap_dev)
 			}
 		}
 
-		flags |= FSS_UNCONFIG_ON_CLOSE;
-		if (ioctl(fd, FSSIOCGET, &fsg) < 0 ||
-		    ioctl(fd, FSSIOFSET, &flags) < 0 ||
-		    (!israw && unlink(fss.fss_bstore) < 0)) {
+		if (ioctl(fd, FSSIOCGET, &fsg) < 0) {
 			ioctl(fd, FSSIOCCLR);
 			goto fail;
 		}
 
+		if (mntbuf)
+			free(mntbuf);
 		if (snap_date != NULL)
 			*snap_date = fsg.fsg_time.tv_sec;
 		return fd;
 	}
 
 fail:
+	if (mntbuf)
+		free(mntbuf);
 	if (dounlink)
 		unlink(fss.fss_bstore);
 	if (fd >= 0)

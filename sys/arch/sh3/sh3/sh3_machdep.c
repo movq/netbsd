@@ -1,4 +1,4 @@
-/*	$NetBSD: sh3_machdep.c,v 1.81 2009/08/11 17:04:19 matt Exp $	*/
+/*	$NetBSD: sh3_machdep.c,v 1.97.2.1 2012/05/21 15:25:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2002 The NetBSD Foundation, Inc.
@@ -65,11 +65,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.81 2009/08/11 17:04:19 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.97.2.1 2012/05/21 15:25:58 riz Exp $");
 
+#include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_memsize.h"
 #include "opt_kstack_debug.h"
+#include "opt_ptrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,7 +88,8 @@ __KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.81 2009/08/11 17:04:19 matt Exp $"
 #include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/ucontext.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -96,14 +99,16 @@ __KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.81 2009/08/11 17:04:19 matt Exp $"
 const char kgdb_devname[] = KGDB_DEVNAME;
 #endif /* KGDB */
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <sh3/cache.h>
 #include <sh3/clock.h>
 #include <sh3/exception.h>
 #include <sh3/locore.h>
 #include <sh3/mmu.h>
+#include <sh3/pcb.h>
 #include <sh3/intr.h>
+#include <sh3/ubcreg.h>
 
 /* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
@@ -111,10 +116,8 @@ int cpu_arch;
 int cpu_product;
 char cpu_model[120];
 
-struct vm_map *mb_map;
 struct vm_map *phys_map;
 
-struct user *proc0paddr;	/* init_main.c use this. */
 struct pcb *curpcb;
 
 #if !defined(IOM_RAM_BEGIN)
@@ -192,6 +195,33 @@ sh_cpu_init(int arch, int product)
 
 	/* Set page size (4KB) */
 	uvm_setpagesize();
+
+	/* setup UBC channel A for single-stepping */
+#if defined(PTRACE) || defined(DDB)
+	_reg_write_2(SH_(BBRA), 0); /* disable channel A */
+	_reg_write_2(SH_(BBRB), 0); /* disable channel B */
+
+#ifdef SH3
+	if (CPU_IS_SH3) {
+		/* A: break after execution, ignore ASID */
+		_reg_write_4(SH3_BRCR, (UBC_CTL_A_AFTER_INSN
+					| SH3_UBC_CTL_A_MASK_ASID));
+
+		/* A: compare all address bits */
+		_reg_write_4(SH3_BAMRA, 0x00000000);
+	}
+#endif	/* SH3 */
+
+#ifdef SH4
+	if (CPU_IS_SH4) {
+		/* A: break after execution */
+		_reg_write_2(SH4_BRCR, UBC_CTL_A_AFTER_INSN);
+
+		/* A: compare all address bits, ignore ASID */
+		_reg_write_1(SH4_BAMRA, SH4_UBC_MASK_NONE | SH4_UBC_MASK_ASID);
+	}
+#endif	/* SH4 */
+#endif
 }
 
 
@@ -200,7 +230,7 @@ sh_cpu_init(int arch, int product)
  *	Setup proc0 u-area.
  */
 void
-sh_proc0_init()
+sh_proc0_init(void)
 {
 	struct switchframe *sf;
 	vaddr_t u;
@@ -209,25 +239,26 @@ sh_proc0_init()
 	u = uvm_pageboot_alloc(USPACE);
 	memset((void *)u, 0, USPACE);
 
-	/* Setup proc0 */
-	proc0paddr = (struct user *)u;
-	lwp0.l_addr = proc0paddr;
+	/* Setup uarea for lwp0 */
+	uvm_lwp_setuarea(&lwp0, u);
+
 	/*
 	 * u-area map:
-	 * |user| .... | .................. |
+	 * |pcb| .... | .................. |
 	 * | PAGE_SIZE | USPACE - PAGE_SIZE |
          *        frame bot        stack bot
 	 * current frame ... r6_bank
 	 * stack bottom  ... r7_bank
 	 * current stack ... r15
 	 */
-	curpcb = lwp0.l_md.md_pcb = &lwp0.l_addr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
+	lwp0.l_md.md_pcb = curpcb;
 
 	sf = &curpcb->pcb_sf;
 
 #ifdef KSTACK_DEBUG
-	memset((char *)(u + sizeof(struct user)), 0x5a,
-	    PAGE_SIZE - sizeof(struct user));
+	memset((char *)(u + sizeof(struct pcb)), 0x5a,
+	    PAGE_SIZE - sizeof(struct pcb));
 	memset((char *)(u + PAGE_SIZE), 0xa5, USPACE - PAGE_SIZE);
 	memset(sf, 0xb4, sizeof(struct switchframe));
 #endif /* KSTACK_DEBUG */
@@ -451,17 +482,31 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 }
 
 int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+{
+	struct trapframe *tf = l->l_md.md_regs;
+	const __greg_t *gr = mcp->__gregs;
+
+	if (((tf->tf_ssr ^ gr[_REG_SR]) & PSL_USERSTATIC) != 0)
+		return EINVAL;
+
+	return 0;
+}
+
+int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 	const __greg_t *gr = mcp->__gregs;
 	struct proc *p = l->l_proc;
+	int error;
 
 	/* Restore register context, if any. */
 	if ((flags & _UC_CPU) != 0) {
 		/* Check for security violations. */
-		if (((tf->tf_ssr ^ gr[_REG_SR]) & PSL_USERSTATIC) != 0)
-			return (EINVAL);
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
 
 		tf->tf_gbr    = gr[_REG_GBR];
 		tf->tf_spc    = gr[_REG_PC];
@@ -485,6 +530,8 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_r1     = gr[_REG_R1];
 		tf->tf_r0     = gr[_REG_R0];
 		tf->tf_r15    = gr[_REG_R15];
+
+		lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_GBR]);
 	}
 
 #if 0
@@ -508,11 +555,11 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
  * Clear registers on exec
  */
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
 	struct trapframe *tf;
 
-	l->l_md.md_flags &= ~MDP_USEDFPU;
+	l->l_md.md_flags &= ~(MDP_USEDFPU | MDP_SSTEP);
 
 	tf = l->l_md.md_regs;
 
@@ -533,7 +580,7 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	tf->tf_r6 = stack + 4 * tf->tf_r4 + 8;	/* envp */
 	tf->tf_r7 = 0;
 	tf->tf_r8 = 0;
-	tf->tf_r9 = (int)l->l_proc->p_psstr;
+	tf->tf_r9 = l->l_proc->p_psstrp;
 	tf->tf_r10 = 0;
 	tf->tf_r11 = 0;
 	tf->tf_r12 = 0;
@@ -557,3 +604,12 @@ cpu_reset(void)
 #endif
 	/* NOTREACHED */
 }
+
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+
+	l->l_md.md_regs->tf_gbr = (int)addr;
+	return 0;
+}
+

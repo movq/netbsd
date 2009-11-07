@@ -1,6 +1,6 @@
-/*	$NetBSD: proc.h,v 1.7 2009/04/30 07:01:27 skrll Exp $	*/
+/*	$NetBSD: proc.h,v 1.11 2011/01/14 02:06:26 rmind Exp $	*/
 
-/*	$OpenBSD: proc.h,v 1.1 1998/07/07 21:32:44 mickey Exp $	*/
+/*	$OpenBSD: proc.h,v 1.4 2009/12/29 13:11:40 jsing Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,10 +40,11 @@
  * Machine-dependent part of the lwp structure for hppa.
  */
 struct mdlwp {
-	struct	trapframe *md_regs;	/* registers on current frame */
-	int	md_flags;		/* machine-dependent flags */
+	struct		trapframe *md_regs;	/* registers on current frame */
+	volatile int	md_astpending;		/* AST pending for this LWP */
+	int		md_flags;		/* machine-dependent flags */
 
-	vaddr_t	md_bpva;
+	vaddr_t		md_bpva;
 	unsigned int	md_bpsave[2];
 };
 

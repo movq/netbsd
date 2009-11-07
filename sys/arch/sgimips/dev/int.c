@@ -1,4 +1,4 @@
-/*	$NetBSD: int.c,v 1.20 2009/02/12 06:33:57 rumble Exp $	*/
+/*	$NetBSD: int.c,v 1.24 2011/07/01 18:53:46 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2009 Stephen M. Rumble 
@@ -33,8 +33,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: int.c,v 1.20 2009/02/12 06:33:57 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: int.c,v 1.24 2011/07/01 18:53:46 dyoung Exp $");
 
+#define __INTR_PRIVATE
 #include "opt_cputype.h"
 
 #include <sys/param.h>
@@ -48,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: int.c,v 1.20 2009/02/12 06:33:57 rumble Exp $");
 #include <dev/ic/i8253reg.h>
 #include <machine/sysconf.h>
 #include <machine/machtype.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <mips/locore.h>
 
 #include <mips/cache.h>
@@ -67,17 +68,16 @@ struct int_softc {
 
 static int	int_match(struct device *, struct cfdata *, void *);
 static void	int_attach(struct device *, struct device *, void *);
-static void	int1_local_intr(uint32_t, uint32_t, uint32_t, uint32_t);
 static void    *int1_intr_establish(int, int, int (*)(void *), void *);
 static void    *int2_intr_establish(int, int, int (*)(void *), void *);
-static void 	int2_local0_intr(uint32_t, uint32_t, uint32_t, uint32_t);
-static void	int2_local1_intr(uint32_t, uint32_t, uint32_t, uint32_t);
+static void 	int1_local_intr(vaddr_t, uint32_t, uint32_t);
+static void 	int2_local0_intr(vaddr_t, uint32_t, uint32_t);
+static void	int2_local1_intr(vaddr_t, uint32_t, uint32_t);
 static int 	int2_mappable_intr(void *);
-static void    *int2_intr_establish(int, int, int (*)(void *), void *);
 static void	int_8254_cal(void);
 static u_int	int_8254_get_timecount(struct timecounter *);
-static void	int_8254_intr0(uint32_t, uint32_t, uint32_t, uint32_t);
-static void	int_8254_intr1(uint32_t, uint32_t, uint32_t, uint32_t);
+static void	int_8254_intr0(vaddr_t, uint32_t, uint32_t);
+static void	int_8254_intr1(vaddr_t, uint32_t, uint32_t);
 
 #ifdef MIPS3
 static u_long	int2_cpu_freq(struct device *);
@@ -235,7 +235,7 @@ int2_mappable_intr(void *arg)
 	int intnum;
 	uint32_t mstat;
 	uint32_t mmask;
-	int which = (int)arg;
+	int which = (intptr_t)arg;
 	struct sgimips_intrhand *ih;
 
 	ret = 0;
@@ -262,7 +262,7 @@ int2_mappable_intr(void *arg)
 }
 
 static void
-int1_local_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
+int1_local_intr(vaddr_t pc, uint32_t status, uint32_t ipend)
 {
 	int i;
 	uint16_t stat;
@@ -275,8 +275,8 @@ int1_local_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
 	/* for STATUS, a 0 bit means interrupt is pending */
 	stat = ~stat & mask;
 
-	for (i = 0; i < 16; i++) {
-		if (stat & (1 << i)) {
+	for (i = 0; stat != 0; i++, stat >>= 1) {
+		if (stat & 1) {
 			for (ih = &intrtab[i]; ih != NULL; ih = ih->ih_next) {
 				if (ih->ih_fun != NULL)
 					(ih->ih_fun)(ih->ih_arg);
@@ -289,7 +289,7 @@ int1_local_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
 }
 
 void
-int2_local0_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
+int2_local0_intr(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
 	int i;
 	uint32_t l0stat;
@@ -315,7 +315,7 @@ int2_local0_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
 }
 
 void
-int2_local1_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
+int2_local1_intr(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
 	int i;
 	uint32_t l1stat;
@@ -633,12 +633,13 @@ int_8254_get_timecount(struct timecounter *tc)
 }
 
 static void
-int_8254_intr0(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
+int_8254_intr0(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
 	struct clockframe cf;
 
 	cf.pc = pc;
 	cf.sr = status;
+	cf.intr = (curcpu()->ci_idepth > 1);
 
 	hardclock(&cf);
 
@@ -657,7 +658,7 @@ int_8254_intr0(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
 }
 
 static void
-int_8254_intr1(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipend)
+int_8254_intr1(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
 	int s;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.9 2007/12/22 08:59:02 dsl Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.13 2011/04/07 02:04:07 matt Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -32,12 +32,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.9 2007/12/22 08:59:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.13 2011/04/07 02:04:07 matt Exp $");
 
 #include <sys/param.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
+#include <sys/cpu.h>
+
+#include <uvm/uvm_extern.h>
 
 int
 sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retval)

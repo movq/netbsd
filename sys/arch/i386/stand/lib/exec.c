@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.42 2009/09/14 11:56:27 jmcneill Exp $	 */
+/*	$NetBSD: exec.c,v 1.49.4.1 2012/06/03 21:42:51 jdc Exp $	 */
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -71,13 +71,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -105,7 +98,6 @@
 #include <sys/reboot.h>
 
 #include <machine/multiboot.h>
-#include <machine/stdarg.h>
 
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
@@ -125,13 +117,20 @@
 #define	PAGE_SIZE	4096
 #endif
 
-#define MODULE_WARNING_DELAY	5000000
+#define MODULE_WARNING_SEC	5
 
 extern struct btinfo_console btinfo_console;
 
 boot_module_t *boot_modules;
 bool boot_modules_enabled = true;
 bool kernel_loaded;
+
+typedef struct userconf_command {
+	char *uc_text;
+	size_t uc_len;
+	struct userconf_command *uc_next;
+} userconf_command_t;
+userconf_command_t *userconf_commands = NULL;
 
 static struct btinfo_framebuffer btinfo_framebuffer;
 
@@ -141,7 +140,13 @@ static uint32_t image_end;
 static char module_base[64] = "/";
 static int howto;
 
+static struct btinfo_userconfcommands *btinfo_userconfcommands = NULL;
+static size_t btinfo_userconfcommands_size = 0;
+
 static void	module_init(const char *);
+static void	module_add_common(char *, uint8_t);
+
+static void	userconf_init(void);
 
 void
 framebuffer_configure(struct btinfo_framebuffer *fb)
@@ -156,6 +161,24 @@ framebuffer_configure(struct btinfo_framebuffer *fb)
 
 void
 module_add(char *name)
+{
+	return module_add_common(name, BM_TYPE_KMOD);
+}
+
+void
+splash_add(char *name)
+{
+	return module_add_common(name, BM_TYPE_IMAGE);
+}
+
+void
+rnd_add(char *name)
+{
+	return module_add_common(name, BM_TYPE_RND);
+}
+
+static void
+module_add_common(char *name, uint8_t type)
 {
 	boot_module_t *bm, *bmp;
 	size_t len;
@@ -174,6 +197,7 @@ module_add(char *name)
 	memcpy(str, name, len);
 	bm->bm_path = str;
 	bm->bm_next = NULL;
+	bm->bm_type = type;
 	if (boot_modules == NULL)
 		boot_modules = bm;
 	else {
@@ -181,6 +205,46 @@ module_add(char *name)
 		    bmp = bmp->bm_next)
 			;
 		bmp->bm_next = bm;
+	}
+}
+
+void
+userconf_add(char *cmd)
+{
+	userconf_command_t *uc;
+	size_t len;
+	char *text;
+
+	while (*cmd == ' ' || *cmd == '\t')
+		++cmd;
+
+	uc = alloc(sizeof(*uc));
+	if (uc == NULL) {
+		printf("couldn't allocate command\n");
+		return;
+	}
+
+	len = strlen(cmd) + 1;
+	text = alloc(len);
+	if (text == NULL) {
+		dealloc(uc, sizeof(*uc));
+		printf("couldn't allocate command\n");
+		return;
+	}
+	memcpy(text, cmd, len);
+
+	uc->uc_text = text;
+	uc->uc_len = len;
+	uc->uc_next = NULL;
+
+	if (userconf_commands == NULL)
+		userconf_commands = uc;
+	else {
+		userconf_command_t *ucp;
+		for (ucp = userconf_commands; ucp->uc_next != NULL;
+		     ucp = ucp->uc_next)
+			;
+		ucp->uc_next = uc;
 	}
 }
 
@@ -228,15 +292,14 @@ common_load_kernel(const char *file, u_long *basemem, u_long *extmem,
 #endif
 	marks[MARK_START] = loadaddr;
 	if ((fd = loadfile(file, marks,
-	    LOAD_KERNEL & ~(floppy ? LOAD_NOTE : 0))) == -1)
+	    LOAD_KERNEL & ~(floppy ? LOAD_BACKWARDS : 0))) == -1)
 		return EIO;
 
 	close(fd);
 
-	/* Now we know the root fs type, load modules for it. */
-	module_add(fsmod);
-	if (fsmod2 != NULL && strcmp(fsmod, fsmod2) != 0)
-		module_add(fsmod2);
+	/* If the root fs type is unusual, load its module. */
+	if (fsmod != NULL)
+		module_add(fsmod);
 
 	/*
 	 * Gather some information for the kernel. Do this after the
@@ -311,6 +374,11 @@ exec_netbsd(const char *file, physaddr_t loadaddr, int boothowto, int floppy,
 			    btinfo_modulelist_size);
 		}
 	}
+
+	userconf_init();
+	if (btinfo_userconfcommands != NULL)
+		BI_ADD(btinfo_userconfcommands, BTINFO_USERCONFCOMMANDS,
+	btinfo_userconfcommands_size);
 
 #ifdef DEBUG
 	printf("Start @ 0x%lx [%ld=0x%lx-0x%lx]...\n", marks[MARK_ENTRY],
@@ -486,7 +554,7 @@ module_init(const char *kernel_path)
 	btinfo_modulelist = alloc(len);
 	if (btinfo_modulelist == NULL) {
 		printf("WARNING: couldn't allocate module list\n");
-		delay(MODULE_WARNING_DELAY);
+		wait_sec(MODULE_WARNING_SEC);
 		return;
 	}
 	memset(btinfo_modulelist, 0, len);
@@ -516,7 +584,19 @@ module_init(const char *kernel_path)
 			strncpy(bi->path, bm->bm_path, sizeof(bi->path) - 1);
 			bi->base = image_end;
 			bi->len = len;
-			bi->type = BI_MODULE_ELF;
+			switch (bm->bm_type) {
+			    case BM_TYPE_KMOD:
+				bi->type = BI_MODULE_ELF;
+				break;
+			    case BM_TYPE_IMAGE:
+				bi->type = BI_MODULE_IMAGE;
+				break;
+			    case BM_TYPE_RND:
+			    default:
+				/* safest -- rnd checks the sha1 */
+				bi->type = BI_MODULE_RND;
+				break;
+			}
 			if ((howto & AB_SILENT) == 0)
 				printf(" \n");
 		}
@@ -530,8 +610,46 @@ module_init(const char *kernel_path)
 		printf("WARNING: %d module%s failed to load\n",
 		    nfail, nfail == 1 ? "" : "s");
 #if notyet
-		delay(MODULE_WARNING_DELAY);
+		wait_sec(MODULE_WARNING_SEC);
 #endif
+	}
+}
+
+static void
+userconf_init(void)
+{
+	size_t count, len;
+	userconf_command_t *uc;
+	char *buf;
+	off_t off;
+
+	/* Calculate the userconf commands list size */
+	count = 0;
+	for (uc = userconf_commands; uc != NULL; uc = uc->uc_next)
+		count++;
+	len = sizeof(btinfo_userconfcommands) +
+	      count * sizeof(struct bi_userconfcommand);
+
+	/* Allocate the userconf commands list */
+	btinfo_userconfcommands = alloc(len);
+	if (btinfo_userconfcommands == NULL) {
+		printf("WARNING: couldn't allocate userconf commands list\n");
+		return;
+	}
+	memset(btinfo_userconfcommands, 0, len);
+	btinfo_userconfcommands_size = len;
+
+	/* Fill in btinfo structure */
+	buf = (char *)btinfo_userconfcommands;
+	off = sizeof(*btinfo_userconfcommands);
+	btinfo_userconfcommands->num = 0;
+	for (uc = userconf_commands; uc != NULL; uc = uc->uc_next) {
+		struct bi_userconfcommand *bi;
+		bi = (struct bi_userconfcommand *)(buf + off);
+		strncpy(bi->text, uc->uc_text, sizeof(bi->text) - 1);
+
+		off += sizeof(*bi);
+		btinfo_userconfcommands->num++;
 	}
 }
 

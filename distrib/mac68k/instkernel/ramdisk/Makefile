@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.34 2009/09/20 23:19:53 abs Exp $
+#	$NetBSD: Makefile,v 1.36 2010/02/11 09:06:49 roy Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -17,7 +17,6 @@ IMAGEENDIAN=	be
 MAKEDEVTARGETS=	raminst
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		dot.profile \
-		${DISTRIBDIR}/common/termcap \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
 		${DISTRIBDIR}/common/services

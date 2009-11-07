@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.4 2008/04/28 20:22:57 martin Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.6 2011/01/16 02:43:10 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,30 +30,41 @@
  */
 
 #include "SYS.h"
+#include "assym.h"
 
-#if defined(LIBC_SCCS) && !defined(lint)
-	.text
-	.asciz "$NetBSD: swapcontext.S,v 1.4 2008/04/28 20:22:57 martin Exp $"
-#endif /* LIBC_SCCS && !lint */
+__RCSID("$NetBSD: swapcontext.S,v 1.6 2011/01/16 02:43:10 matt Exp $")
+
+#define	XCALLFRAMELEN	(((2+3)*SZREG + CALLFRAMELEN - 1) & -CALLFRAMELEN)
+#define	XCALLFRAME_R30	(XCALLFRAMELEN-1*SZREG)
+#define	XCALLFRAME_UCP	(XCALLFRAMELEN-2*SZREG)
+#define	XCALLFRAME_OUCP	(XCALLFRAMELEN-3*SZREG)
 
 ENTRY(swapcontext)
-	stwu	%r1,-16(%r1)			# set up new stack frame
+	stwu	%r1,-XCALLFRAMELEN(%r1)		# set up new stack frame
 	mflr	%r0
-	stw	%r0,20(%r1)			# save link register
-	stw	%r3,8(%r1)			# must save oucp
-	stw	%r4,12(%r1)			# must save ucp
+	stw	%r0,XCALLFRAMELEN+CALLFRAME_LR(%r1)	# save link register
+	stw	%r3,XCALLFRAME_OUCP(%r1)	# must save oucp
+	stw	%r4,XCALLFRAME_UCP(%r1)		# must save ucp
+#ifdef PIC
+	stw	%r30,XCALLFRAME_R30(%r1)	# must save r30
+	PIC_TOCSETUP(swapcontext,%r30)		# setup toc pointer
+#endif
 	bl	PIC_PLT(_C_LABEL(_getcontext))	# getcontext(oucp)
 	cmpwi	%r3,0
 	bne	1f
-	lwz	%r11,8(%r1)			# load oucp for adjustment
-	lwz	%r0,20(%r1)
-	stw	%r0,(48 + 34 * 4)(%r11)		# pc <- lr
-	la	%r0,16(%r1)
-	stw	%r0,(48 +  1 * 4)(%r11)		# adjust sp
-	lwz	%r3,12(%r1)			# load ucp
+	lwz	%r11,XCALLFRAME_OUCP(%r1)	# load oucp for adjustment
+	lwz	%r0,XCALLFRAMELEN+CALLFRAME_LR(%r1)
+	stw	%r0,UC_GREGS_PC(%r11)		# pc <- lr
+	addi	%r0,%r1,XCALLFRAMELEN
+	stw	%r0,UC_GREGS_R1(%r11)		# adjust sp
+	lwz	%r3,XCALLFRAME_UCP(%r1)		# load ucp
 	bl	PIC_PLT(_C_LABEL(setcontext))	# setcontext(ucp)
 1:
-	lwz	%r0,20(%r1)
+	lwz	%r0,XCALLFRAMELEN+CALLFRAME_LR(%r1)
+#ifdef PIC
+	lwz	%r30,XCALLFRAME_R30(%r1)
+#endif
 	mtlr	%r0
-	la	%r1,16(%r1)
+	addi	%r1,%r1,XCALLFRAMELEN
 	blr
+END(swapcontext)

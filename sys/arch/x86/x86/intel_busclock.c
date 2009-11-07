@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_busclock.c,v 1.8 2009/10/02 15:05:42 jmcneill Exp $	*/
+/*	$NetBSD: intel_busclock.c,v 1.13 2011/09/24 10:49:13 jym Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.8 2009/10/02 15:05:42 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.13 2011/09/24 10:49:13 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,10 +39,10 @@ __KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.8 2009/10/02 15:05:42 jmcneill 
 
 #include <machine/specialreg.h>
 #include <machine/pio.h>
-#include <machine/cpufunc.h>
 
 #include <x86/cpuvar.h>
 #include <x86/cpufunc.h>
+#include <x86/est.h>
 
 int
 via_get_bus_clock(struct cpu_info *ci)
@@ -97,8 +97,18 @@ p3_get_bus_clock(struct cpu_info *ci)
 	case 0x9: /* Pentium M (130 nm, Banias) */
 		bus_clock = 10000;
 		break;
-	case 0xc: /* Atom, model 1 */
-		msr = rdmsr(MSR_FSB_FREQ);
+	case 0xc: /* Core i7, Atom, model 1 */
+		/*
+		 * XXX (See also case 0xe)
+		 * Some core i7 CPUs can report model 0xc.
+		 * Newer CPUs will GP when attemping to access MSR_FSB_FREQ.
+		 * In the long-term, use ACPI instead of all this.
+		 */
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 1:
@@ -111,7 +121,11 @@ p3_get_bus_clock(struct cpu_info *ci)
 		}
 		break;
 	case 0xd: /* Pentium M (90 nm, Dothan) */
-		msr = rdmsr(MSR_FSB_FREQ);
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 0:
@@ -127,8 +141,23 @@ p3_get_bus_clock(struct cpu_info *ci)
 		}
 		break;
 	case 0xe: /* Core Duo/Solo */
+		/*
+		 * XXX (See also case 0xc)
+		 * Newer CPUs will GP when attemping to access MSR_FSB_FREQ.
+		 * In the long-term, use ACPI instead of all this.
+		 */
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
+		/* FALLTHROUGH */
 	case 0xf: /* Core Xeon */
-		msr = rdmsr(MSR_FSB_FREQ);
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 5:
@@ -174,6 +203,9 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		case 2:
 			bus_clock = 10000;
+			break;
+		case 3:
+			bus_clock = 10666;
 			break;
 		default:
 			aprint_debug("%s: unknown i686 EBL_CR_POWERON "

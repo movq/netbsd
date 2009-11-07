@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.126 2009/10/06 04:28:10 elad Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.134.8.1 2012/05/07 03:01:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.126 2009/10/06 04:28:10 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.134.8.1 2012/05/07 03:01:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -151,6 +151,8 @@ const struct vnodeopv_entry_desc spec_vnodeop_entries[] = {
 const struct vnodeopv_desc spec_vnodeop_opv_desc =
 	{ &spec_vnodeop_p, spec_vnodeop_entries };
 
+static kauth_listener_t rawio_listener;
+
 /* Returns true if vnode is /dev/mem or /dev/kmem. */
 bool
 iskmemvp(struct vnode *vp)
@@ -169,6 +171,32 @@ iskmemdev(dev_t dev)
 
 	/* minor 14 is /dev/io on i386 with COMPAT_10 */
 	return (major(dev) == mem_no && (minor(dev) < 2 || minor(dev) == 14));
+}
+
+static int
+rawio_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
+    void *arg0, void *arg1, void *arg2, void *arg3)
+{
+	int result;
+
+	result = KAUTH_RESULT_DEFER;
+
+	if ((action != KAUTH_DEVICE_RAWIO_SPEC) &&
+	    (action != KAUTH_DEVICE_RAWIO_PASSTHRU))
+		return result;
+
+	/* Access is mandated by permissions. */
+	result = KAUTH_RESULT_ALLOW;
+
+	return result;
+}
+
+void
+spec_init(void)
+{
+
+	rawio_listener = kauth_listen_scope(KAUTH_SCOPE_DEVICE,
+	    rawio_listener_cb, NULL);
 }
 
 /*
@@ -410,7 +438,7 @@ spec_open(void *v)
 		mutex_exit(&device_lock);
 		if (cdev_type(dev) == D_TTY)
 			vp->v_vflag |= VV_ISTTY;
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		do {
 			const struct cdevsw *cdev;
 
@@ -431,9 +459,7 @@ spec_open(void *v)
 				break;
 			
 			/* Try to autoload device module */
-			mutex_enter(&module_lock);
 			(void) module_autoload(name, MODULE_CLASS_DRIVER);
-			mutex_exit(&module_lock);
 		} while (gen != module_gen);
 
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
@@ -481,12 +507,10 @@ spec_open(void *v)
 			if ((name = bdevsw_getname(major(dev))) == NULL)
 				break;
 
-			VOP_UNLOCK(vp, 0);
+			VOP_UNLOCK(vp);
 
                         /* Try to autoload device module */
-			mutex_enter(&module_lock);
 			(void) module_autoload(name, MODULE_CLASS_DRIVER);
-			mutex_exit(&module_lock);
 			
 			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		} while (gen != module_gen);
@@ -566,7 +590,7 @@ spec_read(void *v)
 	switch (vp->v_type) {
 
 	case VCHR:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_read(vp->v_rdev, uio, ap->a_ioflag);
 		vn_lock(vp, LK_SHARED | LK_RETRY);
 		return (error);
@@ -638,7 +662,7 @@ spec_write(void *v)
 	switch (vp->v_type) {
 
 	case VCHR:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_write(vp->v_rdev, uio, ap->a_ioflag);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		return (error);
@@ -714,11 +738,11 @@ spec_ioctl(void *v)
 
 	vp = ap->a_vp;
 	dev = NODEV;
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	if ((vp->v_iflag & VI_XLOCK) == 0 && vp->v_specnode) {
 		dev = vp->v_rdev;
 	}
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 	if (dev == NODEV) {
 		return ENXIO;
 	}
@@ -758,11 +782,11 @@ spec_poll(void *v)
 
 	vp = ap->a_vp;
 	dev = NODEV;
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	if ((vp->v_iflag & VI_XLOCK) == 0 && vp->v_specnode) {
 		dev = vp->v_rdev;
 	}
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 	if (dev == NODEV) {
 		return POLLERR;
 	}
@@ -841,11 +865,11 @@ spec_fsync(void *v)
 
 	if (vp->v_type == VBLK) {
 		if ((mp = vp->v_specmountpoint) != NULL) {
-			error = VFS_FSYNC(mp, vp, ap->a_flags | FSYNC_VFS);
+			error = VFS_FSYNC(mp, vp, ap->a_flags);
 			if (error != EOPNOTSUPP)
 				return error;
 		}
-		vflushbuf(vp, (ap->a_flags & FSYNC_WAIT) != 0);
+		return vflushbuf(vp, ap->a_flags);
 	}
 	return (0);
 }
@@ -891,7 +915,7 @@ spec_inactive(void *v)
 		struct proc *a_l;
 	} */ *ap = v;
 
-	VOP_UNLOCK(ap->a_vp, 0);
+	VOP_UNLOCK(ap->a_vp);
 	return (0);
 }
 
@@ -1037,7 +1061,7 @@ spec_close(void *v)
 	 * set, don't release the lock as we won't be able to regain it.
 	 */
 	if (!(flags1 & FNONBLOCK))
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 
 	if (vp->v_type == VBLK)
 		error = bdev_close(dev, flags1, mode, curlwp);

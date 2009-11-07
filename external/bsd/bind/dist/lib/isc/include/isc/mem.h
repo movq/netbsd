@@ -1,7 +1,7 @@
-/*	$NetBSD: mem.h,v 1.3 2009/10/25 00:14:33 christos Exp $	*/
+/*	$NetBSD: mem.h,v 1.7.4.1 2012/06/05 21:15:27 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1997-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: mem.h,v 1.86 2009/09/04 18:51:37 jinmei Exp */
+/* Id */
 
 #ifndef ISC_MEM_H
 #define ISC_MEM_H 1
@@ -123,7 +123,7 @@ LIBISC_EXTERNAL_DATA extern unsigned int isc_mem_debugging;
 
 #if ISC_MEM_TRACKLINES
 #define _ISC_MEM_FILELINE	, __FILE__, __LINE__
-#define _ISC_MEM_FLARG		, const char *, int
+#define _ISC_MEM_FLARG		, const char *, unsigned int
 #else
 #define _ISC_MEM_FILELINE
 #define _ISC_MEM_FLARG
@@ -226,6 +226,7 @@ typedef struct isc_memmethods {
 			 void *water_arg, size_t hiwater, size_t lowater);
 	void (*waterack)(isc_mem_t *ctx, int flag);
 	size_t (*inuse)(isc_mem_t *mctx);
+	isc_boolean_t (*isovermem)(isc_mem_t *mctx);
 	isc_result_t (*mpcreate)(isc_mem_t *mctx, size_t size,
 				 isc_mempool_t **mpctxp);
 } isc_memmethods_t;
@@ -335,7 +336,7 @@ isc_mem_createx2(size_t max_size, size_t target_size,
  * ISC_MEMFLAG_INTERNAL is not set, 'target_size' is ignored.
  *
  * 'max_size' is also used to size the statistics arrays and the array
- * used to record active memory when ISC_MEM_DEBUGRECORD is set.  Settin
+ * used to record active memory when ISC_MEM_DEBUGRECORD is set.  Setting
  * 'max_size' too low can have detrimental effects on performance.
  *
  * A memory context created using isc_mem_createx() will obtain
@@ -420,6 +421,14 @@ isc_mem_inuse(isc_mem_t *mctx);
  * Get an estimate of the number of memory in use in 'mctx', in bytes.
  * This includes quantization overhead, but does not include memory
  * allocated from the system but not yet used.
+ */
+
+isc_boolean_t
+isc_mem_isovermem(isc_mem_t *mctx);
+/*%<
+ * Return true iff the memory context is in "over memory" state, i.e.,
+ * a hiwater mark has been set and the used amount of memory has exceeds
+ * the mark.
  */
 
 void

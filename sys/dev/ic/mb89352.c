@@ -1,4 +1,4 @@
-/*	$NetBSD: mb89352.c,v 1.49 2008/06/12 22:30:30 cegger Exp $	*/
+/*	$NetBSD: mb89352.c,v 1.53 2011/12/02 16:17:04 tsutsui Exp $	*/
 /*	NecBSD: mb89352.c,v 1.4 1998/03/14 07:31:20 kmatsuda Exp	*/
 
 /*-
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.49 2008/06/12 22:30:30 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.53 2011/12/02 16:17:04 tsutsui Exp $");
 
 #ifdef DDB
 #define	integrate
@@ -127,6 +127,9 @@ __KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.49 2008/06/12 22:30:30 cegger Exp $");
 /* threshold length for DMA transfer */
 #define SPC_MIN_DMA_LEN	32
 
+#ifdef luna68k	/* XXX old drives like DK312C in LUNAs require this */
+#define NO_MANUAL_XFER
+#endif
 #ifdef x68k	/* XXX it seems x68k SPC SCSI hardware has some quirks */
 #define NEED_DREQ_ON_HARDWARE_XFER
 #define NO_MANUAL_XFER
@@ -148,7 +151,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb89352.c,v 1.49 2008/06/12 22:30:30 cegger Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 
 #include <sys/intr.h>
@@ -307,26 +309,13 @@ spc_attach(struct spc_softc *sc)
 	scsipi_adapter_delref(adapt);
 }
 
-int
-spc_activate(device_t self, enum devact act)
+void
+spc_childdet(device_t self, device_t child)
 {
 	struct spc_softc *sc = device_private(self);
-	int s, rv = 0;
 
-	s = splhigh();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_child != NULL)
-			rv = config_deactivate(sc->sc_child);
-		break;
-	}
-	splx(s);
-
-	return (rv);
+	if (sc->sc_child == child)
+		sc->sc_child = NULL;
 }
 
 int
@@ -1968,7 +1957,7 @@ dophase:
 	case PH_DATAOUT:
 		if (sc->sc_state != SPC_CONNECTED)
 			break;
-		SPC_MISC(("dataout dleft=%d  ", sc->sc_dleft));
+		SPC_MISC(("dataout dleft=%zu  ", sc->sc_dleft));
 		if (sc->sc_dma_start != NULL &&
 		    sc->sc_dleft > SPC_MIN_DMA_LEN) {
 			(*sc->sc_dma_start)(sc, sc->sc_dp, sc->sc_dleft, 0);

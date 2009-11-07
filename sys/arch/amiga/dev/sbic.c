@@ -1,4 +1,4 @@
-/*	$NetBSD: sbic.c,v 1.65 2009/10/26 19:16:54 cegger Exp $ */
+/*	$NetBSD: sbic.c,v 1.70 2011/07/07 06:02:06 mrg Exp $ */
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -76,9 +76,12 @@
  */
 
 #include "opt_ddb.h"
+#ifdef __m68k__
+#include "opt_m68k_arch.h"
+#endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbic.c,v 1.65 2009/10/26 19:16:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbic.c,v 1.70 2011/07/07 06:02:06 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +92,6 @@ __KERNEL_RCSID(0, "$NetBSD: sbic.c,v 1.65 2009/10/26 19:16:54 cegger Exp $");
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
-#include <uvm/uvm_extern.h>
 #include <machine/cpu.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/custom.h>
@@ -1270,7 +1272,7 @@ sbicxfin(sbic_regmap_t regs, int len, void *bp)
 				return len;
 			}
 
-			if( ! asr & SBIC_ASR_BSY ) {
+			if (!(asr & SBIC_ASR_BSY)) {
 				GET_SBIC_csr(regs, csr);
 				CSR_TRACE('<',csr,asr,len);
 				QPRINTF(("[CSR%02xASR%02x]", csr, asr));
@@ -1746,6 +1748,9 @@ sbicgo(struct sbic_softc *dev, struct scsipi_xfer *xs)
 		if (((u_int)addr & 0xF) || (((u_int)addr + count) & 0xF))
 			dev->sc_flags |= SBICF_DCFLUSH;
 	}
+#endif
+#ifdef __powerpc__
+	dma_cachectl(addr, count);
 #endif
 
 	/*

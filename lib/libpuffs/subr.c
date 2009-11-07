@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.c,v 1.24 2008/12/28 22:45:05 christos Exp $	*/
+/*	$NetBSD: subr.c,v 1.27 2011/02/17 17:55:36 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006 Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: subr.c,v 1.24 2008/12/28 22:45:05 christos Exp $");
+__RCSID("$NetBSD: subr.c,v 1.27 2011/02/17 17:55:36 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -102,10 +102,12 @@ int
 puffs_fsnop_statvfs(struct puffs_usermount *dontuse1, struct statvfs *sbp)
 {
 
-	sbp->f_bsize = sbp->f_frsize = sbp->f_iosize = 512;
+	sbp->f_bsize = sbp->f_frsize = sbp->f_iosize = DEV_BSIZE;
 
 	sbp->f_bfree=sbp->f_bavail=sbp->f_bresvd=sbp->f_blocks = (fsblkcnt_t)0;
 	sbp->f_ffree=sbp->f_favail=sbp->f_fresvd=sbp->f_files = (fsfilcnt_t)0;
+
+	sbp->f_namemax = MAXNAMLEN;
 
 	return 0;
 }
@@ -280,7 +282,7 @@ puffs_stat2vattr(struct vattr *va, const struct stat *sb)
 	va->va_gen = sb->st_gen;
 	va->va_flags = sb->st_flags;
 	va->va_rdev = sb->st_rdev;
-	va->va_bytes = sb->st_blocks * sb->st_blksize;
+	va->va_bytes = sb->st_blocks << DEV_BSHIFT;
 	va->va_filerev = 0;
 	va->va_vaflags = 0;
 }
@@ -295,6 +297,21 @@ puffs_addvtype2mode(mode_t mode, enum vtype type)
 		break;
 	case VBLK:
 		mode |= S_IFBLK;
+		break;
+	case VSOCK:
+		mode |= S_IFSOCK;
+		break;
+	case VFIFO:
+		mode |= S_IFIFO;
+		break;
+	case VREG:
+		mode |= S_IFREG;
+		break;
+	case VLNK:
+		mode |= S_IFLNK;
+		break;
+	case VDIR:
+		mode |= S_IFDIR;
 		break;
 	default:
 		break;

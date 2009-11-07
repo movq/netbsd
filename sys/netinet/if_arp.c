@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arp.c,v 1.148 2009/11/03 00:57:42 christos Exp $	*/
+/*	$NetBSD: if_arp.c,v 1.154 2012/01/02 22:17:11 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_arp.c,v 1.148 2009/11/03 00:57:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_arp.c,v 1.154 2012/01/02 22:17:11 liamjfoy Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -151,6 +151,7 @@ static	struct llinfo_arp *arplookup1(struct mbuf *, const struct in_addr *,
 static	struct llinfo_arp *arplookup(struct mbuf *, const struct in_addr *,
 					  int, int);
 static	void in_arpinput(struct mbuf *);
+static	void arp_drainstub(void);
 
 LIST_HEAD(, llinfo_arp) llinfo_arp;
 struct	ifqueue arpintrq = {
@@ -160,7 +161,7 @@ struct	ifqueue arpintrq = {
 	.ifq_maxlen = 50,
 	.ifq_drops = 0,
 };
-int	arp_inuse, arp_allocated, arp_intimer;
+int	arp_inuse, arp_allocated;
 int	arp_maxtries = 5;
 int	useloopback = 1;	/* use loopback interface for local traffic */
 int	arpinit_done = 0;
@@ -187,6 +188,12 @@ static void db_print_ifa(struct ifaddr *);
 static void db_print_llinfo(void *);
 static int db_show_rtentry(struct rtentry *, void *);
 #endif
+
+static int arp_drainwanted;
+
+static int log_movements = 1;
+static int log_permanent_modify = 1;
+static int log_wrong_iface = 1;
 
 /*
  * this should be elsewhere.
@@ -224,6 +231,15 @@ lla_snprintf(u_int8_t *adrp, int len)
 
 DOMAIN_DEFINE(arpdomain);	/* forward declare and add to link set */
 
+static void
+arp_fasttimo(void)
+{
+	if (arp_drainwanted) {
+		arp_drain();
+		arp_drainwanted = 0;
+	}
+}
+
 const struct protosw arpsw[] = {
 	{ .pr_type = 0,
 	  .pr_domain = &arpdomain,
@@ -235,9 +251,9 @@ const struct protosw arpsw[] = {
 	  .pr_ctloutput = 0,
 	  .pr_usrreq =  0,
 	  .pr_init = arp_init,
-	  .pr_fasttimo = 0,
+	  .pr_fasttimo = arp_fasttimo,
 	  .pr_slowtimo = 0,
-	  .pr_drain = arp_drain,
+	  .pr_drain = arp_drainstub,
 	}
 };
 
@@ -326,6 +342,12 @@ arp_init(void)
 
 	sysctl_net_inet_arp_setup(NULL);
 	arpstat_percpu = percpu_alloc(sizeof(uint64_t) * ARP_NSTATS);
+}
+
+static void
+arp_drainstub(void)
+{
+	arp_drainwanted = 1;
 }
 
 /*
@@ -1067,6 +1089,8 @@ in_arpinput(struct mbuf *m)
 		    memcmp(ar_sha(ah), CLLADDR(sdl), sdl->sdl_alen)) {
 			if (rt->rt_flags & RTF_STATIC) {
 				ARP_STATINC(ARP_STAT_RCVOVERPERM);
+				if (!log_permanent_modify)
+					goto out;
 				log(LOG_INFO,
 				    "%s tried to overwrite permanent arp info"
 				    " for %s\n",
@@ -1075,6 +1099,8 @@ in_arpinput(struct mbuf *m)
 				goto out;
 			} else if (rt->rt_ifp != ifp) {
 				ARP_STATINC(ARP_STAT_RCVOVERINT);
+				if (!log_wrong_iface)
+					goto out;
 				log(LOG_INFO,
 				    "%s on %s tried to overwrite "
 				    "arp info for %s on %s\n",
@@ -1084,10 +1110,12 @@ in_arpinput(struct mbuf *m)
 				    goto out;
 			} else {
 				ARP_STATINC(ARP_STAT_RCVOVER);
-				log(LOG_INFO,
-				    "arp info overwritten for %s by %s\n",
-				    in_fmtaddr(isaddr),
-				    lla_snprintf(ar_sha(ah), ah->ar_hln));
+				if (log_movements)
+					log(LOG_INFO, "arp info overwritten "
+					    "for %s by %s\n",
+					    in_fmtaddr(isaddr),
+					    lla_snprintf(ar_sha(ah),
+					    ah->ar_hln));
 			}
 		}
 		/*
@@ -1210,7 +1238,7 @@ reply:
 	arps[ARP_STAT_SNDTOTAL]++;
 	arps[ARP_STAT_SNDREPLY]++;
 	ARP_STAT_PUTREF();
-	(*ifp->if_output)(ifp, m, &sa, (struct rtentry *)0);
+	(*ifp->if_output)(ifp, m, &sa, NULL);
 	return;
 }
 
@@ -1403,7 +1431,8 @@ in_revarpinput(struct mbuf *m)
 	if (myip_initialized)
 		goto wake;
 	tha = ar_tha(ah);
-	KASSERT(tha);
+	if (tha == NULL)
+		goto out;
 	if (memcmp(tha, CLLADDR(ifp->if_sadl), ifp->if_sadl->sdl_alen))
 		goto out;
 	memcpy(&srv_ip, ar_spa(ah), sizeof(srv_ip));
@@ -1444,7 +1473,8 @@ revarprequest(struct ifnet *ifp)
 
 	memcpy(ar_sha(ah), CLLADDR(ifp->if_sadl), ah->ar_hln);
 	tha = ar_tha(ah);
-	KASSERT(tha);
+	if (tha == NULL)
+		return;
 	memcpy(tha, CLLADDR(ifp->if_sadl), ah->ar_hln);
 
 	sa.sa_family = AF_ARP;
@@ -1553,9 +1583,9 @@ db_show_rtentry(struct rtentry *rt, void *w)
 {
 	db_printf("rtentry=%p", rt);
 
-	db_printf(" flags=0x%x refcnt=%d use=%ld expire=%lld\n",
+	db_printf(" flags=0x%x refcnt=%d use=%"PRId64" expire=%"PRId64"\n",
 			  rt->rt_flags, rt->rt_refcnt,
-			  rt->rt_use, (long long)rt->rt_expire);
+			  rt->rt_use, (uint64_t)rt->rt_expire);
 
 	db_printf(" key="); db_print_sa(rt_getkey(rt));
 	db_printf(" mask="); db_print_sa(rt_mask(rt));
@@ -1621,21 +1651,21 @@ sysctl_net_inet_arp_setup(struct sysctllog **clog)
 	sysctl_createv(clog, 0, NULL, NULL,
 			CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 			CTLTYPE_INT, "prune",
-			SYSCTL_DESCR("ARP cache pruning interval"),
+			SYSCTL_DESCR("ARP cache pruning interval in seconds"),
 			NULL, 0, &arpt_prune, 0,
 			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 			CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 			CTLTYPE_INT, "keep",
-			SYSCTL_DESCR("Valid ARP entry lifetime"),
+			SYSCTL_DESCR("Valid ARP entry lifetime in seconds"),
 			NULL, 0, &arpt_keep, 0,
 			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 			CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 			CTLTYPE_INT, "down",
-			SYSCTL_DESCR("Failed ARP entry lifetime"),
+			SYSCTL_DESCR("Failed ARP entry lifetime in seconds"),
 			NULL, 0, &arpt_down, 0,
 			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
 
@@ -1651,6 +1681,30 @@ sysctl_net_inet_arp_setup(struct sysctllog **clog)
 			CTLTYPE_STRUCT, "stats",
 			SYSCTL_DESCR("ARP statistics"),
 			sysctl_net_inet_arp_stats, 0, NULL, 0,
+			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(clog, 0, NULL, NULL,
+			CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			CTLTYPE_INT, "log_movements",
+			SYSCTL_DESCR("log ARP replies from MACs different than"
+			    " the one in the cache"),
+			NULL, 0, &log_movements, 0,
+			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(clog, 0, NULL, NULL,
+			CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			CTLTYPE_INT, "log_permanent_modify",
+			SYSCTL_DESCR("log ARP replies from MACs different than"
+			    " the one in the permanent arp entry"),
+			NULL, 0, &log_permanent_modify, 0,
+			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(clog, 0, NULL, NULL,
+			CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			CTLTYPE_INT, "log_wrong_iface",
+			SYSCTL_DESCR("log ARP packets arriving on the wrong"
+			    " interface"),
+			NULL, 0, &log_wrong_iface, 0,
 			CTL_NET,PF_INET, node->sysctl_num, CTL_CREATE, CTL_EOL);
 }
 

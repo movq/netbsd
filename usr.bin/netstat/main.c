@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.73 2009/09/14 10:36:51 degroote Exp $	*/
+/*	$NetBSD: main.c,v 1.81 2011/09/16 15:39:27 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.73 2009/09/14 10:36:51 degroote Exp $");
+__RCSID("$NetBSD: main.c,v 1.81 2011/09/16 15:39:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,6 +64,7 @@ __RCSID("$NetBSD: main.c,v 1.73 2009/09/14 10:36:51 degroote Exp $");
 #include <string.h>
 #include <unistd.h>
 #include "netstat.h"
+#include "prog_ops.h"
 
 struct nlist nl[] = {
 #define	N_MBSTAT	0
@@ -343,24 +344,48 @@ const struct softintrq {
 int main __P((int, char *[]));
 static void printproto __P((struct protox *, const char *));
 static void print_softintrq __P((void));
-static void usage __P((void));
+__dead static void usage(void);
 static struct protox *name2protox __P((const char *));
 static struct protox *knownname __P((const char *));
-static void prepare(char *, char *, struct protox *tp);
+static void prepare(const char *, const char *, struct protox *tp);
+static kvm_t *prepare_kvmd(const char *, const char *, char *);
 
-kvm_t *kvmd;
+static kvm_t *kvmd = NULL;
 gid_t egid;
 int interval;	/* repeat interval for i/f stats */
+static const char *nlistf = NULL, *memf = NULL;
 
-void
-prepare(char *nlistf, char *memf, struct protox *tp)
+kvm_t *
+get_kvmd(void)
 {
 	char buf[_POSIX2_LINE_MAX];
 
+	if (kvmd != NULL)
+		return kvmd;
+	if ((kvmd = prepare_kvmd(nlistf, memf, buf)) == NULL)
+		errx(1, "kvm error: %s", buf);
+	return kvmd;
+}
+
+static kvm_t *
+prepare_kvmd(const char *nf, const char *mf, char *errbuf)
+{
+	kvm_t *k;
+
+	(void)setegid(egid);
+	k = kvm_openfiles(nf, mf, NULL, O_RDONLY, errbuf);
+	(void)setgid(getgid());
+	return k;
+}
+
+void
+prepare(const char *nf, const char *mf, struct protox *tp)
+{
+	char buf[_POSIX2_LINE_MAX];
 	/*
 	 * Try to figure out if we can use sysctl or not.
 	 */
-	if (nlistf != NULL && memf != NULL) {
+	if (nf != NULL && mf != NULL) {
 		/* Of course, we can't use sysctl with dumps. */
 		if (force_sysctl)
 			errx(EXIT_FAILURE, "can't use sysctl with dumps");
@@ -393,16 +418,15 @@ prepare(char *nlistf, char *memf, struct protox *tp)
 		use_sysctl = 1;
 	}
 
+	kvmd = prepare_kvmd(nf, mf, buf);
+
 	if (!use_sysctl) {
-		(void)setegid(egid);
-		kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, buf);
-		(void)setgid(getgid());
+
 		if (kvmd == NULL)
-			err(1, "kvm error: %s", buf);
-	
+			errx(1, "kvm error: %s", buf);
 		if (kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
-			if (nlistf)
-				errx(1, "%s: no namelist", nlistf);
+			if (nf)
+				errx(1, "%s: no namelist", nf);
 			else
 				errx(1, "no namelist");
 		}
@@ -418,9 +442,14 @@ main(argc, argv)
 	struct protoent *p;
 	struct protox *tp;	/* for printing cblocks & stats */
 	int ch;
-	char *nlistf = NULL, *memf = NULL;
 	char *cp;
 	u_long pcbaddr;
+
+	if (prog_init) {
+		if (prog_init() == -1)
+			err(1, "init failed");
+		force_sysctl = 1; /* cheap trick */
+	}
 
 	egid = getegid();
 	(void)setegid(getgid());
@@ -429,7 +458,7 @@ main(argc, argv)
 	pcbaddr = 0;
 
 	while ((ch = getopt(argc, argv,
-	    "AabBdf:ghI:LliM:mN:nP:p:qrsStuvw:X")) != -1)
+	    "AabBdf:ghI:LliM:mN:nP:p:qrsStTuVvw:X")) != -1)
 		switch (ch) {
 		case 'A':
 			Aflag = 1;
@@ -462,6 +491,8 @@ main(argc, argv)
 				af = AF_ISO;
 			else if (strcmp(optarg, "atalk") == 0)
 				af = AF_APPLETALK;
+			else if (strcmp(optarg, "mpls") == 0)
+				af = AF_MPLS;
 			else
 				errx(1, "%s: unknown address family",
 				    optarg);
@@ -471,6 +502,9 @@ main(argc, argv)
 			gflag = 1;
 			break;
 #endif
+		case 'h':
+			hflag = 1;
+			break;
 		case 'I':
 			iflag = 1;
 			interface = optarg;
@@ -525,8 +559,14 @@ main(argc, argv)
 		case 't':
 			tflag = 1;
 			break;
+		case 'T':
+			tagflag = 1;
+			break;
 		case 'u':
 			af = AF_LOCAL;
+			break;
+		case 'V':
+			Vflag++;
 			break;
 		case 'v':
 			vflag++;

@@ -1,4 +1,4 @@
-/* $NetBSD: lemac.c,v 1.36 2008/11/07 00:20:02 dyoung Exp $ */
+/* $NetBSD: lemac.c,v 1.40 2012/02/02 19:43:03 tls Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -34,10 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.36 2008/11/07 00:20:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.40 2012/02/02 19:43:03 tls Exp $");
 
 #include "opt_inet.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,9 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.36 2008/11/07 00:20:02 dyoung Exp $");
 #include <sys/errno.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -76,12 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.36 2008/11/07 00:20:02 dyoung Exp $");
 #include <i386/isa/decether.h>
 #endif
 
-#include <uvm/uvm_extern.h>
-
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 static void lemac_init(lemac_softc_t *sc);
 static void lemac_ifstart(struct ifnet *ifp);
@@ -310,10 +302,9 @@ lemac_input(
 	if (length & 1)
 	    m->m_data[length - 1] = LEMAC_GET8(sc, offset + length - 1);
     }
-#if NBPFILTER > 0
     if (sc->sc_if.if_bpf != NULL) {
 	m->m_pkthdr.len = m->m_len = length;
-	bpf_mtap(sc->sc_if.if_bpf, m);
+	bpf_mtap(&sc->sc_if, m);
     }
     /*
      * If this is single cast but not to us
@@ -324,7 +315,6 @@ lemac_input(
 	m_freem(m);
 	return;
     }
-#endif
     m->m_pkthdr.len = m->m_len = length;
     m->m_pkthdr.rcvif = &sc->sc_if;
     (*sc->sc_if.if_input)(&sc->sc_if, m);
@@ -735,10 +725,7 @@ lemac_ifstart(
 	}
 
 	LEMAC_OUTB(sc, LEMAC_REG_TQ, tx_pg);	/* tell chip to transmit this packet */
-#if NBPFILTER > 0
-	if (sc->sc_if.if_bpf != NULL)
-	    bpf_mtap(sc->sc_if.if_bpf, m);
-#endif
+	bpf_mtap(&sc->sc_if, m);
 	m_freem(m);			/* free the mbuf */
     }
     LEMAC_INTR_ENABLE(sc);
@@ -965,10 +952,8 @@ lemac_intr(
     LEMAC_OUTB(sc, LEMAC_REG_CTL, LEMAC_INB(sc, LEMAC_REG_CTL) ^ LEMAC_CTL_LED);
     LEMAC_INTR_ENABLE(sc);		/* Unmask interrupts */
 
-#if NRND > 0
     if (cs_value)
         rnd_add_uint32(&sc->rnd_source, cs_value);
-#endif
 
     return 1;
 }
@@ -1026,10 +1011,8 @@ lemac_ifattach(
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dv),
 			  RND_TYPE_NET, 0);
-#endif
 
 	ifmedia_init(&sc->sc_ifmedia, 0,
 		     lemac_ifmedia_change,

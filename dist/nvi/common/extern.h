@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.2 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: extern.h,v 1.5 2011/11/23 19:25:28 tnozaki Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 SCR *api_fscreen __P((int, char *));
@@ -28,7 +28,7 @@ TAGQ * api_tagq_new __P((SCR*, char*));
 void api_tagq_add __P((SCR*, TAGQ*, char*, char *, char *));
 int api_tagq_push __P((SCR*, TAGQ**));
 void api_tagq_free __P((SCR*, TAGQ*));
-int cut __P((SCR *, CHAR_T *, MARK *, MARK *, int));
+int cut __P((SCR *, ARG_CHAR_T *, MARK *, MARK *, int));
 int cut_line __P((SCR *, db_recno_t, size_t, size_t, CB *));
 void cut_close __P((WIN *));
 TEXT *text_init __P((SCR *, const CHAR_T *, size_t, size_t));
@@ -66,7 +66,7 @@ int v_key_init __P((SCR *));
 void v_key_ilookup __P((SCR *));
 size_t v_key_len __P((SCR *, ARG_CHAR_T));
 u_char *v_key_name __P((SCR *, ARG_CHAR_T));
-int v_key_val __P((SCR *, ARG_CHAR_T));
+e_key_t v_key_val __P((SCR *, ARG_CHAR_T));
 int v_event_push __P((SCR *, EVENT *, const CHAR_T *, size_t, u_int));
 int v_event_get __P((SCR *, EVENT *, int, u_int32_t));
 void v_event_err __P((SCR *, EVENT *));
@@ -93,7 +93,8 @@ int mark_end __P((SCR *, EXF *));
 int mark_get __P((SCR *, ARG_CHAR_T, MARK *, mtype_t));
 int mark_set __P((SCR *, ARG_CHAR_T, MARK *, int));
 int mark_insdel __P((SCR *, lnop_t, db_recno_t));
-void msgq __P((SCR *, mtype_t, const char *, ...));
+void msgq __P((SCR *, mtype_t, const char *, ...))
+    __attribute__((__format__(__printf__, 3, 4)));
 void msgq_wstr __P((SCR *, mtype_t, const CHAR_T *, const char *));
 void msgq_str __P((SCR *, mtype_t, const char *, const char *));
 void mod_rpt __P((SCR *));
@@ -132,7 +133,7 @@ int f_w9600 __P((SCR *, OPTION *, const char *, u_long *));
 int f_window __P((SCR *, OPTION *, const char *, u_long *));
 int f_encoding __P((SCR *, OPTION *, const char *, u_long *));
 void thread_init __P((GS *gp));
-int put __P((SCR *, CB *, CHAR_T *, MARK *, MARK *, int));
+int put __P((SCR *, CB *, ARG_CHAR_T *, MARK *, MARK *, int));
 int rcv_tmp __P((SCR *, EXF *, char *));
 int rcv_init __P((SCR *));
 int rcv_sync __P((SCR *, u_int));
@@ -158,7 +159,8 @@ int seq_save __P((SCR *, FILE *, const char *, seq_t));
 int e_memcmp __P((CHAR_T *, EVENT *, size_t));
 void vtrace_end __P((void));
 void vtrace_init __P((char *));
-void vtrace __P((const char *, ...));
+void vtrace __P((const char *, ...))
+    __attribute__((__format__(__printf__, 1, 2)));
 void *binc __P((SCR *, void *, size_t *, size_t));
 int nonblank __P((SCR *, db_recno_t, size_t *));
 const char *tail __P((const char *));

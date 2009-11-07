@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.100 2009/05/16 19:15:34 nakayama Exp $ */
+/*	$NetBSD: clock.c,v 1.106 2011/09/04 12:17:46 nakayama Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.100 2009/05/16 19:15:34 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.106 2011/09/04 12:17:46 nakayama Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -81,7 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.100 2009/05/16 19:15:34 nakayama Exp $")
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/eeprom.h>
 #include <machine/cpu.h>
@@ -90,10 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.100 2009/05/16 19:15:34 nakayama Exp $")
 #include <sparc64/sparc64/intreg.h>
 #include <sparc64/sparc64/timerreg.h>
 #include <sparc64/dev/iommureg.h>
-#include <sparc64/dev/sbusreg.h>
-#include <dev/sbus/sbusvar.h>
-#include <dev/ebus/ebusreg.h>
-#include <dev/ebus/ebusvar.h>
 
 
 /*
@@ -121,18 +117,18 @@ int timerok;
 static int statscheddiv;
 #endif
 
-static struct intrhand level10 = { .ih_fun = clockintr };
+static struct intrhand level10 = { .ih_fun = clockintr, .ih_pil = PIL_CLOCK };
 #ifndef MULTIPROCESSOR
-static struct intrhand level14 = { .ih_fun = statintr };
+static struct intrhand level14 = { .ih_fun = statintr, .ih_pil = PIL_STATCLOCK };
 static struct intrhand *schedint;
 #endif
 
-static int	timermatch(struct device *, struct cfdata *, void *);
-static void	timerattach(struct device *, struct device *, void *);
+static int	timermatch(device_t, cfdata_t, void *);
+static void	timerattach(device_t, device_t, void *);
 
 struct timerreg_4u	timerreg_4u;	/* XXX - need more cleanup */
 
-CFATTACH_DECL(timer, sizeof(struct device),
+CFATTACH_DECL_NEW(timer, 0,
     timermatch, timerattach, NULL, NULL);
 
 struct chiptime;
@@ -200,7 +196,7 @@ counter_get_timecount(struct timecounter *tc)
  * the lame UltraSPARC IIi PCI machines that don't have them.
  */
 static int
-timermatch(struct device *parent, struct cfdata *cf, void *aux)
+timermatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -208,7 +204,7 @@ timermatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-timerattach(struct device *parent, struct device *self, void *aux)
+timerattach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	u_int *va = ma->ma_address;
@@ -238,7 +234,7 @@ timerattach(struct device *parent, struct device *self, void *aux)
 	     (CPU_UPAID << INTMAP_TID_SHIFT));
 
 	/* Install the appropriate interrupt vector here */
-	level10.ih_number = ma->ma_interrupts[0];
+	level10.ih_number = INTVEC(ma->ma_interrupts[0]);
 	level10.ih_clr = &timerreg_4u.t_clrintr[0];
 	intr_establish(PIL_CLOCK, true, &level10);
 	printf(" irq vectors %lx", (u_long)level10.ih_number);
@@ -246,7 +242,7 @@ timerattach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * On SMP kernel, don't establish interrupt to use it as timecounter.
 	 */
-	level14.ih_number = ma->ma_interrupts[1];
+	level14.ih_number = INTVEC(ma->ma_interrupts[1]);
 	level14.ih_clr = &timerreg_4u.t_clrintr[1];
 	intr_establish(PIL_STATCLOCK, true, &level14);
 	printf(" and %lx", (u_long)level14.ih_number);
@@ -327,10 +323,7 @@ tickintr_establish(int pil, int (*fun)(void *))
 
 	/* set the next interrupt time */
 	ci->ci_tick_increment = ci->ci_cpu_clockrate[0] / hz;
-#ifdef DEBUG
-	printf("Using %%tick -- intr in %ld cycles\n",
-	    ci->ci_tick_increment);
-#endif
+
 	s = intr_disable();
 	next_tick(ci->ci_tick_increment);
 	intr_restore(s);
@@ -386,7 +379,7 @@ cpu_initclocks(void)
 
 	if (!timerreg_4u.t_timer || !timerreg_4u.t_clrintr) {
 
-		printf("No counter-timer -- using %%tick at %luMHz as "
+		aprint_normal("No counter-timer -- using %%tick at %luMHz as "
 			"system clock.\n",
 			(unsigned long)curcpu()->ci_cpu_clockrate[1]);
 

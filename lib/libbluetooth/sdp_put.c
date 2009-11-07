@@ -1,4 +1,4 @@
-/*	$NetBSD: sdp_put.c,v 1.2 2009/05/14 19:12:45 plunky Exp $	*/
+/*	$NetBSD: sdp_put.c,v 1.6 2011/04/16 07:19:36 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sdp_put.c,v 1.2 2009/05/14 19:12:45 plunky Exp $");
+__RCSID("$NetBSD: sdp_put.c,v 1.6 2011/04/16 07:19:36 plunky Exp $");
 
 #include <bluetooth.h>
 #include <limits.h>
@@ -51,7 +51,7 @@ sdp_put_data(sdp_data_t *data, sdp_data_t *value)
 
 	len = value->end - value->next;
 
-	if (data->next + len > data->end)
+	if (len > data->end - data->next)
 		return false;
 
 	memcpy(data->next, value->next, (size_t)len);
@@ -65,7 +65,8 @@ sdp_put_attr(sdp_data_t *data, uint16_t attr, sdp_data_t *value)
 	sdp_data_t d = *data;
 
 	if (!sdp_put_uint16(&d, attr)
-	    || sdp_put_data(&d, value))
+	    || sdp_data_size(value) != (value->end - value->next)
+	    || !sdp_put_data(&d, value))
 		return false;
 
 	*data = d;
@@ -304,21 +305,21 @@ _sdp_put_ext(uint8_t type, sdp_data_t *data, ssize_t len)
 		return false;
 
 	if ((size_t)len > UINT16_MAX) {
-		if (p + 5 + len > data->end)
+		if (len > data->end - 5 - p)
 			return false;
 
 		p[0] = type | SDP_DATA_EXT32;
 		be32enc(p + 1, (uint32_t)len);
 		p += 5;
 	} else if ((size_t)len > UINT8_MAX) {
-		if (p + 3 + len > data->end)
+		if (len > data->end - 3 - p)
 			return false;
 
 		p[0] = type | SDP_DATA_EXT16;
 		be16enc(p + 1, (uint16_t)len);
 		p += 3;
 	} else {
-		if (p + 2 + len > data->end)
+		if (len > data->end - 2 - p)
 			return false;
 
 		p[0] = type | SDP_DATA_EXT8;
@@ -354,7 +355,7 @@ sdp_put_str(sdp_data_t *data, const char *str, ssize_t len)
 	if (!_sdp_put_ext(SDP_DATA_STR, data, len))
 		return false;
 
-	memcpy(data->next, str, len);
+	memcpy(data->next, str, (size_t)len);
 	data->next += len;
 	return true;
 }
@@ -369,7 +370,7 @@ sdp_put_url(sdp_data_t *data, const char *url, ssize_t len)
 	if (!_sdp_put_ext(SDP_DATA_URL, data, len))
 		return false;
 
-	memcpy(data->next, url, len);
+	memcpy(data->next, url, (size_t)len);
 	data->next += len;
 	return true;
 }

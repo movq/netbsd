@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9x.c,v 1.141 2009/09/07 13:31:44 tsutsui Exp $	*/
+/*	$NetBSD: ncr53c9x.c,v 1.143.8.2 2012/07/25 20:55:36 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.141 2009/09/07 13:31:44 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.143.8.2 2012/07/25 20:55:36 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -194,7 +194,7 @@ ncr53c9x_attach(struct ncr53c9x_softc *sc)
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	simple_lock_init(&sc->sc_lock);
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_BIO);
 
 	callout_init(&sc->sc_watchdog, 0);
 
@@ -340,6 +340,8 @@ ncr53c9x_detach(struct ncr53c9x_softc *sc, int flags)
 		free(sc->sc_imess, M_DEVBUF);
 	if (sc->sc_omess)
 		free(sc->sc_omess, M_DEVBUF);
+
+	mutex_destroy(&sc->sc_lock);
 
 	return 0;
 }
@@ -511,7 +513,7 @@ ncr53c9x_init(struct ncr53c9x_softc *sc, int doreset)
 
 		TAILQ_INIT(&sc->ready_list);
 		sc->sc_nexus = NULL;
-		memset(sc->sc_tinfo, 0, sizeof(sc->sc_tinfo));
+		memset(sc->sc_tinfo, 0, sizeof(*sc->sc_tinfo));
 		for (r = 0; r < sc->sc_ntarg; r++) {
 			LIST_INIT(&sc->sc_tinfo[r].luns);
 		}
@@ -527,6 +529,9 @@ ncr53c9x_init(struct ncr53c9x_softc *sc, int doreset)
 	sc->sc_flags = 0;
 	sc->sc_msgpriq = sc->sc_msgout = sc->sc_msgoutq = 0;
 	sc->sc_phase = sc->sc_prevphase = INVALID_PHASE;
+
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
 	for (r = 0; r < sc->sc_ntarg; r++) {
 		struct ncr53c9x_tinfo *ti = &sc->sc_tinfo[r];
@@ -557,6 +562,9 @@ ncr53c9x_init(struct ncr53c9x_softc *sc, int doreset)
 
 	/* Notify upper layer */
 	scsipi_async_event(&sc->sc_channel, ASYNC_EVENT_RESET, NULL);
+
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
 }
 
 /*
@@ -727,6 +735,7 @@ ncr53c9x_select(struct ncr53c9x_softc *sc, struct ncr53c9x_ecb *ecb)
 		} else {
 			ncr53c9x_wrfifo(sc, (uint8_t *)&ecb->cmd.cmd,
 			    ecb->clen);
+			sc->sc_cmdlen = 0;
 			NCRCMD(sc, NCRCMD_SELNATN);
 		}
 		return;
@@ -796,6 +805,7 @@ ncr53c9x_select(struct ncr53c9x_softc *sc, struct ncr53c9x_ecb *ecb)
 	 */
 
 	/* Now get the command into the FIFO */
+	sc->sc_cmdlen = 0;
 	ncr53c9x_wrfifo(sc, cmd, clen);
 
 	/* And get the targets attention */
@@ -857,13 +867,12 @@ ncr53c9x_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct scsipi_periph *periph;
 	struct ncr53c9x_softc *sc;
 	struct ncr53c9x_ecb *ecb;
-	int s, flags;
+	int flags;
 
 	NCR_TRACE(("[ncr53c9x_scsipi_request] "));
 
 	sc = device_private(chan->chan_adapter->adapt_dev);
-	s = splbio();
-	simple_lock(&sc->sc_lock);
+	mutex_enter(&sc->sc_lock);
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -886,8 +895,7 @@ ncr53c9x_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 			printf("%s: unable to allocate ecb\n",
 			    device_xname(sc->sc_dev));
 			xs->error = XS_RESOURCE_SHORTAGE;
-			simple_unlock(&sc->sc_lock);
-			splx(s);
+			mutex_exit(&sc->sc_lock);
 			scsipi_done(xs);
 			return;
 		}
@@ -972,8 +980,7 @@ ncr53c9x_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		break;
 	}
 
-	simple_unlock(&sc->sc_lock);
-	splx(s);
+	mutex_exit(&sc->sc_lock);
 }
 
 void
@@ -1011,9 +1018,9 @@ ncr53c9x_poll(struct ncr53c9x_softc *sc, struct scsipi_xfer *xs, int count)
 	NCR_TRACE(("[ncr53c9x_poll] "));
 	while (count) {
 		if (NCRDMA_ISINTR(sc)) {
-			simple_unlock(&sc->sc_lock);
+			mutex_exit(&sc->sc_lock);
 			ncr53c9x_intr(sc);
-			simple_lock(&sc->sc_lock);
+			mutex_enter(&sc->sc_lock);
 		}
 #if alternatively
 		if (NCR_READ_REG(sc, NCR_STAT) & NCRSTAT_INT)
@@ -1036,16 +1043,14 @@ ncr53c9x_ioctl(struct scsipi_channel *chan, u_long cmd, void *arg,
     int flag, struct proc *p)
 {
 	struct ncr53c9x_softc *sc;
-	int s, error = 0;
+	int error = 0;
 
 	sc = device_private(chan->chan_adapter->adapt_dev);
 	switch (cmd) {
 	case SCBUSIORESET:
-		s = splbio();
-		simple_lock(&sc->sc_lock);
+		mutex_enter(&sc->sc_lock);
 		ncr53c9x_init(sc, 1);
-		simple_unlock(&sc->sc_lock);
-		splx(s);
+		mutex_exit(&sc->sc_lock);
 		break;
 	default:
 		error = ENOTTY;
@@ -1279,9 +1284,9 @@ ncr53c9x_done(struct ncr53c9x_softc *sc, struct ncr53c9x_ecb *ecb)
 
 	ncr53c9x_free_ecb(sc, ecb);
 	ti->cmds++;
-	simple_unlock(&sc->sc_lock);
+	mutex_exit(&sc->sc_lock);
 	scsipi_done(xs);
-	simple_lock(&sc->sc_lock);
+	mutex_enter(&sc->sc_lock);
 }
 
 void
@@ -2051,6 +2056,7 @@ ncr53c9x_msgout(struct ncr53c9x_softc *sc)
 		 */
 		ncr53c9x_flushfifo(sc);
 		ncr53c9x_wrfifo(sc, sc->sc_omp, sc->sc_omlen);
+		sc->sc_cmdlen = 0;
 		NCRCMD(sc, NCRCMD_TRANS);
 	} else {
 		/* (re)send the message */
@@ -2090,7 +2096,7 @@ ncr53c9x_intr(void *arg)
 	if (!NCRDMA_ISINTR(sc))
 		return 0;
 
-	simple_lock(&sc->sc_lock);
+	mutex_enter(&sc->sc_lock);
 again:
 	/* and what do the registers say... */
 	ncr53c9x_readregs(sc);
@@ -2624,7 +2630,7 @@ again:
 		if (sc->sc_state == NCR_IDLE) {
 			printf("%s: stray interrupt\n",
 			    device_xname(sc->sc_dev));
-			simple_unlock(&sc->sc_lock);
+			mutex_exit(&sc->sc_lock);
 			return 0;
 		}
 		break;
@@ -2756,6 +2762,7 @@ msgin:
 		} else {
 			ncr53c9x_wrfifo(sc, (uint8_t *)&ecb->cmd.cmd,
 			    ecb->clen);
+			sc->sc_cmdlen = 0;
 			NCRCMD(sc, NCRCMD_TRANS);
 		}
 		sc->sc_prevphase = COMMAND_PHASE;
@@ -2815,7 +2822,7 @@ msgin:
 	}
 
 out:
-	simple_unlock(&sc->sc_lock);
+	mutex_exit(&sc->sc_lock);
 	return 1;
 
 reset:
@@ -2899,7 +2906,6 @@ ncr53c9x_timeout(void *arg)
 	struct scsipi_periph *periph = xs->xs_periph;
 	struct ncr53c9x_softc *sc;
 	struct ncr53c9x_tinfo *ti;
-	int s;
 
 	sc = device_private(periph->periph_channel->chan_adapter->adapt_dev);
 	ti = &sc->sc_tinfo[periph->periph_target];
@@ -2919,8 +2925,7 @@ ncr53c9x_timeout(void *arg)
 	printf("TRACE: %s.", ecb->trace);
 #endif
 
-	s = splbio();
-	simple_lock(&sc->sc_lock);
+	mutex_enter(&sc->sc_lock);
 
 	if (ecb->flags & ECB_ABORT) {
 		/* abort timed out */
@@ -2946,8 +2951,7 @@ ncr53c9x_timeout(void *arg)
 		}
 	}
 
-	simple_unlock(&sc->sc_lock);
-	splx(s);
+	mutex_exit(&sc->sc_lock);
 }
 
 void
@@ -2956,12 +2960,11 @@ ncr53c9x_watch(void *arg)
 	struct ncr53c9x_softc *sc = arg;
 	struct ncr53c9x_tinfo *ti;
 	struct ncr53c9x_linfo *li;
-	int t, s;
+	int t;
 	/* Delete any structures that have not been used in 10min. */
 	time_t old = time_second - (10 * 60);
 
-	s = splbio();
-	simple_lock(&sc->sc_lock);
+	mutex_enter(&sc->sc_lock);
 	for (t = 0; t < sc->sc_ntarg; t++) {
 		ti = &sc->sc_tinfo[t];
 		li = LIST_FIRST(&ti->luns);
@@ -2980,7 +2983,6 @@ ncr53c9x_watch(void *arg)
 			li = LIST_NEXT(li, link);
 		}
 	}
-	simple_unlock(&sc->sc_lock);
-	splx(s);
+	mutex_exit(&sc->sc_lock);
 	callout_reset(&sc->sc_watchdog, 60 * hz, ncr53c9x_watch, sc);
 }

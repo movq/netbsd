@@ -1,4 +1,4 @@
-/*      $NetBSD: sa1111_kbc.c,v 1.11 2009/05/29 14:15:44 rjs Exp $ */
+/*      $NetBSD: sa1111_kbc.c,v 1.15 2012/02/04 22:20:38 matt Exp $ */
 
 /*
  * Copyright (c) 2004  Ben Harris.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa1111_kbc.c,v 1.11 2009/05/29 14:15:44 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa1111_kbc.c,v 1.15 2012/02/04 22:20:38 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,6 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: sa1111_kbc.c,v 1.11 2009/05/29 14:15:44 rjs Exp $");
 #include <sys/errno.h>
 #include <sys/queue.h>
 #include <sys/bus.h>
+#include <sys/rnd.h>
 
 #include <arm/sa11x0/sa1111_reg.h>
 #include <arm/sa11x0/sa1111_var.h>
@@ -78,7 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: sa1111_kbc.c,v 1.11 2009/05/29 14:15:44 rjs Exp $");
 #include <dev/pckbport/pckbportvar.h>		/* for prototypes */
 
 #include "pckbd.h"
-#include "rnd.h"
 #include "locators.h"
 
 struct sackbc_softc {
@@ -95,9 +95,7 @@ struct sackbc_softc {
 	int	poll_stat;	/* data read from inr handler if polling */
 	int	poll_data;	/* status read from intr handler if polling */
 
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 	pckbport_tag_t pt;
 };
 
@@ -171,9 +169,7 @@ sackbc_rxint(void *cookie)
 	if (stat & KBDSTAT_RXF) {
 		code = bus_space_read_4(sc->iot, sc->ioh, SACCKBD_DATA);
 
-#if NRND > 0
-		rnd_add_uint32(&sc->rnd_source, (stat<<8)|data);
-#endif
+		rnd_add_uint32(&sc->rnd_source, (stat<<8)|code);
 
 		if (sc->polling) {
 			sc->poll_data = code;
@@ -193,7 +189,8 @@ sackbc_intr_establish(void *cookie, pckbport_slot_t slot)
 
 	if (!(sc->polling) && sc->ih_rx == NULL) {
 		sc->ih_rx = sacc_intr_establish(
-			(sacc_chipset_tag_t *) device_parent(sc->dev), 
+			(sacc_chipset_tag_t *) 
+			  device_private(device_parent(sc->dev)), 
 			sc->intr+1, IST_EDGE_RAISE, IPL_TTY, sackbc_rxint, sc);
 		if (sc->ih_rx == NULL) {
 			aprint_normal_dev(sc->dev, "can't establish interrupt\n");
@@ -206,7 +203,8 @@ sackbc_disable_intrhandler(struct sackbc_softc *sc)
 {
 	if (sc->polling && sc->ih_rx) {
 		sacc_intr_disestablish(
-			(sacc_chipset_tag_t *) device_parent(sc->dev),
+			(sacc_chipset_tag_t *)
+			  device_private(device_parent(sc->dev)),
 			sc->ih_rx);
 		sc->ih_rx = NULL;
 	}
@@ -277,10 +275,8 @@ sackbc_attach(device_t parent, device_t self, void *aux)
 		if (child == NULL)
 			continue;
 		sc->slot = slot;
-#if NRND > 0
 		rnd_attach_source(&sc->rnd_source, device_xname(child),
 		    RND_TYPE_TTY, 0);
-#endif
 		/* only one of KBD_SLOT or AUX_SLOT is used. */
 		break;			
 	}

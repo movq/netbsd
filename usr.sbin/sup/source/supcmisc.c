@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmisc.c,v 1.20 2009/10/16 12:41:37 christos Exp $	*/
+/*	$NetBSD: supcmisc.c,v 1.22 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -144,14 +144,17 @@ estabd(char *fname, char *dname)
 	if (strcmp(fpart, ".") == 0) {	/* dname is / or . */
 		notify("SUP: Can't create directory %s for %s (Invalid name)\n",
 		    dname, fname);
+		errno = EINVAL;
 		return (TRUE);
 	}
 	x = estabd(fname, dpart);
 	if (x)
 		return (TRUE);
 	if (makedir(dname, 0755, &sbuf) < 0) {
+		int oerrno = errno;
 		notify("SUP: Can't create directory %s for %s (%s)\n", dname,
 		    fname, strerror(errno));
+		errno = oerrno;
 		return TRUE;
 	}
 	vnotify("SUP Created directory %s for %s\n", dname, fname);
@@ -328,7 +331,7 @@ notify(const char *fmt, ...)
 			(void)unlink(template);
 		} else
 			noteF = stdout;
-		tloc = time((time_t *) NULL);
+		tloc = time(NULL);
 		fprintf(noteF, "SUP Upgrade of %s at %s",
 		    collrelname, ctime(&tloc));
 		(void) fflush(noteF);

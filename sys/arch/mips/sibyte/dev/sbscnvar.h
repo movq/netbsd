@@ -1,4 +1,4 @@
-/* $NetBSD: sbscnvar.h,v 1.3 2006/03/07 14:01:41 he Exp $ */
+/* $NetBSD: sbscnvar.h,v 1.6 2012/02/02 19:43:00 tls Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -65,7 +65,7 @@
  */
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_SBSCN)
+#ifdef RND_SBSCN
 #include <sys/rnd.h>
 #endif
 
@@ -156,16 +156,16 @@ struct sbscn_channel {
 	u_char		ch_i_dcd_pin, ch_i_cts_pin, ch_i_dsr_pin, ch_i_ri_pin;
 	u_char		ch_o_dtr_pin, ch_o_rts_pin;
 
-#if NRND > 0 && defined(RND_SBSCN)
-	rndsource_element_t  ch_rnd_source;
+#ifdef RND_SBSCN
+	krndsource_t  ch_rnd_source;
 #endif
 };
 
 struct sbscn_softc {
-	struct device	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 
 	/* shared data structures */
-	u_long	sc_addr;	/* phys addr of DUART XXX bus_space */
+	u_long		sc_addr;	/* phys addr of DUART XXX bus_space */
 
 	struct sbscn_channel sc_channels[2];
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: admin.c,v 1.32 2009/09/03 09:29:07 tteras Exp $	*/
+/*	$NetBSD: admin.c,v 1.38 2010/12/08 07:38:35 tteras Exp $	*/
 
 /* Id: admin.c,v 1.25 2006/04/06 14:31:04 manubsd Exp */
 
@@ -299,9 +299,8 @@ admin_process(so2, combuf)
 		break;
 
 	case ADMIN_DELETE_SA: {
-		struct ph1handle *iph1;
-		struct ph1selector sel;
 		char *loc, *rem;
+		struct ph1selector sel;
 
 		memset(&sel, 0, sizeof(sel));
 		sel.local = (struct sockaddr *)
@@ -319,6 +318,7 @@ admin_process(so2, combuf)
 		plog(LLV_INFO, LOCATION, NULL,
 		     "admin delete-sa %s %s\n", loc, rem);
 		enumph1(&sel, admin_ph1_delete_sa, NULL);
+		remcontacted(sel.remote);
 
 		racoon_free(loc);
 		racoon_free(rem);
@@ -329,7 +329,7 @@ admin_process(so2, combuf)
 	case ADMIN_LOGOUT_USER: {
 		struct ph1handle *iph1;
 		char user[LOGINLEN+1];
-		int found = 0, len = com->ac_len - sizeof(com);
+		int found = 0, len = com->ac_len - sizeof(*com);
 
 		if (len > LOGINLEN) {
 			plog(LLV_ERROR, LOCATION, NULL,
@@ -564,12 +564,17 @@ admin_process(so2, combuf)
 			iph2->status = PHASE2ST_STATUS2;
 
 			/* set end addresses of SA */
+			iph2->sa_dst = dupsaddr(dst);
+			iph2->sa_src = dupsaddr(src);
 			iph2->dst = dupsaddr(dst);
 			iph2->src = dupsaddr(src);
-			if (iph2->dst == NULL || iph2->src == NULL) {
+			if (iph2->sa_src == NULL || iph2->sa_dst == NULL ||
+			    iph2->dst == NULL || iph2->src == NULL) {
 				delph2(iph2);
 				break;
 			}
+			set_port(iph2->dst, 0);
+			set_port(iph2->src, 0);
 
 			if (isakmp_get_sainfo(iph2, sp_out, sp_in) < 0) {
 				delph2(iph2);
@@ -577,7 +582,7 @@ admin_process(so2, combuf)
 			}
 
 			insph2(iph2);
-			if (isakmp_post_acquire(iph2, NULL) < 0) {
+			if (isakmp_post_acquire(iph2, NULL, FALSE) < 0) {
 				remph2(iph2);
 				delph2(iph2);
 				break;
@@ -638,9 +643,15 @@ admin_reply(so, req, l_ac_errno, buf)
 	}
 
 	combuf = (struct admin_com *) retbuf;
-	combuf->ac_len = tlen;
+	combuf->ac_len = (u_int16_t) tlen;
 	combuf->ac_cmd = req->ac_cmd & ~ADMIN_FLAG_VERSION;
-	combuf->ac_errno = l_ac_errno;
+	if (tlen != (u_int32_t) combuf->ac_len &&
+	    l_ac_errno == 0) {
+		combuf->ac_len_high = tlen >> 16;
+		combuf->ac_cmd |= ADMIN_FLAG_LONG_REPLY;
+	} else {
+		combuf->ac_errno = l_ac_errno;
+	}
 	combuf->ac_proto = req->ac_proto;
 
 	if (buf != NULL)
@@ -734,7 +745,7 @@ admin_init()
 		return -1;
 	}
 
-	monitor_fd(lcconf->sock_admin, admin_handler, NULL);
+	monitor_fd(lcconf->sock_admin, admin_handler, NULL, 0);
 	plog(LLV_DEBUG, LOCATION, NULL,
 	     "open %s as racoon management.\n", sunaddr.sun_path);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.28 2009/11/01 01:51:35 snj Exp $	*/
+/*	$NetBSD: adb.c,v 1.33 2012/02/01 02:02:07 matt Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.28 2009/11/01 01:51:35 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.33 2012/02/01 02:02:07 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.28 2009/11/01 01:51:35 snj Exp $");
 #include <sys/signalvar.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 
@@ -55,8 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.28 2009/11/01 01:51:35 snj Exp $");
 /*
  * Function declarations.
  */
-static int	adbmatch(struct device *, struct cfdata *, void *);
-static void	adbattach(struct device *, struct device *, void *);
+static int	adbmatch(device_t, cfdata_t, void *);
+static void	adbattach(device_t, device_t, void *);
 static int	adbprint(void *, const char *);
 static void	adb_todr_init(void);
 
@@ -76,7 +76,7 @@ CFATTACH_DECL(adb, sizeof(struct adb_softc),
     adbmatch, adbattach, NULL, NULL);
 
 static int
-adbmatch(struct device *parent, struct cfdata *cf, void *aux)
+adbmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -96,9 +96,9 @@ adbmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-adbattach(struct device *parent, struct device *self, void *aux)
+adbattach(device_t parent, device_t self, void *aux)
 {
-	struct adb_softc *sc = (struct adb_softc *)self;
+	struct adb_softc *sc = device_private(self);
 	struct confargs *ca = aux;
 	int irq = ca->ca_intr[0];
 	int node;
@@ -107,11 +107,11 @@ adbattach(struct device *parent, struct device *self, void *aux)
 	int totaladbs;
 	int adbindex, adbaddr, adb_node;
 
-	extern volatile u_char *Via1Base;
+	extern volatile uint8_t *Via1Base;
 
 	ca->ca_reg[0] += ca->ca_baseaddr;
 
-	sc->sc_regbase = mapiodev(ca->ca_reg[0], ca->ca_reg[1]);
+	sc->sc_regbase = mapiodev(ca->ca_reg[0], ca->ca_reg[1], false);
 	Via1Base = sc->sc_regbase;
 
 	if (strcmp(ca->ca_name, "via-cuda") == 0)
@@ -267,7 +267,7 @@ adbprint(void *args, const char *name)
 #define DIFF19041970 2082844800
 
 static int
-adb_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
+adb_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	unsigned long sec;
 
@@ -279,7 +279,7 @@ adb_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
 }
 
 static int
-adb_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
+adb_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	unsigned long sec;
 

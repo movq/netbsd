@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.36 2009/03/13 20:44:59 cube Exp $	*/
+/*	$NetBSD: main.c,v 1.43 2011/07/09 08:01:58 matt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -212,15 +212,16 @@ main(int argc, char **argv)
 		}
 	}
 
+	if (xflag && optind != 2) {
+		errx(EXIT_FAILURE, "-x must be used alone");
+	}
+
 	argc -= optind;
 	argv += optind;
 	if (argc > 1) {
 		usage();
 	}
 
-	if (xflag && (builddir != NULL || srcdir != NULL || Pflag || pflag ||
-	    vflag || Lflag))
-		errx(EXIT_FAILURE, "-x must be used alone");
 	if (Lflag && (builddir != NULL || Pflag || pflag))
 		errx(EXIT_FAILURE, "-L can only be used with -s and -v");
 
@@ -347,13 +348,24 @@ main(int argc, char **argv)
 		firstfile(cname);
 	}
 
+	 /*
+	  * Log config file.  We don't know until yyparse() if we're
+	  * going to need config_file.h (i.e. if we're doing ioconf-only
+	  * or not).  Just start creating the file, and when we know
+	  * later, we'll just keep or discard our work here.
+	  */
+	logconfig_start();
+
 	/*
 	 * Parse config file (including machine definitions).
 	 */
-	logconfig_start();
 	if (yyparse())
 		stop();
-	logconfig_end();
+
+	if (ioconfname && cfg)
+		fclose(cfg);
+	else
+		logconfig_end();
 
 	if (removeit)
 		unlink(cname);
@@ -368,6 +380,17 @@ main(int argc, char **argv)
 	 */
 	if (fixdevis())
 		stop();
+
+	/*
+	 * If working on an ioconf-only config, process here and exit
+	 */
+	if (ioconfname) {
+		pack();
+		mkioconf();
+		emitlocs();
+		emitioconfh();
+		return 0;
+	}
 
 	/*
 	 * Deal with option dependencies.
@@ -518,6 +541,7 @@ mksymlinks(void)
 	snprintf(buf, sizeof(buf), "arch/%s/include", machine);
 	p = sourcepath(buf);
 	ret = recreate(p, "machine");
+	ret = recreate(p, machine);
 	free(p);
 
 	if (machinearch != NULL) {
@@ -581,13 +605,10 @@ add_dependencies(struct nvlist *nv, struct nvlist *deps)
 }
 
 /*
- * Define one or more file systems.  If file system options file name is
- * specified, a preprocessor #define for that file system will be placed
- * in that file.  In this case, only one file system may be specified.
- * Otherwise, no preprocessor #defines will be generated.
+ * Define one or more file systems.
  */
 void
-deffilesystem(const char *fname, struct nvlist *fses, struct nvlist *deps)
+deffilesystem(struct nvlist *fses, struct nvlist *deps)
 {
 	struct nvlist *nv;
 
@@ -609,23 +630,6 @@ deffilesystem(const char *fname, struct nvlist *fses, struct nvlist *deps)
 		if (ht_insert(deffstab, nv->nv_name, nv))
 			panic("file system `%s' already in table?!",
 			    nv->nv_name);
-
-		if (fname != NULL) {
-			/*
-			 * Only one file system allowed in this case.
-			 */
-			if (nv->nv_next != NULL) {
-				cfgerror("only one file system per option "
-				    "file may be specified");
-				return;
-			}
-
-			if (ht_insert(optfiletab, fname, nv)) {
-				cfgerror("option file `%s' already exists",
-				    fname);
-				return;
-			}
-		}
 
 		add_dependencies(nv, deps);
 	}
@@ -1024,8 +1028,14 @@ deva_has_instances(struct deva *deva, int unit)
 {
 	struct devi *i;
 
+	/*
+	 * EHAMMERTOOBIG: we shouldn't check i_pseudoroot here.
+	 * What we want by this check is them to appear non-present
+	 * except for purposes of other devices being able to attach
+	 * to them.
+	 */
 	for (i = deva->d_ihead; i != NULL; i = i->i_asame)
-		if (i->i_active == DEVI_ACTIVE &&
+		if (i->i_active == DEVI_ACTIVE && i->i_pseudoroot == 0 &&
 		    (unit == WILD || unit == i->i_unit || i->i_unit == STAR))
 			return (1);
 	return (0);

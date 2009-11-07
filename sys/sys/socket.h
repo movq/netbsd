@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.96 2009/09/11 22:06:29 dyoung Exp $	*/
+/*	$NetBSD: socket.h,v 1.106 2012/01/29 18:33:07 roy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -97,6 +97,7 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #endif
 
 #include <sys/uio.h>
+#include <sys/sigtypes.h>
 
 /*
  * Socket types.
@@ -106,6 +107,11 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #define	SOCK_RAW	3		/* raw-protocol interface */
 #define	SOCK_RDM	4		/* reliably-delivered message */
 #define	SOCK_SEQPACKET	5		/* sequenced packet stream */
+
+#define	SOCK_CLOEXEC	0x10000000	/* set close on exec on socket */
+#define	SOCK_NONBLOCK	0x20000000	/* set non blocking i/o socket */
+#define	SOCK_NOSIGPIPE	0x40000000	/* don't send sigpipe */
+#define	SOCK_FLAGS_MASK	0xf0000000	/* flags mask */
 
 /*
  * Option flags per-socket.
@@ -121,6 +127,7 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #define	SO_OOBINLINE	0x0100		/* leave received OOB data in line */
 #define	SO_REUSEPORT	0x0200		/* allow local address & port reuse */
 /* 	SO_OTIMESTAMP	0x0400		*/
+#define	SO_NOSIGPIPE	0x0800		/* no SIGPIPE from EPIPE */
 #define	SO_ACCEPTFILTER	0x1000		/* there is an accept filter */
 #define	SO_TIMESTAMP	0x2000		/* timestamp received dgram traffic */
 
@@ -166,7 +173,7 @@ struct	accept_filter_arg {
  * Address families.
  */
 #define	AF_UNSPEC	0		/* unspecified */
-#define	AF_LOCAL	1		/* local to host (pipes, portals) */
+#define	AF_LOCAL	1		/* local to host */
 #define	AF_UNIX		AF_LOCAL	/* backward compatibility */
 #define	AF_INET		2		/* internetwork: UDP, TCP, etc. */
 #define	AF_IMPLINK	3		/* arpanet imp addresses */
@@ -184,7 +191,7 @@ struct	accept_filter_arg {
 #define AF_LAT		14		/* LAT */
 #define	AF_HYLINK	15		/* NSC Hyperchannel */
 #define	AF_APPLETALK	16		/* Apple Talk */
-#define	AF_ROUTE	17		/* Internal Routing Protocol */
+#define	AF_OROUTE	17		/* Internal Routing Protocol */
 #define	AF_LINK		18		/* Link layer interface */
 #if defined(_NETBSD_SOURCE)
 #define	pseudo_AF_XTP	19		/* eXpress Transfer Protocol (no AF) */
@@ -210,8 +217,9 @@ struct	accept_filter_arg {
 #endif
 #define AF_BLUETOOTH	31		/* Bluetooth: HCI, SCO, L2CAP, RFCOMM */
 #define	AF_IEEE80211	32		/* IEEE80211 */
-
-#define	AF_MAX		33
+#define	AF_MPLS		33		/* MultiProtocol Label Switching */
+#define	AF_ROUTE	34		/* Internal Routing Protocol */
+#define	AF_MAX		35
 
 /*
  * Structure used by kernel to store most
@@ -279,7 +287,7 @@ struct sockaddr_storage {
 #define PF_LAT		AF_LAT
 #define	PF_HYLINK	AF_HYLINK
 #define	PF_APPLETALK	AF_APPLETALK
-#define	PF_ROUTE	AF_ROUTE
+#define	PF_OROUTE	AF_OROUTE
 #define	PF_LINK		AF_LINK
 #if defined(_NETBSD_SOURCE)
 #define	PF_XTP		pseudo_AF_XTP	/* really just proto family, no AF */
@@ -300,6 +308,8 @@ struct sockaddr_storage {
 #define PF_KEY 		pseudo_AF_KEY	/* like PF_ROUTE, only for key mgmt */
 #endif
 #define PF_BLUETOOTH	AF_BLUETOOTH
+#define	PF_MPLS		AF_MPLS
+#define	PF_ROUTE	AF_ROUTE
 
 #define	PF_MAX		AF_MAX
 
@@ -364,7 +374,7 @@ struct sockcred {
 	{ "lat", CTLTYPE_NODE }, \
 	{ "hylink", CTLTYPE_NODE }, \
 	{ "appletalk", CTLTYPE_NODE }, \
-	{ "route", CTLTYPE_NODE }, \
+	{ "oroute", CTLTYPE_NODE }, \
 	{ "link_layer", CTLTYPE_NODE }, \
 	{ "xtp", CTLTYPE_NODE }, \
 	{ "coip", CTLTYPE_NODE }, \
@@ -377,6 +387,9 @@ struct sockcred {
 	{ "natm", CTLTYPE_NODE }, \
 	{ "arp", CTLTYPE_NODE }, \
 	{ "key", CTLTYPE_NODE }, \
+	{ "ieee80211", CTLTYPE_NODE }, \
+	{ "mlps", CTLTYPE_NODE }, \
+	{ "route", CTLTYPE_NODE }, \
 }
 
 struct kinfo_pcb {
@@ -479,6 +492,10 @@ struct msghdr {
 #define	MSG_BCAST	0x0100		/* this message was rcvd using link-level brdcst */
 #define	MSG_MCAST	0x0200		/* this message was rcvd using link-level mcast */
 #define	MSG_NOSIGNAL	0x0400		/* do not generate SIGPIPE on EOF */
+#if defined(_NETBSD_SOURCE)
+#define	MSG_CMSG_CLOEXEC 0x0800		/* close on exec receiving fd */
+#define	MSG_NBIO	0x1000		/* use non-blocking I/O */
+#endif
 
 /* Extra flags used internally only */
 #define	MSG_USERFLAGS	0x0ffffff
@@ -516,7 +533,7 @@ struct cmsghdr {
  * without (2), we can't guarantee binary compatibility in case of future
  * changes in ALIGNBYTES.
  */
-#define __CMSG_ALIGN(n)	(((n) + __cmsg_alignbytes()) & ~__cmsg_alignbytes())
+#define __CMSG_ALIGN(n)	(((n) + __ALIGNBYTES) & ~__ALIGNBYTES)
 #ifdef _KERNEL
 #define CMSG_ALIGN(n)	__CMSG_ALIGN(n)
 #endif
@@ -527,7 +544,7 @@ struct cmsghdr {
 			    __CMSG_ALIGN(sizeof(struct cmsghdr)) > \
 	    (((char *)(mhdr)->msg_control) + (mhdr)->msg_controllen)) ? \
 	    (struct cmsghdr *)0 : \
-	    (struct cmsghdr *)((char *)(cmsg) + \
+	    (struct cmsghdr *)(void *)((char *)(cmsg) + \
 	        __CMSG_ALIGN((cmsg)->cmsg_len)))
 
 /*
@@ -558,10 +575,6 @@ struct cmsghdr {
 #define	SHUT_RDWR	2		/* Disallow further sends/receives. */
 
 #include <sys/cdefs.h>
-
-__BEGIN_DECLS
-int	__cmsg_alignbytes(void);
-__END_DECLS
 
 #ifdef	_KERNEL
 static inline socklen_t
@@ -597,6 +610,8 @@ int	getpeername(int, struct sockaddr * __restrict, socklen_t * __restrict);
 int	getsockname(int, struct sockaddr * __restrict, socklen_t * __restrict);
 int	getsockopt(int, int, int, void *__restrict, socklen_t * __restrict);
 int	listen(int, int);
+int	paccept(int, struct sockaddr * __restrict, socklen_t * __restrict,
+	const sigset_t * __restrict, int);
 ssize_t	recv(int, void *, size_t, int);
 ssize_t	recvfrom(int, void *__restrict, size_t, int,
 	    struct sockaddr * __restrict, socklen_t * __restrict);

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.2 2009/10/21 21:12:04 rmind Exp $	*/
+/*	$NetBSD: syscall.c,v 1.9 2012/02/11 23:16:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2009 The NetBSD Foundation, Inc.
@@ -30,18 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.2 2009/10/21 21:12:04 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.9 2012/02/11 23:16:16 martin Exp $");
 
 #include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
 #include <sys/ktrace.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 #include <sys/syscall_stats.h>
@@ -68,6 +68,18 @@ child_return(void *arg)
 {
 	struct lwp *l = arg;
 	struct trapframe *tf = l->l_md.md_regs;
+	struct proc *p = l->l_proc;
+
+	if (p->p_slflag & PSL_TRACED) {
+		ksiginfo_t ksi;
+
+		mutex_enter(proc_lock);
+                KSI_INIT_EMPTY(&ksi);
+                ksi.ksi_signo = SIGTRAP;
+                ksi.ksi_lid = l->l_lid; 
+                kpsignal(p, &ksi, NULL);
+		mutex_exit(proc_lock);
+	}
 
 	X86_TF_RAX(tf) = 0;
 	X86_TF_RFLAGS(tf) &= ~PSL_C;
@@ -76,6 +88,16 @@ child_return(void *arg)
 	ktrsysret(SYS_fork, 0, 0);
 }
 
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l);
+}
+	
 void
 syscall_intern(struct proc *p)
 {
@@ -95,7 +117,7 @@ syscall(struct trapframe *frame)
 	struct proc *p;
 	struct lwp *l;
 	int error;
-	register_t code, rval[2];
+	register_t code, rval[2], rip_call;
 #ifdef __x86_64__
 	/* Verify that the syscall args will fit in the trapframe space */
 	CTASSERT(offsetof(struct trapframe, tf_arg9) >=
@@ -108,6 +130,13 @@ syscall(struct trapframe *frame)
 	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
+
+	/*
+	 * The offset to adjust the PC by depends on whether we entered the
+	 * kernel through the trap or call gate.  We saved the instruction
+	 * size in tf_err on entry.
+	 */
+	rip_call = X86_TF_RIP(frame) - frame->tf_err;
 
 	code = X86_TF_RAX(frame) & (SYS_NSYSENT - 1);
 	callp = p->p_emul->e_sysent + code;
@@ -133,8 +162,6 @@ syscall(struct trapframe *frame)
 		    &frame->tf_arg6, callp->sy_argsize - 6 * 8);
 		if (error != 0)
 			goto bad;
-		/* Refetch to avoid register spill to stack */
-		code = frame->tf_rax & (SYS_NSYSENT - 1);
 	}
 #else
 	if (callp->sy_argsize) {
@@ -154,7 +181,6 @@ syscall(struct trapframe *frame)
 
 	if (__predict_false(p->p_trace_enabled)
 	    && !__predict_false(callp->sy_flags & SYCALL_INDIRECT)) {
-		code = X86_TF_RAX(frame) & (SYS_NSYSENT - 1);
 		trace_exit(code, rval, error);
 	}
 
@@ -165,12 +191,7 @@ syscall(struct trapframe *frame)
 	} else {
 		switch (error) {
 		case ERESTART:
-			/*
-			 * The offset to adjust the PC by depends on whether we
-			 * entered the kernel through the trap or call gate.
-			 * We saved the instruction size in tf_err on entry.
-			 */
-			X86_TF_RIP(frame) -= frame->tf_err;
+			X86_TF_RIP(frame) = rip_call;
 			break;
 		case EJUSTRETURN:
 			/* nothing to do */

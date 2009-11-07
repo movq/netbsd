@@ -1,15 +1,18 @@
-#	$NetBSD: Makefile,v 1.1 2009/06/10 00:38:10 agc Exp $
+#	$NetBSD: Makefile,v 1.3 2010/09/02 06:00:12 agc Exp $
 
 .include <bsd.own.mk>
 
 PROG=		netpgpkeys
+SRCS=		netpgpkeys.c
 BINDIR=		/usr/bin
-
-CPPFLAGS+=	-I${.CURDIR}/../dist/include
 
 LIBNETPGPDIR!=	cd ${.CURDIR}/../lib && ${PRINTOBJDIR}
 LDADD+=		-L${LIBNETPGPDIR} -lnetpgp
 DPADD+=		${LIBNETPGPDIR}/libnetpgp.a
+
+LIBMJDIR!=	cd ${.CURDIR}/../libmj && ${PRINTOBJDIR}
+LDADD+=		-L${LIBMJDIR} -lmj
+DPADD+=		${LIBMJDIR}/libmj.a
 
 LDADD+=		-lcrypto -lz -lbz2
 DPADD+=		${LIBCRYPTO} ${LIBZ} ${LIBBZ2}

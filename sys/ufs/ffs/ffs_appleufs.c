@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_appleufs.c,v 1.9 2006/06/11 09:26:04 kardel Exp $	*/
+/*	$NetBSD: ffs_appleufs.c,v 1.12 2011/11/19 22:51:31 tls Exp $	*/
 
 /*
  * Copyright (c) 2002 Darrin B. Jewell
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Darrin B. Jewell
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,13 +26,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_appleufs.c,v 1.9 2006/06/11 09:26:04 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_appleufs.c,v 1.12 2011/11/19 22:51:31 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
 #if defined(_KERNEL)
 #include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/cprng.h>
 #endif
 
 #include <ufs/ufs/dinode.h>
@@ -113,7 +109,7 @@ ffs_appleufs_validate(const char *name, const struct appleufslabel *o,
 		n->ul_namelen = APPLEUFS_MAX_LABEL_NAME;
 	}
 	/* if len is max, will set ul_unused1 */
-	n->ul_name[n->ul_namelen] = '\0';
+	n->ul_name[n->ul_namelen - 1] = '\0';
 
 #ifdef DEBUG
 	printf("%s: found APPLE UFS label v%d: \"%s\"\n",
@@ -141,9 +137,7 @@ ffs_appleufs_set(struct appleufslabel *appleufs, const char *name, time_t t,
 	}
 	if (uuid == 0) {
 #if defined(_KERNEL) && !defined(STANDALONE)
-		uuid = arc4random();
-		uuid <<= 32;
-		uuid |= arc4random();
+		uuid = cprng_fast64();
 #endif
 	}
 	namelen = strlen(name);

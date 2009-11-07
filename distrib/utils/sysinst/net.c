@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.123 2009/10/16 19:01:03 joerg Exp $	*/
+/*	$NetBSD: net.c,v 1.130.2.1 2012/05/17 18:57:11 sborrill Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -38,6 +34,20 @@
 
 /* net.c -- routines to fetch files off the network. */
 
+#include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/statvfs.h>
+#include <sys/sysctl.h>
+#include <sys/wait.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <net/if_media.h>
+#include <netinet/in.h>
+
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,28 +55,12 @@
 #include <curses.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/param.h>
-#include <sys/stat.h>
-#include <sys/statvfs.h>
-#ifdef INET6
-#include <sys/sysctl.h>
-#endif
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/statvfs.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <net/if_media.h>
-#include <arpa/inet.h>
+
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
 #include "txtwalk.h"
-
-#include <sys/wait.h>
-#include <sys/resource.h>
-#include <sys/sysctl.h>
 
 int network_up = 0;
 /* Access to network information */
@@ -91,7 +85,7 @@ static int net_dhcpconf;
 static char net_ip6[STRSIZE];
 char net_namesvr6[STRSIZE];
 static int net_ip6conf;
-#define IP6CONF_AUTOHOST        0x01    
+#define IP6CONF_AUTOHOST        0x01
 #endif
 
 
@@ -247,7 +241,7 @@ get_ifconfig_info(void)
 
 	textsize = collect(T_OUTPUT, &textbuf, "/sbin/ifconfig -a 2>/dev/null");
 	if (textsize < 0) {
-		if (logging)
+		if (logfp)
 			(void)fprintf(logfp,
 			    "Aborting: Could not run ifconfig.\n");
 		(void)fprintf(stderr, "Could not run ifconfig.");
@@ -303,7 +297,25 @@ get_ifconfig_info(void)
 }
 
 static int
-do_ifreq(struct ifmediareq *ifmr, unsigned long cmd)
+do_ifreq(struct ifreq *ifr, unsigned long cmd)
+{
+	int sock;
+	int rval;
+
+	sock = socket(PF_INET, SOCK_DGRAM, 0);
+	if (sock == -1)
+		return -1;
+
+	memset(ifr, 0, sizeof *ifr);
+	strncpy(ifr->ifr_name, net_dev, sizeof ifr->ifr_name);
+	rval = ioctl(sock, cmd, ifr);
+	close(sock);
+
+	return rval;
+}
+
+static int
+do_ifmreq(struct ifmediareq *ifmr, unsigned long cmd)
 {
 	int sock;
 	int rval;
@@ -324,19 +336,20 @@ do_ifreq(struct ifmediareq *ifmr, unsigned long cmd)
 static void
 get_ifinterface_info(void)
 {
+	struct ifreq ifr;
 	struct ifmediareq ifmr;
-	struct sockaddr_in *sa_in = (void *)&((struct ifreq *)&ifmr)->ifr_addr;
+	struct sockaddr_in *sa_in = (void*)&ifr.ifr_addr;
 	int modew;
 	const char *media_opt;
 	const char *sep;
 
-	if (do_ifreq(&ifmr, SIOCGIFADDR) == 0 && sa_in->sin_addr.s_addr != 0)
+	if (do_ifreq(&ifr, SIOCGIFADDR) == 0 && sa_in->sin_addr.s_addr != 0)
 		strlcpy(net_ip, inet_ntoa(sa_in->sin_addr), sizeof net_ip);
 
-	if (do_ifreq(&ifmr, SIOCGIFNETMASK) == 0 && sa_in->sin_addr.s_addr != 0)
+	if (do_ifreq(&ifr, SIOCGIFNETMASK) == 0 && sa_in->sin_addr.s_addr != 0)
 		strlcpy(net_mask, inet_ntoa(sa_in->sin_addr), sizeof net_mask);
 
-	if (do_ifreq(&ifmr, SIOCGIFMEDIA) == 0) {
+	if (do_ifmreq(&ifmr, SIOCGIFMEDIA) == 0) {
 		/* Get the name of the media word */
 		modew = ifmr.ifm_current;
 		strlcpy(net_media, get_media_subtype_string(modew),
@@ -807,7 +820,7 @@ done:
 		) {
 		f = fopen("/etc/resolv.conf", "w");
 		if (f == NULL) {
-			if (logging)
+			if (logfp)
 				(void)fprintf(logfp,
 				    "%s", msg_string(MSG_resolv));
 			(void)fprintf(stderr, "%s", msg_string(MSG_resolv));
@@ -905,81 +918,112 @@ done:
 
 #ifdef INET6
 	if (v6config && network_up) {
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 		    "/sbin/ping6 -v -c 3 -n -I %s ff02::2", net_dev);
 
 		if (net_namesvr6[0] != '\0')
-			network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+			network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 			    "/sbin/ping6 -v -c 3 -n %s", net_namesvr6);
 	}
 #endif
 
 	if (net_namesvr[0] != '\0' && network_up)
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 		    "/sbin/ping -v -c 5 -w 5 -o -n %s", net_namesvr);
 
 	if (net_defroute[0] != '\0' && network_up)
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 		    "/sbin/ping -v -c 5 -w 5 -o -n %s", net_defroute);
 	fflush(NULL);
 
 	return network_up;
 }
 
-static int
-ftp_fetch(const char *set_name)
+void
+make_url(char *urlbuffer, struct ftpinfo *f, const char *dir)
 {
-	const char *ftp_opt;
 	char ftp_user_encoded[STRSIZE];
 	char ftp_dir_encoded[STRSIZE];
-	char *cp, *set_dir2;
-	int rval;
+	char *cp;
+	const char *dir2;
 
 	/*
-	 * Invoke ftp to fetch the file.
-	 *
-	 * ftp.pass is quite likely to contain unsafe characters
+	 * f->pass is quite likely to contain unsafe characters
 	 * that need to be encoded in the URL (for example,
 	 * "@", ":" and "/" need quoting).  Let's be
-	 * paranoid and also encode ftp.user and ftp.dir.  (For
-	 * example, ftp.dir could easily contain '~', which is
+	 * paranoid and also encode f->user and f->dir.  (For
+	 * example, f->dir could easily contain '~', which is
 	 * unsafe by a strict reading of RFC 1738).
 	 */
-	if (strcmp("ftp", ftp.user) == 0 && ftp.pass[0] == 0) {
-		/* do anon ftp */
-		ftp_opt = "-a ";
+	if (strcmp("ftp", f->user) == 0 && f->pass[0] == 0) {
 		ftp_user_encoded[0] = 0;
 	} else {
-		ftp_opt = "";
-		cp = url_encode(ftp_user_encoded, ftp.user,
+		cp = url_encode(ftp_user_encoded, f->user,
 			ftp_user_encoded + sizeof ftp_user_encoded - 1,
 			RFC1738_SAFE_LESS_SHELL, 0);
 		*cp++ = ':';
-		cp = url_encode(cp, ftp.pass,
+		cp = url_encode(cp, f->pass,
 			ftp_user_encoded + sizeof ftp_user_encoded - 1,
 			NULL, 0);
 		*cp++ = '@';
 		*cp = 0;
 	}
-
-	cp = url_encode(ftp_dir_encoded, ftp.dir,
+	cp = url_encode(ftp_dir_encoded, f->dir,
 			ftp_dir_encoded + sizeof ftp_dir_encoded - 1,
 			RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 1);
 	if (cp != ftp_dir_encoded && cp[-1] != '/')
 		*cp++ = '/';
 
-	set_dir2 = set_dir;
-	while (*set_dir2 == '/')
-		++set_dir2;
+	dir2 = dir;
+	while (*dir2 == '/')
+		++dir2;
 
-	url_encode(cp, set_dir2,
+	url_encode(cp, dir2,
 			ftp_dir_encoded + sizeof ftp_dir_encoded,
 			RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 0);
 
-	rval = run_program(RUN_DISPLAY | RUN_PROGRESS | RUN_XFER_DIR, 
-		    "/usr/bin/ftp %s%s://%s%s/%s/%s%s",
-		    ftp_opt, ftp.xfer_type, ftp_user_encoded, ftp.host,
-		    ftp_dir_encoded, set_name, dist_postfix);
+	snprintf(urlbuffer, STRSIZE, "%s://%s%s/%s", f->xfer_type,
+	    ftp_user_encoded, f->host, ftp_dir_encoded);
+}
+
+
+/* ftp_fetch() and pkgsrc_fetch() are essentially the same, with a different
+ * ftpinfo var. */
+static int do_ftp_fetch(const char *, struct ftpinfo *);
+
+static int
+ftp_fetch(const char *set_name)
+{
+	return do_ftp_fetch(set_name, &ftp);
+}
+
+static int
+pkgsrc_fetch(const char *set_name)
+{
+	return do_ftp_fetch(set_name, &pkgsrc);
+}
+
+static int
+do_ftp_fetch(const char *set_name, struct ftpinfo *f)
+{
+	const char *ftp_opt;
+	char url[STRSIZE];
+	int rval;
+
+	/*
+	 * Invoke ftp to fetch the file.
+	 */
+	if (strcmp("ftp", f->user) == 0 && f->pass[0] == 0) {
+		/* do anon ftp */
+		ftp_opt = "-a ";
+	} else {
+		ftp_opt = "";
+	}
+
+	make_url(url, f, set_dir_for_set(set_name));
+	rval = run_program(RUN_DISPLAY | RUN_PROGRESS | RUN_XFER_DIR,
+		    "/usr/bin/ftp %s%s/%s%s",
+		    ftp_opt, url, set_name, dist_postfix);
 
 	return rval ? SET_RETRY : SET_OK;
 }
@@ -1007,6 +1051,25 @@ do_config_network(void)
 }
 
 int
+get_pkgsrc(void)
+{
+	if (!network_up)
+		if (do_config_network() != 0)
+			return SET_RETRY;
+
+	yesno = 1;
+	process_menu(MENU_pkgsrc, NULL);
+	
+	if (yesno == 0)
+		return SET_SKIP;
+	fetch_fn = pkgsrc_fetch;
+	snprintf(ext_dir_pkgsrc, sizeof ext_dir_pkgsrc, "%s/%s",
+	    target_prefix(), xfer_dir + (*xfer_dir == '/'));
+
+	return SET_OK;
+}
+
+int
 get_via_ftp(const char *xfer_type)
 {
 
@@ -1018,7 +1081,9 @@ get_via_ftp(const char *xfer_type)
 	/* We'll fetch each file just before installing it */
 	fetch_fn = ftp_fetch;
 	ftp.xfer_type = xfer_type;
-	snprintf(ext_dir, sizeof ext_dir, "%s/%s", target_prefix(),
+	snprintf(ext_dir_bin, sizeof ext_dir_bin, "%s/%s", target_prefix(),
+	    xfer_dir + (*xfer_dir == '/'));
+	snprintf(ext_dir_src, sizeof ext_dir_src, "%s/%s", target_prefix(),
 	    xfer_dir + (*xfer_dir == '/'));
 
 	return SET_OK;
@@ -1033,9 +1098,10 @@ get_via_nfs(void)
 		return SET_RETRY;
 
 	/* If root is on NFS and we have sets, skip this step. */
-	if (statvfs(set_dir, &sb) == 0 &&
+	if (statvfs(set_dir_bin, &sb) == 0 &&
 	    strcmp(sb.f_fstypename, "nfs") == 0) {
-	    	strlcpy(ext_dir, set_dir, sizeof ext_dir);
+	    	strlcpy(ext_dir_bin, set_dir_bin, sizeof ext_dir_bin);
+	    	strlcpy(ext_dir_src, set_dir_src, sizeof ext_dir_src);
 		return SET_OK;
 	}
 
@@ -1049,7 +1115,8 @@ get_via_nfs(void)
 
 	mnt2_mounted = 1;
 
-	snprintf(ext_dir, sizeof ext_dir, "/mnt2/%s", set_dir);
+	snprintf(ext_dir_bin, sizeof ext_dir_bin, "/mnt2/%s", set_dir_bin);
+	snprintf(ext_dir_src, sizeof ext_dir_src, "/mnt2/%s", set_dir_src);
 
 	/* return location, don't clean... */
 	return SET_OK;
@@ -1084,6 +1151,7 @@ void
 mnt_net_config(void)
 {
 	char ifconfig_fn[STRSIZE];
+	char ifconfig_str[STRSIZE];
 	FILE *ifconf = NULL;
 
 	if (!network_up)
@@ -1093,23 +1161,23 @@ mnt_net_config(void)
 		return;
 
 	/* Write hostname to /etc/rc.conf */
-	if ((net_dhcpconf & DHCPCONF_HOST) == 0)
-		add_rc_conf("hostname=%s\n", recombine_host_domain());
+	if ((net_dhcpconf & DHCPCONF_HOST) == 0) 
+		if (del_rc_conf("hostname") == 0)
+			add_rc_conf("hostname=%s\n", recombine_host_domain());
 
-	/* If not running in target, copy resolv.conf there. */
-	if ((net_dhcpconf & DHCPCONF_NAMESVR) == 0) {
+	/* Copy resolv.conf to target.  If DHCP was used to create it,
+	 * it will be replaced on next boot anyway. */
 #ifndef INET6
-		if (net_namesvr[0] != '\0')
-			dup_file_into_target("/etc/resolv.conf");
+	if (net_namesvr[0] != '\0')
+		dup_file_into_target("/etc/resolv.conf");
 #else
-		/*
-		 * not sure if it is a good idea, to allow dhcp config to
-		 * override IPv6 configuration
-		 */
-		if (net_namesvr[0] != '\0' || net_namesvr6[0] != '\0')
-			dup_file_into_target("/etc/resolv.conf");
+	/*
+	 * not sure if it is a good idea, to allow dhcp config to
+	 * override IPv6 configuration
+	 */
+	if (net_namesvr[0] != '\0' || net_namesvr6[0] != '\0')
+		dup_file_into_target("/etc/resolv.conf");
 #endif
-	}
 
 	/*
 	 * bring the interface up, it will be necessary for IPv6, and
@@ -1159,14 +1227,20 @@ mnt_net_config(void)
 			fclose(hosts);
 		}
 
-		add_rc_conf("defaultroute=\"%s\"\n", net_defroute);
+		if (del_rc_conf("defaultroute") == 0)
+			add_rc_conf("defaultroute=\"%s\"\n", net_defroute);
 	} else {
-		add_rc_conf("ifconfig_%s=dhcp\n", net_dev);
+		if (snprintf(ifconfig_str, sizeof ifconfig_str,
+		    "ifconfig_%s", net_dev) > 0 &&
+		    del_rc_conf(ifconfig_str) == 0) {
+			add_rc_conf("ifconfig_%s=dhcp\n", net_dev);
+		}
         }
 
 #ifdef INET6
 	if ((net_ip6conf & IP6CONF_AUTOHOST) != 0) {
-		add_rc_conf("ip6mode=autohost\n");
+		if (del_rc_conf("ip6mode") == 0)
+			add_rc_conf("ip6mode=autohost\n");
 		if (ifconf != NULL) {
 			scripting_fprintf(NULL, "cat <<EOF >>%s%s\n",
 			    target_prefix(), ifconfig_fn);

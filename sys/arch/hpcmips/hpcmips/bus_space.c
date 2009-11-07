@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.28 2009/11/07 07:27:43 cegger Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.31 2012/01/27 18:52:56 para Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.28 2009/11/07 07:27:43 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.31 2012/01/27 18:52:56 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.28 2009/11/07 07:27:43 cegger Exp $"
 #include <uvm/uvm_extern.h>
 
 #include <mips/cache.h>
+#include <mips/locore.h>
 #include <mips/pte.h>
 #include <machine/bus.h>
 #include <machine/bus_space_hpcmips.h>
@@ -215,7 +216,7 @@ hpcmips_init_bus_space(struct bus_space_tag_hpcmips *t,
 	}
 
 	t->extent = (void*)extent_create(t->name, t->base, 
-	    t->base + t->size, M_DEVBUF,
+	    t->base + t->size,
 	    0, 0, EX_NOWAIT);
 	if (!t->extent) {
 		panic("hpcmips_init_bus_space_extent:"
@@ -250,7 +251,7 @@ __hpcmips_cacheable(struct bus_space_tag_hpcmips *t, bus_addr_t bpa,
 			/*
 			 * Update the same virtual address entry.
 			 */
-			MachTLBUpdate(va, opte);
+			tlb_update(va, opte);
 		}
 		return (bpa);
 	}

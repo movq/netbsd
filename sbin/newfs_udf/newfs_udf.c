@@ -1,4 +1,4 @@
-/* $NetBSD: newfs_udf.c,v 1.8 2009/09/17 10:37:28 reinoud Exp $ */
+/* $NetBSD: newfs_udf.c,v 1.12 2011/05/26 07:59:08 reinoud Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -573,7 +573,7 @@ udf_derive_format(int req_enable, int req_disable, int force)
 
 	/* enable/disable requests */
 	if (req_disable & FORMAT_META) {
-		format_flags &= ~FORMAT_META;
+		format_flags &= ~(FORMAT_META | FORMAT_LOW);
 		req_disable  &= ~FORMAT_META;
 	}
 	if (req_disable || req_enable) {
@@ -581,7 +581,7 @@ udf_derive_format(int req_enable, int req_disable, int force)
 		(void)printf("\tunrecognised enable/disable req.\n");
 		return EIO;
 	}
-	if ((format_flags && FORMAT_VAT) && UDF_512_TRACK)
+	if ((format_flags & FORMAT_VAT) & UDF_512_TRACK)
 		format_flags |= FORMAT_TRACK512;
 
 	/* determine partition/media access type */
@@ -608,7 +608,8 @@ udf_derive_format(int req_enable, int req_disable, int force)
 		context.min_udf = MAX(context.min_udf, 0x0260);
 
 	/* adjust maximum version limits not to tease or break things */
-	if (!(format_flags & FORMAT_META) && (context.max_udf > 0x200))
+	if (!(format_flags & (FORMAT_META | FORMAT_LOW)) &&
+	    (context.max_udf > 0x200))
 		context.max_udf = 0x201;
 
 	if ((format_flags & (FORMAT_VAT | FORMAT_SPARABLE)) == 0)
@@ -848,8 +849,10 @@ udf_surface_check(void)
 			/* block is bad */
 			printf("BAD block at %08d + %d         \n",
 				loc, layout.blockingnr);
-			if ((error = udf_register_bad_block(loc)))
+			if ((error = udf_register_bad_block(loc))) {
+				free(buffer);
 				return error;
+			}
 			num_errors ++;
 		}
 		loc += layout.blockingnr;
@@ -868,8 +871,10 @@ udf_surface_check(void)
 			/* block is bad */
 			printf("BAD block at %08d + %d         \n",
 				loc, layout.blockingnr);
-			if ((error = udf_register_bad_block(loc)))
+			if ((error = udf_register_bad_block(loc))) {
+				free(buffer);
 				return error;
+			}
 			num_errors ++;
 		}
 		loc += layout.blockingnr;
@@ -904,8 +909,10 @@ udf_write_iso9660_vrs(void)
 		/* wipe at least 6 times 2048 byte `sectors' */
 		for (cnt = 0; cnt < 6 *dpos; cnt++) {
 			pos = layout.iso9660_vrs + cnt;
-			if ((error = udf_write_sector(iso9660_vrs_desc, pos)))
+			if ((error = udf_write_sector(iso9660_vrs_desc, pos))) {
+				free(iso9660_vrs_desc);
 				return error;
+			}
 		}
 
 		/* common VRS fields in all written out ISO descriptors */
@@ -915,8 +922,10 @@ udf_write_iso9660_vrs(void)
 
 		/* BEA01, NSR[23], TEA01 */
 		memcpy(iso9660_vrs_desc->identifier, "BEA01", 5);
-		if ((error = udf_write_sector(iso9660_vrs_desc, pos)))
+		if ((error = udf_write_sector(iso9660_vrs_desc, pos))) {
+			free(iso9660_vrs_desc);
 			return error;
+		}
 		pos += dpos;
 
 		if (context.dscrver == 2)
@@ -924,15 +933,20 @@ udf_write_iso9660_vrs(void)
 		else
 			memcpy(iso9660_vrs_desc->identifier, "NSR03", 5);
 		;
-		if ((error = udf_write_sector(iso9660_vrs_desc, pos)))
+		if ((error = udf_write_sector(iso9660_vrs_desc, pos))) {
+			free(iso9660_vrs_desc);
 			return error;
+		}
 		pos += dpos;
 
 		memcpy(iso9660_vrs_desc->identifier, "TEA01", 5);
-		if ((error = udf_write_sector(iso9660_vrs_desc, pos)))
+		if ((error = udf_write_sector(iso9660_vrs_desc, pos))) {
+			free(iso9660_vrs_desc);
 			return error;
+		}
 	}
 
+	free(iso9660_vrs_desc);
 	/* return success */
 	return 0;
 }
@@ -1062,14 +1076,18 @@ udf_do_newfs(void)
 
 	loc = (format_flags & FORMAT_TRACK512) ? layout.vds1 : ti.track_start;
 	for (; loc < layout.part_start_lba; loc++) {
-		if ((error = udf_write_sector(zero_dscr, loc)))
+		if ((error = udf_write_sector(zero_dscr, loc))) {
+			free(zero_dscr);
 			return error;
+		}
 	}
+	free(zero_dscr);
 
 	/* Create anchors */
 	for (cnt = 0; cnt < 3; cnt++) {
-		if ((error = udf_create_anchor(cnt)))
+		if ((error = udf_create_anchor(cnt))) {
 			return error;
+		}
 	}
 
 	/* 
@@ -1532,7 +1550,7 @@ main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	/* Formatting can only be done on raw devices */
+	/* formatting can only be done on raw devices */
 	if (!S_ISCHR(st.st_mode)) {
 		printf("%s is not a raw device\n", dev);
 		close(fd);

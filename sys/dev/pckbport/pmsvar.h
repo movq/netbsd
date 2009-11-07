@@ -1,4 +1,4 @@
-/*	$NetBSD: pmsvar.h,v 1.8 2008/12/14 00:42:33 jmcneill Exp $	*/
+/*	$NetBSD: pmsvar.h,v 1.11 2011/09/09 14:29:47 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.
@@ -50,13 +50,9 @@ struct pms_softc {		/* driver status information */
 	device_t sc_dev;
 
 	pckbport_tag_t sc_kbctag;
-	int sc_kbcslot;
+	pckbport_slot_t sc_kbcslot;
 
 	int sc_enabled;		/* input enabled? */
-#ifndef PMS_DISABLE_POWERHOOK
-	void *sc_powerhook;	/* cookie from power hook */
-	int sc_suspended;	/* suspended? */
-#endif /* !PMS_DISABLE_POWERHOOK */
 	int inputstate;		/* number of bytes received for this packet */
 	u_int buttons;		/* mouse button status */
 	enum pms_type protocol;
@@ -78,4 +74,6 @@ struct pms_softc {		/* driver status information */
 #endif
 };
 
-#endif
+int pms_sliced_command(pckbport_tag_t, pckbport_slot_t, u_char);
+
+#endif /* _DEV_PCKBCPORT_PMSVAR_H_ */

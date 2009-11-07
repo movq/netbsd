@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2xx0_intr.c,v 1.13 2008/04/27 18:58:45 matt Exp $ */
+/* $NetBSD: s3c2xx0_intr.c,v 1.16 2012/01/30 03:28:33 nisimura Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -73,14 +73,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2xx0_intr.c,v 1.13 2008/04/27 18:58:45 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2xx0_intr.c,v 1.16 2012/01/30 03:28:33 nisimura Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-#include <uvm/uvm_extern.h>
-#include <machine/bus.h>
+
+#include <sys/bus.h>
 #include <machine/intr.h>
+
 #include <arm/cpufunc.h>
 
 #include <arm/s3c2xx0/s3c2xx0reg.h>
@@ -149,6 +150,9 @@ s3c2xx0_intr_init(struct s3c2xx0_intr_dispatch * dispatch_table, int icu_len)
 		dispatch_table[i].func = stray_interrupt;
 		dispatch_table[i].cookie = (void *) (i);
 		dispatch_table[i].level = IPL_VM;
+		sprintf(dispatch_table[i].name, "irq %d", i);
+		evcnt_attach_dynamic(&dispatch_table[i].ev, EVCNT_TYPE_INTR,
+				     NULL, "s3c2xx0", dispatch_table[i].name);
 	}
 
 	global_intr_mask = ~0;		/* no intr is globally blocked. */

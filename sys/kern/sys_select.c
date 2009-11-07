@@ -1,11 +1,11 @@
-/*	$NetBSD: sys_select.c,v 1.18 2009/11/01 21:46:09 rmind Exp $	*/
+/*	$NetBSD: sys_select.c,v 1.36 2011/08/29 00:39:16 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008, 2009, 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran.
+ * by Andrew Doran and Mindaugas Rasiukevicius.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -66,51 +66,78 @@
  */
 
 /*
- * System calls relating to files.
+ * System calls of synchronous I/O multiplexing subsystem.
+ *
+ * Locking
+ *
+ * Two locks are used: <object-lock> and selcluster_t::sc_lock.
+ *
+ * The <object-lock> might be a device driver or another subsystem, e.g.
+ * socket or pipe.  This lock is not exported, and thus invisible to this
+ * subsystem.  Mainly, synchronisation between selrecord() and selnotify()
+ * routines depends on this lock, as it will be described in the comments.
+ *
+ * Lock order
+ *
+ *	<object-lock> ->
+ *		selcluster_t::sc_lock
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_select.c,v 1.18 2009/11/01 21:46:09 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_select.c,v 1.36 2011/08/29 00:39:16 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/filedesc.h>
-#include <sys/ioctl.h>
 #include <sys/file.h>
 #include <sys/proc.h>
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
-#include <sys/stat.h>
+#include <sys/lwp.h>
 #include <sys/poll.h>
-#include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/cpu.h>
 #include <sys/atomic.h>
 #include <sys/socketvar.h>
 #include <sys/sleepq.h>
+#include <sys/sysctl.h>
 
 /* Flags for lwp::l_selflag. */
 #define	SEL_RESET	0	/* awoken, interrupted, or not yet polling */
 #define	SEL_SCANNING	1	/* polling descriptors */
-#define	SEL_BLOCKING	2	/* about to block on select_cv */
+#define	SEL_BLOCKING	2	/* blocking and waiting for event */
+#define	SEL_EVENT	3	/* interrupted, events set directly */
 
-/* Per-CPU state for select()/poll(). */
-#if MAXCPUS > 32
-#error adjust this code
-#endif
-typedef struct selcpu {
+/* Operations: either select() or poll(). */
+#define	SELOP_SELECT	1
+#define	SELOP_POLL	2
+
+/*
+ * Per-cluster state for select()/poll().  For a system with fewer
+ * than 32 CPUs, this gives us per-CPU clusters.
+ */
+#define	SELCLUSTERS	32
+#define	SELCLUSTERMASK	(SELCLUSTERS - 1)
+
+typedef struct selcluster {
 	kmutex_t	*sc_lock;
 	sleepq_t	sc_sleepq;
 	int		sc_ncoll;
 	uint32_t	sc_mask;
-} selcpu_t;
+} selcluster_t;
 
-static int	selscan(char *, u_int, register_t *);
-static int	pollscan(struct pollfd *, u_int, register_t *);
-static void	selclear(void);
+static inline int	selscan(char *, const int, const size_t, register_t *);
+static inline int	pollscan(struct pollfd *, const int, register_t *);
+static void		selclear(void);
+
+static const int sel_flag[] = {
+	POLLRDNORM | POLLHUP | POLLERR,
+	POLLWRNORM | POLLHUP | POLLERR,
+	POLLRDBAND
+};
 
 static syncobj_t select_sobj = {
 	SOBJ_SLEEPQ_FIFO,
@@ -119,6 +146,9 @@ static syncobj_t select_sobj = {
 	sleepq_lendpri,
 	syncobj_noowner,
 };
+
+static selcluster_t	*selcluster[SELCLUSTERS] __read_mostly;
+static int		direct_select __read_mostly = 0;
 
 /*
  * Select system call.
@@ -152,7 +182,7 @@ sys___pselect50(struct lwp *l, const struct sys___pselect50_args *uap,
 		mask = &amask;
 	}
 
-	return selcommon(l, retval, SCARG(uap, nd), SCARG(uap, in),
+	return selcommon(retval, SCARG(uap, nd), SCARG(uap, in),
 	    SCARG(uap, ou), SCARG(uap, ex), ts, mask);
 }
 
@@ -179,7 +209,7 @@ sys___select50(struct lwp *l, const struct sys___select50_args *uap,
 		ts = &ats;
 	}
 
-	return selcommon(l, retval, SCARG(uap, nd), SCARG(uap, in),
+	return selcommon(retval, SCARG(uap, nd), SCARG(uap, in),
 	    SCARG(uap, ou), SCARG(uap, ex), ts, NULL);
 }
 
@@ -187,14 +217,12 @@ sys___select50(struct lwp *l, const struct sys___select50_args *uap,
  * sel_do_scan: common code to perform the scan on descriptors.
  */
 static int
-sel_do_scan(void *fds, u_int nfds, struct timespec *ts, sigset_t *mask,
-    register_t *retval, int selpoll)
+sel_do_scan(const int op, void *fds, const int nf, const size_t ni,
+    struct timespec *ts, sigset_t *mask, register_t *retval)
 {
 	lwp_t		* const l = curlwp;
-	proc_t		* const p = l->l_proc;
-	selcpu_t	*sc;
+	selcluster_t	*sc;
 	kmutex_t	*lock;
-	sigset_t	oldmask;
 	struct timespec	sleepts;
 	int		error, timo;
 
@@ -203,23 +231,24 @@ sel_do_scan(void *fds, u_int nfds, struct timespec *ts, sigset_t *mask,
 		return EINVAL;
 	}
 
-	if (__predict_false(mask)) {
-		sigminusset(&sigcantmask, mask);
-		mutex_enter(p->p_lock);
-		oldmask = l->l_sigmask;
-		l->l_sigmask = *mask;
-		mutex_exit(p->p_lock);
+	if (__predict_false(mask))
+		sigsuspendsetup(l, mask);
+
+	sc = curcpu()->ci_data.cpu_selcluster;
+	lock = sc->sc_lock;
+	l->l_selcluster = sc;
+	if (op == SELOP_SELECT) {
+		l->l_selbits = fds;
+		l->l_selni = ni;
 	} else {
-		/* XXXgcc */
-		oldmask = l->l_sigmask;
+		l->l_selbits = NULL;
 	}
 
-	sc = curcpu()->ci_data.cpu_selcpu;
-	lock = sc->sc_lock;
-	l->l_selcpu = sc;
-	SLIST_INIT(&l->l_selwait);
 	for (;;) {
 		int ncoll;
+
+		SLIST_INIT(&l->l_selwait);
+		l->l_selret = 0;
 
 		/*
 		 * No need to lock.  If this is overwritten by another value
@@ -231,53 +260,83 @@ sel_do_scan(void *fds, u_int nfds, struct timespec *ts, sigset_t *mask,
 		l->l_selflag = SEL_SCANNING;
 		ncoll = sc->sc_ncoll;
 
-		if (selpoll) {
-			error = selscan((char *)fds, nfds, retval);
+		if (op == SELOP_SELECT) {
+			error = selscan((char *)fds, nf, ni, retval);
 		} else {
-			error = pollscan((struct pollfd *)fds, nfds, retval);
+			error = pollscan((struct pollfd *)fds, nf, retval);
 		}
-
 		if (error || *retval)
 			break;
 		if (ts && (timo = gettimeleft(ts, &sleepts)) <= 0)
 			break;
+		/*
+		 * Acquire the lock and perform the (re)checks.  Note, if
+		 * collision has occured, then our state does not matter,
+		 * as we must perform re-scan.  Therefore, check it first.
+		 */
+state_check:
 		mutex_spin_enter(lock);
-		if (l->l_selflag != SEL_SCANNING || sc->sc_ncoll != ncoll) {
+		if (__predict_false(sc->sc_ncoll != ncoll)) {
+			/* Collision: perform re-scan. */
 			mutex_spin_exit(lock);
+			selclear();
 			continue;
 		}
+		if (__predict_true(l->l_selflag == SEL_EVENT)) {
+			/* Events occured, they are set directly. */
+			mutex_spin_exit(lock);
+			break;
+		}
+		if (__predict_true(l->l_selflag == SEL_RESET)) {
+			/* Events occured, but re-scan is requested. */
+			mutex_spin_exit(lock);
+			selclear();
+			continue;
+		}
+		/* Nothing happen, therefore - sleep. */
 		l->l_selflag = SEL_BLOCKING;
 		l->l_kpriority = true;
 		sleepq_enter(&sc->sc_sleepq, l, lock);
 		sleepq_enqueue(&sc->sc_sleepq, sc, "select", &select_sobj);
 		error = sleepq_block(timo, true);
-		if (error != 0)
+		if (error != 0) {
 			break;
+		}
+		/* Awoken: need to check the state. */
+		goto state_check;
 	}
 	selclear();
 
-	if (__predict_false(mask)) {
-		mutex_enter(p->p_lock);
-		l->l_sigmask = oldmask;
-		mutex_exit(p->p_lock);
+	/* Add direct events if any. */
+	if (l->l_selflag == SEL_EVENT) {
+		KASSERT(l->l_selret != 0);
+		*retval += l->l_selret;
 	}
+
+	if (__predict_false(mask))
+		sigsuspendteardown(l);
+
+	/* select and poll are not restarted after signals... */
+	if (error == ERESTART)
+		return EINTR;
+	if (error == EWOULDBLOCK)
+		return 0;
 	return error;
 }
 
 int
-selcommon(lwp_t *l, register_t *retval, int nd, fd_set *u_in,
-	  fd_set *u_ou, fd_set *u_ex, struct timespec *ts, sigset_t *mask)
+selcommon(register_t *retval, int nd, fd_set *u_in, fd_set *u_ou,
+    fd_set *u_ex, struct timespec *ts, sigset_t *mask)
 {
 	char		smallbits[howmany(FD_SETSIZE, NFDBITS) *
 			    sizeof(fd_mask) * 6];
-	proc_t		* const p = l->l_proc;
 	char 		*bits;
 	int		error, nf;
 	size_t		ni;
 
 	if (nd < 0)
 		return (EINVAL);
-	nf = p->p_fd->fd_dt->dt_nfiles;
+	nf = curlwp->l_fd->fd_dt->dt_nfiles;
 	if (nd > nf) {
 		/* forgiving; slightly wrong */
 		nd = nf;
@@ -294,7 +353,7 @@ selcommon(lwp_t *l, register_t *retval, int nd, fd_set *u_in,
 	if (u_ ## name) {						\
 		error = copyin(u_ ## name, bits + ni * x, ni);		\
 		if (error)						\
-			goto done;					\
+			goto fail;					\
 	} else								\
 		memset(bits + ni * x, 0, ni);
 	getbits(in, 0);
@@ -302,55 +361,65 @@ selcommon(lwp_t *l, register_t *retval, int nd, fd_set *u_in,
 	getbits(ex, 2);
 #undef	getbits
 
-	error = sel_do_scan(bits, nd, ts, mask, retval, 1);
- done:
-	/* select is not restarted after signals... */
-	if (error == ERESTART)
-		error = EINTR;
-	if (error == EWOULDBLOCK)
-		error = 0;
+	error = sel_do_scan(SELOP_SELECT, bits, nd, ni, ts, mask, retval);
 	if (error == 0 && u_in != NULL)
 		error = copyout(bits + ni * 3, u_in, ni);
 	if (error == 0 && u_ou != NULL)
 		error = copyout(bits + ni * 4, u_ou, ni);
 	if (error == 0 && u_ex != NULL)
 		error = copyout(bits + ni * 5, u_ex, ni);
+ fail:
 	if (bits != smallbits)
 		kmem_free(bits, ni * 6);
 	return (error);
 }
 
-static int
-selscan(char *bits, u_int nfd, register_t *retval)
+static inline int
+selscan(char *bits, const int nfd, const size_t ni, register_t *retval)
 {
-	static const int flag[3] = { POLLRDNORM | POLLHUP | POLLERR,
-			       POLLWRNORM | POLLHUP | POLLERR,
-			       POLLRDBAND };
 	fd_mask *ibitp, *obitp;
-	int msk, i, j, fd, ni, n;
-	fd_mask ibits, obits;
+	int msk, i, j, fd, n;
 	file_t *fp;
 
-	ni = howmany(nfd, NFDBITS) * sizeof(fd_mask);
 	ibitp = (fd_mask *)(bits + ni * 0);
 	obitp = (fd_mask *)(bits + ni * 3);
 	n = 0;
 
+	memset(obitp, 0, ni * 3);
 	for (msk = 0; msk < 3; msk++) {
 		for (i = 0; i < nfd; i += NFDBITS) {
-			ibits = *ibitp++;
+			fd_mask ibits, obits;
+
+			ibits = *ibitp;
 			obits = 0;
 			while ((j = ffs(ibits)) && (fd = i + --j) < nfd) {
 				ibits &= ~(1 << j);
 				if ((fp = fd_getfile(fd)) == NULL)
 					return (EBADF);
-				if ((*fp->f_ops->fo_poll)(fp, flag[msk])) {
+				/*
+				 * Setup an argument to selrecord(), which is
+				 * a file descriptor number.
+				 */
+				curlwp->l_selrec = fd;
+				if ((*fp->f_ops->fo_poll)(fp, sel_flag[msk])) {
 					obits |= (1 << j);
 					n++;
 				}
 				fd_putfile(fd);
 			}
-			*obitp++ = obits;
+			if (obits != 0) {
+				if (direct_select) {
+					kmutex_t *lock;
+					lock = curlwp->l_selcluster->sc_lock;
+					mutex_spin_enter(lock);
+					*obitp |= obits;
+					mutex_spin_exit(lock);
+				} else {
+					*obitp |= obits;
+				}
+			}
+			ibitp++;
+			obitp++;
 		}
 	}
 	*retval = n;
@@ -376,8 +445,7 @@ sys_poll(struct lwp *l, const struct sys_poll_args *uap, register_t *retval)
 		ts = &ats;
 	}
 
-	return pollcommon(l, retval, SCARG(uap, fds), SCARG(uap, nfds),
-		ts, NULL);
+	return pollcommon(retval, SCARG(uap, fds), SCARG(uap, nfds), ts, NULL);
 }
 
 /*
@@ -410,24 +478,29 @@ sys___pollts50(struct lwp *l, const struct sys___pollts50_args *uap,
 		mask = &amask;
 	}
 
-	return pollcommon(l, retval, SCARG(uap, fds), SCARG(uap, nfds),
-	    ts, mask);
+	return pollcommon(retval, SCARG(uap, fds), SCARG(uap, nfds), ts, mask);
 }
 
 int
-pollcommon(lwp_t *l, register_t *retval, struct pollfd *u_fds, u_int nfds,
+pollcommon(register_t *retval, struct pollfd *u_fds, u_int nfds,
     struct timespec *ts, sigset_t *mask)
 {
 	struct pollfd	smallfds[32];
 	struct pollfd	*fds;
-	proc_t		* const p = l->l_proc;
 	int		error;
-	size_t		ni, nf;
+	size_t		ni;
 
-	nf = p->p_fd->fd_dt->dt_nfiles;
-	if (nfds > nf) {
-		/* forgiving; slightly wrong */
-		nfds = nf;
+	if (nfds > 1000 + curlwp->l_fd->fd_dt->dt_nfiles) {
+		/*
+		 * Either the user passed in a very sparse 'fds' or junk!
+		 * The kmem_alloc() call below would be bad news.
+		 * We could process the 'fds' array in chunks, but that
+		 * is a lot of code that isn't normally useful.
+		 * (Or just move the copyin/out into pollscan().)
+		 * Historically the code silently truncated 'fds' to
+		 * dt_nfiles entries - but that does cause issues.
+		 */
+		return EINVAL;
 	}
 	ni = nfds * sizeof(struct pollfd);
 	if (ni > sizeof(smallfds)) {
@@ -439,48 +512,49 @@ pollcommon(lwp_t *l, register_t *retval, struct pollfd *u_fds, u_int nfds,
 
 	error = copyin(u_fds, fds, ni);
 	if (error)
-		goto done;
+		goto fail;
 
-	error = sel_do_scan(fds, nfds, ts, mask, retval, 0);
- done:
-	/* poll is not restarted after signals... */
-	if (error == ERESTART)
-		error = EINTR;
-	if (error == EWOULDBLOCK)
-		error = 0;
+	error = sel_do_scan(SELOP_POLL, fds, nfds, ni, ts, mask, retval);
 	if (error == 0)
 		error = copyout(fds, u_fds, ni);
+ fail:
 	if (fds != smallfds)
 		kmem_free(fds, ni);
 	return (error);
 }
 
-static int
-pollscan(struct pollfd *fds, u_int nfd, register_t *retval)
+static inline int
+pollscan(struct pollfd *fds, const int nfd, register_t *retval)
 {
-	int i, n;
 	file_t *fp;
+	int i, n = 0, revents;
 
-	n = 0;
 	for (i = 0; i < nfd; i++, fds++) {
+		fds->revents = 0;
 		if (fds->fd < 0) {
-			fds->revents = 0;
+			revents = 0;
 		} else if ((fp = fd_getfile(fds->fd)) == NULL) {
-			fds->revents = POLLNVAL;
-			n++;
+			revents = POLLNVAL;
 		} else {
-			fds->revents = (*fp->f_ops->fo_poll)(fp,
+			/*
+			 * Perform poll: registers select request or returns
+			 * the events which are set.  Setup an argument for
+			 * selrecord(), which is a pointer to struct pollfd.
+			 */
+			curlwp->l_selrec = (uintptr_t)fds;
+			revents = (*fp->f_ops->fo_poll)(fp,
 			    fds->events | POLLERR | POLLHUP);
-			if (fds->revents != 0)
-				n++;
 			fd_putfile(fds->fd);
+		}
+		if (revents) {
+			fds->revents = revents;
+			n++;
 		}
 	}
 	*retval = n;
 	return (0);
 }
 
-/*ARGSUSED*/
 int
 seltrue(dev_t dev, int events, lwp_t *l)
 {
@@ -512,52 +586,115 @@ seltrue(dev_t dev, int events, lwp_t *l)
 void
 selrecord(lwp_t *selector, struct selinfo *sip)
 {
-	selcpu_t *sc;
+	selcluster_t *sc;
 	lwp_t *other;
 
 	KASSERT(selector == curlwp);
 
-	sc = selector->l_selcpu;
+	sc = selector->l_selcluster;
 	other = sip->sel_lwp;
 
 	if (other == selector) {
-		/* `selector' has already claimed it. */
-		KASSERT(sip->sel_cpu = sc);
+		/* 1. We (selector) already claimed to be the first LWP. */
+		KASSERT(sip->sel_cluster = sc);
 	} else if (other == NULL) {
 		/*
-		 * First named waiter, although there may be unnamed
-		 * waiters (collisions).  Issue a memory barrier to
-		 * ensure that we access sel_lwp (above) before other
-		 * fields - this guards against a call to selclear().
+		 * 2. No first LWP, therefore we (selector) are the first.
+		 *
+		 * There may be unnamed waiters (collisions).  Issue a memory
+		 * barrier to ensure that we access sel_lwp (above) before
+		 * other fields - this guards against a call to selclear().
 		 */
 		membar_enter();
 		sip->sel_lwp = selector;
 		SLIST_INSERT_HEAD(&selector->l_selwait, sip, sel_chain);
-		/* Replace selinfo's lock with our chosen CPU's lock. */
-		sip->sel_cpu = sc;
+		/* Copy the argument, which is for selnotify(). */
+		sip->sel_fdinfo = selector->l_selrec;
+		/* Replace selinfo's lock with the chosen cluster's lock. */
+		sip->sel_cluster = sc;
 	} else {
-		/* Multiple waiters: record a collision. */
+		/* 3. Multiple waiters: record a collision. */
 		sip->sel_collision |= sc->sc_mask;
-		KASSERT(sip->sel_cpu != NULL);
+		KASSERT(sip->sel_cluster != NULL);
 	}
+}
+
+/*
+ * sel_setevents: a helper function for selnotify(), to set the events
+ * for LWP sleeping in selcommon() or pollcommon().
+ */
+static inline bool
+sel_setevents(lwp_t *l, struct selinfo *sip, const int events)
+{
+	const int oflag = l->l_selflag;
+	int ret = 0;
+
+	/*
+	 * If we require re-scan or it was required by somebody else,
+	 * then just (re)set SEL_RESET and return.
+	 */
+	if (__predict_false(events == 0 || oflag == SEL_RESET)) {
+		l->l_selflag = SEL_RESET;
+		return true;
+	}
+	/*
+	 * Direct set.  Note: select state of LWP is locked.  First,
+	 * determine whether it is selcommon() or pollcommon().
+	 */
+	if (l->l_selbits != NULL) {
+		const size_t ni = l->l_selni;
+		fd_mask *fds = (fd_mask *)l->l_selbits;
+		fd_mask *ofds = (fd_mask *)((char *)fds + ni * 3);
+		const int fd = sip->sel_fdinfo, fbit = 1 << (fd & __NFDMASK);
+		const int idx = fd >> __NFDSHIFT;
+		int n;
+
+		for (n = 0; n < 3; n++) {
+			if ((fds[idx] & fbit) != 0 &&
+			    (ofds[idx] & fbit) == 0 &&
+			    (sel_flag[n] & events)) {
+				ofds[idx] |= fbit;
+				ret++;
+			}
+			fds = (fd_mask *)((char *)fds + ni);
+			ofds = (fd_mask *)((char *)ofds + ni);
+		}
+	} else {
+		struct pollfd *pfd = (void *)sip->sel_fdinfo;
+		int revents = events & (pfd->events | POLLERR | POLLHUP);
+
+		if (revents) {
+			if (pfd->revents == 0)
+				ret = 1;
+			pfd->revents |= revents;
+		}
+	}
+	/* Check whether there are any events to return. */
+	if (!ret) {
+		return false;
+	}
+	/* Indicate direct set and note the event (cluster lock is held). */
+	l->l_selflag = SEL_EVENT;
+	l->l_selret += ret;
+	return true;
 }
 
 /*
  * Do a wakeup when a selectable event occurs.  Concurrency issues:
  *
  * As per selrecord(), the caller's object lock is held.  If there
- * is a named waiter, we must acquire the associated selcpu's lock
+ * is a named waiter, we must acquire the associated selcluster's lock
  * in order to synchronize with selclear() and pollers going to sleep
  * in sel_do_scan().
  *
- * sip->sel_cpu cannot change at this point, as it is only changed
+ * sip->sel_cluser cannot change at this point, as it is only changed
  * in selrecord(), and concurrent calls to selrecord() are locked
  * out by the caller.
  */
 void
 selnotify(struct selinfo *sip, int events, long knhint)
 {
-	selcpu_t *sc;
+	selcluster_t *sc;
 	uint32_t mask;
 	int index, oflag;
 	lwp_t *l;
@@ -567,19 +704,31 @@ selnotify(struct selinfo *sip, int events, long knhint)
 
 	if (sip->sel_lwp != NULL) {
 		/* One named LWP is waiting. */
-		sc = sip->sel_cpu;
+		sc = sip->sel_cluster;
 		lock = sc->sc_lock;
 		mutex_spin_enter(lock);
 		/* Still there? */
 		if (sip->sel_lwp != NULL) {
+			/*
+			 * Set the events for our LWP and indicate that.
+			 * Otherwise, request for a full re-scan.
+			 */
 			l = sip->sel_lwp;
+			oflag = l->l_selflag;
+
+			if (!direct_select) {
+				l->l_selflag = SEL_RESET;
+			} else if (!sel_setevents(l, sip, events)) {
+				/* No events to return. */
+				mutex_spin_exit(lock);
+				return;
+			}
+
 			/*
 			 * If thread is sleeping, wake it up.  If it's not
 			 * yet asleep, it will notice the change in state
 			 * and will re-poll the descriptors.
 			 */
-			oflag = l->l_selflag;
-			l->l_selflag = SEL_RESET;
 			if (oflag == SEL_BLOCKING && l->l_mutex == lock) {
 				KASSERT(l->l_wchan == sc);
 				sleepq_unsleep(l, false);
@@ -597,7 +746,7 @@ selnotify(struct selinfo *sip, int events, long knhint)
 		do {
 			index = ffs(mask) - 1;
 			mask &= ~(1 << index);
-			sc = cpu_lookup(index)->ci_data.cpu_selcpu;
+			sc = selcluster[index];
 			lock = sc->sc_lock;
 			mutex_spin_enter(lock);
 			sc->sc_ncoll++;
@@ -620,18 +769,19 @@ static void
 selclear(void)
 {
 	struct selinfo *sip, *next;
-	selcpu_t *sc;
+	selcluster_t *sc;
 	lwp_t *l;
 	kmutex_t *lock;
 
 	l = curlwp;
-	sc = l->l_selcpu;
+	sc = l->l_selcluster;
 	lock = sc->sc_lock;
 
 	mutex_spin_enter(lock);
 	for (sip = SLIST_FIRST(&l->l_selwait); sip != NULL; sip = next) {
 		KASSERT(sip->sel_lwp == l);
-		KASSERT(sip->sel_cpu == l->l_selcpu);
+		KASSERT(sip->sel_cluster == l->l_selcluster);
+
 		/*
 		 * Read link to next selinfo record, if any.
 		 * It's no longer safe to touch `sip' after clearing
@@ -654,16 +804,23 @@ selclear(void)
 void
 selsysinit(struct cpu_info *ci)
 {
-	selcpu_t *sc;
+	selcluster_t *sc;
+	u_int index;
 
-	sc = kmem_alloc(roundup2(sizeof(selcpu_t), coherency_unit) +
-	    coherency_unit, KM_SLEEP);
-	sc = (void *)roundup2((uintptr_t)sc, coherency_unit);
-	sc->sc_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_SCHED);
-	sleepq_init(&sc->sc_sleepq);
-	sc->sc_ncoll = 0;
-	sc->sc_mask = (1 << cpu_index(ci));
-	ci->ci_data.cpu_selcpu = sc;
+	/* If already a cluster in place for this bit, re-use. */
+	index = cpu_index(ci) & SELCLUSTERMASK;
+	sc = selcluster[index];
+	if (sc == NULL) {
+		sc = kmem_alloc(roundup2(sizeof(selcluster_t),
+		    coherency_unit) + coherency_unit, KM_SLEEP);
+		sc = (void *)roundup2((uintptr_t)sc, coherency_unit);
+		sc->sc_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_SCHED);
+		sleepq_init(&sc->sc_sleepq);
+		sc->sc_ncoll = 0;
+		sc->sc_mask = (1 << index);
+		selcluster[index] = sc;
+	}
+	ci->ci_data.cpu_selcluster = sc;
 }
 
 /*
@@ -684,12 +841,12 @@ selinit(struct selinfo *sip)
  * Concurrency issues: we only need guard against a call to selclear()
  * by a thread exiting sel_do_scan().  The caller has prevented further
  * references being made to the selinfo record via selrecord(), and it
- * won't call selwakeup() again.
+ * will not call selnotify() again.
  */
 void
 seldestroy(struct selinfo *sip)
 {
-	selcpu_t *sc;
+	selcluster_t *sc;
 	kmutex_t *lock;
 	lwp_t *l;
 
@@ -697,13 +854,13 @@ seldestroy(struct selinfo *sip)
 		return;
 
 	/*
-	 * Lock out selclear().  The selcpu pointer can't change while
+	 * Lock out selclear().  The selcluster pointer can't change while
 	 * we are here since it is only ever changed in selrecord(),
 	 * and that will not be entered again for this record because
 	 * it is dying.
 	 */
-	KASSERT(sip->sel_cpu != NULL);
-	sc = sip->sel_cpu;
+	KASSERT(sip->sel_cluster != NULL);
+	sc = sip->sel_cluster;
 	lock = sc->sc_lock;
 	mutex_spin_enter(lock);
 	if ((l = sip->sel_lwp) != NULL) {
@@ -711,7 +868,7 @@ seldestroy(struct selinfo *sip)
 		 * This should rarely happen, so although SLIST_REMOVE()
 		 * is slow, using it here is not a problem.
 		 */
-		KASSERT(l->l_selcpu == sc);
+		KASSERT(l->l_selcluster == sc);
 		SLIST_REMOVE(&l->l_selwait, sip, selinfo, sel_chain);
 		sip->sel_lwp = NULL;
 	}
@@ -723,7 +880,7 @@ pollsock(struct socket *so, const struct timespec *tsp, int events)
 {
 	int		ncoll, error, timo;
 	struct timespec	sleepts, ts;
-	selcpu_t	*sc;
+	selcluster_t	*sc;
 	lwp_t		*l;
 	kmutex_t	*lock;
 
@@ -735,9 +892,9 @@ pollsock(struct socket *so, const struct timespec *tsp, int events)
 	}
 
 	l = curlwp;
-	sc = l->l_cpu->ci_data.cpu_selcpu;
+	sc = curcpu()->ci_data.cpu_selcluster;
 	lock = sc->sc_lock;
-	l->l_selcpu = sc;
+	l->l_selcluster = sc;
 	SLIST_INIT(&l->l_selwait);
 	error = 0;
 	for (;;) {
@@ -774,4 +931,24 @@ pollsock(struct socket *so, const struct timespec *tsp, int events)
 	if (error == EWOULDBLOCK)
 		error = 0;
 	return (error);
+}
+
+/*
+ * System control nodes.
+ */
+SYSCTL_SETUP(sysctl_select_setup, "sysctl select setup")
+{
+	const struct sysctlnode *node = NULL;
+
+	sysctl_createv(clog, 0, NULL, &node,
+		CTLFLAG_PERMANENT,
+		CTLTYPE_NODE, "kern", NULL,
+		NULL, 0, NULL, 0,
+		CTL_KERN, CTL_EOL);
+	sysctl_createv(clog, 0, &node, NULL,
+		CTLFLAG_PERMANENT | CTLFLAG_READWRITE,
+		CTLTYPE_INT, "direct_select",
+		SYSCTL_DESCR("Enable/disable direct select (for testing)"),
+		NULL, 0, &direct_select, 0,
+		CTL_CREATE, CTL_EOL);
 }

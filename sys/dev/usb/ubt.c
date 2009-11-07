@@ -1,4 +1,4 @@
-/*	$NetBSD: ubt.c,v 1.37 2009/09/23 19:07:19 plunky Exp $	*/
+/*	$NetBSD: ubt.c,v 1.44.2.1 2012/05/07 16:25:42 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.37 2009/09/23 19:07:19 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.44.2.1 2012/05/07 16:25:42 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -97,14 +97,18 @@ __KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.37 2009/09/23 19:07:19 plunky Exp $");
 #ifdef UBT_DEBUG
 int	ubt_debug = 0;
 
-#define DPRINTF(fmt, args...)		do {		\
-	if (ubt_debug)					\
-		printf("%s: "fmt, __func__ , ##args);	\
+#define DPRINTF(...)		do {		\
+	if (ubt_debug) {			\
+		printf("%s: ", __func__);	\
+		printf(__VA_ARGS__);		\
+	}					\
 } while (/* CONSTCOND */0)
 
-#define DPRINTFN(n, fmt, args...)	do {		\
-	if (ubt_debug > (n))				\
-		printf("%s: "fmt, __func__ , ##args);	\
+#define DPRINTFN(n, ...)	do {		\
+	if (ubt_debug > (n)) {			\
+		printf("%s: ", __func__);	\
+		printf(__VA_ARGS__);		\
+	}					\
 } while (/* CONSTCOND */0)
 
 SYSCTL_SETUP(sysctl_hw_ubt_debug_setup, "sysctl hw.ubt_debug setup")
@@ -171,7 +175,7 @@ struct ubt_isoc_xfer {
 };
 
 struct ubt_softc {
-	USBBASEDEVICE		 sc_dev;
+	device_t		 sc_dev;
 	usbd_device_handle	 sc_udev;
 	int			 sc_refcnt;
 	int			 sc_dying;
@@ -241,20 +245,20 @@ struct ubt_softc {
  * Bluetooth unit/USB callback routines
  *
  */
-static int ubt_enable(device_ptr_t);
-static void ubt_disable(device_ptr_t);
+static int ubt_enable(device_t);
+static void ubt_disable(device_t);
 
-static void ubt_xmit_cmd(device_ptr_t, struct mbuf *);
+static void ubt_xmit_cmd(device_t, struct mbuf *);
 static void ubt_xmit_cmd_start(struct ubt_softc *);
 static void ubt_xmit_cmd_complete(usbd_xfer_handle,
 				usbd_private_handle, usbd_status);
 
-static void ubt_xmit_acl(device_ptr_t, struct mbuf *);
+static void ubt_xmit_acl(device_t, struct mbuf *);
 static void ubt_xmit_acl_start(struct ubt_softc *);
 static void ubt_xmit_acl_complete(usbd_xfer_handle,
 				usbd_private_handle, usbd_status);
 
-static void ubt_xmit_sco(device_ptr_t, struct mbuf *);
+static void ubt_xmit_sco(device_t, struct mbuf *);
 static void ubt_xmit_sco_start(struct ubt_softc *);
 static void ubt_xmit_sco_start1(struct ubt_softc *, struct ubt_isoc_xfer *);
 static void ubt_xmit_sco_complete(usbd_xfer_handle,
@@ -271,7 +275,7 @@ static void ubt_recv_sco_start1(struct ubt_softc *, struct ubt_isoc_xfer *);
 static void ubt_recv_sco_complete(usbd_xfer_handle,
 				usbd_private_handle, usbd_status);
 
-static void ubt_stats(device_ptr_t, struct bt_stats *, int);
+static void ubt_stats(device_t, struct bt_stats *, int);
 
 static const struct hci_if ubt_hci = {
 	.enable = ubt_enable,
@@ -289,7 +293,12 @@ static const struct hci_if ubt_hci = {
  *
  */
 
-USB_DECLARE_DRIVER(ubt);
+int             ubt_match(device_t, cfdata_t, void *);
+void            ubt_attach(device_t, device_t, void *);
+int             ubt_detach(device_t, int);
+int             ubt_activate(device_t, enum devact);
+extern struct cfdriver ubt_cd;
+CFATTACH_DECL_NEW(ubt, sizeof(struct ubt_softc), ubt_match, ubt_attach, ubt_detach, ubt_activate);
 
 static int ubt_set_isoc_config(struct ubt_softc *);
 static int ubt_sysctl_config(SYSCTLFN_PROTO);
@@ -307,9 +316,10 @@ static const struct usb_devno ubt_ignore[] = {
 	{ USB_VENDOR_BROADCOM, USB_PRODUCT_BROADCOM_BCM2033NF },
 };
 
-USB_MATCH(ubt)
+int 
+ubt_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_MATCH_START(ubt, uaa);
+	struct usb_attach_arg *uaa = aux;
 
 	DPRINTFN(50, "ubt_match\n");
 
@@ -324,9 +334,11 @@ USB_MATCH(ubt)
 	return UMATCH_NONE;
 }
 
-USB_ATTACH(ubt)
+void 
+ubt_attach(device_t parent, device_t self, void *aux)
 {
-	USB_ATTACH_START(ubt, sc, uaa);
+	struct ubt_softc *sc = device_private(self);
+	struct usb_attach_arg *uaa = aux;
 	usb_config_descriptor_t *cd;
 	usb_endpoint_descriptor_t *ed;
 	const struct sysctlnode *node;
@@ -358,7 +370,7 @@ USB_ATTACH(ubt)
 		aprint_error_dev(self, "failed to set configuration idx 0: %s\n",
 		    usbd_errstr(err));
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	/*
@@ -372,7 +384,7 @@ USB_ATTACH(ubt)
 		aprint_error_dev(self, "Could not get interface 0 handle %s (%d)\n",
 				usbd_errstr(err), err);
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	sc->sc_evt_addr = -1;
@@ -390,7 +402,7 @@ USB_ATTACH(ubt)
 			aprint_error_dev(self,
 			    "could not read endpoint descriptor %d\n", i);
 
-			USB_ATTACH_ERROR_RETURN;
+			return;
 		}
 
 		dir = UE_GET_DIR(ed->bEndpointAddress);
@@ -408,19 +420,19 @@ USB_ATTACH(ubt)
 		aprint_error_dev(self,
 		    "missing INTERRUPT endpoint on interface 0\n");
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 	if (sc->sc_aclrd_addr == -1) {
 		aprint_error_dev(self,
 		    "missing BULK IN endpoint on interface 0\n");
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 	if (sc->sc_aclwr_addr == -1) {
 		aprint_error_dev(self,
 		    "missing BULK OUT endpoint on interface 0\n");
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	/*
@@ -438,14 +450,14 @@ USB_ATTACH(ubt)
 		    "Could not get interface 1 handle %s (%d)\n",
 		    usbd_errstr(err), err);
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	cd = usbd_get_config_descriptor(sc->sc_udev);
 	if (cd == NULL) {
 		aprint_error_dev(self, "could not get config descriptor\n");
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	sc->sc_alt_config = usbd_get_no_alts(cd, 1);
@@ -455,14 +467,14 @@ USB_ATTACH(ubt)
 	if (err) {
 		aprint_error_dev(self, "ISOC config failed\n");
 
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	/* Attach HCI */
-	sc->sc_unit = hci_attach(&ubt_hci, USBDEV(sc->sc_dev), 0);
+	sc->sc_unit = hci_attach(&ubt_hci, sc->sc_dev, 0);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
 
 	/* sysctl set-up for alternate configs */
 	sysctl_createv(&sc->sc_log, 0, NULL, NULL,
@@ -475,7 +487,7 @@ USB_ATTACH(ubt)
 
 	sysctl_createv(&sc->sc_log, 0, NULL, &node,
 		0,
-		CTLTYPE_NODE, USBDEVNAME(sc->sc_dev),
+		CTLTYPE_NODE, device_xname(sc->sc_dev),
 		SYSCTL_DESCR("ubt driver information"),
 		NULL, 0,
 		NULL, 0,
@@ -523,12 +535,13 @@ USB_ATTACH(ubt)
 	sc->sc_ok = 1;
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 }
 
-USB_DETACH(ubt)
+int 
+ubt_detach(device_t self, int flags)
 {
-	USB_DETACH_START(ubt, sc);
+	struct ubt_softc *sc = device_private(self);
 	int s;
 
 	DPRINTF("sc=%p flags=%d\n", sc, flags);
@@ -562,12 +575,12 @@ USB_DETACH(ubt)
 	/* wait for all processes to finish */
 	s = splusb();
 	if (sc->sc_refcnt-- > 0)
-		usb_detach_wait(USBDEV(sc->sc_dev));
+		usb_detach_wait(sc->sc_dev);
 
 	splx(s);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
 
 	DPRINTFN(1, "driver detached\n");
 
@@ -575,27 +588,19 @@ USB_DETACH(ubt)
 }
 
 int
-ubt_activate(device_ptr_t self, enum devact act)
+ubt_activate(device_t self, enum devact act)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
-	int error = 0;
+	struct ubt_softc *sc = device_private(self);
 
 	DPRINTFN(1, "sc=%p, act=%d\n", sc, act);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		break;
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
-
+		return 0;
 	default:
-		error = EOPNOTSUPP;
-		break;
+		return EOPNOTSUPP;
 	}
-
-	return error;
 }
 
 /* set ISOC configuration */
@@ -642,7 +647,7 @@ ubt_set_isoc_config(struct ubt_softc *sc)
 		}
 
 		DPRINTFN(5, "%s: endpoint type %02x (%02x) addr %02x (%s)\n",
-			USBDEVNAME(sc->sc_dev),
+			device_xname(sc->sc_dev),
 			UE_GET_XFERTYPE(ed->bmAttributes),
 			UE_GET_ISO_TYPE(ed->bmAttributes),
 			ed->bEndpointAddress,
@@ -675,7 +680,6 @@ ubt_set_isoc_config(struct ubt_softc *sc)
 		return ENOENT;
 	}
 
-#ifdef DIAGNOSTIC
 	if (rd_size > MLEN) {
 		aprint_error_dev(sc->sc_dev, "rd_size=%d exceeds MLEN\n",
 		    rd_size);
@@ -689,7 +693,6 @@ ubt_set_isoc_config(struct ubt_softc *sc)
 
 		return EOVERFLOW;
 	}
-#endif
 
 	sc->sc_scord_size = rd_size;
 	sc->sc_scord_addr = rd_addr;
@@ -724,8 +727,11 @@ ubt_sysctl_config(SYSCTLFN_ARGS)
 	if (sc->sc_enabled)
 		return EBUSY;
 
+	KERNEL_LOCK(1, curlwp);
 	sc->sc_config = t;
-	return ubt_set_isoc_config(sc);
+	error = ubt_set_isoc_config(sc);
+	KERNEL_UNLOCK_ONE(curlwp);
+	return error;
 }
 
 static void
@@ -830,9 +836,9 @@ ubt_abortdealloc(struct ubt_softc *sc)
  *
  */
 static int
-ubt_enable(device_ptr_t self)
+ubt_enable(device_t self)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
+	struct ubt_softc *sc = device_private(self);
 	usbd_status err;
 	int s, i, error;
 
@@ -981,9 +987,9 @@ bad:
 }
 
 static void
-ubt_disable(device_ptr_t self)
+ubt_disable(device_t self)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
+	struct ubt_softc *sc = device_private(self);
 	int s;
 
 	DPRINTFN(1, "sc=%p\n", sc);
@@ -999,9 +1005,9 @@ ubt_disable(device_ptr_t self)
 }
 
 static void
-ubt_xmit_cmd(device_ptr_t self, struct mbuf *m)
+ubt_xmit_cmd(device_t self, struct mbuf *m)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
+	struct ubt_softc *sc = device_private(self);
 	int s;
 
 	KASSERT(sc->sc_enabled);
@@ -1033,7 +1039,7 @@ ubt_xmit_cmd_start(struct ubt_softc *sc)
 	KASSERT(m != NULL);
 
 	DPRINTFN(15, "%s: xmit CMD packet (%d bytes)\n",
-			USBDEVNAME(sc->sc_dev), m->m_pkthdr.len);
+			device_xname(sc->sc_dev), m->m_pkthdr.len);
 
 	sc->sc_refcnt++;
 	sc->sc_cmd_busy = 1;
@@ -1077,13 +1083,13 @@ ubt_xmit_cmd_complete(usbd_xfer_handle xfer,
 	uint32_t count;
 
 	DPRINTFN(15, "%s: CMD complete status=%s (%d)\n",
-			USBDEVNAME(sc->sc_dev), usbd_errstr(status), status);
+			device_xname(sc->sc_dev), usbd_errstr(status), status);
 
 	sc->sc_cmd_busy = 0;
 
 	if (--sc->sc_refcnt < 0) {
 		DPRINTF("sc_refcnt=%d\n", sc->sc_refcnt);
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1108,9 +1114,9 @@ ubt_xmit_cmd_complete(usbd_xfer_handle xfer,
 }
 
 static void
-ubt_xmit_acl(device_ptr_t self, struct mbuf *m)
+ubt_xmit_acl(device_t self, struct mbuf *m)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
+	struct ubt_softc *sc = device_private(self);
 	int s;
 
 	KASSERT(sc->sc_enabled);
@@ -1144,12 +1150,12 @@ ubt_xmit_acl_start(struct ubt_softc *sc)
 	KASSERT(m != NULL);
 
 	DPRINTFN(15, "%s: xmit ACL packet (%d bytes)\n",
-			USBDEVNAME(sc->sc_dev), m->m_pkthdr.len);
+			device_xname(sc->sc_dev), m->m_pkthdr.len);
 
 	len = m->m_pkthdr.len - 1;
 	if (len > UBT_BUFSIZ_ACL) {
 		DPRINTF("%s: truncating ACL packet (%d => %d)!\n",
-			USBDEVNAME(sc->sc_dev), len, UBT_BUFSIZ_ACL);
+			device_xname(sc->sc_dev), len, UBT_BUFSIZ_ACL);
 
 		len = UBT_BUFSIZ_ACL;
 	}
@@ -1189,12 +1195,12 @@ ubt_xmit_acl_complete(usbd_xfer_handle xfer,
 	struct ubt_softc *sc = h;
 
 	DPRINTFN(15, "%s: ACL complete status=%s (%d)\n",
-		USBDEVNAME(sc->sc_dev), usbd_errstr(status), status);
+		device_xname(sc->sc_dev), usbd_errstr(status), status);
 
 	sc->sc_aclwr_busy = 0;
 
 	if (--sc->sc_refcnt < 0) {
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1217,9 +1223,9 @@ ubt_xmit_acl_complete(usbd_xfer_handle xfer,
 }
 
 static void
-ubt_xmit_sco(device_ptr_t self, struct mbuf *m)
+ubt_xmit_sco(device_t self, struct mbuf *m)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
+	struct ubt_softc *sc = device_private(self);
 	int s;
 
 	KASSERT(sc->sc_enabled);
@@ -1359,7 +1365,7 @@ ubt_xmit_sco_complete(usbd_xfer_handle xfer,
 	}
 
 	if (--sc->sc_refcnt < 0) {
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1494,7 +1500,7 @@ ubt_recv_acl_complete(usbd_xfer_handle xfer,
 
 	if (--sc->sc_refcnt < 0) {
 		DPRINTF("refcnt = %d\n", sc->sc_refcnt);
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1585,7 +1591,7 @@ ubt_recv_sco_complete(usbd_xfer_handle xfer,
 
 	if (--sc->sc_refcnt < 0) {
 		DPRINTF("refcnt=%d\n", sc->sc_refcnt);
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1665,10 +1671,7 @@ ubt_recv_sco_complete(usbd_xfer_handle xfer,
 			if (got + size > want)
 				size = want - got;
 
-			if (got + size > MHLEN)
-				memcpy(ptr, frame, MHLEN - got);
-			else
-				memcpy(ptr, frame, size);
+			memcpy(ptr, frame, size);
 
 			ptr += size;
 			got += size;
@@ -1680,8 +1683,18 @@ ubt_recv_sco_complete(usbd_xfer_handle xfer,
 				 * length to our want count. Send complete
 				 * packets up to protocol stack.
 				 */
-				if (want == sizeof(hci_scodata_hdr_t))
-					want += mtod(m, hci_scodata_hdr_t *)->length;
+				if (want == sizeof(hci_scodata_hdr_t)) {
+					uint32_t len =
+					    mtod(m, hci_scodata_hdr_t *)->length;
+					want += len;
+					if (len == 0 || want > MHLEN) {
+						aprint_error_dev(sc->sc_dev,
+						    "packet too large %u "
+						    "(lost sync)\n", len);
+						sc->sc_stats.err_rx++;
+						return;
+					}
+				}
 
 				if (got == want) {
 					m->m_pkthdr.len = m->m_len = got;
@@ -1707,9 +1720,9 @@ restart: /* and restart */
 }
 
 void
-ubt_stats(device_ptr_t self, struct bt_stats *dest, int flush)
+ubt_stats(device_t self, struct bt_stats *dest, int flush)
 {
-	struct ubt_softc *sc = USBGETSOFTC(self);
+	struct ubt_softc *sc = device_private(self);
 	int s;
 
 	s = splusb();

@@ -1,4 +1,4 @@
-/* $NetBSD: vga.c,v 1.101 2009/02/19 00:39:25 jmcneill Exp $ */
+/* $NetBSD: vga.c,v 1.108.2.1 2012/08/12 13:27:43 martin Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.101 2009/02/19 00:39:25 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.108.2.1 2012/08/12 13:27:43 martin Exp $");
 
 /* for WSCONS_SUPPORT_PCVTFONTS */
 #include "opt_wsdisplay_compat.h"
@@ -101,7 +101,6 @@ struct vgascreen {
 	/* videostate */
 	struct egavga_font *fontset1, *fontset2;
 	/* font data */
-	/* palette */
 
 	int mindispoffset, maxdispoffset;
 	int vga_rollover;
@@ -312,7 +311,9 @@ const struct wsdisplay_accessops vga_accessops = {
 #define vga_valid_primary_font(f) \
 	(f->wsfont->encoding == WSDISPLAY_FONTENC_IBM || \
 	f->wsfont->encoding == WSDISPLAY_FONTENC_ISO || \
-	f->wsfont->encoding == WSDISPLAY_FONTENC_ISO7)
+	f->wsfont->encoding == WSDISPLAY_FONTENC_ISO2 || \
+	f->wsfont->encoding == WSDISPLAY_FONTENC_ISO7 || \
+	f->wsfont->encoding == WSDISPLAY_FONTENC_KOI8_R)
 
 struct egavga_font *
 egavga_getfont(struct vga_config *vc, struct vgascreen *scr, const char *name,
@@ -324,7 +325,7 @@ egavga_getfont(struct vga_config *vc, struct vgascreen *scr, const char *name,
 
 	TAILQ_FOREACH(f, &vc->vc_fontlist, next) {
 		if (wsfont_matches(f->wsfont, name,
-		    8, scr->pcs.type->fontheight, 0) &&
+		    8, scr->pcs.type->fontheight, 0, WSFONT_FIND_BITMAP) &&
 		    (!primary || vga_valid_primary_font(f))) {
 #ifdef VGAFONTDEBUG
 			if (scr != &vga_console_screen || vga_console_attached)
@@ -336,7 +337,7 @@ egavga_getfont(struct vga_config *vc, struct vgascreen *scr, const char *name,
 	}
 
 	cookie = wsfont_find(name, 8, scr->pcs.type->fontheight, 0,
-	    WSDISPLAY_FONTORDER_L2R, 0);
+	    WSDISPLAY_FONTORDER_L2R, 0, WSFONT_FIND_BITMAP);
 	/* XXX obey "primary" */
 	if (cookie == -1) {
 #ifdef VGAFONTDEBUG
@@ -526,7 +527,7 @@ void
 vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 {
 	struct vga_handle *vh = &vc->hdl;
-	u_int8_t mor;
+	uint8_t mor;
 	int i;
 
 	vh->vh_iot = iot;
@@ -536,7 +537,7 @@ vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 		panic("vga_init: couldn't map vga io");
 
 	/* read "misc output register" */
-	mor = bus_space_read_1(vh->vh_iot, vh->vh_ioh_vga, VGA_MISC_DATAR);
+	mor = vga_raw_read(vh, VGA_MISC_DATAR);
 	vh->vh_mono = !(mor & 1);
 
 	if (bus_space_map(vh->vh_iot, (vh->vh_mono ? 0x3b0 : 0x3d0), 0x10, 0,
@@ -569,7 +570,7 @@ vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 		int cookie;
 
 		cookie = wsfont_find(NULL, 8, 16, 0,
-		     WSDISPLAY_FONTORDER_L2R, 0);
+		     WSDISPLAY_FONTORDER_L2R, 0, WSFONT_FIND_BITMAP);
 		if (cookie == -1 || wsfont_lock(cookie, &wf))
 			panic("vga_init: can't load console font");
 		vga_loadchars(&vc->hdl, 0, wf->firstchar, wf->numchars,
@@ -589,6 +590,7 @@ vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 	if (!vh->vh_mono && (u_int)WSDISPLAY_BORDER_COLOR < sizeof(fgansitopc))
 		_vga_attr_write(vh, VGA_ATC_OVERSCAN,
 		                fgansitopc[WSDISPLAY_BORDER_COLOR]);
+	vga_save_palette(vc);
 }
 
 void
@@ -736,7 +738,7 @@ vga_is_console(bus_space_tag_t iot, int type)
 {
 	if (vgaconsole &&
 	    !vga_console_attached &&
-	    iot == vga_console_vc.hdl.vh_iot &&
+	    bus_space_is_equal(iot, vga_console_vc.hdl.vh_iot) &&
 	    (vga_console_type == -1 || (type == vga_console_type)))
 		return (1);
 	return (0);
@@ -781,6 +783,11 @@ vga_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 	const struct vga_funcs *vf = vc->vc_funcs;
 
 	switch (cmd) {
+	case WSDISPLAYIO_SMODE:
+		if (*(u_int *)data == WSDISPLAYIO_MODE_EMUL)
+			vga_restore_palette(vc);
+		return 0;
+
 	case WSDISPLAYIO_GTYPE:
 		*(int *)data = vc->vc_type;
 		return 0;
@@ -1037,7 +1044,7 @@ vga_doswitch(struct vga_config *vc)
 	}
 
 	vga_setfont(vc, scr);
-	/* XXX swich colours! */
+	vga_restore_palette(vc);
 
 	scr->pcs.visibleoffset = scr->pcs.dispoffset = scr->mindispoffset;
 	if (!oldscr || (scr->pcs.dispoffset != oldscr->pcs.dispoffset)) {
@@ -1173,7 +1180,7 @@ vga_copyrows(void *id, int srcrow, int dstrow, int nrows)
 #ifdef WSCONS_SUPPORT_PCVTFONTS
 
 #define NOTYET 0xffff
-static const u_int16_t pcvt_unichars[0xa0] = {
+static const uint16_t pcvt_unichars[0xa0] = {
 /* 0 */	_e006U, /* N/L control */
 	NOTYET, NOTYET, NOTYET, NOTYET, NOTYET, NOTYET, NOTYET,
 	NOTYET,
@@ -1246,11 +1253,11 @@ static const u_int16_t pcvt_unichars[0xa0] = {
 	0x00ac, /* NOT SIGN */
 	0x00a8, /* DIAERESIS */
 	0x2260, /* NOT EQUAL TO */
-	_e005U, /* scan 9 */
-	_e004U, /* scan 7 */
-	_e003U, /* scan 5 */
-	_e002U, /* scan 3 */
-	_e001U, /* scan 1 */
+	0x23bd, /* scan 9 */
+	0x23bc, /* scan 7 */
+	0x2500, /* scan 5 */
+	0x23bb, /* scan 3 */
+	0x23ba, /* scan 1 */
 	0x03c5, /* GREEK SMALL LETTER UPSILON */
 	0x00f8, /* LATIN SMALL LETTER O WITH STROKE */
 /* 8 */	0x0153, /* LATIN SMALL LIGATURE OE */
@@ -1330,6 +1337,32 @@ vga_iso7_mapchar(int uni, u_int *index)
 
 #endif /* WSCONS_SUPPORT_ISO7FONTS */
 
+static const uint16_t iso2_unichars[0x60] = {
+	0x00A0, 0x0104, 0x02D8, 0x0141, 0x00A4, 0x013D, 0x015A, 0x00A7,
+	0x00A8, 0x0160, 0x015E, 0x0164, 0x0179, 0x00AD, 0x017D, 0x017B,
+	0x00B0, 0x0105, 0x02DB, 0x0142, 0x00B4, 0x013E, 0x015B, 0x02C7,
+	0x00B8, 0x0161, 0x015F, 0x0165, 0x017A, 0x02DD, 0x017E, 0x017C,
+	0x0154, 0x00C1, 0x00C2, 0x0102, 0x00C4, 0x0139, 0x0106, 0x00C7,
+	0x010C, 0x00C9, 0x0118, 0x00CB, 0x011A, 0x00CD, 0x00CE, 0x010E,
+	0x0110, 0x0143, 0x0147, 0x00D3, 0x00D4, 0x0150, 0x00D6, 0x00D7,
+	0x0158, 0x016E, 0x00DA, 0x0170, 0x00DC, 0x00DD, 0x0162, 0x00DF,
+	0x0155, 0x00E1, 0x00E2, 0x0103, 0x00E4, 0x013A, 0x0107, 0x00E7,
+	0x010D, 0x00E9, 0x0119, 0x00EB, 0x011B, 0x00ED, 0x00EE, 0x010F,
+	0x0111, 0x0144, 0x0148, 0x00F3, 0x00F4, 0x0151, 0x00F6, 0x00F7,
+	0x0159, 0x016F, 0x00FA, 0x0171, 0x00FC, 0x00FD, 0x0163, 0x02D9
+};
+
+static const uint16_t koi8_unichars[0x40] = {
+	0x044E, 0x0430, 0x0431, 0x0446, 0x0434, 0x0435, 0x0444, 0x0433,
+	0x0445, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E,
+	0x043F, 0x044F, 0x0440, 0x0441, 0x0442, 0x0443, 0x0436, 0x0432,
+	0x044C, 0x044B, 0x0437, 0x0448, 0x044D, 0x0449, 0x0447, 0x044A,
+	0x042E, 0x0410, 0x0411, 0x0426, 0x0414, 0x0415, 0x0424, 0x0413,
+	0x0425, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E,
+	0x041F, 0x042F, 0x0420, 0x0421, 0x0422, 0x0423, 0x0416, 0x0412,
+	0x042C, 0x042B, 0x0417, 0x0428, 0x042D, 0x0429, 0x0427, 0x042A
+};
+
 static int _vga_mapchar(void *, const struct egavga_font *, int, u_int *);
 
 static int
@@ -1343,6 +1376,36 @@ _vga_mapchar(void *id, const struct egavga_font *font, int uni, u_int *index)
 			return (5);
 		} else {
 			*index = ' ';
+			return (0);
+		}
+	case WSDISPLAY_FONTENC_ISO2:
+		if (uni < 0xa0) {
+			*index = uni;
+			return (5);
+		} else {
+			int i;
+			for (i = 0; i < 0x60; i++) {
+				if (uni == iso2_unichars[i]) {
+					*index = i + 0xa0;
+					return (5);
+				}
+			}
+			*index = 0xa4; /* currency sign */
+			return (0);
+		}
+	case WSDISPLAY_FONTENC_KOI8_R:
+		if (uni < 0x80) {
+			*index = uni;
+			return (5);
+		} else {
+			int i;
+			for (i = 0; i < 0x40; i++) {
+				if (uni == koi8_unichars[i]) {
+					*index = i + 0xc0;
+					return (5);
+				}
+			}
+			*index = 0x94; /* box */
 			return (0);
 		}
 	case WSDISPLAY_FONTENC_IBM:
@@ -1444,7 +1507,7 @@ vga_getborder(struct vga_config *vc, u_int *valuep)
 {
 	struct vga_handle *vh = &vc->hdl;
 	u_int idx;
-	u_int8_t value;
+	uint8_t value;
 
 	if (vh->vh_mono)
 		return ENODEV;
@@ -1480,4 +1543,46 @@ vga_resume(struct vga_softc *sc)
 #ifdef VGA_RESET_ON_RESUME
 	vga_initregs(&sc->sc_vc->hdl);
 #endif
+#ifdef PCDISPLAY_SOFTCURSOR
+	/* Disable the hardware cursor */
+	vga_6845_write(&sc->sc_vc->hdl, curstart, 0x20);
+	vga_6845_write(&sc->sc_vc->hdl, curend, 0x00);
+#endif
+}
+
+void
+vga_save_palette(struct vga_config *vc)
+{
+	struct vga_handle *vh = &vc->hdl;
+	size_t i;
+	uint8_t *palette = vc->palette;
+
+	if (vh->vh_mono)
+		return;
+
+	vga_raw_write(vh, VGA_DAC_PELMASK, 0xff);
+	vga_raw_write(vh, VGA_DAC_ADDRR, 0x00);
+	for (i = 0; i < sizeof(vc->palette); i++)
+		*palette++ = vga_raw_read(vh, VGA_DAC_PALETTE);
+
+	vga_reset_state(vh);			/* reset flip/flop */
+}
+
+void
+vga_restore_palette(struct vga_config *vc)
+{
+	struct vga_handle *vh = &vc->hdl;
+	size_t i;
+	uint8_t *palette = vc->palette;
+
+	if (vh->vh_mono)
+		return;
+
+	vga_raw_write(vh, VGA_DAC_PELMASK, 0xff);
+	vga_raw_write(vh, VGA_DAC_ADDRW, 0x00);
+	for (i = 0; i < sizeof(vc->palette); i++)
+		vga_raw_write(vh, VGA_DAC_PALETTE, *palette++);
+
+	vga_reset_state(vh);			/* reset flip/flop */
+	vga_enable(vh);
 }

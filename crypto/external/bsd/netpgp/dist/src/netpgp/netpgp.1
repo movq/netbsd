@@ -1,4 +1,4 @@
-.\" $NetBSD: netpgp.1,v 1.3 2009/06/11 01:12:42 agc Exp $
+.\" $NetBSD: netpgp.1,v 1.17 2010/11/29 04:20:12 agc Exp $
 .\"
 .\" Copyright (c) 2009 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 10, 2009
+.Dd November 28, 2010
 .Dt NETPGP 1
 .Os
 .Sh NAME
@@ -42,7 +42,8 @@
 .Nm
 .Fl Fl decrypt
 .Op Fl Fl output Ns = Ns Ar filename
-.Op Fl Fl pass-fd Ns = Ns Ar fd
+.Op Fl Fl pass\-fd Ns = Ns Ar fd
+.Op Fl Fl num\-tries Ns = Ns Ar attempts
 .Op options
 .Ar file ...
 .Pp
@@ -52,7 +53,10 @@
 .Op Fl Fl detach
 .Op Fl Fl hash Ns = Ns Ar algorithm
 .Op Fl Fl output Ns = Ns Ar filename
-.Op Fl Fl pass-fd Ns = Ns Ar fd
+.Op Fl Fl pass\-fd Ns = Ns Ar fd
+.Op Fl Fl from Ns = Ns Ar sig-valid-from
+.Op Fl Fl num\-tries Ns = Ns Ar attempts
+.Op Fl Fl duration Ns = Ns Ar sig-valid-duration
 .Op options
 .Ar file ...
 .Nm
@@ -67,25 +71,33 @@
 .Nm
 .Fl Fl clearsign
 .Op Fl Fl output Ns = Ns Ar filename
-.Op Fl Fl pass-fd Ns = Ns Ar fd
+.Op Fl Fl pass\-fd Ns = Ns Ar fd
 .Op options
 .Ar file ...
 .Nm
-.Fl Fl list-packets
-.Op Fl Fl pass-fd Ns = Ns Ar fd
+.Fl Fl list\-packets
+.Op Fl Fl pass\-fd Ns = Ns Ar fd
 .Ar file ...
 .Nm
 .Fl Fl version
+.Nm
+.Op Fl Vdesv
+.Op Fl olong-option Ns = Ns value
+.Ar file ...
 .Pp
-where the options for all commands are:
+where the long options for all commands are:
 .Pp
+.Op Fl Fl cipher Ns = Ns Ar ciphername
+.br
 .Op Fl Fl coredumps
 .br
-.Op Fl Fl homedir Ns = Ns Ar home-directory
+.Op Fl Fl homedir Ns = Ns Ar home\-directory
 .br
 .Op Fl Fl keyring Ns = Ns Ar keyring
 .br
 .Op Fl Fl results Ns = Ns Ar filename
+.br
+.Op Fl Fl ssh\-keys
 .br
 .Op Fl Fl userid Ns = Ns Ar userid
 .br
@@ -134,7 +146,7 @@ Keys can be listed, exported (i.e. made available to others),
 and imported (i.e. users who have signed our public key).
 .Pp
 The
-.Fl Fl list-packets
+.Fl Fl list\-packets
 command can be used for debugging purposes.
 .Pp
 The following commands are used to sign and verify signatures:
@@ -173,7 +185,7 @@ to type it in, using
 .Xr getpass 3 .
 .It Fl Fl encrypt
 Use the user's public key to encrypt the files named on the command line.
-.It Fl Fl list-packets
+.It Fl Fl list\-packets
 List all the
 .Dq packets
 in an encrypted or signed file.
@@ -194,6 +206,16 @@ or options may be given.
 .It Fl Fl armour , Fl armor
 This option, however it is spelled, wraps the signature as an
 ASCII-encoded piece of text, for ease of use.
+.It Fl Fl cipher Ar ciphername
+can be used to specify the symmetric encryption algorithm (or
+cipher) which is used when encrypting data.
+To decrypt this data, the same cipher will be needed,
+so care should be taken at encryption time to make sure
+that the person who decrypts the data has
+access to the cipher used.
+The default cipher algorithm is the
+.Dq CAST5
+algorithm.
 .It Fl Fl detached
 When signing a file, place the resulting signature in a separate
 file from the one being signed.
@@ -209,7 +231,7 @@ At the present time,
 may also be used, although it is recommended that
 SHA256 be used, due to recent advances in generating
 collisions for the SHA1 hashing algorithm.
-.It Fl Fl homedir Ar home-directory
+.It Fl Fl homedir Ar home\-directory
 Keyrings are normally located, for historical reasons, within
 the user's home directory in a subdirectory called
 .Dq Pa .gnupg
@@ -229,6 +251,15 @@ value.
 specifies a filename to which the results of the operation
 should be sent.
 The default is to send the results to stderr.
+.It Fl Fl ssh\-keys
+specifies that the public and private keys should be taken
+from the
+.Xr ssh 1
+host key files, usually found in
+.Pa /etc/ssh/ssh_host_rsa_key
+and
+.Pa /etc/ssh/ssh_host_rsa_key.pub
+for the private and public host keys.
 .It Fl Fl userid Ar userid
 This option specifies the user identity to be used for all operations.
 This identity can either be in the form of the full name, or as an
@@ -241,10 +272,10 @@ that a key belongs to a certain individual.
 The trust for a signed key is given by the other signers of that key.
 The 16 hexadecimal digit user identity should be used when specifying
 user identities - email addresses and names are provided as aliases.
-.It Fl Fl pass-fd Ns = Ns Ar fd
+.It Fl Fl pass\-fd Ns = Ns Ar fd
 This option is intended for the use of external programs which may
 like to use the
-.Xr netpgp 3
+.Xr libnetpgp 3
 library through the
 .Nm
 interface, but have their own ways of retrieving and caching
@@ -255,6 +286,31 @@ utility will read a line of text from the file descriptor
 passed to it in the command line argument, rather than
 using its own methods of retrieving the passphrase from
 the user.
+.It Fl Fl num-tries Ns = Ns Ar attempts
+This option sets the maximum number of attempts to get the
+correct passphrase from the user.
+A value of
+.Dv unlimited
+means that there is no maximum number of attempts, and the
+utility will loop endlessly until the correct passphrase has been
+entered, or the utility is terminated.
+.It Fl Fl from Ns = Ns Ar signature-valid-from
+This option allows the signer to specify a time as the
+starting point for validity of the signature.
+In this way it is possible to prevent files from being verified
+until a specific point in time.
+The time can be specified either in
+.Dv YYYY-MM-DD
+format, or as the number of seconds since the epoch.
+.It Fl Fl duration Ns = Ns Ar signature-valid-to
+This option allows the signer to specify a time as the
+end point for validity of the signature.
+In this way it is possible to prevent files from being verified
+after a specific point in time.
+The time can be specified either
+in
+.Dv YYYY-MM-DD
+format, or as the number of seconds.
 .It Fl Fl verbose
 This option can be used to view information during
 the process of the
@@ -361,7 +417,86 @@ uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
 netpgp passphrase:
 %
 .Ed
-.Sh RETURN VALUES
+.Pp
+If no file name is provided, the data will be read from standard input,
+and displayed on standard output:
+.Bd -literal
+% netpgp --encrypt \*[Lt] a | netpgp --decrypt \*[Gt] b
+netpgp: default key set to "C0596823"
+netpgp: default key set to "C0596823"
+pub 2048/RSA (Encrypt or Sign) 1b68dcfcc0596823 2004-01-12
+Key fingerprint: d415 9deb 336d e4cc cdfa 00cd 1b68 dcfc c059 6823
+uid              Alistair Crooks \*[Lt]agc@netbsd.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@pkgsrc.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@alistaircrooks.com\*[Gt]
+uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
+netpgp passphrase:
+%
+.Ed
+.Pp
+This simple (and contrived) example shows that
+.Nm
+commands can be used together in a pipeline to produce the desired effect.
+.Bd -literal
+% netpgp --sign \*[Lt] a | netpgp --cat \*[Gt] b
+netpgp: default key set to "C0596823"
+netpgp: default key set to "C0596823"
+pub 2048/RSA (Encrypt or Sign) 1b68dcfcc0596823 2004-01-12
+Key fingerprint: d415 9deb 336d e4cc cdfa 00cd 1b68 dcfc c059 6823
+uid              Alistair Crooks \*[Lt]agc@netbsd.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@pkgsrc.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@alistaircrooks.com\*[Gt]
+uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
+netpgp passphrase:
+Good signature for \*[Lt]stdin\*[Gt] made Mon Dec 21 18:25:02 2009
+using RSA (Encrypt or Sign) key 1b68dcfcc0596823
+pub 2048/RSA (Encrypt or Sign) 1b68dcfcc0596823 2004-01-12
+Key fingerprint: d415 9deb 336d e4cc cdfa 00cd 1b68 dcfc c059 6823
+uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@pkgsrc.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@netbsd.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@alistaircrooks.com\*[Gt]
+uid              Alistair Crooks (Yahoo!) \*[Lt]agcrooks@yahoo-inc.com\*[Gt]
+%
+.Ed
+.Pp
+For operations like signing and encrypting a file at the same time,
+the best way is to make use of pipelines:
+.Bd -literal
+% netpgp --sign \*[Lt] example | netpgp --encrypt --userid=c0596823 \*[Gt] example.gpg
+netpgp: default key set to "C0596823"
+pub 2048/RSA (Encrypt or Sign) 1b68dcfcc0596823 2004-01-12
+Key fingerprint: d415 9deb 336d e4cc cdfa 00cd 1b68 dcfc c059 6823
+uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@pkgsrc.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@netbsd.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@alistaircrooks.com\*[Gt]
+uid              Alistair Crooks (Yahoo!) \*[Lt]agcrooks@yahoo-inc.com\*[Gt]
+netpgp passphrase:
+% netpgp --decrypt \*[Lt] example.gpg | netpgp --cat
+netpgp: default key set to "C0596823"
+netpgp: default key set to "C0596823"
+pub 2048/RSA (Encrypt or Sign) 1b68dcfcc0596823 2004-01-12
+Key fingerprint: d415 9deb 336d e4cc cdfa 00cd 1b68 dcfc c059 6823
+uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@pkgsrc.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@netbsd.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@alistaircrooks.com\*[Gt]
+uid              Alistair Crooks (Yahoo!) \*[Lt]agcrooks@yahoo-inc.com\*[Gt]
+netpgp passphrase:
+Good signature for \*[Lt]stdin\*[Gt] made Mon Feb 22 07:21:19 2010
+using RSA (Encrypt or Sign) key 1b68dcfcc0596823
+pub 2048/RSA (Encrypt or Sign) 1b68dcfcc0596823 2004-01-12
+Key fingerprint: d415 9deb 336d e4cc cdfa 00cd 1b68 dcfc c059 6823
+uid              Alistair Crooks \*[Lt]alistair@hockley-crooks.com\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@pkgsrc.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@netbsd.org\*[Gt]
+uid              Alistair Crooks \*[Lt]agc@alistaircrooks.com\*[Gt]
+uid              Alistair Crooks (Yahoo!) \*[Lt]agcrooks@yahoo-inc.com\*[Gt]
+\&...contents of original file...
+%
+.Ed
+.Sh EXIT STATUS
 The
 .Nm
 utility will return 0 for success,
@@ -369,6 +504,7 @@ utility will return 0 for success,
 or 2 if any other error occurs.
 .Sh SEE ALSO
 .Xr netpgpkeys 1 ,
+.Xr ssh 1 ,
 .Xr getpass 3 ,
 .\" .Xr libbz2 3 ,
 .Xr libnetpgp 3 ,

@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.82 2009/01/18 00:30:54 lukem Exp $	*/
+/*	$NetBSD: expand.c,v 1.86 2011/08/31 16:24:54 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.82 2009/01/18 00:30:54 lukem Exp $");
+__RCSID("$NetBSD: expand.c,v 1.86 2011/08/31 16:24:54 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,6 +65,7 @@ __RCSID("$NetBSD: expand.c,v 1.82 2009/01/18 00:30:54 lukem Exp $");
 #include "parser.h"
 #include "jobs.h"
 #include "options.h"
+#include "builtins.h"
 #include "var.h"
 #include "input.h"
 #include "output.h"
@@ -119,7 +120,7 @@ void
 expandhere(union node *arg, int fd)
 {
 	herefd = fd;
-	expandarg(arg, (struct arglist *)NULL, 0);
+	expandarg(arg, NULL, 0);
 	xwrite(fd, stackblock(), expdest - stackblock());
 }
 
@@ -425,6 +426,7 @@ expbackq(union node *cmd, int quoted, int flag)
 	char const *syntax = quoted? DQSYNTAX : BASESYNTAX;
 	int saveherefd;
 	int quotes = flag & (EXP_FULL | EXP_CASE);
+	int nnl;
 
 	INTOFF;
 	saveifs = ifsfirst;
@@ -442,6 +444,7 @@ expbackq(union node *cmd, int quoted, int flag)
 
 	p = in.buf;
 	lastc = '\0';
+	nnl = 0;
 	for (;;) {
 		if (--in.nleft < 0) {
 			if (in.fd < 0)
@@ -455,16 +458,20 @@ expbackq(union node *cmd, int quoted, int flag)
 		}
 		lastc = *p++;
 		if (lastc != '\0') {
-			if (quotes && syntax[(int)lastc] == CCTL)
-				STPUTC(CTLESC, dest);
-			STPUTC(lastc, dest);
+			if (lastc == '\n')
+				nnl++;
+			else {
+				CHECKSTRSPACE(nnl + 2, dest);
+				while (nnl > 0) {
+					nnl--;
+					USTPUTC('\n', dest);
+				}
+				if (quotes && syntax[(int)lastc] == CCTL)
+					USTPUTC(CTLESC, dest);
+				USTPUTC(lastc, dest);
+			}
 		}
 	}
-
-	/* Eat all trailing newlines */
-	p = stackblock() + startloc;
-	while (dest > p && dest[-1] == '\n')
-		STUNPUTC(dest);
 
 	if (in.fd >= 0)
 		close(in.fd);
@@ -526,7 +533,7 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 	case VSQUESTION:
 		if (*p != CTLENDVAR) {
 			outfmt(&errout, "%s\n", startp);
-			error((char *)NULL);
+			error(NULL);
 		}
 		error("%.*s: parameter %snot set",
 		      (int)(p - str - 1),
@@ -1565,7 +1572,7 @@ wordexpcmd(int argc, char **argv)
 	out1c('\0');
 	for (i = 1, len = 0; i < argc; i++)
 		len += strlen(argv[i]);
-	out1fmt("%zd", len);
+	out1fmt("%zu", len);
 	out1c('\0');
 	for (i = 1; i < argc; i++) {
 		out1str(argv[i]);

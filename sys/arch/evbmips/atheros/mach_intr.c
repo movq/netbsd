@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_intr.c,v 1.2 2008/04/28 20:23:17 martin Exp $	*/
+/*	$NetBSD: mach_intr.c,v 1.6 2011/07/10 00:03:53 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,31 +34,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_intr.c,v 1.2 2008/04/28 20:23:17 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_intr.c,v 1.6 2011/07/10 00:03:53 matt Exp $");
 
 #include "opt_ddb.h"
 
 #include <sys/param.h>
-#include <sys/queue.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/device.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/systm.h>
 
 #include <mips/locore.h>
-#include <mips/atheros/include/ar531xvar.h>
+#include <mips/atheros/include/platform.h>
 
 void
 evbmips_intr_init(void)
 {
-	ar531x_intr_init();
+	(*platformsw->apsw_intr_init)();
 }
 
 void
-evbmips_iointr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+evbmips_iointr(int ipl, vaddr_t pc, uint32_t ipending)
 {
 
-	ar531x_cpuintr(status, cause, pc, ipending);
+	(*platformsw->apsw_intrsw->aisw_iointr)(ipl, pc, ipending);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: socketvar.h,v 1.121 2009/09/11 22:06:29 dyoung Exp $	*/
+/*	$NetBSD: socketvar.h,v 1.129 2012/02/01 02:27:23 matt Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -128,7 +128,7 @@ struct socket {
 	short		so_options;	/* from socket call, see socket.h */
 	u_short		so_linger;	/* time to linger while closing */
 	short		so_state;	/* internal state flags SS_*, below */
-	int		so_nbio;	/* non-blocking I/O enabled */
+	int		so_unused;	/* used to be so_nbio */
 	void		*so_pcb;	/* protocol control block */
 	const struct protosw *so_proto;	/* protocol handle */
 /*
@@ -177,6 +177,7 @@ struct socket {
 		void	*so_accept_filter_arg;	/* saved filter args */
 		char	*so_accept_filter_str;	/* saved user args */
 	} *so_accf;
+	kauth_cred_t	so_cred;	/* socket credentials */
 };
 
 #define	SB_EMPTY_FIXUP(sb)						\
@@ -198,7 +199,8 @@ do {									\
 #define	SS_CANTSENDMORE		0x010	/* can't send more data to peer */
 #define	SS_CANTRCVMORE		0x020	/* can't receive more data from peer */
 #define	SS_RCVATMARK		0x040	/* at mark on input */
-#define	SS_ISDRAINING		0x080	/* draining fd references */
+#define	SS_ISABORTING		0x080	/* aborting fd references - close() */
+#define	SS_RESTARTSYS		0x100	/* restart blocked system calls */
 #define	SS_ISDISCONNECTED	0x800	/* socket disconnected from peer */
 
 #define	SS_ASYNC		0x100	/* async i/o notify */
@@ -208,6 +210,7 @@ do {									\
 					 * more data coming
 					 */
 #define	SS_ISAPIPE 		0x1000	/* socket is implementing a pipe */
+#define	SS_NBIO			0x2000	/* socket is in non blocking I/O */
 
 #ifdef _KERNEL
 
@@ -256,7 +259,7 @@ int	soo_poll(file_t *, int);
 int	soo_kqfilter(file_t *, struct knote *);
 int 	soo_close(file_t *);
 int	soo_stat(file_t *, struct stat *);
-void	soo_drain(file_t *);
+void	soo_restart(file_t *);
 void	sbappend(struct sockbuf *, struct mbuf *);
 void	sbappendstream(struct sockbuf *, struct mbuf *);
 int	sbappendaddr(struct sockbuf *, const struct sockaddr *, struct mbuf *,
@@ -278,6 +281,7 @@ int	sbreserve(struct sockbuf *, u_long, struct socket *);
 int	sbwait(struct sockbuf *);
 int	sb_max_set(u_long);
 void	soinit(void);
+void	soinit1(void);
 void	soinit2(void);
 int	soabort(struct socket *);
 int	soaccept(struct socket *, struct mbuf *);
@@ -313,7 +317,7 @@ int	sosend(struct socket *, struct mbuf *, struct uio *,
 int	sosetopt(struct socket *, struct sockopt *);
 int	so_setsockopt(struct lwp *, struct socket *, int, int, const void *, size_t);
 int	soshutdown(struct socket *, int);
-int	sodrain(struct socket *);
+void	sorestart(struct socket *);
 void	sowakeup(struct socket *, struct sockbuf *, int);
 int	sockargs(struct mbuf **, const void *, size_t, int);
 int	sopoll(struct socket *, int);
@@ -348,7 +352,8 @@ int	do_sys_recvmsg(struct lwp *, int, struct msghdr *, struct mbuf **,
 
 int	do_sys_bind(struct lwp *, int, struct mbuf *);
 int	do_sys_connect(struct lwp *, int, struct mbuf *);
-int	do_sys_accept(struct lwp *, int, struct mbuf **, register_t *);
+int	do_sys_accept(struct lwp *, int, struct mbuf **, register_t *,
+	    const sigset_t *, int, int);
 
 /*
  * Inline functions for sockets and socket buffering.
@@ -503,7 +508,7 @@ void	sblastmbufchk(struct sockbuf *, const char *);
 #endif /* SOCKBUF_DEBUG */
 
 /* sosend loan */
-vaddr_t	sokvaalloc(vsize_t, struct socket *);
+vaddr_t	sokvaalloc(vaddr_t, vsize_t, struct socket *);
 void	sokvafree(vaddr_t, vsize_t);
 void	soloanfree(struct mbuf *, void *, size_t, void *);
 

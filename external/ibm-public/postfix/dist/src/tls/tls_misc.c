@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_misc.c,v 1.1.1.1 2009/06/23 10:08:57 tron Exp $	*/
+/*	$NetBSD: tls_misc.c,v 1.1.1.3.6.1 2012/06/13 19:29:04 riz Exp $	*/
 
 /*++
 /* NAME
@@ -17,6 +17,8 @@
 /*	char	*var_tls_eecdh_strong;
 /*	char	*var_tls_eecdh_ultra;
 /*	int	var_tls_daemon_rand_bytes;
+/*	bool    var_tls_append_def_CA;
+/*	bool	var_tls_preempt_clist;
 /*
 /*	TLS_APPL_STATE *tls_alloc_app_context(ssl_ctx)
 /*	SSL_CTX	*ssl_ctx;
@@ -166,6 +168,8 @@
 #include <vstring.h>
 #include <stringops.h>
 #include <argv.h>
+#include <name_mask.h>
+#include <name_code.h>
 
  /*
   * Global library.
@@ -192,6 +196,13 @@ char   *var_tls_null_clist;
 int     var_tls_daemon_rand_bytes;
 char   *var_tls_eecdh_strong;
 char   *var_tls_eecdh_ultra;
+bool    var_tls_append_def_CA;
+char   *var_tls_bug_tweaks;
+
+#ifdef VAR_TLS_PREEMPT_CLIST
+bool    var_tls_preempt_clist;
+
+#endif
 
  /*
   * Index to attach TLScontext pointers to SSL objects, so that they can be
@@ -206,7 +217,75 @@ static const NAME_CODE protocol_table[] = {
     SSL_TXT_SSLV2, TLS_PROTOCOL_SSLv2,
     SSL_TXT_SSLV3, TLS_PROTOCOL_SSLv3,
     SSL_TXT_TLSV1, TLS_PROTOCOL_TLSv1,
+#ifdef SSL_TXT_TLSV1_1
+    SSL_TXT_TLSV1_1, TLS_PROTOCOL_TLSv1_1,
+#endif
+#ifdef SSL_TXT_TLSV1_2
+    SSL_TXT_TLSV1_2, TLS_PROTOCOL_TLSv1_2,
+#endif
     0, TLS_PROTOCOL_INVALID,
+};
+
+ /*
+  * SSL_OP_MUMBLE bug work-around name <=> mask conversion.
+  */
+#define NAMEBUG(x)	#x, SSL_OP_##x
+static const LONG_NAME_MASK ssl_bug_tweaks[] = {
+
+#if defined(SSL_OP_MICROSOFT_SESS_ID_BUG)
+    NAMEBUG(MICROSOFT_SESS_ID_BUG),	/* 0x00000001L */
+#endif
+
+#if defined(SSL_OP_NETSCAPE_CHALLENGE_BUG)
+    NAMEBUG(NETSCAPE_CHALLENGE_BUG),	/* 0x00000002L */
+#endif
+
+#if defined(SSL_OP_LEGACY_SERVER_CONNECT)
+    NAMEBUG(LEGACY_SERVER_CONNECT),	/* 0x00000004L */
+#endif
+
+#if defined(SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG)
+    NAMEBUG(NETSCAPE_REUSE_CIPHER_CHANGE_BUG),	/* 0x00000008L */
+    "CVE-2010-4180", SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG,
+#endif
+
+#if defined(SSL_OP_SSLREF2_REUSE_CERT_TYPE_BUG)
+    NAMEBUG(SSLREF2_REUSE_CERT_TYPE_BUG),	/* 0x00000010L */
+#endif
+
+#if defined(SSL_OP_MICROSOFT_BIG_SSLV3_BUFFER)
+    NAMEBUG(MICROSOFT_BIG_SSLV3_BUFFER),/* 0x00000020L	 */
+#endif
+
+#if defined(SSL_OP_MSIE_SSLV2_RSA_PADDING)
+    NAMEBUG(MSIE_SSLV2_RSA_PADDING),	/* 0x00000040L */
+    "CVE-2005-2969", SSL_OP_MSIE_SSLV2_RSA_PADDING,
+#endif
+
+#if defined(SSL_OP_SSLEAY_080_CLIENT_DH_BUG)
+    NAMEBUG(SSLEAY_080_CLIENT_DH_BUG),	/* 0x00000080L */
+#endif
+
+#if defined(SSL_OP_TLS_D5_BUG)
+    NAMEBUG(TLS_D5_BUG),		/* 0x00000100L	 */
+#endif
+
+#if defined(SSL_OP_TLS_BLOCK_PADDING_BUG)
+    NAMEBUG(TLS_BLOCK_PADDING_BUG),	/* 0x00000200L */
+#endif
+
+#if defined(SSL_OP_TLS_ROLLBACK_BUG)
+    NAMEBUG(TLS_ROLLBACK_BUG),		/* 0x00000400L */
+#endif
+
+#if defined(SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS)
+    NAMEBUG(DONT_INSERT_EMPTY_FRAGMENTS),	/* 0x00000800L */
+#endif
+
+#if defined(SSL_OP_CRYPTOPRO_TLSEXT_BUG)
+    NAMEBUG(CRYPTOPRO_TLSEXT_BUG),	/* 0x80000000L */
+#endif
+    0, 0,
 };
 
  /*
@@ -403,10 +482,18 @@ void    tls_param_init(void)
 	VAR_TLS_NULL_CLIST, DEF_TLS_NULL_CLIST, &var_tls_null_clist, 1, 0,
 	VAR_TLS_EECDH_STRONG, DEF_TLS_EECDH_STRONG, &var_tls_eecdh_strong, 1, 0,
 	VAR_TLS_EECDH_ULTRA, DEF_TLS_EECDH_ULTRA, &var_tls_eecdh_ultra, 1, 0,
+	VAR_TLS_BUG_TWEAKS, DEF_TLS_BUG_TWEAKS, &var_tls_bug_tweaks, 0, 0,
 	0,
     };
     static const CONFIG_INT_TABLE int_table[] = {
 	VAR_TLS_DAEMON_RAND_BYTES, DEF_TLS_DAEMON_RAND_BYTES, &var_tls_daemon_rand_bytes, 1, 0,
+	0,
+    };
+    static const CONFIG_BOOL_TABLE bool_table[] = {
+	VAR_TLS_APPEND_DEF_CA, DEF_TLS_APPEND_DEF_CA, &var_tls_append_def_CA,
+#if OPENSSL_VERSION_NUMBER >= 0x0090700fL	/* OpenSSL 0.9.7 and later */
+	VAR_TLS_PREEMPT_CLIST, DEF_TLS_PREEMPT_CLIST, &var_tls_preempt_clist,
+#endif
 	0,
     };
     static int init_done;
@@ -417,6 +504,7 @@ void    tls_param_init(void)
 
     get_mail_conf_str_table(str_table);
     get_mail_conf_int_table(int_table);
+    get_mail_conf_bool_table(bool_table);
 }
 
 /* tls_set_ciphers - Set SSL context cipher list */
@@ -577,8 +665,6 @@ TLS_SESS_STATE *tls_alloc_sess_context(int log_level, const char *namaddr)
     TLScontext = (TLS_SESS_STATE *) mymalloc(sizeof(TLS_SESS_STATE));
     memset((char *) TLScontext, 0, sizeof(*TLScontext));
     TLScontext->con = 0;
-    TLScontext->internal_bio = 0;
-    TLScontext->network_bio = 0;
     TLScontext->cache_type = 0;
     TLScontext->serverid = 0;
     TLScontext->peer_CN = 0;
@@ -588,6 +674,7 @@ TLS_SESS_STATE *tls_alloc_sess_context(int log_level, const char *namaddr)
     TLScontext->cipher_name = 0;
     TLScontext->log_level = log_level;
     TLScontext->namaddr = lowercase(mystrdup(namaddr));
+    TLScontext->fpt_dgst = 0;
 
     return (TLScontext);
 }
@@ -604,8 +691,6 @@ void    tls_free_context(TLS_SESS_STATE *TLScontext)
      */
     if (TLScontext->con != 0)
 	SSL_free(TLScontext->con);
-    if (TLScontext->network_bio)
-	BIO_free(TLScontext->network_bio);
 
     if (TLScontext->namaddr)
 	myfree(TLScontext->namaddr);
@@ -618,6 +703,8 @@ void    tls_free_context(TLS_SESS_STATE *TLScontext)
 	myfree(TLScontext->issuer_CN);
     if (TLScontext->peer_fingerprint)
 	myfree(TLScontext->peer_fingerprint);
+    if (TLScontext->fpt_dgst)
+	myfree(TLScontext->fpt_dgst);
 
     myfree((char *) TLScontext);
 }
@@ -713,6 +800,7 @@ void    tls_check_version(void)
 long    tls_bug_bits(void)
 {
     long    bits = SSL_OP_ALL;		/* Work around all known bugs */
+    long    mask;
 
 #if OPENSSL_VERSION_NUMBER >= 0x00908000L
     long    lib_version = SSLeay();
@@ -731,6 +819,16 @@ long    tls_bug_bits(void)
 	    bits &= ~SSL_OP_TLS_BLOCK_PADDING_BUG;
     }
 #endif
+
+    /*
+     * Silently ignore any strings that don't appear in the tweaks table, or
+     * hex bits that are not in SSL_OP_ALL.
+     */
+    if (*var_tls_bug_tweaks) {
+	bits &= ~long_name_mask_opt(VAR_TLS_BUG_TWEAKS, ssl_bug_tweaks,
+				    var_tls_bug_tweaks, NAME_MASK_ANY_CASE |
+				    NAME_MASK_NUMBER | NAME_MASK_WARN);
+    }
     return (bits);
 }
 

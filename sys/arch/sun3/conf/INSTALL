@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.45 2009/03/06 20:31:53 joerg Exp $
+# $NetBSD: INSTALL,v 1.51 2011/12/18 05:49:33 dholland Exp $
 #
 # INSTALL - Installation kernel for the Sun3
 #
@@ -78,11 +78,12 @@ file-system	KERNFS		# /kern
 
 # Filesystem options
 #options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# FFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 
 # Networking options
 options 	INET		# IP protocol stack support
@@ -184,7 +185,7 @@ cd* at scsibus? target ? lun ?		# SCSI CD-ROMs
 #uk* at scsibus? target ? lun ?		# unknown SCSI devices
 
 # Memory-disk drivers
-#pseudo-device	md		2
+#pseudo-device	md		
 
 # Misc.
 pseudo-device	loop		1	# network loopback
@@ -194,9 +195,8 @@ pseudo-device	ppp			# PPP
 pseudo-device	tun			# network tunneling over tty
 #pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	ipfilter		# ip filter
-pseudo-device	rnd			# /dev/random and in-kernel generator
 
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 #pseudo-device	vnd			# paging to files
 #pseudo-device	ccd		4	# concatenated disks
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device

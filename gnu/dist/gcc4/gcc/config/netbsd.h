@@ -43,9 +43,13 @@ Boston, MA 02110-1301, USA.  */
 
 /* NETBSD_NATIVE is defined when gcc is integrated into the NetBSD
    source tree so it can be configured appropriately without using
-   the GNU configure/build mechanism.  */
+   the GNU configure/build mechanism.
 
-#ifdef NETBSD_NATIVE
+   NETBSD_TOOLS is defined when gcc is built as cross-compiler for
+   the in-tree toolchain.
+ */
+
+#if defined(NETBSD_NATIVE) || defined(NETBSD_TOOLS)
 
 /* Look for the include files in the system-defined places.  */
 
@@ -56,28 +60,34 @@ Boston, MA 02110-1301, USA.  */
 #define GPLUSPLUS_BACKWARD_INCLUDE_DIR "/usr/include/g++/backward"
 
 #undef GCC_INCLUDE_DIR
-#define GCC_INCLUDE_DIR "/usr/include"
+#define GCC_INCLUDE_DIR "/usr/include/gcc-4.1"
 
 #undef INCLUDE_DEFAULTS
 #define INCLUDE_DEFAULTS				\
   {							\
-    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },		\
-    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1 },	\
-    { GCC_INCLUDE_DIR, "GCC", 0, 0 },			\
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 1 },		\
+    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 1 },	\
+    { GCC_INCLUDE_DIR, "GCC", 0, 0, 1 },		\
+    { "/usr/include", "GCC", 0, 0, 1 },			\
     { 0, 0, 0, 0 }					\
   }
-
-/* Under NetBSD, the normal location of the compiler back ends is the
-   /usr/libexec directory.  */
-
-#undef STANDARD_EXEC_PREFIX
-#define STANDARD_EXEC_PREFIX		"/usr/libexec/"
 
 /* Under NetBSD, the normal location of the various *crt*.o files is the
    /usr/lib directory.  */
 
 #undef STANDARD_STARTFILE_PREFIX
 #define STANDARD_STARTFILE_PREFIX	"/usr/lib/"
+#undef STANDARD_STARTFILE_PREFIX_1
+#define STANDARD_STARTFILE_PREFIX_1	"/usr/lib/"
+
+#endif /* NETBSD_NATIVE || NETBSD_TOOLS */
+
+#if defined(NETBSD_NATIVE)
+/* Under NetBSD, the normal location of the compiler back ends is the
+   /usr/libexec directory.  */
+
+#undef STANDARD_EXEC_PREFIX
+#define STANDARD_EXEC_PREFIX		"/usr/libexec/"
 
 #undef TOOLDIR_BASE_PREFIX
 #define TOOLDIR_BASE_PREFIX		"/usr/"

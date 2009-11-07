@@ -1,6 +1,6 @@
-/*	$NetBSD: dllstub.c,v 1.1.1.1 2009/03/22 14:57:54 christos Exp $	*/
+/*	$NetBSD: dllstub.c,v 1.2.6.1 2012/06/06 18:18:10 bouyer Exp $	*/
 
-/* Id: dllstub.c,v 1.1.1.1 2003/06/04 00:27:51 marka Exp */
+/* Id: dllstub.c,v 1.1 2003/06/04 00:27:51 marka Exp  */
 
 SOCKET   PASCAL
 accept(SOCKET a0, struct sockaddr* a1, int* a2)

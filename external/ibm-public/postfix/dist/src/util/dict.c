@@ -1,4 +1,4 @@
-/*	$NetBSD: dict.c,v 1.1.1.1 2009/06/23 10:08:58 tron Exp $	*/
+/*	$NetBSD: dict.c,v 1.1.1.3.6.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME
@@ -109,15 +109,16 @@
 /*	modified, or if the result is to survive multiple dict_lookup() calls.
 /*
 /*	dict_delete() removes the named member from the named dictionary.
-/*	The result is non-zero when the member does not exist.
+/*	The result value is zero when the member was found.
 /*
-/*	dict_sequence() steps throuh the named dictionary and returns
+/*	dict_sequence() steps through the named dictionary and returns
 /*	keys and values in some implementation-defined order. The func
 /*	argument is DICT_SEQ_FUN_FIRST to set the cursor to the first
 /*	entry or DICT_SEQ_FUN_NEXT to select the next entry. The result
 /*	is owned by the underlying dictionary method. Make a copy if the
 /*	result is to be modified, or if the result is to survive multiple
-/*	dict_sequence() calls.
+/*	dict_sequence() calls. The result value is zero when a member
+/*	was found.
 /*
 /*	dict_eval() expands macro references in the specified string.
 /*	The result is owned by the dictionary manager. Make a copy if the
@@ -291,7 +292,7 @@ void    dict_update(const char *dict_name, const char *member, const char *value
     if ((node = dict_node(dict_name)) == 0) {
 	if (dict_unknown_allowed == 0)
 	    msg_fatal("%s: unknown dictionary: %s", myname, dict_name);
-	dict = dict_ht_open(dict_name, htable_create(0), myfree);
+	dict = dict_ht_open(dict_name, O_CREAT | O_RDWR, 0);
 	dict_register(dict_name, dict);
     } else
 	dict = node->dict;
@@ -335,7 +336,7 @@ int     dict_delete(const char *dict_name, const char *member)
     if ((node = dict_node(dict_name)) == 0) {
 	if (dict_unknown_allowed == 0)
 	    msg_fatal("%s: unknown dictionary: %s", myname, dict_name);
-	dict = dict_ht_open(dict_name, htable_create(0), myfree);
+	dict = dict_ht_open(dict_name, O_CREAT | O_RDWR, 0);
 	dict_register(dict_name, dict);
     } else
 	dict = node->dict;
@@ -359,7 +360,7 @@ int     dict_sequence(const char *dict_name, const int func,
     if ((node = dict_node(dict_name)) == 0) {
 	if (dict_unknown_allowed == 0)
 	    msg_fatal("%s: unknown dictionary: %s", myname, dict_name);
-	dict = dict_ht_open(dict_name, htable_create(0), myfree);
+	dict = dict_ht_open(dict_name, O_CREAT | O_RDWR, 0);
 	dict_register(dict_name, dict);
     } else
 	dict = node->dict;
@@ -392,7 +393,7 @@ void    dict_load_file(const char *dict_name, const char *path)
 	after = time((time_t *) 0);
 	if (st.st_mtime < before - 1 || st.st_mtime > after)
 	    break;
-	if (msg_verbose)
+	if (msg_verbose > 1)
 	    msg_info("pausing to let %s cool down", path);
 	doze(300000);
     }
@@ -460,7 +461,7 @@ const char *dict_eval(const char *dict_name, const char *value, int recursive)
 			DONT_FILTER, dict_eval_lookup, (char *) dict_name);
     if (status & MAC_PARSE_ERROR)
 	msg_fatal("dictionary %s: macro processing error", dict_name);
-    if (msg_verbose) {
+    if (msg_verbose > 1) {
 	if (strcmp(value, STR(buf)) != 0)
 	    msg_info("%s: expand %s -> %s", myname, value, STR(buf));
 	else
@@ -537,6 +538,8 @@ static const NAME_MASK dict_mask[] = {
     "no_unauth", (1 << 13),		/* disallow unauthenticated data */
     "fold_fix", (1 << 14),		/* case-fold with fixed-case key map */
     "fold_mul", (1 << 15),		/* case-fold with multi-case key map */
+    "open_lock", (1 << 16),		/* permanent lock upon open */
+    0,
 };
 
 /* dict_flags_str - convert mask to string for debugging purposes */

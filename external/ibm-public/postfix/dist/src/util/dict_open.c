@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_open.c,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: dict_open.c,v 1.1.1.4 2011/05/11 09:11:23 tron Exp $	*/
 
 /*++
 /* NAME
@@ -82,6 +82,10 @@
 /* .IP DICT_FLAG_LOCK
 /*	With maps where this is appropriate, acquire an exclusive lock
 /*	before writing, and acquire a shared lock before reading.
+/* .IP DICT_FLAG_OPEN_LOCK
+/*	With maps where this is appropriate, acquire an exclusive
+/*	lock upon open, and report a fatal run-time error if the
+/*	table is already locked.
 /* .IP DICT_FLAG_FOLD_FIX
 /*	With databases whose lookup fields are fixed-case strings,
 /*	fold the search key to lower case before accessing the
@@ -133,6 +137,8 @@
 /*	PERL-compatible regular expressions.
 /* .IP regexp
 /*	POSIX-compatible regular expressions.
+/* .IP texthash
+/*	Flat text in postmap(1) input format.
 /* .PP
 /*	dict_open3() takes separate arguments for dictionary type and
 /*	name, but otherwise performs the same functions as dict_open().
@@ -146,13 +152,13 @@
 /*	dict_put() stores the specified key and value into the named
 /*	dictionary.
 /*
-/*	dict_del() removes a dictionary entry, and returns non-zero
+/*	dict_del() removes a dictionary entry, and returns zero
 /*	in case of success.
 /*
 /*	dict_seq() iterates over all members in the named dictionary.
 /*	func is define DICT_SEQ_FUN_FIRST (select first member) or
-/*	DICT_SEQ_FUN_NEXT (select next member). A null result means
-/*	there is more.
+/*	DICT_SEQ_FUN_NEXT (select next member). A zero result means
+/*	that an entry was found.
 /*
 /*	dict_close() closes the specified dictionary and cleans up the
 /*	associated data structures.
@@ -205,9 +211,12 @@
 #include <dict_regexp.h>
 #include <dict_static.h>
 #include <dict_cidr.h>
+#include <dict_ht.h>
+#include <dict_thash.h>
 #include <stringops.h>
 #include <split_at.h>
 #include <htable.h>
+#include <myflock.h>
 
  /*
   * lookup table for available map types.
@@ -222,10 +231,9 @@ static const DICT_OPEN_INFO dict_open_info[] = {
     DICT_TYPE_CDB, dict_cdb_open,
 #endif
     DICT_TYPE_ENVIRON, dict_env_open,
+    DICT_TYPE_HT, dict_ht_open,
     DICT_TYPE_UNIX, dict_unix_open,
-#ifdef SNAPSHOT
     DICT_TYPE_TCP, dict_tcp_open,
-#endif
 #ifdef HAS_SDBM
     DICT_TYPE_SDBM, dict_sdbm_open,
 #endif
@@ -253,6 +261,7 @@ static const DICT_OPEN_INFO dict_open_info[] = {
 #endif
     DICT_TYPE_STATIC, dict_static_open,
     DICT_TYPE_CIDR, dict_cidr_open,
+    DICT_TYPE_THASH, dict_thash_open,
     0,
 };
 
@@ -311,6 +320,16 @@ DICT   *dict_open3(const char *dict_type, const char *dict_name,
 	msg_fatal("opening %s:%s %m", dict_type, dict_name);
     if (msg_verbose)
 	msg_info("%s: %s:%s", myname, dict_type, dict_name);
+    /* XXX the choice between wait-for-lock or no-wait is hard-coded. */
+    if (dict->lock_fd >= 0 && (dict_flags & DICT_FLAG_OPEN_LOCK) != 0) {
+	if (dict_flags & DICT_FLAG_LOCK)
+	    msg_panic("%s: attempt to open %s:%s with both \"open\" lock and \"access\" lock",
+		      myname, dict_type, dict_name);
+	if (myflock(dict->lock_fd, INTERNAL_LOCK,
+		    MYFLOCK_OP_EXCLUSIVE | MYFLOCK_OP_NOWAIT) < 0)
+	    msg_fatal("%s:%s: unable to get exclusive lock: %m",
+		      dict_type, dict_name);
+    }
     return (dict);
 }
 
@@ -387,7 +406,7 @@ ARGV   *dict_mapnames()
 
 static NORETURN usage(char *myname)
 {
-    msg_fatal("usage: %s type:file read|write|create [fold]", myname);
+    msg_fatal("usage: %s type:file read|write|create [fold] [sync]", myname);
 }
 
 int     main(int argc, char **argv)
@@ -403,6 +422,7 @@ int     main(int argc, char **argv)
     const char *value;
     int     ch;
     int     dict_flags = DICT_FLAG_LOCK | DICT_FLAG_DUP_REPLACE;
+    int     n;
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -417,7 +437,7 @@ int     main(int argc, char **argv)
 	}
     }
     optind = OPTIND;
-    if (argc - optind < 2 || argc - optind > 3)
+    if (argc - optind < 2)
 	usage(argv[0]);
     if (strcasecmp(argv[optind + 1], "create") == 0)
 	open_flags = O_CREAT | O_RDWR | O_TRUNC;
@@ -427,8 +447,14 @@ int     main(int argc, char **argv)
 	open_flags = O_RDONLY;
     else
 	msg_fatal("unknown access mode: %s", argv[2]);
-    if (argv[optind + 2] && strcasecmp(argv[optind + 2], "fold") == 0)
-	dict_flags |= DICT_FLAG_FOLD_ANY;
+    for (n = 2; argv[optind + n]; n++) {
+	if (strcasecmp(argv[optind + 2], "fold") == 0)
+	    dict_flags |= DICT_FLAG_FOLD_ANY;
+	else if (strcasecmp(argv[optind + 2], "sync") == 0)
+	    dict_flags |= DICT_FLAG_SYNC_UPDATE;
+	else
+	    usage(argv[0]);
+    }
     dict_name = argv[optind];
     dict = dict_open(dict_name, open_flags, dict_flags);
     dict_register(dict_name, dict);

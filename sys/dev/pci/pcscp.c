@@ -1,4 +1,4 @@
-/*	$NetBSD: pcscp.c,v 1.44 2008/08/28 16:47:10 tsutsui Exp $	*/
+/*	$NetBSD: pcscp.c,v 1.46 2012/01/30 19:41:22 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcscp.c,v 1.44 2008/08/28 16:47:10 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcscp.c,v 1.46 2012/01/30 19:41:22 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,8 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: pcscp.c,v 1.44 2008/08/28 16:47:10 tsutsui Exp $");
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsi_all.h>
@@ -163,11 +161,9 @@ pcscp_attach(device_t parent, device_t self, void *aux)
 	pcireg_t csr;
 	bus_dma_segment_t seg;
 	int error, rseg;
-	char devinfo[256];
 
 	sc->sc_dev = self;
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s\n", devinfo);
+	pci_aprint_devinfo(pa, NULL);
 	aprint_normal("%s", device_xname(sc->sc_dev));
 
 	if (pci_mapreg_map(pa, IO_MAP_REG, PCI_MAPREG_TYPE_IO, 0,

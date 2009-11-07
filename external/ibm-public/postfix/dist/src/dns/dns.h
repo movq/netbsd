@@ -1,4 +1,4 @@
-/*	$NetBSD: dns.h,v 1.1.1.1 2009/06/23 10:08:43 tron Exp $	*/
+/*	$NetBSD: dns.h,v 1.1.1.3 2011/03/02 19:32:10 tron Exp $	*/
 
 #ifndef _DNS_H_INCLUDED_
 #define _DNS_H_INCLUDED_
@@ -23,6 +23,9 @@
 #endif
 #ifdef RESOLVE_H_NEEDS_NAMESER8_COMPAT_H
 #include <nameser8_compat.h>
+#endif
+#ifdef RESOLVE_H_NEEDS_ARPA_NAMESER_COMPAT_H
+#include <arpa/nameser_compat.h>
 #endif
 #include <resolv.h>
 
@@ -115,6 +118,9 @@ extern void dns_rr_free(DNS_RR *);
 extern DNS_RR *dns_rr_copy(DNS_RR *);
 extern DNS_RR *dns_rr_append(DNS_RR *, DNS_RR *);
 extern DNS_RR *dns_rr_sort(DNS_RR *, int (*) (DNS_RR *, DNS_RR *));
+extern int dns_rr_compare_pref_ipv6(DNS_RR *, DNS_RR *);
+extern int dns_rr_compare_pref_ipv4(DNS_RR *, DNS_RR *);
+extern int dns_rr_compare_pref_any(DNS_RR *, DNS_RR *);
 extern int dns_rr_compare_pref(DNS_RR *, DNS_RR *);
 extern DNS_RR *dns_rr_shuffle(DNS_RR *);
 extern DNS_RR *dns_rr_remove(DNS_RR *, DNS_RR *);

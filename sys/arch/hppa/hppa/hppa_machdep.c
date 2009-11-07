@@ -1,4 +1,4 @@
-/*	$NetBSD: hppa_machdep.c,v 1.17 2009/06/01 07:10:14 skrll Exp $	*/
+/*	$NetBSD: hppa_machdep.c,v 1.26.2.1 2012/05/21 15:25:57 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -27,14 +27,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hppa_machdep.c,v 1.17 2009/06/01 07:10:14 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hppa_machdep.c,v 1.26.2.1 2012/05/21 15:25:57 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/sa.h>
 #include <sys/lwp.h>
 #include <sys/savar.h>
-#include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
 #include <sys/cpu.h>
@@ -44,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: hppa_machdep.c,v 1.17 2009/06/01 07:10:14 skrll Exp 
 #include <uvm/uvm_extern.h>
 
 #include <machine/cpufunc.h>
+#include <machine/pcb.h>
 #include <machine/mcontext.h>
 #include <hppa/hppa/machdep.h>
 
@@ -141,6 +141,7 @@ void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
+	struct pcb *pcb = lwp_getpcb(l);
 	__greg_t *gr = mcp->__gregs;
 	__greg_t ras_pc;
 
@@ -187,9 +188,9 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	gr[_REG_SR2] = tf->tf_sr2;
 	gr[_REG_SR3] = tf->tf_sr3;
 	gr[_REG_SR4] = tf->tf_sr4;
+	gr[_REG_CR27] = tf->tf_cr27;
 #if 0
 	gr[_REG_CR26] = tf->tf_cr26;
-	gr[_REG_CR27] = tf->tf_cr27;
 #endif
 
 	ras_pc = (__greg_t)ras_lookup(l->l_proc,
@@ -200,18 +201,53 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 		gr[_REG_PCOQT] = ras_pc + 4;
 	}
 
-	*flags |= _UC_CPU;
+	*flags |= _UC_CPU | _UC_TLSBASE;
 
 	if (l->l_md.md_flags & 0) {
 		return;
 	}
 
 	hppa_fpu_flush(l);
-	memcpy(&mcp->__fpregs, l->l_addr->u_pcb.pcb_fpregs,
-	       sizeof(mcp->__fpregs));
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)l->l_addr->u_pcb.pcb_fpregs,
-		sizeof(l->l_addr->u_pcb.pcb_fpregs));
+	memcpy(&mcp->__fpregs, pcb->pcb_fpregs, sizeof(mcp->__fpregs));
 	*flags |= _UC_FPU;
+}
+
+int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+{
+	const __greg_t *gr = mcp->__gregs;
+
+	if ((gr[_REG_PSW] & (PSW_MBS|PSW_MBZ)) != PSW_MBS) {
+		return EINVAL;
+	}
+
+#if 0
+	/*
+	 * XXX
+	 * Force the space regs and priviledge bits to
+	 * the right values in the trapframe for now.
+	 */
+
+	if (gr[_REG_PCSQH] != pmap_sid(pmap, gr[_REG_PCOQH])) {
+		return EINVAL;
+	}
+
+	if (gr[_REG_PCSQT] != pmap_sid(pmap, gr[_REG_PCOQT])) {
+		return EINVAL;
+	}
+
+	if (gr[_REG_PCOQH] < 0xc0000020 &&
+	    (gr[_REG_PCOQH] & HPPA_PC_PRIV_MASK) != HPPA_PC_PRIV_USER) {
+		return EINVAL;
+	}
+
+	if (gr[_REG_PCOQT] < 0xc0000020 &&
+	    (gr[_REG_PCOQT] & HPPA_PC_PRIV_MASK) != HPPA_PC_PRIV_USER) {
+		return EINVAL;
+	}
+#endif
+
+	return 0;
 }
 
 int
@@ -221,41 +257,15 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	struct proc *p = l->l_proc;
 	struct pmap *pmap = p->p_vmspace->vm_map.pmap;
 	const __greg_t *gr = mcp->__gregs;
+	int error;
 
 	if ((flags & _UC_CPU) != 0) {
-
-		if ((gr[_REG_PSW] & (PSW_MBS|PSW_MBZ)) != PSW_MBS) {
-			return EINVAL;
-		}
-
-#if 0
-		/*
-		 * XXX
-		 * Force the space regs and priviledge bits to
-		 * the right values in the trapframe for now.
-		 */
-
-		if (gr[_REG_PCSQH] != pmap_sid(pmap, gr[_REG_PCOQH])) {
-			return EINVAL;
-		}
-
-		if (gr[_REG_PCSQT] != pmap_sid(pmap, gr[_REG_PCOQT])) {
-			return EINVAL;
-		}
-
-		if (gr[_REG_PCOQH] < 0xc0000020 &&
-		    (gr[_REG_PCOQH] & HPPA_PC_PRIV_MASK) != HPPA_PC_PRIV_USER) {
-			return EINVAL;
-		}
-
-		if (gr[_REG_PCOQT] < 0xc0000020 &&
-		    (gr[_REG_PCOQT] & HPPA_PC_PRIV_MASK) != HPPA_PC_PRIV_USER) {
-			return EINVAL;
-		}
-#endif
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
 
 		tf->tf_ipsw	= gr[0] |
-		    (hppa_cpu_info->hci_features & HPPA_FTRS_W32B ? PSW_O : 0);
+		    (hppa_cpu_ispa20_p() ? PSW_O : 0);
 		tf->tf_r1	= gr[1];
 		tf->tf_rp	= gr[2];
 		tf->tf_r3	= gr[3];
@@ -312,16 +322,21 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_sr3	= gr[_REG_SR3];
 		tf->tf_sr4	= gr[_REG_SR4];
 		tf->tf_cr26	= gr[_REG_CR26];
-		tf->tf_cr27	= gr[_REG_CR27];
 #endif
 	}
 
+	/* Restore the private thread context */
+	if (flags & _UC_TLSBASE) {
+		lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_CR27]);
+		tf->tf_cr27	= gr[_REG_CR27];
+	}
+
+	/* Restore the floating point registers */
 	if ((flags & _UC_FPU) != 0) {
+		struct pcb *pcb = lwp_getpcb(l);
+
 		hppa_fpu_flush(l);
-		memcpy(l->l_addr->u_pcb.pcb_fpregs, &mcp->__fpregs,
-		       sizeof(mcp->__fpregs));
-		fdcache(HPPA_SID_KERNEL, (vaddr_t)l->l_addr->u_pcb.pcb_fpregs,
-			sizeof(l->l_addr->u_pcb.pcb_fpregs));
+		memcpy(pcb->pcb_fpregs, &mcp->__fpregs, sizeof(mcp->__fpregs));
 	}
 
 	mutex_enter(p->p_lock);
@@ -355,6 +370,10 @@ hppa_ras(struct lwp *l)
 	}
 }
 
+/*
+ * Preempt the current LWP if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
 void
 cpu_need_resched(struct cpu_info *ci, int flags)
 {
@@ -363,10 +382,13 @@ cpu_need_resched(struct cpu_info *ci, int flags)
 	if (ci->ci_want_resched && !immed)
 		return;
 	ci->ci_want_resched = 1;
+	setsoftast(ci->ci_data.cpu_onproc);
+
 #ifdef MULTIPROCESSOR
-        if (ci->ci_curlwp != ci->ci_data.cpu_idlelwp) {
-		/* aston(ci->ci_curlwp); */
-		setsoftast();
+	if (ci->ci_curlwp != ci->ci_data.cpu_idlelwp) {
+		if (immed && ci != curcpu()) {
+			/* XXX send IPI */
+		}
 	}
 #endif
 }

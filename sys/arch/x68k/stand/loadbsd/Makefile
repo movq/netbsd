@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.12 2006/06/29 03:46:43 lukem Exp $
+#	$NetBSD: Makefile,v 1.14 2012/02/08 23:51:37 joerg Exp $
+
+S=	${.CURDIR}/../../../..
 
 BASE=	loadbsd
 PROG=	${BASE}.x	# Human68k ".x" executable
@@ -20,12 +22,22 @@ LIBIOCS!=	cd ${.CURDIR}/../libiocs && ${PRINTOBJDIR}
 
 CPPFLAGS=	-W -Wall -O -fomit-frame-pointer
 CPPFLAGS+=	-m68000 -Wa,-mc68000
+CPPFLAGS+=	-nostdinc 
+CPPFLAGS+=	-I$S -I.
 CPPFLAGS+=	-I${.CURDIR}/../libdos -I${.CURDIR}/../libiocs
+CPPFLAGS+=	-I${DESTDIR}/usr/include
 LDFLAGS=	-nostdlib -static -N
 LDLIBS=		-L${LIBDOS} -ldos -L${LIBIOCS} -liocs -L${DESTDIR}/usr/lib -lc
 DPADD+=		${AOUT2HUX}
 
 CLEANFILES+=	${BASE}1 ${BASE}2
+CLEANFILES+=	machine m68k
+
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN:
+	rm -f machine && ln -s $S/arch/x68k/include machine
+	rm -f m68k && ln -s $S/arch/m68k/include m68k
+.endif
 
 ${PROG}: ${BASE}1 ${BASE}2
 	${_MKTARGET_LINK}
@@ -42,6 +54,7 @@ ${BASE}${i}:	${OBJS} ${LIBDOS}/libdos.a ${LIBIOCS}/libiocs.a
 release: check_RELEASEDIR
 	${HOST_INSTALL_FILE} -m ${NONBINMODE} ${PROG} \
 	    ${RELEASEDIR}/${MACHINE}/installation/misc
-	${HOST_INSTALL_FILE} -m ${NONBINMODE} \
-	    ${DESTDIR}/usr/share/man/cat8/x68k/loadbsd.0 \
-	    ${RELEASEDIR}/${MACHINE}/installation/misc
+	${TOOL_MANDOC_ASCII} ${DESTDIR}/usr/share/man/man8/x68k/loadbsd.8 > \
+	    ${RELEASEDIR}/${MACHINE}/installation/misc/loadbsd.0
+	${TOOL_MANDOC_HTML} ${DESTDIR}/usr/share/man/man8/x68k/loadbsd.8 > \
+	    ${RELEASEDIR}/${MACHINE}/installation/misc/loadbsd.html

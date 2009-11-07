@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.18 2009/10/23 23:23:56 joerg Exp $
+# $NetBSD: Makefile.inc,v 1.20 2011/05/26 12:56:29 joerg Exp $
 
 # $FreeBSD: src/gnu/usr.bin/groff/Makefile.inc,v 2.7 2003/05/01 13:22:18 ru Exp $
 
@@ -93,6 +93,8 @@ CXXFLAGS+=	-fno-rtti -fno-exceptions
 # We only need -lsupc++
 USE_LIBSTDCXX=	no
 
+CWARNFLAGS.clang+=	-Wno-unused-value
+
 
 .ifdef GROFFYSRCS
 YFLAGS+=	-d
@@ -163,5 +165,3 @@ GROFF_DIST=	${NETBSDSRCDIR}/gnu/dist/groff
 DIST_SUBDIR?=	${.CURDIR:T}
 DIST_DIR=	${GROFF_DIST}/${DIST_SUBDIR}
 .PATH: ${DIST_DIR}
-
-NOMANDOC=	yes

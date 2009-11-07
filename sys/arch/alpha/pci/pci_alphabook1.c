@@ -1,4 +1,4 @@
-/* $NetBSD: pci_alphabook1.c,v 1.13 2009/03/16 23:11:09 dsl Exp $ */
+/* $NetBSD: pci_alphabook1.c,v 1.16 2012/02/06 02:14:15 matt Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Authors: Jeffrey Hsu and Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -59,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.13 2009/03/16 23:11:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.16 2012/02/06 02:14:15 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -68,10 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.13 2009/03/16 23:11:09 dsl Exp 
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/autoconf.h>
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -86,7 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.13 2009/03/16 23:11:09 dsl Exp 
 
 #include "sio.h"
 
-int     dec_alphabook1_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+int     dec_alphabook1_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
 const char *dec_alphabook1_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *dec_alphabook1_intr_evcnt(void *, pci_intr_handle_t);
 void    *dec_alphabook1_intr_establish(void *, pci_intr_handle_t,
@@ -106,7 +103,7 @@ pci_alphabook1_pickintr(struct lca_config *lcp)
 	/* XXX MAGIC NUMBER */
 	sioclass = pci_conf_read(pc, pci_make_tag(pc, 0, LCA_SIO_DEVICE, 0),
 	    PCI_CLASS_REG);
-        sioII = (sioclass & 0xff) >= 3;
+	sioII = (sioclass & 0xff) >= 3;
 
 	if (!sioII)
 		printf("WARNING: SIO NOT SIO II... NO BETS...\n");
@@ -129,7 +126,8 @@ pci_alphabook1_pickintr(struct lca_config *lcp)
 }
 
 int
-dec_alphabook1_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+dec_alphabook1_intr_map(const struct pci_attach_args *pa,
+    pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
@@ -165,9 +163,9 @@ dec_alphabook1_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		break;
 
 	default:
-                printf("dec_alphabook1_intr_map: weird device number %d\n",
+	        printf("dec_alphabook1_intr_map: weird device number %d\n",
 		    device);
-                return 1;
+	        return 1;
 	}
 
 	*ihp = irq;

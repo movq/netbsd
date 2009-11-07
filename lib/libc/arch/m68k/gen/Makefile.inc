@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.28 2006/07/03 12:54:34 drochner Exp $
+#	$NetBSD: Makefile.inc,v 1.31 2011/11/22 15:25:28 joerg Exp $
 
 SRCS+=	alloca.S fabs.S
 
@@ -26,6 +26,7 @@ SRCS+=	ashlsi3.S ashrsi3.S \
 	negdf2.S negsf2.S
 SRCS+=	bswap16.S bswap32.S bswap64.S
 SRCS+=	_lwp.c
+CPPFLAGS._lwp.c	+= -D_LIBC_SOURCE
 
 # 68000-based machines build with a libgcc that includes
 # much of the (soft)float and integer support that would 
@@ -33,6 +34,9 @@ SRCS+=	_lwp.c
 .if	(${MACHINE_ARCH} == "m68000" || ${MKSOFTFLOAT} == "yes")
 SRCS+=	modf_ieee754.c			# generic ieee754 version
 SRCS+=	flt_rounds_softfloat.S
+.if ${MKSOFTFLOAT} != "yes"
+SRCS+=	fpfake.c
+.endif
 .else
 SRCS+=	modf.S
 SRCS+=	flt_rounds.S fpgetmask.S fpgetround.S fpgetsticky.S fpsetmask.S \
@@ -62,8 +66,8 @@ SRCS+=	ldexp_ieee754.c			# generic ieee754 version
 SRCS+=	ldexp_881.c
 .endif
 
-SRCS.m68k.gen=	Lint_bswap16.c Lint_bswap32.c Lint_bswap64.c \
+LSRCS.m68k.gen=	Lint_bswap16.c Lint_bswap32.c Lint_bswap64.c \
 		Lint_resumecontext.c Lint_swapcontext.c
-LSRCS+=		${SRCS.m68k.gen}
-DPSRCS+=	${SRCS.m68k.gen}
-CLEANFILES+=	${SRCS.m68k.gen}
+LSRCS+=		${LSRCS.m68k.gen}
+DPSRCS+=	${LSRCS.m68k.gen}
+CLEANFILES+=	${LSRCS.m68k.gen}

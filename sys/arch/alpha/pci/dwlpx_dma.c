@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpx_dma.c,v 1.19 2009/03/14 15:35:59 dsl Exp $ */
+/* $NetBSD: dwlpx_dma.c,v 1.23 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dwlpx_dma.c,v 1.19 2009/03/14 15:35:59 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwlpx_dma.c,v 1.23 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: dwlpx_dma.c,v 1.19 2009/03/14 15:35:59 dsl Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -99,7 +97,7 @@ dwlpx_dma_init(struct dwlpx_config *ccp)
 {
 	char *exname;
 	bus_dma_tag_t t;
-	u_int32_t *page_table;
+	uint32_t *page_table;
 	int i, lim, wmask;
 
 	/*
@@ -199,7 +197,7 @@ dwlpx_dma_init(struct dwlpx_config *ccp)
 	 * Initialize the page table.
 	 */
 	page_table =
-	    (u_int32_t *)ALPHA_PHYS_TO_K0SEG(PCIA_SGMAP_PT + ccp->cc_sysbase);
+	    (uint32_t *)ALPHA_PHYS_TO_K0SEG(PCIA_SGMAP_PT + ccp->cc_sysbase);
 	for (i = 0; i < lim; i++)
 		page_table[i * SGMAP_PTE_SPACING] = 0;
 	alpha_mb();
@@ -214,9 +212,9 @@ dwlpx_dma_init(struct dwlpx_config *ccp)
 	exname = malloc(16, M_DEVBUF, M_NOWAIT);
 	if (exname == NULL)
 		panic("dwlpx_dma_init");
-	sprintf(exname, "%s_sgmap_a", ccp->cc_sc->dwlpx_dev.dv_xname);
+	sprintf(exname, "%s_sgmap_a", device_xname(ccp->cc_sc->dwlpx_dev));
 	alpha_sgmap_init(t, &ccp->cc_sgmap, exname, DWLPx_SG_MAPPED_BASE,
-	    0, DWLPx_SG_MAPPED_SIZE(lim), sizeof(u_int32_t),
+	    0, DWLPx_SG_MAPPED_SIZE(lim), sizeof(uint32_t),
 	    (void *)page_table, 0);
 
 	/*

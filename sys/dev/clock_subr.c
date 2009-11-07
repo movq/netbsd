@@ -1,6 +1,7 @@
-/*	$NetBSD: clock_subr.c,v 1.13 2009/02/14 20:32:29 perry Exp $	*/
+/*	$NetBSD: clock_subr.c,v 1.16 2011/02/08 20:20:26 rmind Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -38,53 +39,13 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: clock.c 1.18 91/01/21$
- *
- *	@(#)clock.c	8.2 (Berkeley) 1/12/94
- */
-
-/*
  * Generic routines to convert between a POSIX date
  * (seconds since 1/1/1970) and yr/mo/day/hr/min/sec
  * Derived from arch/hp300/hp300/clock.c
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock_subr.c,v 1.13 2009/02/14 20:32:29 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock_subr.c,v 1.16 2011/02/08 20:20:26 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -121,7 +82,7 @@ leapyear(int year)
 				rv = 1;
 		}
 	}
-	return (rv);
+	return rv;
 }
 
 time_t
@@ -136,7 +97,8 @@ clock_ymdhms_to_secs(struct clock_ymdhms *dt)
 	 * Compute days since start of time
 	 * First from years, then from months.
 	 */
-	if (year < POSIX_BASE_YEAR) return -1;
+	if (year < POSIX_BASE_YEAR)
+		return -1;
 	days = 0;
 	for (i = POSIX_BASE_YEAR; i < year; i++)
 		days += days_in_year(i);
@@ -154,16 +116,18 @@ clock_ymdhms_to_secs(struct clock_ymdhms *dt)
 	    * 60 + dt->dt_min)
 	    * 60 + dt->dt_sec;
 
-	if ((time_t)secs != secs) return -1;
-	return (secs);
+	if ((time_t)secs != secs)
+		return -1;
+	return secs;
 }
 
 void
 clock_secs_to_ymdhms(time_t secs, struct clock_ymdhms *dt)
 {
 	int mthdays[12];
-	int i, days;
-	int rsec;	/* remainder seconds */
+	int i;
+	time_t days;
+	time_t rsec;	/* remainder seconds */
 
 	/*
 	 * This function uses a local copy of month_days[]

@@ -1,4 +1,4 @@
-/* $NetBSD: chk.c,v 1.20 2009/04/14 09:03:45 lukem Exp $ */
+/* $NetBSD: chk.c,v 1.22 2011/10/17 16:31:14 mbalmer Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,10 +38,11 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: chk.c,v 1.20 2009/04/14 09:03:45 lukem Exp $");
+__RCSID("$NetBSD: chk.c,v 1.22 2011/10/17 16:31:14 mbalmer Exp $");
 #endif
 
 #include <ctype.h>
+#include <string.h>
 #include <limits.h>
 #include <stdlib.h>
 
@@ -1045,6 +1046,19 @@ tomanyarg(hte_t *hte, fcall_t *call)
 	msg(16, hte->h_name, mkpos(&call->f_pos));
 }
 
+/*
+ * List of functions where we usually don't care about their result.
+ * NB: Must be sorted.
+ */
+static const char ignorelist[][8] = {
+	"memcpy",
+	"memmove",
+	"memset",
+	"printf",
+	"strcat",
+	"strcpy",
+	"vprintf",
+};
 
 /*
  * Print warnings for return values which are used, but not returned,
@@ -1057,33 +1071,38 @@ chkrvu(hte_t *hte, sym_t *def)
 	int	used, ignored;
 
 	if (def == NULL)
-		/* don't know wheter or not the functions returns a value */
+		/* don't know whether or not the functions returns a value */
 		return;
 
 	if (hte->h_calls == NULL)
 		return;
 
 	if (def->s_rval) {
-		/* function has return value */
-		used = ignored = 0;
-		for (call = hte->h_calls; call != NULL; call = call->f_nxt) {
-			used |= call->f_rused || call->f_rdisc;
-			ignored |= !call->f_rused && !call->f_rdisc;
-		}
 		/*
 		 * XXX as soon as we are able to disable single warnings
 		 * the following dependencies from hflag should be removed.
 		 * but for now I do'nt want to be botherd by this warnings
 		 * which are almost always useless.
 		 */
+		if (hflag == 0)
+			return;
+		if (hflag == 1 && bsearch(hte->h_name, ignorelist,
+		    __arraycount(ignorelist), sizeof(ignorelist[0]),
+		    (int (*)(const void *, const void *))strcmp) != NULL)
+			return;
+
+		/* function has return value */
+		used = ignored = 0;
+		for (call = hte->h_calls; call != NULL; call = call->f_nxt) {
+			used |= call->f_rused || call->f_rdisc;
+			ignored |= !call->f_rused && !call->f_rdisc;
+		}
 		if (!used && ignored) {
-			if (hflag)
-				/* %s returns value which is always ignored */
-				msg(8, hte->h_name);
+			/* %s returns value which is always ignored */
+			msg(8, hte->h_name);
 		} else if (used && ignored) {
-			if (hflag)
-				/* %s returns value which is sometimes ign. */
-				msg(9, hte->h_name);
+			/* %s returns value which is sometimes ign. */
+			msg(9, hte->h_name);
 		}
 	} else {
 		/* function has no return value */

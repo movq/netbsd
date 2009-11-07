@@ -1,4 +1,4 @@
-/*	$NetBSD: c_ksh.c,v 1.16 2009/04/25 05:11:37 lukem Exp $	*/
+/*	$NetBSD: c_ksh.c,v 1.18 2011/10/16 17:12:11 joerg Exp $	*/
 
 /*
  * built-in Korn commands: c_*
@@ -6,7 +6,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: c_ksh.c,v 1.16 2009/04/25 05:11:37 lukem Exp $");
+__RCSID("$NetBSD: c_ksh.c,v 1.18 2011/10/16 17:12:11 joerg Exp $");
 #endif
 
 #include "sh.h"
@@ -573,7 +573,7 @@ c_whence(wp)
 			break;
 		}
 		if (vflag || !ret)
-			shprintf(newline);
+			shprintf("%s", newline);
 	}
 	return ret;
 }
@@ -873,7 +873,7 @@ c_typeset(wp)
 				else
 				    print_value_quoted(s);
 			    }
-			    shprintf(newline);
+			    shprintf("%s", newline);
 			}
 			/* Only report first `element' of an array with
 			 * no set elements.
@@ -964,7 +964,7 @@ c_alias(wp)
 					shf_putc('=', shl_stdout);
 					print_value_quoted(ap->val.s);
 				}
-				shprintf(newline);
+				shprintf("%s", newline);
 			}
 	}
 
@@ -988,7 +988,7 @@ c_alias(wp)
 					shf_putc('=', shl_stdout);
 					print_value_quoted(ap->val.s);
 				}
-				shprintf(newline);
+				shprintf("%s", newline);
 			} else {
 				shprintf("%s alias not found\n", alias);
 				rv = 1;
@@ -1236,7 +1236,7 @@ c_kill(wp)
 "usage: kill [ -s signame | -signum | -signame ] {pid|job}...\n\
        kill -l [exit_status]\n"
 			);
-		bi_errorf(null);
+		bi_errorf("%s", null);
 		return 1;
 	}
 
@@ -1257,7 +1257,7 @@ c_kill(wp)
 			for (i = 1; i < SIGNALS; i++, p = space)
 				if (sigtraps[i].name)
 					shprintf("%s%s", p, sigtraps[i].name);
-			shprintf(newline);
+			shprintf("%s", newline);
 		} else {
 			int w, si;
 			int mess_width;
@@ -1439,7 +1439,7 @@ c_bind(wp)
 	wp += builtin_opt.optind;
 
 	if (*wp == NULL)	/* list all */
-		rv = x_bind((char*)NULL, (char*)NULL, 0, list);
+		rv = x_bind(NULL, NULL, 0, list);
 
 	for (; *wp != NULL; wp++) {
 		cp = strchr(*wp, '=');

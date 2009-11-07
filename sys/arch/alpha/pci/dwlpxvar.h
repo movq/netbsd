@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpxvar.h,v 1.9 2009/03/14 14:45:53 dsl Exp $ */
+/* $NetBSD: dwlpxvar.h,v 1.11 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -59,13 +59,13 @@ struct dwlpx_config {
 };
 
 struct dwlpx_softc {
-	struct device		dwlpx_dev;
+	device_t		dwlpx_dev;
 	struct dwlpx_config	dwlpx_cc;	/* config info */
-	u_int16_t		dwlpx_dtype;	/* Node Type */
-	u_int8_t		dwlpx_node;	/* TurboLaser Node */
-	u_int8_t		dwlpx_hosenum;	/* Hose Number */
-	u_int8_t		dwlpx_nhpc;	/* # of hpcs */
-	u_int8_t		dwlpx_sgmapsz;	/* size of SGMAP */
+	uint16_t		dwlpx_dtype;	/* Node Type */
+	uint8_t		dwlpx_node;	/* TurboLaser Node */
+	uint8_t		dwlpx_hosenum;	/* Hose Number */
+	uint8_t		dwlpx_nhpc;	/* # of hpcs */
+	uint8_t		dwlpx_sgmapsz;	/* size of SGMAP */
 };
 #define	DWLPX_NONE	0
 #define	DWLPX_SG32K	1

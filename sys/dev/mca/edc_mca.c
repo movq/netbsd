@@ -1,4 +1,4 @@
-/*	$NetBSD: edc_mca.c,v 1.44 2009/05/12 14:31:00 cegger Exp $	*/
+/*	$NetBSD: edc_mca.c,v 1.46 2012/02/02 19:43:04 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,9 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: edc_mca.c,v 1.44 2009/05/12 14:31:00 cegger Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: edc_mca.c,v 1.46 2012/02/02 19:43:04 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,9 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: edc_mca.c,v 1.44 2009/05/12 14:31:00 cegger Exp $");
 #include <sys/vnode.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -481,7 +477,7 @@ edc_intr(void *arg)
 	if (intr_id != ISR_DATA_TRANSFER_RDY) {
 	    	if (cmd == CMD_READ_DATA || cmd == CMD_WRITE_DATA)
 			sc->sc_resblk = sc->status_block[SB_RESBLKCNT_IDX];
-		wakeup_one(sc);
+		wakeup(sc);
 	}
 
 	return (1);
@@ -840,9 +836,7 @@ edcworker(void *arg)
 
 			disk_unbusy(&ed->sc_dk, (bp->b_bcount - bp->b_resid),
 			    (bp->b_flags & B_READ));
-#if NRND > 0
 			rnd_add_uint32(&ed->rnd_source, bp->b_blkno);
-#endif
 			biodone(bp);
 		}
 	}

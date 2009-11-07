@@ -1,4 +1,4 @@
-/* $NetBSD: com.c,v 1.288 2009/05/06 07:27:42 cegger Exp $ */
+/* $NetBSD: com.c,v 1.304.2.1 2012/04/22 17:01:44 riz Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2004, 2008 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.288 2009/05/06 07:27:42 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.304.2.1 2012/04/22 17:01:44 riz Exp $");
 
 #include "opt_com.h"
 #include "opt_ddb.h"
@@ -76,9 +76,6 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.288 2009/05/06 07:27:42 cegger Exp $");
 #include "opt_ntp.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
-#include <sys/rnd.h>
-#endif
 
 /* The COM16650 option was renamed to COM_16650. */
 #ifdef COM16650
@@ -104,7 +101,6 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.288 2009/05/06 07:27:42 cegger Exp $");
 #include <sys/poll.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -116,6 +112,10 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.288 2009/05/06 07:27:42 cegger Exp $");
 #include <sys/vnode.h>
 #include <sys/kauth.h>
 #include <sys/intr.h>
+#ifdef RND_COM
+#include <sys/rnd.h>
+#endif
+
 
 #include <sys/bus.h>
 
@@ -173,16 +173,18 @@ int	com_to_tiocm(struct com_softc *);
 void	com_iflush(struct com_softc *);
 
 int	com_common_getc(dev_t, struct com_regs *);
-void	com_common_putc(dev_t, struct com_regs *, int);
+static void	com_common_putc(dev_t, struct com_regs *, int);
 
 int	cominit(struct com_regs *, int, int, int, tcflag_t);
+
+static int comcnreattach(void);
 
 int	comcngetc(dev_t);
 void	comcnputc(dev_t, int);
 void	comcnpollc(dev_t, int);
 
 #define	integrate	static inline
-void 	comsoft(void *);
+void	comsoft(void *);
 integrate void com_rxsoft(struct com_softc *, struct tty *);
 integrate void com_txsoft(struct com_softc *, struct tty *);
 integrate void com_stsoft(struct com_softc *, struct tty *);
@@ -200,6 +202,17 @@ dev_type_stop(comstop);
 dev_type_tty(comtty);
 dev_type_poll(compoll);
 
+static struct comcons_info comcons_info;
+
+/*
+ * Following are all routines needed for COM to act as console
+ */
+static struct consdev comcons = {
+	NULL, NULL, comcngetc, comcnputc, comcnpollc, NULL, NULL, NULL,
+	NODEV, CN_NORMAL
+};
+
+
 const struct cdevsw com_cdevsw = {
 	comopen, comclose, comread, comwrite, comioctl,
 	comstop, comtty, compoll, nommap, ttykqfilter, D_TTY
@@ -215,10 +228,7 @@ u_int com_rbuf_size = COM_RING_SIZE;
 u_int com_rbuf_hiwat = (COM_RING_SIZE * 1) / 4;
 u_int com_rbuf_lowat = (COM_RING_SIZE * 3) / 4;
 
-static struct com_regs comconsregs;
 static int comconsattached;
-static int comconsrate;
-static tcflag_t comconscflag;
 static struct cnm_state com_cnm_state;
 
 #ifdef KGDB
@@ -383,9 +393,14 @@ com_attach_subr(struct com_softc *sc)
 
 	CSR_WRITE_1(regsp, COM_REG_IER, sc->sc_ier);
 
-	if (regsp->cr_iot == comconsregs.cr_iot &&
-	    regsp->cr_iobase == comconsregs.cr_iobase) {
+	if (bus_space_is_equal(regsp->cr_iot, comcons_info.regs.cr_iot) &&
+	    regsp->cr_iobase == comcons_info.regs.cr_iobase) {
 		comconsattached = 1;
+
+		if (cn_tab == NULL && comcnreattach() != 0) {
+			printf("can't re-init serial console @%lx\n",
+			    (u_long)comcons_info.regs.cr_iobase);
+		}
 
 		/* Make sure the console is always "hardwired". */
 		delay(10000);			/* wait for output to finish */
@@ -410,12 +425,12 @@ com_attach_subr(struct com_softc *sc)
 		SET(sc->sc_hwflags, COM_HW_FIFO);
 		goto fifodelay;
 
- 	case COM_TYPE_OMAP:
- 		sc->sc_fifolen = 64;
- 		fifo_msg = "OMAP UART, working fifo";
- 		SET(sc->sc_hwflags, COM_HW_FIFO);
- 		goto fifodelay;
-  	}
+	case COM_TYPE_OMAP:
+		sc->sc_fifolen = 64;
+		fifo_msg = "OMAP UART, working fifo";
+		SET(sc->sc_hwflags, COM_HW_FIFO);
+		goto fifodelay;
+	}
 
 	sc->sc_fifolen = 1;
 	/* look for a NS 16550AF UART with FIFOs */
@@ -487,7 +502,7 @@ fifodelay:
 
 fifodone:
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = comstart;
 	tp->t_param = comparam;
 	tp->t_hwiflow = comhwiflow;
@@ -527,7 +542,7 @@ fifodone:
 	 * exclusive use.  If it's the console _and_ the
 	 * kgdb device, it doesn't.
 	 */
-	if (regsp->cr_iot == comkgdbregs.cr_iot &&
+	if (bus_space_is_equal(regsp->cr_iot, comkgdbregs.cr_iot) &&
 	    regsp->cr_iobase == comkgdbregs.cr_iobase) {
 		if (!ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
 			com_kgdb_attached = 1;
@@ -540,7 +555,7 @@ fifodone:
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, comsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif
@@ -605,14 +620,41 @@ com_config(struct com_softc *sc)
 		com_enable_debugport(sc);
 }
 
+#if 0
+static int
+comcngetc_detached(dev_t dev)
+{
+	return 0;
+}
+
+static void
+comcnputc_detached(dev_t dev, int c)
+{
+}
+#endif
+
 int
 com_detach(device_t self, int flags)
 {
 	struct com_softc *sc = device_private(self);
 	int maj, mn;
 
-        if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE))
+	if (ISSET(sc->sc_hwflags, COM_HW_KGDB))
 		return EBUSY;
+
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE) &&
+	    (flags & DETACH_SHUTDOWN) != 0)
+		return EBUSY;
+
+	if (sc->disable != NULL && sc->enabled != 0) {
+		(*sc->disable)(sc);
+		sc->enabled = 0;
+	}
+
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
+		comconsattached = 0;
+		cn_tab = NULL;
+	}
 
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&com_cdevsw);
@@ -629,7 +671,7 @@ com_detach(device_t self, int flags)
 		 * Ring buffer allocation failed in the com_attach_subr,
 		 * only the tty is allocated, and nothing else.
 		 */
-		ttyfree(sc->sc_tty);
+		tty_free(sc->sc_tty);
 		return 0;
 	}
 
@@ -638,12 +680,12 @@ com_detach(device_t self, int flags)
 
 	/* Detach and free the tty. */
 	tty_detach(sc->sc_tty);
-	ttyfree(sc->sc_tty);
+	tty_free(sc->sc_tty);
 
 	/* Unhook the soft interrupt handler. */
 	softint_disestablish(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
 #endif
@@ -653,33 +695,6 @@ com_detach(device_t self, int flags)
 	mutex_destroy(&sc->sc_lock);
 
 	return (0);
-}
-
-int
-com_activate(device_t self, enum devact act)
-{
-	struct com_softc *sc = device_private(self);
-	int rv = 0;
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (COM_HW_CONSOLE|COM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		if (sc->disable != NULL && sc->enabled != 0) {
-			(*sc->disable)(sc);
-			sc->enabled = 0;
-		}
-		break;
-	}
-
-	return (rv);
 }
 
 void
@@ -789,7 +804,10 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 		}
 
 		/* Turn on interrupts. */
-		sc->sc_ier = IER_ERXRDY | IER_ERLS | IER_EMSC;
+		sc->sc_ier = IER_ERXRDY | IER_ERLS;
+		if (!ISSET(tp->t_cflag, CLOCAL))
+			sc->sc_ier |= IER_EMSC;
+
 		if (sc->sc_type == COM_TYPE_PXA2x0)
 			sc->sc_ier |= IER_EUART | IER_ERXTOUT;
 		CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, sc->sc_ier);
@@ -811,8 +829,8 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 		 * sticky bits from TIOCSFLAGS.
 		 */
 		if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE)) {
-			t.c_ospeed = comconsrate;
-			t.c_cflag = comconscflag;
+			t.c_ospeed = comcons_info.rate;
+			t.c_cflag = comcons_info.cflag;
 		} else {
 			t.c_ospeed = TTYDEF_SPEED;
 			t.c_cflag = TTYDEF_CFLAG;
@@ -1463,8 +1481,8 @@ com_loadchannelregs(struct com_softc *sc)
 		KASSERT(sc->sc_type != COM_TYPE_AU1x00);
 		KASSERT(sc->sc_type != COM_TYPE_16550_NOERS);
 		/* no EFR on alchemy */
-		CSR_WRITE_1(regsp, COM_REG_EFR, sc->sc_efr);
 		CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
+		CSR_WRITE_1(regsp, COM_REG_EFR, sc->sc_efr);
 	}
 	if (sc->sc_type == COM_TYPE_AU1x00) {
 		/* alchemy has single separate 16-bit clock divisor register */
@@ -1995,7 +2013,7 @@ again:	do {
 	    /*
 	     * Since some device (e.g., ST16C1550) doesn't clear IIR_TXRDY
 	     * by IIR read, so we can't do this way: `process all interrupts,
-	     * then do TX if possble'.
+	     * then do TX if possible'.
 	     */
 	    (iir & IIR_IMASK) != IIR_TXRDY);
 
@@ -2053,7 +2071,7 @@ again:	do {
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 
@@ -2110,7 +2128,7 @@ com_common_getc(dev_t dev, struct com_regs *regsp)
 	return (c);
 }
 
-void
+static void
 com_common_putc(dev_t dev, struct com_regs *regsp, int c)
 {
 	int s = splserial();
@@ -2154,17 +2172,19 @@ cominit(struct com_regs *regsp, int rate, int frequency, int type,
 	}
 
 	rate = comspeed(rate, frequency, type);
-	if (type != COM_TYPE_AU1x00) {
-		/* no EFR on alchemy */ 
-		if (type != COM_TYPE_16550_NOERS) {
-			CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
-			CSR_WRITE_1(regsp, COM_REG_EFR, 0);
+	if (__predict_true(rate != -1)) {
+		if (type == COM_TYPE_AU1x00) {
+			CSR_WRITE_2(regsp, COM_REG_DLBL, rate);
+		} else {
+			/* no EFR on alchemy */ 
+			if (type != COM_TYPE_16550_NOERS) {
+				CSR_WRITE_1(regsp, COM_REG_LCR, LCR_EERS);
+				CSR_WRITE_1(regsp, COM_REG_EFR, 0);
+			}
+			CSR_WRITE_1(regsp, COM_REG_LCR, LCR_DLAB);
+			CSR_WRITE_1(regsp, COM_REG_DLBL, rate & 0xff);
+			CSR_WRITE_1(regsp, COM_REG_DLBH, rate >> 8);
 		}
-		CSR_WRITE_1(regsp, COM_REG_LCR, LCR_DLAB);
-		CSR_WRITE_1(regsp, COM_REG_DLBL, rate & 0xff);
-		CSR_WRITE_1(regsp, COM_REG_DLBH, rate >> 8);
-	} else {
-		CSR_WRITE_1(regsp, COM_REG_DLBL, rate);
 	}
 	CSR_WRITE_1(regsp, COM_REG_LCR, cflag2lcr(cflag));
 	CSR_WRITE_1(regsp, COM_REG_MCR, MCR_DTR | MCR_RTS);
@@ -2210,24 +2230,15 @@ cominit(struct com_regs *regsp, int rate, int frequency, int type,
 	return (0);
 }
 
-/*
- * Following are all routines needed for COM to act as console
- */
-struct consdev comcons = {
-	NULL, NULL, comcngetc, comcnputc, comcnpollc, NULL, NULL, NULL,
-	NODEV, CN_NORMAL
-};
-
-
 int
 comcnattach1(struct com_regs *regsp, int rate, int frequency, int type,
     tcflag_t cflag)
 {
 	int res;
 
-	comconsregs = *regsp;
+	comcons_info.regs = *regsp;
 
-	res = cominit(&comconsregs, rate, frequency, type, cflag);
+	res = cominit(&comcons_info.regs, rate, frequency, type, cflag);
 	if (res)
 		return (res);
 
@@ -2235,8 +2246,10 @@ comcnattach1(struct com_regs *regsp, int rate, int frequency, int type,
 	cn_init_magic(&com_cnm_state);
 	cn_set_magic("\047\001"); /* default magic is BREAK */
 
-	comconsrate = rate;
-	comconscflag = cflag;
+	comcons_info.frequency = frequency;
+	comcons_info.type = type;
+	comcons_info.rate = rate;
+	comcons_info.cflag = cflag;
 
 	return (0);
 }
@@ -2258,11 +2271,18 @@ comcnattach(bus_space_tag_t iot, bus_addr_t iobase, int rate, int frequency,
 	return comcnattach1(&regs, rate, frequency, type, cflag);
 }
 
+static int
+comcnreattach(void)
+{
+	return comcnattach1(&comcons_info.regs, comcons_info.rate,
+	    comcons_info.frequency, comcons_info.type, comcons_info.cflag);
+}
+
 int
 comcngetc(dev_t dev)
 {
 
-	return (com_common_getc(dev, &comconsregs));
+	return (com_common_getc(dev, &comcons_info.regs));
 }
 
 /*
@@ -2272,7 +2292,7 @@ void
 comcnputc(dev_t dev, int c)
 {
 
-	com_common_putc(dev, &comconsregs, c);
+	com_common_putc(dev, &comcons_info.regs, c);
 }
 
 void
@@ -2288,13 +2308,13 @@ com_kgdb_attach1(struct com_regs *regsp, int rate, int frequency, int type,
 {
 	int res;
 
-	if (regsp->cr_iot == comconsregs.cr_iot &&
-	    regsp->cr_iobase == comconsregs.cr_iobase) {
+	if (bus_space_is_equal(regsp->cr_iot, comcons_info.regs.cr_iot) &&
+	    regsp->cr_iobase == comcons_info.regs.cr_iobase) {
 #if !defined(DDB)
 		return (EBUSY); /* cannot share with console */
 #else
 		comkgdbregs = *regsp;
-		comkgdbregs.cr_ioh = comconsregs.cr_ioh;
+		comkgdbregs.cr_ioh = comcons_info.regs.cr_ioh;
 #endif
 	} else {
 		comkgdbregs = *regsp;
@@ -2357,11 +2377,13 @@ com_is_console(bus_space_tag_t iot, bus_addr_t iobase, bus_space_handle_t *ioh)
 	bus_space_handle_t help;
 
 	if (!comconsattached &&
-	    iot == comconsregs.cr_iot && iobase == comconsregs.cr_iobase)
-		help = comconsregs.cr_ioh;
+	    bus_space_is_equal(iot, comcons_info.regs.cr_iot) &&
+	    iobase == comcons_info.regs.cr_iobase)
+		help = comcons_info.regs.cr_ioh;
 #ifdef KGDB
 	else if (!com_kgdb_attached &&
-	    iot == comkgdbregs.cr_iot && iobase == comkgdbregs.cr_iobase)
+	    bus_space_is_equal(iot, comkgdbregs.cr_iot) &&
+	    iobase == comkgdbregs.cr_iobase)
 		help = comkgdbregs.cr_ioh;
 #endif
 	else
@@ -2389,9 +2411,14 @@ com_cleanup(device_t self, int how)
 }
 
 bool
-com_suspend(device_t self PMF_FN_ARGS)
+com_suspend(device_t self, const pmf_qual_t *qual)
 {
 	struct com_softc *sc = device_private(self);
+
+#if 0
+	if (ISSET(sc->sc_hwflags, COM_HW_CONSOLE) && cn_tab == &comcons)
+		cn_tab = &comcons_suspend;
+#endif
 
 	CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, 0);
 	(void)CSR_READ_1(&sc->sc_regs, COM_REG_IIR);
@@ -2400,7 +2427,7 @@ com_suspend(device_t self PMF_FN_ARGS)
 }
 
 bool
-com_resume(device_t self PMF_FN_ARGS)
+com_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct com_softc *sc = device_private(self);
 

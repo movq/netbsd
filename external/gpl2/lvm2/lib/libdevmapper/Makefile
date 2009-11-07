@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2008/12/22 01:48:10 haad Exp $
+#	$NetBSD: Makefile,v 1.8 2011/05/26 12:56:26 joerg Exp $
 
 USE_SHLIBDIR=	yes
 USE_FORT?=	no
@@ -8,27 +8,37 @@ NOLINT=		#defined
 
 LIB=		devmapper
 
-CFLAGS+= -fno-inline
+CWARNFLAGS.clang+=	-Wno-comment -Wno-parentheses -Wno-switch
 
-CPPFLAGS+=	-I${LIBDM_DISTDIR} -I${LIBDM_DISTDIR}/misc -I${LIBDM_DISTDIR}/mm \
-		-I${LIBDM_DISTDIR}/datastruct -I${LIBDM_DISTDIR}/ioctl \
-		-I${LVM2_DISTDIR}/include -I${LIBDM_SRCDIR} -D__NetBSD__
+CPPFLAGS+=	-I${LIBDEVMAPPER_DISTDIR} \
+		-I${LIBDEVMAPPER_DISTDIR}/misc \
+		-I${LIBDEVMAPPER_DISTDIR}/mm \
+		-I${LIBDEVMAPPER_DISTDIR}/datastruct \
+		-I${LIBDEVMAPPER_DISTDIR}/ioctl \
+		-I${LVM2_DISTDIR}/include \
+		-I${LIBDEVMAPPER_SRCDIR} \
+		-D__NetBSD__
 
+CPPFLAGS+=	-D__LIB_DEVMAPPER__ 
 
-CPPFLAGS+=	-D__LIB_DEVMAPPER__ -DDM_DEVICE_UID=0 \
-		-DDM_DEVICE_GID=0 -DDM_DEVICE_MODE=0600
-
-LDADD+=		-lprop
+LIBDPLIBS+=	prop ${NETBSDSRCDIR}/lib/libprop
 
 SRCS+=		bitset.c hash.c list.c libdm-common.c libdm-file.c \
 		libdm-deptree.c	libdm-string.c libdm-report.c \
 		dbg_malloc.c pool.c matcher.c parse_rx.c ttree.c \
 		libdm-nbsd-iface.c libdm_netbsd.c
 
-.PATH: ${LIBDM_DISTDIR}/
-.PATH: ${LIBDM_DISTDIR}/datastruct
-.PATH: ${LIBDM_DISTDIR}/mm
-.PATH: ${LIBDM_DISTDIR}/regex
-.PATH: ${LIBDM_DISTDIR}/ioctl
+.ifdef RUMP_ACTION
+CPPFLAGS+=      -DRUMP_ACTION -DRUMP_SYS_IOCTL -DRUMP_SYS_CLOSE -DRUMP_SYS_OPEN
+LDADD+=         -lrumpdev_disk -lrumpdev_dm -lrumpdev
+LDADD+=         -lrumpvfs -lrump -lrumpuser -lpthread
+DBG=            -g
+.endif
+
+.PATH: ${LIBDEVMAPPER_DISTDIR}/
+.PATH: ${LIBDEVMAPPER_DISTDIR}/datastruct
+.PATH: ${LIBDEVMAPPER_DISTDIR}/mm
+.PATH: ${LIBDEVMAPPER_DISTDIR}/regex
+.PATH: ${LIBDEVMAPPER_DISTDIR}/ioctl
 
 .include <bsd.lib.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.130 2009/07/13 19:05:41 roy Exp $	*/
+/*	$NetBSD: cmds.c,v 1.134 2012/01/15 20:43:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996-2009 The NetBSD Foundation, Inc.
@@ -96,7 +96,7 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.6 (Berkeley) 10/9/94";
 #else
-__RCSID("$NetBSD: cmds.c,v 1.130 2009/07/13 19:05:41 roy Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.134 2012/01/15 20:43:24 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -111,6 +111,7 @@ __RCSID("$NetBSD: cmds.c,v 1.130 2009/07/13 19:05:41 roy Exp $");
 
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <glob.h>
 #include <limits.h>
 #include <netdb.h>
@@ -142,7 +143,7 @@ static struct types {
 static sigjmp_buf	 jabort;
 
 static int	confirm(const char *, const char *);
-static void	mintr(int);
+__dead static void	mintr(int);
 static void	mabort(const char *);
 static void	set_type(const char *);
 
@@ -556,14 +557,14 @@ void
 reget(int argc, char *argv[])
 {
 
-	(void)getit(argc, argv, 1, "r+");
+	(void)getit(argc, argv, 1, restart_point ? "r+" : "a");
 }
 
 void
 get(int argc, char *argv[])
 {
 
-	(void)getit(argc, argv, 0, restart_point ? "r+" : "w" );
+	(void)getit(argc, argv, 0, restart_point ? "r+" : "w");
 }
 
 /*
@@ -612,10 +613,14 @@ getit(int argc, char *argv[], int restartit, const char *gmode)
 		ret = stat(locfile, &stbuf);
 		if (restartit == 1) {
 			if (ret < 0) {
-				warn("Can't stat `%s'", locfile);
-				goto freegetit;
+				if (errno != ENOENT) {
+					warn("Can't stat `%s'", locfile);
+					goto freegetit;
+				}
+				restart_point = 0;
 			}
-			restart_point = stbuf.st_size;
+			else
+				restart_point = stbuf.st_size;
 		} else {
 			if (ret == 0) {
 				time_t mtime;
@@ -779,10 +784,10 @@ fget(int argc, char *argv[])
 }
 
 const char *
-onoff(int bool)
+onoff(int val)
 {
 
-	return (bool ? "on" : "off");
+	return (val ? "on" : "off");
 }
 
 /*

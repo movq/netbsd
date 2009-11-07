@@ -1,12 +1,14 @@
-.\"	$NetBSD: yacc.1,v 1.2 2009/10/29 00:56:20 christos Exp $
-.\" Id: yacc.1,v 1.6 2005/05/04 22:11:56 tom Exp
+.\"	$NetBSD: yacc.1,v 1.4 2011/09/10 21:29:04 christos Exp $
 .\"
-.TH YACC 1 "July\ 15,\ 1990"
-.UC 6
+.\" Id: yacc.1,v 1.12 2011/09/08 00:40:44 tom Exp
+.\"
+.\" .TH YACC 1 "July\ 15,\ 1990"
+.\" .UC 6
+.TH YACC 1 "September 7, 2011" "Berkeley Yacc" "User Commands"
 .SH NAME
 Yacc \- an LALR(1) parser generator
 .SH SYNOPSIS
-.B yacc [ -dglrtv ] [ \-b
+.B yacc [ -dgilrtv ] [ \-b
 .I file_prefix
 .B ] [ \-p
 .I symbol_prefix
@@ -24,7 +26,6 @@ normally writes the parse tables and the driver routine to the file
 .IR y.tab.c.
 .PP
 The following options are available:
-.RS
 .TP
 \fB\-b \fP\fIfile_prefix\fR
 The
@@ -37,16 +38,31 @@ The default prefix is the character
 .TP
 .B \-d
 The \fB-d\fR option causes the header file
-.IR y.tab.h
+.BR y.tab.h
 to be written.
+It contains #define's for the token identifiers.
 .TP
 .B \-g
 The
 .B \-g
 option causes a graphical description of the generated LALR(1) parser to
 be written to the file
-.IR y.dot
+.BR y.dot
 in graphviz format, ready to be processed by dot(1).
+.TP
+.B \-i
+The \fB-i\fR option causes a supplementary header file
+.BR y.tab.i
+to be written.
+It contains extern declarations
+and supplementary #define's as needed to map the conventional \fIyacc\fP
+\fByy\fP-prefixed names to whatever the \fB-p\fP option may specify.
+The code file, e.g., \fBy.tab.c\fP is modified to #include this file
+as well as the \fBy.tab.h\fP file, enforcing consistent usage of the
+symbols defined in those files.
+.IP
+The supplementary header file makes it simpler to separate compilation
+of lex- and yacc-files.
 .TP
 .B \-l
 If the
@@ -74,7 +90,10 @@ option changes the prefix prepended to yacc-generated symbols to
 the string denoted by
 .IR symbol_prefix.
 The default prefix is the string
-.IR yy.
+.BR yy.
+.TP
+.B \-P
+create a reentrant parser, e.g., "%pure-parser".
 .TP
 .B \-r
 The
@@ -86,6 +105,7 @@ is named
 .IR y.code.c,
 and the tables file is named
 .IR y.tab.c.
+The prefix "\fIy.\fP" can be overridden using the \fB\-b\fP option.
 .TP
 .B \-t
 The
@@ -103,7 +123,33 @@ be written to the file
 .TP
 .B \-V
 print the version number to the standard output.
-.RE
+.SH EXTENSIONS
+.B yacc
+provides some extensions for compatibility with bison and other implementations
+of yacc:
+.TP
+\fB %expect\fP \fInumber\fP
+tell \fByacc\fP the expected number of shift/reduce conflicts.
+That makes it only report the number if it differs.
+.TP
+\fB %expect-rr\fP \fInumber\fP
+tell \fByacc\fP the expected number of reduce/reduce conflicts.
+That makes it only report the number if it differs.
+This is (unlike bison) allowable in LALR parsers.
+.TP
+\fB %lex-param\fP { \fIargument-declaration\fP }
+By default, the lexer accepts no parameters, e.g., \fByylex()\fP.
+Use this directive to add parameter declarations for your customized lexer.
+.TP
+\fB %parse-param\fP { \fIargument-declaration\fP }
+By default, the parser accepts no parameters, e.g., \fByyparse()\fP. 
+Use this directive to add parameter declarations for your customized parser.
+.TP
+\fB %pure-parser\fP
+Most variables (other than \fByydebug\fP and \fByynerrs\fP) are
+allocated on the stack within \fByyparse\fP, making the parser reasonably
+reentrant.
+.
 .SH DIAGNOSTICS
 If there are rules that are never reduced, the number of such rules is
 reported on standard error.

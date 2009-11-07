@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.22 2009/06/10 04:16:53 ginsbach Exp $	*/
+/*	$NetBSD: main.c,v 1.25 2011/08/21 08:40:31 christos Exp $	*/
 
 /* main.c: This file contains the main control and user-interface routines
    for the ed line editor. */
@@ -39,7 +39,7 @@ __COPYRIGHT(
 #if 0
 static char *rcsid = "@(#)main.c,v 1.1 1994/02/01 00:34:42 alm Exp";
 #else
-__RCSID("$NetBSD: main.c,v 1.22 2009/06/10 04:16:53 ginsbach Exp $");
+__RCSID("$NetBSD: main.c,v 1.25 2011/08/21 08:40:31 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -104,7 +104,8 @@ int lineno;			/* script line number */
 const char *prompt;			/* command-line prompt */
 const char *dps = "*";		/* default command-line prompt */
 
-const char *usage = "usage: %s [-] [-sxE] [-p string] [name]\n";
+
+static const char usage[] = "Usage: %s [-] [-sxE] [-p string] [name]\n";
 
 /* ed: line editor */
 int
@@ -137,7 +138,7 @@ top:
 			ere = REG_EXTENDED;
 			break;
 		default:
-			fprintf(stderr, usage, argv[0]);
+			fprintf(stderr, usage, getprogname());
 			exit(1);
 			/* NOTREACHED */
 		}
@@ -200,9 +201,11 @@ top:
 				fputs("?\n", stderr);
 				sprintf(errmsg, "warning: file modified");
 				if (!isatty(0)) {
-					fprintf(stderr, garrulous ? 
-					    "script, line %d: %s\n" :
-					    "", lineno, errmsg);
+					if (garrulous) {
+						fprintf(stderr,
+						    "script, line %d: %s\n",
+						    lineno, errmsg);
+					}
 					quit(2);
 				}
 				clearerr(stdin);
@@ -233,27 +236,32 @@ top:
 			fputs("?\n", stderr);		/* give warning */
 			sprintf(errmsg, "warning: file modified");
 			if (!isatty(0)) {
-				fprintf(stderr, garrulous ? 
-				    "script, line %d: %s\n" : 
-				    "", lineno, errmsg);
+				if (garrulous) {
+					fprintf(stderr,
+					    "script, line %d: %s\n",
+					    lineno, errmsg);
+				}
 				quit(2);
 			}
 			break;
 		case FATAL:
-			if (!isatty(0))
-				fprintf(stderr, garrulous ? 
-				    "script, line %d: %s\n" : "", 
-				    lineno, errmsg);
-			else
-				fprintf(stderr, garrulous ? "%s\n" : "",
-				    errmsg);
+			if (garrulous) {
+				if (!isatty(0)) {
+					fprintf(stderr,
+					    "script, line %d: %s\n",
+					    lineno, errmsg);
+				} else {
+					fprintf(stderr, "%s\n", errmsg);
+				}
+			}
 			quit(3);
 		default:
 			fputs("?\n", stderr);
 			if (!isatty(0)) {
-				fprintf(stderr, garrulous ? 
-				    "script, line %d: %s\n" : "",
-				    lineno, errmsg);
+				if (garrulous) {
+					fprintf(stderr, "script, line %d: %s\n",
+					    lineno, errmsg);
+				}
 				quit(2);
 			}
 			break;

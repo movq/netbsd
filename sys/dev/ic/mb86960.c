@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86960.c,v 1.74 2009/09/12 19:55:29 tsutsui Exp $	*/
+/*	$NetBSD: mb86960.c,v 1.78 2012/02/02 19:43:03 tls Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb86960.c,v 1.74 2009/09/12 19:55:29 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb86960.c,v 1.78 2012/02/02 19:43:03 tls Exp $");
 
 /*
  * Device driver for Fujitsu MB86960A/MB86965A based Ethernet cards.
@@ -48,8 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb86960.c,v 1.74 2009/09/12 19:55:29 tsutsui Exp $")
  */
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,9 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: mb86960.c,v 1.74 2009/09/12 19:55:29 tsutsui Exp $")
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -78,10 +74,8 @@ __KERNEL_RCSID(0, "$NetBSD: mb86960.c,v 1.74 2009/09/12 19:55:29 tsutsui Exp $")
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -255,10 +249,9 @@ mb86960_config(struct mb86960_softc *sc, int *media, int nmedia, int defmedia)
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
+
 	/* Print additional info when attached. */
 	aprint_normal_dev(sc->sc_dev, "Ethernet address %s\n",
 	    ether_sprintf(sc->sc_enaddr));
@@ -756,11 +749,8 @@ mb86960_start(struct ifnet *ifp)
 			goto indicate_inactive;
 		}
 
-#if NBPFILTER > 0
 		/* Tap off here if there is a BPF listener. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/*
 		 * Copy the mbuf chain into the transmission buffer.
@@ -1155,10 +1145,8 @@ mb86960_intr(void *arg)
 		if ((ifp->if_flags & IFF_OACTIVE) == 0)
 			mb86960_start(ifp);
 
-#if NRND > 0
 		if (rstat != 0 || tstat != 0)
 			rnd_add_uint32(&sc->rnd_source, rstat + tstat);
-#endif
 
 		/*
 		 * Get interrupt conditions, masking unneeded flags.
@@ -1342,14 +1330,11 @@ mb86960_get_packet(struct mb86960_softc *sc, u_int len)
 		bus_space_read_multi_stream_2(bst, bsh, FE_BMPR8,
 		    mtod(m, uint16_t *), (len + 1) >> 1);
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.  If so, hand off
 	 * the raw packet to bpf.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 	return 1;
@@ -1802,22 +1787,15 @@ mb86960_disable(struct mb86960_softc *sc)
 int
 mb86960_activate(device_t self, enum devact act)
 {
-	struct mb86960_softc *sc = (struct mb86960_softc *)self;
-	int rv, s;
+	struct mb86960_softc *sc = device_private(self);
 
-	rv = 0;
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_ec.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return rv;
 }
 
 /*
@@ -1837,10 +1815,9 @@ mb86960_detach(struct mb86960_softc *sc)
 	/* Delete all media. */
 	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 
-#if NRND > 0
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
-#endif
+
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 

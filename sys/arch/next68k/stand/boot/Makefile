@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2009/01/12 07:47:47 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.24 2011/01/22 19:19:21 joerg Exp $
 
 NOMAN=	# defined
 
@@ -25,7 +25,7 @@ RELOC=	4380000
 # XXX make defs arch-indep.
 INCLUDES+=	-I${.OBJDIR} -I${S}/arch -I${S} -I${S}/lib/libsa 
 DEFS+=		-D_STANDALONE -DMC68040 -DSUPPORT_BOOTP -DSUPPORT_DHCP  -DDEBUG -DSD_DEBUG -DSCSI_DEBUG # -DEN_DEBUG   -DNETIF_DEBUG  
-SAMISCCPPFLAGS=	-DSUPPORT_DHCP -DSUPPORT_BOOTP -DINSECURE # -DBOOTP_DEBUG -DETHER_DEBUG -DNET_DEBUG # -DNETIF_DEBUG -DNFS_DEBUG  -DARP_DEBUG 
+SAMISCCPPFLAGS=	-DSUPPORT_DHCP -DSUPPORT_BOOTP -DSA_EXEC_ANYOWNER # -DBOOTP_DEBUG -DETHER_DEBUG -DNET_DEBUG # -DNETIF_DEBUG -DNFS_DEBUG  -DARP_DEBUG 
 WARNS=1
 CFLAGS+=	 -ffreestanding -nostdinc ${INCLUDES} ${DEFS}
 CFLAGS+=	-Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
@@ -81,7 +81,7 @@ build.c:
 	${HOST_SH} ${.CURDIR}/newvers.sh
 
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh -MD ${.CURDIR}/version "next68k"
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "next68k"
 
 #installboot: ${.CURDIR}/installboot.sh
 #	@rm -f installboot

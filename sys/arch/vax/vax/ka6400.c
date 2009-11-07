@@ -1,4 +1,4 @@
-/*	$NetBSD: ka6400.c,v 1.13 2008/03/11 05:34:03 matt Exp $	*/
+/*	$NetBSD: ka6400.c,v 1.16 2011/06/05 16:59:21 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -40,25 +40,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka6400.c,v 1.13 2008/03/11 05:34:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka6400.c,v 1.16 2011/06/05 16:59:21 matt Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
-#include <sys/time.h>
-#include <sys/kernel.h>
-#include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/conf.h>
-#include <sys/user.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/kernel.h>
+#include <sys/time.h>
 
 #include <machine/ka670.h>
-#include <machine/cpu.h>
-#include <machine/mtpr.h>
 #include <machine/nexus.h>
 #include <machine/clock.h>
 #include <machine/scb.h>
-#include <machine/bus.h>
 #include <machine/sid.h>
 #include <machine/cca.h>
 #include <machine/rpb.h>
@@ -197,7 +194,7 @@ static int ms6400_match(device_t , cfdata_t, void *);
 static void ms6400_attach(device_t , device_t , void*);
 
 struct mem_xmi_softc {
-	struct device *sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
@@ -339,6 +336,7 @@ rxchar(void)
 static void
 ka6400_startslave(struct cpu_info *ci)
 {
+	const struct pcb *pcb = lwp_getpcb(ci->ci_data.cpu_onproc);
 	const int id = ci->ci_slotid;
 	int i;
 
@@ -352,8 +350,7 @@ ka6400_startslave(struct cpu_info *ci)
 	ka6400_txrx(id, "D/I 4 %x\r", ci->ci_istack);	/* Interrupt stack */
 	ka6400_txrx(id, "D/I C %x\r", mfpr(PR_SBR));	/* SBR */
 	ka6400_txrx(id, "D/I D %x\r", mfpr(PR_SLR));	/* SLR */
-	ka6400_txrx(id, "D/I 10 %x\r",			/* PCB for idle proc */
-	    ci->ci_data.cpu_onproc->l_addr->u_pcb.pcb_paddr);
+	ka6400_txrx(id, "D/I 10 %x\r", pcb->pcb_paddr);	/* PCB for idle proc */
 	ka6400_txrx(id, "D/I 11 %x\r", mfpr(PR_SCBB));	/* SCB */
 	ka6400_txrx(id, "D/I 38 %x\r", mfpr(PR_MAPEN)); /* Enable MM */
 	ka6400_txrx(id, "S %x\r", (int)&vax_mp_tramp); /* Start! */

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.14 2009/03/14 14:45:55 dsl Exp $	*/
+/*	$NetBSD: param.h,v 1.17 2012/02/04 17:56:16 para Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -60,38 +60,26 @@
 #define MSGBUFSIZE	NBPG		/* default message buffer size */
 #endif
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((6 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((7 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
 
 /* Constants used to divide the USPACE area */
 
 /*
  * The USPACE area contains :
- * 1. the user structure for the process
+ * 1. the pcb structure for the process
  * 2. the fp context for FP emulation
  * 3. the kernel (svc) stack
  *
  * The layout of the area looks like this
  *
- * | user area | FP context | kernel stack |
+ * | uarea | FP context | kernel stack |
  *
- * The size of the user area is known.
+ * The size of the uarea is known.
  * The size of the FP context is variable depending of the FP emulator
  * in use and whether there is hardware FP support. However we can put
  * an upper limit on it.
@@ -104,7 +92,7 @@
 
 #define FPCONTEXTSIZE			(0x100)
 #define USPACE_SVC_STACK_TOP		(USPACE)
-#define USPACE_SVC_STACK_BOTTOM		(sizeof(struct user) + FPCONTEXTSIZE + 10)
+#define USPACE_SVC_STACK_BOTTOM		(sizeof(struct pcb) + FPCONTEXTSIZE + 10)
 
 #define arm_btop(x)			((x) >> PGSHIFT)
 #define arm_ptob(x)			((x) << PGSHIFT)

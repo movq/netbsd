@@ -1,7 +1,7 @@
-/*	$NetBSD: rdataset.h,v 1.1.1.2 2009/10/25 00:02:38 christos Exp $	*/
+/*	$NetBSD: rdataset.h,v 1.4.4.1 2012/06/05 21:14:58 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rdataset.h,v 1.67 2009/01/17 23:47:43 tbox Exp */
+/* Id: rdataset.h,v 1.72 2011/06/08 22:13:51 each Exp  */
 
 #ifndef DNS_RDATASET_H
 #define DNS_RDATASET_H 1
@@ -112,6 +112,9 @@ typedef struct dns_rdatasetmethods {
 						 dns_rdataset_t *rdataset,
 						 dns_rdatasetadditional_t type,
 						 dns_rdatatype_t qtype);
+	void			(*settrust)(dns_rdataset_t *rdataset,
+					    dns_trust_t trust);
+	void			(*expire)(dns_rdataset_t *rdataset);
 } dns_rdatasetmethods_t;
 
 #define DNS_RDATASET_MAGIC	       ISC_MAGIC('D','N','S','R')
@@ -202,6 +205,7 @@ struct dns_rdataset {
 #define DNS_RDATASETATTR_RESIGN		0x00040000
 #define DNS_RDATASETATTR_CLOSEST	0x00080000
 #define DNS_RDATASETATTR_OPTOUT		0x00100000	/*%< OPTOUT proof */
+#define DNS_RDATASETATTR_NEGATIVE	0x00200000
 
 /*%
  * _OMITDNSSEC:
@@ -634,6 +638,25 @@ dns_rdataset_putadditional(dns_acache_t *acache,
  * \li	#ISC_R_FAILURE	- additional information caching is not supported.
  * \li	#ISC_R_NOTFOUND	- the corresponding DB node has not cached additional
  *			  information for 'rdataset.'
+ */
+
+void
+dns_rdataset_settrust(dns_rdataset_t *rdataset, dns_trust_t trust);
+/*%<
+ * Set the trust of the 'rdataset' to trust in any in the backing database.
+ * The local trust level of 'rdataset' is also set.
+ */
+
+void
+dns_rdataset_expire(dns_rdataset_t *rdataset);
+/*%<
+ * Mark the rdataset to be expired in the backing database.
+ */
+
+const char *
+dns_trust_totext(dns_trust_t trust);
+/*
+ * Display trust in textual form.
  */
 
 ISC_LANG_ENDDECLS

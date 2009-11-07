@@ -1,4 +1,4 @@
-/*	$NetBSD: stand.h,v 1.69 2009/03/19 10:20:54 tsutsui Exp $	*/
+/*	$NetBSD: stand.h,v 1.75.2.1 2012/06/03 21:42:52 jdc Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -67,6 +67,7 @@
 #include <sys/types.h>
 #include <sys/cdefs.h>
 #include <sys/stat.h>
+#include <sys/stdarg.h>
 #include "saioctl.h"
 #include "saerrno.h"
 
@@ -86,36 +87,57 @@
 
 struct open_file;
 
+#define FS_DEF_BASE(fs) \
+	extern __compactcall int	__CONCAT(fs,_open)(const char *, struct open_file *); \
+	extern __compactcall int	__CONCAT(fs,_close)(struct open_file *); \
+	extern __compactcall int	__CONCAT(fs,_read)(struct open_file *, void *, \
+						size_t, size_t *); \
+	extern __compactcall int	__CONCAT(fs,_write)(struct open_file *, void *, \
+						size_t, size_t *); \
+	extern __compactcall off_t	__CONCAT(fs,_seek)(struct open_file *, off_t, int); \
+	extern __compactcall int	__CONCAT(fs,_stat)(struct open_file *, struct stat *)
+
+#if defined(LIBSA_ENABLE_LS_OP)
 #define FS_DEF(fs) \
-	extern int	__CONCAT(fs,_open)(const char *, struct open_file *); \
-	extern int	__CONCAT(fs,_close)(struct open_file *); \
-	extern int	__CONCAT(fs,_read)(struct open_file *, void *, \
-						size_t, size_t *); \
-	extern int	__CONCAT(fs,_write)(struct open_file *, void *, \
-						size_t, size_t *); \
-	extern off_t	__CONCAT(fs,_seek)(struct open_file *, off_t, int); \
-	extern int	__CONCAT(fs,_stat)(struct open_file *, struct stat *)
+	FS_DEF_BASE(fs);\
+	extern __compactcall void	__CONCAT(fs,_ls)(struct open_file *, const char *)
+#else
+#define FS_DEF(fs) FS_DEF_BASE(fs)
+#endif
+
 
 /*
  * This structure is used to define file system operations in a file system
  * independent way.
  */
 extern char *fsmod;
-extern char *fsmod2;
 
 #if !defined(LIBSA_SINGLE_FILESYSTEM)
 struct fs_ops {
-	int	(*open)(const char *, struct open_file *);
-	int	(*close)(struct open_file *);
-	int	(*read)(struct open_file *, void *, size_t, size_t *);
-	int	(*write)(struct open_file *, void *, size_t size, size_t *);
-	off_t	(*seek)(struct open_file *, off_t, int);
-	int	(*stat)(struct open_file *, struct stat *);
+	__compactcall int	(*open)(const char *, struct open_file *);
+	__compactcall int	(*close)(struct open_file *);
+	__compactcall int	(*read)(struct open_file *, void *, size_t, size_t *);
+	__compactcall int	(*write)(struct open_file *, void *, size_t size, size_t *);
+	__compactcall off_t	(*seek)(struct open_file *, off_t, int);
+	__compactcall int	(*stat)(struct open_file *, struct stat *);
+#if defined(LIBSA_ENABLE_LS_OP)
+	__compactcall void	(*ls)(struct open_file *, const char *);
+#endif
 };
 
 extern struct fs_ops file_system[];
 extern int nfsys;
 
+#if defined(LIBSA_ENABLE_LS_OP)
+#define FS_OPS(fs) { \
+	__CONCAT(fs,_open), \
+	__CONCAT(fs,_close), \
+	__CONCAT(fs,_read), \
+	__CONCAT(fs,_write), \
+	__CONCAT(fs,_seek), \
+	__CONCAT(fs,_stat), \
+	__CONCAT(fs,_ls) }
+#else
 #define FS_OPS(fs) { \
 	__CONCAT(fs,_open), \
 	__CONCAT(fs,_close), \
@@ -123,6 +145,7 @@ extern int nfsys;
 	__CONCAT(fs,_write), \
 	__CONCAT(fs,_seek), \
 	__CONCAT(fs,_stat) }
+#endif
 
 #define	FS_OPEN(fs)		((fs)->open)
 #define	FS_CLOSE(fs)		((fs)->close)
@@ -130,6 +153,9 @@ extern int nfsys;
 #define	FS_WRITE(fs)		((fs)->write)
 #define	FS_SEEK(fs)		((fs)->seek)
 #define	FS_STAT(fs)		((fs)->stat)
+#if defined(LIBSA_ENABLE_LS_OP)
+#define	FS_LS(fs)		((fs)->ls)
+#endif
 
 #else
 
@@ -139,6 +165,9 @@ extern int nfsys;
 #define	FS_WRITE(fs)		___CONCAT(LIBSA_SINGLE_FILESYSTEM,_write)
 #define	FS_SEEK(fs)		___CONCAT(LIBSA_SINGLE_FILESYSTEM,_seek)
 #define	FS_STAT(fs)		___CONCAT(LIBSA_SINGLE_FILESYSTEM,_stat)
+#if defined(LIBSA_ENABLE_LS_OP)
+#define	FS_LS(fs)		___CONCAT(LIBSA_SINGLE_FILESYSTEM,_ls)
+#endif
 
 FS_DEF(LIBSA_SINGLE_FILESYSTEM);
 
@@ -215,8 +244,8 @@ int	(devopen)(struct open_file *, const char *, char **);
 #ifdef HEAP_VARIABLE
 void	setheap(void *, void *);
 #endif
-void	*alloc(size_t);
-void	dealloc(void *, size_t);
+void	*alloc(size_t) __compactcall;
+void	dealloc(void *, size_t) __compactcall;
 struct	disklabel;
 char	*getdisklabel(const char *, struct disklabel *);
 int	dkcksum(const struct disklabel *);
@@ -227,18 +256,19 @@ int	sprintf(char *, const char *, ...)
     __attribute__((__format__(__printf__, 2, 3)));
 int	snprintf(char *, size_t, const char *, ...)
     __attribute__((__format__(__printf__, 3, 4)));
-void	vprintf(const char *, _BSD_VA_LIST_)
+void	vprintf(const char *, va_list)
     __attribute__((__format__(__printf__, 1, 0)));
-int	vsprintf(char *, const char *, _BSD_VA_LIST_)
+int	vsprintf(char *, const char *, va_list)
     __attribute__((__format__(__printf__, 2, 0)));
-int	vsnprintf(char *, size_t, const char *, _BSD_VA_LIST_)
+int	vsnprintf(char *, size_t, const char *, va_list)
     __attribute__((__format__(__printf__, 3, 0)));
 void	twiddle(void);
 void	gets(char *);
 int	getfile(char *prompt, int mode);
 char	*strerror(int);
 __dead void	exit(int);
-__dead void	panic(const char *, ...);
+__dead void	panic(const char *, ...)
+    __attribute__((__format__(__printf__, 1, 2)));
 __dead void	_rtt(void);
 void	*memcpy(void *, const void *, size_t);
 void	*memmove(void *, const void *, size_t);
@@ -254,6 +284,9 @@ off_t	lseek(int, off_t, int);
 int	ioctl(int, u_long, char *);
 int	stat(const char *, struct stat *);
 int	fstat(int, struct stat *);
+#if defined(LIBSA_ENABLE_LS_OP)
+void	ls(const char *);
+#endif
 
 typedef int cmp_t(const void *, const void *);
 void	qsort(void *, size_t, size_t, cmp_t *);
@@ -284,8 +317,9 @@ ssize_t	oread(int, void *, size_t);
 off_t	olseek(int, off_t, int);
 #endif
 
-extern const char HEXDIGITS[];
 extern const char hexdigits[];
+
+int	fnmatch(const char *, const char *);
 
 /* XXX: These should be removed eventually. */
 void	bcopy(const void *, void *, size_t);

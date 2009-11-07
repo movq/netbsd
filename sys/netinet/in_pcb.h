@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.h,v 1.47 2009/07/17 22:02:54 minskim Exp $	*/
+/*	$NetBSD: in_pcb.h,v 1.49 2011/09/24 17:18:17 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -80,6 +80,7 @@ struct inpcb {
 #define inp_af		inp_head.inph_af
 #define inp_ppcb	inp_head.inph_ppcb
 #define inp_state	inp_head.inph_state
+#define inp_rfc6056algo inp_head.inph_rfc6056algo
 #define inp_socket	inp_head.inph_socket
 #define inp_table	inp_head.inph_table
 #define inp_sp		inp_head.inph_sp
@@ -92,6 +93,7 @@ struct inpcb {
 	struct	  ip_moptions *inp_moptions; /* IP multicast options */
 	int	  inp_errormtu;		/* MTU of last xmit status = EMSGSIZE */
 	uint8_t	  inp_ip_minttl;
+	bool      inp_bindportonsend;
 };
 
 #define	inp_faddr	inp_ip.ip_dst
@@ -133,13 +135,14 @@ void	in_pcbdisconnect(void *);
 void	in_pcbinit(struct inpcbtable *, int, int);
 struct inpcb *
 	in_pcblookup_port(struct inpcbtable *,
-	    struct in_addr, u_int, int);
+			  struct in_addr, u_int, int, struct vestigial_inpcb *);
 struct inpcb *
 	in_pcblookup_bind(struct inpcbtable *,
 	    struct in_addr, u_int);
 struct inpcb *
 	in_pcblookup_connect(struct inpcbtable *,
-	    struct in_addr, u_int, struct in_addr, u_int);
+			     struct in_addr, u_int, struct in_addr, u_int,
+			     struct vestigial_inpcb *);
 int	in_pcbnotify(struct inpcbtable *, struct in_addr, u_int,
 	    struct in_addr, u_int, int, void (*)(struct inpcb *, int));
 void	in_pcbnotifyall(struct inpcbtable *, struct in_addr, int,

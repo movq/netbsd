@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.4 2007/10/17 19:56:56 garbled Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.8 2011/01/11 06:57:35 nisimura Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -42,6 +42,9 @@ struct btinfo_common {
 #define BTINFO_CLOCK		4
 #define BTINFO_BOOTPATH		5
 #define BTINFO_ROOTDEVICE	6
+#define BTINFO_NET		7
+#define BTINFO_PRODFAMILY	8
+#define BTINFO_MODULELIST	9
 
 struct btinfo_magic {
 	struct btinfo_common common;
@@ -74,6 +77,34 @@ struct btinfo_rootdevice {
 	struct btinfo_common common;
 	char devname[16];
 	unsigned cookie;
+};
+
+struct btinfo_net {
+	struct btinfo_common common;
+	char devname[16];
+	unsigned cookie;
+	uint8_t mac_address[6];
+};
+
+struct btinfo_prodfamily {
+	struct btinfo_common common;
+	char name[24];
+};
+
+struct btinfo_modulelist {
+	struct btinfo_common common;
+	int num;
+	uint32_t endpa;
+	/* bi_modulelist_entry follows as an array */
+};
+
+struct bi_modulelist_entry {
+	char kmod[80];
+	int type;
+#define BI_MODULE_NONE		0x00
+#define BI_MODULE_ELF		0x01
+	int len;
+	uint32_t base;
 };
 
 #define BOOTINFO_MAXSIZE 4096

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exit.c,v 1.225 2009/11/04 21:23:02 rmind Exp $	*/
+/*	$NetBSD: kern_exit.c,v 1.236.2.1 2012/04/12 17:05:36 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.225 2009/11/04 21:23:02 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.236.2.1 2012/04/12 17:05:36 riz Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_perfctrs.h"
@@ -109,6 +109,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.225 2009/11/04 21:23:02 rmind Exp $"
 #include <sys/cpu.h>
 #include <sys/lwpctl.h>
 #include <sys/atomic.h>
+#include <sys/sdt.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -123,9 +124,17 @@ static int find_stopped_child(struct proc *, pid_t, int, struct proc **, int *);
 static void proc_free(struct proc *, struct rusage *);
 
 /*
+ * DTrace SDT provider definitions
+ */
+SDT_PROBE_DEFINE(proc,,,exit, 
+	    "int", NULL, 		/* reason */
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL);
+/*
  * Fill in the appropriate signal information, and signal the parent.
  */
-static void
+/* XXX noclone works around a gcc 4.5 bug on arm */
+static void __noclone
 exit_psignal(struct proc *p, struct proc *pp, ksiginfo_t *ksi)
 {
 
@@ -196,6 +205,7 @@ exit1(struct lwp *l, int rv)
 	p = l->l_proc;
 
 	KASSERT(mutex_owned(p->p_lock));
+	KASSERT(p->p_vmspace != NULL);
 
 	if (__predict_false(p == initproc))
 		panic("init died (signal %d, exit %d)",
@@ -236,7 +246,9 @@ exit1(struct lwp *l, int rv)
 		lwp_lock(l);
 		p->p_nrlwps--;
 		l->l_stat = LSSTOP;
+		lwp_unlock(l);
 		mutex_exit(p->p_lock);
+		lwp_lock(l);
 		mi_switch(l);
 		KERNEL_LOCK(l->l_biglocks, l);
 		mutex_enter(p->p_lock);
@@ -331,6 +343,7 @@ exit1(struct lwp *l, int rv)
 	 */
 	mutex_enter(proc_lock);
 	if (p->p_lflag & PL_PPWAIT) {
+		l->l_lwpctl = NULL; /* was on loan from blocked parent */
 		p->p_lflag &= ~PL_PPWAIT;
 		cv_broadcast(&p->p_pptr->p_waitcv);
 	}
@@ -402,6 +415,11 @@ exit1(struct lwp *l, int rv)
 	 */
 	KNOTE(&p->p_klist, NOTE_EXIT);
 
+	SDT_PROBE(proc,,,exit, 
+		(WCOREDUMP(rv) ? CLD_DUMPED :
+		 (WIFSIGNALED(rv) ? CLD_KILLED : CLD_EXITED)),
+		0,0,0,0);
+
 #if PERFCTRS
 	/*
 	 * Save final PMC information in parent process & clean up.
@@ -423,8 +441,6 @@ exit1(struct lwp *l, int rv)
 	 */
 	if (__predict_false(p->p_slflag & PSL_CHTRACED)) {
 		PROCLIST_FOREACH(q, &allproc) {
-			if ((q->p_flag & PK_MARKER) != 0)
-				continue;
 			if (q->p_opptr == p)
 				q->p_opptr = NULL;
 		}
@@ -520,6 +536,11 @@ exit1(struct lwp *l, int rv)
 	callout_destroy(&l->l_timeout_ch);
 
 	/*
+	 * Release any PCU resources before becoming a zombie.
+	 */
+	pcu_discard_all(l);
+
+	/*
 	 * Remaining lwp resources will be freed in lwp_exit2() once we've
 	 * switch to idle context; at that point, we will be marked as a
 	 * full blown zombie.
@@ -560,6 +581,7 @@ exit1(struct lwp *l, int rv)
 	 * case these resources are in the PCB.
 	 */
 	cpu_lwp_free(l, 1);
+
 	pmap_deactivate(l);
 
 	/* This process no longer needs to hold the kernel lock. */
@@ -757,9 +779,9 @@ find_stopped_child(struct proc *parent, pid_t pid, int options,
 		LIST_FOREACH(child, &parent->p_children, p_sibling) {
 			if (pid >= 0) {
 				if (child->p_pid != pid) {
-					child = p_find(pid, PFIND_ZOMBIE |
-					    PFIND_LOCKED);
+					child = proc_find_raw(pid);
 					if (child == NULL ||
+					    child->p_stat == SIDL ||
 					    child->p_pptr != parent) {
 						child = NULL;
 						break;
@@ -794,7 +816,7 @@ find_stopped_child(struct proc *parent, pid_t pid, int options,
 					/*
 					 * We may occasionally arrive here
 					 * after receiving a signal, but
-					 * immediatley before the child
+					 * immediately before the child
 					 * process is zombified.  The wait
 					 * will be short, so avoid returning
 					 * to userspace.
@@ -921,7 +943,7 @@ proc_free(struct proc *p, struct rusage *ru)
 	/*
 	 * Let pid be reallocated.
 	 */
-	proc_free_pid(p);
+	proc_free_pid(p->p_pid);
 
 	/*
 	 * Unlink process from its process group.
@@ -956,7 +978,7 @@ proc_free(struct proc *p, struct rusage *ru)
 	 * Release substructures.
 	 */
 
-	limfree(p->p_limit);
+	lim_free(p->p_limit);
 	pstatsfree(p->p_stats);
 	kauth_cred_free(cred1);
 	kauth_cred_free(cred2);

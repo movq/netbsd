@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.36 2009/02/06 18:50:28 jym Exp $
+# 	$NetBSD: INSTALL,v 1.40 2011/12/18 05:49:30 dholland Exp $
 #
 #	INSTALL kernel for RISC-NEWS
 
@@ -49,7 +49,7 @@ file-system	MSDOSFS		# MS-DOS FAT filesystem(s).
 # Filesystem options
 options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 
 # Networking options
 options 	INET		# Internet protocols
@@ -111,7 +111,6 @@ wskbd0	at kb? console ?
 
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
-pseudo-device	md		1	# memory disk device
-#pseudo-device	fss		4	# file system snapshot device
+pseudo-device	md			# memory disk device
+#pseudo-device	fss			# file system snapshot device
 
-pseudo-device	rnd			# /dev/random and in-kernel generator

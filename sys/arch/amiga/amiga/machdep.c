@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.220 2009/05/19 18:39:26 phx Exp $	*/
+/*	$NetBSD: machdep.c,v 1.237 2011/12/15 14:25:12 phx Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -37,46 +38,6 @@
  *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
  */
 
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.63 91/04/24$
- *
- *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
- */
-
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
 #include "opt_fpu_emulate.h"
@@ -84,9 +45,10 @@
 #include "opt_m060sp.h"
 #include "opt_modular.h"
 #include "opt_panicbutton.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.220 2009/05/19 18:39:26 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.237 2011/12/15 14:25:12 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.220 2009/05/19 18:39:26 phx Exp $");
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
 #include <sys/queue.h>
@@ -109,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.220 2009/05/19 18:39:26 phx Exp $");
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #include <sys/cpu.h>
 #include <sys/exec.h>
 
@@ -130,10 +92,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.220 2009/05/19 18:39:26 phx Exp $");
 #include <ddb/db_extern.h>
 
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/kcore.h>
 #include <dev/cons.h>
+#include <dev/mm.h>
 #include <amiga/amiga/isr.h>
 #include <amiga/amiga/custom.h>
 #ifdef DRACO
@@ -143,6 +107,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.220 2009/05/19 18:39:26 phx Exp $");
 #include <amiga/amiga/cia.h>
 #include <amiga/amiga/cc.h>
 #include <amiga/amiga/memlist.h>
+#include <amiga/amiga/device.h>
 
 #include "fd.h"
 #include "ser.h"
@@ -164,7 +129,6 @@ void fdintr(int);
 
 volatile unsigned int interrupt_depth = 0;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 void *	msgbufaddr;
@@ -219,6 +183,10 @@ consinit(void)
 	} else
 #endif
 		custom_chips_init();
+
+	/* preconfigure graphics cards */
+	config_console();
+
 	/*
 	 * Initialize the console before we print anything out.
 	 */
@@ -246,16 +214,12 @@ consinit(void)
 void
 cpu_startup(void)
 {
-	char pbuf[9];
 	u_int i;
 #ifdef DEBUG
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 #endif
 	vaddr_t minaddr, maxaddr;
-
-	if (fputype != FPU_NONE)
-		m68k_make_fpu_idle_frame();
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -275,15 +239,6 @@ cpu_startup(void)
 	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
-	/*
-	 * Good {morning,afternoon,evening,night}.
-	 */
-	printf("%s%s", copyright, version);
-	identifycpu();
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-
 	minaddr = 0;
 
 	/*
@@ -293,17 +248,18 @@ cpu_startup(void)
 				   VM_PHYS_SIZE, 0, false, NULL);
 
 	/*
-	 * Finally, allocate mbuf cluster submap.
+	 * Good {morning,afternoon,evening,night}.
 	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+	banner();
+
+	/*
+	 * Get MMU/FPU type from bootstrap
+	 */
+	identifycpu();
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
 
 	/*
 	 * display memory configuration passed from loadbsd
@@ -325,43 +281,6 @@ cpu_startup(void)
 #ifdef DEBUG_KERNEL_START
 	printf("survived initcpu...\n");
 #endif
-}
-
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-#ifdef FPU_EMULATE
-	if (!fputype)
-		memset(&l->l_addr->u_pcb.pcb_fpregs, 0, sizeof(struct fpframe));
-	else
-#endif
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
 }
 
 /*
@@ -399,6 +318,8 @@ identifycpu(void)
 		mach = "Amiga 3000";
 	else if (is_a1200())
 		mach = "Amiga 1200";
+	else if (is_a600())
+		mach = "Amiga 600";
 	else
 		mach = "Amiga 500/2000";
 
@@ -489,9 +410,11 @@ bootsync(void)
 void
 cpu_reboot(register int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
+
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0)
@@ -531,10 +454,8 @@ cpu_dumpconf(void)
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
-	const struct bdevsw *bdev;
 	int nblks;
 	int i;
-	extern u_int Sysseg_pa;
 	extern int end[];
 
 	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr));
@@ -567,7 +488,7 @@ cpu_dumpconf(void)
 	/*
 	 * Initialize the pointer to the kernel segment table.
 	 */
-	m->sysseg_pa = Sysseg_pa;
+	m->sysseg_pa = (paddr_t)pmap_kernel()->pm_stpa;
 
 	/*
 	 * Initialize relocation value such that:
@@ -593,12 +514,12 @@ cpu_dumpconf(void)
 		m->ram_segs[1].size  = memlist->m_seg[i].ms_size;
 		break;
 	}
-	if ((bdev = bdevsw_lookup(dumpdev)) == NULL) {
+	if (bdevsw_lookup(dumpdev) == NULL) {
 		dumpdev = NODEV;
 		return;
 	}
-	if (bdev->d_psize != NULL) {
-		nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
+	if (nblks > 0) {
 		if (dumpsize > btoc(dbtob(nblks - dumplo)))
 			dumpsize = btoc(dbtob(nblks - dumplo));
 		else if (dumplo == 0)
@@ -660,7 +581,7 @@ dumpsys(void)
 	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
 	    minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable.\n");
@@ -1269,6 +1190,13 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 }
 
 #ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
 
 int _spllkm6(void);
 int _spllkm7(void);
@@ -1299,19 +1227,19 @@ int _spllkm7() {
 int ipl2spl_table[_NIPL] = {
 	[IPL_NONE] = PSL_IPL0|PSL_S,
 	[IPL_SOFTCLOCK] = PSL_IPL1|PSL_S,
-	[IPL_BIO] = PSL_IPL3|PSL_S,
-	[IPL_NET] = PSL_IPL3|PSL_S,
-	[IPL_TTY] = PSL_IPL4|PSL_S,
-	[IPL_SERIAL] = PSL_IPL5|PSL_S,
 	[IPL_VM] = PSL_IPL4|PSL_S,
-	[IPL_SERIAL] = PSL_IPL4|PSL_S,	/* patched by some devices at attach
-					   time (currently, only the coms) */
-	[IPL_AUDIO] = PSL_IPL6|PSL_S,
 #if defined(LEV6_DEFER)
-	[IPL_CLOCK] = PSL_IPL4|PSL_S,
+	[IPL_SCHED] = PSL_IPL4|PSL_S,
 	[IPL_HIGH] = PSL_IPL4|PSL_S,
 #else /* defined(LEV6_DEFER) */
-	[IPL_CLOCK] = PSL_IPL6|PSL_S,
+	[IPL_SCHED] = PSL_IPL6|PSL_S,
 	[IPL_HIGH] = PSL_IPL7|PSL_S,
 #endif /* defined(LEV6_DEFER) */
 };
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return (pa >= 0xfffffffc || pa < lowram) ? EFAULT : 0;
+}

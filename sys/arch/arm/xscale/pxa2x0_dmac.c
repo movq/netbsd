@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_dmac.c,v 1.6 2009/03/16 11:42:31 nonaka Exp $	*/
+/*	$NetBSD: pxa2x0_dmac.c,v 1.10 2012/01/29 09:08:04 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2003, 2005 Wasabi Systems, Inc.
@@ -41,13 +41,13 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/queue.h>
 
 #include <uvm/uvm_param.h>	/* For PAGE_SIZE */
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/dmover/dmovervar.h>
 
@@ -163,7 +163,7 @@ struct dmac_dmover {
 #endif
 
 struct pxadmac_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_bust;
 	bus_dma_tag_t sc_dmat;
 	bus_space_handle_t sc_bush;
@@ -216,10 +216,10 @@ struct pxadmac_softc {
 #endif
 };
 
-static int	pxadmac_match(struct device *, struct cfdata *, void *);
-static void	pxadmac_attach(struct device *, struct device *, void *);
+static int	pxadmac_match(device_t, cfdata_t, void *);
+static void	pxadmac_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pxadmac, sizeof(struct pxadmac_softc),
+CFATTACH_DECL_NEW(pxadmac, sizeof(struct pxadmac_softc),
     pxadmac_match, pxadmac_attach, NULL, NULL);
 
 static struct pxadmac_softc *pxadmac_sc;
@@ -278,7 +278,7 @@ dmac_free_channel(struct pxadmac_softc *sc, dmac_priority_t priority,
 }
 
 static int
-pxadmac_match(struct device *parent, struct cfdata *cf, void *aux)
+pxadmac_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 
@@ -292,13 +292,14 @@ pxadmac_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pxadmac_attach(struct device *parent, struct device *self, void *aux)
+pxadmac_attach(device_t parent, device_t self, void *aux)
 {
-	struct pxadmac_softc *sc = (struct pxadmac_softc *)self;
+	struct pxadmac_softc *sc = device_private(self);
 	struct pxaip_attach_args *pxa = aux;
 	struct pxa2x0_dma_desc *dd;
 	int i, nsegs;
 
+	sc->sc_dev = self;
 	sc->sc_bust = pxa->pxa_iot;
 	sc->sc_dmat = pxa->pxa_dmat;
 
@@ -306,7 +307,7 @@ pxadmac_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_bust, pxa->pxa_addr, pxa->pxa_size, 0,
 	    &sc->sc_bush)) {
-		aprint_error("%s: Can't map registers!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Can't map registers!\n");
 		return;
 	}
 
@@ -740,11 +741,11 @@ dmac_dmover_done(struct dmac_xfer *dx, int error)
 #endif
 
 struct dmac_xfer *
-pxa2x0_dmac_allocate_xfer(int flags)
+pxa2x0_dmac_allocate_xfer(void)
 {
 	struct dmac_xfer_state *dxs;
 
-	dxs = malloc(sizeof(struct dmac_xfer_state), M_DEVBUF, flags);
+	dxs = kmem_alloc(sizeof(*dxs), KM_SLEEP);
 
 	return ((struct dmac_xfer *)dxs);
 }
@@ -752,36 +753,52 @@ pxa2x0_dmac_allocate_xfer(int flags)
 void
 pxa2x0_dmac_free_xfer(struct dmac_xfer *dx)
 {
+	struct dmac_xfer_state *dxs = (struct dmac_xfer_state *)dx;
 
 	/*
 	 * XXX: Should verify the DMAC is not actively using this
 	 * structure before freeing...
 	 */
-	free(dx, M_DEVBUF);
+	kmem_free(dxs, sizeof(*dxs));
 }
 
 static inline int
 dmac_validate_desc(struct dmac_xfer_desc *xd, size_t *psize,
     bool *misaligned_flag)
 {
+	bus_dma_segment_t *dma_segs = xd->xd_dma_segs;
+	bus_addr_t periph_end;
+	bus_size_t align;
 	size_t size;
-	int i;
+	int i, nsegs = xd->xd_nsegs;
 
 	/*
 	 * Make sure the transfer parameters are acceptable.
 	 */
 
 	if (xd->xd_addr_hold &&
-	    (xd->xd_nsegs != 1 || xd->xd_dma_segs[0].ds_len == 0))
+	    (nsegs != 1 || dma_segs[0].ds_len == 0))
 		return (EINVAL);
 
-	for (i = 0, size = 0; i < xd->xd_nsegs; i++) {
-		if (xd->xd_dma_segs[i].ds_addr & 0x7) {
+	periph_end = CPU_IS_PXA270 ? PXA270_PERIPH_END : PXA250_PERIPH_END;
+	for (i = 0, size = 0; i < nsegs; i++) {
+		if (dma_segs[i].ds_addr >= PXA2X0_PERIPH_START &&
+		    dma_segs[i].ds_addr + dma_segs[i].ds_len < periph_end)
+			/* Internal Peripherals. */
+			align = 0x03;
+		else /* Companion-Chip/External Peripherals/External Memory. */
+			align = 0x07;
+		/*
+		 * XXXX:
+		 * Also PXA27x has more constraints by pairs Source/Target.
+		 */
+
+		if (dma_segs[i].ds_addr & align) {
 			if (!CPU_IS_PXA270)
 				return (EFAULT);
 			*misaligned_flag = true;
 		}
-		size += xd->xd_dma_segs[i].ds_len;
+		size += dma_segs[i].ds_len;
 	}
 
 	*psize = size;
@@ -1186,8 +1203,9 @@ dmac_channel_intr(struct pxadmac_softc *sc, u_int channel)
 		dmac_reg_write(sc, DMAC_DCSR(channel), dcsr & ~DCSR_RUN);
 
 	if ((dxs = sc->sc_active[channel]) == NULL) {
-		printf("%s: Stray DMAC interrupt for unallocated channel %d\n",
-		    sc->sc_dev.dv_xname, channel);
+		aprint_error_dev(sc->sc_dev,
+		    "Stray DMAC interrupt for unallocated channel %d\n",
+		    channel);
 		return (0);
 	}
 

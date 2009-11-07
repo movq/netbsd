@@ -1,4 +1,4 @@
-/*	$NetBSD: findfp.c,v 1.23 2006/10/07 21:40:46 thorpej Exp $	*/
+/*	$NetBSD: findfp.c,v 1.26 2012/01/22 18:36:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)findfp.c	8.2 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: findfp.c,v 1.23 2006/10/07 21:40:46 thorpej Exp $");
+__RCSID("$NetBSD: findfp.c,v 1.26 2012/01/22 18:36:17 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -62,7 +62,7 @@ int	__sdidinit;
 /*	  read      seek     write     ext                              up */ \
 	  __sread,  __sseek, __swrite, { (void *)(__sFext + file), 0 }, NULL, \
 /*	  ur ubuf,                 nbuf      lb     blksize  offset */ \
-	  0, { '\0', '\0', '\0' }, { '\0' }, { NULL, 0 }, 0, (fpos_t)0 }
+	  0, { '\0', '\0', '\0' }, { '\0' }, { NULL, 0 }, 0, (off_t)0 }
 
 				/* the usual - (stdin + stdout + stderr) */
 static FILE usual[FOPEN_MAX - 3];
@@ -119,6 +119,23 @@ moreglue(n)
 	return (g);
 }
 
+void
+__sfpinit(FILE *fp)
+{
+	fp->_flags = 1;		/* reserve this slot; caller sets real flags */
+	fp->_p = NULL;		/* no current pointer */
+	fp->_w = 0;		/* nothing to read or write */
+	fp->_r = 0;
+	fp->_bf._base = NULL;	/* no buffer */
+	fp->_bf._size = 0;
+	fp->_lbfsize = 0;	/* not line buffered */
+	fp->_file = -1;		/* no file */
+/*	fp->_cookie = <any>; */	/* caller sets cookie, _read/_write etc */
+	_UB(fp)._base = NULL;	/* no ungetc buffer */
+	_UB(fp)._size = 0;
+	memset(WCIO_GET(fp), 0, sizeof(struct wchar_io_data));
+}
+
 /*
  * Find a free FILE for fopen et al.
  */
@@ -143,20 +160,7 @@ __sfp()
 	rwlock_unlock(&__sfp_lock);
 	return (NULL);
 found:
-	fp->_flags = 1;		/* reserve this slot; caller sets real flags */
-	fp->_p = NULL;		/* no current pointer */
-	fp->_w = 0;		/* nothing to read or write */
-	fp->_r = 0;
-	fp->_bf._base = NULL;	/* no buffer */
-	fp->_bf._size = 0;
-	fp->_lbfsize = 0;	/* not line buffered */
-	fp->_file = -1;		/* no file */
-/*	fp->_cookie = <any>; */	/* caller sets cookie, _read/_write etc */
-	_UB(fp)._base = NULL;	/* no ungetc buffer */
-	_UB(fp)._size = 0;
-	fp->_lb._base = NULL;	/* no line buffer */
-	fp->_lb._size = 0;
-	memset(WCIO_GET(fp), 0, sizeof(struct wchar_io_data));
+	__sfpinit(fp);
 	rwlock_unlock(&__sfp_lock);
 	return (fp);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: if_iee_gsc.c,v 1.15 2009/05/24 06:53:35 skrll Exp $ */
+/* $NetBSD: if_iee_gsc.c,v 1.20 2011/07/01 18:33:09 dyoung Exp $ */
 
 /*
  * Copyright (c) 2003 Jochen Kunz.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iee_gsc.c,v 1.15 2009/05/24 06:53:35 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iee_gsc.c,v 1.20 2011/07/01 18:33:09 dyoung Exp $");
 
 /* autoconfig and device stuff */
 #include <sys/param.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_iee_gsc.c,v 1.15 2009/05/24 06:53:35 skrll Exp $"
 #include "ioconf.h"
 
 /* bus_space / bus_dma etc. */
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 /* general system data and functions */
@@ -70,11 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_iee_gsc.c,v 1.15 2009/05/24 06:53:35 skrll Exp $"
 #include <sys/socket.h>
 #include <sys/mbuf.h>
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
-
 #include <dev/ic/i82596reg.h>
 #include <dev/ic/i82596var.h>
 
@@ -82,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_iee_gsc.c,v 1.15 2009/05/24 06:53:35 skrll Exp $"
 #define IEE_GSC_RESET	0
 #define IEE_GSC_PORT	4
 #define IEE_GSC_CHANATT	8
-#define IEE_ISCP_BUSSY 0x1
+#define IEE_ISCP_BUSY 0x1
 
 /* autoconfig stuff */
 static int iee_gsc_match(device_t, cfdata_t, void *);
@@ -142,8 +137,8 @@ iee_gsc_reset(struct iee_softc *sc)
 	uint32_t cmd;
 	uint16_t ack;
 
-	/* Make sure the bussy byte is set and the cache is flushed. */
-	SC_ISCP(sc)->iscp_bussy = IEE_ISCP_BUSSY;
+	/* Make sure the busy byte is set and the cache is flushed. */
+	SC_ISCP(sc)->iscp_busy = IEE_ISCP_BUSY;
 	IEE_ISCPSYNC(sc, BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 	/* Setup the PORT Command with pointer to SCP. */
 	cmd = IEE_PORT_SCP | IEE_PHYS_SHMEM(sc->sc_scp_off);
@@ -170,9 +165,9 @@ iee_gsc_reset(struct iee_softc *sc)
 	/* Wait for the chip to initialize and read SCP and ISCP. */
 	for (n = 0 ; n < 1000; n++) {
 		IEE_ISCPSYNC(sc, BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
-		ack = SC_ISCP(sc)->iscp_bussy;
+		ack = SC_ISCP(sc)->iscp_busy;
 		IEE_ISCPSYNC(sc, BUS_DMASYNC_PREREAD);
-		if (ack != IEE_ISCP_BUSSY)
+		if (ack != IEE_ISCP_BUSY)
 			break;
 		DELAY(100);
 	}
@@ -181,8 +176,8 @@ iee_gsc_reset(struct iee_softc *sc)
 		(sc->sc_iee_cmd)(sc, IEE_SCB_ACK);
 		return 0;
 	}
-	printf("%s: iee_gsc_reset timeout bussy=0x%x\n",
-	    device_xname(sc->sc_dev), SC_ISCP(sc)->iscp_bussy);
+	printf("%s: iee_gsc_reset timeout busy=0x%x\n",
+	    device_xname(sc->sc_dev), SC_ISCP(sc)->iscp_busy);
 	return -1;
 }
 
@@ -254,8 +249,8 @@ iee_gsc_attach(device_t parent, device_t self, void *aux)
 		sc->sc_flags = IEE_NEED_SWAP;
 	}
 
-	sc_gsc->sc_ih = hp700_intr_establish(self, IPL_NET,
-	    iee_intr, sc, ga->ga_int_reg, ga->ga_irq);
+	sc_gsc->sc_ih = hp700_intr_establish(IPL_NET, iee_intr, sc,
+	    ga->ga_ir, ga->ga_irq);
 
 	sc->sc_iee_reset = iee_gsc_reset;
 	sc->sc_iee_cmd = iee_gsc_cmd;

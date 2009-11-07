@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.c,v 1.43 2009/01/11 03:05:23 christos Exp $	*/
+/*	$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)ktrace.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ktrace.c,v 1.43 2009/01/11 03:05:23 christos Exp $");
+__RCSID("$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,11 +66,10 @@ __RCSID("$NetBSD: ktrace.c,v 1.43 2009/01/11 03:05:23 christos Exp $");
 #include "setemul.h"
 #endif
 
-int	main(int, char *[]);
 static int rpid(char *);
-static void usage(void);
+__dead static void usage(void);
 static int do_ktrace(const char *, int, int, int, int, int);
-static void no_ktrace(int);
+__dead static void no_ktrace(int);
 static void fset(int fd, int flag);
 static void fclear(int fd, int flag);
 
@@ -296,7 +295,7 @@ static void
 usage(void)
 {
 
-#define	TRPOINTS "[AaceilmnsUuvw+-]"
+#define	TRPOINTS "[AaceilmnSsuvw+-]"
 #ifdef KTRUSS
 	(void)fprintf(stderr, "usage:\t%s "
 	    "[-aCcdilnRT] [-e emulation] [-f infile] [-g pgrp] "

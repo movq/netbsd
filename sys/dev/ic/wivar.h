@@ -1,4 +1,4 @@
-/*	$NetBSD: wivar.h,v 1.62 2009/05/12 14:25:18 cegger Exp $	*/
+/*	$NetBSD: wivar.h,v 1.65 2011/08/15 18:24:34 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -31,6 +31,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/mutex.h>
+#include <sys/condvar.h>
+#include <sys/lwp.h>
 
 /* Radio capture format for Prism. */
 
@@ -74,13 +78,12 @@ typedef SLIST_HEAD(,wi_rssdesc) wi_rssdescq_t;
  * Oslo IETF plenary meeting.
  */
 struct wi_softc	{
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
 	u_int32_t		sc_ic_flags;	/* backup of ic->ic_flags */
 	void			*sc_ih;		/* interrupt handler */
-	int			(*sc_enable)(struct wi_softc *);
-	void			(*sc_disable)(struct wi_softc *);
+	int			(*sc_enable)(device_t, int);
 	void			(*sc_reset)(struct wi_softc *);
 
 	int			(*sc_newstate)(struct ieee80211com *,
@@ -102,7 +105,7 @@ struct wi_softc	{
 	bus_space_tag_t		sc_iot;			/* bus cookie */
 	bus_space_handle_t	sc_ioh;			/* bus i/o handle */
 
-	void *			sc_drvbpf;
+	struct bpf_if *		sc_drvbpf;
 	int			sc_flags;
 	int			sc_bap_id;
 	int			sc_bap_off;
@@ -167,6 +170,12 @@ struct wi_softc	{
 	/* number of transmissions pending at each data rate */
 	u_int8_t		sc_txpending[IEEE80211_RATE_MAXSIZE];
 	struct callout		sc_rssadapt_ch;
+	kmutex_t		sc_ioctl_mtx;
+	kcondvar_t		sc_ioctl_cv;
+	bool			sc_ioctl_gone;
+	unsigned int		sc_ioctl_nwait;
+	unsigned int		sc_ioctl_depth;
+	lwp_t			*sc_ioctl_lwp;
 };
 
 #define	sc_if		sc_ec.ec_if

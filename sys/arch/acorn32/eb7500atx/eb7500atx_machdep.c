@@ -1,4 +1,4 @@
-/*	$NetBSD: eb7500atx_machdep.c,v 1.16 2009/09/22 14:49:28 tsutsui Exp $	*/
+/*	$NetBSD: eb7500atx_machdep.c,v 1.21 2011/07/19 15:59:52 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 Reinoud Zandijk.
@@ -39,7 +39,7 @@
  *
  * machdep.c
  *
- * Machine dependant functions for kernel setup
+ * Machine dependent functions for kernel setup
  *
  * This file still needs a lot of work
  *
@@ -55,7 +55,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.16 2009/09/22 14:49:28 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.21 2011/07/19 15:59:52 dyoung Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -65,6 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.16 2009/09/22 14:49:28 tsuts
 #include <sys/exec.h>
 #include <sys/exec_aout.h>
 #include <sys/ksyms.h>
+#include <sys/bus.h>
 
 #include <dev/cons.h>
 
@@ -85,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.16 2009/09/22 14:49:28 tsuts
 #include <arm/arm32/machdep.h>
 #include <arm/undefined.h>
 #include <machine/rtc.h>
-#include <machine/bus.h>
 
 #include <arm/iomd/vidc.h>
 #include <arm/iomd/iomdreg.h>
@@ -116,11 +116,10 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.16 2009/09/22 14:49:28 tsuts
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
+ * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
 u_int cpu_reset_address = 0x0; /* XXX 0x3800000 too for rev0 RiscPC 600 */
-
 
 #define VERBOSE_INIT_ARM
 
@@ -183,7 +182,6 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
-struct user *proc0paddr;
 
 #ifdef CPU_SA110
 #define CPU_SA110_CACHE_CLEAN_SIZE (0x4000 * 2)
@@ -763,12 +761,12 @@ initarm(void *cookie)
 #ifdef VERBOSE_INIT_ARM
 	printf("switching to new L1 page table\n");
 #endif
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 
 	/*
 	 * We must now clean the cache again....
 	 * Cleaning may be done by reading new data to displace any
-	 * dirty data in the cache. This will have happened in setttb()
+	 * dirty data in the cache. This will have happened in cpu_setttb()
 	 * but since we are boot strapping the addresses used for the read
 	 * may have just been remapped and thus the cache could be out
 	 * of sync. A re-clean after the switch will cure this.
@@ -783,8 +781,7 @@ initarm(void *cookie)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 	/* 
 	 * if there is support for a serial console ...we should now

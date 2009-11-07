@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_ipip.c,v 1.24 2008/04/27 12:58:48 degroote Exp $	*/
+/*	$NetBSD: xform_ipip.c,v 1.28 2011/07/17 20:54:54 joerg Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_ipip.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$OpenBSD: ip_ipip.c,v 1.25 2002/06/10 18:04:55 itojun Exp $ */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.24 2008/04/27 12:58:48 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.28 2011/07/17 20:54:54 joerg Exp $");
 
 /*
  * IP-inside-IP processing
@@ -97,8 +97,6 @@ __KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.24 2008/04/27 12:58:48 degroote Exp
 #include <netipsec/key.h>
 #include <netipsec/key_debug.h>
 #include <netipsec/ipsec_osdep.h>
-
-#include <machine/stdarg.h>
 
 #ifdef __FreeBSD__
 typedef void	pr_in_input_t (struct mbuf *, int, int); /* XXX FIX THIS */
@@ -203,7 +201,6 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 	struct ip6_hdr *ip6 = NULL;
 	u_int8_t itos;
 #endif
-	u_int8_t nxt;
 	int isr;
 	u_int8_t otos;
 	u_int8_t v;
@@ -322,14 +319,12 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 #ifdef INET
     	case 4:
                 ipo = mtod(m, struct ip *);
-                nxt = ipo->ip_p;
 		ip_ecn_egress(ip4_ipsec_ecn, &otos, &ipo->ip_tos);
                 break;
 #endif /* INET */
 #ifdef INET6
     	case 6:
                 ip6 = (struct ip6_hdr *) ipo;
-                nxt = ip6->ip6_nxt;
 		itos = (ntohl(ip6->ip6_flow) >> 20) & 0xff;
 		ip_ecn_egress(ip6_ipsec_ecn, &otos, &itos);
 		ip6->ip6_flow &= ~htonl(0xff << 20);
@@ -429,7 +424,7 @@ ipip_output(
     int protoff
 )
 {
-	struct secasvar *sav;
+	const struct secasvar *sav;
 	u_int8_t tp, otos;
 	struct secasindex *saidx;
 	int error;
@@ -549,12 +544,14 @@ ipip_output(
 			goto bad;
 		}
 
-		/* scoped address handling */
-		ip6 = mtod(m, struct ip6_hdr *);
-		if (IN6_IS_SCOPE_LINKLOCAL(&ip6->ip6_src))
-			ip6->ip6_src.s6_addr16[1] = 0;
-		if (IN6_IS_SCOPE_LINKLOCAL(&ip6->ip6_dst))
-			ip6->ip6_dst.s6_addr16[1] = 0;
+		if (tp == (IPV6_VERSION >> 4)) {
+			/* scoped address handling */
+			ip6 = mtod(m, struct ip6_hdr *);
+			if (IN6_IS_SCOPE_LINKLOCAL(&ip6->ip6_src))
+				ip6->ip6_src.s6_addr16[1] = 0;
+			if (IN6_IS_SCOPE_LINKLOCAL(&ip6->ip6_dst))
+				ip6->ip6_dst.s6_addr16[1] = 0;
+		}
 
 		M_PREPEND(m, sizeof(struct ip6_hdr), M_DONTWAIT);
 		if (m == 0) {
@@ -573,6 +570,10 @@ ipip_output(
 		ip6o->ip6_hlim = ip_defttl;
 		ip6o->ip6_dst = saidx->dst.sin6.sin6_addr;
 		ip6o->ip6_src = saidx->src.sin6.sin6_addr;
+		if (IN6_IS_SCOPE_LINKLOCAL(&ip6o->ip6_dst))
+			ip6o->ip6_dst.s6_addr16[1] = htons(saidx->dst.sin6.sin6_scope_id);
+		if (IN6_IS_SCOPE_LINKLOCAL(&ip6o->ip6_src))
+			ip6o->ip6_src.s6_addr16[1] = htons(saidx->src.sin6.sin6_scope_id);
 
 #ifdef INET
 		if (tp == IPVERSION) {
@@ -636,7 +637,7 @@ nofamily:
 			tdb->tdb_cur_bytes +=
 			    m->m_pkthdr.len - sizeof(struct ip6_hdr);
 #endif
-		IPIP_STATADD(IPIP_STAT_IBYTES,
+		IPIP_STATADD(IPIP_STAT_OBYTES,
 		    m->m_pkthdr.len - sizeof(struct ip6_hdr));
 	}
 #endif /* INET6 */
@@ -651,7 +652,7 @@ bad:
 
 #ifdef FAST_IPSEC
 static int
-ipe4_init(struct secasvar *sav, struct xformsw *xsp)
+ipe4_init(struct secasvar *sav, const struct xformsw *xsp)
 {
 	sav->tdb_xform = xsp;
 	return 0;
@@ -667,7 +668,7 @@ ipe4_zeroize(struct secasvar *sav)
 static int
 ipe4_input(
     struct mbuf *m,
-    struct secasvar *sav,
+    const struct secasvar *sav,
     int skip,
     int protoff
 )

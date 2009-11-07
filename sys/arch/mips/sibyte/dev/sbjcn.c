@@ -1,4 +1,4 @@
-/* $NetBSD: sbjcn.c,v 1.22 2009/03/14 15:36:10 dsl Exp $ */
+/* $NetBSD: sbjcn.c,v 1.28 2011/07/10 23:32:03 matt Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -103,11 +103,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbjcn.c,v 1.22 2009/03/14 15:36:10 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbjcn.c,v 1.28 2011/07/10 23:32:03 matt Exp $");
 
 #define	SBJCN_DEBUG
 
 #include "opt_ddb.h"
+#include "ioconf.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,7 +116,6 @@ __KERNEL_RCSID(0, "$NetBSD: sbjcn.c,v 1.22 2009/03/14 15:36:10 dsl Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -129,8 +129,10 @@ __KERNEL_RCSID(0, "$NetBSD: sbjcn.c,v 1.22 2009/03/14 15:36:10 dsl Exp $");
 
 #include <sbmips/dev/sbscd/sbscdvar.h>
 #include <sbmips/dev/sbscd/sbjcnvar.h>
+
 #include <dev/cons.h>
-#include <machine/locore.h>
+
+#include <mips/locore.h>
 
 void	sbjcn_attach_channel(struct sbjcn_softc *sc, int chan, int intr);
 static void sbjcncn_grabdword(struct sbjcn_channel *ch);
@@ -163,8 +165,6 @@ void	sbjcn_common_putc(u_long addr, int chan, int c);
 int	sbjcn_cngetc(dev_t dev);
 void	sbjcn_cnputc(dev_t dev, int c);
 void	sbjcn_cnpollc(dev_t dev, int on);
-
-extern struct cfdriver sbjcn_cd;
 
 dev_type_open(sbjcnopen);
 dev_type_close(sbjcnclose);
@@ -219,14 +219,14 @@ int	sbjcn_kgdb_getc(void *);
 void	sbjcn_kgdb_putc(void *, int);
 #endif /* KGDB */
 
-static int	sbjcn_match(struct device *, struct cfdata *, void *);
-static void	sbjcn_attach(struct device *, struct device *, void *);
+static int	sbjcn_match(device_t, cfdata_t, void *);
+static void	sbjcn_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(sbjcn, sizeof(struct sbjcn_softc),
+CFATTACH_DECL_NEW(sbjcn, sizeof(struct sbjcn_softc),
     sbjcn_match, sbjcn_attach, NULL, NULL);
 
-#define	READ_REG(rp)		(mips3_ld((uint64_t *)(rp)))
-#define	WRITE_REG(rp, val)	(mips3_sd((uint64_t *)(rp), (val)))
+#define	READ_REG(rp)		(mips3_ld((volatile uint64_t *)(rp)))
+#define	WRITE_REG(rp, val)	(mips3_sd((volatile uint64_t *)(rp), (val)))
 
 #define	JTAG_CONS_CONTROL  0x00
 #define	JTAG_CONS_INPUT    0x20
@@ -237,26 +237,27 @@ CFATTACH_DECL(sbjcn, sizeof(struct sbjcn_softc),
 
 
 static int
-sbjcn_match(struct device *parent, struct cfdata *match, void *aux)
+sbjcn_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct sbscd_attach_args *sap = aux;
+	struct sbscd_attach_args *sa = aux;
 
-	if (sap->sa_locs.sa_type != SBSCD_DEVTYPE_JTAGCONS)
+	if (sa->sa_locs.sa_type != SBSCD_DEVTYPE_JTAGCONS)
 		return (0);
 
 	return 1;
 }
 
 static void
-sbjcn_attach(struct device *parent, struct device *self, void *aux)
+sbjcn_attach(device_t parent, device_t self, void *aux)
 {
-	struct sbjcn_softc *sc = (struct sbjcn_softc *)self;
-	struct sbscd_attach_args *sap = aux;
+	struct sbjcn_softc *sc = device_private(self);
+	struct sbscd_attach_args *sa = aux;
 
-	sc->sc_addr = sap->sa_base + sap->sa_locs.sa_offset;
+	sc->sc_dev = self;
+	sc->sc_addr = sa->sa_base + sa->sa_locs.sa_offset;
 
-	printf("\n");
-	sbjcn_attach_channel(sc, 0, sap->sa_locs.sa_intr[0]);
+	aprint_normal("\n");
+	sbjcn_attach_channel(sc, 0, sa->sa_locs.sa_intr[0]);
 }
 
 void
@@ -305,7 +306,7 @@ sbjcn_attach_channel(struct sbjcn_softc *sc, int chan, int intr)
 		SET(ch->ch_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sbjcn_start;
 	tp->t_param = sbjcn_param;
 	tp->t_hwiflow = sbjcn_hwiflow;
@@ -313,8 +314,9 @@ sbjcn_attach_channel(struct sbjcn_softc *sc, int chan, int intr)
 	ch->ch_tty = tp;
 	ch->ch_rbuf = malloc(sbjcn_rbuf_size << 1, M_DEVBUF, M_NOWAIT);
 	if (ch->ch_rbuf == NULL) {
-		printf("%s: channel %d: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname, chan);
+		aprint_error_dev(sc->sc_dev,
+		    "channel %d: unable to allocate ring buffer\n",
+		    chan);
 		return;
 	}
 	ch->ch_ebuf = ch->ch_rbuf + (sbjcn_rbuf_size << 1);
@@ -328,9 +330,10 @@ sbjcn_attach_channel(struct sbjcn_softc *sc, int chan, int intr)
 		maj = cdevsw_lookup_major(&sbjcn_cdevsw);
 
 		cn_tab->cn_dev = makedev(maj,
-		    (device_unit(&sc->sc_dev) << 1) + chan);
+		    (device_unit(sc->sc_dev) << 1) + chan);
 
-		printf("%s: channel %d: console\n", sc->sc_dev.dv_xname, chan);
+		aprint_normal_dev(sc->sc_dev, "channel %d: %s\n",
+		    chan, "console");
 	}
 
 #ifdef KGDB
@@ -343,7 +346,8 @@ sbjcn_attach_channel(struct sbjcn_softc *sc, int chan, int intr)
 		sbjcn_kgdb_attached = 1;
 
 		SET(ch->ch_hwflags, SBJCN_HW_KGDB);
-		printf("%s: channel %d: kgdb\n", sc->sc_dev.dv_xname, chan);
+		aprint_normal_dev(sc->sc_dev, "channel %d: %s\n",
+		    chan, "kgdb");
 	}
 #endif
 
@@ -391,16 +395,18 @@ sbjcn_status(struct sbjcn_channel *ch, char *str)
 	struct sbjcn_softc *sc = ch->ch_sc;
 	struct tty *tp = ch->ch_tty;
 
-	printf("%s: chan %d: %s %sclocal  %sdcd %sts_carr_on %sdtr %stx_stopped\n",
-	    sc->sc_dev.dv_xname, ch->ch_num, str,
+	aprint_normal_dev(sc->sc_dev,
+	    "chan %d: %s %sclocal  %sdcd %sts_carr_on %sdtr %stx_stopped\n",
+	    ch->ch_num, str,
 	    ISSET(tp->t_cflag, CLOCAL) ? "+" : "-",
 	    ISSET(ch->ch_iports, ch->ch_i_dcd) ? "+" : "-",
 	    ISSET(tp->t_state, TS_CARR_ON) ? "+" : "-",
 	    ISSET(ch->ch_oports, ch->ch_o_dtr) ? "+" : "-",
 	    ch->ch_tx_stopped ? "+" : "-");
 
-	printf("%s: chan %d: %s %scrtscts %scts %sts_ttstop  %srts %xrx_flags\n",
-	    sc->sc_dev.dv_xname, ch->ch_num, str,
+	aprint_normal_dev(sc->sc_dev,
+	    "chan %d: %s %scrtscts %scts %sts_ttstop  %srts %xrx_flags\n",
+	    ch->ch_num, str,
 	    ISSET(tp->t_cflag, CRTSCTS) ? "+" : "-",
 	    ISSET(ch->ch_iports, ch->ch_i_cts) ? "+" : "-",
 	    ISSET(tp->t_state, TS_TTSTOP) ? "+" : "-",
@@ -1043,8 +1049,8 @@ sbjcn_iflush(struct sbjcn_channel *ch)
 
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: sbjcn_iflush timeout %02x\n",
-		    ch->ch_sc->sc_dev.dv_xname, reg);
+		aprint_error_dev(ch->ch_sc->sc_dev,
+		    "sbjcn_iflush timeout %02x\n", reg);
 #endif
 }
 
@@ -1197,7 +1203,7 @@ sbjcn_diag(void *arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: channel %d: %d fifo overflow%s, %d ibuf flood%s\n",
-	    sc->sc_dev.dv_xname, ch->ch_num,
+	    device_xname(sc->sc_dev), ch->ch_num,
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }

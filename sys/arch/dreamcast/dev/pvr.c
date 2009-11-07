@@ -1,4 +1,4 @@
-/*	$NetBSD: pvr.c,v 1.25 2008/05/26 10:31:22 nisimura Exp $	*/
+/*	$NetBSD: pvr.c,v 1.34 2012/01/11 21:17:33 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pvr.c,v 1.25 2008/05/26 10:31:22 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pvr.c,v 1.34 2012/01/11 21:17:33 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,10 +44,10 @@ __KERNEL_RCSID(0, "$NetBSD: pvr.c,v 1.25 2008/05/26 10:31:22 nisimura Exp $");
 #include <sys/malloc.h> 
 #include <sys/buf.h>
 #include <sys/ioctl.h>
+#include <sys/bus.h>
 
 #include <machine/vmparam.h>
 #include <machine/cpu.h>
-#include <machine/bus.h>
 
 #include <dev/cons.h> 
 
@@ -143,55 +143,43 @@ struct fb_devconfig {
 	int	dc_dispflags;		/* display flags */
 	int	dc_tvsystem;		/* TV broadcast system */
 
-	struct rasops_info rinfo;
+	struct rasops_info dc_rinfo;
+
+	char dc_wsscrname[32];
+	struct wsscreen_descr dc_wsscrdescr;
 };
 
 #define	PVR_RGBMODE	0x01		/* RGB or composite */
 #define	PVR_VGAMODE	0x02		/* VGA */
 
 struct pvr_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct fb_devconfig *sc_dc;	/* device configuration */
-	int nscreens;
+	int sc_nscreens;
+	const struct wsscreen_descr *sc_scrdescs[1];
+	struct wsscreen_list sc_scrlist;
 };
 
-int	pvr_match(struct device *, struct cfdata *, void *);
-void	pvr_attach(struct device *, struct device *, void *);
+static int	pvr_match(device_t, cfdata_t, void *);
+static void	pvr_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pvr, sizeof(struct pvr_softc),
+CFATTACH_DECL_NEW(pvr, sizeof(struct pvr_softc),
     pvr_match, pvr_attach, NULL, NULL);
 
-void	pvr_getdevconfig(struct fb_devconfig *);
+static void	pvr_getdevconfig(struct fb_devconfig *);
 
-struct fb_devconfig pvr_console_dc;
+static struct fb_devconfig pvr_console_dc;
 
-char pvr_stdscreen_textgeom[32] = { "std" };	/* XXX yuck */
+static int	pvrioctl(void *, void *, u_long, void *, int, struct lwp *);
+static paddr_t	pvrmmap(void *, void *, off_t, int);
 
-struct wsscreen_descr pvr_stdscreen = {
-	pvr_stdscreen_textgeom, 0, 0,
-	0, /* textops */
-	0, 0,
-	WSSCREEN_WSCOLORS,
-};
+static int	pvr_alloc_screen(void *, const struct wsscreen_descr *,
+		    void **, int *, int *, long *);
+static void	pvr_free_screen(void *, void *);
+static int	pvr_show_screen(void *, void *, int,
+		    void (*)(void *, int, int), void *);
 
-const struct wsscreen_descr *_pvr_scrlist[] = {
-	&pvr_stdscreen,
-};
-
-const struct wsscreen_list pvr_screenlist = {
-	sizeof(_pvr_scrlist) / sizeof(struct wsscreen_descr *), _pvr_scrlist
-};
-
-int	pvrioctl(void *, void *, u_long, void *, int, struct lwp *);
-paddr_t	pvrmmap(void *, void *, off_t, int);
-
-int	pvr_alloc_screen(void *, const struct wsscreen_descr *,
-	    void **, int *, int *, long *);
-void	pvr_free_screen(void *, void *);
-int	pvr_show_screen(void *, void *, int,
-	    void (*)(void *, int, int), void *);
-
-const struct wsdisplay_accessops pvr_accessops = {
+static const struct wsdisplay_accessops pvr_accessops = {
 	pvrioctl,
 	pvrmmap,
 	pvr_alloc_screen,
@@ -200,12 +188,12 @@ const struct wsdisplay_accessops pvr_accessops = {
 	NULL, /* load_font */
 };
 
-void	pvrinit(struct fb_devconfig *);
+static void	pvrinit(struct fb_devconfig *);
 
 int	pvr_is_console;
 
 int
-pvr_match(struct device *parent, struct cfdata *match, void *aux)
+pvr_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
@@ -237,57 +225,60 @@ pvr_getdevconfig(struct fb_devconfig *dc)
 	/* Initialize the device. */
 	pvrinit(dc);
 
-	dc->rinfo.ri_flg = 0;
-	dc->rinfo.ri_depth = dc->dc_depth;
-	dc->rinfo.ri_bits = (void *) dc->dc_videobase;
-	dc->rinfo.ri_width = dc->dc_wid;
-	dc->rinfo.ri_height = dc->dc_ht;
-	dc->rinfo.ri_stride = dc->dc_rowbytes;
+	dc->dc_rinfo.ri_flg = 0;
+	if (dc == &pvr_console_dc)
+		dc->dc_rinfo.ri_flg |= RI_NO_AUTO;
+	dc->dc_rinfo.ri_depth = dc->dc_depth;
+	dc->dc_rinfo.ri_bits = (void *) dc->dc_videobase;
+	dc->dc_rinfo.ri_width = dc->dc_wid;
+	dc->dc_rinfo.ri_height = dc->dc_ht;
+	dc->dc_rinfo.ri_stride = dc->dc_rowbytes;
 
 	wsfont_init();
 	/* prefer 8 pixel wide font */
 	cookie = wsfont_find(NULL, 8, 0, 0, WSDISPLAY_FONTORDER_L2R,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("pvr: font table is empty\n");
 		return;
 	}
 
-	if (wsfont_lock(cookie, &dc->rinfo.ri_font)) {
+	if (wsfont_lock(cookie, &dc->dc_rinfo.ri_font)) {
 		printf("pvr: unable to lock font\n");
 		return;
 	}
-	dc->rinfo.ri_wsfcookie = cookie;
+	dc->dc_rinfo.ri_wsfcookie = cookie;
 
-	rasops_init(&dc->rinfo, 500, 500);
+	rasops_init(&dc->dc_rinfo, 500, 500);
 
-	/* XXX shouldn't be global */
-	pvr_stdscreen.nrows = dc->rinfo.ri_rows;
-	pvr_stdscreen.ncols = dc->rinfo.ri_cols;
-	pvr_stdscreen.textops = &dc->rinfo.ri_ops;
-	pvr_stdscreen.capabilities = dc->rinfo.ri_caps;
+	dc->dc_wsscrdescr.name = dc->dc_wsscrname;
+	dc->dc_wsscrdescr.ncols = dc->dc_rinfo.ri_cols;
+	dc->dc_wsscrdescr.nrows = dc->dc_rinfo.ri_rows;
+	dc->dc_wsscrdescr.textops = &dc->dc_rinfo.ri_ops;
+	dc->dc_wsscrdescr.capabilities = dc->dc_rinfo.ri_caps;
 
-	/* XXX yuck */
-	sprintf(pvr_stdscreen_textgeom, "%dx%d", pvr_stdscreen.ncols,
-	    pvr_stdscreen.nrows);
+	sprintf(dc->dc_wsscrname, "%dx%d",
+	    dc->dc_wsscrdescr.ncols, dc->dc_wsscrdescr.nrows);
 }
 
 void
-pvr_attach(struct device *parent, struct device *self, void *aux)
+pvr_attach(device_t parent, device_t self, void *aux)
 {
-	struct pvr_softc *sc = (void *) self;
+	struct pvr_softc *sc = device_private(self);
 	struct wsemuldisplaydev_attach_args waa;
 	int console;
 	static const char *tvsystem_name[4] =
 		{ "NTSC", "PAL", "PAL-M", "PAL-N" };
 
+	sc->sc_dev = self;
 	console = pvr_is_console;
 	if (console) {
 		sc->sc_dc = &pvr_console_dc;
-		sc->nscreens = 1;
+		sc->sc_dc->dc_rinfo.ri_flg &= ~RI_NO_AUTO;
+		sc->sc_nscreens = 1;
 	} else {
 		sc->sc_dc = malloc(sizeof(struct fb_devconfig), M_DEVBUF,
 		    M_WAITOK);
@@ -301,8 +292,12 @@ pvr_attach(struct device *parent, struct device *self, void *aux)
 
 	/* XXX Colormap initialization? */
 
+	sc->sc_scrdescs[0] = &sc->sc_dc->dc_wsscrdescr;
+	sc->sc_scrlist.nscreens = 1;
+	sc->sc_scrlist.screens = sc->sc_scrdescs;
+
 	waa.console = console;
-	waa.scrdata = &pvr_screenlist;
+	waa.scrdata = &sc->sc_scrlist;
 	waa.accessops = &pvr_accessops;
 	waa.accesscookie = sc;
 
@@ -327,6 +322,10 @@ pvrioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 		wsd_fbip->depth = sc->sc_dc->dc_depth;
 		wsd_fbip->cmsize = 0;	/* XXX Colormap */
 #undef wsd_fbip
+		return 0;
+
+	case WSDISPLAYIO_LINEBYTES:
+		*(u_int *)data = sc->sc_dc->dc_rinfo.ri_stride;
 		return 0;
 
 	case WSDISPLAYIO_GETCMAP:
@@ -401,16 +400,16 @@ pvr_alloc_screen(void *v, const struct wsscreen_descr *type,
 	struct pvr_softc *sc = v;
 	long defattr;
 
-	if (sc->nscreens > 0)
+	if (sc->sc_nscreens > 0)
 		return ENOMEM;
 
-	*cookiep = &sc->sc_dc->rinfo; /* one and only for now */
+	*cookiep = &sc->sc_dc->dc_rinfo; /* one and only for now */
 	*curxp = 0;
 	*curyp = 0;
-	(*sc->sc_dc->rinfo.ri_ops.allocattr)(&sc->sc_dc->rinfo, 0, 0, 0,
+	(*sc->sc_dc->dc_rinfo.ri_ops.allocattr)(&sc->sc_dc->dc_rinfo, 0, 0, 0,
 	    &defattr);
 	*attrp = defattr;
-	sc->nscreens++;
+	sc->sc_nscreens++;
 	return 0;
 }
 
@@ -422,7 +421,7 @@ pvr_free_screen(void *v, void *cookie)
 	if (sc->sc_dc == &pvr_console_dc)
 		panic("pvr_free_screen: console");
 
-	sc->nscreens--;
+	sc->sc_nscreens--;
 }
 
 int
@@ -572,9 +571,6 @@ pvrinit(struct fb_devconfig *dc)
 
 /* Console support. */
 
-void	pvrcnprobe(struct consdev *);
-void	pvrcninit(struct consdev *);
-
 void
 pvrcninit(struct consdev *cndev)
 {
@@ -582,8 +578,8 @@ pvrcninit(struct consdev *cndev)
 	long defattr;
 
 	pvr_getdevconfig(dcp);
-	(*dcp->rinfo.ri_ops.allocattr)(&dcp->rinfo, 0, 0, 0, &defattr);
-	wsdisplay_cnattach(&pvr_stdscreen, &dcp->rinfo, 0, 0, defattr);
+	(*dcp->dc_rinfo.ri_ops.allocattr)(&dcp->dc_rinfo, 0, 0, 0, &defattr);
+	wsdisplay_cnattach(&dcp->dc_wsscrdescr, &dcp->dc_rinfo, 0, 0, defattr);
 
 	pvr_is_console = 1;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.h,v 1.59 2009/08/27 07:28:42 mouse Exp $	*/
+/*	$NetBSD: stat.h,v 1.63 2011/09/04 10:02:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -195,6 +195,7 @@ struct stat {
 /*	SF_NOUNLINK	0x00100000	   [NOT IMPLEMENTED] */
 #define	SF_SNAPSHOT	0x00200000	/* snapshot inode */
 #define	SF_LOG		0x00400000	/* WAPBL log file inode */
+#define	SF_SNAPINVAL	0x00800000	/* snapshot is invalid */
 
 #ifdef _KERNEL
 /*
@@ -205,6 +206,12 @@ struct stat {
 #define	IMMUTABLE	(UF_IMMUTABLE | SF_IMMUTABLE)
 #endif /* _KERNEL */
 #endif /* _NETBSD_SOURCE */
+
+/*
+ * Special values for utimensat and futimens
+ */
+#define UTIME_NOW	((1 << 30) - 1)
+#define UTIME_OMIT	((1 << 30) - 2)
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/cdefs.h>
@@ -232,6 +239,19 @@ int	fchflags(int, unsigned long);
 int	lchflags(const char *, unsigned long);
 int	lchmod(const char *, mode_t);
 #endif /* defined(_NETBSD_SOURCE) */
+
+#ifndef __LIBC12_SOURCE__
+/*
+ * X/Open Extended API set 2 (a.k.a. C063)
+ */
+#if defined(_INCOMPLETE_XOPEN_C063) 
+int     fstatat(int, const char *, struct stat *, int);
+int     utimensat(int, const char *, const struct timespec *, int);
+#endif
+
+int futimens(int, const struct timespec *);
+#endif
+
 __END_DECLS
 
 #endif /* !_KERNEL && !_STANDALONE */

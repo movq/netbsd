@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci.c,v 1.201 2009/11/01 06:36:44 uebayasi Exp $	*/
+/*	$NetBSD: ohci.c,v 1.218 2011/08/07 13:45:46 jmcneill Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/ohci.c,v 1.22 1999/11/17 22:33:40 n_hibma Exp $	*/
 
 /*
@@ -41,25 +41,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.201 2009/11/01 06:36:44 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.218 2011/08/07 13:45:46 jmcneill Exp $");
+
+#include "opt_usb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/select.h>
-#include <uvm/uvm_extern.h>
-#elif defined(__FreeBSD__)
-#include <sys/module.h>
-#include <sys/bus.h>
-#include <machine/bus_pio.h>
-#include <machine/bus_memio.h>
-#if defined(DIAGNOSTIC) && defined(__i386__) && defined(__FreeBSD__)
-#include <sys/cpu.h>
-#endif
-#endif
 #include <sys/proc.h>
 #include <sys/queue.h>
 
@@ -76,25 +67,12 @@ __KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.201 2009/11/01 06:36:44 uebayasi Exp $");
 #include <dev/usb/ohcivar.h>
 #include <dev/usb/usbroothub_subr.h>
 
-#if defined(__FreeBSD__)
-#include <machine/clock.h>
 
-#define delay(d)                DELAY(d)
-#endif
-
-#if defined(__OpenBSD__)
-struct cfdriver ohci_cd = {
-	NULL, "ohci", DV_DULL
-};
-#endif
 
 #ifdef OHCI_DEBUG
-#define DPRINTF(x)	if (ohcidebug) logprintf x
-#define DPRINTFN(n,x)	if (ohcidebug>(n)) logprintf x
+#define DPRINTF(x)	if (ohcidebug) printf x
+#define DPRINTFN(n,x)	if (ohcidebug>(n)) printf x
 int ohcidebug = 0;
-#ifndef __NetBSD__
-#define snprintb((q), (f), "%b", q,f,b,l) snprintf((b), (l))
-#endif
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
@@ -352,24 +330,18 @@ Static const struct usbd_pipe_methods ohci_device_isoc_methods = {
 	ohci_device_isoc_done,
 };
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 int
 ohci_activate(device_t self, enum devact act)
 {
 	struct ohci_softc *sc = device_private(self);
-	int rv = 0;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		if (sc->sc_child != NULL)
-			rv = config_deactivate(sc->sc_child);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (rv);
 }
 
 void
@@ -393,10 +365,10 @@ ohci_detach(struct ohci_softc *sc, int flags)
 	if (rv != 0)
 		return (rv);
 
-	usb_uncallout(sc->sc_tmo_rhsc, ohci_rhsc_enable, sc);
+	callout_stop(&sc->sc_tmo_rhsc);
 
 	usb_delay_ms(&sc->sc_bus, 300); /* XXX let stray task complete */
-	usb_callout_destroy(sc->sc_tmo_rhsc);
+	callout_destroy(&sc->sc_tmo_rhsc);
 
 	if (sc->sc_hcca != NULL)
 		usb_freemem(&sc->sc_bus, &sc->sc_hccadma);
@@ -407,7 +379,6 @@ ohci_detach(struct ohci_softc *sc, int flags)
 
 	return (rv);
 }
-#endif
 
 ohci_soft_ed_t *
 ohci_alloc_sed(ohci_softc_t *sc)
@@ -691,7 +662,7 @@ ohci_init(ohci_softc_t *sc)
 	aprint_normal_dev(sc->sc_dev, "");
 
 	sc->sc_hcca = NULL;
-	usb_callout_init(sc->sc_tmo_rhsc);
+	callout_init(&sc->sc_tmo_rhsc, 0);
 
 	for (i = 0; i < OHCI_HASH_SIZE; i++)
 		LIST_INIT(&sc->sc_hash_tds[i]);
@@ -712,10 +683,8 @@ ohci_init(ohci_softc_t *sc)
 	}
 	sc->sc_bus.usbrev = USBREV_1_0;
 
-#ifdef __NetBSD__
 	usb_setup_reserve(sc->sc_dev, &sc->sc_dma_reserve, sc->sc_bus.dmatag,
 	    USB_MEM_RESERVE);
-#endif
 
 	/* XXX determine alignment by R/W */
 	/* Allocate the HCCA area. */
@@ -927,12 +896,10 @@ ohci_init(ohci_softc_t *sc)
 	sc->sc_bus.methods = &ohci_bus_methods;
 	sc->sc_bus.pipe_size = sizeof(struct ohci_pipe);
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 	sc->sc_control = sc->sc_intre = 0;
-#endif
 
 	/* Finally, turn on interrupts. */
-	DPRINTFN(1,("ohci_init: enabling\n"));
+	DPRINTFN(1,("ohci_init: enabling %#x\n", sc->sc_eintrs | OHCI_MIE));
 	OWRITE4(sc, OHCI_INTERRUPT_ENABLE, sc->sc_eintrs | OHCI_MIE);
 
 	return (USBD_NORMAL_COMPLETION);
@@ -955,31 +922,23 @@ ohci_init(ohci_softc_t *sc)
 usbd_status
 ohci_allocm(struct usbd_bus *bus, usb_dma_t *dma, u_int32_t size)
 {
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 	struct ohci_softc *sc = bus->hci_private;
-#endif
 	usbd_status status;
 
 	status = usb_allocmem(&sc->sc_bus, size, 0, dma);
-#ifdef __NetBSD__
 	if (status == USBD_NOMEM)
 		status = usb_reserve_allocm(&sc->sc_dma_reserve, dma, size);
-#endif
 	return status;
 }
 
 void
 ohci_freem(struct usbd_bus *bus, usb_dma_t *dma)
 {
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 	struct ohci_softc *sc = bus->hci_private;
-#endif
-#ifdef __NetBSD__
 	if (dma->block->flags & USB_DMA_RESERVE) {
 		usb_reserve_freem(&sc->sc_dma_reserve, dma);
 		return;
 	}
-#endif
 	usb_freemem(&sc->sc_bus, dma);
 }
 
@@ -1039,7 +998,7 @@ ohci_shutdown(device_t self, int flags)
 }
 
 bool
-ohci_resume(device_t dv PMF_FN_ARGS)
+ohci_resume(device_t dv, const pmf_qual_t *qual)
 {
 	ohci_softc_t *sc = device_private(dv);
 	uint32_t ctl;
@@ -1074,7 +1033,7 @@ ohci_resume(device_t dv PMF_FN_ARGS)
 }
 
 bool
-ohci_suspend(device_t dv PMF_FN_ARGS)
+ohci_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	ohci_softc_t *sc = device_private(dv);
 	uint32_t ctl;
@@ -1188,15 +1147,16 @@ ohci_intr1(ohci_softc_t *sc)
 
 	OWRITE4(sc, OHCI_INTERRUPT_STATUS, intrs & ~(OHCI_MIE|OHCI_WDH)); /* Acknowledge */
 	eintrs = intrs & sc->sc_eintrs;
-	if (!eintrs)
+	DPRINTFN(7, ("ohci_intr: sc=%p intrs=%#x(%#x) eintrs=%#x(%#x)\n",
+		     sc, (u_int)intrs, OREAD4(sc, OHCI_INTERRUPT_STATUS),
+		     (u_int)eintrs, sc->sc_eintrs));
+
+	if (!eintrs) {
 		return (0);
+	}
 
 	sc->sc_bus.intr_context++;
 	sc->sc_bus.no_intrs++;
-	DPRINTFN(7, ("ohci_intr: sc=%p intrs=0x%x(0x%x) eintrs=0x%x\n",
-		     sc, (u_int)intrs, OREAD4(sc, OHCI_INTERRUPT_STATUS),
-		     (u_int)eintrs));
-
 	if (eintrs & OHCI_SO) {
 		sc->sc_overrun_cnt++;
 		if (usbd_ratecheck(&sc->sc_overrun_ntc)) {
@@ -1231,7 +1191,7 @@ ohci_intr1(ohci_softc_t *sc)
 		 */
 		ohci_rhsc(sc, sc->sc_intrxfer);
 		/* Do not allow RHSC interrupts > 1 per second */
-                usb_callout(sc->sc_tmo_rhsc, hz, ohci_rhsc_enable, sc);
+		callout_reset(&sc->sc_tmo_rhsc, hz, ohci_rhsc_enable, sc);
 	}
 
 	sc->sc_bus.intr_context--;
@@ -1333,7 +1293,9 @@ ohci_softintr(void *v)
 			DPRINTFN(5,("add ITD %p\n", sitd));
 			continue;
 		}
-		panic("ohci_softintr: addr 0x%08lx not found", (u_long)done);
+		device_printf(sc->sc_dev, "WARNING: addr 0x%08lx not found\n",
+		    (u_long)done);
+		break;
 	}
 
 	DPRINTFN(10,("ohci_softintr: sdone=%p sidone=%p\n", sdone, sidone));
@@ -1366,7 +1328,7 @@ ohci_softintr(void *v)
 			/* Handled by abort routine. */
 			continue;
 		}
-		usb_uncallout(xfer->timeout_handle, ohci_timeout, xfer);
+		callout_stop(&xfer->timeout_handle);
 
 		len = std->len;
 		if (std->td.td_cbp != 0)
@@ -1685,6 +1647,7 @@ ohci_poll(struct usbd_bus *bus)
 	}
 #endif
 
+	sc->sc_eintrs |= OHCI_WDH;
 	if (OREAD4(sc, OHCI_INTERRUPT_STATUS) & sc->sc_eintrs)
 		ohci_intr1(sc);
 }
@@ -1812,7 +1775,7 @@ ohci_device_request(usbd_xfer_handle xfer)
 	opipe->tail.td = tail;
 	OWRITE4(sc, OHCI_COMMAND_STATUS, OHCI_CLF);
 	if (xfer->timeout && !sc->sc_bus.use_polling) {
-                usb_callout(xfer->timeout_handle, mstohz(xfer->timeout),
+		callout_reset(&xfer->timeout_handle, mstohz(xfer->timeout),
 			    ohci_timeout, xfer);
 	}
 	splx(s);
@@ -2021,12 +1984,11 @@ ohci_dump_td(ohci_softc_t *sc, ohci_soft_td_t *std)
 {
 	char sbuf[128];
 
+	usb_syncmem(&std->dma, std->offs, sizeof(std->td),
+	    BUS_DMASYNC_POSTWRITE | BUS_DMASYNC_POSTREAD);
 	snprintb(sbuf, sizeof(sbuf),
 	    "\20\23R\24OUT\25IN\31TOG1\32SETTOGGLE",
 	    (u_int32_t)O32TOH(std->td.td_flags));
-
-	usb_syncmem(&std->dma, std->offs, sizeof(std->td),
-	    BUS_DMASYNC_POSTWRITE | BUS_DMASYNC_POSTREAD);
 	printf("TD(%p) at %08lx: %s delay=%d ec=%d cc=%d\ncbp=0x%08lx "
 	       "nexttd=0x%08lx be=0x%08lx\n",
 	       std, (u_long)std->physaddr, sbuf,
@@ -2161,7 +2123,9 @@ ohci_open(usbd_pipe_handle pipe)
 			(dev->speed == USB_SPEED_LOW ? OHCI_ED_SPEED : 0) |
 			fmt |
 			OHCI_ED_SET_MAXP(UGETW(ed->wMaxPacketSize)));
-		sed->ed.ed_headp = sed->ed.ed_tailp = HTOO32(tdphys);
+		sed->ed.ed_headp = HTOO32(tdphys |
+		    (pipe->endpoint->datatoggle ? OHCI_TOGGLECARRY : 0));
+		sed->ed.ed_tailp = HTOO32(tdphys);
 		usb_syncmem(&sed->dma, sed->offs, sizeof(sed->ed),
 		    BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 
@@ -2248,6 +2212,8 @@ ohci_close_pipe(usbd_pipe_handle pipe, ohci_soft_ed_t *head)
 	ohci_rem_ed(sed, head);
 	/* Make sure the host controller is not touching this ED */
 	usb_delay_ms(&sc->sc_bus, 1);
+	pipe->endpoint->datatoggle =
+	    (O32TOH(sed->ed.ed_headp) & OHCI_TOGGLECARRY) ? 1 : 0;
 	splx(s);
 	ohci_free_sed(sc, opipe->sed);
 }
@@ -2279,7 +2245,7 @@ ohci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 		/* If we're dying, just do the software part. */
 		s = splusb();
 		xfer->status = status;	/* make software ignore it */
-		usb_uncallout(xfer->timeout_handle, ohci_timeout, xfer);
+		callout_stop(&xfer->timeout_handle);
 		usb_transfer_complete(xfer);
 		splx(s);
 		return;
@@ -2313,7 +2279,7 @@ ohci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	 */
 	s = splusb();
 	xfer->status = status;	/* make software ignore it */
-	usb_uncallout(xfer->timeout_handle, ohci_timeout, xfer);
+	callout_stop(&xfer->timeout_handle);
 	splx(s);
 	DPRINTFN(1,("ohci_abort_xfer: stop ed=%p\n", sed));
 	usb_syncmem(&sed->dma, sed->offs + offsetof(ohci_ed_t, ed_flags),
@@ -2416,7 +2382,7 @@ Static usb_device_descriptor_t ohci_devd = {
 	{0x00, 0x01},		/* USB version */
 	UDCLASS_HUB,		/* class */
 	UDSUBCLASS_HUB,		/* subclass */
-	UDPROTO_FSHUB,
+	UDPROTO_FSHUB,		/* protocol */
 	64,			/* max packet */
 	{0},{0},{0x00,0x01},	/* device id */
 	1,2,0,			/* string indicies */
@@ -3041,7 +3007,7 @@ ohci_device_bulk_start(usbd_xfer_handle xfer)
 	    BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 	OWRITE4(sc, OHCI_COMMAND_STATUS, OHCI_BLF);
 	if (xfer->timeout && !sc->sc_bus.use_polling) {
-                usb_callout(xfer->timeout_handle, mstohz(xfer->timeout),
+		callout_reset(&xfer->timeout_handle, mstohz(xfer->timeout),
 			    ohci_timeout, xfer);
 	}
 

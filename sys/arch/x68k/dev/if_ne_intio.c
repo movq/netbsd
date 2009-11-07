@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $	*/
+/*	$NetBSD: if_ne_intio.c,v 1.17 2011/10/16 03:10:18 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.17 2011/10/16 03:10:18 isaki Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,8 +72,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $
 #include <dev/ic/dp8390var.h>
 #include <dev/ic/ne2000reg.h>
 #include <dev/ic/ne2000var.h>
-#include <dev/ic/rtl80x9reg.h>
-#include <dev/ic/rtl80x9var.h>
 
 #include <arch/x68k/dev/intiovar.h>
 
@@ -136,7 +131,7 @@ ne_intio_match(device_t parent, cfdata_t cf, void *aux)
 
  out:
 	bus_space_unmap(iot, ioh, NE2000_NPORTS);
-	return rv;
+	return (rv != 0) ? 1 : 0;
 }
 
 static void
@@ -188,21 +183,10 @@ ne_intio_attach(device_t parent, device_t self, void *aux)
 
 	case NE2000_TYPE_NE2000:
 		typestr = "NE2000";
-		/*
-		 * Check for a Realtek 8019.
-		 */
-		bus_space_write_1(iot, ioh, ED_P0_CR,
-			ED_CR_PAGE_0 | ED_CR_STP);
-		if (bus_space_read_1(iot, ioh, NERTL_RTL0_8019ID0) ==
-		      RTL0_8019ID0 &&
-		      bus_space_read_1(iot, ioh, NERTL_RTL0_8019ID1) ==
-		      RTL0_8019ID1) {
-			typestr = "NE2000 (RTL8019)";
-			dsc->sc_mediachange = rtl80x9_mediachange;
-			dsc->sc_mediastatus = rtl80x9_mediastatus;
-			dsc->init_card      = rtl80x9_init_card;
-			dsc->sc_media_init  = rtl80x9_media_init;
-		}
+		break;
+
+	case NE2000_TYPE_RTL8019:
+		typestr = "NE2000 (RTL8019)";
 		break;
 
 	default:

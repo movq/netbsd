@@ -1,4 +1,4 @@
-/*	$NetBSD: handler.h,v 1.22 2009/09/03 09:29:07 tteras Exp $	*/
+/*	$NetBSD: handler.h,v 1.25 2010/11/17 10:40:41 tteras Exp $	*/
 
 /* Id: handler.h,v 1.19 2006/02/25 08:25:12 manubsd Exp */
 
@@ -202,7 +202,8 @@ struct ph1handle {
 
 #ifdef ENABLE_DPD
 	int		dpd_support;	/* Does remote supports DPD ? */
-	u_int16_t	dpd_seq;		/* DPD seq number to receive */
+	u_int32_t	dpd_last_ack;
+	u_int32_t	dpd_seq;		/* DPD seq number to receive */
 	u_int8_t	dpd_fails;		/* number of failures */
 	struct sched	dpd_r_u;
 #endif
@@ -492,6 +493,7 @@ extern void remph1 __P((struct ph1handle *));
 extern int resolveph1rmconf __P((struct ph1handle *));
 extern void flushph1 __P((void));
 extern void initph1tree __P((void));
+extern int ph1_rekey_enabled __P((struct ph1handle *));
 
 extern int enumph2 __P((struct ph2selector *ph2sel,
 			int (* enum_func)(struct ph2handle *iph2, void *arg),
@@ -518,6 +520,7 @@ extern void unbindph12 __P((struct ph2handle *));
 
 extern struct contacted *getcontacted __P((struct sockaddr *));
 extern int inscontacted __P((struct sockaddr *));
+extern void remcontacted __P((struct sockaddr *));
 extern void initctdtree __P((void));
 
 extern int check_recvdpkt __P((struct sockaddr *,

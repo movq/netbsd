@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.17 2009/04/30 00:07:23 rmind Exp $	*/
+/*	$NetBSD: cpu.h,v 1.47.2.3 2012/05/09 03:22:52 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,6 +37,12 @@
 #ifndef _X86_CPU_H_
 #define _X86_CPU_H_
 
+#if defined(_KERNEL) || defined(_STANDALONE)
+#include <sys/types.h>
+#else
+#include <stdbool.h>
+#endif /* _KERNEL || _STANDALONE */
+
 #if defined(_KERNEL) || defined(_KMEMUSER)
 #if defined(_KERNEL_OPT)
 #include "opt_xen.h"
@@ -50,15 +56,22 @@
  * Definitions unique to x86 cpu support.
  */
 #include <machine/frame.h>
+#include <machine/pte.h>
 #include <machine/segments.h>
 #include <machine/tss.h>
 #include <machine/intrdefs.h>
 
 #include <x86/cacheinfo.h>
-#include <x86/via_padlock.h>
 
 #include <sys/cpu_data.h>
 #include <sys/evcnt.h>
+#include <sys/device_if.h> /* for device_t */
+
+#ifdef XEN
+#include <xen/xen-public/xen.h>
+#include <xen/xen-public/event_channel.h>
+#include <sys/mutex.h>
+#endif /* XEN */
 
 struct intrsource;
 struct pmap;
@@ -76,7 +89,8 @@ struct device;
  */
 
 struct cpu_info {
-	struct device *ci_dev;		/* pointer to our device */
+	struct cpu_data ci_data;	/* MI per-cpu data */
+	device_t ci_dev;		/* pointer to our device */
 	struct cpu_info *ci_self;	/* self-pointer */
 	volatile struct vcpu_info *ci_vcpu; /* for XEN */
 	void	*ci_tlog_base;		/* Trap log base */
@@ -87,17 +101,13 @@ struct cpu_info {
 	 */
 	struct cpu_info *ci_next;	/* next cpu */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
-	struct pmap_cpu *ci_pmap_cpu;	/* per-CPU pmap data */
 	struct lwp *ci_fpcurlwp;	/* current owner of the FPU */
 	int	ci_fpsaving;		/* save in progress */
 	int	ci_fpused;		/* XEN: FPU was used by curlwp */
 	cpuid_t ci_cpuid;		/* our CPU ID */
-	int	ci_cpumask;		/* (1 << CPU ID) */
-	uint8_t ci_initapicid;		/* our intitial APIC ID */
-	uint8_t ci_packageid;
-	uint8_t ci_coreid;
-	uint8_t ci_smtid;
-	struct cpu_data ci_data;	/* MI per-cpu data */
+	int	_unused;
+	uint32_t ci_acpiid;		/* our ACPI/MADT ID */
+	uint32_t ci_initapicid;		/* our intitial APIC ID */
 
 	/*
 	 * Private members.
@@ -113,9 +123,11 @@ struct cpu_info {
 	int ci_curldt;		/* current LDT descriptor */
 	int ci_nintrhand;	/* number of H/W interrupt handlers */
 	uint64_t ci_scratch;
+	uintptr_t ci_pmap_data[128 / sizeof(uintptr_t)];
 
 #ifdef XEN
 	struct iplsource  *ci_isources[NIPL];
+	u_long ci_evtmask[NR_EVENT_CHANNELS]; /* events allowed on this CPU */
 #else
 	struct intrsource *ci_isources[MAX_INTR_SOURCES];
 #endif
@@ -137,18 +149,21 @@ struct cpu_info {
 
 	uint32_t ci_flags;		/* flags; see below */
 	uint32_t ci_ipis;		/* interprocessor interrupts pending */
-	int sc_apic_version;		/* local APIC version */
+	uint32_t sc_apic_version;	/* local APIC version */
 
 	uint32_t	ci_signature;	 /* X86 cpuid type */
-	uint32_t	ci_feature_flags;/* X86 %edx CPUID feature bits */
-	uint32_t	ci_feature2_flags;/* X86 %ecx CPUID feature bits */
-	uint32_t	ci_feature3_flags;/* X86 extended %edx feature bits */
-	uint32_t	ci_feature4_flags;/* X86 extended %ecx feature bits */
-	uint32_t	ci_padlock_flags;/* VIA PadLock feature bits */
 	uint32_t	ci_vendor[4];	 /* vendor string */
 	uint32_t	ci_cpu_serial[3]; /* PIII serial number */
 	volatile uint32_t	ci_lapic_counter;
 
+	uint32_t	ci_feat_val[5]; /* X86 CPUID feature bits
+					 *	[0] basic features %edx
+					 *	[1] basic features %ecx
+					 *	[2] extended features %edx
+					 *	[3] extended features %ecx
+					 *	[4] VIA padlock features
+					 */
+	
 	const struct cpu_functions *ci_func;  /* start/stop functions */
 	struct trapframe *ci_ddb_regs;
 
@@ -161,12 +176,38 @@ struct cpu_info {
 	struct i386tss	ci_doubleflt_tss;
 	struct i386tss	ci_ddbipi_tss;
 #endif
+
+#ifdef PAE
+	uint32_t	ci_pae_l3_pdirpa; /* PA of L3 PD */
+	pd_entry_t *	ci_pae_l3_pdir; /* VA pointer to L3 PD */
+#endif
+
+#if defined(XEN) && (defined(PAE) || defined(__x86_64__))
+	/* Currently active user PGD (can't use rcr3() with Xen) */
+	pd_entry_t *	ci_kpm_pdir;	/* per-cpu PMD (va) */
+	paddr_t		ci_kpm_pdirpa;  /* per-cpu PMD (pa) */
+	kmutex_t	ci_kpm_mtx;
+#if defined(__x86_64__)
+	/* per-cpu version of normal_pdes */
+	pd_entry_t *	ci_normal_pdes[3]; /* Ok to hardcode. only for x86_64 && XEN */
+	paddr_t		ci_xen_current_user_pgd;
+#endif /* __x86_64__ */
+#endif /* XEN et.al */
+
 	char *ci_doubleflt_stack;
 	char *ci_ddbipi_stack;
 
+#ifndef XEN
 	struct evcnt ci_ipi_events[X86_NIPI];
+#else   /* XEN */
+	struct evcnt ci_ipi_events[XEN_NIPIS];
+	evtchn_port_t ci_ipi_evtchn;
+#endif  /* XEN */
 
-	struct via_padlock	ci_vp;	/* VIA PadLock private storage */
+	device_t	ci_frequency;	/* Frequency scaling technology */
+	device_t	ci_padlock;	/* VIA PadLock private storage */
+	device_t	ci_temperature;	/* Intel coretemp(4) or equivalent */
+	device_t	ci_vm;		/* Virtual machine guest driver */
 
 	struct i386tss	ci_tss;		/* Per-cpu TSS; shared among LWPs */
 	char		ci_iomap[IOMAPSIZE]; /* I/O Bitmap */
@@ -235,6 +276,9 @@ struct cpu_info {
 #define	CPUF_PAUSE	0x4000		/* CPU is paused in DDB */
 #define	CPUF_GO		0x8000		/* CPU should start running */
 
+#endif /* _KERNEL || __KMEMUSER */
+
+#ifdef _KERNEL
 /*
  * We statically allocate the CPU info for the primary CPU (or,
  * the only CPU on uniprocessors), and the primary CPU is the
@@ -275,17 +319,13 @@ lwp_t   *x86_curlwp(void);
 void cpu_boot_secondary_processors(void);
 void cpu_init_idle_lwps(void);
 void cpu_init_msrs(struct cpu_info *, bool);
+void cpu_load_pmap(struct pmap *, struct pmap *);
+void cpu_broadcast_halt(void);
+void cpu_kick(struct cpu_info *);
 
-extern uint32_t cpus_attached;
-#ifndef XEN
 #define	curcpu()		x86_curcpu()
 #define	curlwp			x86_curlwp()
-#else
-/* XXX initgdt() calls pmap_kenter_pa() which calls splvm() before %fs is set */
-#define curcpu()		(&cpu_info_primary)
-#define curlwp			curcpu()->ci_curlwp
-#endif
-#define	curpcb			(&curlwp->l_addr->u_pcb)
+#define	curpcb			((struct pcb *)lwp_getpcb(curlwp))
 
 /*
  * Arguments to hardclock, softclock and statclock
@@ -320,13 +360,11 @@ struct timeval;
 
 extern int biosbasemem;
 extern int biosextmem;
-extern unsigned int cpu_feature;
-extern unsigned int cpu_feature2;
-extern unsigned int cpu_feature_padlock;
 extern int cpu;
 extern int cpuid_level;
 extern int cpu_class;
 extern char cpu_brand_string[];
+extern int use_pae;
 
 extern int i386_use_fxsave;
 extern int i386_has_sse;
@@ -354,7 +392,7 @@ void 	cpu_probe(struct cpu_info *);
 void	cpu_identify(struct cpu_info *);
 
 /* cpu_topology.c */
-void	x86_cpu_toplogy(struct cpu_info *);
+void	x86_cpu_topology(struct cpu_info *);
 
 /* vm_machdep.c */
 void	cpu_proc_fork(struct proc *, struct proc *);
@@ -364,7 +402,6 @@ struct region_descriptor;
 void	lgdt(struct region_descriptor *);
 #ifdef XEN
 void	lgdt_finish(void);
-void	i386_switch_context(lwp_t *);
 #endif
 
 struct pcb;
@@ -375,6 +412,8 @@ void	child_trampoline(void);
 void	startrtclock(void);
 void	xen_delay(unsigned int);
 void	xen_initclocks(void);
+void	xen_suspendclocks(struct cpu_info *);
+void	xen_resumeclocks(struct cpu_info *);
 #else
 /* clock.c */
 void	initrtclock(u_long);
@@ -417,15 +456,11 @@ void kgdb_port_init(void);
 void x86_bus_space_init(void);
 void x86_bus_space_mallocok(void);
 
+#endif /* _KERNEL */
+
+#if defined(_KERNEL) || defined(_KMEMUSER)
 #include <machine/psl.h>	/* Must be after struct cpu_info declaration */
-
 #endif /* _KERNEL || __KMEMUSER */
-
-#if defined(_KERNEL) || defined(_STANDALONE)
-#include <sys/types.h>
-#else
-#include <stdbool.h>
-#endif /* _KERNEL || _STANDALONE */
 
 /*
  * CTL_MACHDEP definitions.

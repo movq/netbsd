@@ -1,4 +1,4 @@
-/*	$NetBSD: reverse.c,v 1.20 2009/04/13 23:33:25 lukem Exp $	*/
+/*	$NetBSD: reverse.c,v 1.23 2011/09/03 10:59:11 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)reverse.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: reverse.c,v 1.20 2009/04/13 23:33:25 lukem Exp $");
+__RCSID("$NetBSD: reverse.c,v 1.23 2011/09/03 10:59:11 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -115,13 +115,14 @@ r_reg(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 
 	if ((uint64_t)size > SIZE_T_MAX) {
 			/* XXX: need a cleaner way to check this on amd64 */
-		err(0, "%s: %s", fname, strerror(EFBIG));
+		errno = EFBIG;
+		xerr(0, "%s", fname);
 		return;
 	}
 
 	if ((start = mmap(NULL, (size_t)size, PROT_READ,
-	    MAP_FILE|MAP_SHARED, fileno(fp), (off_t)0)) == (caddr_t)-1) {
-		err(0, "%s: %s", fname, strerror(EFBIG));
+	    MAP_FILE|MAP_SHARED, fileno(fp), (off_t)0)) == MAP_FAILED) {
+		xerr(0, "%s", fname);
 		return;
 	}
 	p = start + size - 1;
@@ -142,7 +143,7 @@ r_reg(FILE *fp, enum STYLE style, off_t off, struct stat *sbp)
 	if (llen)
 		WR(p, llen);
 	if (munmap(start, (size_t)sbp->st_size))
-		err(0, "%s: %s", fname, strerror(errno));
+		xerr(0, "%s", fname);
 }
 
 typedef struct bf {
@@ -181,17 +182,17 @@ r_buf(FILE *fp)
 		if (enomem) {
 			if (!mark) {
 				errno = ENOMEM;
-				err(1, NULL);
+				xerr(1, NULL);
 			}
 			tl = tl->next;
 			enomem += tl->len;
-		} else if ((tl = malloc(sizeof(BF))) == NULL ||
+		} else if ((tl = malloc(sizeof(*tl))) == NULL ||
 		    (tl->l = malloc(BSZ)) == NULL) {
 			if (tl)
 				free(tl);
 			if (!mark) {
 				errno = ENOMEM;
-				err(1, NULL);
+				xerr(1, NULL);
 			}
 			tl = mark;
 			enomem += tl->len;
@@ -228,9 +229,7 @@ r_buf(FILE *fp)
 	}
 
 	if (enomem) {
-		(void)fprintf(stderr,
-		    "tail: warning: %lld bytes discarded\n", (long long)enomem);
-		rval = 1;
+		xerrx(0, "Warning: %lld bytes discarded", (long long)enomem);
 	}
 
 	/*

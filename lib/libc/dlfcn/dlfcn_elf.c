@@ -1,4 +1,4 @@
-/*	$NetBSD: dlfcn_elf.c,v 1.6 2009/09/24 21:21:33 pooka Exp $	*/
+/*	$NetBSD: dlfcn_elf.c,v 1.10 2011/06/25 05:45:11 nonaka Exp $	*/
 
 /*
  * Copyright (c) 2000 Takuya SHIOZAKI
@@ -27,10 +27,15 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: dlfcn_elf.c,v 1.6 2009/09/24 21:21:33 pooka Exp $");
+__RCSID("$NetBSD: dlfcn_elf.c,v 1.10 2011/06/25 05:45:11 nonaka Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include <sys/atomic.h>
+#include <elf.h>
+#include <errno.h>
+#include <string.h>
+#include <stdbool.h>
 
 #undef dlopen
 #undef dlclose
@@ -42,9 +47,11 @@ __RCSID("$NetBSD: dlfcn_elf.c,v 1.6 2009/09/24 21:21:33 pooka Exp $");
 #define	dlopen		___dlopen
 #define	dlclose		___dlclose
 #define	dlsym		___dlsym
+#define	dlvsym		___dlvsym
 #define	dlerror		___dlerror
 #define	dladdr		___dladdr
 #define	dlinfo		___dlinfo
+#define	dl_iterate_phdr		___dl_iterate_phdr
 
 #define ELFSIZE ARCH_ELFSIZE
 #include "rtld.h"
@@ -53,16 +60,20 @@ __RCSID("$NetBSD: dlfcn_elf.c,v 1.6 2009/09/24 21:21:33 pooka Exp $");
 __weak_alias(dlopen,___dlopen)
 __weak_alias(dlclose,___dlclose)
 __weak_alias(dlsym,___dlsym)
+__weak_alias(dlvsym,___dlvsym)
 __weak_alias(dlerror,___dlerror)
 __weak_alias(dladdr,___dladdr)
 __weak_alias(dlinfo,___dlinfo)
+__weak_alias(dl_iterate_phdr,___dl_iterate_phdr)
 
 __weak_alias(__dlopen,___dlopen)
 __weak_alias(__dlclose,___dlclose)
 __weak_alias(__dlsym,___dlsym)
+__weak_alias(__dlvsym,___dlvsym)
 __weak_alias(__dlerror,___dlerror)
 __weak_alias(__dladdr,___dladdr)
 __weak_alias(__dlinfo,___dlinfo)
+__weak_alias(__dl_iterate_phdr,___dl_iterate_phdr)
 #endif
 
 /*
@@ -102,6 +113,14 @@ dlsym(void *handle, const char *name)
 }
 
 /*ARGSUSED*/
+void *
+dlvsym(void *handle, const char *name, const char *version)
+{
+
+	return NULL;
+}
+
+/*ARGSUSED*/
 __aconst char *
 dlerror()
 {
@@ -123,4 +142,72 @@ dlinfo(void *handle, int req, void *v)
 {
 
 	return -1;
+}
+
+static const char *dlpi_name;
+static Elf_Addr dlpi_addr;
+static const Elf_Phdr *dlpi_phdr;
+static Elf_Half dlpi_phnum;
+
+/*
+ * Declare as common symbol to allow new libc with older binaries to
+ * not trigger an undefined reference.
+ */
+extern __dso_hidden void *__auxinfo;
+
+static void
+dl_iterate_phdr_setup(void)
+{
+	const AuxInfo *aux;
+
+	if (__auxinfo == NULL)
+		return;
+
+	for (aux = __auxinfo; aux->a_type != AT_NULL; ++aux) {
+		switch (aux->a_type) {
+		case AT_BASE:
+			dlpi_addr = aux->a_v;
+			break;
+		case AT_PHDR:
+			dlpi_phdr = (void *)aux->a_v;
+			break;
+		case AT_PHNUM:
+			dlpi_phnum = aux->a_v;
+			break;
+		case AT_SUN_EXECNAME:
+			dlpi_name = (void *)aux->a_v;
+			break;
+		}
+	}
+}
+
+/*ARGSUSED*/
+int
+dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *),
+    void *data)
+{
+	static bool setup_done;
+	struct dl_phdr_info phdr_info;
+
+	if (__auxinfo == NULL)
+		return EOPNOTSUPP;
+
+	if (!setup_done) {
+		/*
+		 * This can race on the first call to dl_iterate_phdr.
+		 * dl_iterate_phdr_setup only touches field of pointer size
+		 * and smaller and such stores are atomic.
+		 */
+		dl_iterate_phdr_setup();
+		membar_producer();
+		setup_done = true;
+	}
+
+	memset(&phdr_info, 0, sizeof(phdr_info));
+	phdr_info.dlpi_addr = dlpi_addr;
+	phdr_info.dlpi_phdr = dlpi_phdr;
+	phdr_info.dlpi_phnum = dlpi_phnum;
+	phdr_info.dlpi_name = dlpi_name;
+
+	return callback(&phdr_info, sizeof(phdr_info), data);
 }

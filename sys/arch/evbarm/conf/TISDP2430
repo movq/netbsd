@@ -1,5 +1,5 @@
 #
-#	$NetBSD: TISDP2430,v 1.10 2009/10/11 16:20:23 bsh Exp $
+#	$NetBSD: TISDP2430,v 1.19 2011/12/18 05:49:26 dholland Exp $
 #
 #	TISDP2430 -- TI OMAP 2430 Eval Board Kernel
 #
@@ -35,7 +35,6 @@ file-system	MSDOSFS		# MS-DOS file system
 #file-system	FDESC		# /dev/fd
 #file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
@@ -43,10 +42,11 @@ file-system	TMPFS		# memory file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	NFSSERVER
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -141,12 +141,12 @@ options		DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=300000
+options 	SYMTAB_SPACE=500000
 
 ## USB Debugging options
 options USB_DEBUG
-options OHCI_DEBUG 
-options UHUB_DEBUG 
+options OHCI_DEBUG
+options UHUB_DEBUG
 
 
 # Valid options for BOOT_ARGS:
@@ -178,12 +178,11 @@ options		MEMSIZE=128
 L3i0		at mainbus?
 
 # OBIO
-obio0		at mainbus? base 0x48000000 size 0x1000000	# L4 CORE 
+obio0		at mainbus? base 0x48000000 size 0x1000000	# L4 CORE
 obio1		at mainbus? base 0x49000000 size 0x0800000	# L4 WAKEUP
 
 # General Purpose Memory Controller
 gpmc0		at mainbus? base 0x6e000000
-
 
 # Interrupt Controller
 omapicu0	at obio0 addr 0x4900c000 size 0x1000 intrbase 0
@@ -246,9 +245,9 @@ options		OMAP_CK_REF_SPEED=12000000
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -257,7 +256,6 @@ pseudo-device	loop			# network loopback
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options	RND_COM
 #pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms

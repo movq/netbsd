@@ -1,4 +1,4 @@
-/*	$NetBSD: in6.c,v 1.154 2009/09/19 13:11:02 christos Exp $	*/
+/*	$NetBSD: in6.c,v 1.159 2011/11/19 22:51:26 tls Exp $	*/
 /*	$KAME: in6.c,v 1.198 2001/07/18 09:12:38 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6.c,v 1.154 2009/09/19 13:11:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6.c,v 1.159 2011/11/19 22:51:26 tls Exp $");
 
 #include "opt_inet.h"
 #include "opt_pfil_hooks.h"
@@ -81,6 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: in6.c,v 1.154 2009/09/19 13:11:02 christos Exp $");
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -965,7 +966,7 @@ in6_update_ifa1(struct ifnet *ifp, struct in6_aliasreq *ifra,
 		    M_NOWAIT);
 		if (ia == NULL)
 			return ENOBUFS;
-		memset((void *)ia, 0, sizeof(*ia));
+		memset(ia, 0, sizeof(*ia));
 		LIST_INIT(&ia->ia6_memberships);
 		/* Initialize the address and masks, and put time stamp */
 		ia->ia_ifa.ifa_addr = (struct sockaddr *)&ia->ia_addr;
@@ -1119,7 +1120,7 @@ in6_update_ifa1(struct ifnet *ifp, struct in6_aliasreq *ifra,
 			 * avoid report collision.
 			 * [draft-ietf-ipv6-rfc2462bis-02.txt]
 			 */
-			dad_delay = arc4random() %
+			dad_delay = cprng_fast32() %
 			    (MAX_RTR_SOLICITATION_DELAY * hz);
 		}
 
@@ -1210,7 +1211,7 @@ in6_update_ifa1(struct ifnet *ifp, struct in6_aliasreq *ifra,
 			 * The spec doesn't say anything about delay for this
 			 * group, but the same logic should apply.
 			 */
-			dad_delay = arc4random() %
+			dad_delay = cprng_fast32() %
 			    (MAX_RTR_SOLICITATION_DELAY * hz);
 		}
 		if (in6_nigroup(ifp, hostname, hostnamelen, &mltaddr) != 0)
@@ -1318,7 +1319,7 @@ in6_update_ifa1(struct ifnet *ifp, struct in6_aliasreq *ifra,
 				dad_delay = 0;
 			else {
 				dad_delay =
-				    (arc4random() % (maxdelay - mindelay)) +
+				    (cprng_fast32() % (maxdelay - mindelay)) +
 				    mindelay;
 			}
 		}
@@ -1607,7 +1608,7 @@ in6_lifaddr_ioctl(struct socket *so, u_long cmd, void *data,
 		ifra.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
 		ifra.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
 		ifra.ifra_flags = iflr->flags & ~IFLR_PREFIX;
-		return in6_control(so, SIOCAIFADDR_IN6, (void *)&ifra, ifp, l);
+		return in6_control(so, SIOCAIFADDR_IN6, &ifra, ifp, l);
 	    }
 	case SIOCGLIFADDR:
 	case SIOCDLIFADDR:
@@ -1718,8 +1719,7 @@ in6_lifaddr_ioctl(struct socket *so, u_long cmd, void *data,
 			    ia->ia_prefixmask.sin6_len);
 
 			ifra.ifra_flags = ia->ia6_flags;
-			return in6_control(so, SIOCDIFADDR_IN6, (void *)&ifra,
-			    ifp, l);
+			return in6_control(so, SIOCDIFADDR_IN6, &ifra, ifp, l);
 		}
 	    }
 	}
@@ -1754,8 +1754,8 @@ in6_ifinit(struct ifnet *ifp, struct in6_ifaddr *ia,
 
 	ia->ia_addr = *sin6;
 
-	if (ifacount <= 1 && 
-	    (error = (*ifp->if_ioctl)(ifp, SIOCINITIFADDR, ia)) != 0) {
+	if (ifacount <= 1 &&
+	    (error = if_addr_init(ifp, &ia->ia_ifa, true)) != 0) {
 		splx(s);
 		return error;
 	}
@@ -1792,6 +1792,14 @@ in6_ifinit(struct ifnet *ifp, struct in6_ifaddr *ia,
 	return error;
 }
 
+static struct ifaddr *
+bestifa(struct ifaddr *best_ifa, struct ifaddr *ifa)
+{
+	if (best_ifa == NULL || best_ifa->ifa_preference < ifa->ifa_preference)
+		return ifa;
+	return best_ifa;
+}
+
 /*
  * Find an IPv6 interface link-local address specific to an interface.
  */
@@ -1809,10 +1817,7 @@ in6ifa_ifpforlinklocal(const struct ifnet *ifp, const int ignoreflags)
 			continue;
 		if ((((struct in6_ifaddr *)ifa)->ia6_flags & ignoreflags) != 0)
 			continue;
-		if (best_ifa == NULL)
-			best_ifa = ifa;
-		else if (best_ifa->ifa_preference < ifa->ifa_preference)
-			best_ifa = ifa;
+		best_ifa = bestifa(best_ifa, ifa);
 	}
 
 	return (struct in6_ifaddr *)best_ifa;
@@ -1825,18 +1830,28 @@ in6ifa_ifpforlinklocal(const struct ifnet *ifp, const int ignoreflags)
 struct in6_ifaddr *
 in6ifa_ifpwithaddr(const struct ifnet *ifp, const struct in6_addr *addr)
 {
-	struct ifaddr *ifa;
+	struct ifaddr *best_ifa = NULL, *ifa;
 
 	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr == NULL)
 			continue;	/* just for safety */
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
-		if (IN6_ARE_ADDR_EQUAL(addr, IFA_IN6(ifa)))
-			break;
+		if (!IN6_ARE_ADDR_EQUAL(addr, IFA_IN6(ifa)))
+			continue;
+		best_ifa = bestifa(best_ifa, ifa);
 	}
 
-	return (struct in6_ifaddr *)ifa;
+	return (struct in6_ifaddr *)best_ifa;
+}
+
+static struct in6_ifaddr *
+bestia(struct in6_ifaddr *best_ia, struct in6_ifaddr *ia)
+{
+	if (best_ia == NULL ||
+	    best_ia->ia_ifa.ifa_preference < ia->ia_ifa.ifa_preference)
+		return ia;
+	return best_ia;
 }
 
 /*
@@ -1847,7 +1862,7 @@ struct in6_ifaddr *
 in6ifa_ifplocaladdr(const struct ifnet *ifp, const struct in6_addr *addr)
 {
 	struct ifaddr *ifa;
-	struct in6_ifaddr *ia;
+	struct in6_ifaddr *best_ia = NULL, *ia;
 
 	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr == NULL)
@@ -1855,13 +1870,14 @@ in6ifa_ifplocaladdr(const struct ifnet *ifp, const struct in6_addr *addr)
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
 		ia = (struct in6_ifaddr *)ifa;
-		if (IN6_ARE_MASKED_ADDR_EQUAL(addr,
+		if (!IN6_ARE_MASKED_ADDR_EQUAL(addr,
 				&ia->ia_addr.sin6_addr,
 				&ia->ia_prefixmask.sin6_addr))
-			return ia;
+			continue;
+		best_ia = bestia(best_ia, ia);
 	}
 
-	return NULL;
+	return best_ia;
 }
 
 /*
@@ -1873,6 +1889,7 @@ ip6_sprintf(const struct in6_addr *addr)
 {
 	static char ip6buf[8][48];
 	int i;
+	char *bp;
 	char *cp;
 	const u_int16_t *a = (const u_int16_t *)addr;
 	const u_int8_t *d;
@@ -1905,9 +1922,16 @@ ip6_sprintf(const struct in6_addr *addr)
 			continue;
 		}
 		d = (const u_char *)a;
-		*cp++ = hexdigits[*d >> 4];
-		*cp++ = hexdigits[*d++ & 0xf];
-		*cp++ = hexdigits[*d >> 4];
+		bp = cp;
+		*cp = hexdigits[*d >> 4];
+		if (*cp != '0')
+			cp++;
+		*cp = hexdigits[*d++ & 0xf];
+		if (cp != bp || *cp != '0')
+			cp++;
+		*cp = hexdigits[*d >> 4];
+		if (cp != bp || *cp != '0')
+			cp++;
 		*cp++ = hexdigits[*d & 0xf];
 		*cp++ = ':';
 		a++;
@@ -2035,7 +2059,7 @@ in6_ifawithifp(struct ifnet *ifp, struct in6_addr *dst)
 {
 	int dst_scope =	in6_addrscope(dst), blen = -1, tlen;
 	struct ifaddr *ifa;
-	struct in6_ifaddr *besta = 0;
+	struct in6_ifaddr *best_ia = NULL, *ia;
 	struct in6_ifaddr *dep[2];	/* last-resort: deprecated */
 
 	dep[0] = dep[1] = NULL;
@@ -2049,54 +2073,60 @@ in6_ifawithifp(struct ifnet *ifp, struct in6_addr *dst)
 	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_ANYCAST)
+		ia = (struct in6_ifaddr *)ifa;
+		if (ia->ia6_flags & IN6_IFF_ANYCAST)
 			continue; /* XXX: is there any case to allow anycast? */
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_NOTREADY)
+		if (ia->ia6_flags & IN6_IFF_NOTREADY)
 			continue; /* don't use this interface */
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_DETACHED)
+		if (ia->ia6_flags & IN6_IFF_DETACHED)
 			continue;
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_DEPRECATED) {
+		if (ia->ia6_flags & IN6_IFF_DEPRECATED) {
 			if (ip6_use_deprecated)
-				dep[0] = (struct in6_ifaddr *)ifa;
+				dep[0] = ia;
 			continue;
 		}
 
-		if (dst_scope == in6_addrscope(IFA_IN6(ifa))) {
-			/*
-			 * call in6_matchlen() as few as possible
-			 */
-			if (besta) {
-				if (blen == -1)
-					blen = in6_matchlen(&besta->ia_addr.sin6_addr, dst);
-				tlen = in6_matchlen(IFA_IN6(ifa), dst);
-				if (tlen > blen) {
-					blen = tlen;
-					besta = (struct in6_ifaddr *)ifa;
-				}
-			} else
-				besta = (struct in6_ifaddr *)ifa;
+		if (dst_scope != in6_addrscope(IFA_IN6(ifa)))
+			continue;
+		/*
+		 * call in6_matchlen() as few as possible
+		 */
+		if (best_ia == NULL) {
+			best_ia = ia;
+			continue;
 		}
+		if (blen == -1)
+			blen = in6_matchlen(&best_ia->ia_addr.sin6_addr, dst);
+		tlen = in6_matchlen(IFA_IN6(ifa), dst);
+		if (tlen > blen) {
+			blen = tlen;
+			best_ia = ia;
+		} else if (tlen == blen)
+			best_ia = bestia(best_ia, ia);
 	}
-	if (besta)
-		return besta;
+	if (best_ia != NULL)
+		return best_ia;
 
 	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_ANYCAST)
+		ia = (struct in6_ifaddr *)ifa;
+		if (ia->ia6_flags & IN6_IFF_ANYCAST)
 			continue; /* XXX: is there any case to allow anycast? */
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_NOTREADY)
+		if (ia->ia6_flags & IN6_IFF_NOTREADY)
 			continue; /* don't use this interface */
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_DETACHED)
+		if (ia->ia6_flags & IN6_IFF_DETACHED)
 			continue;
-		if (((struct in6_ifaddr *)ifa)->ia6_flags & IN6_IFF_DEPRECATED) {
+		if (ia->ia6_flags & IN6_IFF_DEPRECATED) {
 			if (ip6_use_deprecated)
 				dep[1] = (struct in6_ifaddr *)ifa;
 			continue;
 		}
 
-		return (struct in6_ifaddr *)ifa;
+		best_ia = bestia(best_ia, ia);
 	}
+	if (best_ia != NULL)
+		return best_ia;
 
 	/* use the last-resort values, that are, deprecated addresses */
 	if (dep[0])
@@ -2128,7 +2158,8 @@ in6_if_up(struct ifnet *ifp)
 			 * case, but we impose delays just in case.
 			 */
 			nd6_dad_start(ifa,
-			    arc4random() % (MAX_RTR_SOLICITATION_DELAY * hz));
+			    cprng_fast32() %
+				(MAX_RTR_SOLICITATION_DELAY * hz));
 		}
 	}
 

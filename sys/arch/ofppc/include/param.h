@@ -1,7 +1,12 @@
-/*	$NetBSD: param.h,v 1.11 2008/03/07 17:13:49 phx Exp $	*/
+/*	$NetBSD: param.h,v 1.13 2011/07/28 01:30:22 macallan Exp $	*/
 
-#define MACHINE		"ofppc"
-#include <powerpc/param.h>
+#if defined(_KERNEL) && !defined(_MODULE)
+
+#define MACHINE			"ofppc"
+
+#endif /* _KERNEL && !_MODULE */
 
 /* at this offset we mmap() the PCI IO range in display drivers */
 #define PCI_MAGIC_IO_RANGE      0xfeff0000
+
+#include <powerpc/param.h>

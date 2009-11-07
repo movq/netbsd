@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.105 2009/07/18 16:31:43 reinoud Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.112 2012/01/16 18:47:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -117,6 +117,7 @@ struct disklabel {
 			char *un_d_boot0;	/* primary bootstrap name */
 			char *un_d_boot1;	/* secondary bootstrap name */
 		} un_b;
+		uint64_t un_d_pad;		/* force 8 byte alignment */
 	} d_un;
 #define	d_packname	d_un.un_d_packname
 #define	d_boot0		d_un.un_b.un_d_boot0
@@ -306,10 +307,14 @@ x(CGD,		17,	"cgd")		/* cryptographic pseudo-disk */ \
 x(VINUM,	18,	"vinum")	/* vinum volume */ \
 x(FLASH,	19,	"flash")	/* flash memory devices */ \
 x(DM,           20,     "dm")           /* device-mapper pseudo-disk devices */\
+x(RUMPD,	21,     "rumpd")	/* rump virtual disk */ \
     
 #ifndef _LOCORE
 #define DKTYPE_NUMS(tag, number, name) __CONCAT(DTYPE_,tag=number),
-enum { DKTYPE_DEFN(DKTYPE_NUMS) DKMAXTYPES };
+#ifndef DKTYPE_ENUMNAME
+#define DKTYPE_ENUMNAME
+#endif
+enum DKTYPE_ENUMNAME { DKTYPE_DEFN(DKTYPE_NUMS) DKMAXTYPES };
 #undef	DKTYPE_NUMS
 #endif
 
@@ -326,7 +331,7 @@ static const char *const dktypenames[] = { DKTYPE_DEFN(DKTYPE_NAMES) NULL };
 x(UNUSED,   0, "unused",     NULL,    NULL)   /* unused */ \
 x(SWAP,     1, "swap",       NULL,    NULL)   /* swap */ \
 x(V6,       2, "Version 6",  NULL,    NULL)   /* Sixth Edition */ \
-x(V7,       3, "Version 7",  NULL,    NULL)   /* Seventh Edition */ \
+x(V7,       3, "Version 7", "v7fs",  "v7fs")  /* Seventh Edition */ \
 x(SYSV,     4, "System V",   NULL,    NULL)   /* System V */ \
 x(V71K,     5, "4.1BSD",     NULL,    NULL)   /* V7, 1K blocks (4.1, 2.9) */ \
 x(V8,    6, "Eighth Edition",NULL,    NULL)   /* Eighth Edition, 4K blocks */ \
@@ -351,11 +356,17 @@ x(VINUM,   23, "vinum",      NULL,    NULL)   /* Vinum */ \
 x(UDF,     24, "UDF",        NULL,   "udf")   /* UDF */ \
 x(SYSVBFS, 25, "SysVBFS",    NULL,  "sysvbfs")/* System V boot file system */ \
 x(EFS,     26, "EFS",        NULL,   "efs")   /* SGI's Extent Filesystem */ \
-x(NILFS,   27, "NiLFS",      NULL,   "nilfs") /* NTT's NiLFS(2) */
+x(NILFS,   27, "NiLFS",      NULL,   "nilfs") /* NTT's NiLFS(2) */ \
+x(CGD,     28, "cgd",	     NULL,   NULL)    /* Cryptographic disk */ \
+x(MINIXFS3,29, "MINIX FSv3", NULL,   NULL)    /* MINIX file system v3 */
+
 
 #ifndef _LOCORE
 #define	FS_TYPENUMS(tag, number, name, fsck, mount) __CONCAT(FS_,tag=number),
-enum { FSTYPE_DEFN(FS_TYPENUMS) FSMAXTYPES };
+#ifndef FSTYPE_ENUMNAME
+#define FSTYPE_ENUMNAME
+#endif
+enum FSTYPE_ENUMNAME { FSTYPE_DEFN(FS_TYPENUMS) FSMAXTYPES };
 #undef	FS_TYPENUMS
 #endif
 
@@ -424,6 +435,7 @@ struct format_op {
 	int	 df_reg[8];		/* result */
 };
 
+#ifdef _KERNEL
 /*
  * Structure used internally to retrieve information about a partition
  * on a disk.
@@ -432,8 +444,6 @@ struct partinfo {
 	struct disklabel *disklab;
 	struct partition *part;
 };
-
-#ifdef _KERNEL
 
 struct disk;
 
@@ -453,6 +463,7 @@ const char *convertdisklabel(struct disklabel *, void (*)(struct buf *),
     struct buf *, uint32_t);
 int	 bounds_check_with_label(struct disk *, struct buf *, int);
 int	 bounds_check_with_mediasize(struct buf *, int, uint64_t);
+const char *getfstypename(int);
 #endif
 #endif /* _LOCORE */
 

@@ -1,4 +1,4 @@
-# $NetBSD: t_modload.sh,v 1.5 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_modload.sh,v 1.9 2011/03/24 21:52:51 jmmv Exp $
 #
 # Copyright (c) 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -30,7 +30,7 @@ check_sysctl() {
 	atf_check -s eq:0 -o file:expout -e empty sysctl ${1}
 }
 
-atf_test_case plain
+atf_test_case plain cleanup
 plain_head() {
 	atf_set "descr" "Test load without arguments"
 	atf_set "require.user" "root"
@@ -47,12 +47,13 @@ EOF
 	check_sysctl vendor.k_helper.prop_int_ok 0
 	check_sysctl vendor.k_helper.prop_str_ok 0
 	atf_check -s eq:0 -o empty -e empty modunload k_helper
+	touch done
 }
 plain_cleanup() {
-	modunload k_helper >/dev/null 2>&1
+	test -f done || modunload k_helper >/dev/null 2>&1
 }
 
-atf_test_case bflag
+atf_test_case bflag cleanup
 bflag_head() {
 	atf_set "descr" "Test the -b flag"
 	atf_set "require.user" "root"
@@ -89,10 +90,10 @@ bflag_body() {
 	#echo "Checking valid values"
 }
 bflag_cleanup() {
-	modunload k_helper >/dev/null 2>&1
+	modunload k_helper >/dev/null 2>&1 || true
 }
 
-atf_test_case iflag
+atf_test_case iflag cleanup
 iflag_head() {
 	atf_set "descr" "Test the -i flag"
 	atf_set "require.user" "root"
@@ -130,12 +131,13 @@ iflag_body() {
 		check_sysctl vendor.k_helper.prop_int_val "${v}"
 		atf_check -s eq:0 -o empty -e empty modunload k_helper
 	done
+	touch done
 }
 iflag_cleanup() {
-	modunload k_helper >/dev/null 2>&1
+	test -f done || modunload k_helper >/dev/null 2>&1
 }
 
-atf_test_case sflag
+atf_test_case sflag cleanup
 sflag_head() {
 	atf_set "descr" "Test the -s flag"
 	atf_set "require.user" "root"
@@ -158,9 +160,10 @@ sflag_body() {
 		check_sysctl vendor.k_helper.prop_str_val "${v}"
 		atf_check -s eq:0 -o empty -e empty modunload k_helper
 	done
+	touch done
 }
 sflag_cleanup() {
-	modunload k_helper >/dev/null 2>&1
+	test -f done || modunload k_helper >/dev/null 2>&1
 }
 
 atf_init_test_cases()

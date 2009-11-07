@@ -1,9 +1,11 @@
-#	$NetBSD: Makefile,v 1.3 2009/01/11 03:09:35 christos Exp $
+#	$NetBSD: Makefile,v 1.5 2011/05/26 12:56:27 joerg Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
 NOPIC=		# defined
 NOPROFILE=	# defined
+
+CWARNFLAGS.clang+=	-Wno-parentheses
 
 .include <bsd.own.mk>
 
@@ -40,9 +42,4 @@ CLEANFILES+= unwind.h
 ${OBJS}: ${.CURDIR}/../libstdc++-v3_4/arch/${MACHINE_ARCH}/defs.mk
 .else
 .include <bsd.prog.mk> # do nothing
-.endif
-
-.if (${OBJECT_FMT} == "a.out")
-LDADD=	${DESTDIR}/usr/lib/c++rt0.o
-DPADD=	${DESTDIR}/usr/lib/c++rt0.o
 .endif

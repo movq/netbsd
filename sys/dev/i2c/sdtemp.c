@@ -1,4 +1,4 @@
-/*      $NetBSD: sdtemp.c,v 1.7 2009/07/10 15:30:45 pgoyette Exp $        */
+/*      $NetBSD: sdtemp.c,v 1.21 2012/02/02 02:47:59 pgoyette Exp $        */
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdtemp.c,v 1.7 2009/07/10 15:30:45 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdtemp.c,v 1.21 2012/02/02 02:47:59 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: sdtemp.c,v 1.7 2009/07/10 15:30:45 pgoyette Exp $");
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/endian.h>
+#include <sys/module.h>
 
 #include <dev/sysmon/sysmonvar.h>
 
@@ -51,21 +52,24 @@ struct sdtemp_softc {
 
 	struct sysmon_envsys *sc_sme;
 	envsys_data_t *sc_sensor;
+	sysmon_envsys_lim_t sc_deflims;
+	uint32_t sc_defprops;
 	int sc_resolution;
 	uint16_t sc_capability;
 };
 
 static int  sdtemp_match(device_t, cfdata_t, void *);
 static void sdtemp_attach(device_t, device_t, void *);
+static int  sdtemp_detach(device_t, int);
 
 CFATTACH_DECL_NEW(sdtemp, sizeof(struct sdtemp_softc),
-	sdtemp_match, sdtemp_attach, NULL, NULL);
+	sdtemp_match, sdtemp_attach, sdtemp_detach, NULL);
 
 static void	sdtemp_refresh(struct sysmon_envsys *, envsys_data_t *);
 static void	sdtemp_get_limits(struct sysmon_envsys *, envsys_data_t *,
-				  sysmon_envsys_lim_t *);
+				  sysmon_envsys_lim_t *, uint32_t *);
 static void	sdtemp_set_limits(struct sysmon_envsys *, envsys_data_t *,
-				  sysmon_envsys_lim_t *);
+				  sysmon_envsys_lim_t *, uint32_t *);
 #ifdef NOT_YET
 static int	sdtemp_read_8(struct sdtemp_softc *, uint8_t, uint8_t *);
 static int	sdtemp_write_8(struct sdtemp_softc *, uint8_t, uint8_t);
@@ -73,13 +77,13 @@ static int	sdtemp_write_8(struct sdtemp_softc *, uint8_t, uint8_t);
 static int	sdtemp_read_16(struct sdtemp_softc *, uint8_t, uint16_t *);
 static int	sdtemp_write_16(struct sdtemp_softc *, uint8_t, uint16_t);
 static uint32_t	sdtemp_decode_temp(struct sdtemp_softc *, uint16_t);
-static bool	sdtemp_pmf_suspend(device_t PMF_FN_PROTO);
-static bool	sdtemp_pmf_resume(device_t PMF_FN_PROTO);
+static bool	sdtemp_pmf_suspend(device_t, const pmf_qual_t *);
+static bool	sdtemp_pmf_resume(device_t, const pmf_qual_t *);
 
 struct sdtemp_dev_entry {
 	const uint16_t sdtemp_mfg_id;
-	const uint8_t  sdtemp_dev_id;
-	const uint8_t  sdtemp_rev_id;
+	const uint16_t  sdtemp_devrev;
+	const uint16_t  sdtemp_mask;
 	const uint8_t  sdtemp_resolution;
 	const char    *sdtemp_desc;
 };
@@ -98,36 +102,43 @@ struct sdtemp_dev_entry {
  */
 static const struct sdtemp_dev_entry
 sdtemp_dev_table[] = {
-    { MAXIM_MANUFACTURER_ID, MAX_6604_DEVICE_ID,    0xff, 3,
-	"Maxim MAX604" },
-    { MCP_MANUFACTURER_ID,   MCP_9805_DEVICE_ID,    0xff, 2,
-	"Microchip Tech MCP9805" },
-    { MCP_MANUFACTURER_ID,   MCP_98242_DEVICE_ID,   0xff, -4,
+    { MAXIM_MANUFACTURER_ID, MAX_6604_DEVICE_ID,    MAX_6604_MASK,   3,
+	"Maxim MAX6604" },
+    { MCP_MANUFACTURER_ID,   MCP_9805_DEVICE_ID,    MCP_9805_MASK,   2,
+	"Microchip Tech MCP9805/MCP9843" },
+    { MCP_MANUFACTURER_ID,   MCP_98243_DEVICE_ID,   MCP_98243_MASK, -4,
+	"Microchip Tech MCP98243" },
+    { MCP_MANUFACTURER_ID,   MCP_98242_DEVICE_ID,   MCP_98242_MASK, -4,
 	"Microchip Tech MCP98242" },
-    { ADT_MANUFACTURER_ID,   ADT_7408_DEVICE_ID,    0xff, 4,
+    { ADT_MANUFACTURER_ID,   ADT_7408_DEVICE_ID,    ADT_7408_MASK,   4,
 	"Analog Devices ADT7408" },
-    { NXP_MANUFACTURER_ID,   NXP_SE97_DEVICE_ID,    0xff, 3,
-	"NXP Semiconductors SE97/SE98" },
-    { STTS_MANUFACTURER_ID,  STTS_424E02_DEVICE_ID, 0x00, 2,
-	"STmicroelectronics STTS424E02-DA" }, 
-    { STTS_MANUFACTURER_ID,  STTS_424E02_DEVICE_ID, 0x01, 2,
-	"STmicroelectronics STTS424E02-DN" }, 
-    { CAT_MANUFACTURER_ID,   CAT_34TS02_DEVICE_ID,  0xff, 4,
+    { NXP_MANUFACTURER_ID,   NXP_SE98_DEVICE_ID,    NXP_SE98_MASK,   3,
+	"NXP Semiconductors SE97B/SE98" },
+    { NXP_MANUFACTURER_ID,   NXP_SE97_DEVICE_ID,    NXP_SE97_MASK,   3,
+	"NXP Semiconductors SE97" },
+    { STTS_MANUFACTURER_ID,  STTS_424E_DEVICE_ID,   STTS_424E_MASK,  2,
+	"STmicroelectronics STTS424E" }, 
+    { STTS_MANUFACTURER_ID,  STTS_424_DEVICE_ID,    STTS_424_MASK,   2,
+	"STmicroelectronics STTS424" }, 
+    { CAT_MANUFACTURER_ID,   CAT_34TS02_DEVICE_ID,  CAT_34TS02_MASK, 4,
 	"Catalyst CAT34TS02/CAT6095" },
+    { IDT_MANUFACTURER_ID,   IDT_TS3000B3_DEVICE_ID, IDT_TS3000B3_MASK, 4,
+	"Integrated Device Technology TS3000B3/TSE2002B3" },
     { 0, 0, 0, 2, "Unknown" }
 };
 
 static int
-sdtemp_lookup(uint16_t mfg, uint16_t dev, uint16_t rev)
+sdtemp_lookup(uint16_t mfg, uint16_t devrev)
 {
 	int i;
 
-	for (i = 0; sdtemp_dev_table[i].sdtemp_mfg_id; i++)
-		if (sdtemp_dev_table[i].sdtemp_mfg_id == mfg &&
-		    sdtemp_dev_table[i].sdtemp_dev_id == dev &&
-		    (sdtemp_dev_table[i].sdtemp_rev_id == 0xff ||
-		     sdtemp_dev_table[i].sdtemp_rev_id == rev))
+	for (i = 0; sdtemp_dev_table[i].sdtemp_mfg_id; i++) {
+		if (mfg != sdtemp_dev_table[i].sdtemp_mfg_id)
+			continue;
+		if ((devrev & sdtemp_dev_table[i].sdtemp_mask) ==
+		    sdtemp_dev_table[i].sdtemp_devrev)
 			break;
+	}
 
 	return i;
 }
@@ -155,7 +166,7 @@ sdtemp_match(device_t parent, cfdata_t cf, void *aux)
 	if (error)
 		return 0;
 
-	i = sdtemp_lookup(mfgid, devid >> 8, devid & 0xff);
+	i = sdtemp_lookup(mfgid, devid);
 	if (sdtemp_dev_table[i].sdtemp_mfg_id == 0) {
 		aprint_debug("sdtemp: No match for mfg 0x%04x dev 0x%02x "
 		    "rev 0x%02x at address 0x%02x\n", mfgid, devid >> 8,
@@ -171,7 +182,6 @@ sdtemp_attach(device_t parent, device_t self, void *aux)
 {
 	struct sdtemp_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = aux;
-	sysmon_envsys_lim_t limits;
 	uint16_t mfgid, devid;
 	int i, error;
 
@@ -186,7 +196,7 @@ sdtemp_attach(device_t parent, device_t self, void *aux)
 		aprint_error(": attach error %d\n", error);
 		return;
 	}
-	i = sdtemp_lookup(mfgid, devid >> 8, devid & 0xff);
+	i = sdtemp_lookup(mfgid, devid);
 	sc->sc_resolution =
 	    sdtemp_dev_table[i].sdtemp_resolution;
 
@@ -250,7 +260,6 @@ sdtemp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_sensor->units =  ENVSYS_STEMP;
 	sc->sc_sensor->state = ENVSYS_SINVALID;
 	sc->sc_sensor->flags |= ENVSYS_FMONLIMITS;
-	sc->sc_sensor->monitor = true;
 	(void)strlcpy(sc->sc_sensor->desc, device_xname(self),
 	    sizeof(sc->sc_sensor->desc));
 
@@ -272,27 +281,26 @@ sdtemp_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	/* Retrieve and display hardware monitor limits */
-	sdtemp_get_limits(sc->sc_sme, sc->sc_sensor, &limits);
-	aprint_normal_dev(self, "");
+	sdtemp_get_limits(sc->sc_sme, sc->sc_sensor, &sc->sc_deflims,
+	    &sc->sc_defprops);
+	aprint_normal_dev(self, "Hardware limits: ");
 	i = 0;
-	if (limits.sel_flags & PROP_WARNMIN) {
-		aprint_normal("low limit %dC", __UK2C(limits.sel_warnmin));
+	if (sc->sc_defprops & PROP_WARNMIN) {
+		aprint_normal("low %dC",
+		              __UK2C(sc->sc_deflims.sel_warnmin));
 		i++;
 	}
-	if (limits.sel_flags & PROP_WARNMAX) {
-		aprint_normal("%shigh limit %dC ", (i)?", ":"",
-			      __UK2C(limits.sel_warnmax));
+	if (sc->sc_defprops & PROP_WARNMAX) {
+		aprint_normal("%shigh %dC ", (i)?", ":"",
+			      __UK2C(sc->sc_deflims.sel_warnmax));
 		i++;
 	}
-	if (limits.sel_flags & PROP_CRITMAX) {
-		aprint_normal("%scritical limit %dC ", (i)?", ":"",
-			      __UK2C(limits.sel_critmax));
+	if (sc->sc_defprops & PROP_CRITMAX) {
+		aprint_normal("%scritical %dC ", (i)?", ":"",
+			      __UK2C(sc->sc_deflims.sel_critmax));
 		i++;
 	}
-	if (i == 0)
-		aprint_normal("no hardware limits set\n");
-	else
-		aprint_normal("\n");
+	aprint_normal("%s\n", (i)?"":"none set");
 
 	return;
 
@@ -302,51 +310,72 @@ bad2:
 	sysmon_envsys_destroy(sc->sc_sme);
 }
 
+static int
+sdtemp_detach(device_t self, int flags)
+{
+	struct sdtemp_softc *sc = device_private(self);
+
+	pmf_device_deregister(self);
+
+	if (sc->sc_sme)
+		sysmon_envsys_unregister(sc->sc_sme);
+	if (sc->sc_sensor)
+		kmem_free(sc->sc_sensor, sizeof(envsys_data_t));
+
+	return 0;
+}
+
 /* Retrieve current limits from device, and encode in uKelvins */
 static void
 sdtemp_get_limits(struct sysmon_envsys *sme, envsys_data_t *edata,
-		  sysmon_envsys_lim_t *limits)
+		  sysmon_envsys_lim_t *limits, uint32_t *props)
 {
 	struct sdtemp_softc *sc = sme->sme_cookie;
 	uint16_t lim;
 
-	limits->sel_flags = 0;
+	*props = 0;
 	iic_acquire_bus(sc->sc_tag, 0);
 	if (sdtemp_read_16(sc, SDTEMP_REG_LOWER_LIM, &lim) == 0 && lim != 0) {
 		limits->sel_warnmin = sdtemp_decode_temp(sc, lim);
-		limits->sel_flags |= PROP_WARNMIN;
+		*props |= PROP_WARNMIN;
 	}
 	if (sdtemp_read_16(sc, SDTEMP_REG_UPPER_LIM, &lim) == 0 && lim != 0) {
 		limits->sel_warnmax = sdtemp_decode_temp(sc, lim);
-		limits->sel_flags |= PROP_WARNMAX;
+		*props |= PROP_WARNMAX;
 	}
 	if (sdtemp_read_16(sc, SDTEMP_REG_CRIT_LIM, &lim) == 0 && lim != 0) {
 		limits->sel_critmax = sdtemp_decode_temp(sc, lim);
-		limits->sel_flags |= PROP_CRITMAX;
+		*props |= PROP_CRITMAX;
 	}
 	iic_release_bus(sc->sc_tag, 0);
+	if (*props != 0)
+		*props |= PROP_DRIVER_LIMITS;
 }
 
 /* Send current limit values to the device */
 static void
 sdtemp_set_limits(struct sysmon_envsys *sme, envsys_data_t *edata,
-		  sysmon_envsys_lim_t *limits)
+		  sysmon_envsys_lim_t *limits, uint32_t *props)
 {
 	uint16_t val;
 	struct sdtemp_softc *sc = sme->sme_cookie;
 
+	if (limits == NULL) {
+		limits = &sc->sc_deflims;
+		props  = &sc->sc_defprops;
+	}
 	iic_acquire_bus(sc->sc_tag, 0);
-	if (limits->sel_flags & PROP_WARNMIN) {
+	if (*props & PROP_WARNMIN) {
 		val = __UK2C(limits->sel_warnmin);
 		(void)sdtemp_write_16(sc, SDTEMP_REG_LOWER_LIM,
 					(val << 4) & SDTEMP_TEMP_MASK);
 	}
-	if (limits->sel_flags & PROP_WARNMAX) {
+	if (*props & PROP_WARNMAX) {
 		val = __UK2C(limits->sel_warnmax);
 		(void)sdtemp_write_16(sc, SDTEMP_REG_UPPER_LIM,
 					(val << 4) & SDTEMP_TEMP_MASK);
 	}
-	if (limits->sel_flags & PROP_CRITMAX) {
+	if (*props & PROP_CRITMAX) {
 		val = __UK2C(limits->sel_critmax);
 		(void)sdtemp_write_16(sc, SDTEMP_REG_CRIT_LIM,
 					(val << 4) & SDTEMP_TEMP_MASK);
@@ -358,12 +387,12 @@ sdtemp_set_limits(struct sysmon_envsys *sme, envsys_data_t *edata,
 	 * limits are set that we cannot handle, tell sysmon that
 	 * the driver will take care of monitoring the limits!
 	 */
-	if (limits->sel_flags & (PROP_CRITMIN | PROP_BATTCAP | PROP_BATTWARN))
-		limits->sel_flags &= ~PROP_DRIVER_LIMITS;
-	else if (limits->sel_flags & PROP_LIMITS)
-		limits->sel_flags |= PROP_DRIVER_LIMITS;
+	if (*props & (PROP_CRITMIN | PROP_BATTCAP | PROP_BATTWARN))
+		*props &= ~PROP_DRIVER_LIMITS;
+	else if (*props & PROP_LIMITS)
+		*props |= PROP_DRIVER_LIMITS;
 	else
-		limits->sel_flags &= ~PROP_DRIVER_LIMITS;
+		*props &= ~PROP_DRIVER_LIMITS;
 }
 
 #ifdef NOT_YET	/* All registers on these sensors are 16-bits */
@@ -461,11 +490,14 @@ sdtemp_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 	/* Now check for limits */
 	if ((edata->upropset & PROP_DRIVER_LIMITS) == 0)
 		edata->state = ENVSYS_SVALID;
-	else if (val & SDTEMP_ABOVE_CRIT)
+	else if ((val & SDTEMP_ABOVE_CRIT) &&
+		    (edata->upropset & PROP_CRITMAX))
 		edata->state = ENVSYS_SCRITOVER;
-	else if (val & SDTEMP_ABOVE_UPPER)
+	else if ((val & SDTEMP_ABOVE_UPPER) &&
+		    (edata->upropset & PROP_WARNMAX))
 		edata->state = ENVSYS_SWARNOVER;
-	else if (val & SDTEMP_BELOW_LOWER)
+	else if ((val & SDTEMP_BELOW_LOWER) &&
+		    (edata->upropset & PROP_WARNMIN))
 		edata->state = ENVSYS_SWARNUNDER;
 	else
 		edata->state = ENVSYS_SVALID;
@@ -480,7 +512,7 @@ sdtemp_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
  */
 
 static bool
-sdtemp_pmf_suspend(device_t dev PMF_FN_ARGS)
+sdtemp_pmf_suspend(device_t dev, const pmf_qual_t *qual)
 {
 	struct sdtemp_softc *sc = device_private(dev);
 	int error;
@@ -497,7 +529,7 @@ sdtemp_pmf_suspend(device_t dev PMF_FN_ARGS)
 }
 
 static bool
-sdtemp_pmf_resume(device_t dev PMF_FN_ARGS)
+sdtemp_pmf_resume(device_t dev, const pmf_qual_t *qual)
 {
 	struct sdtemp_softc *sc = device_private(dev);
 	int error;
@@ -511,4 +543,33 @@ sdtemp_pmf_resume(device_t dev PMF_FN_ARGS)
 	}
 	iic_release_bus(sc->sc_tag, 0);
 	return (error == 0);
+}
+
+MODULE(MODULE_CLASS_DRIVER, sdtemp, "iic");
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+sdtemp_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error = 0;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_sdtemp,
+		    cfattach_ioconf_sdtemp, cfdata_ioconf_sdtemp);
+#endif
+		return error;
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		error = config_fini_component(cfdriver_ioconf_sdtemp,
+		    cfattach_ioconf_sdtemp, cfdata_ioconf_sdtemp);
+#endif
+		return error;
+	default:
+		return ENOTTY;
+	}
 }

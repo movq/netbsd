@@ -1,4 +1,4 @@
-/*	$NetBSD: cdf_time.c,v 1.2 2009/05/08 17:28:01 christos Exp $	*/
+/*	$NetBSD: cdf_time.c,v 1.3.6.1 2012/03/07 23:18:28 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 Christos Zoulas
@@ -30,9 +30,9 @@
 
 #ifndef lint
 #if 0
-FILE_RCSID("@(#)$File: cdf_time.c,v 1.6 2009/03/10 11:44:29 christos Exp $")
+FILE_RCSID("@(#)$File: cdf_time.c,v 1.11 2011/12/13 13:48:41 christos Exp $")
 #else
-__RCSID("$NetBSD: cdf_time.c,v 1.2 2009/05/08 17:28:01 christos Exp $");
+__RCSID("$NetBSD: cdf_time.c,v 1.3.6.1 2012/03/07 23:18:28 riz Exp $");
 #endif
 #endif
 
@@ -127,7 +127,7 @@ cdf_timestamp_to_timespec(struct timespec *ts, cdf_timestamp_t t)
 	tm.tm_year = (int)(CDF_BASE_YEAR + (t / 365));
 
 	rdays = cdf_getdays(tm.tm_year);
-	t -= rdays;
+	t -= rdays - 1;
 	tm.tm_mday = cdf_getday(tm.tm_year, (int)t);
 	tm.tm_mon = cdf_getmonth(tm.tm_year, (int)t);
 	tm.tm_wday = 0;
@@ -171,6 +171,18 @@ cdf_timespec_to_timestamp(cdf_timestamp_t *t, const struct timespec *ts)
 	return 0;
 }
 
+char *
+cdf_ctime(const time_t *sec)
+{
+	static char ctbuf[26];
+	char *ptr = ctime(sec);
+	if (ptr != NULL)
+		return ptr;
+	(void)snprintf(ctbuf, sizeof(ctbuf), "*Bad* 0x%16.16llx\n",
+	    (long long)*sec);
+	return ctbuf;
+}
+
 
 #ifdef TEST
 int
@@ -182,7 +194,7 @@ main(int argc, char *argv[])
 	char *p, *q;
 
 	cdf_timestamp_to_timespec(&ts, tst);
-	p = ctime(&ts.tv_sec);
+	p = cdf_ctime(&ts.tv_sec);
 	if ((q = strchr(p, '\n')) != NULL)
 		*q = '\0';
 	if (strcmp(ref, p) != 0)

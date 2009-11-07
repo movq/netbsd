@@ -1,4 +1,4 @@
-/*	$NetBSD: t_modctl.c,v 1.3 2009/01/04 17:56:57 jmmv Exp $	*/
+/*	$NetBSD: t_modctl.c,v 1.5 2010/11/03 16:10:23 christos Exp $	*/
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: t_modctl.c,v 1.3 2009/01/04 17:56:57 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: t_modctl.c,v 1.5 2010/11/03 16:10:23 christos Exp $");
 
 #include <sys/module.h>
 #include <sys/sysctl.h>
@@ -202,7 +202,8 @@ k_helper_is_present(enum presence_check how)
 		break;
 
 	default:
-		assert(false);
+		found = false;
+		assert(found);
 	}
 
 	return found;
@@ -283,7 +284,7 @@ unload(const char *name, bool fatal)
  * process only.
  */
 static
-int
+void
 unload_cleanup(const char *name)
 {
 
@@ -397,6 +398,46 @@ ATF_TC_CLEANUP(cmd_load_props, tc)
 	unload_cleanup("k_helper");
 }
 
+ATF_TC_WITH_CLEANUP(cmd_load_recurse);
+ATF_TC_HEAD(cmd_load_recurse, tc)
+{
+	atf_tc_set_md_var(tc, "descr", "Tests for the MODCTL_LOAD command, "
+	    "with recursive module_load()");
+	atf_tc_set_md_var(tc, "require.user", "root");
+}
+ATF_TC_BODY(cmd_load_recurse, tc)
+{
+	prop_dictionary_t props;
+	char filename[MAXPATHLEN];
+
+	require_modular();
+
+	printf("Loading module with request to load another module\n");
+	props = prop_dictionary_create();
+	snprintf(filename, sizeof(filename), "%s/k_helper2/k_helper2.kmod",
+	    atf_tc_get_config_var(tc, "srcdir"));
+	prop_dictionary_set(props, "prop_recurse",
+	    prop_string_create_cstring(filename));
+	load(props, true, "%s/k_helper/k_helper.kmod",
+	    atf_tc_get_config_var(tc, "srcdir"));
+	{
+		int ok;
+		ATF_CHECK(get_sysctl("vendor.k_helper.prop_int_load",
+		    &ok, sizeof(ok)));
+		ATF_CHECK(ok == 0);
+		ATF_CHECK(get_sysctl("vendor.k_helper2.present",
+		    &ok, sizeof(ok)));
+		ATF_CHECK(ok);
+	}
+	unload("k_helper", true);
+	unload("k_helper2", true);
+}
+ATF_TC_CLEANUP(cmd_load_recurse, tc)
+{
+	unload_cleanup("k_helper");
+	unload_cleanup("k_helper2");
+}
+
 ATF_TC_WITH_CLEANUP(cmd_stat);
 ATF_TC_HEAD(cmd_stat, tc)
 {
@@ -467,6 +508,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, cmd_load);
 	ATF_TP_ADD_TC(tp, cmd_load_props);
 	ATF_TP_ADD_TC(tp, cmd_stat);
+	ATF_TP_ADD_TC(tp, cmd_load_recurse);
 	ATF_TP_ADD_TC(tp, cmd_unload);
 
 	return atf_no_error();

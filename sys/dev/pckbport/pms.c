@@ -1,4 +1,4 @@
-/* $NetBSD: pms.c,v 1.28 2009/03/08 15:06:56 ad Exp $ */
+/* $NetBSD: pms.c,v 1.35 2011/09/09 14:29:47 jakllsch Exp $ */
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.28 2009/03/08 15:06:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.35 2011/09/09 14:29:47 jakllsch Exp $");
 
 #include "opt_pms.h"
 
@@ -61,11 +61,11 @@ int pmsdebug = 1;
 #define DPRINTF(x)
 #endif
 
-const enum pms_type tries[] = {
+static const enum pms_type tries[] = {
 	PMS_SCROLL5, PMS_SCROLL3, PMS_STANDARD, PMS_UNKNOWN
 };
 
-const struct pms_protocol pms_protocols[] = {
+static const struct pms_protocol pms_protocols[] = {
 	{ { 0, 0, 0 }, 0, "unknown protocol" },
 	{ { 0, 0, 0 }, 0, "no scroll wheel (3 buttons)" },
 	{ { 200, 100, 80 }, 3, "scroll wheel (3 buttons)" },
@@ -75,9 +75,9 @@ const struct pms_protocol pms_protocols[] = {
 };
 
 
-int pmsprobe(device_t, cfdata_t, void *);
-void pmsattach(device_t, device_t, void *);
-void pmsinput(void *, int);
+static int pmsprobe(device_t, cfdata_t, void *);
+static void pmsattach(device_t, device_t, void *);
+static void pmsinput(void *, int);
 
 CFATTACH_DECL_NEW(pms, sizeof(struct pms_softc),
     pmsprobe, pmsattach, NULL, NULL);
@@ -86,14 +86,14 @@ static int	pms_protocol(pckbport_tag_t, pckbport_slot_t);
 static void	do_enable(struct pms_softc *);
 static void	do_disable(struct pms_softc *);
 static void	pms_reset_thread(void*);
-int	pms_enable(void *);
-int	pms_ioctl(void *, u_long, void *, int, struct lwp *);
-void	pms_disable(void *);
+static int	pms_enable(void *);
+static int	pms_ioctl(void *, u_long, void *, int, struct lwp *);
+static void	pms_disable(void *);
 
-static bool	pms_suspend(device_t PMF_FN_PROTO);
-static bool	pms_resume(device_t PMF_FN_PROTO);
+static bool	pms_suspend(device_t, const pmf_qual_t *);
+static bool	pms_resume(device_t, const pmf_qual_t *);
 
-const struct wsmouse_accessops pms_accessops = {
+static const struct wsmouse_accessops pms_accessops = {
 	pms_enable,
 	pms_ioctl,
 	pms_disable,
@@ -166,7 +166,7 @@ pmsprobe(device_t parent, cfdata_t match, void *aux)
 	return 10;
 }
 
-void
+static void
 pmsattach(device_t parent, device_t self, void *aux)
 {
 	struct pms_softc *sc = device_private(self);
@@ -224,17 +224,14 @@ pmsattach(device_t parent, device_t self, void *aux)
 
 	/* no interrupts until enabled */
 	cmd[0] = PMS_DEV_DISABLE;
-	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 0, 0, 0);
+	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 0, NULL, 0);
 	if (res)
 		aprint_error("pmsattach: disable error\n");
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 
 	kthread_create(PRI_NONE, 0, NULL, pms_reset_thread, sc,
-	    &sc->sc_event_thread, device_xname(sc->sc_dev));
+	    &sc->sc_event_thread, "%s", device_xname(sc->sc_dev));
 
-#ifndef PMS_DISABLE_POWERHOOK
-	sc->sc_suspended = 0;
-#endif
 	if (!pmf_device_register(self, pms_suspend, pms_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 }
@@ -311,7 +308,7 @@ do_disable(struct pms_softc *sc)
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 }
 
-int
+static int
 pms_enable(void *v)
 {
 	struct pms_softc *sc = v;
@@ -329,7 +326,7 @@ pms_enable(void *v)
 	return 0;
 }
 
-void
+static void
 pms_disable(void *v)
 {
 	struct pms_softc *sc = v;
@@ -343,7 +340,7 @@ pms_disable(void *v)
 }
 
 static bool
-pms_suspend(device_t dv PMF_FN_ARGS)
+pms_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pms_softc *sc = device_private(dv);
 
@@ -354,7 +351,7 @@ pms_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-pms_resume(device_t dv PMF_FN_ARGS)
+pms_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pms_softc *sc = device_private(dv);
 
@@ -383,7 +380,7 @@ pms_resume(device_t dv PMF_FN_ARGS)
 	return true;
 }
 
-int
+static int
 pms_ioctl(void *v, u_long cmd, void *data, int flag,
     struct lwp *l)
 {
@@ -492,7 +489,7 @@ pms_reset_thread(void *arg)
 #define PMS_4BUTMASK 0x10
 #define PMS_5BUTMASK 0x20
 
-void
+static void
 pmsinput(void *vsc, int data)
 {
 	struct pms_softc *sc = vsc;
@@ -501,7 +498,7 @@ pmsinput(void *vsc, int data)
 	int newbuttons = 0;
 
 	if (!sc->sc_enabled) {
-		/* Interrupts are not expected.	 Discard the byte. */
+		/* Interrupts are not expected. Discard the byte. */
 		return;
 	}
 
@@ -588,9 +585,9 @@ pmsinput(void *vsc, int data)
 			dz = sc->packet[3] & 0xf;
 			if (dz >= 8)
 				dz -= 16;
-                	if (sc->packet[3] & PMS_4BUTMASK)
+			if (sc->packet[3] & PMS_4BUTMASK)
 				newbuttons |= 0x8;
-                	if (sc->packet[3] & PMS_5BUTMASK)
+			if (sc->packet[3] & PMS_5BUTMASK)
 				newbuttons |= 0x10;
 		} else {
 			DPRINTF(("pmsinput: why am I looking at this byte?\n"));
@@ -655,4 +652,29 @@ pmsinput(void *vsc, int data)
 		wakeup(&sc->sc_enabled);
 		return;
 	}
+}
+
+int
+pms_sliced_command(pckbport_tag_t tag, pckbport_slot_t slot, u_char scmd)
+{
+	u_char cmd[2];
+	int i, err, ret = 0;
+
+	cmd[0] = PMS_SET_SCALE11;
+	ret = pckbport_poll_cmd(tag, slot, cmd, 1, 0, NULL, 0);
+
+	/*
+	 * Need to send 4 Set Resolution commands, with the argument
+	 * encoded in the bottom most 2 bits.
+	 */
+	for (i = 6; i >= 0; i -= 2) {
+		cmd[0] = PMS_SET_RES;
+		cmd[1] = (scmd >> i) & 3;
+		err = pckbport_poll_cmd(tag, slot, cmd, 2, 0, NULL, 0);
+		if (ret == 0 && err != 0) {
+			ret = err;
+		}
+	}
+
+	return ret;
 }

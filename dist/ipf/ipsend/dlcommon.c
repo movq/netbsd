@@ -1,4 +1,4 @@
-/*	$NetBSD: dlcommon.c,v 1.2 2004/03/28 09:00:55 martti Exp $	*/
+/*	$NetBSD: dlcommon.c,v 1.5 2012/02/15 17:55:05 riz Exp $	*/
 
 /*
  * Common (shared) DLPI test routines.
@@ -1140,7 +1140,7 @@ char	*addr;
 		n++;
 		p = NULL;
 	}
-	
+
 	return (n);
 }
 

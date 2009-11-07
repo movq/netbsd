@@ -39,7 +39,7 @@
 #include <sys/malloc.h>
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
@@ -180,8 +180,6 @@ opcic_attach(struct device *parent, struct device *self, void *aux)
 		paa.paa_busname = "pcmcia";
 		paa.pct = (pcmcia_chipset_tag_t)&sa11x0_pcmcia_functions;
 		paa.pch = (pcmcia_chipset_handle_t)&sc->sc_socket[i].ss;
-		paa.iobase = 0;
-		paa.iosize = 0x4000000;
 
 		sc->sc_socket[i].ss.pcmcia =
 		    config_found_ia(sc->sc_pc.sc_dev,
@@ -242,7 +240,7 @@ opcic_card_detect(void *arg, int val)
 	}
 	splx(s);
 
-	DPRINTF(("%s: card %d %s\n", sc->sc_pc.sc_dev.dv_xname, sock_no,
+	DPRINTF(("%s: card %d %s\n", device_xname(sc->sc_pc.sc_dev), sock_no,
 	    HAVE_CARD(val) ? "inserted" : "removed"));
 
 	sapcic_intr(arg);
@@ -286,7 +284,7 @@ opcic_write(struct sapcic_socket *__so, int which, int arg)
 	struct opio_softc *psc = 
 	     device_private(device_parent(sc->sc_pc.sc_dev));
 	struct obio_softc *bsc = 
-	     device_private(device_parent(&psc->sc_dev));
+	     device_private(device_parent(psc->sc_dev));
 
 	switch (which) {
 	case SAPCIC_CONTROL_RESET:
@@ -354,7 +352,7 @@ opcic_intr_establish(struct sapcic_socket *so, int level,
 	struct opio_softc *psc = 
 	    device_private(device_parent(sc->sc_pc.sc_dev));
 	struct obio_softc *bsc = 
-	    device_private(device_parent(&psc->sc_dev));
+	    device_private(device_parent(psc->sc_dev));
 	int irq;
 
 	DPRINTF(("opcic_intr_establish %d\n", so->socket));
@@ -371,7 +369,7 @@ opcic_intr_disestablish(struct sapcic_socket *so, void *ih)
 	struct opio_softc *psc = 
 	    device_private(device_parent(sc->sc_pc.sc_dev));
 	struct obio_softc *bsc = 
-	    (struct obio_softc *) device_parent(&psc->sc_dev);
+	    (struct obio_softc *) device_parent(psc->sc_dev);
 	int (* func)(void *) = ((struct obio_handler *)ih)->func;
 
 	int irq = so->socket ? PCMCIA_INT : CF_INT;

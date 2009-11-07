@@ -1,4 +1,4 @@
-/*	$NetBSD: smsc.c,v 1.9 2009/05/12 09:10:16 cegger Exp $ */
+/*	$NetBSD: smsc.c,v 1.11 2011/07/31 16:18:54 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -40,11 +40,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smsc.c,v 1.9 2009/05/12 09:10:16 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smsc.c,v 1.11 2011/07/31 16:18:54 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/module.h>
 #include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
@@ -212,6 +213,7 @@ smsc_attach(device_t parent, device_t self, void *aux)
 	INITSENSOR(7, "Fan3", SMSC_FAN4_LSB, ENVSYS_SFANRPM);
 
 	for (i = 0; i < SMSC_MAX_SENSORS; i++) {
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
 		if (sysmon_envsys_sensor_attach(sc->sc_sme,
 						&sc->sc_sensor[i])) {
 			sysmon_envsys_destroy(sc->sc_sme);
@@ -338,5 +340,34 @@ smsc_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 		rpm = (msb << 8) | lsb;
 		edata->value_cur = smsc_reg2rpm(rpm);
 		break;
+	}
+}
+
+MODULE(MODULE_CLASS_DRIVER, smsc, NULL);
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+smsc_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error = 0;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_smsc,
+		    cfattach_ioconf_smsc, cfdata_ioconf_smsc);
+#endif
+		return error;
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		error = config_fini_component(cfdriver_ioconf_smsc,
+		    cfattach_ioconf_smsc, cfdata_ioconf_smsc);
+#endif
+		return error;
+	default:
+		return ENOTTY;
 	}
 }

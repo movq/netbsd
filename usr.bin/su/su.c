@@ -1,4 +1,4 @@
-/*	$NetBSD: su.c,v 1.68 2008/07/21 14:19:26 lukem Exp $	*/
+/*	$NetBSD: su.c,v 1.69.4.1 2012/05/07 15:59:37 riz Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988\
 #if 0
 static char sccsid[] = "@(#)su.c	8.3 (Berkeley) 4/2/94";*/
 #else
-__RCSID("$NetBSD: su.c,v 1.68 2008/07/21 14:19:26 lukem Exp $");
+__RCSID("$NetBSD: su.c,v 1.69.4.1 2012/05/07 15:59:37 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -399,7 +399,7 @@ main(int argc, char **argv)
 
 #ifdef BSD4_4
 	if (pwd->pw_change || pwd->pw_expire)
-		(void)gettimeofday(&tp, (struct timezone *)NULL);
+		(void)gettimeofday(&tp, NULL);
 	if (pwd->pw_change) {
 		if (tp.tv_sec >= pwd->pw_change) {
 			(void)printf("%s -- %s's password has expired.\n",
@@ -462,7 +462,7 @@ kerberos5(char *username, const char *user, uid_t uid)
 		warnx("kerberos5: not in %s's ACL.", user);
 		goto fail;
 	}
-	ret = krb5_cc_gen_new(context, &krb5_mcc_ops, &ccache);
+	ret = krb5_cc_new_unique(context, krb5_mcc_ops.prefix, NULL, &ccache);
 	if (ret)
 		goto fail;
 	ret = krb5_verify_user_lrealm(context, princ, ccache, NULL, TRUE,
@@ -482,7 +482,7 @@ kerberos5(char *username, const char *user, uid_t uid)
 		}
 		goto fail;
 	}
-	ret = krb5_cc_gen_new(context, &krb5_fcc_ops, &ccache2);
+	ret = krb5_cc_new_unique(context, krb5_mcc_ops.prefix, NULL, &ccache2);
 	if (ret) {
 		krb5_cc_destroy(context, ccache);
 		goto fail;

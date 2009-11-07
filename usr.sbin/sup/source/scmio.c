@@ -1,4 +1,4 @@
-/*	$NetBSD: scmio.c,v 1.19 2009/10/18 15:23:54 christos Exp $	*/
+/*	$NetBSD: scmio.c,v 1.21 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -537,12 +537,12 @@ readmsg(int msg)
 	/* check for MSGGOAWAY in case he noticed problems first */
 	if (m != MSGGOAWAY)
 		return (scmerr(-1, "Received unexpected message %d", m));
-	(void) netcrypt((char *) NULL);
+	(void) netcrypt(NULL);
 	(void) readstring(&goawayreason);
 	(void) readmend();
 	if (goawayreason == NULL)
 		return (SCMEOF);
-	logerr("SCM GOAWAY %s", goawayreason);
+	logerr("SCM GOAWAY for %s %s", remotehost(), goawayreason);
 	return (SCMEOF);
 }
 

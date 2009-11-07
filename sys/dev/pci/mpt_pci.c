@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_pci.c,v 1.19 2009/05/12 08:23:01 cegger Exp $	*/
+/*	$NetBSD: mpt_pci.c,v 1.21 2012/01/30 19:41:22 drochner Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_pci.c,v 1.19 2009/05/12 08:23:01 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_pci.c,v 1.21 2012/01/30 19:41:22 drochner Exp $");
 
 #include <dev/ic/mpt.h>			/* pulls in all headers */
 
@@ -134,12 +134,8 @@ mpt_pci_attach(device_t parent, device_t self, void *aux)
 	bus_space_tag_t memt;
 	bus_space_handle_t memh;
 	int memh_valid;
-	char devinfo[200];
 
-	pci_devinfo(pa->pa_id, 0, 0, devinfo, sizeof (devinfo));
-
-	aprint_naive("\n");
-	aprint_normal(": %s\n", devinfo);
+	pci_aprint_devinfo(pa, NULL);
 
 	psc->sc_pc = pa->pa_pc;
 	psc->sc_tag = pa->pa_tag;
@@ -210,8 +206,8 @@ mpt_pci_attach(device_t parent, device_t self, void *aux)
 	if (psc->sc_ih == NULL) {
 		aprint_error_dev(&mpt->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal_dev(&mpt->sc_dev, "interrupting at %s\n",

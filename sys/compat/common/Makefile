@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.45 2009/01/19 19:39:41 christos Exp $
+#	$NetBSD: Makefile,v 1.48 2011/12/19 21:53:52 apb Exp $
 
 LIB=		compat
 NOPIC=		# defined
@@ -40,8 +40,9 @@ SRCS+=	kern_time_30.c vfs_syscalls_30.c uipc_syscalls_30.c
 SRCS+=	vfs_syscalls_40.c uipc_syscalls_40.c
 
 # Compatibility code for NetBSD 5.0
-SRCS+=	kern_time_50.c rtsock_50.c sysv_msg_50.c sysv_sem_50.c sysv_shm_50.c \
-	vfs_syscalls_50.c  uipc_syscalls_50.c sysv_ipc_50.c
+SRCS+=	kern_time_50.c kern_select_50.c rndpseudo_50.c rtsock_50.c \
+	sysv_ipc_50.c sysv_msg_50.c sysv_sem_50.c sysv_shm_50.c \
+	vfs_syscalls_50.c  uipc_syscalls_50.c
 
 # really, all machines where sizeof(int) != sizeof(long) (LP64)
 .if (${MACHINE_ARCH} != "alpha" && ${MACHINE_ARCH} != "sparc64" \
@@ -55,6 +56,16 @@ libinstall::
 .include <bsd.own.mk>
 .undef DESTDIR
 .include <bsd.lib.mk>
+
+lib${LIB}.o:: ${OBJS}
+	@echo building standard ${LIB} library
+	@rm -f lib${LIB}.o
+	@${LD} -r -o lib${LIB}.o `NM=${NM} ${LORDER} ${OBJS} | ${TSORT}`
+
+lib${LIB}.po:: ${POBJS}
+	@echo building profiled ${LIB} library
+	@rm -f lib${LIB}.po
+	@${LD} -r -o lib${LIB}.po `NM=${NM} ${LORDER} ${POBJS} | ${TSORT}`
 
 showsources: ${SRCS}
 	@echo ${.ALLSRC}

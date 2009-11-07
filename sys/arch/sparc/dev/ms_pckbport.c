@@ -1,4 +1,4 @@
-/*	$NetBSD: ms_pckbport.c,v 1.5 2009/01/17 14:35:06 he Exp $ */
+/*	$NetBSD: ms_pckbport.c,v 1.8 2011/09/08 15:36:42 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2002 Valeriy E. Ushakov
@@ -27,7 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms_pckbport.c,v 1.5 2009/01/17 14:35:06 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms_pckbport.c,v 1.8 2011/09/08 15:36:42 jakllsch Exp $");
 
 /*
  * Attach PS/2 mouse at pckbport aux port
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: ms_pckbport.c,v 1.5 2009/01/17 14:35:06 he Exp $");
 #include <sys/proc.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pckbport/pckbportvar.h>
@@ -152,7 +152,7 @@ ms_pckbport_iopen(struct device *self, int flags)
 	res = pckbport_enqueue_cmd(sc->sc_kbctag, sc->sc_kbcslot,
 				cmd, 1, 0, 1, NULL);
 	if (res) {
-		printf("pms_enable: command error\n");
+		printf("%s: command error\n", __func__);
 		return (res);
 	}
 
@@ -172,7 +172,7 @@ ms_pckbport_iclose(struct device *self, int flags)
 	res = pckbport_enqueue_cmd(sc->sc_kbctag, sc->sc_kbcslot,
 				cmd, 1, 0, 1, NULL);
 	if (res)
-		printf("pms_disable: command error\n");
+		printf("%s: command error\n", __func__);
 
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 

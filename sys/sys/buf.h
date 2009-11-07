@@ -1,4 +1,4 @@
-/*     $NetBSD: buf.h,v 1.113 2009/08/16 10:57:17 yamt Exp $ */
+/*     $NetBSD: buf.h,v 1.118 2011/11/21 04:36:05 christos Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000, 2007, 2008 The NetBSD Foundation, Inc.
@@ -95,7 +95,7 @@ extern kmutex_t buffer_lock;
  * b	thread of execution that holds BC_BUSY, does not correspond
  *	  directly to any particular LWP
  * c	bufcache_lock
- * l	b_objlock
+ * o	b_objlock
  *
  * For buffers associated with a vnode, b_objlock points to vp->v_interlock.
  * If not associated with a vnode, it points to the generic buffer_lock.
@@ -162,7 +162,6 @@ struct buf {
  */
 #define	BC_AGE		0x00000001	/* Move to age queue when I/O done. */
 #define	BC_BUSY		0x00000010	/* I/O in progress. */
-#define BC_SCANNED	0x00000020	/* Block already pushed during sync */
 #define	BC_INVAL	0x00002000	/* Does not contain valid info. */
 #define	BC_NOCACHE	0x00008000	/* Do not cache block after use. */
 #define	BC_WANTED	0x00800000	/* Process wants this buffer. */
@@ -188,7 +187,7 @@ struct buf {
 #define	B_DEVPRIVATE	0x02000000	/* Device driver private flag. */
 
 #define BUF_FLAGBITS \
-    "\20\1AGE\3ASYNC\4BAD\5BUSY\6SCANNED\10DELWRI" \
+    "\20\1AGE\3ASYNC\4BAD\5BUSY\10DELWRI" \
     "\12DONE\13COWDONE\15GATHERED\16INVAL\17LOCKED\20NOCACHE" \
     "\23PHYS\24RAW\25READ\32DEVPRIVATE\33VFLUSH"
 
@@ -225,7 +224,7 @@ do {									\
 #define B_METAONLY	0x04	/* Return indirect block buffer. */
 #define B_CONTIG	0x08	/* Allocate file contiguously. */
 
-/* Flags to bread(), breadn() and breada(). */
+/* Flags to bread() and breadn(). */
 #define B_MODIFY	0x01	/* Hint: caller might modify buffer */
 
 #ifdef _KERNEL
@@ -259,18 +258,14 @@ struct bqueue {
 };
 
 extern struct bqueue bufqueues[BQUEUES];
-extern struct simplelock bqueue_slock;
 
 __BEGIN_DECLS
 int	allocbuf(buf_t *, int, int);
 void	bawrite(buf_t *);
-void	bdirty(buf_t *);
 void	bdwrite(buf_t *);
 void	biodone(buf_t *);
 int	biowait(buf_t *);
 int	bread(struct vnode *, daddr_t, int, struct kauth_cred *, int, buf_t **);
-int	breada(struct vnode *, daddr_t, int, daddr_t, int, struct kauth_cred *,
-	       int, buf_t **);
 int	breadn(struct vnode *, daddr_t, int, daddr_t *, int *, int,
 	       struct kauth_cred *, int, buf_t **);
 void	brelsel(buf_t *, int);
@@ -295,7 +290,8 @@ u_long	buf_memcalc(void);
 int	buf_drain(int);
 int	buf_setvalimit(vsize_t);
 #if defined(DDB) || defined(DEBUGPRINT)
-void	vfs_buf_print(buf_t *, int, void (*)(const char *, ...));
+void	vfs_buf_print(buf_t *, int, void (*)(const char *, ...)
+    __printflike(1, 2));
 #endif
 buf_t	*getiobuf(struct vnode *, bool);
 void	putiobuf(buf_t *);

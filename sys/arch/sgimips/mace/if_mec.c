@@ -1,4 +1,4 @@
-/* $NetBSD: if_mec.c,v 1.39 2009/09/02 17:22:53 tsutsui Exp $ */
+/* $NetBSD: if_mec.c,v 1.48 2012/02/02 19:43:00 tls Exp $ */
 
 /*-
  * Copyright (c) 2004, 2008 Izumi Tsutsui.  All rights reserved.
@@ -61,11 +61,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.39 2009/09/02 17:22:53 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.48 2012/02/02 19:43:00 tls Exp $");
 
 #include "opt_ddb.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,9 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.39 2009/09/02 17:22:53 tsutsui Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -93,11 +89,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.39 2009/09/02 17:22:53 tsutsui Exp $");
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/machtype.h>
 
@@ -319,9 +313,7 @@ struct mec_softc {
 
 	int sc_rxptr;			/* next ready RX buffer */
 
-#if NRND > 0
-	rndsource_element_t sc_rnd_source; /* random source */
-#endif
+	krndsource_t sc_rnd_source; /* random source */
 #ifdef MEC_EVENT_COUNTERS
 	struct evcnt sc_ev_txpkts;	/* TX packets queued total */
 	struct evcnt sc_ev_txdpad;	/* TX packets padded in txdesc buf */
@@ -399,8 +391,6 @@ static int	mec_mii_readreg(device_t, int, int);
 static void	mec_mii_writereg(device_t, int, int, int);
 static int	mec_mii_wait(struct mec_softc *);
 static void	mec_statchg(device_t);
-
-static void	enaddr_aton(const char *, uint8_t *);
 
 static int	mec_init(struct ifnet * ifp);
 static void	mec_start(struct ifnet *);
@@ -514,7 +504,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 	callout_init(&sc->sc_tick_ch, 0);
 
 	/* get Ethernet address from ARCBIOS */
-	if ((macaddr = ARCBIOS->GetEnvironmentVariable("eaddr")) == NULL) {
+	if ((macaddr = arcbios_GetEnvironmentVariable("eaddr")) == NULL) {
 		aprint_error(": unable to get MAC address!\n");
 		goto fail_4;
 	}
@@ -528,7 +518,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 	if (strcmp(macaddr, "ff:ff:ff:ff:ff:ff") == 0) {
 		uint32_t ui = 0;
 		const char * netaddr =
-			ARCBIOS->GetEnvironmentVariable("netaddr");
+			arcbios_GetEnvironmentVariable("netaddr");
 
 		/*
 		 * Create a MAC address by abusing the "netaddr" env var
@@ -554,7 +544,7 @@ mec_attach(device_t parent, device_t self, void *aux)
 		memcpy(sc->sc_enaddr+3, ((uint8_t *)&ui)+1, 3);
 	}
 	if (!mac_is_fake)
-		enaddr_aton(macaddr, sc->sc_enaddr);
+		ether_aton_r(sc->sc_enaddr, sizeof(sc->sc_enaddr), macaddr);
 
 	/* set the Ethernet address */
 	address = 0;
@@ -629,10 +619,8 @@ mec_attach(device_t parent, device_t self, void *aux)
 	/* establish interrupt */
 	cpu_intr_establish(maa->maa_intr, maa->maa_intrmask, mec_intr, sc);
 
-#if NRND > 0
 	rnd_attach_source(&sc->sc_rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 
 #ifdef MEC_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_ev_txpkts , EVCNT_TYPE_MISC,
@@ -855,36 +843,6 @@ mec_statchg(device_t self)
 	}
 
 	bus_space_write_8(st, sh, MEC_MAC_CONTROL, control);
-}
-
-/*
- * XXX
- * maybe this function should be moved to common part
- * (sgimips/machdep.c or elsewhere) for all on-board network devices.
- */
-static void
-enaddr_aton(const char *str, uint8_t *eaddr)
-{
-	int i;
-	char c;
-
-	for (i = 0; i < ETHER_ADDR_LEN; i++) {
-		if (*str == ':')
-			str++;
-
-		c = *str++;
-		if (isdigit(c)) {
-			eaddr[i] = (c - '0');
-		} else if (isxdigit(c)) {
-			eaddr[i] = (toupper(c) + 10 - 'A');
-		}
-		c = *str++;
-		if (isdigit(c)) {
-			eaddr[i] = (eaddr[i] << 4) | (c - '0');
-		} else if (isxdigit(c)) {
-			eaddr[i] = (eaddr[i] << 4) | (toupper(c) + 10 - 'A');
-		}
-	}
 }
 
 static int
@@ -1329,13 +1287,10 @@ mec_start(struct ifnet *ifp)
 			    len - buflen, BUS_DMASYNC_PREWRITE);
 		}
 
-#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 		MEC_EVCNT_INCR(&sc->sc_ev_txpkts);
 
 		/*
@@ -1657,10 +1612,8 @@ mec_intr(void *arg)
 		mec_start(ifp);
 	}
 
-#if NRND > 0
 	if (handled)
 		rnd_add_uint32(&sc->sc_rnd_source, statreg);
-#endif
 
 	return handled;
 }
@@ -1714,7 +1667,7 @@ mec_rxintr(struct mec_softc *sc)
 		}
 
 		/*
-		 * If 802.1Q VLAN MTU is enabled, ignore the bad packet errror.
+		 * If 802.1Q VLAN MTU is enabled, ignore the bad packet error.
 		 */
 		if ((sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) != 0)
 			rxstat &= ~MEC_RXSTAT_BADPACKET;
@@ -1725,8 +1678,8 @@ mec_rxintr(struct mec_softc *sc)
 		     MEC_RXSTAT_INVALID   |
 		     MEC_RXSTAT_CRCERROR  |
 		     MEC_RXSTAT_VIOLATION)) {
-			printf("%s: %s: status = 0x%016llx\n",
-			    device_xname(sc->sc_dev), __func__, rxstat);
+			printf("%s: mec_rxintr: status = 0x%016"PRIx64"\n",
+			    device_xname(sc->sc_dev), rxstat);
 			goto dropit;
 		}
 
@@ -1779,14 +1732,11 @@ mec_rxintr(struct mec_softc *sc)
 
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass it up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -1934,7 +1884,7 @@ mec_txintr(struct mec_softc *sc, uint32_t txptr)
 		ifp->if_collisions += col;
 
 		if ((txstat & MEC_TXSTAT_SUCCESS) == 0) {
-			printf("%s: TX error: txstat = 0x%016llx\n",
+			printf("%s: TX error: txstat = 0x%016"PRIx64"\n",
 			    device_xname(sc->sc_dev), txstat);
 			ifp->if_oerrors++;
 		} else

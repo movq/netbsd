@@ -1,4 +1,4 @@
-/* $NetBSD: copy.c,v 1.2 2009/10/21 16:07:00 snj Exp $ */
+/* $NetBSD: copy.c,v 1.7 2012/01/14 17:42:52 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,14 +27,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: copy.c,v 1.2 2009/10/21 16:07:00 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: copy.c,v 1.7 2012/01/14 17:42:52 reinoud Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
+#include <machine/thunk.h>
+
+/* XXX until strnlen(3) has been added to the kernel, we *could* panic on it */
+#define strnlen(str, maxlen) min(strlen((str)), maxlen)
 
 int
 copyin(const void *uaddr, void *kaddr, size_t len)
 {
+//	thunk_printf("copyin uaddr %p, kaddr %p, len %d\n", uaddr, kaddr, (int) len);
 	memcpy(kaddr, uaddr, len);
 	return 0;
 }
@@ -42,6 +47,7 @@ copyin(const void *uaddr, void *kaddr, size_t len)
 int
 copyout(const void *kaddr, void *uaddr, size_t len)
 {
+//	thunk_printf("copyout kaddr %p, uaddr %p, len %d\n", kaddr, uaddr, (int) len);
 	memcpy(uaddr, kaddr, len);
 	return 0;
 }
@@ -49,27 +55,30 @@ copyout(const void *kaddr, void *uaddr, size_t len)
 int
 copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done)
 {
+	len = min(strnlen(uaddr, len), len) + 1;
 	strncpy(kaddr, uaddr, len);
 	if (done)
-		*done = min(strlen(uaddr), len);
+		*done = len;
 	return 0;
 }
 
 int
 copyoutstr(const void *kaddr, void *uaddr, size_t len, size_t *done)
 {
+	len = min(strnlen(kaddr, len), len) + 1;
 	strncpy(uaddr, kaddr, len);
 	if (done)
-		*done = min(strlen(kaddr), len);
+		*done = len;
 	return 0;
 }
 
 int
 copystr(const void *kfaddr, void *kdaddr, size_t len, size_t *done)
 {
+	len = min(strnlen(kfaddr, len), len) + 1;
 	strncpy(kdaddr, kfaddr, len);
 	if (done)
-		*done = min(strlen(kfaddr), len);
+		*done = len;
 	return 0;
 }
 
@@ -77,6 +86,10 @@ int
 kcopy(const void *src, void *dst, size_t len)
 {
 	memcpy(dst, src, len);
+#ifdef DEBUG
+	if (memcmp(dst, src, len) != 0)
+		panic("kcopy not finished correctly\n");
+#endif
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.85 2009/09/17 16:28:12 tsutsui Exp $ */
+/*	$NetBSD: sbus.c,v 1.93 2012/01/30 04:25:15 mrg Exp $ */
 
 /*
  * Copyright (c) 1999-2002 Eduardo Horvath
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.85 2009/09/17 16:28:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.93 2012/01/30 04:25:15 mrg Exp $");
 
 #include "opt_ddb.h"
 
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.85 2009/09/17 16:28:12 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/reboot.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/openfirm.h>
 
 #include <sparc64/dev/iommureg.h>
@@ -79,7 +79,7 @@ static int _sbus_bus_map(
 		bus_addr_t,		/*offset*/
 		bus_size_t,		/*size*/
 		int,			/*flags*/
-		vaddr_t,			/* XXX unused -- compat w/sparc */
+		vaddr_t,		/* XXX unused -- compat w/sparc */
 		bus_space_handle_t *);
 static void *sbus_intr_establish(
 		bus_space_tag_t,
@@ -260,8 +260,9 @@ sbus_attach(device_t parent, device_t self, void *aux)
 	ih->ih_clr = NULL; /* &sc->sc_sysio->therm_clr_int; */
 	ih->ih_fun = sbus_overtemp;
 	ipl = 1;
-	ih->ih_pil = (1<<ipl);
+	ih->ih_pil = ipl;
 	ih->ih_number = INTVEC(*(ih->ih_map));
+	ih->ih_pending = 0;
 	intr_establish(ipl, true, ih);
 	*(ih->ih_map) |= INTMAP_V|(CPU_UPAID << INTMAP_TID_SHIFT);
 	
@@ -314,7 +315,7 @@ sbus_setup_attach_args(struct sbus_softc *sc, bus_space_tag_t bustag,
 	error = prom_getprop(node, "name", 1, &n, &sa->sa_name);
 	if (error != 0)
 		return (error);
-	sa->sa_name[n] = '\0';
+	KASSERT(sa->sa_name[n-1] == '\0');
 
 	sa->sa_bustag = bustag;
 	sa->sa_dmatag = dmatag;
@@ -578,7 +579,10 @@ sbus_intr_establish(bus_space_tag_t t, int pri, int level,
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
 	ih->ih_number = vec;
-	ih->ih_pil = (1<<ipl);
+	ih->ih_ivec = 0;
+	ih->ih_pil = ipl;
+	ih->ih_pending = 0;
+
 	intr_establish(ipl, level != IPL_VM, ih);
 	return (ih);
 }

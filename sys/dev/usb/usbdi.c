@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.c,v 1.125 2008/12/12 05:35:11 jmorse Exp $	*/
+/*	$NetBSD: usbdi.c,v 1.134 2011/11/27 03:25:00 jmcneill Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.c,v 1.28 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -32,9 +32,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.125 2008/12/12 05:35:11 jmorse Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.134 2011/11/27 03:25:00 jmcneill Exp $");
 
 #include "opt_compat_netbsd.h"
+#include "opt_usb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,8 +57,8 @@ __KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.125 2008/12/12 05:35:11 jmorse Exp $");
 #include <fs/unicode.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 extern int usbdebug;
 #else
 #define DPRINTF(x)
@@ -81,7 +82,7 @@ usbd_xfer_isread(usbd_xfer_handle xfer)
 			UE_DIR_IN);
 }
 
-#ifdef USB_DEBUG
+#if defined(USB_DEBUG) || defined(EHCI_DEBUG)
 void
 usbd_dump_iface(struct usbd_interface *iface)
 {
@@ -259,6 +260,9 @@ usbd_transfer(usbd_xfer_handle xfer)
 
 	DPRINTFN(5,("usbd_transfer: xfer=%p, flags=%#x, pipe=%p, running=%d\n",
 		    xfer, xfer->flags, pipe, pipe->running));
+
+	KASSERT(KERNEL_LOCKED_P());
+
 #ifdef USB_DEBUG
 	if (usbdebug > 5)
 		usbd_dump_queue(pipe);
@@ -373,7 +377,7 @@ usbd_alloc_xfer(usbd_device_handle dev)
 	if (xfer == NULL)
 		return (NULL);
 	xfer->device = dev;
-	usb_callout_init(xfer->timeout_handle);
+	callout_init(&xfer->timeout_handle, 0);
 	DPRINTFN(5,("usbd_alloc_xfer() = %p\n", xfer));
 	return (xfer);
 }
@@ -519,16 +523,19 @@ usbd_abort_pipe(usbd_pipe_handle pipe)
 {
 	usbd_status err;
 	int s;
+	usbd_xfer_handle intrxfer = pipe->intrxfer;
 
 #ifdef DIAGNOSTIC
 	if (pipe == NULL) {
-		printf("usbd_close_pipe: pipe==NULL\n");
+		printf("usbd_abort_pipe: pipe==NULL\n");
 		return (USBD_NORMAL_COMPLETION);
 	}
 #endif
 	s = splusb();
 	err = usbd_ar_pipe(pipe);
 	splx(s);
+	if (pipe->intrxfer != intrxfer)
+		usbd_free_xfer(intrxfer);
 	return (err);
 }
 
@@ -749,6 +756,9 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 
 	DPRINTFN(5, ("usb_transfer_complete: pipe=%p xfer=%p status=%d "
 		     "actlen=%d\n", pipe, xfer, xfer->status, xfer->actlen));
+
+	KASSERT(KERNEL_LOCKED_P());
+
 #ifdef DIAGNOSTIC
 	if (xfer->busy_free != XFER_ONQU) {
 		printf("usb_transfer_complete: xfer=%p not busy 0x%08x\n",
@@ -845,6 +855,9 @@ usb_insert_transfer(usbd_xfer_handle xfer)
 
 	DPRINTFN(5,("usb_insert_transfer: pipe=%p running=%d timeout=%d\n",
 		    pipe, pipe->running, xfer->timeout));
+
+	KASSERT(KERNEL_LOCKED_P());
+
 #ifdef DIAGNOSTIC
 	if (xfer->busy_free != XFER_BUSY) {
 		printf("usb_insert_transfer: xfer=%p not busy 0x%08x\n",
@@ -939,9 +952,9 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 	err = usbd_sync_transfer(xfer);
 #if defined(USB_DEBUG) || defined(DIAGNOSTIC)
 	if (xfer->actlen > xfer->length) {
-		DPRINTF(("usbd_do_request: overrun addr=%d type=0x%02x req=0x"
+		DPRINTF(("%s: overrun addr=%d type=0x%02x req=0x"
 			 "%02x val=%d index=%d rlen=%d length=%d actlen=%d\n",
-			 dev->address, xfer->request.bmRequestType,
+			 __func__, dev->address, xfer->request.bmRequestType,
 			 xfer->request.bRequest, UGETW(xfer->request.wValue),
 			 UGETW(xfer->request.wIndex),
 			 UGETW(xfer->request.wLength),
@@ -989,6 +1002,9 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 	}
 
  bad:
+	if (err) {
+		DPRINTF(("%s: returning err=%s\n", __func__, usbd_errstr(err)));
+	}
 	usbd_free_xfer(xfer);
 	return (err);
 }
@@ -1066,9 +1082,9 @@ usbd_set_polling(usbd_device_handle dev, int on)
 		dev->bus->use_polling++;
 	else
 		dev->bus->use_polling--;
-	/* When polling we need to make sure there is nothing pending to do. */
-	if (dev->bus->use_polling)
-		dev->bus->methods->soft_intr(dev->bus);
+
+	/* Kick the host controller when switching modes */
+	dev->bus->methods->soft_intr(dev->bus);
 }
 
 

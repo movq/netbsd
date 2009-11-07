@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd.h,v 1.1.1.1 2009/06/23 10:08:55 tron Exp $	*/
+/*	$NetBSD: smtpd.h,v 1.1.1.3 2011/03/02 19:32:34 tron Exp $	*/
 
 /*++
 /* NAME
@@ -62,11 +62,11 @@ typedef struct {
     char   *rfc_addr;			/* address for RFC 2821 */
     char   *protocol;			/* email protocol */
     char   *helo_name;			/* helo/ehlo parameter */
-    char   *ident;			/* message identifier */
+    char   *ident;			/* local message identifier */
     char   *domain;			/* rewrite context */
 } SMTPD_XFORWARD_ATTR;
 
-typedef struct SMTPD_STATE {
+typedef struct {
     int     flags;			/* see below */
     int     err;			/* cleanup server/queue file errors */
     VSTREAM *client;			/* SMTP client handle */
@@ -155,10 +155,8 @@ typedef struct SMTPD_STATE {
     /*
      * Pass-through proxy client.
      */
-    VSTREAM *proxy;			/* proxy handle */
-    VSTRING *proxy_buffer;		/* proxy query/reply buffer */
+    struct SMTPD_PROXY *proxy;
     char   *proxy_mail;			/* owned by mail_cmd() */
-    int     proxy_xforward_features;	/* XFORWARD proxy state */
 
     /*
      * XFORWARD server state.
@@ -169,9 +167,9 @@ typedef struct SMTPD_STATE {
      * TLS related state.
      */
 #ifdef USE_TLS
-    int     tls_use_tls;		/* can use TLS */
-    int     tls_enforce_tls;		/* must use TLS */
-    int     tls_auth_only;		/* use SASL over TLS only */
+#ifdef USE_TLSPROXY
+    VSTREAM *tlsproxy;			/* tlsproxy(8) temp. handle */
+#endif
     TLS_SESS_STATE *tls_context;	/* TLS session state */
 #endif
 
@@ -194,7 +192,7 @@ typedef struct SMTPD_STATE {
 #define SMTPD_STATE_XFORWARD_PROTO (1<<3)	/* protocol received */
 #define SMTPD_STATE_XFORWARD_HELO  (1<<4)	/* client helo received */
 #define SMTPD_STATE_XFORWARD_IDENT (1<<5)	/* message identifier */
-#define SMTPD_STATE_XFORWARD_DOMAIN (1<<6)	/* message identifier */
+#define SMTPD_STATE_XFORWARD_DOMAIN (1<<6)	/* address context */
 #define SMTPD_STATE_XFORWARD_PORT  (1<<7)	/* client port received */
 
 #define SMTPD_STATE_XFORWARD_CLIENT_MASK \
@@ -318,8 +316,11 @@ extern void smtpd_peer_reset(SMTPD_STATE *state);
   * Don't mix information from the current SMTP session with forwarded
   * information from an up-stream session.
   */
+#define HAVE_FORWARDED_CLIENT_ATTR(s) \
+	((s)->xforward.flags & SMTPD_STATE_XFORWARD_CLIENT_MASK)
+
 #define FORWARD_CLIENT_ATTR(s, a) \
-	(((s)->xforward.flags & SMTPD_STATE_XFORWARD_CLIENT_MASK) ? \
+	(HAVE_FORWARDED_CLIENT_ATTR(s) ? \
 	    (s)->xforward.a : (s)->a)
 
 #define FORWARD_ADDR(s)		FORWARD_CLIENT_ATTR((s), rfc_addr)
@@ -329,10 +330,19 @@ extern void smtpd_peer_reset(SMTPD_STATE *state);
 #define FORWARD_HELO(s)		FORWARD_CLIENT_ATTR((s), helo_name)
 #define FORWARD_PORT(s)		FORWARD_CLIENT_ATTR((s), port)
 
-#define FORWARD_IDENT(s) \
-	(((s)->xforward.flags & SMTPD_STATE_XFORWARD_IDENT) ? \
-	    (s)->queue_id : (s)->ident)
+ /*
+  * Mixing is not a problem with forwarded local message identifiers.
+  */
+#define HAVE_FORWARDED_IDENT(s) \
+	((s)->xforward.ident != 0)
 
+#define FORWARD_IDENT(s) \
+	(HAVE_FORWARDED_IDENT(s) ? \
+	    (s)->xforward.ident : (s)->queue_id)
+
+ /*
+  * Mixing is not a problem with forwarded address rewriting contexts.
+  */
 #define FORWARD_DOMAIN(s) \
 	(((s)->xforward.flags & SMTPD_STATE_XFORWARD_DOMAIN) ? \
 	    (s)->xforward.domain : (s)->rewrite_context)
@@ -351,6 +361,11 @@ extern int smtpd_input_transp_mask;
   * More Milter support.
   */
 extern MILTERS *smtpd_milters;
+
+ /*
+  * Message size multiplication factor for free space check.
+  */
+extern double smtpd_space_multf;
 
 /* LICENSE
 /* .ad

@@ -26,6 +26,7 @@
 #pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <sys/types.h>
+#include <sys/debug.h>
 #include <sys/stat.h>
 #include <sys/avl.h>
 #if defined(_KERNEL)
@@ -422,6 +423,7 @@ cacl_free(void *ptr, size_t size)
 #endif
 }
 
+#if !defined(_KERNEL)
 acl_t *
 acl_alloc(enum acl_type type)
 {
@@ -467,6 +469,7 @@ acl_free(acl_t *aclp)
 
 	cacl_free(aclp, sizeof (acl_t));
 }
+#endif
 
 static uint32_t
 access_mask_set(int haswriteperm, int hasreadperm, int isowner, int isallow)
@@ -941,9 +944,9 @@ acevals_init(acevals_t *vals, uid_t key)
 static void
 ace_list_init(ace_list_t *al, int dfacl_flag)
 {
-	acevals_init(&al->user_obj, NULL);
-	acevals_init(&al->group_obj, NULL);
-	acevals_init(&al->other_obj, NULL);
+	acevals_init(&al->user_obj, 0);
+	acevals_init(&al->group_obj, 0);
+	acevals_init(&al->other_obj, 0);
 	al->numusers = 0;
 	al->numgroups = 0;
 	al->acl_mask = 0;

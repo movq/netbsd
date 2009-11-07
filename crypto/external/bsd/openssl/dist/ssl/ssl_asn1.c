@@ -114,20 +114,27 @@ typedef struct ssl_session_asn1_st
 	ASN1_OCTET_STRING psk_identity_hint;
 	ASN1_OCTET_STRING psk_identity;
 #endif /* OPENSSL_NO_PSK */
+#ifndef OPENSSL_NO_SRP
+	ASN1_OCTET_STRING srp_username;
+#endif /* OPENSSL_NO_SRP */
 	} SSL_SESSION_ASN1;
 
 int i2d_SSL_SESSION(SSL_SESSION *in, unsigned char **pp)
 	{
 #define LSIZE2 (sizeof(long)*2)
 	int v1=0,v2=0,v3=0,v4=0,v5=0,v7=0,v8=0;
-	unsigned char buf[4],ibuf1[LSIZE2],ibuf2[LSIZE2], cbuf;
+	unsigned char buf[4],ibuf1[LSIZE2],ibuf2[LSIZE2];
 	unsigned char ibuf3[LSIZE2],ibuf4[LSIZE2],ibuf5[LSIZE2];
 #ifndef OPENSSL_NO_TLSEXT
 	int v6=0,v9=0,v10=0;
 	unsigned char ibuf6[LSIZE2];
 #endif
 #ifndef OPENSSL_NO_COMP
+	unsigned char cbuf;
 	int v11=0;
+#endif
+#ifndef OPENSSL_NO_SRP
+	int v12=0;
 #endif
 	long l;
 	SSL_SESSION_ASN1 a;
@@ -243,12 +250,6 @@ int i2d_SSL_SESSION(SSL_SESSION *in, unsigned char **pp)
                 a.tlsext_tick.length= in->tlsext_ticklen;
                 a.tlsext_tick.type=V_ASN1_OCTET_STRING;
                 a.tlsext_tick.data=(unsigned char *)in->tlsext_tick;
-		/* If we have a ticket set session ID to empty because
-		 * it will be bogus. If liftime hint is -1 treat as a special
-		 * case because the session is being used as a container
-		 */
-		if (in->tlsext_ticklen && (in->tlsext_tick_lifetime_hint != -1))
-			a.session_id.length=0;
                 }
 	if (in->tlsext_tick_lifetime_hint > 0)
 		{
@@ -272,6 +273,14 @@ int i2d_SSL_SESSION(SSL_SESSION *in, unsigned char **pp)
 		a.psk_identity.data=(unsigned char *)(in->psk_identity);
 		}
 #endif /* OPENSSL_NO_PSK */
+#ifndef OPENSSL_NO_SRP
+	if (in->srp_username)
+		{
+		a.srp_username.length=strlen(in->srp_username);
+		a.srp_username.type=V_ASN1_OCTET_STRING;
+		a.srp_username.data=(unsigned char *)(in->srp_username);
+		}
+#endif /* OPENSSL_NO_SRP */
 
 	M_ASN1_I2D_len(&(a.version),		i2d_ASN1_INTEGER);
 	M_ASN1_I2D_len(&(a.ssl_version),	i2d_ASN1_INTEGER);
@@ -312,6 +321,10 @@ int i2d_SSL_SESSION(SSL_SESSION *in, unsigned char **pp)
 	if (in->psk_identity)
         	M_ASN1_I2D_len_EXP_opt(&(a.psk_identity), i2d_ASN1_OCTET_STRING,8,v8);
 #endif /* OPENSSL_NO_PSK */
+#ifndef OPENSSL_NO_SRP
+	if (in->srp_username)
+        	M_ASN1_I2D_len_EXP_opt(&(a.srp_username), i2d_ASN1_OCTET_STRING,12,v12);
+#endif /* OPENSSL_NO_SRP */
 
 	M_ASN1_I2D_seq_total();
 
@@ -356,13 +369,17 @@ int i2d_SSL_SESSION(SSL_SESSION *in, unsigned char **pp)
 	if (in->compress_meth)
         	M_ASN1_I2D_put_EXP_opt(&(a.comp_id), i2d_ASN1_OCTET_STRING,11,v11);
 #endif
+#ifndef OPENSSL_NO_SRP
+	if (in->srp_username)
+		M_ASN1_I2D_put_EXP_opt(&(a.srp_username), i2d_ASN1_OCTET_STRING,12,v12);
+#endif /* OPENSSL_NO_SRP */
 	M_ASN1_I2D_finish();
 	}
 
 SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 			     long length)
 	{
-	int version,ssl_version=0,i;
+	int ssl_version=0,i;
 	long id;
 	ASN1_INTEGER ai,*aip;
 	ASN1_OCTET_STRING os,*osp;
@@ -376,7 +393,6 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 
 	ai.data=NULL; ai.length=0;
 	M_ASN1_D2I_get_x(ASN1_INTEGER,aip,d2i_ASN1_INTEGER);
-	version=(int)ASN1_INTEGER_get(aip);
 	if (ai.data != NULL) { OPENSSL_free(ai.data); ai.data=NULL; ai.length=0; }
 
 	/* we don't care about the version right now :-) */
@@ -399,7 +415,7 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 			((unsigned long)os.data[1]<< 8L)|
 			 (unsigned long)os.data[2];
 		}
-	else if ((ssl_version>>8) == SSL3_VERSION_MAJOR)
+	else if ((ssl_version>>8) >= SSL3_VERSION_MAJOR)
 		{
 		if (os.length != 2)
 			{
@@ -412,15 +428,15 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 		}
 	else
 		{
-		SSLerr(SSL_F_D2I_SSL_SESSION,SSL_R_UNKNOWN_SSL_VERSION);
-		return(NULL);
+		c.error=SSL_R_UNKNOWN_SSL_VERSION;
+		goto err;
 		}
 	
 	ret->cipher=NULL;
 	ret->cipher_id=id;
 
 	M_ASN1_D2I_get_x(ASN1_OCTET_STRING,osp,d2i_ASN1_OCTET_STRING);
-	if ((ssl_version>>8) == SSL3_VERSION_MAJOR)
+	if ((ssl_version>>8) >= SSL3_VERSION_MAJOR)
 		i=SSL3_MAX_SSL_SESSION_ID_LENGTH;
 	else /* if (ssl_version>>8 == SSL2_VERSION_MAJOR) */
 		i=SSL2_MAX_SSL_SESSION_ID_LENGTH;
@@ -504,8 +520,8 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 	    {
 	    if (os.length > SSL_MAX_SID_CTX_LENGTH)
 		{
-		ret->sid_ctx_length=os.length;
-		SSLerr(SSL_F_D2I_SSL_SESSION,SSL_R_BAD_LENGTH);
+		c.error=SSL_R_BAD_LENGTH;
+		goto err;
 		}
 	    else
 		{
@@ -555,6 +571,19 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 		}
 	else
 		ret->psk_identity_hint=NULL;
+
+	os.length=0;
+	os.data=NULL;
+	M_ASN1_D2I_get_EXP_opt(osp,d2i_ASN1_OCTET_STRING,8);
+	if (os.data)
+		{
+		ret->psk_identity = BUF_strndup((char *)os.data, os.length);
+		OPENSSL_free(os.data);
+		os.data = NULL;
+		os.length = 0;
+		}
+	else
+		ret->psk_identity=NULL;
 #endif /* OPENSSL_NO_PSK */
 
 #ifndef OPENSSL_NO_TLSEXT
@@ -578,19 +607,6 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 		ret->tlsext_ticklen = os.length;
 		os.data = NULL;
 		os.length = 0;
-#if 0
-		/* There are two ways to detect a resumed ticket sesion.
-		 * One is to set a random session ID and then the server
-		 * must return a match in ServerHello. This allows the normal
-		 * client session ID matching to work.
-		 */ 
-		if (ret->session_id_length == 0)
-			{
-			ret->session_id_length=SSL3_MAX_SSL_SESSION_ID_LENGTH;
-			RAND_pseudo_bytes(ret->session_id,
-						ret->session_id_length);
-			}
-#endif
 		}
 	else
 		ret->tlsext_tick=NULL;
@@ -606,6 +622,21 @@ SSL_SESSION *d2i_SSL_SESSION(SSL_SESSION **a, const unsigned char **pp,
 		os.data = NULL;
 		}
 #endif
+
+#ifndef OPENSSL_NO_SRP
+	os.length=0;
+	os.data=NULL;
+	M_ASN1_D2I_get_EXP_opt(osp,d2i_ASN1_OCTET_STRING,12);
+	if (os.data)
+		{
+		ret->srp_username = BUF_strndup((char *)os.data, os.length);
+		OPENSSL_free(os.data);
+		os.data = NULL;
+		os.length = 0;
+		}
+	else
+		ret->srp_username=NULL;
+#endif /* OPENSSL_NO_SRP */
 
 	M_ASN1_D2I_Finish(a,SSL_SESSION_free,SSL_F_D2I_SSL_SESSION);
 	}

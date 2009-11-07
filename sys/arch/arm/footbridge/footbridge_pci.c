@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_pci.c,v 1.18 2009/03/14 21:04:05 dsl Exp $	*/
+/*	$NetBSD: footbridge_pci.c,v 1.22 2012/02/12 16:34:07 matt Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_pci.c,v 1.18 2009/03/14 21:04:05 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_pci.c,v 1.22 2012/02/12 16:34:07 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: footbridge_pci.c,v 1.18 2009/03/14 21:04:05 dsl Exp 
 #include <sys/device.h>
 
 #define _ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pci/pcireg.h>
@@ -67,7 +67,7 @@ void		footbridge_pci_decompose_tag(void *, pcitag_t, int *,
 pcireg_t	footbridge_pci_conf_read(void *, pcitag_t, int);
 void		footbridge_pci_conf_write(void *, pcitag_t, int,
 		    pcireg_t);
-int		footbridge_pci_intr_map(struct pci_attach_args *,
+int		footbridge_pci_intr_map(const struct pci_attach_args *,
 		    pci_intr_handle_t *);
 const char	*footbridge_pci_intr_string(void *, pci_intr_handle_t);
 void		*footbridge_pci_intr_establish(void *, pci_intr_handle_t,
@@ -233,7 +233,8 @@ footbridge_pci_conf_write(void *pcv, pcitag_t tag, int reg, pcireg_t data)
 }
 
 int
-footbridge_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+footbridge_pci_intr_map(const struct pci_attach_args *pa,
+    pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin, line = pa->pa_intrline;
 	int intr = -1;
@@ -269,7 +270,7 @@ footbridge_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		return(1);
 		break;
 #ifdef cats
-	/* This is machine dependant and needs to be moved */
+	/* This is machine dependent and needs to be moved */
 	case PCI_INTERRUPT_PIN_A:
 		intr = IRQ_PCI;
 		break;
@@ -338,11 +339,12 @@ footbridge_pci_intr_string(void *pcv, pci_intr_handle_t ih)
 }
 
 void *
-footbridge_pci_intr_establish(pcv, ih, level, func, arg)
-	void *pcv;
-	pci_intr_handle_t ih;
-	int level, (*func)(void *);
-	void *arg;
+footbridge_pci_intr_establish(
+	void *pcv,
+	pci_intr_handle_t ih,
+	int level,
+	int (*func)(void *),
+	void *arg)
 {
 	void *intr;
 	int length;

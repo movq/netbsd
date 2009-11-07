@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $	*/
+/*	$NetBSD: cd.c,v 1.44 2011/08/31 16:24:54 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cd.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $");
+__RCSID("$NetBSD: cd.c,v 1.44 2011/08/31 16:24:54 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,6 +57,7 @@ __RCSID("$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $");
 #include "nodes.h"	/* for jobs.h */
 #include "jobs.h"
 #include "options.h"
+#include "builtins.h"
 #include "output.h"
 #include "memalloc.h"
 #include "error.h"
@@ -84,7 +85,8 @@ cdcmd(int argc, char **argv)
 	struct stat statb;
 	int print = cdprint;	/* set -cdprint to enable */
 
-	nextopt(nullstr);
+	while (nextopt("P") != '\0')
+		;
 
 	/*
 	 * Try (quite hard) to have 'curdir' defined, nothing has set
@@ -263,9 +265,10 @@ updatepwd(const char *dir)
 		curdir = NULL;
 		getpwd(1);
 		INTON;
-		if (curdir)
+		if (curdir) {
+			setvar("OLDPWD", prevdir, VEXPORT);
 			setvar("PWD", curdir, VEXPORT);
-		else
+		} else
 			unsetvar("PWD", 0);
 		return;
 	}
@@ -296,6 +299,7 @@ updatepwd(const char *dir)
 		ckfree(prevdir);
 	prevdir = curdir;
 	curdir = savestr(stackblock());
+	setvar("OLDPWD", prevdir, VEXPORT);
 	setvar("PWD", curdir, VEXPORT);
 	INTON;
 }
@@ -324,6 +328,7 @@ pwdcmd(int argc, char **argv)
 	else
 		find_curdir(0);
 
+	setvar("OLDPWD", prevdir, VEXPORT);
 	setvar("PWD", curdir, VEXPORT);
 	out1str(curdir);
 	out1c('\n');
@@ -419,12 +424,12 @@ find_curdir(int noerror)
 		INTOFF;
 		if (pipe(pip) < 0)
 			error("Pipe call failed");
-		jp = makejob((union node *)NULL, 1);
-		if (forkshell(jp, (union node *)NULL, FORK_NOJOB) == 0) {
+		jp = makejob(NULL, 1);
+		if (forkshell(jp, NULL, FORK_NOJOB) == 0) {
 			(void) close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1);
+				copyfd(pip[1], 1, 1);
 				close(pip[1]);
 			}
 			(void) execl("/bin/pwd", "pwd", (char *)0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211.c,v 1.49 2009/01/10 12:53:45 cegger Exp $	*/
+/*	$NetBSD: ieee80211.c,v 1.53 2010/04/05 07:22:24 joerg Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211.c,v 1.22 2005/08/10 16:22:29 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.49 2009/01/10 12:53:45 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.53 2010/04/05 07:22:24 joerg Exp $");
 #endif
 
 /*
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.49 2009/01/10 12:53:45 cegger Exp $"
  */
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h> 
@@ -92,8 +91,6 @@ SLIST_HEAD(ieee80211_list, ieee80211com);
 static struct ieee80211_list ieee80211_list =
 	SLIST_HEAD_INITIALIZER(ieee80211_list);
 static u_int8_t ieee80211_vapmap[32];		/* enough for 256 */
-
-static void ieee80211_setbasicrates(struct ieee80211com *);
 
 static void
 ieee80211_add_vap(struct ieee80211com *ic)
@@ -159,10 +156,8 @@ ieee80211_ifattach(struct ieee80211com *ic)
 #endif /* __NetBSD__ */
 
 	ether_ifattach(ifp, ic->ic_myaddr);
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11,
+	bpf_attach2(ifp, DLT_IEEE802_11,
 	    sizeof(struct ieee80211_frame_addr4), &ic->ic_rawbpf);
-#endif
 
 	ieee80211_crypto_attach(ic);
 
@@ -219,7 +214,6 @@ ieee80211_ifattach(struct ieee80211com *ic)
 	if (ic->ic_caps & IEEE80211_C_WME)
 		ic->ic_flags |= IEEE80211_F_WME;
 #endif
-	ieee80211_setbasicrates(ic);
 	(void) ieee80211_setmode(ic, ic->ic_curmode);
 
 	if (ic->ic_bintval == 0)
@@ -264,9 +258,7 @@ ieee80211_ifdetach(struct ieee80211com *ic)
 
 	IEEE80211_BEACON_LOCK_DESTROY(ic);
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	ether_ifdetach(ifp);
 }
 
@@ -357,7 +349,7 @@ ieee80211_media_init(struct ieee80211com *ic,
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ifmediareq imr;
 	int i, j, mode, rate, maxrate, mword, mopt, r;
-	struct ieee80211_rateset *rs;
+	const struct ieee80211_rateset *rs;
 	struct ieee80211_rateset allrates;
 
 	/*
@@ -812,41 +804,6 @@ const struct ieee80211_rateset ieee80211_std_rateset_11b =
 
 const struct ieee80211_rateset ieee80211_std_rateset_11g =
 	{ 12, { 2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108 } };
-
-/*
- * Mark the basic rates for the 11g rate table based on the
- * operating mode.  For real 11g we mark all the 11b rates
- * and 6, 12, and 24 OFDM.  For 11b compatibility we mark only
- * 11b rates.  There's also a pseudo 11a-mode used to mark only
- * the basic OFDM rates.
- */
-static void
-ieee80211_setbasicrates(struct ieee80211com *ic)
-{
-	static const struct ieee80211_rateset basic[] = {
-	    { 0, { } },                         /* IEEE80211_MODE_AUTO */
-	    { 3, { 12, 24, 48 } },              /* IEEE80211_MODE_11A */
-	    { 2, { 2, 4 } },                    /* IEEE80211_MODE_11B */
-	    { 4, { 2, 4, 11, 22 } },            /* IEEE80211_MODE_11G */
-	    { 0, { } },                         /* IEEE80211_MODE_TURBO */
-	};
-	enum ieee80211_phymode mode;
-	struct ieee80211_rateset *rs;
-	int i, j;
-
-	for (mode = 0; mode < IEEE80211_MODE_MAX; mode++) {
-		rs = &ic->ic_sup_rates[mode];
-		for (i = 0; i < rs->rs_nrates; i++) {
-			rs->rs_rates[i] &= IEEE80211_RATE_VAL;
-			for (j = 0; j < basic[mode].rs_nrates; j++) {
-				if (basic[mode].rs_rates[j] != rs->rs_rates[i])
-					continue; 
-				rs->rs_rates[i] |= IEEE80211_RATE_BASIC;
-				break;
-			}
-		}
-	}
-}
 
 /*
  * Set the current phy mode and recalculate the active channel

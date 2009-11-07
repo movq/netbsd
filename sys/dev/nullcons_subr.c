@@ -1,4 +1,4 @@
-/*	$NetBSD: nullcons_subr.c,v 1.9 2009/04/16 12:57:22 tsutsui Exp $	*/
+/*	$NetBSD: nullcons_subr.c,v 1.11 2011/04/24 16:26:59 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -27,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nullcons_subr.c,v 1.9 2009/04/16 12:57:22 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nullcons_subr.c,v 1.11 2011/04/24 16:26:59 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/ioctl.h>
@@ -161,7 +160,7 @@ nullcons_newdev(struct consdev *cn)
 	/*
 	 * Allocate tty (mostly to have sane ioctl()).
 	 */
-	nulltty = ttymalloc();
+	nulltty = tty_alloc();
 	nulltty->t_dev = makedev(cmajor, 0);
 	tty_attach(nulltty);
 	cn->cn_dev = nulltty->t_dev;

@@ -1,3 +1,4 @@
+.\" $NetBSD: accf_data.9,v 1.5 2010/04/11 21:32:10 wiz Exp $
 .\"
 .\" Copyright (c) 2000 Alfred Perlstein
 .\"
@@ -43,16 +44,18 @@ It prevents the application from receiving the connected descriptor via
 .Fn accept
 until data arrives on the connection.
 .Sh EXAMPLES
-If the accf_data accept filter is present in the kernel configuration,
+If the
+.Nm
+accept filter is present in the kernel configuration,
 this will enable the data accept filter
 on the socket
 .Fa sok .
 .Bd -literal -offset 0i
 	struct accept_filter_arg afa;
 
-	bzero(&afa, sizeof(afa));
+	bzero(\*[Am]afa, sizeof(afa));
 	strcpy(afa.af_name, "dataready");
-	setsockopt(sok, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa));
+	setsockopt(sok, SOL_SOCKET, SO_ACCEPTFILTER, \*[Am]afa, sizeof(afa));
 .Ed
 .Sh SEE ALSO
 .Xr setsockopt 2 ,
@@ -60,7 +63,8 @@ on the socket
 .Xr accf_http 9
 .Sh HISTORY
 The accept filter mechanism and the
-accf_data filter were introduced in
+.Nm
+filter were introduced in
 .Fx 4.0 .
 They were ported to
 .Nx

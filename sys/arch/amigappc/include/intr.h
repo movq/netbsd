@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.22 2009/07/21 09:49:16 phx Exp $	*/
+/*	$NetBSD: intr.h,v 1.26 2011/06/19 08:00:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -39,12 +39,21 @@
 #ifndef _AMIGAPPC_INTR_H_
 #define _AMIGAPPC_INTR_H_
 
+#ifdef _KERNEL
+#include <amiga/amiga/isr.h>
+#endif
 #include <powerpc/intr.h>
 
-#ifndef _LOCORE
-#include <machine/cpu.h>
-#include <sys/device.h>
-
-#endif
+/*
+ * Compatibility with m68k/include/psl.h for amiga/68k devices.
+ * Has to match with interrupt IPLs in amigappc_install_handlers().
+ */
+#define spl1()		splbio()
+#define spl2()		splbio()
+#define spl3()		spltty()
+#define spl4()		splaudio()
+#define spl5()		splserial()
+#define spl6()		splserial()
+#define spl7()		splhigh()
 
 #endif /* !_AMIGAPPC_INTR_H_ */

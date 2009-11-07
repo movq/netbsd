@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.engrave.c,v 1.9 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: hack.engrave.c,v 1.14 2011/08/07 06:03:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.engrave.c,v 1.9 2009/08/12 07:28:40 dholland Exp $");
+__RCSID("$NetBSD: hack.engrave.c,v 1.14 2011/08/07 06:03:45 dholland Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -105,7 +105,8 @@ sengr_at(const char *s, xchar x, xchar y)
 {
 	struct engr    *ep = engr_at(x, y);
 	char           *t;
-	int             n;
+	size_t n;
+
 	if (ep && ep->engr_time <= moves) {
 		t = ep->engr_txt;
 		/*
@@ -132,8 +133,10 @@ void
 wipe_engr_at(xchar x, xchar y, xchar cnt)
 {
 	struct engr    *ep = engr_at(x, y);
-	int             lth, pos;
+	int             pos;
 	char            ch;
+	size_t lth;
+
 	if (ep) {
 		if ((ep->engr_type != DUST) || Levitation) {
 			cnt = rn2(1 + 50 / (cnt + 1)) ? 0 : 1;
@@ -185,8 +188,8 @@ make_engr_at(int x, int y, const char *s)
 
 	if ((ep = engr_at(x, y)) != NULL)
 		del_engr(ep);
-	ep = (struct engr *)
-		alloc((unsigned) (sizeof(struct engr) + strlen(s) + 1));
+	ep = alloc(sizeof(*ep) + strlen(s) + 1);
+
 	ep->nxt_engr = head_engr;
 	head_engr = ep;
 	ep->engr_x = x;
@@ -230,7 +233,7 @@ doengrave(void)
 			if (uwep && uwep->cursed) {
 				/* Andreas Bormann */
 				pline("Since your weapon is welded to your hand,");
-				pline("you use the %s.", aobjnam(uwep, (char *) 0));
+				pline("you use the %s.", aobjnam(uwep, NULL));
 				otmp = uwep;
 			} else {
 				if (!otmp)
@@ -316,7 +319,7 @@ doengrave(void)
 	}
 	if (oep)
 		len += strlen(oep->engr_txt) + spct;
-	ep = (struct engr *) alloc((unsigned) (sizeof(struct engr) + len + 1));
+	ep = alloc(sizeof(*ep) + len + 1);
 	ep->nxt_engr = head_engr;
 	head_engr = ep;
 	ep->engr_x = u.ux;
@@ -364,11 +367,11 @@ rest_engravings(int fd)
 	unsigned        lth;
 	head_engr = 0;
 	while (1) {
-		mread(fd, (char *) &lth, sizeof(unsigned));
+		mread(fd, &lth, sizeof(unsigned));
 		if (lth == 0)
 			return;
-		ep = (struct engr *) alloc(sizeof(struct engr) + lth);
-		mread(fd, (char *) ep, sizeof(struct engr) + lth);
+		ep = alloc(sizeof(*ep) + lth);
+		mread(fd, ep, sizeof(*ep) + lth);
 		ep->nxt_engr = head_engr;
 		ep->engr_txt = (char *) (ep + 1);	/* Andreas Bormann */
 		head_engr = ep;
@@ -392,5 +395,5 @@ del_engr(struct engr *ep)
 		return;
 fnd:		;
 	}
-	free((char *) ep);
+	free(ep);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.84 2009/11/03 22:06:30 jakllsch Exp $	*/
+/*	$NetBSD: hme.c,v 1.87.2.1 2012/07/04 19:43:10 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,13 +34,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.84 2009/11/03 22:06:30 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.87.2.1 2012/07/04 19:43:10 riz Exp $");
 
 /* #define HMEDEBUG */
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,9 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.84 2009/11/03 22:06:30 jakllsch Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -73,10 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.84 2009/11/03 22:06:30 jakllsch Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -260,15 +254,8 @@ hme_config(struct hme_softc *sc)
 
 	hme_mifinit(sc);
 
-	/*
-	 * Some HME's have an MII connector, as well as RJ45.  Try attaching
-	 * the RJ45 (internal) PHY first, so that the MII PHY is always
-	 * instance 1.
-	 */
 	mii_attach(sc->sc_dev, mii, 0xffffffff,
-			HME_PHYAD_INTERNAL, MII_OFFSET_ANY, MIIF_FORCEANEG);
-	mii_attach(sc->sc_dev, mii, 0xffffffff,
-			HME_PHYAD_EXTERNAL, MII_OFFSET_ANY, MIIF_FORCEANEG);
+			MII_PHY_ANY, MII_OFFSET_ANY, MIIF_FORCEANEG);
 
 	child = LIST_FIRST(&mii->mii_phys);
 	if (child == NULL) {
@@ -327,10 +314,8 @@ hme_config(struct hme_softc *sc)
 		aprint_error_dev(sc->sc_dev,
 		    "couldn't establish power handler\n");
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_NET, 0);
-#endif
 
 	callout_init(&sc->sc_tick_ch, 0);
 }
@@ -893,14 +878,11 @@ hme_read(struct hme_softc *sc, int ix, uint32_t flags)
 
 	ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	/* Pass the packet up. */
 	(*ifp->if_input)(ifp, m);
@@ -927,14 +909,11 @@ hme_start(struct ifnet *ifp)
 		if (m == 0)
 			break;
 
-#if NBPFILTER > 0
 		/*
 		 * If BPF is listening on this interface, let it see the
 		 * packet before we commit it to the wire.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 #ifdef INET
 		/* collect bits for h/w csum, before hme_put frees the mbuf */
@@ -1171,9 +1150,7 @@ hme_intr(void *v)
 	if ((status & HME_SEB_STAT_RXTOHOST) != 0)
 		r |= hme_rint(sc);
 
-#if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, status);
-#endif
 
 	return (r);
 }

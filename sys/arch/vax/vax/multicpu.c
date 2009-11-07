@@ -1,4 +1,4 @@
-/*	$NetBSD: multicpu.c,v 1.26 2009/04/02 13:00:40 tsutsui Exp $	*/
+/*	$NetBSD: multicpu.c,v 1.32 2011/06/05 16:59:21 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -35,20 +35,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: multicpu.c,v 1.26 2009/04/02 13:00:40 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: multicpu.c,v 1.32 2011/06/05 16:59:21 matt Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
-#include <sys/queue.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/device.h>
+#include <sys/xcall.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
 #include <vax/vax/gencons.h>
 
 #include "ioconf.h"
@@ -58,12 +57,12 @@ const struct cpu_mp_dep *mp_dep_call;
 struct cpuq {
 	SIMPLEQ_ENTRY(cpuq) cq_q;
 	struct cpu_info *cq_ci;
-	struct device *cq_dev;
+	device_t cq_dev;
 };
 
 SIMPLEQ_HEAD(, cpuq) cpuq = SIMPLEQ_HEAD_INITIALIZER(cpuq);
 
-extern long avail_start, avail_end, proc0paddr;
+extern long avail_start, avail_end;
 struct cpu_info_qh cpus = SIMPLEQ_HEAD_INITIALIZER(cpus);
 
 void
@@ -196,9 +195,32 @@ cpu_handle_ipi(void)
 		case IPI_DDB:
 			Debugger();
 			break;
+		case IPI_XCALL:
+			xc_ipi_handler();
+			break;
 		default:
 			panic("cpu_handle_ipi: bad bit %x", bitno);
 		}
 	}
 	splx(s);
+}
+
+/*
+ * MD support for xcall(9) interface.
+ */
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+
+	KASSERT(kpreempt_disabled());
+	KASSERT(curcpu() != ci);
+
+	if (ci) {
+		/* Unicast: remote CPU. */
+		cpu_send_ipi(ci->ci_cpuid, IPI_XCALL);
+	} else {
+		/* Broadcast: all, but local CPU (caller will handle it). */
+		cpu_send_ipi(IPI_DEST_ALL, IPI_XCALL);
+	}
 }

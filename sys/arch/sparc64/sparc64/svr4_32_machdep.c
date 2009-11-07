@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_machdep.c,v 1.35 2008/11/12 12:36:06 ad Exp $	 */
+/*	$NetBSD: svr4_32_machdep.c,v 1.38 2011/03/04 22:25:29 joerg Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.35 2008/11/12 12:36:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.38 2011/03/04 22:25:29 joerg Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.35 2008/11/12 12:36:06 ad Exp 
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
@@ -73,13 +72,13 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_machdep.c,v 1.35 2008/11/12 12:36:06 ad Exp 
 static void svr4_32_getsiginfo(union svr4_32_siginfo *, int, u_long, void *);
 
 void
-svr4_32_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+svr4_32_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 	register struct trapframe64 *tf = l->l_md.md_tf;
 
 	netbsd32_setregs(l, epp, stack);
 	
-	/* This should be the exit function, not p->p_psstr. */
+	/* This should be the exit function, not p->p_psstrp. */
 	tf->tf_global[1] = (vaddr_t)0;
 }
 

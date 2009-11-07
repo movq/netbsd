@@ -1,4 +1,4 @@
-# $NetBSD: genassym.cf,v 1.16 2008/09/20 18:29:04 tsutsui Exp $
+# $NetBSD: genassym.cf,v 1.20 2011/06/07 00:48:30 matt Exp $
 
 #
 # Copyright (c) 1982, 1990, 1993
@@ -72,7 +72,6 @@ include <sys/proc.h>
 include <sys/sched.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
-include <sys/user.h>
 include <sys/syscall.h>
 
 include <machine/cpu.h>
@@ -81,7 +80,6 @@ include <machine/frame.h>
 include <machine/rpb.h>
 include <machine/vmparam.h>
 
-include <uvm/uvm.h>
 include <uvm/uvm_extern.h>
 
 # general constants 
@@ -141,7 +139,7 @@ define	ALPHA_PTE_KR		ALPHA_PTE_KR
 define	ALPHA_PTE_KW		ALPHA_PTE_KW
 
 # Important offsets into the lwp and proc structs & associated constants
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_STAT			offsetof(struct lwp, l_stat)
 define	L_CPU			offsetof(struct lwp, l_cpu)
 define	L_PROC			offsetof(struct lwp, l_proc)
@@ -160,12 +158,10 @@ define	VM_MAP_PMAP		offsetof(struct vmspace, vm_map.pmap)
 
 # Important offsets into the user struct & associated constants
 define	UPAGES			UPAGES
-define	U_PCB			offsetof(struct user, u_pcb)
-define	U_PCB_HWPCB		offsetof(struct user, u_pcb.pcb_hw)
-define	U_PCB_HWPCB_KSP		offsetof(struct user, u_pcb.pcb_hw.apcb_ksp)
-define	U_PCB_CONTEXT		offsetof(struct user, u_pcb.pcb_context[0])
-define	U_PCB_ONFAULT		offsetof(struct user, u_pcb.pcb_onfault)
-define	U_PCB_ACCESSADDR	offsetof(struct user, u_pcb.pcb_accessaddr)
+define	PCB_HWPCB_KSP		offsetof(struct pcb, pcb_hw.apcb_ksp)
+define	PCB_CONTEXT		offsetof(struct pcb, pcb_context[0])
+define	PCB_ONFAULT		offsetof(struct pcb, pcb_onfault)
+define	PCB_ACCESSADDR		offsetof(struct pcb, pcb_accessaddr)
 
 # Offsets into struct fpstate, for save, restore
 define	FPREG_FPR_REGS		offsetof(struct fpreg, fpr_regs[0])
@@ -194,7 +190,6 @@ define	SYS_exit		SYS_exit
 
 # CPU info
 define	CPU_INFO_CURLWP		offsetof(struct cpu_info, ci_curlwp)
-define	CPU_INFO_FPCURLWP	offsetof(struct cpu_info, ci_fpcurlwp)
 define	CPU_INFO_CURPCB		offsetof(struct cpu_info, ci_curpcb)
 define	CPU_INFO_IDLE_LWP	offsetof(struct cpu_info, ci_data.cpu_idlelwp)
 define	CPU_INFO_SIZEOF		sizeof(struct cpu_info)

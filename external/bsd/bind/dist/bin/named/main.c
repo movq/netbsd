@@ -1,7 +1,7 @@
-/*	$NetBSD: main.c,v 1.4 2009/10/25 00:14:31 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.8.4.1 2012/06/05 21:15:21 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: main.c,v 1.175 2009/10/05 17:30:49 fdupont Exp */
+/* Id */
 
 /*! \file */
 
@@ -53,6 +53,8 @@
 
 #include <dst/result.h>
 
+#include <dlz/dlz_dlopen_driver.h>
+
 /*
  * Defining NS_MAIN provides storage declarations (rather than extern)
  * for variables in named/globals.h.
@@ -72,15 +74,21 @@
 #include <named/ns_smf_globals.h>
 #endif
 
+#ifdef OPENSSL
+#include <openssl/opensslv.h>
+#endif
+#ifdef HAVE_LIBXML2
+#include <libxml/xmlversion.h>
+#endif
 /*
  * Include header files for database drivers here.
  */
 /* #include "xxdb.h" */
 
+#ifdef CONTRIB_DLZ
 /*
- * Include DLZ drivers if appropriate.
+ * Include contributed DLZ drivers if appropriate.
  */
-#ifdef DLZ
 #include <dlz/dlz_drivers.h>
 #endif
 
@@ -412,7 +420,7 @@ parse_command_line(int argc, char *argv[]) {
 	isc_commandline_errprint = ISC_FALSE;
 	while ((ch = isc_commandline_parse(argc, argv,
 					   "46c:C:d:E:fFgi:lm:n:N:p:P:"
-					   "sS:t:T:u:vVx:")) != -1) {
+					   "sS:t:T:U:u:vVx:")) != -1) {
 		switch (ch) {
 		case '4':
 			if (disable4)
@@ -502,13 +510,17 @@ parse_command_line(int argc, char *argv[]) {
 			/* XXXJAB should we make a copy? */
 			ns_g_chrootdir = isc_commandline_argument;
 			break;
-		case 'T':
+		case 'T':	/* NOT DOCUMENTED */
 			/*
 			 * clienttest: make clients single shot with their
 			 * 	       own memory context.
 			 */
 			if (!strcmp(isc_commandline_argument, "clienttest"))
 				ns_g_clienttest = ISC_TRUE;
+			else if (!strcmp(isc_commandline_argument, "nosoa"))
+				ns_g_nosoa = ISC_TRUE;
+			else if (!strcmp(isc_commandline_argument, "noaa"))
+				ns_g_noaa = ISC_TRUE;
 			else if (!strcmp(isc_commandline_argument, "maxudp512"))
 				maxudp = 512;
 			else if (!strcmp(isc_commandline_argument, "maxudp1460"))
@@ -516,6 +528,11 @@ parse_command_line(int argc, char *argv[]) {
 			else
 				fprintf(stderr, "unknown -T flag '%s\n",
 					isc_commandline_argument);
+			break;
+		case 'U':
+			ns_g_udpdisp = parse_int(isc_commandline_argument,
+						 "number of UDP listeners "
+						 "per interface");
 			break;
 		case 'u':
 			ns_g_username = isc_commandline_argument;
@@ -526,6 +543,14 @@ parse_command_line(int argc, char *argv[]) {
 		case 'V':
 			printf("BIND %s built with %s\n", ns_g_version,
 				ns_g_configargs);
+#ifdef OPENSSL
+			printf("using OpenSSL version: %s\n",
+			       OPENSSL_VERSION_TEXT);
+#endif
+#ifdef HAVE_LIBXML2
+			printf("using libxml2 version: %s\n",
+			       LIBXML_DOTTED_VERSION);
+#endif
 			exit(0);
 		case 'F':
 			/* Reserved for FIPS mode */
@@ -544,6 +569,7 @@ parse_command_line(int argc, char *argv[]) {
 
 	argc -= isc_commandline_index;
 	argv += isc_commandline_index;
+	POST(argv);
 
 	if (argc > 0) {
 		usage();
@@ -566,6 +592,16 @@ create_managers(void) {
 #else
 	ns_g_cpus = 1;
 #endif
+#ifdef WIN32
+	ns_g_udpdisp = 1;
+#else
+	if (ns_g_udpdisp == 0 || ns_g_udpdisp > ns_g_cpus)
+		ns_g_udpdisp = ns_g_cpus;
+#endif
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_SERVER,
+		      ISC_LOG_INFO, "using %u UDP listener%s per interface",
+		      ns_g_udpdisp, ns_g_udpdisp == 1 ? "" : "s");
+
 	result = isc_taskmgr_create(ns_g_mctx, ns_g_cpus, 0, &ns_g_taskmgr);
 	if (result != ISC_R_SUCCESS) {
 		UNEXPECTED_ERROR(__FILE__, __LINE__,
@@ -774,6 +810,25 @@ setup(void) {
 	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
 		      ISC_LOG_NOTICE, "built with %s", ns_g_configargs);
 
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
+		      ISC_LOG_NOTICE,
+		      "----------------------------------------------------");
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
+		      ISC_LOG_NOTICE,
+		      "BIND 9 is maintained by Internet Systems Consortium,");
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
+		      ISC_LOG_NOTICE,
+		      "Inc. (ISC), a non-profit 501(c)(3) public-benefit ");
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
+		      ISC_LOG_NOTICE,
+		      "corporation.  Support and training for BIND 9 are ");
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
+		      ISC_LOG_NOTICE,
+		      "available at https://www.isc.org/support");
+	isc_log_write(ns_g_lctx, NS_LOGCATEGORY_GENERAL, NS_LOGMODULE_MAIN,
+		      ISC_LOG_NOTICE,
+		      "----------------------------------------------------");
+
 	dump_symboltable();
 
 	/*
@@ -840,9 +895,19 @@ setup(void) {
 	 */
 	/* xxdb_init(); */
 
-#ifdef DLZ
+#ifdef ISC_DLZ_DLOPEN
 	/*
-	 * Register any DLZ drivers.
+	 * Register the DLZ "dlopen" driver.
+	 */
+	result = dlz_dlopen_init(ns_g_mctx);
+	if (result != ISC_R_SUCCESS)
+		ns_main_earlyfatal("dlz_dlopen_init() failed: %s",
+				   isc_result_totext(result));
+#endif
+
+#if CONTRIB_DLZ
+	/*
+	 * Register any other contributed DLZ drivers.
 	 */
 	result = dlz_drivers_init();
 	if (result != ISC_R_SUCCESS)
@@ -866,11 +931,17 @@ cleanup(void) {
 	 */
 	/* xxdb_clear(); */
 
-#ifdef DLZ
+#ifdef CONTRIB_DLZ
 	/*
-	 * Unregister any DLZ drivers.
+	 * Unregister contributed DLZ drivers.
 	 */
 	dlz_drivers_clear();
+#endif
+#ifdef ISC_DLZ_DLOPEN
+	/*
+	 * Unregister "dlopen" DLZ driver.
+	 */
+	dlz_dlopen_clear();
 #endif
 
 	dns_name_destroy();

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vfsops.c,v 1.40 2009/05/07 19:26:09 elad Exp $	*/
+/*	$NetBSD: ufs_vfsops.c,v 1.50 2012/02/01 05:34:43 dholland Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.40 2009/05/07 19:26:09 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.50 2012/02/01 05:34:43 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -50,11 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.40 2009/05/07 19:26:09 elad Exp $")
 #include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/kauth.h>
 
 #include <miscfs/specfs/specdev.h>
 
+#include <sys/quotactl.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
@@ -99,29 +100,33 @@ ufs_root(struct mount *mp, struct vnode **vpp)
  * Do operations associated with quotas
  */
 int
-ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
+ufs_quotactl(struct mount *mp, struct quotactl_args *args)
 {
-	struct lwp *l = curlwp;
 
-#ifndef QUOTA
+#if !defined(QUOTA) && !defined(QUOTA2)
 	(void) mp;
-	(void) cmds;
-	(void) uid;
-	(void) arg;
-	(void) l;
+	(void) args;
 	return (EOPNOTSUPP);
 #else
-	int cmd, type, error;
-
-	if (uid == -1)
-		uid = kauth_cred_getuid(l->l_cred);
-	cmd = cmds >> SUBCMDSHIFT;
+	struct lwp *l = curlwp;
+	int error;
 
 	/* Mark the mount busy, as we're passing it to kauth(9). */
 	error = vfs_busy(mp, NULL);
-	if (error)
+	if (error) {
 		return (error);
+	}
+	mutex_enter(&mp->mnt_updating);
 
+	error = quota_handle_cmd(mp, l, args);
+
+	mutex_exit(&mp->mnt_updating);
+	vfs_unbusy(mp, false, NULL);
+	return (error);
+#endif
+}
+	
+#if 0
 	switch (cmd) {
 	case Q_SYNC:
 		break;
@@ -201,7 +206,6 @@ ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
 	vfs_unbusy(mp, false, NULL);
 	return (error);
 #endif
-}
 
 /*
  * This is the generic part of fhtovp called after the underlying
@@ -241,7 +245,7 @@ ufs_init(void)
 	    "ufsdir", NULL, IPL_NONE, NULL, NULL, NULL);
 
 	ufs_ihashinit();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqinit();
 #endif
 #ifdef UFS_DIRHASH
@@ -256,7 +260,7 @@ void
 ufs_reinit(void)
 {
 	ufs_ihashreinit();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqreinit();
 #endif
 }
@@ -271,7 +275,7 @@ ufs_done(void)
 		return;
 
 	ufs_ihashdone();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqdone();
 #endif
 	pool_cache_destroy(ufs_direct_cache);

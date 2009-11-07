@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.zfs,v 1.1 2009/08/07 20:57:55 haad Exp $
+#	$NetBSD: Makefile.zfs,v 1.3 2011/01/13 23:18:23 haad Exp $
 
 .include <bsd.own.mk>
 
@@ -14,8 +14,9 @@ CPPFLAGS+=	-std=c99
 CPPFLAGS+=	-D_SUNOS_VTOC_16
 CPPFLAGS+=	-D_PROPLIB_ZFS_CONFLICT
 
-CPPFLAGS+=	-g
-LDFLAGS+=	-g
+CFLAGS+=	 -O0 -fno-inline
+
+DBG=	-g
 
 ZFSDIR=		${NETBSDSRCDIR}/external/cddl/osnet
 
@@ -36,6 +37,8 @@ CPPFLAGS+=	-I${ZFSDIR}/dist/lib/libumem
 CPPFLAGS+=	-I${ZFSDIR}/dist/lib/libuutil/common
 CPPFLAGS+=	-I${ZFSDIR}/dist/lib/libzfs/common
 CPPFLAGS+=	-I${ZFSDIR}/dist/lib/libzpool/common
+
+CPPFLAGS+=      -I${ZFSDIR}/dist/common
 
 LIBAVL_SRCDIR= ${ZFSDIR}/lib/libavl
 LIBNVPAIR_SRCDIR= ${ZFSDIR}/lib/libnvpair

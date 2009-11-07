@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_inode.c,v 1.103 2009/02/22 20:28:06 ad Exp $	*/
+/*	$NetBSD: ffs_inode.c,v 1.109 2012/01/27 19:22:49 para Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.103 2009/02/22 20:28:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.109 2012/01/27 19:22:49 para Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -75,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.103 2009/02/22 20:28:06 ad Exp $");
 #include <sys/fstrans.h>
 #include <sys/kauth.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
@@ -238,6 +238,8 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 		return (ffs_update(ovp, NULL, NULL, 0));
 	}
 	if (oip->i_size == length) {
+		/* still do a uvm_vnp_setsize() as writesize may be larger */
+		uvm_vnp_setsize(ovp, length);
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
 		return (ffs_update(ovp, NULL, NULL, 0));
 	}
@@ -267,10 +269,13 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 			uvm_vnp_setwritesize(ovp, eob);
 			error = ufs_balloc_range(ovp, osize, eob - osize,
 			    cred, aflag);
-			if (error)
+			if (error) {
+				(void) ffs_truncate(ovp, osize,
+				    ioflag & IO_SYNC, cred);
 				return error;
+			}
 			if (ioflag & IO_SYNC) {
-				mutex_enter(&ovp->v_interlock);
+				mutex_enter(ovp->v_interlock);
 				VOP_PUTPAGES(ovp,
 				    trunc_page(osize & fs->fs_bmask),
 				    round_page(eob), PGO_CLEANIT | PGO_SYNCIO |
@@ -319,9 +324,10 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 		size = blksize(fs, oip, lbn);
 		eoz = MIN(MAX(lblktosize(fs, lbn) + size, round_page(pgoffset)),
 		    osize);
-		uvm_vnp_zerorange(ovp, length, eoz - length);
+		ubc_zerorange(&ovp->v_uobj, length, eoz - length,
+		    UBC_UNMAP_FLAG(ovp));
 		if (round_page(eoz) > round_page(length)) {
-			mutex_enter(&ovp->v_interlock);
+			mutex_enter(ovp->v_interlock);
 			error = VOP_PUTPAGES(ovp, round_page(length),
 			    round_page(eoz),
 			    PGO_CLEANIT | PGO_DEACTIVATE | PGO_JOURNALLOCKED |
@@ -517,7 +523,7 @@ done:
 	genfs_node_unlock(ovp);
 	oip->i_flag |= IN_CHANGE;
 	UFS_WAPBL_UPDATE(ovp, NULL, NULL, 0);
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	(void) chkdq(oip, -blocksreleased, NOCRED, 0);
 #endif
 	KASSERT(ovp->v_type != VREG || ovp->v_size == oip->i_size);
@@ -615,7 +621,7 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	else
 		bap2 = (int64_t *)bp->b_data;
 	if (lastbn >= 0) {
-		copy = malloc(fs->fs_bsize, M_TEMP, M_WAITOK);
+		copy = kmem_alloc(fs->fs_bsize, KM_SLEEP);
 		memcpy((void *)copy, bp->b_data, (u_int)fs->fs_bsize);
 		for (i = last + 1; i < NINDIR(fs); i++)
 			BAP_ASSIGN(ip, i, 0);
@@ -670,7 +676,7 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	}
 
 	if (copy != NULL) {
-		free(copy, M_TEMP);
+		kmem_free(copy, fs->fs_bsize);
 	} else {
 		brelse(bp, BC_INVAL);
 	}

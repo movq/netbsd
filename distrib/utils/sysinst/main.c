@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.54 2009/10/18 12:09:48 ahoka Exp $	*/
+/*	$NetBSD: main.c,v 1.63.2.2 2012/07/04 20:48:55 jdc Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,24 +14,20 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -57,15 +53,13 @@
 
 int main(int, char **);
 static void select_language(void);
-static void usage(void);
-static void miscsighandler(int);
+__dead static void usage(void);
+__dead static void miscsighandler(int);
 static void ttysighandler(int);
 static void cleanup(void);
 static void process_f_flag(char *);
 
 static int exit_cleanly = 0;	/* Did we finish nicely? */
-int logging;			/* are we logging everything? */
-int scripting;			/* are we building a script? */
 FILE *logfp;			/* log file */
 FILE *script;			/* script file */
 
@@ -86,16 +80,18 @@ static const struct f_arg fflagopts[] = {
 	{"release", REL, rel, sizeof rel},
 	{"machine", MACH, machine, sizeof machine},
 	{"xfer dir", "/usr/INSTALL", xfer_dir, sizeof xfer_dir},
-	{"ext dir", "", ext_dir, sizeof ext_dir},
+	{"ext dir", "", ext_dir_bin, sizeof ext_dir_bin},
+	{"ext src dir", "", ext_dir_src, sizeof ext_dir_src},
 	{"ftp host", SYSINST_FTP_HOST, ftp.host, sizeof ftp.host},
 	{"ftp dir", SYSINST_FTP_DIR, ftp.dir, sizeof ftp.dir},
-	{"ftp prefix", "/" MACH "/binary/sets", set_dir, sizeof set_dir},
+	{"ftp prefix", "/" MACH "/binary/sets", set_dir_bin, sizeof set_dir_bin},
+	{"ftp src prefix", "/source/sets", set_dir_src, sizeof set_dir_src},
 	{"ftp user", "ftp", ftp.user, sizeof ftp.user},
 	{"ftp pass", "", ftp.pass, sizeof ftp.pass},
 	{"ftp proxy", "", ftp.proxy, sizeof ftp.proxy},
 	{"nfs host", "", nfs_host, sizeof nfs_host},
 	{"nfs dir", "/bsd/release", nfs_dir, sizeof nfs_dir},
-	{"cd dev", "cd0a", cdrom_dev, sizeof cdrom_dev},
+	{"cd dev", 0, cdrom_dev, sizeof cdrom_dev}, /* default filled in init */
 	{"fd dev", "/dev/fd0a", fd_dev, sizeof fd_dev},
 	{"local dev", "", localfs_dev, sizeof localfs_dev},
 	{"local fs", "ffs", localfs_fs, sizeof localfs_fs},
@@ -103,6 +99,18 @@ static const struct f_arg fflagopts[] = {
 	{"targetroot mount", "/targetroot", targetroot_mnt, sizeof targetroot_mnt},
 	{"dist postfix", ".tgz", dist_postfix, sizeof dist_postfix},
 	{"diskname", "mydisk", bsddiskname, sizeof bsddiskname},
+	{"pkg host", SYSINST_PKG_HOST, pkg.host, sizeof pkg.host},
+	{"pkg dir", SYSINST_PKG_DIR, pkg.dir, sizeof pkg.dir},
+	{"pkg prefix", "/" MACH "/" REL "/All", pkg_dir, sizeof pkg_dir},
+	{"pkg user", "ftp", pkg.user, sizeof pkg.user},
+	{"pkg pass", "", pkg.pass, sizeof pkg.pass},
+	{"pkg proxy", "", pkg.proxy, sizeof pkg.proxy},
+	{"pkgsrc host", SYSINST_PKGSRC_HOST, pkgsrc.host, sizeof pkgsrc.host},
+	{"pkgsrc dir", "", pkgsrc.dir, sizeof pkgsrc.dir},
+	{"pkgsrc prefix", "pub/pkgsrc/stable", pkgsrc_dir, sizeof pkgsrc_dir},
+	{"pkgsrc user", "ftp", pkgsrc.user, sizeof pkgsrc.user},
+	{"pkgsrc pass", "", pkgsrc.pass, sizeof pkgsrc.pass},
+	{"pkgsrc proxy", "", pkgsrc.proxy, sizeof pkgsrc.proxy},
 
 	{NULL, NULL, NULL, 0}
 };
@@ -120,8 +128,13 @@ init(void)
 	mnt2_mounted = 0;
 	fd_type = "msdos";
 
-	for (arg = fflagopts; arg->name != NULL; arg++)
-		strlcpy(arg->var, arg->dflt, arg->size);
+	for (arg = fflagopts; arg->name != NULL; arg++) {
+		if (arg->var == cdrom_dev)
+			strlcpy(arg->var, get_default_cdrom(), arg->size);
+		else
+			strlcpy(arg->var, arg->dflt, arg->size);
+	}
+	pkg.xfer_type = pkgsrc.xfer_type = "http";
 }
 
 int
@@ -130,18 +143,15 @@ main(int argc, char **argv)
 	WINDOW *win;
 	int ch;
 
-	logging = 0; /* shut them off unless turned on by the user */
 	init();
 #ifdef DEBUG
 	log_flip();
 #endif
-	scripting = 0;
-
 	/* Check for TERM ... */
 	if (!getenv("TERM")) {
 		(void)fprintf(stderr,
 			 "sysinst: environment variable TERM not set.\n");
-		exit(1);
+		exit(4);
 	}
 
 	/* argv processing */
@@ -168,7 +178,7 @@ main(int argc, char **argv)
 	/* initialize message window */
 	if (menu_init()) {
 		__menu_initerror();
-		exit(1);
+		exit(4);
 	}
 
 	/*
@@ -209,7 +219,7 @@ main(int argc, char **argv)
 
 	/* Menu processing */
 	process_menu(MENU_netbsd, NULL);
-	
+
 	exit_cleanly = 1;
 	return 0;
 }
@@ -317,6 +327,10 @@ select_language(void)
 	}
 }
 
+#ifndef md_may_remove_boot_medium
+#define md_may_remove_boot_medium()	(boot_media_still_needed()<=0)
+#endif
+
 /* toplevel menu handler ... */
 void
 toplevel(void)
@@ -325,9 +339,11 @@ toplevel(void)
 	/* Display banner message in (english, francais, deutsch..) */
 	msg_display(MSG_hello);
 	msg_display_add(MSG_md_hello);
+	if (md_may_remove_boot_medium())
+		msg_display_add(MSG_md_may_remove_boot_medium);
 	msg_display_add(MSG_thanks);
 
-	/* 
+	/*
 	 * Undo any stateful side-effects of previous menu choices.
 	 * XXX must be idempotent, since we get run each time the main
 	 *     menu is displayed.
@@ -343,7 +359,7 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, msg_string(MSG_usage));
+	(void)fprintf(stderr, "%s", msg_string(MSG_usage));
 	exit(1);
 }
 
@@ -405,16 +421,18 @@ cleanup(void)
 
 	endwin();
 
-	if (logging) {
+	if (logfp) {
 		fprintf(logfp, "Log ended at: %s\n", asctime(localtime(&tloc)));
 		fflush(logfp);
 		fclose(logfp);
+		logfp = NULL;
 	}
-	if (scripting) {
+	if (script) {
 		fprintf(script, "# Script ended at: %s\n",
 		    asctime(localtime(&tloc)));
 		fflush(script);
 		fclose(script);
+		script = NULL;
 	}
 
 	if (!exit_cleanly)

@@ -127,7 +127,7 @@ static unsigned char lst[]="\xC6\x4F\x43\x04\x2A\xEA\xCA\x6E\x58\x36\x80\x5B\xE8
 
 static const char rnd_seed[] = "string to make the random number generator think it has entropy";
 
-static void message(BIO *out, char *m)
+static void message(BIO *out, const char *m)
 	{
 	fprintf(stderr, "test %s\n", m);
 	BIO_puts(out, "print \"test ");
@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
 	message(out,"BN_mod_sqrt");
 	if (!test_sqrt(out,ctx)) goto err;
 	(void)BIO_flush(out);
-
+#ifndef OPENSSL_NO_EC2M
 	message(out,"BN_GF2m_add");
 	if (!test_gf2m_add(out)) goto err;
 	(void)BIO_flush(out);
@@ -298,7 +298,7 @@ int main(int argc, char *argv[])
 	message(out,"BN_GF2m_mod_solve_quad");
 	if (!test_gf2m_mod_solve_quad(out,ctx)) goto err;
 	(void)BIO_flush(out);
-
+#endif
 	BN_CTX_free(ctx);
 	BIO_free(out);
 
@@ -1029,7 +1029,7 @@ int test_exp(BIO *bp, BN_CTX *ctx)
 		BN_bntest_rand(a,20+i*5,0,0); /**/
 		BN_bntest_rand(b,2+i,0,0); /**/
 
-		if (!BN_exp(d,a,b,ctx))
+		if (BN_exp(d,a,b,ctx) <= 0)
 			return(0);
 
 		if (bp != NULL)
@@ -1061,7 +1061,7 @@ int test_exp(BIO *bp, BN_CTX *ctx)
 	BN_free(one);
 	return(1);
 	}
-
+#ifndef OPENSSL_NO_EC2M
 int test_gf2m_add(BIO *bp)
 	{
 	BIGNUM a,b,c;
@@ -1636,7 +1636,7 @@ int test_gf2m_mod_solve_quad(BIO *bp,BN_CTX *ctx)
 	BN_free(e);
 	return ret;
 	}
-
+#endif
 static int genprime_cb(int p, int n, BN_GENCB *arg)
 	{
 	char c='*';

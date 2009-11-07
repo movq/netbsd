@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.54 2009/10/21 21:12:00 rmind Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.57 2012/01/31 21:17:57 mlelstv Exp $	*/
 
 /* 
  * Mach Operating System
@@ -27,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.54 2009/10/21 21:12:00 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.57 2012/01/31 21:17:57 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/systm.h>
 
 #include <machine/db_machdep.h>
@@ -40,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.54 2009/10/21 21:12:00 rmind Exp $");
 #include <ddb/db_output.h>
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
-#include <ddb/db_extern.h>
 #include <ddb/db_variables.h>
 
 /*
@@ -50,26 +48,26 @@ static int db_var_short(const struct db_variable *, db_expr_t *, int);
 
 const struct db_variable db_regs[] = {
 	/* D0-D7 */
-	{ "d0",	(long *)&ddb_regs.tf_regs[0],	FCN_NULL },
-	{ "d1",	(long *)&ddb_regs.tf_regs[1],	FCN_NULL },
-	{ "d2",	(long *)&ddb_regs.tf_regs[2],	FCN_NULL },
-	{ "d3",	(long *)&ddb_regs.tf_regs[3],	FCN_NULL },
-	{ "d4",	(long *)&ddb_regs.tf_regs[4],	FCN_NULL },
-	{ "d5",	(long *)&ddb_regs.tf_regs[5],	FCN_NULL },
-	{ "d6",	(long *)&ddb_regs.tf_regs[6],	FCN_NULL },
-	{ "d7",	(long *)&ddb_regs.tf_regs[7],	FCN_NULL },
+	{ "d0",	(long *)&ddb_regs.tf_regs[0],	FCN_NULL, NULL },
+	{ "d1",	(long *)&ddb_regs.tf_regs[1],	FCN_NULL, NULL },
+	{ "d2",	(long *)&ddb_regs.tf_regs[2],	FCN_NULL, NULL },
+	{ "d3",	(long *)&ddb_regs.tf_regs[3],	FCN_NULL, NULL },
+	{ "d4",	(long *)&ddb_regs.tf_regs[4],	FCN_NULL, NULL },
+	{ "d5",	(long *)&ddb_regs.tf_regs[5],	FCN_NULL, NULL },
+	{ "d6",	(long *)&ddb_regs.tf_regs[6],	FCN_NULL, NULL },
+	{ "d7",	(long *)&ddb_regs.tf_regs[7],	FCN_NULL, NULL },
 	/* A0-A7 */
-	{ "a0",	(long *)&ddb_regs.tf_regs[8+0],	FCN_NULL },
-	{ "a1",	(long *)&ddb_regs.tf_regs[8+1],	FCN_NULL },
-	{ "a2",	(long *)&ddb_regs.tf_regs[8+2],	FCN_NULL },
-	{ "a3",	(long *)&ddb_regs.tf_regs[8+3],	FCN_NULL },
-	{ "a4",	(long *)&ddb_regs.tf_regs[8+4],	FCN_NULL },
-	{ "a5",	(long *)&ddb_regs.tf_regs[8+5],	FCN_NULL },
-	{ "a6",	(long *)&ddb_regs.tf_regs[8+6],	FCN_NULL },
-	{ "sp",	(long *)&ddb_regs.tf_regs[8+7],	FCN_NULL },
+	{ "a0",	(long *)&ddb_regs.tf_regs[8+0],	FCN_NULL, NULL },
+	{ "a1",	(long *)&ddb_regs.tf_regs[8+1],	FCN_NULL, NULL },
+	{ "a2",	(long *)&ddb_regs.tf_regs[8+2],	FCN_NULL, NULL },
+	{ "a3",	(long *)&ddb_regs.tf_regs[8+3],	FCN_NULL, NULL },
+	{ "a4",	(long *)&ddb_regs.tf_regs[8+4],	FCN_NULL, NULL },
+	{ "a5",	(long *)&ddb_regs.tf_regs[8+5],	FCN_NULL, NULL },
+	{ "a6",	(long *)&ddb_regs.tf_regs[8+6],	FCN_NULL, NULL },
+	{ "sp",	(long *)&ddb_regs.tf_regs[8+7],	FCN_NULL, NULL },
 	/* misc. */
-	{ "pc",	(long *)&ddb_regs.tf_pc, 	FCN_NULL },
-	{ "sr",	(long *)&ddb_regs.tf_sr,	db_var_short }
+	{ "pc",	(long *)&ddb_regs.tf_pc, 	FCN_NULL, NULL },
+	{ "sr",	(long *)&ddb_regs.tf_sr,	db_var_short, NULL }
 };
 const struct db_variable * const db_eregs =
     db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
@@ -87,7 +85,6 @@ db_var_short(const struct db_variable *varp, db_expr_t *valp, int op)
 
 #define	MAXINT	0x7fffffff
 
-extern struct pcb *curpcb;
 #define	INKERNEL(va,pcb)	(((u_int)(va) > (u_int)(pcb)) && \
 				 ((u_int)(va) < ((u_int)(pcb) + USPACE)))
 
@@ -109,9 +106,11 @@ struct stackpos {
 };
 
 static void	findentry(struct stackpos *, void (*)(const char *, ...));
+#ifdef _KERNEL
 static void	findregs(struct stackpos *, db_addr_t);
 static int	nextframe(struct stackpos *, struct pcb *, int,
 		    void (*)(const char *, ...));
+#endif
 static void	stacktop(db_regs_t *, struct stackpos *,
 		    void (*)(const char *, ...));
 
@@ -176,6 +175,7 @@ static struct nlist *	trampsym = 0;
 static struct nlist *	funcsym = 0;
 #endif
 
+#ifdef _KERNEL
 static int
 nextframe(struct stackpos *sp, struct pcb *pcb, int kerneltrace,
     void (*pr)(const char *, ...))
@@ -224,10 +224,11 @@ nextframe(struct stackpos *sp, struct pcb *pcb, int kerneltrace,
 	} else
 		findentry(sp, pr);
 
-	if (sp->k_fp == 0 || oldfp == sp->k_fp)
+	if (sp->k_fp == 0 || oldfp == (db_addr_t)sp->k_fp)
 		return 0;
 	return sp->k_fp;
 }
+#endif
 
 static void
 findentry(struct stackpos *sp, void (*pr)(const char *, ...))
@@ -241,19 +242,6 @@ findentry(struct stackpos *sp, void (*pr)(const char *, ...))
 	int		instruc;
 	int		val;
 	db_addr_t	addr, nextword;
-	label_t		db_jmpbuf;
-	label_t		*savejmp;
-
-	savejmp = db_recover;
-	db_recover = &db_jmpbuf;
-	if (setjmp(&db_jmpbuf)) {
-		/* oops -- we touched something we ought not to have */
-		/* cannot trace caller of "start" */
-		sp->k_entry = MAXINT;
-		sp->k_nargs = 0;
-		db_recover = savejmp;
-		return;
-	}
 
 	addr = get(sp->k_fp + FR_SAVPC, DSP);
 	if (addr == 0) {
@@ -261,13 +249,10 @@ findentry(struct stackpos *sp, void (*pr)(const char *, ...))
 		/* cannot trace caller of "start" */
 		sp->k_entry = MAXINT;
 		sp->k_nargs = 0;
-		db_recover = savejmp;
 		return;
 	}
 	instruc  = get(addr - 6, ISP);
 	nextword = get(addr - 4, ISP);
-
-	db_recover = savejmp;
 
 	if ((instruc & HIWORD) == (JSR | LONGBIT)) {
 		/* longword offset here */
@@ -330,6 +315,7 @@ findentry(struct stackpos *sp, void (*pr)(const char *, ...))
 	sp->k_nargs = val / 4;
 }
 
+#ifdef _KERNEL
 /*
  * Look at the procedure prolog of the current called procedure.
  * Figure out which registers we saved, and where they are
@@ -392,6 +378,7 @@ findregs(struct stackpos *sp, db_addr_t addr)
 	}
 	/* else no registers saved */
 }
+#endif
 
 /*
  *	Frame tracing.
@@ -405,7 +392,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 	db_addr_t	regp;
 	const char *	name;
 	struct stackpos pos;
-	struct pcb	*pcb = curpcb;
+	struct pcb	*pcb;
 	bool		kernel_only = true;
 	bool		trace_thread = false;
 	bool		lwpaddr = false;
@@ -430,33 +417,37 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 	else {
 		if (trace_thread) {
 			struct proc *p;
-			struct user *u;
 			struct lwp *l;
+
 			if (lwpaddr) {
 				l = (struct lwp *)addr;
 				p = l->l_proc;
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
+#ifdef _KERNEL
+				p = proc_find_raw(addr);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
 				l = LIST_FIRST(&p->p_lwps);
 				KASSERT(l != NULL);
+#else
+				(*pr)("no proc_find_raw() in crash\n");
+                                return;
+#endif
 			}
 			(*pr)("lid %d ", l->l_lid);
-			u = l->l_addr;
-			pos.k_fp = u->u_pcb.pcb_regs[PCB_REGS_FP];
+			pcb = lwp_getpcb(l);
+			pos.k_fp = pcb->pcb_regs[PCB_REGS_FP];
 			/*
 			 * Note: The following only works because cpu_switch()
 			 * doesn't push anything on the stack before it saves
 			 * the process' context in the pcb.
 			 */
-			pos.k_pc = get(u->u_pcb.pcb_regs[PCB_REGS_SP], DSP);
+			pos.k_pc = get(pcb->pcb_regs[PCB_REGS_SP], DSP);
 			(*pr)("at %p\n", (void *)pos.k_fp);
-			pcb = &u->u_pcb;
 		} else {
 			pos.k_fp = addr;
 			pos.k_pc = MAXINT;
@@ -553,13 +544,16 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		else
 			(*pr)(") + %lx\n", val);
 
+#if _KERNEL
 		/*
 		 * Stop tracing if frame ptr no longer points into kernel
 		 * stack.
 		 */
+		pcb = lwp_getpcb(curlwp);
 		if (kernel_only && !INKERNEL(pos.k_fp, pcb))
 			break;
 		if (nextframe(&pos, pcb, kernel_only, pr) == 0)
 			break;
+#endif
 	}
 }

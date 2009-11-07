@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.7 2009/03/18 10:22:28 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.11 2011/06/20 07:18:06 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/03/18 10:22:28 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2011/06/20 07:18:06 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -74,12 +74,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/03/18 10:22:28 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/kgdb.h>
+#include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
@@ -87,28 +90,22 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/03/18 10:22:28 cegger Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
-#include <sys/syslog.h>
 #include <sys/sysctl.h>
+#include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/ksyms.h>
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
-
-#include <machine/bus.h>
-#include <machine/db_machdep.h>
-#include <machine/intr.h>
-#include <machine/pio.h>
-#include <machine/pmap.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
 #include <machine/pmppc.h>
 
+#include <powerpc/db_machdep.h>
+#include <powerpc/pio.h>
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
+
 #include <powerpc/oea/bat.h>
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 
 #include <ddb/db_extern.h>
 
@@ -165,17 +162,6 @@ void initppc(u_int, u_int, u_int, void *); /* Called from locore */
 void pmppc_setup(void);
 void setleds(int leds);
 
-/*
- * Force cpu_info to be in the data segment to avoid the
- * memset() blowing away the data set up by locore.S.
- */
-#if 0
- /* this is defined in powerpc/oea/cpu_subr.c, I don't understand the above
-  * comment however.
-  */
-struct cpu_info cpu_info[1] = { { .ci_curlwp = &lwp0, }, };
-#endif
-
 void
 initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 {
@@ -206,14 +192,6 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 		panic("bus_space_init failed");
 
 	/*
-	 * Get CPU clock
-	 */
-	ticks_per_sec = a_config.a_bus_freq;
-	ticks_per_sec /= 4;	/* 4 cycles per DEC tick */
-	cpu_timebase = ticks_per_sec;
-	cpu_initclocks();
-
-	/*
 	 * Initialize the BAT registers
 	 */
 	oea_batinit(
@@ -226,6 +204,13 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	 * Set up trap vectors
 	 */
 	oea_init(NULL);
+
+	/*
+	 * Get CPU clock
+	 */
+	ticks_per_sec = a_config.a_bus_freq;
+	ticks_per_sec /= 4;	/* 4 cycles per DEC tick */
+	cpu_timebase = ticks_per_sec;
 
 	/*
 	 * Set up console.

@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.7 2009/05/12 10:05:07 plunky Exp $	*/
+/*	$NetBSD: server.c,v 1.10.4.1 2012/03/05 19:01:49 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: server.c,v 1.7 2009/05/12 10:05:07 plunky Exp $");
+__RCSID("$NetBSD: server.c,v 1.10.4.1 2012/03/05 19:01:49 sborrill Exp $");
 
 #include <sys/select.h>
 #include <sys/stat.h>
@@ -98,7 +98,7 @@ server_init(server_t *srv, char const *control, char const *sgroup)
 	assert(srv != NULL);
 	assert(control != NULL);
 
-	memset(srv, 0, sizeof(srv));
+	memset(srv, 0, sizeof(*srv));
 	FD_ZERO(&srv->fdset);
 	srv->sgroup = sgroup;
 
@@ -112,7 +112,7 @@ server_init(server_t *srv, char const *control, char const *sgroup)
 	srv->ctllen = CMSG_SPACE(SOCKCREDSIZE(MAX_GROUPS));
 	srv->ctlbuf = malloc(srv->ctllen);
 	if (srv->ctlbuf == NULL) {
-		log_crit("Malloc cmsg buffer (len=%d) failed.", srv->ctllen);
+		log_crit("Malloc cmsg buffer (len=%zu) failed.", srv->ctllen);
 		goto fail;
 	}
 
@@ -398,6 +398,9 @@ server_accept_client(server_t *srv, int fd)
 	srv->fdidx[cfd].omtu = (omtu > srv->omtu) ? srv->omtu : omtu;
 	srv->fdidx[cfd].offset = 0;
 	bdaddr_copy(&srv->fdidx[cfd].bdaddr, &sa.bt_bdaddr);
+
+	log_debug("new %s client on fd#%d",
+	    srv->fdidx[cfd].control ? "control" : "L2CAP", cfd);
 }
 
 /*
@@ -511,6 +514,7 @@ server_process_request(server_t *srv, int fd)
 		srv->pdu.pid = SDP_PDU_ERROR_RESPONSE;
 		srv->pdu.len = sizeof(error);
 		be16enc(srv->obuf, error);
+		log_debug("sending ErrorResponse (error=0x%04x)", error);
 	}
 
 	iov[0].iov_base = &srv->pdu;
@@ -559,6 +563,8 @@ server_close_fd(server_t *srv, int fd)
 	close(fd);
 	FD_CLR(fd, &srv->fdset);
 	srv->fdidx[fd].valid = false;
+
+	log_debug("client on fd#%d closed", fd);
 
 	if (fd == srv->fdmax) {
 		while (fd > 0 && !srv->fdidx[fd].valid)

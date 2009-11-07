@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_io.c,v 1.15 2009/03/14 21:04:05 dsl Exp $	*/
+/*	$NetBSD: footbridge_io.c,v 1.21 2012/02/12 16:34:07 matt Exp $	*/
 
 /*
  * Copyright (c) 1997 Causality Limited
@@ -39,11 +39,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_io.c,v 1.15 2009/03/14 21:04:05 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_io.c,v 1.21 2012/02/12 16:34:07 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <arm/footbridge/footbridge.h>
 #include <arm/footbridge/dc21285mem.h>
 #include <uvm/uvm_extern.h>
@@ -56,6 +56,7 @@ bs_protos(generic_armv4);
 bs_protos(bs_notimpl);
 bs_map_proto(footbridge_mem);
 bs_unmap_proto(footbridge_mem);
+bs_mmap_proto(footbridge_io);
 bs_mmap_proto(footbridge_mem);
 
 /* Declare the footbridge bus space tag */
@@ -137,17 +138,20 @@ struct bus_space footbridge_bs_tag = {
 	bs_notimpl_bs_c_8,
 };
 
-void footbridge_create_io_bs_tag(t, cookie)
-	struct bus_space *t;
-	void *cookie;
+void
+footbridge_create_io_bs_tag(
+	struct bus_space *t,
+	void *cookie)
 {
 	*t = footbridge_bs_tag;
 	t->bs_cookie = cookie;
+	t->bs_mmap = footbridge_io_bs_mmap;
 }
 
-void footbridge_create_mem_bs_tag(t, cookie)
-	struct bus_space *t;
-	void *cookie;
+void
+footbridge_create_mem_bs_tag(
+	struct bus_space *t,
+	void *cookie)
 {
 	*t = footbridge_bs_tag;
 	t->bs_map = footbridge_mem_bs_map;
@@ -210,17 +214,16 @@ footbridge_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags, bus_s
 
 	/* Now map the pages */
 	/* The cookie is the physical base address for the I/O area */
-        for (pa = startpa; pa < endpa; pa+=PAGE_SIZE, va += PAGE_SIZE) 
-        {
-                pmap_enter(pmap_kernel(), va, (bus_addr_t)t + pa, VM_PROT_READ | VM_PROT_WRITE,
-                                VM_PROT_READ | VM_PROT_WRITE| PMAP_WIRED);
-                if ((flags & BUS_SPACE_MAP_CACHEABLE) == 0) {
-                        pt_entry_t *pte;	
-                        pte = vtopte(va);
-                        *pte &= ~L2_S_CACHE_MASK;
-                        PTE_SYNC(pte);
-                }
-        }
+	for (pa = startpa; pa < endpa; pa+=PAGE_SIZE, va += PAGE_SIZE) {
+		pmap_enter(pmap_kernel(), va, (bus_addr_t)t + pa, VM_PROT_READ | VM_PROT_WRITE,
+		    VM_PROT_READ | VM_PROT_WRITE| PMAP_WIRED);
+		if ((flags & BUS_SPACE_MAP_CACHEABLE) == 0) {
+			pt_entry_t *pte;	
+			pte = vtopte(va);
+			*pte &= ~L2_S_CACHE_MASK;
+			PTE_SYNC(pte);
+		}
+	}
 	pmap_update(pmap_kernel());
 
 /*	if (bpa >= DC21285_PCI_MEM_VSIZE && bpa != DC21285_ARMCSR_VBASE)
@@ -230,14 +233,16 @@ footbridge_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flags, bus_s
 }
 
 int
-footbridge_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
-    bpap, bshp)
-	void *t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int cacheable;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+footbridge_bs_alloc(
+	void *t,
+	bus_addr_t rstart,
+	bus_addr_t rend,
+	bus_size_t size,
+	bus_size_t alignment,
+	bus_size_t boundary,
+	int cacheable,
+	bus_addr_t *bpap,
+	bus_space_handle_t *bshp)
 {
 	panic("footbridge_alloc(): Help!");
 }
@@ -305,6 +310,25 @@ footbridge_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_si
 
 
 paddr_t
+footbridge_io_bs_mmap(void *t, bus_addr_t addr, off_t offset,
+		       int prot, int flags)
+{
+	paddr_t pa;
+
+	/* allow mapping of IO space */
+	if (addr >= DC21285_PCI_IO_SIZE ||
+	    addr >= DC21285_PCI_IO_SIZE - offset ||
+	    offset < 0 ||
+	    offset >= DC21285_PCI_IO_SIZE)
+		return -1;
+
+	pa = DC21285_PCI_IO_BASE + addr + offset;
+
+	return arm_btop(pa);
+}
+
+
+paddr_t
 footbridge_mem_bs_mmap(void *t, bus_addr_t addr, off_t offset,
 		       int prot, int flags)
 {
@@ -318,5 +342,5 @@ footbridge_mem_bs_mmap(void *t, bus_addr_t addr, off_t offset,
 
 	pa = DC21285_PCI_MEM_BASE + addr + offset;
 
-	return arm_ptob(pa);
+	return arm_btop(pa);
 }

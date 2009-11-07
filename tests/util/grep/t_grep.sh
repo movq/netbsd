@@ -1,4 +1,4 @@
-# $NetBSD: t_grep.sh,v 1.1 2009/02/13 05:19:52 jmmv Exp $
+# $NetBSD: t_grep.sh,v 1.5 2011/05/14 17:42:29 jmmv Exp $
 #
 # Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -25,8 +25,6 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-words="/usr/share/dict/words"
-
 atf_test_case basic
 basic_head()
 {
@@ -34,7 +32,8 @@ basic_head()
 }
 basic_body()
 { 
-	atf_check -o file:"$(atf_get_srcdir)/d_basic.out" grep aa "${words}"
+	atf_check -o file:"$(atf_get_srcdir)/d_basic.out" -x \
+	    'jot 10000 | grep 123'
 }
 
 atf_test_case binary
@@ -167,8 +166,8 @@ file_exp_head()
 }
 file_exp_body()
 {
-	atf_check -o file:"$(atf_get_srcdir)/d_file_exp.inout" \
-	    grep -f "$(atf_get_srcdir)/d_file_exp.inout" "${words}"
+	atf_check -o file:"$(atf_get_srcdir)/d_file_exp.out" -x \
+	    'jot 21 -1 1.00 | grep -f '"$(atf_get_srcdir)"'/d_file_exp.in'
 }
 
 atf_test_case egrep

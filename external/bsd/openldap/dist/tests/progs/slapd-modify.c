@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/tests/progs/slapd-modify.c,v 1.19.2.5 2008/02/11 23:26:50 kurt Exp $ */
+/*	$NetBSD: slapd-modify.c,v 1.1.1.3 2010/12/12 15:24:16 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/tests/progs/slapd-modify.c,v 1.19.2.8 2010/04/13 20:23:58 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1999-2008 The OpenLDAP Foundation.
+ * Copyright 1999-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -310,7 +312,7 @@ retry:;
 	}
 
 done:;
-	fprintf( stderr, " PID=%ld - Modify done (%d).\n", (long) pid, rc );
+	fprintf( stderr, "  PID=%ld - Modify done (%d).\n", (long) pid, rc );
 
 	ldap_unbind_ext( ld, NULL, NULL );
 }

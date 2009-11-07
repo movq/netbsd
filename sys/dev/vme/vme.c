@@ -1,4 +1,4 @@
-/* $NetBSD: vme.c,v 1.23 2009/05/12 14:47:27 cegger Exp $ */
+/* $NetBSD: vme.c,v 1.25 2012/01/27 18:53:09 para Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.23 2009/05/12 14:47:27 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.25 2012/01/27 18:53:09 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,7 +125,7 @@ vmeprint(struct vme_attach_args *v, char *dummy)
 static int
 vmesubmatch1(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
 {
-	struct vmebus_softc *sc = (struct vmebus_softc*)bus;
+	struct vmebus_softc *sc = device_private(bus);
 	struct vme_attach_args v;
 
 	if (strcmp(dev->cf_name, VME_SLAVE_DUMMYDRV))
@@ -142,7 +142,7 @@ vmesubmatch1(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
 static int
 vmesubmatch(device_t bus, cfdata_t dev, const int *ldesc, void *aux)
 {
-	struct vmebus_softc *sc = (struct vmebus_softc*)bus;
+	struct vmebus_softc *sc = device_private(bus);
 	struct vme_attach_args v;
 
 	if (!strcmp(dev->cf_name, VME_SLAVE_DUMMYDRV))
@@ -187,22 +187,19 @@ vmeattach(device_t parent, device_t self, void *aux)
 	/*
 	 * set up address space accounting - assume incomplete decoding
 	 */
-	sc->vme32ext = extent_create("vme32", 0, 0xffffffff,
-				     M_DEVBUF, 0, 0, 0);
+	sc->vme32ext = extent_create("vme32", 0, 0xffffffff, 0, 0, 0);
 	if (!sc->vme32ext) {
 		printf("error creating A32 map\n");
 		return;
 	}
 
-	sc->vme24ext = extent_create("vme24", 0, 0x00ffffff,
-				     M_DEVBUF, 0, 0, 0);
+	sc->vme24ext = extent_create("vme24", 0, 0x00ffffff, 0, 0, 0);
 	if (!sc->vme24ext) {
 		printf("error creating A24 map\n");
 		return;
 	}
 
-	sc->vme16ext = extent_create("vme16", 0, 0x0000ffff,
-				     M_DEVBUF, 0, 0, 0);
+	sc->vme16ext = extent_create("vme16", 0, 0x0000ffff, 0, 0, 0);
 	if (!sc->vme16ext) {
 		printf("error creating A16 map\n");
 		return;

@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay_vnops.c,v 1.16 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: overlay_vnops.c,v 1.19 2011/07/11 08:27:39 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 National Aeronautics & Space Administration
@@ -67,7 +67,7 @@
  *
  * Ancestors:
  *	@(#)lofs_vnops.c	1.2 (Berkeley) 6/18/92
- *	$Id: overlay_vnops.c,v 1.16 2005/12/11 12:24:51 christos Exp $
+ *	$Id: overlay_vnops.c,v 1.19 2011/07/11 08:27:39 hannken Exp $
  *	...and...
  *	@(#)null_vnodeops.c 1.20 92/07/07 UCLA Ficus project
  */
@@ -126,7 +126,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: overlay_vnops.c,v 1.16 2005/12/11 12:24:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: overlay_vnops.c,v 1.19 2011/07/11 08:27:39 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -152,20 +152,17 @@ const struct vnodeopv_entry_desc overlay_vnodeop_entries[] = {
 	{ &vop_setattr_desc,  layer_setattr },
 	{ &vop_getattr_desc,  layer_getattr },
 	{ &vop_access_desc,   layer_access },
-	{ &vop_lock_desc,     layer_lock },
-	{ &vop_unlock_desc,   layer_unlock },
-	{ &vop_islocked_desc, layer_islocked },
 	{ &vop_fsync_desc,    layer_fsync },
 	{ &vop_inactive_desc, layer_inactive },
 	{ &vop_reclaim_desc,  layer_reclaim },
 	{ &vop_print_desc,    layer_print },
 	{ &vop_remove_desc,   layer_remove },
 	{ &vop_rename_desc,   layer_rename },
+	{ &vop_revoke_desc,   layer_revoke },
 	{ &vop_rmdir_desc,    layer_rmdir },
 
 	{ &vop_open_desc,     layer_open },	/* mount option handling */
 
-	{ &vop_bwrite_desc,   layer_bwrite },
 	{ &vop_bmap_desc,     layer_bmap },
 	{ &vop_getpages_desc, layer_getpages },
 	{ &vop_putpages_desc, layer_putpages },

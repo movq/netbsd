@@ -1,4 +1,4 @@
-/*	$NetBSD: ata.c,v 1.108 2009/10/19 18:41:12 bouyer Exp $	*/
+/*	$NetBSD: ata.c,v 1.115 2011/04/30 00:34:03 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.108 2009/10/19 18:41:12 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.115 2011/04/30 00:34:03 jakllsch Exp $");
 
 #include "opt_ata.h"
 
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.108 2009/10/19 18:41:12 bouyer Exp $");
 #include <sys/errno.h>
 #include <sys/ataio.h>
 #include <sys/kmem.h>
-#include <sys/simplelock.h>
 #include <sys/intr.h>
 #include <sys/bus.h>
 #include <sys/once.h>
@@ -74,18 +73,18 @@ int atadebug_mask = 0;
 #define ATADEBUG_PRINT(args, level)
 #endif
 
+static ONCE_DECL(ata_init_ctrl);
 static struct pool ata_xfer_pool;
 
 /*
  * A queue of atabus instances, used to ensure the same bus probe order
- * for a given hardware configuration at each boot.
+ * for a given hardware configuration at each boot.  Kthread probing
+ * devices on a atabus.  Only one probing at once. 
  */
-struct atabus_initq_head atabus_initq_head =
-    TAILQ_HEAD_INITIALIZER(atabus_initq_head);
-struct simplelock atabus_interlock = SIMPLELOCK_INITIALIZER;
-
-/* kernel thread probing devices on a atabus. Only one probing at once */
-struct lwp *atabus_configlwp;
+static TAILQ_HEAD(, atabus_initq)	atabus_initq_head;
+static kmutex_t				atabus_qlock;
+static kcondvar_t			atabus_qcv;
+static lwp_t *				atabus_cfg_lwp;
 
 /*****************************************************************************
  * ATA bus layer.
@@ -106,9 +105,27 @@ const struct cdevsw atabus_cdevsw = {
 extern struct cfdriver atabus_cd;
 
 static void atabus_childdetached(device_t, device_t);
-static bool atabus_resume(device_t PMF_FN_PROTO);
-static bool atabus_suspend(device_t PMF_FN_PROTO);
+static int atabus_rescan(device_t, const char *, const int *);
+static bool atabus_resume(device_t, const pmf_qual_t *);
+static bool atabus_suspend(device_t, const pmf_qual_t *);
 static void atabusconfig_thread(void *);
+
+/*
+ * atabus_init:
+ *
+ *	Initialize ATA subsystem structures.
+ */
+static int
+atabus_init(void)
+{
+
+	pool_init(&ata_xfer_pool, sizeof(struct ata_xfer), 0, 0, 0,
+	    "ataspl", NULL, IPL_BIO);
+	TAILQ_INIT(&atabus_initq_head);
+	mutex_init(&atabus_qlock, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&atabus_qcv, "atainitq");
+	return 0;
+}
 
 /*
  * atabusprint:
@@ -196,15 +213,14 @@ atabusconfig(struct atabus_softc *atabus_sc)
 	splx(s);
 
 	/* Make sure the devices probe in atabus order to avoid jitter. */
-	simple_lock(&atabus_interlock);
-	while(1) {
+	mutex_enter(&atabus_qlock);
+	for (;;) {
 		atabus_initq = TAILQ_FIRST(&atabus_initq_head);
 		if (atabus_initq->atabus_sc == atabus_sc)
 			break;
-		ltsleep(&atabus_initq_head, PRIBIO, "ata_initq", 0,
-		    &atabus_interlock);
+		cv_wait(&atabus_qcv, &atabus_qlock);
 	}
-	simple_unlock(&atabus_interlock);
+	mutex_exit(&atabus_qlock);
 
 	/* If no drives, abort here */
 	for (i = 0; i < chp->ch_ndrive; i++)
@@ -219,19 +235,19 @@ atabusconfig(struct atabus_softc *atabus_sc)
 
 
 	if ((error = kthread_create(PRI_NONE, 0, NULL, atabusconfig_thread,
-	    atabus_sc, &atabus_configlwp,
+	    atabus_sc, &atabus_cfg_lwp,
 	    "%scnf", device_xname(atac->atac_dev))) != 0)
 		aprint_error_dev(atac->atac_dev,
 		    "unable to create config thread: error %d\n", error);
 	return;
 
  out:
-	simple_lock(&atabus_interlock);
+	mutex_enter(&atabus_qlock);
 	TAILQ_REMOVE(&atabus_initq_head, atabus_initq, atabus_initq);
-	simple_unlock(&atabus_interlock);
+	cv_broadcast(&atabus_qcv);
+	mutex_exit(&atabus_qlock);
 
 	free(atabus_initq, M_DEVBUF);
-	wakeup(&atabus_initq_head);
 
 	ata_delref(chp);
 
@@ -248,13 +264,15 @@ atabusconfig_thread(void *arg)
 	struct atabus_softc *atabus_sc = arg;
 	struct ata_channel *chp = atabus_sc->sc_chan;
 	struct atac_softc *atac = chp->ch_atac;
-	int i, s;
 	struct atabus_initq *atabus_initq = NULL;
+	int i, s;
 
-	simple_lock(&atabus_interlock);
+	/* XXX seems wrong */
+	mutex_enter(&atabus_qlock);
 	atabus_initq = TAILQ_FIRST(&atabus_initq_head);
-	simple_unlock(&atabus_interlock);
 	KASSERT(atabus_initq->atabus_sc == atabus_sc);
+	mutex_exit(&atabus_qlock);
+
 	/*
 	 * Attach an ATAPI bus, if needed.
 	 */
@@ -326,12 +344,12 @@ atabusconfig_thread(void *arg)
 	}
 	splx(s);
 
-	simple_lock(&atabus_interlock);
+	mutex_enter(&atabus_qlock);
 	TAILQ_REMOVE(&atabus_initq_head, atabus_initq, atabus_initq);
-	simple_unlock(&atabus_interlock);
+	cv_broadcast(&atabus_qcv);
+	mutex_exit(&atabus_qlock);
 
 	free(atabus_initq, M_DEVBUF);
-	wakeup(&atabus_initq_head);
 
 	ata_delref(chp);
 
@@ -379,6 +397,10 @@ atabus_thread(void *arg)
 		if (chp->ch_flags & ATACH_SHUTDOWN) {
 			break;
 		}
+		if (chp->ch_flags & ATACH_TH_RESCAN) {
+			atabusconfig(sc);
+			chp->ch_flags &= ~ATACH_TH_RESCAN;
+		}
 		if (chp->ch_flags & ATACH_TH_RESET) {
 			/*
 			 * ata_reset_channel() will freeze 2 times, so
@@ -424,15 +446,6 @@ atabus_match(device_t parent, cfdata_t cf, void *aux)
 	return (1);
 }
 
-static int
-atabus_xferpool_init(void)
-{
-
-	pool_init(&ata_xfer_pool, sizeof(struct ata_xfer), 0, 0, 0, "ataspl",
-	    NULL, IPL_BIO);
-	return 0;
-}
-
 /*
  * atabus_attach:
  *
@@ -444,7 +457,6 @@ atabus_attach(device_t parent, device_t self, void *aux)
 	struct atabus_softc *sc = device_private(self);
 	struct ata_channel *chp = aux;
 	struct atabus_initq *initq;
-	static ONCE_DECL(poolinit_ctrl);
 	int error;
 
 	sc->sc_chan = chp;
@@ -457,7 +469,7 @@ atabus_attach(device_t parent, device_t self, void *aux)
 	if (ata_addref(chp))
 		return;
 
-	RUN_ONCE(&poolinit_ctrl, atabus_xferpool_init);
+	RUN_ONCE(&ata_init_ctrl, atabus_init);
 
 	initq = malloc(sizeof(*initq), M_DEVBUF, M_WAITOK);
 	initq->atabus_sc = sc;
@@ -471,66 +483,6 @@ atabus_attach(device_t parent, device_t self, void *aux)
 
 	if (!pmf_device_register(self, atabus_suspend, atabus_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
-}
-
-/*
- * atabus_activate:
- *
- *	Autoconfiguration activation routine.
- */
-static int
-atabus_activate(device_t self, enum devact act)
-{
-	struct atabus_softc *sc = device_private(self);
-	struct ata_channel *chp = sc->sc_chan;
-	device_t dev = NULL;
-	int s, i, error = 0;
-
-	s = splbio();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		/*
-		 * We might deactivate the children of atapibus twice
-		 * (once bia atapibus, once directly), but since the
-		 * generic autoconfiguration code maintains the DVF_ACTIVE
-		 * flag, it's safe.
-		 */
-		if ((dev = chp->atapibus) != NULL) {
-			error = config_deactivate(dev);
-			if (error)
-				goto out;
-		}
-
-		for (i = 0; i < chp->ch_ndrive; i++) {
-			if (chp->ch_drive[i].drive_flags & DRIVE_ATAPI)
-				continue;
-			if ((dev = chp->ch_drive[i].drv_softc) != NULL) {
-				ATADEBUG_PRINT(("atabus_activate: %s: "
-				    "deactivating %s\n", device_xname(self),
-				    device_xname(dev)),
-				    DEBUG_DETACH);
-				error = config_deactivate(dev);
-				if (error)
-					goto out;
-			}
-		}
-		break;
-	}
- out:
-	splx(s);
-
-#ifdef ATADEBUG
-	if (dev != NULL && error != 0)
-		ATADEBUG_PRINT(("atabus_activate: %s: "
-		    "error %d deactivating %s\n", device_xname(self),
-		    error, device_xname(dev)), DEBUG_DETACH);
-#endif /* ATADEBUG */
-
-	return (error);
 }
 
 /*
@@ -638,7 +590,7 @@ atabus_childdetached(device_t self, device_t child)
 }
 
 CFATTACH_DECL3_NEW(atabus, sizeof(struct atabus_softc),
-    atabus_match, atabus_attach, atabus_detach, atabus_activate, NULL,
+    atabus_match, atabus_attach, atabus_detach, NULL, atabus_rescan,
     atabus_childdetached, DVF_DETACH_SHUTDOWN);
 
 /*****************************************************************************
@@ -1292,7 +1244,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 			 */
 			if (atac->atac_set_modes)
 				/*
-				 * It's OK to pool here, it's fast enouth
+				 * It's OK to pool here, it's fast enough
 				 * to not bother waiting for interrupt
 				 */
 				if (ata_set_mode(drvp, 0x08 | (i + 3),
@@ -1469,8 +1421,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 
 /* management of the /dev/atabus* devices */
 int
-atabusopen(dev_t dev, int flag, int fmt,
-    struct lwp *l)
+atabusopen(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct atabus_softc *sc;
 	int error;
@@ -1492,8 +1443,7 @@ atabusopen(dev_t dev, int flag, int fmt,
 
 
 int
-atabusclose(dev_t dev, int flag, int fmt,
-    struct lwp *l)
+atabusclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct atabus_softc *sc =
 	    device_lookup_private(&atabus_cd, minor(dev));
@@ -1506,8 +1456,7 @@ atabusclose(dev_t dev, int flag, int fmt,
 }
 
 int
-atabusioctl(dev_t dev, u_long cmd, void *addr, int flag,
-    struct lwp *l)
+atabusioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	struct atabus_softc *sc =
 	    device_lookup_private(&atabus_cd, minor(dev));
@@ -1534,8 +1483,7 @@ atabusioctl(dev_t dev, u_long cmd, void *addr, int flag,
 		s = splbio();
 		ata_reset_channel(sc->sc_chan, AT_WAIT | AT_POLL);
 		splx(s);
-		error = 0;
-		break;
+		return 0;
 	case ATABUSIOSCAN:
 	{
 #if 0
@@ -1575,17 +1523,15 @@ atabusioctl(dev_t dev, u_long cmd, void *addr, int flag,
 				KASSERT(chp->ch_drive[drive].drv_softc == NULL);
 			}
 		}
-		error = 0;
-		break;
+		return 0;
 	}
 	default:
-		error = ENOTTY;
+		return ENOTTY;
 	}
-	return (error);
-};
+}
 
 static bool
-atabus_suspend(device_t dv PMF_FN_ARGS)
+atabus_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct atabus_softc *sc = device_private(dv);
 	struct ata_channel *chp = sc->sc_chan;
@@ -1596,7 +1542,7 @@ atabus_suspend(device_t dv PMF_FN_ARGS)
 }
 
 static bool
-atabus_resume(device_t dv PMF_FN_ARGS)
+atabus_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct atabus_softc *sc = device_private(dv);
 	struct ata_channel *chp = sc->sc_chan;
@@ -1618,4 +1564,40 @@ atabus_resume(device_t dv PMF_FN_ARGS)
 	splx(s);
 
 	return true;
+}
+
+static int
+atabus_rescan(device_t self, const char *ifattr, const int *locators)
+{
+	struct atabus_softc *sc = device_private(self);
+	struct ata_channel *chp = sc->sc_chan;
+	struct atabus_initq *initq;
+	int i;
+	int s;
+
+	if (chp->atapibus != NULL) {
+		return EBUSY;
+	}
+
+	for (i = 0; i < ATA_MAXDRIVES; i++) {
+		if (chp->ata_drives[i] != NULL) {
+			return EBUSY;
+		}
+	}
+
+	s = splbio();
+	for (i = 0; i < ATA_MAXDRIVES; i++) {
+		chp->ch_drive[i].drive_flags = 0;
+	}
+	splx(s);
+
+	initq = malloc(sizeof(*initq), M_DEVBUF, M_WAITOK);
+	initq->atabus_sc = sc;
+	TAILQ_INSERT_TAIL(&atabus_initq_head, initq, atabus_initq);
+	config_pending_incr();
+
+	chp->ch_flags |= ATACH_TH_RESCAN;
+	wakeup(&chp->ch_thread);
+
+	return 0;
 }

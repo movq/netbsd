@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sysctl.c,v 1.168 2009/10/21 21:12:06 rmind Exp $ */
+/*	$NetBSD: init_sysctl.c,v 1.186 2011/12/17 20:05:39 tls Exp $ */
 
 /*-
  * Copyright (c) 2003, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -30,16 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.168 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.186 2011/12/17 20:05:39 tls Exp $");
 
 #include "opt_sysv.h"
-#include "opt_compat_netbsd32.h"
 #include "opt_compat_netbsd.h"
 #include "opt_modular.h"
 #include "opt_sa.h"
 #include "opt_posix.h"
 #include "pty.h"
-#include "rnd.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -50,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.168 2009/10/21 21:12:06 rmind Exp 
 #include <sys/kernel.h>
 #include <sys/unistd.h>
 #include <sys/disklabel.h>
-#include <sys/rnd.h>
+#include <sys/cprng.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
@@ -71,9 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.168 2009/10/21 21:12:06 rmind Exp 
 #include <sys/ktrace.h>
 #include <sys/ksem.h>
 
-#ifdef COMPAT_NETBSD32
-#include <compat/netbsd32/netbsd32.h>
-#endif
 #ifdef COMPAT_50
 #include <compat/sys/time.h>
 #endif
@@ -135,13 +130,6 @@ static const u_int sysctl_stflagmap[] = {
 
 };
 
-static const u_int sysctl_lwpflagmap[] = {
-	LW_SINTR, P_SINTR,
-	LW_SYSTEM, P_SYSTEM,
-	LW_SA, P_SA,	/* WRS ??? */
-	0
-};
-
 static const u_int sysctl_lwpprflagmap[] = {
 	LPR_DETACHED, L_DETACHED,
 	0
@@ -150,7 +138,6 @@ static const u_int sysctl_lwpprflagmap[] = {
 /*
  * try over estimating by 5 procs/lwps
  */
-#define KERN_PROCSLOP	(5 * sizeof(struct kinfo_proc))
 #define KERN_LWPSLOP	(5 * sizeof(struct kinfo_lwp))
 
 static int dcopyout(struct lwp *, const void *, void *, size_t);
@@ -175,7 +162,6 @@ static int sysctl_kern_maxproc(SYSCTLFN_PROTO);
 static int sysctl_kern_hostid(SYSCTLFN_PROTO);
 static int sysctl_setlen(SYSCTLFN_PROTO);
 static int sysctl_kern_clockrate(SYSCTLFN_PROTO);
-static int sysctl_kern_file(SYSCTLFN_PROTO);
 static int sysctl_msgbuf(SYSCTLFN_PROTO);
 static int sysctl_kern_defcorename(SYSCTLFN_PROTO);
 static int sysctl_kern_cptime(SYSCTLFN_PROTO);
@@ -189,20 +175,13 @@ static int sysctl_kern_lwp(SYSCTLFN_PROTO);
 static int sysctl_kern_forkfsleep(SYSCTLFN_PROTO);
 static int sysctl_kern_root_partition(SYSCTLFN_PROTO);
 static int sysctl_kern_drivers(SYSCTLFN_PROTO);
-static int sysctl_kern_file2(SYSCTLFN_PROTO);
 static int sysctl_security_setidcore(SYSCTLFN_PROTO);
 static int sysctl_security_setidcorename(SYSCTLFN_PROTO);
 static int sysctl_kern_cpid(SYSCTLFN_PROTO);
-static int sysctl_doeproc(SYSCTLFN_PROTO);
-static int sysctl_kern_proc_args(SYSCTLFN_PROTO);
 static int sysctl_hw_usermem(SYSCTLFN_PROTO);
 static int sysctl_hw_cnmagic(SYSCTLFN_PROTO);
 
-static u_int sysctl_map_flags(const u_int *, u_int);
-static void fill_kproc2(struct proc *, struct kinfo_proc2 *, bool);
 static void fill_lwp(struct lwp *l, struct kinfo_lwp *kl);
-static void fill_file(struct kinfo_file *, const file_t *, const fdfile_t *,
-		      int, pid_t);
 
 /*
  * ********************************************************************
@@ -233,13 +212,13 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "ostype",
 		       SYSCTL_DESCR("Operating system type"),
-		       NULL, 0, &ostype, 0,
+		       NULL, 0, __UNCONST(&ostype), 0,
 		       CTL_KERN, KERN_OSTYPE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "osrelease",
 		       SYSCTL_DESCR("Operating system release"),
-		       NULL, 0, &osrelease, 0,
+		       NULL, 0, __UNCONST(&osrelease), 0,
 		       CTL_KERN, KERN_OSRELEASE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
@@ -251,7 +230,7 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "version",
 		       SYSCTL_DESCR("Kernel version"),
-		       NULL, 0, &version, 0,
+		       NULL, 0, __UNCONST(&version), 0,
 		       CTL_KERN, KERN_VERSION, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
@@ -309,12 +288,6 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       SYSCTL_DESCR("System vnode table"),
 		       sysctl_kern_vnode, 0, NULL, 0,
 		       CTL_KERN, KERN_VNODE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "file",
-		       SYSCTL_DESCR("System open file table"),
-		       sysctl_kern_file, 0, NULL, 0,
-		       CTL_KERN, KERN_FILE, CTL_EOL);
 #ifndef GPROF
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
@@ -614,6 +587,12 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       NULL, LABELOFFSET, NULL, 0,
 		       CTL_KERN, KERN_LABELOFFSET, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
+		       CTLTYPE_INT, "labelusesmbr",
+		       SYSCTL_DESCR("disklabel is inside MBR partition"),
+		       NULL, LABELUSESMBR, NULL, 0,
+		       CTL_KERN, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "lwp",
 		       SYSCTL_DESCR("System-wide LWP information"),
@@ -708,12 +687,6 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTL_KERN, KERN_DRIVERS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "file2",
-		       SYSCTL_DESCR("System open file table"),
-		       sysctl_kern_file2, 0, NULL, 0,
-		       CTL_KERN, KERN_FILE2, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "cp_id",
 		       SYSCTL_DESCR("Mapping of CPU number to CPU id"),
 		       sysctl_kern_cpid, 0, NULL, 0,
@@ -766,22 +739,22 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       sysctl_security_setidcore, 0, &security_setidcore_mode,
 		       0,
 		       CTL_CREATE, CTL_EOL);
-#ifdef KERN_SA
 	sysctl_createv(clog, 0, NULL, NULL,
+#ifndef KERN_SA
+		       CTLFLAG_IMMEDIATE|
+#endif
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "no_sa_support",
-		       SYSCTL_DESCR("0 if the kernel supports SA, otherwise it doesn't"),
-		       NULL, 0, &sa_system_disabled, 0,
-		       CTL_KERN, CTL_CREATE, CTL_EOL);
+		       SYSCTL_DESCR("0 if the kernel supports SA, otherwise "
+		       "it doesn't"),
+		       NULL, 
+#ifndef KERN_SA
+		       1, NULL,
 #else
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
-		       CTLTYPE_INT, "no_sa_support",
-		       SYSCTL_DESCR("0 if the kernel supports SA, otherwise it doesn't"),
-		       NULL, 1, NULL, 0,
-		       CTL_KERN, CTL_CREATE, CTL_EOL);
+		       0, &sa_system_disabled,
 #endif
-
+		       0,
+		       CTL_KERN, CTL_CREATE, CTL_EOL);
 	/* kern.posix. */
 	sysctl_createv(clog, 0, NULL, &rnode,
 			CTLFLAG_PERMANENT,
@@ -795,52 +768,6 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 			SYSCTL_DESCR("Maximal number of semaphores"),
 			NULL, 0, &ksem_max, 0,
 			CTL_CREATE, CTL_EOL);
-}
-
-SYSCTL_SETUP(sysctl_kern_proc_setup,
-	     "sysctl kern.proc/proc2/proc_args subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "kern", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_KERN, CTL_EOL);
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "proc",
-		       SYSCTL_DESCR("System-wide process information"),
-		       sysctl_doeproc, 0, NULL, 0,
-		       CTL_KERN, KERN_PROC, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "proc2",
-		       SYSCTL_DESCR("Machine-independent process information"),
-		       sysctl_doeproc, 0, NULL, 0,
-		       CTL_KERN, KERN_PROC2, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "proc_args",
-		       SYSCTL_DESCR("Process argument information"),
-		       sysctl_kern_proc_args, 0, NULL, 0,
-		       CTL_KERN, KERN_PROC_ARGS, CTL_EOL);
-
-	/*
-	  "nodes" under these:
-
-	  KERN_PROC_ALL
-	  KERN_PROC_PID pid
-	  KERN_PROC_PGRP pgrp
-	  KERN_PROC_SESSION sess
-	  KERN_PROC_TTY tty
-	  KERN_PROC_UID uid
-	  KERN_PROC_RUID uid
-	  KERN_PROC_GID gid
-	  KERN_PROC_RGID gid
-
-	  all in all, probably not worth the effort...
-	*/
 }
 
 SYSCTL_SETUP(sysctl_hw_setup, "sysctl hw subtree setup")
@@ -1070,7 +997,7 @@ sysctl_kern_maxvnodes(SYSCTLFN_ARGS)
 	old_vnodes = desiredvnodes;
 	desiredvnodes = new_vnodes;
 	if (new_vnodes < old_vnodes) {
-		error = vfs_drainvnodes(new_vnodes, l);
+		error = vfs_drainvnodes(new_vnodes);
 		if (error) {
 			desiredvnodes = old_vnodes;
 			return (error);
@@ -1210,105 +1137,6 @@ sysctl_kern_clockrate(SYSCTLFN_ARGS)
 	node = *rnode;
 	node.sysctl_data = &clkinfo;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-}
-
-
-/*
- * sysctl helper routine for kern.file pseudo-subtree.
- */
-static int
-sysctl_kern_file(SYSCTLFN_ARGS)
-{
-	int error;
-	size_t buflen;
-	struct file *fp, *dp, *np, fbuf;
-	char *start, *where;
-
-	start = where = oldp;
-	buflen = *oldlenp;
-	dp = NULL;
-	
-	if (where == NULL) {
-		/*
-		 * overestimate by 10 files
-		 */
-		*oldlenp = sizeof(filehead) + (nfiles + 10) *
-		    sizeof(struct file);
-		return (0);
-	}
-
-	/*
-	 * first dcopyout filehead
-	 */
-	if (buflen < sizeof(filehead)) {
-		*oldlenp = 0;
-		return (0);
-	}
-	sysctl_unlock();
-	error = dcopyout(l, &filehead, where, sizeof(filehead));
-	if (error) {
-	 	sysctl_relock();
-		return error;
-	}
-	buflen -= sizeof(filehead);
-	where += sizeof(filehead);
-
-	/*
-	 * allocate dummy file descriptor to make position in list
-	 */
-	if ((dp = fgetdummy()) == NULL) {
-	 	sysctl_relock();
-		return ENOMEM;
-	}
-
-	/*
-	 * followed by an array of file structures
-	 */
-	mutex_enter(&filelist_lock);
-	for (fp = LIST_FIRST(&filehead); fp != NULL; fp = np) {
-	    	np = LIST_NEXT(fp, f_list);
-	    	mutex_enter(&fp->f_lock);
-	    	if (fp->f_count == 0) {
-		    	mutex_exit(&fp->f_lock);
-	    		continue;
-		}
-		/*
-		 * XXX Need to prevent that from being an alternative way
-		 * XXX to getting process information.
-		 */
-		if (kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_CANSEE, fp->f_cred) != 0) {
-		    	mutex_exit(&fp->f_lock);
-			continue;
-		}
-		if (buflen < sizeof(struct file)) {
-			*oldlenp = where - start;
-		    	mutex_exit(&fp->f_lock);
-			error = ENOMEM;
-			break;
-		}
-		memcpy(&fbuf, fp, sizeof(fbuf));
-		LIST_INSERT_AFTER(fp, dp, f_list);
-	    	mutex_exit(&fp->f_lock);
-		mutex_exit(&filelist_lock);
-		error = dcopyout(l, &fbuf, where, sizeof(fbuf));
-		if (error) {
-			mutex_enter(&filelist_lock);
-			LIST_REMOVE(dp, f_list);
-			break;
-		}
-		buflen -= sizeof(struct file);
-		where += sizeof(struct file);
-		mutex_enter(&filelist_lock);
-		np = LIST_NEXT(dp, f_list);
-		LIST_REMOVE(dp, f_list);
-	}
-	mutex_exit(&filelist_lock);
-	*oldlenp = where - start;
- 	if (dp != NULL)
-		fputdummy(dp);
- 	sysctl_relock();
-	return (error);
 }
 
 /*
@@ -1566,12 +1394,9 @@ sysctl_kern_sbmax(SYSCTLFN_ARGS)
 static int
 sysctl_kern_urnd(SYSCTLFN_ARGS)
 {
-#if NRND > 0
 	int v, rv;
 
-	KERNEL_LOCK(1, NULL);
-	rv = rnd_extract_data(&v, sizeof(v), RND_EXTRACT_ANY);
-	KERNEL_UNLOCK_ONE(NULL);
+	rv = cprng_strong(sysctl_prng, &v, sizeof(v), 0);
 	if (rv == sizeof(v)) {
 		struct sysctlnode node = *rnode;
 		node.sysctl_data = &v;
@@ -1579,9 +1404,6 @@ sysctl_kern_urnd(SYSCTLFN_ARGS)
 	}
 	else
 		return (EIO);	/*XXX*/
-#else
-	return (EOPNOTSUPP);
-#endif
 }
 
 /*
@@ -1591,26 +1413,37 @@ sysctl_kern_urnd(SYSCTLFN_ARGS)
 static int
 sysctl_kern_arnd(SYSCTLFN_ARGS)
 {
-#if NRND > 0
 	int error;
 	void *v;
 	struct sysctlnode node = *rnode;
 
 	if (*oldlenp == 0)
 		return 0;
-	if (*oldlenp > 8192)
+	/*
+	 * This code used to allow sucking 8192 bytes at a time out
+	 * of the kernel arc4random generator.  Evidently there is some
+	 * very old OpenBSD application code that may try to do this.
+	 *
+	 * Note that this node is documented as type "INT" -- 4 or 8
+	 * bytes, not 8192.
+	 *
+	 * We continue to support this abuse of the "len" pointer here
+	 * but only 256 bytes at a time, as, anecdotally, the actual
+	 * application use here was to generate RC4 keys in userspace.
+	 *
+	 * Support for such large requests will probably be removed
+	 * entirely in the future.
+	 */
+	if (*oldlenp > 256)
 		return E2BIG;
 
 	v = kmem_alloc(*oldlenp, KM_SLEEP);
-	arc4randbytes(v, *oldlenp);
+	cprng_fast(v, *oldlenp);
 	node.sysctl_data = v;
 	node.sysctl_size = *oldlenp;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	kmem_free(v, *oldlenp);
 	return error;
-#else
-	return (EOPNOTSUPP);
-#endif
 }
 /*
  * sysctl helper routine to do kern.lwp.* work.
@@ -1695,7 +1528,7 @@ sysctl_kern_lwp(SYSCTLFN_ARGS)
 		mutex_exit(proc_lock);
 	} else {
 		mutex_enter(proc_lock);
-		p = p_find(pid, PFIND_LOCKED);
+		p = proc_find(pid);
 		if (p == NULL) {
 			error = ESRCH;
 			mutex_exit(proc_lock);
@@ -1867,708 +1700,6 @@ sysctl_kern_drivers(SYSCTLFN_ARGS)
 	mutex_exit(&device_lock);
 	sysctl_relock();
 	*oldlenp = where - start;
-	return error;
-}
-
-/*
- * sysctl helper function for kern.file2
- */
-static int
-sysctl_kern_file2(SYSCTLFN_ARGS)
-{
-	struct proc *p;
-	struct file *fp, *tp, *np;
-	struct filedesc *fd;
-	struct kinfo_file kf;
-	char *dp;
-	u_int i, op;
-	size_t len, needed, elem_size, out_size;
-	int error, arg, elem_count;
-	fdfile_t *ff;
-	fdtab_t *dt;
-
-	if (namelen == 1 && name[0] == CTL_QUERY)
-		return (sysctl_query(SYSCTLFN_CALL(rnode)));
-
-	if (namelen != 4)
-		return (EINVAL);
-
-	error = 0;
-	dp = oldp;
-	len = (oldp != NULL) ? *oldlenp : 0;
-	op = name[0];
-	arg = name[1];
-	elem_size = name[2];
-	elem_count = name[3];
-	out_size = MIN(sizeof(kf), elem_size);
-	needed = 0;
-
-	if (elem_size < 1 || elem_count < 0)
-		return (EINVAL);
-
-	switch (op) {
-	case KERN_FILE_BYFILE:
-		/*
-		 * doesn't use arg so it must be zero
-		 */
-		if (arg != 0)
-			return (EINVAL);
-		sysctl_unlock();
-		/*
-		 * allocate dummy file descriptor to make position in list
-		 */
-		if ((tp = fgetdummy()) == NULL) {
-		 	sysctl_relock();
-			return ENOMEM;
-		}
-		mutex_enter(&filelist_lock);
-		for (fp = LIST_FIRST(&filehead); fp != NULL; fp = np) {
-			np = LIST_NEXT(fp, f_list);
-			mutex_enter(&fp->f_lock);
-			if (fp->f_count == 0) {
-				mutex_exit(&fp->f_lock);
-				continue;
-			}
-			/*
-			 * XXX Need to prevent that from being an alternative
-			 * XXX way for getting process information.
-			 */
-			if (kauth_authorize_generic(l->l_cred,
-			    KAUTH_GENERIC_CANSEE, fp->f_cred) != 0) {
-				mutex_exit(&fp->f_lock);
-				continue;
-			}
-			if (len >= elem_size && elem_count > 0) {
-				fill_file(&kf, fp, NULL, 0, 0);
-				LIST_INSERT_AFTER(fp, tp, f_list);
-				mutex_exit(&fp->f_lock);
-				mutex_exit(&filelist_lock);
-				error = dcopyout(l, &kf, dp, out_size);
-				mutex_enter(&filelist_lock);
-				np = LIST_NEXT(tp, f_list);
-				LIST_REMOVE(tp, f_list);
-				if (error) {
-					break;
-				}
-				dp += elem_size;
-				len -= elem_size;
-			} else {
-				mutex_exit(&fp->f_lock);
-			}
-			needed += elem_size;
-			if (elem_count > 0 && elem_count != INT_MAX)
-				elem_count--;
-		}
-		mutex_exit(&filelist_lock);
-		fputdummy(tp);
-		sysctl_relock();
-		break;
-	case KERN_FILE_BYPID:
-		if (arg < -1)
-			/* -1 means all processes */
-			return (EINVAL);
-		sysctl_unlock();
-		mutex_enter(proc_lock);
-		PROCLIST_FOREACH(p, &allproc) {
-			if (p->p_stat == SIDL) {
-				/* skip embryonic processes */
-				continue;
-			}
-			if (arg > 0 && p->p_pid != arg) {
-				/* pick only the one we want */
-				/* XXX want 0 to mean "kernel files" */
-				continue;
-			}
-			mutex_enter(p->p_lock);
-			error = kauth_authorize_process(l->l_cred,
-			    KAUTH_PROCESS_CANSEE, p,
-			    KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_OPENFILES),
-			    NULL, NULL);
-			mutex_exit(p->p_lock);
-			if (error != 0) {
-				/*
-				 * Don't leak kauth retval if we're silently
-				 * skipping this entry.
-				 */
-				error = 0;
-				continue;
-			}
-
-			/*
-			 * Grab a hold on the process.
-			 */
-			if (!rw_tryenter(&p->p_reflock, RW_READER)) {
-				continue;
-			}
-			mutex_exit(proc_lock);
-
-			/* XXX Do we need to check permission per file? */
-			fd = p->p_fd;
-			mutex_enter(&fd->fd_lock);
-			dt = fd->fd_dt;
-			for (i = 0; i < dt->dt_nfiles; i++) {
-				if ((ff = dt->dt_ff[i]) == NULL) {
-					continue;
-				}
-				if ((fp = ff->ff_file) == NULL) {
-					continue;
-				}
-				if (len >= elem_size && elem_count > 0) {
-					mutex_enter(&fp->f_lock);
-					fill_file(&kf, fp, ff, i, p->p_pid);
-					mutex_exit(&fp->f_lock);
-					mutex_exit(&fd->fd_lock);
-					error = dcopyout(l, &kf, dp, out_size);
-					mutex_enter(&fd->fd_lock);
-					if (error)
-						break;
-					dp += elem_size;
-					len -= elem_size;
-				}
-				needed += elem_size;
-				if (elem_count > 0 && elem_count != INT_MAX)
-					elem_count--;
-			}
-			mutex_exit(&fd->fd_lock);
-
-			/*
-			 * Release reference to process.
-			 */
-			mutex_enter(proc_lock);
-			rw_exit(&p->p_reflock);
-		}
-		mutex_exit(proc_lock);
-		sysctl_relock();
-		break;
-	default:
-		return (EINVAL);
-	}
-
-	if (oldp == NULL)
-		needed += KERN_FILESLOP * elem_size;
-	*oldlenp = needed;
-
-	return (error);
-}
-
-static void
-fill_file(struct kinfo_file *kp, const file_t *fp, const fdfile_t *ff,
-	  int i, pid_t pid)
-{
-
-	memset(kp, 0, sizeof(*kp));
-
-	kp->ki_fileaddr =	PTRTOUINT64(fp);
-	kp->ki_flag =		fp->f_flag;
-	kp->ki_iflags =		0;
-	kp->ki_ftype =		fp->f_type;
-	kp->ki_count =		fp->f_count;
-	kp->ki_msgcount =	fp->f_msgcount;
-	kp->ki_fucred =		PTRTOUINT64(fp->f_cred);
-	kp->ki_fuid =		kauth_cred_geteuid(fp->f_cred);
-	kp->ki_fgid =		kauth_cred_getegid(fp->f_cred);
-	kp->ki_fops =		PTRTOUINT64(fp->f_ops);
-	kp->ki_foffset =	fp->f_offset;
-	kp->ki_fdata =		PTRTOUINT64(fp->f_data);
-
-	/* vnode information to glue this file to something */
-	if (fp->f_type == DTYPE_VNODE) {
-		struct vnode *vp = (struct vnode *)fp->f_data;
-
-		kp->ki_vun =	PTRTOUINT64(vp->v_un.vu_socket);
-		kp->ki_vsize =	vp->v_size;
-		kp->ki_vtype =	vp->v_type;
-		kp->ki_vtag =	vp->v_tag;
-		kp->ki_vdata =	PTRTOUINT64(vp->v_data);
-	}
-
-	/* process information when retrieved via KERN_FILE_BYPID */
-	if (ff != NULL) {
-		kp->ki_pid =		pid;
-		kp->ki_fd =		i;
-		kp->ki_ofileflags =	ff->ff_exclose;
-		kp->ki_usecount =	ff->ff_refcnt;
-	}
-}
-
-static int
-sysctl_doeproc(SYSCTLFN_ARGS)
-{
-	union {
-		struct kinfo_proc kproc;
-		struct kinfo_proc2 kproc2;
-	} *kbuf;
-	struct proc *p, *next, *marker;
-	char *where, *dp;
-	int type, op, arg, error;
-	u_int elem_size, kelem_size, elem_count;
-	size_t buflen, needed;
-	bool match, zombie, mmmbrains;
-
-	if (namelen == 1 && name[0] == CTL_QUERY)
-		return (sysctl_query(SYSCTLFN_CALL(rnode)));
-
-	dp = where = oldp;
-	buflen = where != NULL ? *oldlenp : 0;
-	error = 0;
-	needed = 0;
-	type = rnode->sysctl_num;
-
-	if (type == KERN_PROC) {
-		if (namelen != 2 && !(namelen == 1 && name[0] == KERN_PROC_ALL))
-			return (EINVAL);
-		op = name[0];
-		if (op != KERN_PROC_ALL)
-			arg = name[1];
-		else
-			arg = 0;		/* Quell compiler warning */
-		elem_count = 0;	/* Ditto */
-		kelem_size = elem_size = sizeof(kbuf->kproc);
-	} else {
-		if (namelen != 4)
-			return (EINVAL);
-		op = name[0];
-		arg = name[1];
-		elem_size = name[2];
-		elem_count = name[3];
-		kelem_size = sizeof(kbuf->kproc2);
-	}
-
-	sysctl_unlock();
-
-	kbuf = kmem_alloc(sizeof(*kbuf), KM_SLEEP);
-	marker = kmem_alloc(sizeof(*marker), KM_SLEEP);
-	marker->p_flag = PK_MARKER;
-
-	mutex_enter(proc_lock);
-	mmmbrains = false;
-	for (p = LIST_FIRST(&allproc);; p = next) {
-		if (p == NULL) {
-			if (!mmmbrains) {
-				p = LIST_FIRST(&zombproc);
-				mmmbrains = true;
-			}
-			if (p == NULL)
-				break;
-		}
-		next = LIST_NEXT(p, p_list);
-		if ((p->p_flag & PK_MARKER) != 0)
-			continue;
-
-		/*
-		 * Skip embryonic processes.
-		 */
-		if (p->p_stat == SIDL)
-			continue;
-
-		mutex_enter(p->p_lock);
-		error = kauth_authorize_process(l->l_cred,
-		    KAUTH_PROCESS_CANSEE, p,
-		    KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_ENTRY), NULL, NULL);
-		if (error != 0) {
-			mutex_exit(p->p_lock);
-			continue;
-		}
-
-		/*
-		 * TODO - make more efficient (see notes below).
-		 * do by session.
-		 */
-		switch (op) {
-		case KERN_PROC_PID:
-			/* could do this with just a lookup */
-			match = (p->p_pid == (pid_t)arg);
-			break;
-
-		case KERN_PROC_PGRP:
-			/* could do this by traversing pgrp */
-			match = (p->p_pgrp->pg_id == (pid_t)arg);
-			break;
-
-		case KERN_PROC_SESSION:
-			match = (p->p_session->s_sid == (pid_t)arg);
-			break;
-
-		case KERN_PROC_TTY:
-			match = true;
-			if (arg == (int) KERN_PROC_TTY_REVOKE) {
-				if ((p->p_lflag & PL_CONTROLT) == 0 ||
-				    p->p_session->s_ttyp == NULL ||
-				    p->p_session->s_ttyvp != NULL) {
-				    	match = false;
-				}
-			} else if ((p->p_lflag & PL_CONTROLT) == 0 ||
-			    p->p_session->s_ttyp == NULL) {
-				if ((dev_t)arg != KERN_PROC_TTY_NODEV) {
-					match = false;
-				}
-			} else if (p->p_session->s_ttyp->t_dev != (dev_t)arg) {
-				match = false;
-			}
-			break;
-
-		case KERN_PROC_UID:
-			match = (kauth_cred_geteuid(p->p_cred) == (uid_t)arg);
-			break;
-
-		case KERN_PROC_RUID:
-			match = (kauth_cred_getuid(p->p_cred) == (uid_t)arg);
-			break;
-
-		case KERN_PROC_GID:
-			match = (kauth_cred_getegid(p->p_cred) == (uid_t)arg);
-			break;
-
-		case KERN_PROC_RGID:
-			match = (kauth_cred_getgid(p->p_cred) == (uid_t)arg);
-			break;
-
-		case KERN_PROC_ALL:
-			match = true;
-			/* allow everything */
-			break;
-
-		default:
-			error = EINVAL;
-			mutex_exit(p->p_lock);
-			goto cleanup;
-		}
-		if (!match) {
-			mutex_exit(p->p_lock);
-			continue;
-		}
-
-		/*
-		 * Grab a hold on the process.
-		 */
-		if (mmmbrains) { 
-			zombie = true;
-		} else {
-			zombie = !rw_tryenter(&p->p_reflock, RW_READER);
-		}
-		if (zombie) {
-			LIST_INSERT_AFTER(p, marker, p_list);
-		}
-
-		if (buflen >= elem_size &&
-		    (type == KERN_PROC || elem_count > 0)) {
-			if (type == KERN_PROC) {
-				kbuf->kproc.kp_proc = *p;
-				fill_eproc(p, &kbuf->kproc.kp_eproc, zombie);
-			} else {
-				fill_kproc2(p, &kbuf->kproc2, zombie);
-				elem_count--;
-			}
-			mutex_exit(p->p_lock);
-			mutex_exit(proc_lock);
-			/*
-			 * Copy out elem_size, but not larger than kelem_size
-			 */
-			error = dcopyout(l, kbuf, dp,
-			    min(kelem_size, elem_size));
-			mutex_enter(proc_lock);
-			if (error) {
-				goto bah;
-			}
-			dp += elem_size;
-			buflen -= elem_size;
-		} else {
-			mutex_exit(p->p_lock);
-		}
-		needed += elem_size;
-
-		/*
-		 * Release reference to process.
-		 */
-	 	if (zombie) {
-			next = LIST_NEXT(marker, p_list);
- 			LIST_REMOVE(marker, p_list);
-		} else {
-			rw_exit(&p->p_reflock);
-		}
-	}
-	mutex_exit(proc_lock);
-
-	if (where != NULL) {
-		*oldlenp = dp - where;
-		if (needed > *oldlenp) {
-			error = ENOMEM;
-			goto out;
-		}
-	} else {
-		needed += KERN_PROCSLOP;
-		*oldlenp = needed;
-	}
-	if (kbuf)
-		kmem_free(kbuf, sizeof(*kbuf));
-	if (marker)
-		kmem_free(marker, sizeof(*marker));
-	sysctl_relock();
-	return 0;
- bah:
- 	if (zombie)
- 		LIST_REMOVE(marker, p_list);
-	else
-		rw_exit(&p->p_reflock);
- cleanup:
-	mutex_exit(proc_lock);
- out:
-	if (kbuf)
-		kmem_free(kbuf, sizeof(*kbuf));
-	if (marker)
-		kmem_free(marker, sizeof(*marker));
-	sysctl_relock();
-	return error;
-}
-
-/*
- * sysctl helper routine for kern.proc_args pseudo-subtree.
- */
-static int
-sysctl_kern_proc_args(SYSCTLFN_ARGS)
-{
-	struct ps_strings pss;
-	struct proc *p;
-	size_t len, i;
-	struct uio auio;
-	struct iovec aiov;
-	pid_t pid;
-	int nargv, type, error, argvlen;
-	char *arg;
-	char **argv = NULL;
-	char *tmp;
-	struct vmspace *vmspace;
-	vaddr_t psstr_addr;
-	vaddr_t offsetn;
-	vaddr_t offsetv;
-
-	if (namelen == 1 && name[0] == CTL_QUERY)
-		return (sysctl_query(SYSCTLFN_CALL(rnode)));
-
-	if (newp != NULL || namelen != 2)
-		return (EINVAL);
-	pid = name[0];
-	type = name[1];
-	argv = NULL;
-	argvlen = 0;
-
-	switch (type) {
-	case KERN_PROC_ARGV:
-	case KERN_PROC_NARGV:
-	case KERN_PROC_ENV:
-	case KERN_PROC_NENV:
-		/* ok */
-		break;
-	default:
-		return (EINVAL);
-	}
-
-	sysctl_unlock();
-
-	/* check pid */
-	mutex_enter(proc_lock);
-	if ((p = p_find(pid, PFIND_LOCKED)) == NULL) {
-		error = EINVAL;
-		goto out_locked;
-	}
-	mutex_enter(p->p_lock);
-
-	/* Check permission. */
-	if (type == KERN_PROC_ARGV || type == KERN_PROC_NARGV)
-		error = kauth_authorize_process(l->l_cred, KAUTH_PROCESS_CANSEE,
-		    p, KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_ARGS), NULL, NULL);
-	else if (type == KERN_PROC_ENV || type == KERN_PROC_NENV)
-		error = kauth_authorize_process(l->l_cred, KAUTH_PROCESS_CANSEE,
-		    p, KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_ENV), NULL, NULL);
-	else
-		error = EINVAL; /* XXXGCC */
-	if (error) {
-		mutex_exit(p->p_lock);
-		goto out_locked;
-	}
-
-	if (oldp == NULL) {
-		if (type == KERN_PROC_NARGV || type == KERN_PROC_NENV)
-			*oldlenp = sizeof (int);
-		else
-			*oldlenp = ARG_MAX;	/* XXX XXX XXX */
-		error = 0;
-		mutex_exit(p->p_lock);
-		goto out_locked;
-	}
-
-	/*
-	 * Zombies don't have a stack, so we can't read their psstrings.
-	 * System processes also don't have a user stack.
-	 */
-	if (P_ZOMBIE(p) || (p->p_flag & PK_SYSTEM) != 0) {
-		error = EINVAL;
-		mutex_exit(p->p_lock);
-		goto out_locked;
-	}
-
-	/*
-	 * Lock the process down in memory.
-	 */
-	psstr_addr = (vaddr_t)p->p_psstr;
-	if (type == KERN_PROC_ARGV || type == KERN_PROC_NARGV) {
-		offsetn = p->p_psnargv;
-		offsetv = p->p_psargv;
-	} else {
-		offsetn = p->p_psnenv;
-		offsetv = p->p_psenv;
-	}
-	vmspace = p->p_vmspace;
-	uvmspace_addref(vmspace);
-	mutex_exit(p->p_lock);
-	mutex_exit(proc_lock);
-
-	/*
-	 * Allocate a temporary buffer to hold the arguments.
-	 */
-	arg = kmem_alloc(PAGE_SIZE, KM_SLEEP);
-
-	/*
-	 * Read in the ps_strings structure.
-	 */
-	aiov.iov_base = &pss;
-	aiov.iov_len = sizeof(pss);
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_offset = psstr_addr;
-	auio.uio_resid = sizeof(pss);
-	auio.uio_rw = UIO_READ;
-	UIO_SETUP_SYSSPACE(&auio);
-	error = uvm_io(&vmspace->vm_map, &auio);
-	if (error)
-		goto done;
-
-	memcpy(&nargv, (char *)&pss + offsetn, sizeof(nargv));
-	if (type == KERN_PROC_NARGV || type == KERN_PROC_NENV) {
-		error = dcopyout(l, &nargv, oldp, sizeof(nargv));
-		*oldlenp = sizeof(nargv);
-		goto done;
-	}
-	/*
-	 * Now read the address of the argument vector.
-	 */
-	switch (type) {
-	case KERN_PROC_ARGV:
-		/* FALLTHROUGH */
-	case KERN_PROC_ENV:
-		memcpy(&tmp, (char *)&pss + offsetv, sizeof(tmp));
-		break;
-	default:
-		error = EINVAL;
-		goto done;
-	}
-
-#ifdef COMPAT_NETBSD32
-	if (p->p_flag & PK_32)
-		len = sizeof(netbsd32_charp) * nargv;
-	else
-#endif
-		len = sizeof(char *) * nargv;
-
-	if ((argvlen = len) != 0)
-		argv = kmem_alloc(len, KM_SLEEP);
-
-	aiov.iov_base = argv;
-	aiov.iov_len = len;
-	auio.uio_iov = &aiov;
-	auio.uio_iovcnt = 1;
-	auio.uio_offset = (off_t)(unsigned long)tmp;
-	auio.uio_resid = len;
-	auio.uio_rw = UIO_READ;
-	UIO_SETUP_SYSSPACE(&auio);
-	error = uvm_io(&vmspace->vm_map, &auio);
-	if (error)
-		goto done;
-
-	/*
-	 * Now copy each string.
-	 */
-	len = 0; /* bytes written to user buffer */
-	for (i = 0; i < nargv; i++) {
-		int finished = 0;
-		vaddr_t base;
-		size_t xlen;
-		int j;
-
-#ifdef COMPAT_NETBSD32
-		if (p->p_flag & PK_32) {
-			netbsd32_charp *argv32;
-
-			argv32 = (netbsd32_charp *)argv;
-			base = (vaddr_t)NETBSD32PTR64(argv32[i]);
-		} else
-#endif
-			base = (vaddr_t)argv[i];
-
-		/*
-		 * The program has messed around with its arguments,
-		 * possibly deleting some, and replacing them with
-		 * NULL's. Treat this as the last argument and not
-		 * a failure.
-		 */
-		if (base == 0)
-			break;
-
-		while (!finished) {
-			xlen = PAGE_SIZE - (base & PAGE_MASK);
-
-			aiov.iov_base = arg;
-			aiov.iov_len = PAGE_SIZE;
-			auio.uio_iov = &aiov;
-			auio.uio_iovcnt = 1;
-			auio.uio_offset = base;
-			auio.uio_resid = xlen;
-			auio.uio_rw = UIO_READ;
-			UIO_SETUP_SYSSPACE(&auio);
-			error = uvm_io(&vmspace->vm_map, &auio);
-			if (error)
-				goto done;
-
-			/* Look for the end of the string */
-			for (j = 0; j < xlen; j++) {
-				if (arg[j] == '\0') {
-					xlen = j + 1;
-					finished = 1;
-					break;
-				}
-			}
-
-			/* Check for user buffer overflow */
-			if (len + xlen > *oldlenp) {
-				finished = 1;
-				if (len > *oldlenp)
-					xlen = 0;
-				else
-					xlen = *oldlenp - len;
-			}
-
-			/* Copyout the page */
-			error = dcopyout(l, arg, (char *)oldp + len, xlen);
-			if (error)
-				goto done;
-
-			len += xlen;
-			base += xlen;
-		}
-	}
-	*oldlenp = len;
-
-done:
-	if (argvlen != 0)
-		kmem_free(argv, argvlen);
-	uvmspace_free(vmspace);
-	kmem_free(arg, PAGE_SIZE);
-	sysctl_relock();
-	return error;
-
-out_locked:
-	mutex_exit(proc_lock);
-	sysctl_relock();
 	return error;
 }
 
@@ -2809,229 +1940,7 @@ sysctl_consdev(SYSCTLFN_ARGS)
  * section 4: support for some helpers
  * ********************************************************************
  */
-/*
- * Find the most ``active'' lwp of a process and return it for ps display
- * purposes
- */
-static struct lwp *
-proc_active_lwp(struct proc *p)
-{
-	static const int ostat[] = {
-		0,	
-		2,	/* LSIDL */
-		6,	/* LSRUN */
-		5,	/* LSSLEEP */
-		4,	/* LSSTOP */
-		0,	/* LSZOMB */
-		1,	/* LSDEAD */
-		7,	/* LSONPROC */
-		3	/* LSSUSPENDED */
-	};
 
-	struct lwp *l, *lp = NULL;
-	LIST_FOREACH(l, &p->p_lwps, l_sibling) {
-		KASSERT(l->l_stat >= 0 && l->l_stat < __arraycount(ostat));
-		if (lp == NULL ||
-		    ostat[l->l_stat] > ostat[lp->l_stat] ||
-		    (ostat[l->l_stat] == ostat[lp->l_stat] &&
-		    l->l_cpticks > lp->l_cpticks)) {
-			lp = l;
-			continue;
-		}
-	}
-	return lp;
-}
-
-
-/*
- * Fill in a kinfo_proc2 structure for the specified process.
- */
-static void
-fill_kproc2(struct proc *p, struct kinfo_proc2 *ki, bool zombie)
-{
-	struct tty *tp;
-	struct lwp *l, *l2;
-	struct timeval ut, st, rt;
-	sigset_t ss1, ss2;
-	struct rusage ru;
-	struct vmspace *vm;
-
-	KASSERT(mutex_owned(proc_lock));
-	KASSERT(mutex_owned(p->p_lock));
-
-	sigemptyset(&ss1);
-	sigemptyset(&ss2);
-	memset(ki, 0, sizeof(*ki));
-
-	ki->p_paddr = PTRTOUINT64(p);
-	ki->p_fd = PTRTOUINT64(p->p_fd);
-	ki->p_cwdi = PTRTOUINT64(p->p_cwdi);
-	ki->p_stats = PTRTOUINT64(p->p_stats);
-	ki->p_limit = PTRTOUINT64(p->p_limit);
-	ki->p_vmspace = PTRTOUINT64(p->p_vmspace);
-	ki->p_sigacts = PTRTOUINT64(p->p_sigacts);
-	ki->p_sess = PTRTOUINT64(p->p_session);
-	ki->p_tsess = 0;	/* may be changed if controlling tty below */
-	ki->p_ru = PTRTOUINT64(&p->p_stats->p_ru);
-	ki->p_eflag = 0;
-	ki->p_exitsig = p->p_exitsig;
-	ki->p_flag = sysctl_map_flags(sysctl_flagmap, p->p_flag);
-	ki->p_flag |= sysctl_map_flags(sysctl_sflagmap, p->p_sflag);
-	ki->p_flag |= sysctl_map_flags(sysctl_slflagmap, p->p_slflag);
-	ki->p_flag |= sysctl_map_flags(sysctl_lflagmap, p->p_lflag);
-	ki->p_flag |= sysctl_map_flags(sysctl_stflagmap, p->p_stflag);
-	ki->p_pid = p->p_pid;
-	if (p->p_pptr)
-		ki->p_ppid = p->p_pptr->p_pid;
-	else
-		ki->p_ppid = 0;
-	ki->p_uid = kauth_cred_geteuid(p->p_cred);
-	ki->p_ruid = kauth_cred_getuid(p->p_cred);
-	ki->p_gid = kauth_cred_getegid(p->p_cred);
-	ki->p_rgid = kauth_cred_getgid(p->p_cred);
-	ki->p_svuid = kauth_cred_getsvuid(p->p_cred);
-	ki->p_svgid = kauth_cred_getsvgid(p->p_cred);
-	ki->p_ngroups = kauth_cred_ngroups(p->p_cred);
-	kauth_cred_getgroups(p->p_cred, ki->p_groups,
-	    min(ki->p_ngroups, sizeof(ki->p_groups) / sizeof(ki->p_groups[0])),
-	    UIO_SYSSPACE);
-
-	ki->p_uticks = p->p_uticks;
-	ki->p_sticks = p->p_sticks;
-	ki->p_iticks = p->p_iticks;
-	ki->p_tpgid = NO_PGID;	/* may be changed if controlling tty below */
-	ki->p_tracep = PTRTOUINT64(p->p_tracep);
-	ki->p_traceflag = p->p_traceflag;
-
-	memcpy(&ki->p_sigignore, &p->p_sigctx.ps_sigignore,sizeof(ki_sigset_t));
-	memcpy(&ki->p_sigcatch, &p->p_sigctx.ps_sigcatch, sizeof(ki_sigset_t));
-
-	ki->p_cpticks = 0;
-	ki->p_pctcpu = p->p_pctcpu;
-	ki->p_estcpu = 0;
-	ki->p_stat = p->p_stat; /* Will likely be overridden by LWP status */
-	ki->p_realstat = p->p_stat;
-	ki->p_nice = p->p_nice;
-	ki->p_xstat = p->p_xstat;
-	ki->p_acflag = p->p_acflag;
-
-	strncpy(ki->p_comm, p->p_comm,
-	    min(sizeof(ki->p_comm), sizeof(p->p_comm)));
-	strncpy(ki->p_ename, p->p_emul->e_name, sizeof(ki->p_ename));
-
-	ki->p_nlwps = p->p_nlwps;
-	ki->p_realflag = ki->p_flag;
-
-	if (p->p_stat != SIDL && !P_ZOMBIE(p) && !zombie) {
-		vm = p->p_vmspace;
-		ki->p_vm_rssize = vm_resident_count(vm);
-		ki->p_vm_tsize = vm->vm_tsize;
-		ki->p_vm_dsize = vm->vm_dsize;
-		ki->p_vm_ssize = vm->vm_ssize;
-		ki->p_vm_vsize = vm->vm_map.size;
-		/*
-		 * Since the stack is initially mapped mostly with
-		 * PROT_NONE and grown as needed, adjust the "mapped size"
-		 * to skip the unused stack portion.
-		 */
-		ki->p_vm_msize =
-		    atop(vm->vm_map.size) - vm->vm_issize + vm->vm_ssize;
-
-		/* Pick the primary (first) LWP */
-		l = proc_active_lwp(p);
-		KASSERT(l != NULL);
-		lwp_lock(l);
-		ki->p_nrlwps = p->p_nrlwps;
-		ki->p_forw = 0;
-		ki->p_back = 0;
-		ki->p_addr = PTRTOUINT64(l->l_addr);
-		ki->p_stat = l->l_stat;
-		ki->p_flag |= sysctl_map_flags(sysctl_lwpflagmap, l->l_flag);
-		ki->p_swtime = l->l_swtime;
-		ki->p_slptime = l->l_slptime;
-		if (l->l_stat == LSONPROC)
-			ki->p_schedflags = l->l_cpu->ci_schedstate.spc_flags;
-		else
-			ki->p_schedflags = 0;
-		ki->p_priority = lwp_eprio(l);
-		ki->p_usrpri = l->l_priority;
-		if (l->l_wchan)
-			strncpy(ki->p_wmesg, l->l_wmesg, sizeof(ki->p_wmesg));
-		ki->p_wchan = PTRTOUINT64(l->l_wchan);
-		ki->p_cpuid = cpu_index(l->l_cpu);
-		lwp_unlock(l);
-		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
-			/* This is hardly correct, but... */
-			sigplusset(&l->l_sigpend.sp_set, &ss1);
-			sigplusset(&l->l_sigmask, &ss2);
-			ki->p_cpticks += l->l_cpticks;
-			ki->p_pctcpu += l->l_pctcpu;
-			ki->p_estcpu += l->l_estcpu;
-		}
-	}
-	sigplusset(&p->p_sigpend.sp_set, &ss2);
-	memcpy(&ki->p_siglist, &ss1, sizeof(ki_sigset_t));
-	memcpy(&ki->p_sigmask, &ss2, sizeof(ki_sigset_t));
-
-	if (p->p_session != NULL) {
-		ki->p_sid = p->p_session->s_sid;
-		ki->p__pgid = p->p_pgrp->pg_id;
-		if (p->p_session->s_ttyvp)
-			ki->p_eflag |= EPROC_CTTY;
-		if (SESS_LEADER(p))
-			ki->p_eflag |= EPROC_SLEADER;
-		strncpy(ki->p_login, p->p_session->s_login,
-		    min(sizeof ki->p_login - 1, sizeof p->p_session->s_login));
-		ki->p_jobc = p->p_pgrp->pg_jobc;
-		if ((p->p_lflag & PL_CONTROLT) && (tp = p->p_session->s_ttyp)) {
-			ki->p_tdev = tp->t_dev;
-			ki->p_tpgid = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PGID;
-			ki->p_tsess = PTRTOUINT64(tp->t_session);
-		} else {
-			ki->p_tdev = (int32_t)NODEV;
-		}
-	}
-
-	if (!P_ZOMBIE(p) && !zombie) {
-		ki->p_uvalid = 1;
-		ki->p_ustart_sec = p->p_stats->p_start.tv_sec;
-		ki->p_ustart_usec = p->p_stats->p_start.tv_usec;
-
-		calcru(p, &ut, &st, NULL, &rt);
-		ki->p_rtime_sec = rt.tv_sec;
-		ki->p_rtime_usec = rt.tv_usec;
-		ki->p_uutime_sec = ut.tv_sec;
-		ki->p_uutime_usec = ut.tv_usec;
-		ki->p_ustime_sec = st.tv_sec;
-		ki->p_ustime_usec = st.tv_usec;
-
-		memcpy(&ru, &p->p_stats->p_ru, sizeof(ru));
-		ki->p_uru_nvcsw = 0;
-		ki->p_uru_nivcsw = 0;
-		LIST_FOREACH(l2, &p->p_lwps, l_sibling) {
-			ki->p_uru_nvcsw += (l2->l_ncsw - l2->l_nivcsw);
-			ki->p_uru_nivcsw += l2->l_nivcsw;
-			ruadd(&ru, &l2->l_ru);
-		}
-		ki->p_uru_maxrss = ru.ru_maxrss;
-		ki->p_uru_ixrss = ru.ru_ixrss;
-		ki->p_uru_idrss = ru.ru_idrss;
-		ki->p_uru_isrss = ru.ru_isrss;
-		ki->p_uru_minflt = ru.ru_minflt;
-		ki->p_uru_majflt = ru.ru_majflt;
-		ki->p_uru_nswap = ru.ru_nswap;
-		ki->p_uru_inblock = ru.ru_inblock;
-		ki->p_uru_oublock = ru.ru_oublock;
-		ki->p_uru_msgsnd = ru.ru_msgsnd;
-		ki->p_uru_msgrcv = ru.ru_msgrcv;
-		ki->p_uru_nsignals = ru.ru_nsignals;
-
-		timeradd(&p->p_stats->p_cru.ru_utime,
-			 &p->p_stats->p_cru.ru_stime, &ut);
-		ki->p_uctime_sec = ut.tv_sec;
-		ki->p_uctime_usec = ut.tv_usec;
-	}
-}
 
 /*
  * Fill in a kinfo_lwp structure for the specified lwp.
@@ -3044,13 +1953,16 @@ fill_lwp(struct lwp *l, struct kinfo_lwp *kl)
 
 	KASSERT(lwp_locked(l, NULL));
 
+	memset(kl, 0, sizeof(*kl));
+
 	kl->l_forw = 0;
 	kl->l_back = 0;
 	kl->l_laddr = PTRTOUINT64(l);
 	kl->l_addr = PTRTOUINT64(l->l_addr);
 	kl->l_stat = l->l_stat;
 	kl->l_lid = l->l_lid;
-	kl->l_flag = sysctl_map_flags(sysctl_lwpprflagmap, l->l_prflag);
+	kl->l_flag = L_INMEM;
+	kl->l_flag |= sysctl_map_flags(sysctl_lwpprflagmap, l->l_prflag);
 	kl->l_flag |= sysctl_map_flags(sysctl_lwpflagmap, l->l_flag);
 
 	kl->l_swtime = l->l_swtime;
@@ -3075,75 +1987,4 @@ fill_lwp(struct lwp *l, struct kinfo_lwp *kl)
 		kl->l_name[0] = '\0';
 	else
 		strlcpy(kl->l_name, l->l_name, sizeof(kl->l_name));
-}
-
-/*
- * Fill in an eproc structure for the specified process.
- */
-void
-fill_eproc(struct proc *p, struct eproc *ep, bool zombie)
-{
-	struct tty *tp;
-	struct lwp *l;
-
-	KASSERT(mutex_owned(proc_lock));
-	KASSERT(mutex_owned(p->p_lock));
-
-	memset(ep, 0, sizeof(*ep));
-
-	ep->e_paddr = p;
-	ep->e_sess = p->p_session;
-	if (p->p_cred) {
-		kauth_cred_topcred(p->p_cred, &ep->e_pcred);
-		kauth_cred_toucred(p->p_cred, &ep->e_ucred);
-	}
-	if (p->p_stat != SIDL && !P_ZOMBIE(p) && !zombie) {
-		struct vmspace *vm = p->p_vmspace;
-
-		ep->e_vm.vm_rssize = vm_resident_count(vm);
-		ep->e_vm.vm_tsize = vm->vm_tsize;
-		ep->e_vm.vm_dsize = vm->vm_dsize;
-		ep->e_vm.vm_ssize = vm->vm_ssize;
-		ep->e_vm.vm_map.size = vm->vm_map.size;
-
-		/* Pick the primary (first) LWP */
-		l = proc_active_lwp(p);
-		KASSERT(l != NULL);
-		lwp_lock(l);
-		if (l->l_wchan)
-			strncpy(ep->e_wmesg, l->l_wmesg, WMESGLEN);
-		lwp_unlock(l);
-	}
-	if (p->p_pptr)
-		ep->e_ppid = p->p_pptr->p_pid;
-	if (p->p_pgrp && p->p_session) {
-		ep->e_pgid = p->p_pgrp->pg_id;
-		ep->e_jobc = p->p_pgrp->pg_jobc;
-		ep->e_sid = p->p_session->s_sid;
-		if ((p->p_lflag & PL_CONTROLT) &&
-		    (tp = ep->e_sess->s_ttyp)) {
-			ep->e_tdev = tp->t_dev;
-			ep->e_tpgid = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PGID;
-			ep->e_tsess = tp->t_session;
-		} else
-			ep->e_tdev = (uint32_t)NODEV;
-		ep->e_flag = ep->e_sess->s_ttyvp ? EPROC_CTTY : 0;
-		if (SESS_LEADER(p))
-			ep->e_flag |= EPROC_SLEADER;
-		strncpy(ep->e_login, ep->e_sess->s_login, MAXLOGNAME);
-	}
-	ep->e_xsize = ep->e_xrssize = 0;
-	ep->e_xccount = ep->e_xswrss = 0;
-}
-
-u_int
-sysctl_map_flags(const u_int *map, u_int word)
-{
-	u_int rv;
-
-	for (rv = 0; *map != 0; map += 2)
-		if ((word & map[0]) != 0)
-			rv |= map[1];
-
-	return rv;
 }

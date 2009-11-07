@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.62 2009/11/07 07:27:47 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.72 2012/01/27 18:53:03 para Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -129,11 +129,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -153,7 +149,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.62 2009/11/07 07:27:47 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.72 2012/01/27 18:53:03 para Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -176,7 +172,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.62 2009/11/07 07:27:47 cegger Exp $");
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
 #include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
@@ -193,6 +188,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.62 2009/11/07 07:27:47 cegger Exp $");
 #include <sys/sysctl.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/promlib.h>
 #include <machine/cpu.h>
@@ -200,6 +196,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.62 2009/11/07 07:27:47 cegger Exp $");
 #include <machine/idprom.h>
 #include <machine/kcore.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #define _SUN68K_BUS_DMA_PRIVATE
@@ -235,7 +232,6 @@ extern u_int bufpages;
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	physmem;
@@ -346,13 +342,6 @@ cpu_startup(void)
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
 
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
-
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
 
@@ -369,7 +358,7 @@ cpu_startup(void)
 	 */
 	dvmamap = extent_create("dvmamap",
 	    DVMA_MAP_BASE, DVMA_MAP_BASE + DVMA_MAP_AVAIL,
-	    M_DEVBUF, 0, 0, EX_NOWAIT);
+	    0, 0, EX_NOWAIT);
 	if (dvmamap == NULL)
 		panic("unable to allocate DVMA map");
 
@@ -377,39 +366,6 @@ cpu_startup(void)
 	 * Set up CPU-specific registers, cache, etc.
 	 */
 	initcpu();
-}
-
-/*
- * Set registers on exec.
- */
-void 
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
-
-	tf->tf_sr = PSL_USERSET;
-	tf->tf_pc = pack->ep_entry & ~1;
-	tf->tf_regs[D0] = 0;
-	tf->tf_regs[D1] = 0;
-	tf->tf_regs[D2] = 0;
-	tf->tf_regs[D3] = 0;
-	tf->tf_regs[D4] = 0;
-	tf->tf_regs[D5] = 0;
-	tf->tf_regs[D6] = 0;
-	tf->tf_regs[D7] = 0;
-	tf->tf_regs[A0] = 0;
-	tf->tf_regs[A1] = 0;
-	tf->tf_regs[A2] = (int)l->l_proc->p_psstr;
-	tf->tf_regs[A3] = 0;
-	tf->tf_regs[A4] = 0;
-	tf->tf_regs[A5] = 0;
-	tf->tf_regs[A6] = 0;
-	tf->tf_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-
-	l->l_md.md_flags = 0;
 }
 
 /*
@@ -610,23 +566,13 @@ long	dumplo = 0; 		/* blocks */
 void 
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int devblks;	/* size of dump device in blocks */
 	int dumpblks;	/* size of dump image in blocks */
-	int (*getsize)(dev_t);
 
 	if (dumpdev == NODEV)
 		return;
 
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	getsize = bdev->d_psize;
-	if (getsize == NULL)
-		return;
-	devblks = (*getsize)(dumpdev);
+	devblks = bdev_size(dumpdev);
 	if (devblks <= ctod(1))
 		return;
 	devblks &= ~(ctod(1)-1);
@@ -695,7 +641,7 @@ dumpsys(void)
 	}
 	savectx(&dumppcb);
 
-	psize = (*(dsw->d_psize))(dumpdev);
+	psize = bdev_size(dumpdev);
 	if (psize == -1) {
 		printf("dump area unavailable\n");
 		return;
@@ -1188,4 +1134,43 @@ find_prom_map(paddr_t pa, bus_type_t iospace, int len, vaddr_t *vap)
 	}
 	restore_context(saved_ctx);
 	return ENOENT;
+}
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	/* Allow access only in "managed" RAM. */
+	if (pa < avail_start || pa >= avail_end)
+		return EFAULT;
+	return 0;
+}
+
+bool
+mm_md_direct_mapped_phys(paddr_t paddr, vaddr_t *vaddr)
+{
+
+	if (paddr >= avail_start)
+		return false;
+	*vaddr = paddr;
+	return true;
+}
+
+/*
+ * Allow access to the PROM mapping similiar to uvm_kernacc().
+ */
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+
+	if ((vaddr_t)ptr < SUN2_PROM_BASE || (vaddr_t)ptr > SUN2_MONEND) {
+		*handled = false;
+		return 0;
+	}
+
+	*handled = true;
+	/* Read in the PROM itself is OK, write not. */
+	if ((prot & VM_PROT_WRITE) == 0)
+		return 0;
+	return EFAULT;
 }

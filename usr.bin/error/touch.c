@@ -1,4 +1,4 @@
-/*	$NetBSD: touch.c,v 1.22 2009/08/13 06:59:37 dholland Exp $	*/
+/*	$NetBSD: touch.c,v 1.26.6.1 2012/03/05 19:12:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)touch.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: touch.c,v 1.22 2009/08/13 06:59:37 dholland Exp $");
+__RCSID("$NetBSD: touch.c,v 1.26.6.1 2012/03/05 19:12:07 sborrill Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -47,6 +47,7 @@ __RCSID("$NetBSD: touch.c,v 1.22 2009/08/13 06:59:37 dholland Exp $");
 #include <unistd.h>
 #include <util.h>
 #include <stdarg.h>
+#include <err.h>
 #include "error.h"
 #include "pathnames.h"
 
@@ -87,12 +88,30 @@ static int mustwrite(const char *, unsigned, FILE *);
 static void errorprint(FILE *, Eptr, boolean);
 static int probethisfile(const char *);
 
+static const char *
+makename(const char *name, size_t level)
+{
+	const char *p;
+
+	if (level == 0)
+		return name;
+
+	if (*name == '/') {
+		name++;
+		if (level-- == 0)
+			return name;
+	}
+
+	while (level-- != 0 && (p = strchr(name, '/')) != NULL)
+		name = p + 1;
+
+	return name;
+}
 void
 findfiles(int my_nerrors, Eptr *my_errors, int *r_nfiles, Eptr ***r_files)
 {
 	int my_nfiles;
 	Eptr **my_files;
-
 	const char *name;
 	int ei;
 	int fi;
@@ -122,10 +141,11 @@ findfiles(int my_nerrors, Eptr *my_errors, int *r_nfiles, Eptr ***r_files)
 	name = "\1";
 	fi = 1;
 	ECITERATE(ei, errorp, ei, my_errors, my_nerrors) {
+		const char *fname = makename(errorp->error_text[0], filelevel);
 		if (errorp->error_e_class == C_NULLED
 		    || errorp->error_e_class == C_TRUE) {
-			if (strcmp(errorp->error_text[0], name) != 0) {
-				name = errorp->error_text[0];
+			if (strcmp(fname, name) != 0) {
+				name = fname;
 				touchedfiles[fi] = false;
 				my_files[fi] = &my_errors[ei];
 				fi++;
@@ -149,9 +169,11 @@ countfiles(Eptr *errors)
 	name = "\1";
 	ECITERATE(ei, errorp, 0, errors, nerrors) {
 		if (SORTABLE(errorp->error_e_class)) {
-			if (strcmp(errorp->error_text[0],name) != 0) {
+			const char *fname = makename(errorp->error_text[0],
+			    filelevel);
+			if (strcmp(fname, name) != 0) {
 				my_nfiles++;
-				name = errorp->error_text[0];
+				name = fname;
 			}
 		}
 	}
@@ -194,8 +216,10 @@ filenames(int my_nfiles, Eptr **my_files)
 				my_nfiles, plural(my_nfiles), verbform(my_nfiles));
 		if (!terse) {
 			FILEITERATE(fi, 1, my_nfiles) {
+				const char *fname = makename(
+				    (*my_files[fi])->error_text[0], filelevel);
 				fprintf(stdout, "%s\"%s\" (%d)",
-					sep, (*my_files[fi])->error_text[0],
+					sep, fname,
 					(int)(my_files[fi+1] - my_files[fi]));
 				sep = ", ";
 			}
@@ -241,6 +265,7 @@ nopertain(Eptr **my_files)
 	return (someerrors);
 }
 
+
 bool
 touchfiles(int my_nfiles, Eptr **my_files, int *r_edargc, char ***r_edargv)
 {
@@ -254,8 +279,9 @@ touchfiles(int my_nfiles, Eptr **my_files, int *r_edargc, char ***r_edargv)
 	int spread;
 
 	FILEITERATE(fi, 1, my_nfiles) {
-		name = (*my_files[fi])->error_text[0];
+		name = makename((*my_files[fi])->error_text[0], filelevel);
 		spread = my_files[fi+1] - my_files[fi];
+
 		fprintf(stdout, terse
 			? "\"%s\" has %d error%s, "
 			: "\nFile \"%s\" has %d error%s.\n"
@@ -362,10 +388,13 @@ settotouch(const char *name)
 	int dest = TOSTDOUT;
 
 	if (query) {
-		switch (inquire(terse
-			? "Touch? "
-			: "Do you want to touch file \"%s\"? ",
-			name)) {
+		int reply;
+		if (terse)
+			reply = inquire("Touch? ");
+		else
+			reply = inquire("Do you want to touch file \"%s\"? ",
+			    name);
+		switch (reply) {
 		case Q_NO:
 		case Q_no:
 		case Q_error:
@@ -417,10 +446,11 @@ diverterrors(const char *name, int dest, Eptr **my_files, int ix,
 	my_nerrors = my_files[ix+1] - my_files[ix];
 
 	if (my_nerrors != nterrors && !previewed) {
-		fprintf(stdout, terse
-			? "Uninserted errors\n"
-			: ">>Uninserted errors for file \"%s\" follow.\n",
-			name);
+		if (terse)
+			printf("Uninserted errors\n");
+		else
+			printf(">>Uninserted errors for file \"%s\" follow.\n",
+			    name);
 	}
 
 	EITERATE(erpp, my_files, ix) {
@@ -501,7 +531,7 @@ static void
 execvarg(int n_pissed_on, int *r_argc, char ***r_argv)
 {
 	Eptr p;
-	const char *sep;
+	const char *sep, *name;
 	int fi;
 
 	sep = NULL;
@@ -517,11 +547,12 @@ execvarg(int n_pissed_on, int *r_argc, char ***r_argv)
 		if (!touchedfiles[fi])
 			continue;
 		p = *(files[fi]);
+		name = makename(p->error_text[0], filelevel);
 		if (!terse) {
-			fprintf(stdout,"%s\"%s\"", sep, p->error_text[0]);
+			fprintf(stdout,"%s\"%s\"", sep, name);
 			sep = ", ";
 		}
-		(*r_argv)[n_pissed_on++] = p->error_text[0];
+		(*r_argv)[n_pissed_on++] = __UNCONST(name);
 	}
 	if (!terse)
 		fprintf(stdout, "\n");
@@ -548,8 +579,7 @@ edit(const char *name)
 
 	o_name = name;
 	if ((o_touchedfile = fopen(name, "r")) == NULL) {
-		fprintf(stderr, "%s: Can't open file \"%s\" to touch (read).\n",
-			processname, name);
+		warn("Can't open file `%s' to touch (read)", name);
 		return true;
 	}
 	if ((tmpdir = getenv("TMPDIR")) == NULL)
@@ -558,10 +588,9 @@ edit(const char *name)
 	fd = -1;
 	if ((fd = mkstemp(n_name)) == -1 ||
 	    (n_touchedfile = fdopen(fd, "w")) == NULL) {
+		warn("Can't open file `%s' to touch (write)", name);
 		if (fd != -1)
 			close(fd);
-		fprintf(stderr,"%s: Can't open file \"%s\" to touch (write).\n",
-			processname, name);
 		return true;
 	}
 	tempfileopen = true;
@@ -621,9 +650,8 @@ writetouched(int overwrite)
 			 * Catastrophe in temporary area: file system full?
 			 */
 			botch = 1;
-			fprintf(stderr,
-			    "%s: write failure: No errors inserted in \"%s\"\n",
-			    processname, o_name);
+			warn("write failure: No errors inserted in `%s'",
+			    o_name);
 		}
 	}
 	fclose(n_touchedfile);
@@ -638,14 +666,11 @@ writetouched(int overwrite)
 		localfile = NULL;
 		temp = NULL;
 		if ((localfile = fopen(o_name, "w")) == NULL) {
-			fprintf(stderr,
-				"%s: Can't open file \"%s\" to overwrite.\n",
-				processname, o_name);
+			warn("Can't open file `%s' to overwrite", o_name);
 			botch++;
 		}
 		if ((temp = fopen(n_name, "r")) == NULL) {
-			fprintf(stderr, "%s: Can't open file \"%s\" to read.\n",
-				processname, n_name);
+			warn("Can't open file `%s' to read", n_name);
 			botch++;
 		}
 		if (!botch)
@@ -655,11 +680,9 @@ writetouched(int overwrite)
 		if (temp != NULL)
 			fclose(temp);
 	}
-	if (oktorm == 0) {
-		fprintf(stderr, "%s: Catastrophe: A copy of \"%s\": was saved in \"%s\"\n",
-			processname, o_name, n_name);
-		exit(1);
-	}
+	if (oktorm == 0)
+		errx(1, "Catastrophe: A copy of `%s': was saved in `%s'",
+		    o_name, n_name);
 	/*
 	 * Kiss the temp file good bye
 	 */
@@ -696,7 +719,7 @@ mustwrite(const char *base, unsigned n, FILE *preciousfile)
 	nwrote = fwrite(base, 1, n, preciousfile);
 	if (nwrote == n)
 		return (1);
-	perror(processname);
+	warn("write failed");
 	switch (inquire(terse
 	    ? "Botch overwriting: retry? "
 	    : "Botch overwriting the source file: retry? ")) {

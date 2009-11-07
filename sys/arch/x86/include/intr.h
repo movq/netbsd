@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.39 2009/04/19 14:11:37 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.43 2011/08/01 10:42:23 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -73,7 +73,8 @@ struct intrstub {
 
 struct intrsource {
 	int is_maxlevel;		/* max. IPL for this source */
-	int is_pin;			/* IRQ for legacy; pin for IO APIC */
+	int is_pin;			/* IRQ for legacy; pin for IO APIC,
+					   -1 for MSI */
 	struct intrhand *is_handlers;	/* handler chain */
 	struct pic *is_pic;		/* originating PIC */
 	void *is_recurse;		/* entry for spllower */
@@ -111,6 +112,8 @@ struct intrhand {
 
 #define IMASK(ci,level) (ci)->ci_imask[(level)]
 #define IUNMASK(ci,level) (ci)->ci_iunmask[(level)]
+
+#ifdef _KERNEL
 
 void Xspllower(int);
 void spllower(int);
@@ -169,7 +172,7 @@ struct cpu_info;
 struct pcibus_attach_args;
 
 void intr_default_setup(void);
-int x86_nmi(void);
+void x86_nmi(void);
 void *intr_establish(int, struct pic *, int, int, int, int (*)(void *), void *, bool);
 void intr_disestablish(struct intrhand *);
 void intr_add_pcibus(struct pcibus_attach_args *);
@@ -181,10 +184,11 @@ void intr_printconfig(void);
 
 int x86_send_ipi(struct cpu_info *, int);
 void x86_broadcast_ipi(int);
-void x86_multicast_ipi(int, int);
 void x86_ipi_handler(void);
 
 extern void (*ipifunc[X86_NIPI])(struct cpu_info *);
+
+#endif /* _KERNEL */
 
 #endif /* !_LOCORE */
 

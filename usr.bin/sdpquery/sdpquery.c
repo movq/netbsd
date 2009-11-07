@@ -1,4 +1,4 @@
-/*	$NetBSD: sdpquery.c,v 1.5 2009/05/12 18:37:50 plunky Exp $	*/
+/*	$NetBSD: sdpquery.c,v 1.7 2011/09/16 15:39:29 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -35,7 +35,7 @@
 __COPYRIGHT("@(#) Copyright (c) 2009 The NetBSD Foundation, Inc.\
  Copyright (c) 2006 Itronix, Inc.\
  All rights reserved.");
-__RCSID("$NetBSD: sdpquery.c,v 1.5 2009/05/12 18:37:50 plunky Exp $");
+__RCSID("$NetBSD: sdpquery.c,v 1.7 2011/09/16 15:39:29 joerg Exp $");
 
 #include <bluetooth.h>
 #include <err.h>
@@ -48,7 +48,7 @@ __RCSID("$NetBSD: sdpquery.c,v 1.5 2009/05/12 18:37:50 plunky Exp $");
 
 #include "sdpquery.h"
 
-static void usage(void);
+__dead static void usage(void);
 
 const char *control_socket;
 
@@ -142,7 +142,7 @@ main(int argc, char *argv[])
 
 	for (cmd = commands ; cmd->command != NULL; cmd++) {
 		if (strcasecmp(*argv, cmd->command) == 0)
-			return (*cmd->handler)(--argc, (char const **)++argv);
+			return (*cmd->handler)(--argc, (void *)++argv);
 	}
 
 	usage();

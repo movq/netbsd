@@ -1,4 +1,4 @@
-/*	$NetBSD: elroy.c,v 1.8 2009/07/23 13:34:26 skrll Exp $	*/
+/*	$NetBSD: elroy.c,v 1.12 2012/01/27 18:52:56 para Exp $	*/
 
 /*	$OpenBSD: elroy.c,v 1.5 2009/03/30 21:24:57 kettenis Exp $	*/
 
@@ -454,7 +454,7 @@ elroy_alloc_parent(device_t self, struct pci_attach_args *pa, int io)
 			snprintf(sc->sc_memexname, sizeof(sc->sc_memexname),
 			    "%s_mem", sc->sc_dv.dv_xname);
 			if ((sc->sc_memex = extent_create(sc->sc_memexname,
-			    mem_start, mem_start + ELROY_MEM_WINDOW, M_DEVBUF,
+			    mem_start, mem_start + ELROY_MEM_WINDOW,
 			    NULL, 0, EX_NOWAIT | EX_MALLOCOK)) == NULL) {
 				extent_destroy(sc->sc_ioex);
 				bus_space_free(sc->sc_bt, memh,
@@ -706,7 +706,6 @@ elroy_rrm_2(void *v, bus_space_handle_t h, bus_size_t o,
 
 	h += o;
 	p = (volatile uint16_t *)h;
-	c /= 2;
 	while (c--)
 		*q++ = *p;
 }
@@ -719,7 +718,6 @@ elroy_rrm_4(void *v, bus_space_handle_t h, bus_size_t o,
 
 	h += o;
 	p = (volatile uint32_t *)h;
-	c /= 4;
 	while (c--)
 		*q++ = *p;
 }
@@ -732,7 +730,6 @@ elroy_rrm_8(void *v, bus_space_handle_t h, bus_size_t o,
 
 	h += o;
 	p = (volatile uint64_t *)h;
-	c /= 8;
 	while (c--)
 		*q++ = *p;
 }
@@ -746,7 +743,6 @@ elroy_wrm_2(void *v, bus_space_handle_t h, bus_size_t o,
 
 	h += o;
 	p = (volatile uint16_t *)h;
-	c /= 2;
 	while (c--)
 		*p = *q++;
 }
@@ -760,7 +756,6 @@ elroy_wrm_4(void *v, bus_space_handle_t h, bus_size_t o,
 
 	h += o;
 	p = (volatile uint32_t *)h;
-	c /= 4;
 	while (c--)
 		*p = *q++;
 }
@@ -774,7 +769,6 @@ elroy_wrm_8(void *v, bus_space_handle_t h, bus_size_t o,
 
 	h += o;
 	p = (volatile uint64_t *)h;
-	c /= 8;
 	while (c--)
 		*p = *q++;
 }
@@ -885,7 +879,6 @@ elroy_rrr_2(void *v, bus_space_handle_t h, bus_size_t o,
 {
 	volatile uint16_t *p, *q = a;
 
-	c /= 2;
 	h += o;
 	p = (volatile uint16_t *)h;
 	while (c--)
@@ -898,7 +891,6 @@ elroy_rrr_4(void *v, bus_space_handle_t h, bus_size_t o,
 {
 	volatile uint32_t *p, *q = a;
 
-	c /= 4;
 	h += o;
 	p = (volatile uint32_t *)h;
 	while (c--)
@@ -911,7 +903,6 @@ elroy_rrr_8(void *v, bus_space_handle_t h, bus_size_t o,
 {
 	volatile uint64_t *p, *q = a;
 
-	c /= 8;
 	h += o;
 	p = (volatile uint64_t *)h;
 	while (c--)
@@ -925,7 +916,6 @@ elroy_wrr_2(void *v, bus_space_handle_t h, bus_size_t o,
 	volatile uint16_t *p;
 	const uint16_t *q = a;
 
-	c /= 2;
 	h += o;
 	p = (volatile uint16_t *)h;
 	while (c--)
@@ -939,7 +929,6 @@ elroy_wrr_4(void *v, bus_space_handle_t h, bus_size_t o,
 	volatile uint32_t *p;
 	const uint32_t *q = a;
 
-	c /= 4;
 	h += o;
 	p = (volatile uint32_t *)h;
 	while (c--)
@@ -953,7 +942,6 @@ elroy_wrr_8(void *v, bus_space_handle_t h, bus_size_t o,
 	volatile uint64_t *p;
 	const uint64_t *q = a;
 
-	c /= 8;
 	h += o;
 	p = (volatile uint64_t *)h;
 	while (c--)
@@ -1275,7 +1263,8 @@ elroy_attach(device_t parent, device_t self, void *aux)
 		break;
 	}
 
-	aprint_normal(": %s TR%d.%d%s", p, sc->sc_ver >> 4, sc->sc_ver & 0xf, q);
+	aprint_normal(": %s TR%d.%d%s", p, sc->sc_ver >> 4, sc->sc_ver & 0xf,
+	    q);
 	apic_attach(sc);
 	aprint_normal("\n");
 
@@ -1316,7 +1305,7 @@ le64toh(r->eio_base), le64toh(r->eio_mask));
 	pba.pba_dmat = &sc->sc_dmatag;
 	pba.pba_pc = &sc->sc_pc;
 	pba.pba_bus = 0; /* (le32toh(elroy_read32(&r->busnum)) & 0xff) >> 4; */
- 	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+ 	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.49 2009/10/21 21:11:59 rmind Exp $	*/
+/*	$NetBSD: syscall.c,v 1.52 2012/02/11 23:16:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.49 2009/10/21 21:11:59 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.52 2012/02/11 23:16:15 martin Exp $");
 
 #include "opt_sa.h"
 
@@ -83,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.49 2009/10/21 21:11:59 rmind Exp $");
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ktrace.h>
 
 #include <uvm/uvm_extern.h>
@@ -102,6 +101,7 @@ void
 swi_handler(trapframe_t *frame)
 {
 	lwp_t *l = curlwp;
+	struct pcb *pcb;
 	uint32_t insn;
 
 	/*
@@ -170,7 +170,8 @@ swi_handler(trapframe_t *frame)
 #endif
 	}
 
-	l->l_addr->u_pcb.pcb_tf = frame;
+	pcb = lwp_getpcb(l);
+	pcb->pcb_tf = frame;
 
 #ifdef CPU_ARM7
 	/*
@@ -197,7 +198,7 @@ swi_handler(trapframe_t *frame)
 	}
 #endif	/* CPU_ARM7 */
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 
 	LWP_CACHE_CREDS(l, l->l_proc);
 	(*l->l_proc->p_md.md_syscall)(frame, l, insn);
@@ -322,7 +323,8 @@ void
 child_return(void *arg)
 {
 	lwp_t *l = arg;
-	struct trapframe *frame = l->l_addr->u_pcb.pcb_tf;
+	struct pcb *pcb = lwp_getpcb(l);
+	struct trapframe *frame = pcb->pcb_tf;
 
 	frame->tf_r0 = 0;
 #ifdef __PROG32
@@ -334,3 +336,14 @@ child_return(void *arg)
 	userret(l);
 	ktrsysret(SYS_fork, 0, 0);
 }
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l);
+}
+

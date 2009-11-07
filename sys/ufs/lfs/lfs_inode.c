@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_inode.c,v 1.120 2008/04/28 20:24:11 martin Exp $	*/
+/*	$NetBSD: lfs_inode.c,v 1.126 2011/11/23 19:42:10 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_inode.c,v 1.120 2008/04/28 20:24:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_inode.c,v 1.126 2011/11/23 19:42:10 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -141,14 +141,14 @@ lfs_update(struct vnode *vp, const struct timespec *acc,
 	 * will cause a panic.	So, we must wait until any pending write
 	 * for our inode completes, if we are called with UPDATE_WAIT set.
 	 */
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	while ((updflags & (UPDATE_WAIT|UPDATE_DIROP)) == UPDATE_WAIT &&
 	    WRITEINPROG(vp)) {
 		DLOG((DLOG_SEG, "lfs_update: sleeping on ino %d"
 		      " (in progress)\n", ip->i_number));
-		cv_wait(&vp->v_cv, &vp->v_interlock);
+		cv_wait(&vp->v_cv, vp->v_interlock);
 	}
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 	LFS_ITIMES(ip, acc, mod, NULL);
 	if (updflags & UPDATE_CLOSE)
 		flags = ip->i_flag & (IN_MODIFIED | IN_ACCESSED | IN_CLEANING);
@@ -226,8 +226,11 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 	/*
 	 * Just return and not update modification times.
 	 */
-	if (oip->i_size == length)
+	if (oip->i_size == length) {
+		/* still do a uvm_vnp_setsize() as writesize may be larger */
+		uvm_vnp_setsize(ovp, length);
 		return (0);
+	}
 
 	if (ovp->v_type == VLNK &&
 	    (oip->i_size < ump->um_maxsymlinklen ||
@@ -273,10 +276,13 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 				uvm_vnp_setwritesize(ovp, eob);
 				error = ufs_balloc_range(ovp, osize,
 				    eob - osize, cred, aflags);
-				if (error)
+				if (error) {
+					(void) lfs_truncate(ovp, osize,
+						    ioflag & IO_SYNC, cred);
 					return error;
+				}
 				if (ioflag & IO_SYNC) {
-					mutex_enter(&ovp->v_interlock);
+					mutex_enter(ovp->v_interlock);
 					VOP_PUTPAGES(ovp,
 					    trunc_page(osize & fs->lfs_bmask),
 					    round_page(eob),
@@ -309,7 +315,7 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 				return (error);
 			oip->i_ffs1_size = oip->i_size = length;
 			uvm_vnp_setsize(ovp, length);
-			(void) VOP_BWRITE(bp);
+			(void) VOP_BWRITE(bp->b_vp, bp);
 			oip->i_flag |= IN_CHANGE | IN_UPDATE;
 			oip->i_lfs_hiblk = lblkno(fs, oip->i_size + fs->lfs_bsize - 1) - 1;
 			return (lfs_update(ovp, NULL, NULL, 0));
@@ -362,7 +368,7 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 		}
 		if (bp->b_oflags & BO_DELWRI)
 			fs->lfs_avail += odb - btofsb(fs, size);
-		(void) VOP_BWRITE(bp);
+		(void) VOP_BWRITE(bp->b_vp, bp);
 	} else { /* vp->v_type == VREG && length < osize && offset != 0 */
 		/*
 		 * When truncating a regular file down to a non-block-aligned
@@ -388,9 +394,10 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 		xlbn = lblkno(fs, length);
 		size = blksize(fs, oip, xlbn);
 		eoz = MIN(lblktosize(fs, xlbn) + size, osize);
-		uvm_vnp_zerorange(ovp, length, eoz - length);
+		ubc_zerorange(&ovp->v_uobj, length, eoz - length,
+		    UBC_UNMAP_FLAG(ovp));
 		if (round_page(eoz) > round_page(length)) {
-			mutex_enter(&ovp->v_interlock);
+			mutex_enter(ovp->v_interlock);
 			error = VOP_PUTPAGES(ovp, round_page(length),
 			    round_page(eoz),
 			    PGO_CLEANIT | PGO_DEACTIVATE |
@@ -407,6 +414,7 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 
 	oip->i_size = oip->i_ffs1_size = length;
 	uvm_vnp_setsize(ovp, length);
+
 	/*
 	 * Calculate index into inode's block list of
 	 * last direct and indirect blocks (if any)
@@ -753,7 +761,7 @@ lfs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn,
 		memset((void *)&bap[last + 1], 0,
 		/* XXX ondisk32 */
 		  (u_int)(NINDIR(fs) - (last + 1)) * sizeof (int32_t));
-		error = VOP_BWRITE(bp);
+		error = VOP_BWRITE(bp->b_vp, bp);
 		if (error)
 			allerror = error;
 		bap = copy;
@@ -833,7 +841,7 @@ lfs_vtruncbuf(struct vnode *vp, daddr_t lbn, bool catch, int slptimeo)
 	voff_t off;
 
 	off = round_page((voff_t)lbn << vp->v_mount->mnt_fs_bshift);
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	error = VOP_PUTPAGES(vp, off, 0, PGO_FREE | PGO_SYNCIO);
 	if (error)
 		return error;

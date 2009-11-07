@@ -1,4 +1,4 @@
-/*	$NetBSD: ldd.c,v 1.10 2009/09/07 17:56:52 dholland Exp $	*/
+/*	$NetBSD: ldd.c,v 1.19 2011/05/24 12:27:29 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ldd.c,v 1.10 2009/09/07 17:56:52 dholland Exp $");
+__RCSID("$NetBSD: ldd.c,v 1.19 2011/05/24 12:27:29 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -92,8 +92,11 @@ bool _rtld_trust;		/* False for setuid and setgid programs */
 Obj_Entry *_rtld_objlist;	/* Head of linked list of shared objects */
 Obj_Entry **_rtld_objtail = &_rtld_objlist;
 				/* Link field of last object in list */
+u_int _rtld_objcount;		/* Number of shared objects */
+u_int _rtld_objloads;		/* Number of objects loaded */
+
 Obj_Entry *_rtld_objmain;	/* The main program shared object */
-unsigned int _rtld_pagesz;
+size_t _rtld_pagesz;
 
 Search_Path *_rtld_default_paths;
 Search_Path *_rtld_paths;
@@ -160,6 +163,9 @@ main(int argc, char **argv)
 		    /* Alpha never had 32 bit support. */
 #if defined(_LP64) && !defined(__alpha__)
 		    && elf32_ldd(fd, *argv, fmt1, fmt2) == -1
+#ifdef __mips__
+		    && elf32_ldd_compat(fd, *argv, fmt1, fmt2) == -1
+#endif
 #endif
 		    )
 			warnx("%s", error_message);
@@ -206,7 +212,7 @@ fmtprint(const char *libname, Obj_Entry *obj, const char *fmt1,
 
 	if (strncmp(libname, "lib", 3) == 0 &&
 	    (cp = strstr(libname, ".so")) != NULL) {
-		int i = cp - (libname + 3);
+		size_t i = cp - (libname + 3);
 
 		if (i >= sizeof(libnamebuf))
 			i = sizeof(libnamebuf) - 1;
@@ -287,13 +293,43 @@ print_needed(Obj_Entry *obj, const char *fmt1, const char *fmt2)
 		const char *libname = obj->strtab + needed->name;
 
 		if (needed->obj != NULL) {
-			print_needed(needed->obj, fmt1, fmt2);
 			if (!needed->obj->printed) {
 				fmtprint(libname, needed->obj, fmt1, fmt2);
 				needed->obj->printed = 1;
+				print_needed(needed->obj, fmt1, fmt2);
 			}
 		} else {
 			fmtprint(libname, needed->obj, fmt1, fmt2);
 		}
 	}
+}
+
+void
+_rtld_die(void)
+{
+	const char *msg = dlerror();
+
+	if (msg == NULL)
+		msg = "Fatal error";
+	xerrx(1, "%s", msg);
+}
+
+void
+_rtld_shared_enter(void)
+{
+}
+
+void
+_rtld_shared_exit(void)
+{
+}
+
+void
+_rtld_exclusive_enter(sigset_t *mask)
+{
+}
+
+void
+_rtld_exclusive_exit(sigset_t *mask)
+{
 }

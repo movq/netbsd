@@ -1,4 +1,4 @@
-/*	$NetBSD: iplang.h,v 1.2 2002/01/24 08:21:37 martti Exp $	*/
+/*	$NetBSD: iplang.h,v 1.4 2012/02/15 17:55:04 riz Exp $	*/
 
 /*
  * Copyright (C) 1997-1998 by Darren Reed.

@@ -1,7 +1,8 @@
-/*	$NetBSD: machfb.c,v 1.57 2009/05/06 18:41:54 elad Exp $	*/
+/*	$NetBSD: machfb.c,v 1.73.2.1 2012/06/12 19:39:49 riz Exp $	*/
 
 /*
  * Copyright (c) 2002 Bang Jun-Young
+ * Copyright (c) 2005, 2006, 2007 Michael Lorenz
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +34,7 @@
 
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, 
-	"$NetBSD: machfb.c,v 1.57 2009/05/06 18:41:54 elad Exp $");
+	"$NetBSD: machfb.c,v 1.73.2.1 2012/06/12 19:39:49 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,18 +42,11 @@ __KERNEL_RCSID(0,
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/callout.h>
+#include <sys/lwp.h>
 #include <sys/kauth.h>
 
-#ifdef __sparc__
-#include <machine/promlib.h>
-#endif
-
-#ifdef __powerpc__
-#include <dev/ofw/openfirm.h>
-#include <dev/ofw/ofw_pci.h>
-#endif
-
 #include <dev/videomode/videomode.h>
+#include <dev/videomode/edidvar.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -71,8 +65,12 @@ __KERNEL_RCSID(0,
 #include <dev/wscons/wsconsio.h>
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
+#include <dev/pci/wsdisplay_pci.h>
 
 #include <dev/wscons/wsdisplay_vconsvar.h>
+
+#include "opt_wsemul.h"
+#include "opt_machfb.h"
 
 #define MACH64_REG_SIZE		1024
 #define MACH64_REG_OFF		0x7ffc00
@@ -88,7 +86,7 @@ struct vga_bar {
 };
 
 struct mach64_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 #ifdef __sparc__
 	struct fbdevice sc_fb;
 #endif
@@ -111,6 +109,7 @@ struct mach64_softc {
 
 	bus_space_tag_t sc_regt;
 	bus_space_tag_t sc_memt;
+	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_regh;
 	bus_space_handle_t sc_memh;
 	void *sc_aperture;		/* mapped aperture vaddr */
@@ -142,13 +141,18 @@ struct mach64_softc {
 	int vclk_fb_div;
 	int mclk_post_div;
 	int mclk_fb_div;
+	int sc_clock;	/* which clock to use */
 
 	struct videomode *sc_my_mode;
+	int sc_edid_size;
+	uint8_t sc_edid_data[1024];
+
 	u_char sc_cmap_red[256];
 	u_char sc_cmap_green[256];
 	u_char sc_cmap_blue[256];
 	int sc_dacw, sc_blanked, sc_console;
 	struct vcons_data vd;
+	struct wsdisplay_accessops sc_accessops;
 };
 
 struct mach64_crtcregs {
@@ -166,6 +170,8 @@ static struct {
 	uint16_t chip_id;
 	uint32_t ramdac_freq;
 } const mach64_info[] = {
+	{ PCI_PRODUCT_ATI_MACH64_GX, 135000 },
+	{ PCI_PRODUCT_ATI_MACH64_CX, 135000 },
 	{ PCI_PRODUCT_ATI_MACH64_CT, 135000 },
 	{ PCI_PRODUCT_ATI_RAGE_PRO_AGP, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_PRO_AGP1X, 230000 },
@@ -174,20 +180,21 @@ static struct {
 	{ PCI_PRODUCT_ATI_RAGE_PRO_PCI_P, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_PRO_PCI_L, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_XL_PCI, 230000 },
+	{ PCI_PRODUCT_ATI_RAGE_XL_PCI66, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_II, 135000 },
 	{ PCI_PRODUCT_ATI_RAGE_IIP, 200000 },
 	{ PCI_PRODUCT_ATI_RAGE_IIC_PCI, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_IIC_AGP_B, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_IIC_AGP_P, 230000 },
 #if 0
-	{ PCI_PRODUCT_ATI_RAGE_LT_PRO_AGP, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_MOB_M3_PCI, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_MOB_M3_AGP, 230000 },
+	{ PCI_PRODUCT_ATI_RAGE_MOBILITY, 230000 },
+#endif
+	{ PCI_PRODUCT_ATI_RAGE_LT_PRO_AGP, 230000 },
+	{ PCI_PRODUCT_ATI_RAGE_LT_PRO, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_LT, 230000 },
 	{ PCI_PRODUCT_ATI_RAGE_LT_PRO_PCI, 230000 },
-	{ PCI_PRODUCT_ATI_RAGE_MOBILITY, 230000 },
-	{ PCI_PRODUCT_ATI_RAGE_LT_PRO, 230000 },
-#endif
 	{ PCI_PRODUCT_ATI_MACH64_VT, 170000 },
 	{ PCI_PRODUCT_ATI_MACH64_VTB, 200000 },
 	{ PCI_PRODUCT_ATI_MACH64_VT4, 230000 }
@@ -195,6 +202,11 @@ static struct {
 
 static int mach64_chip_id, mach64_chip_rev;
 static struct videomode default_mode = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, };
+
+static const char *mach64_gx_memtype_names[] = {
+	"DRAM", "VRAM", "VRAM", "DRAM",
+	"DRAM", "VRAM", "VRAM", "(unknown type)"
+};
 
 static const char *mach64_memtype_names[] = {
 	"(N/A)", "DRAM", "EDO DRAM", "EDO DRAM", "SDRAM", "SGRAM", "WRAM",
@@ -224,7 +236,7 @@ extern const u_char rasops_cmap[768];
 static int	mach64_match(device_t, cfdata_t, void *);
 static void	mach64_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(machfb, sizeof(struct mach64_softc), mach64_match, mach64_attach,
+CFATTACH_DECL_NEW(machfb, sizeof(struct mach64_softc), mach64_match, mach64_attach,
     NULL, NULL);
 
 static void	mach64_init(struct mach64_softc *);
@@ -254,7 +266,7 @@ static void	mach64_init_lut(struct mach64_softc *);
 static void	mach64_init_screen(void *, struct vcons_screen *, int, long *);
 static int 	mach64_set_screentype(struct mach64_softc *,
 				      const struct wsscreen_descr *);
-static int	mach64_is_console(struct pci_attach_args *);
+static int	mach64_is_console(struct mach64_softc *);
 
 static void	mach64_cursor(void *, int, int, int);
 #if 0
@@ -265,7 +277,6 @@ static void	mach64_copycols(void *, int, int, int, int);
 static void	mach64_erasecols(void *, int, int, int, long);
 static void	mach64_copyrows(void *, int, int, int);
 static void	mach64_eraserows(void *, int, int, long);
-static int	mach64_allocattr(void *, int, int, int, long *);
 static void 	mach64_clearscreen(struct mach64_softc *);
 
 static int	mach64_putcmap(struct mach64_softc *, struct wsdisplay_cmap *);
@@ -284,19 +295,7 @@ static void	mach64_showpal(struct mach64_softc *);
 
 static void	set_address(struct rasops_info *, void *);
 static void	machfb_blank(struct mach64_softc *, int);
-
-#if 0
-static const struct wsdisplay_emulops mach64_emulops = {
-	mach64_cursor,
-	mach64_mapchar,
-	mach64_putchar,
-	mach64_copycols,
-	mach64_erasecols,
-	mach64_copyrows,
-	mach64_eraserows,
-	mach64_allocattr,
-};
-#endif
+static int	machfb_drm_print(void *, const char *);
 
 static struct wsscreen_descr mach64_defaultscreen = {
 	"default",
@@ -380,16 +379,6 @@ static paddr_t	mach64_mmap(void *, void *, off_t, int);
 static int	mach64_load_font(void *, void *, struct wsdisplay_font *);
 #endif
 
-static struct wsdisplay_accessops mach64_accessops = {
-	mach64_ioctl,
-	mach64_mmap,
-	NULL,			/* vcons_alloc_screen */
-	NULL,			/* vcons_free_screen */
-	NULL,			/* vcons_show_screen */
-	NULL,			/* load_font */
-	NULL,			/* polls */
-	NULL,			/* scroll */
-};
 
 static struct vcons_screen mach64_console_screen;
 
@@ -449,9 +438,26 @@ regwb(struct mach64_softc *sc, uint32_t index, uint8_t data)
 static inline void
 regwb_pll(struct mach64_softc *sc, uint32_t index, uint8_t data)
 {
-	regwb(sc, CLOCK_CNTL + 1, (index << 2) | PLL_WR_EN);
-	regwb(sc, CLOCK_CNTL + 2, data);
-	regwb(sc, CLOCK_CNTL + 1, (index << 2) & ~PLL_WR_EN);
+	uint32_t reg;
+
+	reg = regr(sc, CLOCK_CNTL);
+	reg |= PLL_WR_EN;
+	regw(sc, CLOCK_CNTL, reg);
+	reg &= ~(PLL_ADDR | PLL_DATA);
+	reg |= (index & 0x3f) << PLL_ADDR_SHIFT;
+	reg |= data << PLL_DATA_SHIFT;
+	reg |= CLOCK_STROBE;
+	regw(sc, CLOCK_CNTL, reg);
+	reg &= ~PLL_WR_EN;
+	regw(sc, CLOCK_CNTL, reg);
+}
+
+static inline uint8_t
+regrb_pll(struct mach64_softc *sc, uint32_t index)
+{
+
+	regwb(sc, CLOCK_CNTL + 1, index << 2);
+	return regrb(sc, CLOCK_CNTL + 2);
 }
 
 static inline void
@@ -495,13 +501,21 @@ mach64_attach(device_t parent, device_t self, void *aux)
 	struct mach64_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct rasops_info *ri;
-	char devinfo[256];
-	int bar, reg, id;
+	prop_data_t edid_data;
+#if defined(__sparc__) || defined(__powerpc__)
+	const struct videomode *mode = NULL;
+#endif
+	int bar, id, expected_id;
+	int is_gx;
+	const char **memtype_names;
 	struct wsemuldisplaydev_attach_args aa;
 	long defattr;
-	int setmode;
+	int setmode, width, height;
 	pcireg_t screg;
+	uint32_t reg;
+	const pcireg_t enables = PCI_COMMAND_MEM_ENABLE;
 
+	sc->sc_dev = self;
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
 	sc->sc_dacw = -1;
@@ -510,15 +524,22 @@ mach64_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ndev = pa->pa_device;
 	sc->sc_nfunc = pa->pa_function;
 	sc->sc_locked = 0;
+	sc->sc_iot = pa->pa_iot;
+	sc->sc_accessops.ioctl = mach64_ioctl;
+	sc->sc_accessops.mmap = mach64_mmap;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, "Graphics processor");
+#ifdef MACHFB_DEBUG
+	printf(prop_dictionary_externalize(device_properties(self)));
+#endif
 	
-	/* enable memory and IO access */
+	/* enable memory and disable IO access */
 	screg = pci_conf_read(sc->sc_pc, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
-	screg |= PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
-	pci_conf_write(sc->sc_pc, sc->sc_pcitag,PCI_COMMAND_STATUS_REG,screg);
-
+	if ((screg & enables) != enables) {
+		screg |= enables;
+		pci_conf_write(sc->sc_pc, sc->sc_pcitag,
+		    PCI_COMMAND_STATUS_REG, screg);
+	}
 	for (bar = 0; bar < NBARS; bar++) {
 		reg = PCI_MAPREG_START + (bar * 4);
 		sc->sc_bars[bar].vb_type = pci_mapreg_type(sc->sc_pc,
@@ -527,71 +548,158 @@ mach64_attach(device_t parent, device_t self, void *aux)
 		    sc->sc_bars[bar].vb_type, &sc->sc_bars[bar].vb_base,
 		    &sc->sc_bars[bar].vb_size, &sc->sc_bars[bar].vb_flags);
 		sc->sc_bars[bar].vb_busaddr = pci_conf_read(sc->sc_pc,
-		    sc->sc_pcitag, reg)&0xfffffff0;
+		    sc->sc_pcitag, reg) & 0xfffffff0;
 	}
+	printf("%s: aperture size %08x\n", device_xname(sc->sc_dev), 
+	    (uint32_t)sc->sc_apersize);
+
+	sc->sc_rom.vb_type = PCI_MAPREG_TYPE_ROM;	
+	pci_mapreg_info(sc->sc_pc, sc->sc_pcitag, PCI_MAPREG_ROM,
+		    sc->sc_rom.vb_type, &sc->sc_rom.vb_base,
+		    &sc->sc_rom.vb_size, &sc->sc_rom.vb_flags);
 	sc->sc_memt = pa->pa_memt;
+
+	if (bus_space_map(sc->sc_memt, sc->sc_aperbase, sc->sc_apersize,
+		BUS_SPACE_MAP_LINEAR, &sc->sc_memh)) {
+		panic("%s: failed to map aperture", device_xname(sc->sc_dev));
+	}
+	sc->sc_aperture = (void *)bus_space_vaddr(sc->sc_memt, sc->sc_memh);
+
+	/* If the BAR was never mapped, fix it up in MMIO. */
+	if(sc->sc_regsize == 0) {
+		sc->sc_regsize = MACH64_REG_SIZE;
+		sc->sc_regbase = sc->sc_aperbase + MACH64_REG_OFF;
+		sc->sc_regphys = sc->sc_aperphys + MACH64_REG_OFF;
+	}
+
+	sc->sc_regt = sc->sc_memt;
+	bus_space_subregion(sc->sc_regt, sc->sc_memh, MACH64_REG_OFF,
+	    sc->sc_regsize, &sc->sc_regh);
+	sc->sc_registers = (char *)sc->sc_aperture + 0x7ffc00;
 
 	mach64_init(sc);
 
-	printf("%s: %d MB aperture at 0x%08x, %d KB registers at 0x%08x\n",
-	    device_xname(&sc->sc_dev), (u_int)(sc->sc_apersize / (1024 * 1024)),
+	aprint_normal_dev(sc->sc_dev,
+	    "%d MB aperture at 0x%08x, %d KB registers at 0x%08x\n",
+	    (u_int)(sc->sc_apersize / (1024 * 1024)),
 	    (u_int)sc->sc_aperphys, (u_int)(sc->sc_regsize / 1024),
 	    (u_int)sc->sc_regphys);
 
-	if (mach64_chip_id == PCI_PRODUCT_ATI_MACH64_CT ||
-	    ((mach64_chip_id == PCI_PRODUCT_ATI_MACH64_VT ||
-	    mach64_chip_id == PCI_PRODUCT_ATI_RAGE_II) &&
-	    (mach64_chip_rev & 0x07) == 0))
-		sc->has_dsp = 0;
-	else
-		sc->has_dsp = 1;
+	printf("%s: %d KB ROM at 0x%08x\n", device_xname(sc->sc_dev),
+	    (int)sc->sc_rom.vb_size >> 10, (uint32_t)sc->sc_rom.vb_base);
+
+	prop_dictionary_get_uint32(device_properties(self), "width", &width);
+	prop_dictionary_get_uint32(device_properties(self), "height", &height);
+
+	if ((edid_data = prop_dictionary_get(device_properties(self), "EDID"))
+	    != NULL) {
+	    	struct edid_info ei;
+
+		sc->sc_edid_size = min(1024, prop_data_size(edid_data));
+		memset(sc->sc_edid_data, 0, sizeof(sc->sc_edid_data));
+		memcpy(sc->sc_edid_data, prop_data_data_nocopy(edid_data),
+		    sc->sc_edid_size);
+
+		edid_parse(sc->sc_edid_data, &ei);
+
+#ifdef MACHFB_DEBUG
+		edid_print(&ei);
+#endif
+	}
+
+	is_gx = 0;
+	switch(mach64_chip_id) {
+		case PCI_PRODUCT_ATI_MACH64_GX:
+		case PCI_PRODUCT_ATI_MACH64_CX:
+			is_gx = 1;
+		case PCI_PRODUCT_ATI_MACH64_CT:
+			sc->has_dsp = 0;
+			break;
+		case PCI_PRODUCT_ATI_MACH64_VT:
+		case PCI_PRODUCT_ATI_RAGE_II:
+			if((mach64_chip_rev & 0x07) == 0) {
+				sc->has_dsp = 0;
+				break;
+			}
+			/* Otherwise fall through. */
+		default:
+			sc->has_dsp = 1;
+	}
+
+	memtype_names = is_gx ? mach64_gx_memtype_names : mach64_memtype_names;
 
 	sc->memsize = mach64_get_memsize(sc);
 	if (sc->memsize == 8192)
 		/* The last page is used as register aperture. */
 		sc->memsize -= 4;
-	sc->memtype = regr(sc, CONFIG_STAT0) & 0x07;
+	if(is_gx)
+		sc->memtype = (regr(sc, CONFIG_STAT0) >> 3) & 0x07;
+	else
+		sc->memtype = regr(sc, CONFIG_STAT0) & 0x07;
 
 	/* XXX is there any way to calculate reference frequency from
 	   known values? */
 	if ((mach64_chip_id == PCI_PRODUCT_ATI_RAGE_XL_PCI) ||
 	    ((mach64_chip_id >= PCI_PRODUCT_ATI_RAGE_LT_PRO_PCI) &&
 	    (mach64_chip_id <= PCI_PRODUCT_ATI_RAGE_LT_PRO))) {
-		printf("%s: ref_freq=29.498MHz\n", device_xname(&sc->sc_dev));
+		aprint_normal_dev(sc->sc_dev, "ref_freq=29.498MHz\n");
 		sc->ref_freq = 29498;
 	} else
 		sc->ref_freq = 14318;
 
-	regwb(sc, CLOCK_CNTL + 1, PLL_REF_DIV << 2);
-	sc->ref_div = regrb(sc, CLOCK_CNTL + 2);
-	regwb(sc, CLOCK_CNTL + 1, MCLK_FB_DIV << 2);
-	sc->mclk_fb_div = regrb(sc, CLOCK_CNTL + 2);
+	reg = regr(sc, CLOCK_CNTL);
+	printf("CLOCK_CNTL: %08x\n", reg);
+	sc->sc_clock = reg & 3;
+	printf("using clock %d\n", sc->sc_clock);
+
+	sc->ref_div = regrb_pll(sc, PLL_REF_DIV);
+	printf("ref_div: %d\n", sc->ref_div);
+	sc->mclk_fb_div = regrb_pll(sc, MCLK_FB_DIV);
+	printf("mclk_fb_div: %d\n", sc->mclk_fb_div);
 	sc->mem_freq = (2 * sc->ref_freq * sc->mclk_fb_div) /
 	    (sc->ref_div * 2);
 	sc->mclk_post_div = (sc->mclk_fb_div * 2 * sc->ref_freq) /
 	    (sc->mem_freq * sc->ref_div);
 	sc->ramdac_freq = mach64_get_max_ramdac(sc);
-	printf("%s: %ld KB %s %d.%d MHz, maximum RAMDAC clock %d MHz\n",
-	    device_xname(&sc->sc_dev), (u_long)sc->memsize,
-	    mach64_memtype_names[sc->memtype],
+	aprint_normal_dev(sc->sc_dev,
+	    "%ld KB %s %d.%d MHz, maximum RAMDAC clock %d MHz\n",
+	    (u_long)sc->memsize,
+	    memtype_names[sc->memtype],
 	    sc->mem_freq / 1000, sc->mem_freq % 1000,
 	    sc->ramdac_freq / 1000);
 
 	id = regr(sc, CONFIG_CHIP_ID) & 0xffff;
-	if (id != mach64_chip_id) {
-		printf("%s: chip ID mismatch, 0x%x != 0x%x\n",
-		    device_xname(&sc->sc_dev), id, mach64_chip_id);
+	switch(mach64_chip_id) {
+		case PCI_PRODUCT_ATI_MACH64_GX:
+			expected_id = 0x00d7;
+			break;
+		case PCI_PRODUCT_ATI_MACH64_CX:
+			expected_id = 0x0057;
+			break;
+		default:
+			/* Most chip IDs match their PCI product ID. */
+			expected_id = mach64_chip_id;
+	}
+
+	if (id != expected_id) {
+		aprint_error_dev(sc->sc_dev,
+		    "chip ID mismatch, 0x%x != 0x%x\n", id, expected_id);
 		return;
 	}
 
-	sc->sc_console = mach64_is_console(pa);
+	sc->sc_console = mach64_is_console(sc);
 #ifdef DIAGNOSTIC
-	printf("gen_cntl: %08x\n", regr(sc, CRTC_GEN_CNTL));
+	aprint_normal("gen_cntl: %08x\n", regr(sc, CRTC_GEN_CNTL));
 #endif
 #if defined(__sparc__) || defined(__powerpc__)
 	if (sc->sc_console) {
-		mach64_get_mode(sc, &default_mode);
-		setmode = 0;
+		if (mode != NULL) {
+			memcpy(&default_mode, mode, sizeof(struct videomode));
+			setmode = 1;
+		} else {
+			mach64_get_mode(sc, &default_mode);
+			setmode = 0;
+		}
 		sc->sc_my_mode = &default_mode;
 	} else {
 		/* fill in default_mode if it's empty */
@@ -622,13 +730,12 @@ mach64_attach(device_t parent, device_t self, void *aux)
 	sc->color_depth = CRTC_PIX_WIDTH_8BPP;
 
 	mach64_init_engine(sc);
-#if 0
-	mach64_adjust_frame(0, 0);
-	if (sc->bits_per_pixel == 8)
-		mach64_init_lut(sc);
-#endif
 
-	printf("%s: initial resolution %dx%d at %d bpp\n", device_xname(&sc->sc_dev),
+	if (setmode)
+		mach64_modeswitch(sc, sc->sc_my_mode);
+
+	aprint_normal_dev(sc->sc_dev,
+	    "initial resolution %dx%d at %d bpp\n",
 	    sc->sc_my_mode->hdisplay, sc->sc_my_mode->vdisplay,
 	    sc->bits_per_pixel);
 
@@ -639,10 +746,15 @@ mach64_attach(device_t parent, device_t self, void *aux)
 	wsfont_init();
 	
 	sc->sc_bg = WS_DEFAULT_BG;
-	vcons_init(&sc->vd, sc, &mach64_defaultscreen, &mach64_accessops);
+	vcons_init(&sc->vd, sc, &mach64_defaultscreen, &sc->sc_accessops);
 	sc->vd.init_screen = mach64_init_screen;
 
+	mach64_init_lut(sc);
+	mach64_clearscreen(sc);
+	machfb_blank(sc, 0);	/* unblank the screen */
+
 	if (sc->sc_console) {
+
 		vcons_init_screen(&sc->vd, &mach64_console_screen, 1,
 		    &defattr);
 		mach64_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
@@ -652,7 +764,9 @@ mach64_attach(device_t parent, device_t self, void *aux)
 		mach64_defaultscreen.capabilities = ri->ri_caps;
 		mach64_defaultscreen.nrows = ri->ri_rows;
 		mach64_defaultscreen.ncols = ri->ri_cols;
+
 		wsdisplay_cnattach(&mach64_defaultscreen, ri, 0, 0, defattr);	
+		vcons_replay_msgbuf(&mach64_console_screen);
 	} else {
 		/*
 		 * since we're not the console we can postpone the rest
@@ -660,17 +774,23 @@ mach64_attach(device_t parent, device_t self, void *aux)
 		 */
 		mach64_modeswitch(sc, sc->sc_my_mode);		 
 	}
-	
-	mach64_init_lut(sc);
-	mach64_clearscreen(sc);
-	machfb_blank(sc, 0);	/* unblank the screen */
-	
+		
 	aa.console = sc->sc_console;
 	aa.scrdata = &mach64_screenlist;
-	aa.accessops = &mach64_accessops;
+	aa.accessops = &sc->sc_accessops;
 	aa.accesscookie = &sc->vd;
 
 	config_found(self, &aa, wsemuldisplaydevprint);
+
+	config_found_ia(self, "drm", aux, machfb_drm_print);
+}
+
+static int
+machfb_drm_print(void *aux, const char *pnp)
+{
+	if (pnp)
+		aprint_normal("direct rendering for %s", pnp);
+	return (UNSUPP);
 }
 
 static void
@@ -690,18 +810,19 @@ mach64_init_screen(void *cookie, struct vcons_screen *scr, int existing,
 	ri->ri_flg = RI_CENTER;
 	set_address(ri, sc->sc_aperture);
 
+#ifdef VCONS_DRAW_INTR
+	scr->scr_flags |= VCONS_DONT_READ;
+#endif
+
 	if (existing) {
-		ri->ri_flg |= RI_CLEAR;
 		if (setmode && mach64_set_screentype(sc, scr->scr_type)) {
 			panic("%s: failed to switch video mode",
-			    device_xname(&sc->sc_dev));
+			    device_xname(sc->sc_dev));
 		}
 	}
 	
-	rasops_init(ri, sc->sc_my_mode->vdisplay/8,
-	    sc->sc_my_mode->hdisplay/8);
+	rasops_init(ri, 0, 0);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
-
 	rasops_reconfig(ri, sc->sc_my_mode->vdisplay / ri->ri_font->fontheight,
 		    sc->sc_my_mode->hdisplay / ri->ri_font->fontwidth);
 	
@@ -713,7 +834,6 @@ mach64_init_screen(void *cookie, struct vcons_screen *scr, int existing,
 	ri->ri_ops.erasecols = mach64_erasecols;
 	ri->ri_ops.cursor = mach64_cursor;
 	ri->ri_ops.putchar = mach64_putchar;
-	ri->ri_ops.allocattr = mach64_allocattr;
 }
 
 static void
@@ -723,19 +843,8 @@ mach64_init(struct mach64_softc *sc)
 	uint8_t *p;
 	int need_swap;
 
-	if (bus_space_map(sc->sc_memt, sc->sc_aperbase, sc->sc_apersize,
-		BUS_SPACE_MAP_LINEAR, &sc->sc_memh)) {
-		panic("%s: failed to map aperture", device_xname(&sc->sc_dev));
-	}
-	sc->sc_aperture = (void *)bus_space_vaddr(sc->sc_memt, sc->sc_memh);
-
-	sc->sc_regt = sc->sc_memt;
-	bus_space_subregion(sc->sc_regt, sc->sc_memh, MACH64_REG_OFF,
-	    sc->sc_regsize, &sc->sc_regh);
-	sc->sc_registers = (char *)sc->sc_aperture + 0x7ffc00;
-
 	/*
-	 * Test wether the aperture is byte swapped or not
+	 * Test whether the aperture is byte swapped or not
 	 */
 	p32 = (uint32_t*)sc->sc_aperture;
 	saved_value = *p32;
@@ -747,8 +856,11 @@ mach64_init(struct mach64_softc *sc)
 		need_swap = 1;
 	if (need_swap) {
 		sc->sc_aperture = (char *)sc->sc_aperture + 0x800000;
+#if 0
+		/* what the fsck is this for? */
 		sc->sc_aperbase += 0x800000;
 		sc->sc_apersize -= 0x800000;
+#endif
 	}
 	*p32 = saved_value;
 	
@@ -764,7 +876,7 @@ mach64_get_memsize(struct mach64_softc *sc)
 	};
 	tmp = regr(sc, MEM_CNTL);
 #ifdef DIAGNOSTIC
-	printf("%s: memctl %08x\n", device_xname(&sc->sc_dev), tmp);
+	aprint_debug_dev(sc->sc_dev, "memctl %08x\n", tmp);
 #endif
 	if (sc->has_dsp) {
 		tmp &= 0x0000000f;
@@ -822,7 +934,7 @@ mach64_get_mode(struct mach64_softc *sc, struct videomode *mode)
 	mode->vsync_start = (crtc.v_sync_strt_wid & 0xffff) + 1;
 	mode->vsync_end = (crtc.v_sync_strt_wid >> 16) + mode->vsync_start;
 
-#ifndef DEBUG_MACHFB
+#ifdef MACHFB_DEBUG
 	printf("mach64_get_mode: %d %d %d %d %d %d %d %d\n",
 	    mode->hdisplay, mode->hsync_start, mode->hsync_end, mode->htotal,
 	    mode->vdisplay, mode->vsync_start, mode->vsync_end, mode->vtotal);
@@ -886,7 +998,7 @@ mach64_set_crtcregs(struct mach64_softc *sc, struct mach64_crtcregs *crtc)
 
 	if (sc->has_dsp)
 		mach64_set_dsp(sc);
-
+#if 1
 	regw(sc, CRTC_H_TOTAL_DISP, crtc->h_total_disp);
 	regw(sc, CRTC_H_SYNC_STRT_WID, crtc->h_sync_strt_wid);
 	regw(sc, CRTC_V_TOTAL_DISP, crtc->v_total_disp);
@@ -902,6 +1014,7 @@ mach64_set_crtcregs(struct mach64_softc *sc, struct mach64_crtcregs *crtc)
 	    CRTC_CSYNC_EN |
 #endif
 	    CRTC_EXT_DISP_EN | CRTC_EXT_EN);
+#endif
 }
 
 static int
@@ -913,7 +1026,12 @@ mach64_modeswitch(struct mach64_softc *sc, struct videomode *mode)
 
 	if (mach64_calc_crtcregs(sc, &crtc, mode))
 		return 1;
-
+	aprint_debug("crtc dot clock: %d\n", crtc.dot_clock);
+	if (crtc.dot_clock == 0) {
+		aprint_error("%s: preposterous dot clock (%d)\n", 
+		    device_xname(sc->sc_dev), crtc.dot_clock);
+		return 1;
+	}
 	mach64_set_crtcregs(sc, &crtc);
 	return 0;
 }
@@ -952,6 +1070,9 @@ mach64_init_engine(struct mach64_softc *sc)
 
 	regw(sc, DST_OFF_PITCH, (pitch_value / 8) << 22);
 
+	/* make sure the visible area starts where we're going to draw */
+	regw(sc, CRTC_OFF_PITCH, (sc->virt_x >> 3) << 22);
+
 	regw(sc, DST_Y_X, 0);
 	regw(sc, DST_HEIGHT, 0);
 	regw(sc, DST_BRES_ERR, 0);
@@ -982,8 +1103,8 @@ mach64_init_engine(struct mach64_softc *sc)
 	regw(sc, SC_BOTTOM, sc->sc_my_mode->vdisplay - 1);
 	regw(sc, SC_RIGHT, pitch_value - 1);
 
-	regw(sc, DP_BKGD_CLR, 0);
-	regw(sc, DP_FRGD_CLR, 0xffffffff);
+	regw(sc, DP_BKGD_CLR, WS_DEFAULT_BG);
+	regw(sc, DP_FRGD_CLR, WS_DEFAULT_FG);
 	regw(sc, DP_WRITE_MASK, 0xffffffff);
 	regw(sc, DP_MIX, (MIX_SRC << 16) | MIX_DST);
 
@@ -997,18 +1118,16 @@ mach64_init_engine(struct mach64_softc *sc)
 	wait_for_fifo(sc, 2);
 	switch (sc->bits_per_pixel) {
 	case 8:
-		regw(sc, DP_PIX_WIDTH, HOST_8BPP | SRC_8BPP | DST_8BPP);
+		regw(sc, DP_PIX_WIDTH, HOST_1BPP | SRC_8BPP | DST_8BPP);
 		regw(sc, DP_CHAIN_MASK, DP_CHAIN_8BPP);
 		/* We want 8 bit per channel */
 		regw(sc, DAC_CNTL, regr(sc, DAC_CNTL) | DAC_8BIT_EN);
 		break;
-#if 0
 	case 32:
-		regw(sc, DP_PIX_WIDTH, HOST_32BPP | SRC_32BPP | DST_32BPP);
+		regw(sc, DP_PIX_WIDTH, HOST_1BPP | SRC_32BPP | DST_32BPP);
 		regw(sc, DP_CHAIN_MASK, DP_CHAIN_32BPP);
 		regw(sc, DAC_CNTL, regr(sc, DAC_CNTL) | DAC_8BIT_EN);
 		break;
-#endif
 	}
 
 	wait_for_fifo(sc, 5);
@@ -1039,7 +1158,8 @@ mach64_set_dsp(struct mach64_softc *sc)
 	uint32_t xclks_per_qw, y;
 	uint32_t fifo_off, fifo_on;
 
-	printf("%s: initializing the DSP\n", device_xname(&sc->sc_dev));
+	aprint_normal_dev(sc->sc_dev, "initializing the DSP\n");
+
 	if (mach64_chip_id == PCI_PRODUCT_ATI_MACH64_VT ||
 	    mach64_chip_id == PCI_PRODUCT_ATI_RAGE_II ||
 	    mach64_chip_id == PCI_PRODUCT_ATI_RAGE_IIP ||
@@ -1104,7 +1224,7 @@ mach64_set_dsp(struct mach64_softc *sc)
 	dsp_on = fifo_on >> dsp_precision;
 	dsp_off = fifo_off >> dsp_precision;
 
-#ifdef DEBUG_MACHFB
+#ifdef MACHFB_DEBUG
 	printf("dsp_xclks_per_qw = %d, dsp_on = %d, dsp_off = %d,\n"
 	    "dsp_precision = %d, dsp_loop_latency = %d,\n"
 	    "mclk_fb_div = %d, vclk_fb_div = %d,\n"
@@ -1123,10 +1243,12 @@ mach64_set_dsp(struct mach64_softc *sc)
 static void
 mach64_set_pll(struct mach64_softc *sc, int clock)
 {
-	int q;
+	uint32_t q, clockreg;
+	int clockshift = sc->sc_clock << 1;
+	uint8_t reg, vclk_ctl;
 
 	q = (clock * sc->ref_div * 100) / (2 * sc->ref_freq);
-#ifdef DEBUG_MACHFB
+#ifdef MACHFB_DEBUG
 	printf("q = %d\n", q);
 #endif
 	if (q > 25500) {
@@ -1152,10 +1274,27 @@ mach64_set_pll(struct mach64_softc *sc, int clock)
 		sc->log2_vclk_post_div = 3;
 	}
 	sc->vclk_fb_div = q * sc->vclk_post_div / 100;
+	printf("post_div: %d log2_post_div: %d mclk_div: %d\n", sc->vclk_post_div, sc->log2_vclk_post_div, sc->mclk_fb_div);
 
+	vclk_ctl = regrb_pll(sc, PLL_VCLK_CNTL);
+	printf("vclk_ctl: %02x\n", vclk_ctl);
+	vclk_ctl |= PLL_VCLK_RESET;
+	regwb_pll(sc, PLL_VCLK_CNTL, vclk_ctl);
+	
 	regwb_pll(sc, MCLK_FB_DIV, sc->mclk_fb_div);
-	regwb_pll(sc, VCLK_POST_DIV, sc->log2_vclk_post_div);
-	regwb_pll(sc, VCLK0_FB_DIV, sc->vclk_fb_div);
+	reg = regrb_pll(sc, VCLK_POST_DIV);
+	reg &= ~(3 << clockshift);
+	reg |= (sc->log2_vclk_post_div << clockshift);
+	regwb_pll(sc, VCLK_POST_DIV, reg);
+	regwb_pll(sc, VCLK0_FB_DIV + sc->sc_clock, sc->vclk_fb_div);
+
+	vclk_ctl &= ~PLL_VCLK_RESET;
+	regwb_pll(sc, PLL_VCLK_CNTL, vclk_ctl);
+
+	clockreg = regr(sc, CLOCK_CNTL);
+	clockreg &= ~CLOCK_SEL;
+	clockreg |= sc->sc_clock | CLOCK_STROBE;
+	regw(sc, CLOCK_CNTL, clockreg);
 }
 
 static void
@@ -1269,28 +1408,13 @@ mach64_set_screentype(struct mach64_softc *sc, const struct wsscreen_descr *des)
 }
 
 static int
-mach64_is_console(struct pci_attach_args *pa)
+mach64_is_console(struct mach64_softc *sc)
 {
-#ifdef __sparc__
-	int node;
+	bool console = 0;
 
-	node = PCITAG_NODE(pa->pa_tag);
-	if (node == -1)
-		return 0;
-
-	return (node == prom_instance_to_package(prom_stdout()));
-#elif defined(__powerpc__)
-	/* check if we're the /chosen console device */
-	int chosen, stdout, node, us;
-
-	us = pcidev_to_ofdev(pa->pa_pc, pa->pa_tag);
-	chosen = OF_finddevice("/chosen");
-	OF_getprop(chosen, "stdout", &stdout, 4);
-	node = OF_instance_to_package(stdout);
-	return (us == node);
-#else
-	return 1;
-#endif
+	prop_dictionary_get_bool(device_properties(sc->sc_dev),
+	    "is_console", &console);
+	return console;
 }
 
 /*
@@ -1344,6 +1468,7 @@ static void
 mach64_putchar(void *cookie, int row, int col, u_int c, long attr)
 {
 	struct rasops_info *ri = cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, c);
 	struct vcons_screen *scr = ri->ri_hw;
 	struct mach64_softc *sc = scr->scr_cookie;
 	
@@ -1351,20 +1476,20 @@ mach64_putchar(void *cookie, int row, int col, u_int c, long attr)
 		int fg, bg, uc;
 		uint8_t *data;
 		int x, y, wi, he;
-		wi = ri->ri_font->fontwidth;
-		he = ri->ri_font->fontheight;
+		wi = font->fontwidth;
+		he = font->fontheight;
 
-		if (!CHAR_IN_FONT(c, ri->ri_font))
+		if (!CHAR_IN_FONT(c, font))
 			return;
-		bg = (u_char)ri->ri_devcmap[(attr >> 16) & 0xf];
-		fg = (u_char)ri->ri_devcmap[(attr >> 24) & 0xf];
+		bg = (u_char)ri->ri_devcmap[(attr >> 16) & 0x0f];
+		fg = (u_char)ri->ri_devcmap[(attr >> 24) & 0x0f];
 		x = ri->ri_xorigin + col * wi;
 		y = ri->ri_yorigin + row * he;
 		if (c == 0x20) {
 			mach64_rectfill(sc, x, y, wi, he, bg);
 		} else {
-			uc = c-ri->ri_font->firstchar;
-			data = (uint8_t *)ri->ri_font->data + uc * 
+			uc = c - font->firstchar;
+			data = (uint8_t *)font->data + uc * 
 			    ri->ri_fontscale;
 
 			mach64_setup_mono(sc, x, y, wi, he, fg, bg);
@@ -1513,7 +1638,7 @@ mach64_feed_bytes(struct mach64_softc *sc, int count, uint8_t *data)
 	int shift = 0;
 	int reg = 0;
 	
-	for (i=0;i<count;i++) {
+	for (i = 0; i < count; i++) {
 		bork = data[i];
 		latch |= (bork << shift);
 		if (shift == 24) {
@@ -1569,18 +1694,6 @@ mach64_showpal(struct mach64_softc *sc)
 }
 #endif
 
-static int
-mach64_allocattr(void *cookie, int fg, int bg, int flags, long *attrp)
-{
-	if ((fg == 0) && (bg == 0))
-	{
-		fg = WS_DEFAULT_FG;
-		bg = WS_DEFAULT_BG;
-	}
-	*attrp = (fg & 0xf) << 24 | (bg & 0xf) << 16 | (flags & 0xff) << 8;
-	return 0;
-}
-
 /*
  * wsdisplay_accessops
  */
@@ -1595,53 +1708,62 @@ mach64_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct vcons_screen *ms = vd->active;
 	
 	switch (cmd) {
-		case WSDISPLAYIO_GTYPE:
-			/* XXX is this the right type to return? */
-			*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;	
-			return 0;
+	case WSDISPLAYIO_GTYPE:
+		/* XXX is this the right type to return? */
+		*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;	
+		return 0;
 
-		case WSDISPLAYIO_LINEBYTES:
-			*(u_int *)data = sc->virt_x * sc->bits_per_pixel / 8;
-			return 0;
+	case WSDISPLAYIO_LINEBYTES:
+		*(u_int *)data = sc->virt_x * sc->bits_per_pixel / 8;
+		return 0;
 
-		case WSDISPLAYIO_GINFO:
-			wdf = (void *)data;
-			wdf->height = sc->virt_y;
-			wdf->width = sc->virt_x;
-			wdf->depth = sc->bits_per_pixel;
-			wdf->cmsize = 256;
-			return 0;
-			
-		case WSDISPLAYIO_GETCMAP:
-			return mach64_getcmap(sc, 
-			    (struct wsdisplay_cmap *)data);
+	case WSDISPLAYIO_GINFO:
+		wdf = (void *)data;
+		wdf->height = sc->virt_y;
+		wdf->width = sc->virt_x;
+		wdf->depth = sc->bits_per_pixel;
+		wdf->cmsize = 256;
+		return 0;
+		
+	case WSDISPLAYIO_GETCMAP:
+		return mach64_getcmap(sc, 
+		    (struct wsdisplay_cmap *)data);
 
-		case WSDISPLAYIO_PUTCMAP:
-			return mach64_putcmap(sc, 
-			    (struct wsdisplay_cmap *)data);
-			    
-		/* PCI config read/write passthrough. */
-		case PCI_IOC_CFGREAD:
-		case PCI_IOC_CFGWRITE:
-			return (pci_devioctl(sc->sc_pc, sc->sc_pcitag,
-			    cmd, data, flag, l));
-			    
-		case WSDISPLAYIO_SMODE:
+	case WSDISPLAYIO_PUTCMAP:
+		return mach64_putcmap(sc, 
+		    (struct wsdisplay_cmap *)data);
+		    
+	/* PCI config read/write passthrough. */
+	case PCI_IOC_CFGREAD:
+	case PCI_IOC_CFGWRITE:
+		return pci_devioctl(sc->sc_pc, sc->sc_pcitag,
+		    cmd, data, flag, l);
+
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(sc->sc_dev, sc->sc_pc,
+		    sc->sc_pcitag, data);
+
+	case WSDISPLAYIO_SMODE: {
+		int new_mode = *(int*)data;
+		if (new_mode != sc->sc_mode) {
+			sc->sc_mode = new_mode;
+			if ((new_mode == WSDISPLAYIO_MODE_EMUL)
+			    && (ms != NULL))
 			{
-				int new_mode = *(int*)data;
-
-				if (new_mode != sc->sc_mode)
-				{
-					sc->sc_mode = new_mode;
-					if ((new_mode == WSDISPLAYIO_MODE_EMUL)
-					    && (ms != NULL))
-					{
-						vcons_redraw_screen(ms);
-					}
-				}
+				/* restore initial video mode */
+				mach64_init(sc);
+				mach64_init_engine(sc);
+				mach64_init_lut(sc);
+				mach64_modeswitch(sc, sc->sc_my_mode);
+				vcons_redraw_screen(ms);
 			}
-			return 0;
-			
+		}
+		}
+		return 0;
+	case WSDISPLAYIO_GET_EDID: {
+		struct wsdisplayio_edid_info *d = data;
+		return wsdisplayio_get_edid(sc->sc_dev, d);
+	}
 	}
 	return EPASSTHROUGH;
 }
@@ -1675,7 +1797,6 @@ mach64_mmap(void *v, void *vs, off_t offset, int prot)
 	 */
 	if (kauth_authorize_generic(kauth_cred_get(), KAUTH_GENERIC_ISSUSER,
 	    NULL) != 0) {
-		printf("%s: mmap() rejected.\n", device_xname(&sc->sc_dev));
 		return -1;
 	}
 
@@ -1683,7 +1804,7 @@ mach64_mmap(void *v, void *vs, off_t offset, int prot)
 	if (reg != sc->sc_regphys) {
 #ifdef DIAGNOSTIC
 		printf("%s: BAR 0x18 changed! (%x %x)\n", 
-		    device_xname(&sc->sc_dev), (uint32_t)sc->sc_regphys, 
+		    device_xname(sc->sc_dev), (uint32_t)sc->sc_regphys, 
 		    (uint32_t)reg);
 #endif
 		sc->sc_regphys = reg;
@@ -1693,20 +1814,11 @@ mach64_mmap(void *v, void *vs, off_t offset, int prot)
 	if (reg != sc->sc_aperphys) {
 #ifdef DIAGNOSTIC
 		printf("%s: BAR 0x10 changed! (%x %x)\n", 
-		    device_xname(&sc->sc_dev), (uint32_t)sc->sc_aperphys, 
+		    device_xname(sc->sc_dev), (uint32_t)sc->sc_aperphys, 
 		    (uint32_t)reg);
 #endif
 		sc->sc_aperphys = reg;
 	}
-
-#if 0
-	/* evil hack to allow mmap()ing other devices as well */
-	if ((offset > 0x80000000) && (offset <= 0xffffffff)) {
-		pa = bus_space_mmap(sc->sc_memt, offset, 0, prot, 
-		    BUS_SPACE_MAP_LINEAR);
-		return pa;
-	}
-#endif
 
 	if ((offset >= sc->sc_aperphys) && 
 	    (offset < (sc->sc_aperphys + sc->sc_apersize))) {
@@ -1721,6 +1833,21 @@ mach64_mmap(void *v, void *vs, off_t offset, int prot)
 		    BUS_SPACE_MAP_LINEAR);
 		return pa;
 	}
+
+	if ((offset >= sc->sc_rom.vb_base) && 
+	    (offset < (sc->sc_rom.vb_base + sc->sc_rom.vb_size))) {
+		pa = bus_space_mmap(sc->sc_memt, offset, 0, prot, 
+		    BUS_SPACE_MAP_LINEAR);
+		return pa;
+	}
+
+#ifdef PCI_MAGIC_IO_RANGE
+	if ((offset >= PCI_MAGIC_IO_RANGE) &&
+	    (offset <= PCI_MAGIC_IO_RANGE + 0x10000)) {
+	    	return bus_space_mmap(sc->sc_iot, offset - PCI_MAGIC_IO_RANGE,
+	    	   0, prot, BUS_SPACE_MAP_LINEAR);
+	}
+#endif
 
 	return -1;
 }
@@ -1785,14 +1912,14 @@ machfb_fbattach(struct mach64_softc *sc)
 {
 	struct fbdevice *fb = &sc->sc_fb;
 	
-	fb->fb_device = &sc->sc_dev;
+	fb->fb_device = sc->sc_dev;
 	fb->fb_driver = &machfb_fbdriver;
 
 	fb->fb_type.fb_cmsize = 256;
 	fb->fb_type.fb_size = sc->memsize;
 	
 	fb->fb_type.fb_type = FBTYPE_GENERIC_PCI;
-	fb->fb_flags = sc->sc_dev.dv_cfdata->cf_flags & FB_USERMASK;
+	fb->fb_flags = sc->sc_dev->dv_cfdata->cf_flags & FB_USERMASK;
 	fb->fb_type.fb_depth = sc->bits_per_pixel;
 	fb->fb_type.fb_width = sc->virt_x;
 	fb->fb_type.fb_height = sc->virt_y;
@@ -1811,7 +1938,7 @@ machfb_fbopen(dev_t dev, int flags, int mode, struct lwp *l)
 		return ENXIO;
 	sc->sc_locked = 1;
 	
-#ifdef DEBUG_MACHFB	
+#ifdef MACHFB_DEBUG
 	printf("machfb_fbopen(%d)\n", minor(dev));
 #endif
 	return 0;
@@ -1822,7 +1949,7 @@ machfb_fbclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct mach64_softc *sc = device_lookup_private(&machfb_cd, minor(dev));
 
-#ifdef DEBUG_MACHFB
+#ifdef MACHFB_DEBUG
 	printf("machfb_fbclose()\n");
 #endif
 	mach64_init_engine(sc);
@@ -1836,96 +1963,95 @@ machfb_fbioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 	struct mach64_softc *sc = device_lookup_private(&machfb_cd, minor(dev));
 
-#ifdef DEBUG_MACHFB
+#ifdef MACHFB_DEBUG
 	printf("machfb_fbioctl(%d, %lx)\n", minor(dev), cmd);
 #endif
 	switch (cmd) {
-		case FBIOGTYPE:
-			*(struct fbtype *)data = sc->sc_fb.fb_type;
-			break;
+	case FBIOGTYPE:
+		*(struct fbtype *)data = sc->sc_fb.fb_type;
+		break;
 
-		case FBIOGATTR:
+	case FBIOGATTR:
 #define fba ((struct fbgattr *)data)
-			fba->real_type = sc->sc_fb.fb_type.fb_type;
-			fba->owner = 0;		/* XXX ??? */
-			fba->fbtype = sc->sc_fb.fb_type;
-			fba->sattr.flags = 0;
-			fba->sattr.emu_type = sc->sc_fb.fb_type.fb_type;
-			fba->sattr.dev_specific[0] = sc->sc_nbus;
-			fba->sattr.dev_specific[1] = sc->sc_ndev;
-			fba->sattr.dev_specific[2] = sc->sc_nfunc;
-			fba->sattr.dev_specific[3] = -1;			
-			fba->emu_types[0] = sc->sc_fb.fb_type.fb_type;
-			fba->emu_types[1] = -1;
+		fba->real_type = sc->sc_fb.fb_type.fb_type;
+		fba->owner = 0;		/* XXX ??? */
+		fba->fbtype = sc->sc_fb.fb_type;
+		fba->sattr.flags = 0;
+		fba->sattr.emu_type = sc->sc_fb.fb_type.fb_type;
+		fba->sattr.dev_specific[0] = sc->sc_nbus;
+		fba->sattr.dev_specific[1] = sc->sc_ndev;
+		fba->sattr.dev_specific[2] = sc->sc_nfunc;
+		fba->sattr.dev_specific[3] = -1;			
+		fba->emu_types[0] = sc->sc_fb.fb_type.fb_type;
+		fba->emu_types[1] = -1;
 #undef fba
-			break;
-		
-#if 0
-		case FBIOGETCMAP:
-#define	p ((struct fbcmap *)data)
-			return (bt_getcmap(p, &sc->sc_cmap, 256, 1));
-
-		case FBIOPUTCMAP:
-			/* copy to software map */
-			error = bt_putcmap(p, &sc->sc_cmap, 256, 1);
-			if (error)
-				return error;
-			/* now blast them into the chip */
-			/* XXX should use retrace interrupt */
-			cg6_loadcmap(sc, p->index, p->count);
-#undef p
-			break;
-#endif
-		case FBIOGVIDEO:
-			*(int *)data = sc->sc_blanked;
-			break;
-
-		case FBIOSVIDEO:
-			machfb_blank(sc, *(int *)data);
-			break;
-
-#if 0
-		case FBIOGCURSOR:
-			break;
+		break;
 	
-		case FBIOSCURSOR:
-			break;
+#if 0
+	case FBIOGETCMAP:
+#define	p ((struct fbcmap *)data)
+		return bt_getcmap(p, &sc->sc_cmap, 256, 1);
 
-		case FBIOGCURPOS:
-			*(struct fbcurpos *)data = sc->sc_cursor.cc_pos;
-			break;
-
-		case FBIOSCURPOS:
-			sc->sc_cursor.cc_pos = *(struct fbcurpos *)data;
-			break;
-
-		case FBIOGCURMAX:
-			/* max cursor size is 32x32 */
-			((struct fbcurpos *)data)->x = 32;
-			((struct fbcurpos *)data)->y = 32;
-			break;
+	case FBIOPUTCMAP:
+		/* copy to software map */
+		error = bt_putcmap(p, &sc->sc_cmap, 256, 1);
+		if (error)
+			return error;
+		/* now blast them into the chip */
+		/* XXX should use retrace interrupt */
+		cg6_loadcmap(sc, p->index, p->count);
+#undef p
+		break;
 #endif
-		case PCI_IOC_CFGREAD:
-		case PCI_IOC_CFGWRITE:
-		{
-			int ret;
-			
-			ret = pci_devioctl(sc->sc_pc, sc->sc_pcitag,
-			    cmd, data, flags, l);
-			
-#ifdef DEBUG_MACHFB
-			printf("pci_devioctl: %d\n", ret);
+	case FBIOGVIDEO:
+		*(int *)data = sc->sc_blanked;
+		break;
+
+	case FBIOSVIDEO:
+		machfb_blank(sc, *(int *)data);
+		break;
+
+#if 0
+	case FBIOGCURSOR:
+		break;
+
+	case FBIOSCURSOR:
+		break;
+
+	case FBIOGCURPOS:
+		*(struct fbcurpos *)data = sc->sc_cursor.cc_pos;
+		break;
+
+	case FBIOSCURPOS:
+		sc->sc_cursor.cc_pos = *(struct fbcurpos *)data;
+		break;
+
+	case FBIOGCURMAX:
+		/* max cursor size is 32x32 */
+		((struct fbcurpos *)data)->x = 32;
+		((struct fbcurpos *)data)->y = 32;
+		break;
 #endif
-			return ret;
+	case PCI_IOC_CFGREAD:
+	case PCI_IOC_CFGWRITE: {
+		int ret;
+		ret = pci_devioctl(sc->sc_pc, sc->sc_pcitag,
+		    cmd, data, flags, l);
+		
+#ifdef MACHFB_DEBUG
+		printf("pci_devioctl: %d\n", ret);
+#endif
+		return ret;
 		}
-		default:
-#ifdef DEBUG_MACHFB
-			log(LOG_NOTICE, "machfb_fbioctl(0x%lx) (%s[%d])\n", cmd,
-			    p->p_comm, p->p_pid);
-#endif
-			return ENOTTY;
+
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(sc->sc_dev, sc->sc_pc,
+		    sc->sc_pcitag, data);
+
+	default:
+		return ENOTTY;
 	}
-#ifdef DEBUG_MACHFB
+#ifdef MACHFB_DEBUG
 	printf("machfb_fbioctl done\n");
 #endif
 	return 0;

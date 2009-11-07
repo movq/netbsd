@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.6 2009/07/20 06:12:41 kiyohara Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.9 2011/05/17 17:34:50 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -29,23 +29,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.6 2009/07/20 06:12:41 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.9 2011/05/17 17:34:50 dyoung Exp $");
 
-#include "acpi.h"
+#include "acpica.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/errno.h>
 
+#include <dev/acpi/acpica.h>
 #include <dev/acpi/acpivar.h>
+#include <actables.h>
 
 
 static int mainbus_match(device_t, cfdata_t, void *);
 static void mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(mainbus,
-    /*sizeof(struct device): XXXXX It doesn't use it now*/ 0,
-    mainbus_match, mainbus_attach, NULL, NULL);
+CFATTACH_DECL_NEW(mainbus, 0, mainbus_match, mainbus_attach, NULL, NULL);
 
 
 /*
@@ -64,21 +64,63 @@ mainbus_match(device_t parent, cfdata_t match, void *aux)
 static void
 mainbus_attach(device_t parent, device_t self, void *aux)
 {
-#if NACPI > 0
+#if NACPICA > 0
 	struct acpibus_attach_args aaa;
 #endif
+	ACPI_PHYSICAL_ADDRESS rsdp_ptr;
+	ACPI_MADT_LOCAL_SAPIC *entry;
+	ACPI_TABLE_MADT *table;
+	ACPI_TABLE_RSDP *rsdp;
+	ACPI_TABLE_XSDT *xsdt;
+	char *end, *p;
+	int tables, i;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
-#if NACPI > 0
+	if ((rsdp_ptr = AcpiOsGetRootPointer()) == 0)
+		panic("cpu not found");
+
+	rsdp = (ACPI_TABLE_RSDP *)IA64_PHYS_TO_RR7(rsdp_ptr);
+	xsdt = (ACPI_TABLE_XSDT *)IA64_PHYS_TO_RR7(rsdp->XsdtPhysicalAddress);
+
+	tables = (UINT64 *)((char *)xsdt + xsdt->Header.Length) -
+	    xsdt->TableOffsetEntry;
+
+	for (i = 0; i < tables; i++) {
+		int len;
+		char *sig;
+
+		table = (ACPI_TABLE_MADT *)
+		    IA64_PHYS_TO_RR7(xsdt->TableOffsetEntry[i]);
+
+		sig = table->Header.Signature;
+		if (strncmp(sig, ACPI_SIG_MADT, ACPI_NAME_SIZE) != 0)
+			continue;
+		len = table->Header.Length;
+		if (ACPI_FAILURE(AcpiTbChecksum((void *)table, len)))
+			continue;
+
+		end = (char *)table + table->Header.Length;
+		p = (char *)(table + 1);
+		while (p < end) {
+			entry = (ACPI_MADT_LOCAL_SAPIC *)p;
+
+			if (entry->Header.Type == ACPI_MADT_TYPE_LOCAL_SAPIC)
+				config_found_ia(self, "cpubus", entry, 0);
+
+			p += entry->Header.Length;
+		}
+	}
+
+#if NACPICA > 0
 	acpi_probe();
 
 	aaa.aa_iot = IA64_BUS_SPACE_IO;
 	aaa.aa_memt = IA64_BUS_SPACE_MEM;
 	aaa.aa_pc = 0;
 	aaa.aa_pciflags =
-	    PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	    PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
 	    PCI_FLAGS_MWI_OKAY;
 	aaa.aa_ic = 0;

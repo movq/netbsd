@@ -1,4 +1,4 @@
-/*	$NetBSD: zkbd.c,v 1.9 2009/01/29 16:00:33 nonaka Exp $	*/
+/*	$NetBSD: zkbd.c,v 1.16 2012/01/29 10:12:42 tsutsui Exp $	*/
 /* $OpenBSD: zaurus_kbd.c,v 1.28 2005/12/21 20:36:03 deraadt Exp $ */
 
 /*
@@ -18,13 +18,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zkbd.c,v 1.9 2009/01/29 16:00:33 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zkbd.c,v 1.16 2012/01/29 10:12:42 tsutsui Exp $");
 
 #include "opt_wsdisplay_compat.h"
-#include "lcd.h"
 #if 0	/* XXX */
 #include "apm.h"
 #endif
+#include "lcdctl.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,8 +43,11 @@ __KERNEL_RCSID(0, "$NetBSD: zkbd.c,v 1.9 2009/01/29 16:00:33 nonaka Exp $");
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsksymvar.h>
 
-#include <zaurus/dev/zkbdmap.h>
 #include <zaurus/zaurus/zaurus_var.h>
+#include <zaurus/dev/zkbdmap.h>
+#if NLCDCTL > 0
+#include <zaurus/dev/lcdctlvar.h>
+#endif
 
 static const int gpio_sense_pins_c3000[] = {
 	12,
@@ -72,6 +75,32 @@ static const int gpio_strobe_pins_c3000[] = {
 	114
 };
 
+static const int gpio_sense_pins_c860[] = {
+	58,
+	59,
+	60,
+	61,
+	62,
+	63,
+	64,
+	65
+};
+
+static const int gpio_strobe_pins_c860[] = {
+	66,
+	67,
+	68,
+	69,
+	70,
+	71,
+	72,
+	73,
+	74,
+	75,
+	76,
+	77
+};
+
 static const int stuck_keys[] = {
 	7,
 	15,
@@ -87,8 +116,10 @@ struct zkbd_softc {
 
 	const int *sc_sense_array;
 	const int *sc_strobe_array;
+	const int *sc_stuck_keys;
 	int sc_nsense;
 	int sc_nstrobe;
+	int sc_nstuck;
 
 	short sc_onkey_pin;
 	short sc_sync_pin;
@@ -108,6 +139,7 @@ struct zkbd_softc {
 
 	/* wskbd bits */
 	struct device *sc_wskbddev;
+	struct wskbd_mapdata *sc_keymapdata;
 	int sc_rawkbd;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	const char *sc_xt_keymap;
@@ -131,7 +163,7 @@ static void	zkbd_poll(void *v);
 static int	zkbd_on(void *v);
 static int	zkbd_sync(void *v);
 static int	zkbd_hinge(void *v);
-static bool	zkbd_resume(device_t dv PMF_FN_ARGS);
+static bool	zkbd_resume(device_t dv, const pmf_qual_t *);
 
 int zkbd_modstate;
 
@@ -158,6 +190,11 @@ static struct wskbd_consops zkbd_consops = {
 
 static struct wskbd_mapdata zkbd_keymapdata = {
 	zkbd_keydesctab,
+	KB_US,
+};
+
+static struct wskbd_mapdata zkbd_keymapdata_c860 = {
+	zkbd_keydesctab_c860,
 	KB_US,
 };
 
@@ -196,18 +233,37 @@ zkbd_attach(device_t parent, device_t self, void *aux)
 	callout_setfunc(&sc->sc_rawrepeat_ch, zkbd_rawrepeat, sc);
 #endif
 
-	if (ZAURUS_ISC3000) {
+	if (ZAURUS_ISC1000 || ZAURUS_ISC3000) {
 		sc->sc_sense_array = gpio_sense_pins_c3000;
 		sc->sc_strobe_array = gpio_strobe_pins_c3000;
 		sc->sc_nsense = __arraycount(gpio_sense_pins_c3000);
 		sc->sc_nstrobe = __arraycount(gpio_strobe_pins_c3000);
+		sc->sc_stuck_keys = stuck_keys;
+		sc->sc_nstuck = __arraycount(stuck_keys);
 		sc->sc_maxkbdcol = 10;
 		sc->sc_onkey_pin = 95;
 		sc->sc_sync_pin = 16;
 		sc->sc_swa_pin = 97;
 		sc->sc_swb_pin = 96;
+		sc->sc_keymapdata = &zkbd_keymapdata;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 		sc->sc_xt_keymap = xt_keymap;
+#endif
+	} else if (ZAURUS_ISC860) {
+		sc->sc_sense_array = gpio_sense_pins_c860;
+		sc->sc_strobe_array = gpio_strobe_pins_c860;
+		sc->sc_nsense = __arraycount(gpio_sense_pins_c860);
+		sc->sc_nstrobe = __arraycount(gpio_strobe_pins_c860);
+		sc->sc_stuck_keys = NULL;
+		sc->sc_nstuck = 0;
+		sc->sc_maxkbdcol = 0;
+		sc->sc_onkey_pin = -1;
+		sc->sc_sync_pin = -1;
+		sc->sc_swa_pin = -1;
+		sc->sc_swb_pin = -1;
+		sc->sc_keymapdata = &zkbd_keymapdata_c860;
+#ifdef WSDISPLAY_COMPAT_RAWKBD
+		sc->sc_xt_keymap = xt_keymap_c860;
 #endif
 	} else {
 		/* XXX */
@@ -244,22 +300,26 @@ zkbd_attach(device_t parent, device_t self, void *aux)
 		    zkbd_irq, sc);
 	}
 
-	pxa2x0_gpio_intr_establish(sc->sc_onkey_pin, IST_EDGE_BOTH, IPL_TTY,
-	    zkbd_on, sc);
-	pxa2x0_gpio_intr_establish(sc->sc_sync_pin, IST_EDGE_RISING, IPL_TTY,
-	    zkbd_sync, sc);
-	pxa2x0_gpio_intr_establish(sc->sc_swa_pin, IST_EDGE_BOTH, IPL_TTY,
-	    zkbd_hinge, sc);
-	pxa2x0_gpio_intr_establish(sc->sc_swb_pin, IST_EDGE_BOTH, IPL_TTY,
-	    zkbd_hinge, sc);
+	if (sc->sc_onkey_pin >= 0)
+		pxa2x0_gpio_intr_establish(sc->sc_onkey_pin, IST_EDGE_BOTH,
+		    IPL_TTY, zkbd_on, sc);
+	if (sc->sc_sync_pin >= 0)
+		pxa2x0_gpio_intr_establish(sc->sc_sync_pin, IST_EDGE_RISING,
+		    IPL_TTY, zkbd_sync, sc);
+	if (sc->sc_swa_pin >= 0)
+		pxa2x0_gpio_intr_establish(sc->sc_swa_pin, IST_EDGE_BOTH,
+		    IPL_TTY, zkbd_hinge, sc);
+	if (sc->sc_swb_pin >= 0)
+		pxa2x0_gpio_intr_establish(sc->sc_swb_pin, IST_EDGE_BOTH,
+		    IPL_TTY, zkbd_hinge, sc);
 
 	if (glass_console) {
-		wskbd_cnattach(&zkbd_consops, sc, &zkbd_keymapdata);
+		wskbd_cnattach(&zkbd_consops, sc, sc->sc_keymapdata);
 		a.console = 1;
 	} else {
 		a.console = 0;
 	}
-	a.keymap = &zkbd_keymapdata;
+	a.keymap = sc->sc_keymapdata;
 	a.accessops = &zkbd_accessops;
 	a.accesscookie = sc;
 
@@ -377,8 +437,8 @@ zkbd_poll(void *v)
 		stuck = 0;
 		/* extend  xt_keymap to do this faster. */
 		/* ignore 'stuck' keys' */
-		for (j = 0; j < __arraycount(stuck_keys); j++) {
-			if (stuck_keys[j] == i) {
+		for (j = 0; j < sc->sc_nstuck; j++) {
+			if (sc->sc_stuck_keys[j] == i) {
 				stuck = 1;
 				break;
 			}
@@ -461,7 +521,12 @@ zkbd_on(void *v)
 {
 #if NAPM > 0
 	struct zkbd_softc *sc = (struct zkbd_softc *)v;
-	int down = pxa2x0_gpio_get_bit(sc->sc_onkey_pin) ? 1 : 0;
+	int down;
+
+	if (sc->sc_onkey_pin < 0)
+		return 1;
+
+	down = pxa2x0_gpio_get_bit(sc->sc_onkey_pin) ? 1 : 0;
 
 	/*
 	 * Change run mode depending on how long the key is held down.
@@ -503,11 +568,13 @@ static int
 zkbd_hinge(void *v)
 {
 	struct zkbd_softc *sc = (struct zkbd_softc *)v;
-	int a = pxa2x0_gpio_get_bit(sc->sc_swa_pin) ? 1 : 0;
-	int b = pxa2x0_gpio_get_bit(sc->sc_swb_pin) ? 2 : 0;
-#if NLCD > 0
-	extern void lcd_blank(int);
-#endif
+	int a, b;
+
+	if (sc->sc_swa_pin < 0 || sc->sc_swb_pin < 0)
+		return 1;
+
+	a = pxa2x0_gpio_get_bit(sc->sc_swa_pin) ? 1 : 0;
+	b = pxa2x0_gpio_get_bit(sc->sc_swb_pin) ? 2 : 0;
 
 	sc->sc_hinge = a | b;
 
@@ -516,12 +583,12 @@ zkbd_hinge(void *v)
 		if (lid_suspend)
 			apm_suspends++;
 #endif
-#if NLCD > 0
-		lcd_blank(1);
+#if NLCDCTL > 0
+		lcdctl_blank(true);
 #endif
 	} else {
-#if NLCD > 0
-		lcd_blank(0);
+#if NLCDCTL > 0
+		lcdctl_blank(false);
 #endif
 	}
 
@@ -594,7 +661,7 @@ zkbd_cnpollc(void *v, int on)
 }
 
 static bool
-zkbd_resume(device_t dv PMF_FN_ARGS)
+zkbd_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct zkbd_softc *sc = device_private(dv);
 

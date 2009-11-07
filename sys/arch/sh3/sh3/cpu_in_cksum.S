@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.2 2008/02/02 02:15:40 uwe Exp $	*/
+/*	$NetBSD: cpu_in_cksum.S,v 1.4 2011/09/27 00:35:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 SHIMIZU Ryo <ryo@misakimix.org>
@@ -31,7 +31,7 @@
 #include <machine/asm.h>
 #include "assym.h"
 
-__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.2 2008/02/02 02:15:40 uwe Exp $")
+__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.4 2011/09/27 00:35:38 christos Exp $")
 
 
 #define	reg_tmp0		r0
@@ -244,7 +244,7 @@ out_of_mbufs:
 .L_message_out_of_data:
 	.asciz "cksum: out of data (%d byte short)\n"
 
-	SET_ENTRY_SIZE(in_cksum)
+	SET_ENTRY_SIZE(cpu_in_cksum)
 
 
 	.align	2

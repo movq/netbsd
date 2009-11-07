@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge.c,v 1.21 2009/07/21 07:35:55 skrll Exp $	*/
+/*	$NetBSD: footbridge.c,v 1.25 2011/07/01 19:32:28 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.21 2009/07/21 07:35:55 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.25 2011/07/01 19:32:28 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.21 2009/07/21 07:35:55 skrll Exp $"
 
 #include <dev/pci/pcivar.h>
 #define _ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/bootconfig.h>
 
@@ -175,8 +175,6 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, IRQ_ENABLE_CLEAR, 0xffffffff);
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, FIQ_ENABLE_CLEAR, 0xffffffff);
 
-/*	bus_space_write_4(sc->sc_iot, sc->sc_ioh, 0x18, 0x40000000);*/
-
 	/* Install a generic handler to catch a load of system interrupts */
 	sc->sc_serr_ih = footbridge_intr_claim(IRQ_SERR, IPL_HIGH,
 	    "serr", footbridge_intr, sc);
@@ -200,7 +198,8 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 	/* calibrate the delay loop */
 	calibrate_delay();
 
-	/* it seems that the default of the memory being visible from 0 upwards
+	/*
+	 * It seems that the default of the memory being visible from 0 upwards
 	 * on the PCI bus causes issues when DMAing from traditional PC VGA
 	 * address.  This breaks dumping core on cats, as DMAing pages in the
 	 * range 0xb800-0xc000 cause the system to hang.  This suggests that
@@ -242,7 +241,7 @@ footbridge_attach(device_t parent, device_t self, void *aux)
 	fba.fba_pba.pba_memt = &footbridge_pci_mem_bs_tag;
 	fba.fba_pba.pba_dmat = &footbridge_pci_bus_dma_tag;
 	fba.fba_pba.pba_dmat64 = NULL;
-	fba.fba_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	fba.fba_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	fba.fba_pba.pba_bus = 0;
 	fba.fba_pba.pba_bridgetag = NULL;
 	config_found_ia(self, "pcibus", &fba.fba_pba, pcibusprint);

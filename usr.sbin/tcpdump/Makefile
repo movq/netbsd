@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.50 2009/09/14 10:36:51 degroote Exp $	
+#	$NetBSD: Makefile,v 1.52 2011/06/20 07:44:04 mrg Exp $	
 
 WARNS?=	1	# XXX: out of date third-party program 
 
@@ -77,6 +77,9 @@ CPPFLAGS+=-DLBL_ALIGN=1
 CPPFLAGS+=-DTCPDUMP_DO_SMB=1
 CPPFLAGS+=-D_U_="__attribute__((unused))"
 
+CPPFLAGS+=-DWITH_USER=\"_tcpdump\"
+CPPFLAGS+=-DWITH_CHROOT=\"/var/chroot/tcpdump\"
+
 .if (${USE_INET6} != "no")
 SRCS+=	print-ip6.c print-ip6opts.c print-ripng.c print-icmp6.c print-frag6.c \
 	print-rt6.c print-ospf6.c print-dhcp6.c
@@ -90,7 +93,7 @@ LDADD+=	-lcrypto -lcrypt
 DPADD+=	${LIBCRYPTO} ${LIBCRYPT}
 .endif
 
-.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.if defined(HAVE_GCC) || defined(HAVE_PCC)
 COPTS+=	-fno-strict-aliasing
 .for f in print-802_11 print-esp print-fr print-radius print-telnet tcpdump util
 COPTS.${f}.c+=  -Wno-pointer-sign

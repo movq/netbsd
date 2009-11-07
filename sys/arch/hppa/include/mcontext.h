@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.4 2005/12/11 12:17:37 christos Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.7 2011/12/08 21:00:50 skrll Exp $	*/
 
 #ifndef _HPPA_MCONTEXT_H_
 #define	_HPPA_MCONTEXT_H_
@@ -57,11 +57,22 @@ do {									\
 	(uc)->uc_mcontext.__gregs[_REG_PCOQT] = (pc) + 4;		\
 } while (/*CONSTCOND*/0)
 
+static __inline void *
+__lwp_getprivate_fast(void)
+{
+	register void *__tmp;
+
+	__asm volatile("mfctl\t27 /* CR_TLS */, %0" : "=r" (__tmp));
+
+	return __tmp;
+}
+
 #endif /* !__ASSEMBLER__ */
 
 #define	_OFFSETOF_UC_GREGS 40
 
 #define	_UC_SETSTACK	0x00010000
 #define	_UC_CLRSTACK	0x00020000
+#define	_UC_TLSBASE	0x00040000
 
 #endif /* _HPPA_MCONTEXT_H_ */

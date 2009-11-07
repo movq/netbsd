@@ -1,4 +1,4 @@
-/*	$NetBSD: fsutil.h,v 1.14 2009/10/21 01:07:46 snj Exp $	*/
+/*	$NetBSD: fsutil.h,v 1.18 2011/08/27 17:34:44 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
@@ -25,25 +25,21 @@
  */
 
 #include <stdarg.h>
+#include <signal.h>
 
-void errexit(const char *, ...)
-    __attribute__((__noreturn__,__format__(__printf__,1,2)));  
-void pfatal(const char *, ...)
-    __attribute__((__format__(__printf__,1,2)));  
-void pwarn(const char *, ...)
-    __attribute__((__format__(__printf__,1,2)));  
-void perr(const char *, ...)
-    __attribute__((__format__(__printf__,1,2)));  
-void panic(const char *, ...)
-    __attribute__((__noreturn__,__format__(__printf__,1,2)));  
-void vmsg(int, const char *, va_list)
-     __attribute__((__format__(__printf__,2,0)));
+void errexit(const char *, ...) __printflike(1, 2) __dead;
+void pfatal(const char *, ...) __printflike(1, 2);
+void pwarn(const char *, ...) __printflike(1, 2);
+void perr(const char *, ...) __printflike(1, 2);
+void panic(const char *, ...) __printflike(1, 2) __dead;
+void vmsg(int, const char *, va_list) __printflike(2, 0);
 const char *rawname(const char *);
 const char *unrawname(const char *);
 const char *blockcheck(const char *);
 const char *cdevname(void);
 void setcdevname(const char *, int);
 int  hotroot(void);
+const char *print_mtime(time_t);
 
 #define CHECK_PREEN	1
 #define	CHECK_VERBOSE	2
@@ -55,3 +51,9 @@ int  hotroot(void);
 struct fstab;
 int checkfstab(int, int, void *(*)(struct fstab *), 
     int (*) (const char *, const char *, const char *, void *, pid_t *));
+
+void (*ckfinish)(int);
+volatile sig_atomic_t returntosingle;
+void catch(int) __dead;
+void catchquit(int);
+void voidquit(int);

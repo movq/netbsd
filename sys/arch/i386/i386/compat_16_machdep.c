@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.19 2008/11/19 18:35:58 ad Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.21.14.1 2012/05/07 16:38:43 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.19 2008/11/19 18:35:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.21.14.1 2012/05/07 16:38:43 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_vm86.h"
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.19 2008/11/19 18:35:58 ad Ex
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -53,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.19 2008/11/19 18:35:58 ad Ex
 #include <machine/vm86.h>
 #endif
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm_page.h>
 
 #include <machine/pmap.h>
 #include <machine/vmparam.h>
@@ -262,7 +260,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 		/* NOTREACHED */
 	}
 
+	int svufpu = l->l_md.md_flags & MDL_USEDFPU;
 	buildcontext(l, sel, catcher, fp);
+	l->l_md.md_flags |= svufpu;
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)

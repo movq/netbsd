@@ -1,4 +1,4 @@
-/*	$NetBSD: com_gsc.c,v 1.14 2009/11/03 05:07:25 snj Exp $	*/
+/*	$NetBSD: com_gsc.c,v 1.17 2011/07/01 18:33:09 dyoung Exp $	*/
 
 /*	$OpenBSD: com_gsc.c,v 1.8 2000/03/13 14:39:59 mickey Exp $	*/
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.14 2009/11/03 05:07:25 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.17 2011/07/01 18:33:09 dyoung Exp $");
 
 #include "opt_kgdb.h"
 
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_gsc.c,v 1.14 2009/11/03 05:07:25 snj Exp $");
 #include <sys/kgdb.h>
 #endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
@@ -138,8 +138,8 @@ com_gsc_attach(device_t parent, device_t self, void *aux)
 	COM_INIT_REGS(sc->sc_regs, iot, ioh, iobase);
 
 	com_attach_subr(sc);
-	gsc->sc_ih = hp700_intr_establish(sc->sc_dev, IPL_TTY,
-	    comintr, sc, ga->ga_int_reg, ga->ga_irq);
+	gsc->sc_ih = hp700_intr_establish(IPL_TTY, comintr, sc, ga->ga_ir,
+	    ga->ga_irq);
 }
 
 #ifdef	KGDB

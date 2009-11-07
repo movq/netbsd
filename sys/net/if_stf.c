@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stf.c,v 1.72 2009/04/18 14:58:05 tsutsui Exp $	*/
+/*	$NetBSD: if_stf.c,v 1.77 2011/10/28 20:13:32 dyoung Exp $	*/
 /*	$KAME: if_stf.c,v 1.62 2001/06/07 22:32:16 itojun Exp $ */
 
 /*
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.72 2009/04/18 14:58:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.77 2011/10/28 20:13:32 dyoung Exp $");
 
 #include "opt_inet.h"
 
@@ -90,7 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.72 2009/04/18 14:58:05 tsutsui Exp $");
 #include <sys/protosw.h>
 #include <sys/queue.h>
 #include <sys/syslog.h>
-#include <sys/kauth.h>
 
 #include <sys/cpu.h>
 
@@ -114,17 +113,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.72 2009/04/18 14:58:05 tsutsui Exp $");
 
 #include <netinet/ip_encap.h>
 
-#include <machine/stdarg.h>
-
 #include <net/net_osdep.h>
 
-#include "bpfilter.h"
 #include "stf.h"
 #include "gif.h"	/*XXX*/
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #if NGIF > 0
 #include <net/if_gif.h>
@@ -215,9 +209,7 @@ stf_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_dlt    = DLT_NULL;
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(&sc->sc_if, DLT_NULL, sizeof(u_int));
 	LIST_INSERT_HEAD(&stf_softc_list, sc, sc_list);
 	return (0);
 }
@@ -229,9 +221,7 @@ stf_clone_destroy(struct ifnet *ifp)
 
 	LIST_REMOVE(sc, sc_list);
 	encap_detach(sc->encap_cookie);
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	rtcache_free(&sc->sc_ro);
 	free(sc, M_DEVBUF);
@@ -388,10 +378,7 @@ stf_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		return ENETUNREACH;
 	}
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET6, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(ifp, AF_INET6, m);
 
 	M_PREPEND(m, sizeof(struct ip), M_DONTWAIT);
 	if (m && m->m_len < sizeof(struct ip))
@@ -431,6 +418,7 @@ stf_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	}
 
 	ifp->if_opackets++;
+	ifp->if_obytes += m->m_pkthdr.len - sizeof(struct ip);
 	return ip_output(m, NULL, &sc->sc_ro, 0, NULL, NULL);
 }
 
@@ -631,10 +619,7 @@ in_stf_input(struct mbuf *m, ...)
 
 	m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET6, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(ifp, AF_INET6, m);
 
 	/*
 	 * Put the packet to the network layer input queue according to the
@@ -675,7 +660,6 @@ stf_rtrequest(int cmd, struct rtentry *rt,
 static int
 stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
-	struct lwp		*l = curlwp;	/* XXX */
 	struct ifaddr		*ifa;
 	struct ifreq		*ifr = data;
 	struct sockaddr_in6	*sin6;
@@ -708,12 +692,6 @@ stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFMTU:
-		error = kauth_authorize_network(l->l_cred,
-		    KAUTH_NETWORK_INTERFACE,
-		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, KAUTH_ARG(cmd),
-		    NULL);
-		if (error)
-			break;
 		if (ifr->ifr_mtu < STF_MTU_MIN || ifr->ifr_mtu > STF_MTU_MAX)
 			return EINVAL;
 		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)

@@ -1,7 +1,7 @@
-/*	$NetBSD: dir.c,v 1.1.1.2 2009/10/25 00:02:46 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.3.4.1 2012/06/05 21:15:23 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dir.c,v 1.29 2009/02/16 23:48:04 tbox Exp */
+/* Id */
 
 /*! \file
  * \author  Principal Authors: DCL */
@@ -81,7 +81,7 @@ isc_dir_open(isc_dir_t *dir, const char *dirname) {
 	if (dir->dirname < p && *(p - 1) != '/')
 		*p++ = '/';
 	*p++ = '*';
-	*p++ = '\0';
+	*p = '\0';
 
 	/*
 	 * Open stream.

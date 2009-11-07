@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.24 2008/07/20 01:20:23 lukem Exp $	*/
+/*	$NetBSD: newfs.c,v 1.26 2012/02/02 03:49:22 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.24 2008/07/20 01:20:23 lukem Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.26 2012/02/02 03:49:22 perseant Exp $");
 #endif
 #endif /* not lint */
 
@@ -102,6 +102,8 @@ int	preen = 0;		/* Coexistence with fsck_lfs */
 
 char	device[MAXPATHLEN];
 char	*progname, *special;
+
+extern long	dev_bsize;		/* device block size */
 
 static int64_t strsuftoi64(const char *, const char *, int64_t, int64_t, int *);
 static void usage(void);
@@ -273,8 +275,18 @@ main(int argc, char **argv)
 		special = device;
 	}
 	if (!Nflag) {
-		fso = open(special,
-		    (debug ? O_CREAT : 0) | O_RDWR, DEFFILEMODE);
+		fso = open(special, O_RDWR, DEFFILEMODE);
+		if (debug && fso < 0) {
+			/* Create a file of the requested size. */
+			fso = open(special, O_CREAT | O_RDWR, DEFFILEMODE);
+			if (fso >= 0) {
+				char buf[512];
+				int i;
+				for (i = 0; i < fssize; i++)
+					write(fso, buf, sizeof(buf));
+				lseek(fso, 0, SEEK_SET);
+			}
+		}
 		if (fso < 0)
 			fatal("%s: %s", special, strerror(errno));
 	} else
@@ -315,6 +327,9 @@ main(int argc, char **argv)
 	if (secsize == 0)
 		secsize = geo.dg_secsize;
 
+	/* Make device block size available to low level routines */
+	dev_bsize = secsize;
+
 	/* From here on out fssize is in sectors */
 	if (byte_sized) {
 		fssize /= secsize;
@@ -336,7 +351,7 @@ main(int argc, char **argv)
 			warnx("%s is not a character special device, ignoring -A", special);
 			segsize = 0;
 		} else
-			segsize = auto_segsize(fsi, dbtob(dkw.dkw_size),
+			segsize = auto_segsize(fsi, dkw.dkw_size / secsize,
 			    version);
 	}
 

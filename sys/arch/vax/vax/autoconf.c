@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.90 2008/03/11 05:34:03 matt Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.93.6.1 2012/08/08 15:51:08 martin Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,16 +31,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.90 2008/03/11 05:34:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.93.6.1 2012/08/08 15:51:08 martin Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_cputype.h"
 
 #include <sys/param.h>
-#include <sys/types.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
-#include <sys/reboot.h>
 #include <sys/disk.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
@@ -49,10 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.90 2008/03/11 05:34:03 matt Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
 #include <machine/sid.h>
-#include <machine/param.h>
-#include <machine/vmparam.h>
 #include <machine/nexus.h>
 #include <machine/ioa.h>
 #include <machine/ka820.h>
@@ -60,7 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.90 2008/03/11 05:34:03 matt Exp $");
 #include <machine/ka650.h>
 #include <machine/clock.h>
 #include <machine/rpb.h>
-#include <machine/bus.h>
 #include <machine/mainbus.h>
 
 #include <vax/vax/gencons.h>
@@ -106,7 +102,7 @@ cpu_rootconf(void)
 	printf("boot device: %s\n",
 	    booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 static int	mainbus_print(void *, const char *);
@@ -120,8 +116,10 @@ int
 mainbus_print(void *aux, const char *name)
 {
 	struct mainbus_attach_args * const ma = aux;
-	if (name)
+	if (name) {
+		aprint_naive("%s at %s", ma->ma_type, name);
 		aprint_normal("%s at %s", ma->ma_type, name);
+        }
 	return UNCONF;
 }
 
@@ -137,6 +135,7 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	struct mainbus_attach_args ma;
 	const char * const * devp;
 
+	aprint_naive("\n");
 	aprint_normal("\n");
 
 	for (devp = dep_call->cpu_devs; *devp != NULL; devp++) {
@@ -150,10 +149,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	 * Hopefully there a master bus?
 	 * Maybe should have this as master instead of mainbus.
 	 */
-
-	if (dep_call->cpu_subconf != NULL)
-		(*dep_call->cpu_subconf)(self, &ma, mainbus_print);
-
 
 #if defined(COMPAT_14)
 	if (rpb.rpb_base == (void *)-1)
@@ -189,10 +184,13 @@ cpu_mainbus_attach(device_t parent, device_t self, void *aux)
 
 	if (dep_call->cpu_attach_cpu != NULL)
 		(*dep_call->cpu_attach_cpu)(self);
-	else if (ci->ci_cpustr)
+	else if (ci->ci_cpustr) {
+		aprint_naive(": %s\n", ci->ci_cpustr);
 		aprint_normal(": %s\n", ci->ci_cpustr);
-	else
+        } else {
+		aprint_naive("\n");
 		aprint_normal("\n");
+        }
 }
 
 CFATTACH_DECL_NEW(cpu_mainbus, 0,

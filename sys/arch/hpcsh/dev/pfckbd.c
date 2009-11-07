@@ -1,4 +1,4 @@
-/*	$NetBSD: pfckbd.c,v 1.27 2009/04/05 02:29:40 uwe Exp $	*/
+/*	$NetBSD: pfckbd.c,v 1.29 2012/02/12 16:34:08 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  * currently, HP Jornada 680/690, HITACHI PERSONA HPW-50PAD only.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.27 2009/04/05 02:29:40 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.29 2012/02/12 16:34:08 matt Exp $");
 
 #include "debug_hpcsh.h"
 
@@ -42,8 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.27 2009/04/05 02:29:40 uwe Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/callout.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 
@@ -230,7 +230,7 @@ pfckbd_input(struct pfckbd_core *pc, int column, uint16_t data)
 
 /* Look up appropriate callback handler */
 static void
-(*pfckbd_callout_lookup())(void *)
+(*pfckbd_callout_lookup(void))(void *)
 {
 	int i, n;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: hfs_subr.c,v 1.12 2009/03/26 20:05:07 pooka Exp $	*/
+/*	$NetBSD: hfs_subr.c,v 1.17 2011/11/14 18:35:13 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */                                     
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hfs_subr.c,v 1.12 2009/03/26 20:05:07 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hfs_subr.c,v 1.17 2011/11/14 18:35:13 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: hfs_subr.c,v 1.12 2009/03/26 20:05:07 pooka Exp $");
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/mount.h>
-#include <sys/disklabel.h>
+#include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
 #include <sys/buf.h>
@@ -155,8 +155,9 @@ hfs_libcb_opendev(
 {
 	hfs_libcb_data* cbdata = NULL;
 	hfs_libcb_argsopen* args;
-	struct partinfo dpart;
 	int result, mode;
+	uint64_t psize;
+	unsigned secsize;
 
 	result = 0;
 	args = (hfs_libcb_argsopen*)(cbargs->openvol);
@@ -177,14 +178,16 @@ hfs_libcb_opendev(
 	
 	/* Open the device node. */
 	mode = vol->readonly ? FREAD : FREAD|FWRITE;
-	if ((result = VOP_OPEN(args->devvp, mode,
-		FSCRED)) != 0)
+	vn_lock(args->devvp, LK_EXCLUSIVE | LK_RETRY);
+	result = VOP_OPEN(args->devvp, mode, FSCRED);
+	VOP_UNLOCK(args->devvp);
+	if (result != 0)
 		goto error;
 
 	/* Flush out any old buffers remaining from a previous use. */
 	vn_lock(args->devvp, LK_EXCLUSIVE | LK_RETRY);
 	result = vinvalbuf(args->devvp, V_SAVE, args->cred, args->l, 0, 0);
-	VOP_UNLOCK(args->devvp, 0);
+	VOP_UNLOCK(args->devvp);
 	if (result != 0) {
 		VOP_CLOSE(args->devvp, mode, FSCRED);
 		goto error;
@@ -193,11 +196,10 @@ hfs_libcb_opendev(
 	cbdata->devvp = args->devvp;
 
 	/* Determine the device's block size. Default to DEV_BSIZE if unavailable.*/
-	if (VOP_IOCTL(args->devvp, DIOCGPART, &dpart, FREAD, args->cred)
-		!= 0)
+	if (getdisksize(args->devvp, &psize, &secsize) != 0)
 		cbdata->devblksz = DEV_BSIZE;
 	else
-		cbdata->devblksz = dpart.disklab->d_secsize;
+		cbdata->devblksz = secsize;
 		
 	return 0;
 
@@ -207,7 +209,7 @@ error:
 			vn_lock(cbdata->devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(cbdata->devvp, vol->readonly ? FREAD :
 				FREAD | FWRITE, NOCRED);
-			VOP_UNLOCK(cbdata->devvp, 0);
+			VOP_UNLOCK(cbdata->devvp);
 		}
 		free(cbdata, M_HFSMNT);
 		vol->cbdata = NULL;
@@ -230,7 +232,7 @@ hfs_libcb_closedev(hfs_volume* in_vol, hfs_callback_args* cbargs)
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp,
 			    in_vol->readonly ? FREAD : FREAD | FWRITE, NOCRED);
-			/* XXX do we need a VOP_UNLOCK() here? */
+			VOP_UNLOCK(devvp);
 		}
 
 		free(in_vol->cbdata, M_HFSMNT);
@@ -366,55 +368,38 @@ hfs_time_to_timespec(uint32_t hfstime, struct timespec *unixtime)
 uint16_t be16tohp(void** inout_ptr)
 {
 	uint16_t	result;
-	uint16_t *ptr;
 	
-	if(inout_ptr==NULL)
+	if(inout_ptr == NULL)
 		return 0;
 		
-	ptr = *inout_ptr;
-
-	result = be16toh(*ptr);
-
-	ptr++;
-	*inout_ptr = ptr;
+	memcpy(&result, *inout_ptr, sizeof(result));
+	*inout_ptr = (char *)*inout_ptr + sizeof(result);
 	
-	return result;
+	return be16toh(result);
 }
 
 uint32_t be32tohp(void** inout_ptr)
 {
 	uint32_t	result;
-	uint32_t *ptr;
 	
-	if(inout_ptr==NULL)
+	if(inout_ptr == NULL)
 		return 0;
 
-	ptr = *inout_ptr;
-
-	result = be32toh(*ptr);
-
-	ptr++;
-	*inout_ptr = ptr;
-	
-	return result;
+	memcpy(&result, *inout_ptr, sizeof(result));
+	*inout_ptr = (char *)*inout_ptr + sizeof(result);
+	return be32toh(result);
 }
 
 uint64_t be64tohp(void** inout_ptr)
 {
 	uint64_t	result;
-	uint64_t *ptr;
 	
-	if(inout_ptr==NULL)
+	if(inout_ptr == NULL)
 		return 0;
 
-	ptr = *inout_ptr;
-
-	result = be64toh(*ptr);
-
-	ptr++;
-	*inout_ptr = ptr;
-	
-	return result;
+	memcpy(&result, *inout_ptr, sizeof(result));
+	*inout_ptr = (char *)*inout_ptr + sizeof(result);
+	return be64toh(result);
 }
 
 enum vtype

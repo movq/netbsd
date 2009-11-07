@@ -1,7 +1,7 @@
-/*	$NetBSD: keytable.c,v 1.2 2009/10/25 00:14:33 christos Exp $	*/
+/*	$NetBSD: keytable.c,v 1.5.6.1 2012/06/05 21:14:59 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2009, 2010  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keytable.c,v 1.38 2009/07/13 23:47:42 tbox Exp */
+/* Id: keytable.c,v 1.41 2010/06/25 23:46:51 tbox Exp  */
 
 /*! \file */
 
@@ -38,7 +38,7 @@ free_keynode(void *node, void *arg) {
 	dns_keynode_t *keynode = node;
 	isc_mem_t *mctx = arg;
 
-	dns_keynode_detach(mctx, &keynode);
+	dns_keynode_detachall(mctx, &keynode);
 }
 
 isc_result_t
@@ -285,7 +285,7 @@ dns_keytable_deletekeynode(dns_keytable_t *keytable, dst_key_t *dstkey) {
 	while (knode != NULL) {
 		if (dst_key_compare(knode->key, dstkey) == ISC_TRUE)
 			break;
-		kprev = &knode;
+		kprev = &knode->next;
 		knode = knode->next;
 	}
 
@@ -485,6 +485,25 @@ dns_keytable_finddeepestmatch(dns_keytable_t *keytable, dns_name_t *name,
 }
 
 void
+dns_keytable_attachkeynode(dns_keytable_t *keytable, dns_keynode_t *source,
+			   dns_keynode_t **target)
+{
+	/*
+	 * Give back a keynode found via dns_keytable_findkeynode().
+	 */
+
+	REQUIRE(VALID_KEYTABLE(keytable));
+	REQUIRE(VALID_KEYNODE(source));
+	REQUIRE(target != NULL && *target == NULL);
+
+	LOCK(&keytable->lock);
+	keytable->active_nodes++;
+	UNLOCK(&keytable->lock);
+
+	dns_keynode_attach(source, target);
+}
+
+void
 dns_keytable_detachkeynode(dns_keytable_t *keytable, dns_keynode_t **keynodep)
 {
 	/*
@@ -533,6 +552,44 @@ dns_keytable_issecuredomain(dns_keytable_t *keytable, dns_name_t *name,
 
 	RWUNLOCK(&keytable->rwlock, isc_rwlocktype_read);
 
+	return (result);
+}
+
+isc_result_t
+dns_keytable_dump(dns_keytable_t *keytable, FILE *fp)
+{
+	isc_result_t result;
+	dns_keynode_t *knode;
+	dns_rbtnode_t *node;
+	dns_rbtnodechain_t chain;
+
+	REQUIRE(VALID_KEYTABLE(keytable));
+
+	RWLOCK(&keytable->rwlock, isc_rwlocktype_read);
+	dns_rbtnodechain_init(&chain, keytable->mctx);
+	result = dns_rbtnodechain_first(&chain, keytable->table, NULL, NULL);
+	if (result != ISC_R_SUCCESS && result != DNS_R_NEWORIGIN)
+		goto cleanup;
+	for (;;) {
+		char pbuf[DST_KEY_FORMATSIZE];
+
+		dns_rbtnodechain_current(&chain, NULL, NULL, &node);
+		for (knode = node->data; knode != NULL; knode = knode->next) {
+			dst_key_format(knode->key, pbuf, sizeof(pbuf));
+			fprintf(fp, "%s ; %s\n", pbuf,
+				knode->managed ? "managed" : "trusted");
+		}
+		result = dns_rbtnodechain_next(&chain, NULL, NULL);
+		if (result != ISC_R_SUCCESS && result != DNS_R_NEWORIGIN) {
+			if (result == ISC_R_NOMORE)
+				result = ISC_R_SUCCESS;
+			break;
+		}
+	}
+
+   cleanup:
+	dns_rbtnodechain_invalidate(&chain);
+	RWUNLOCK(&keytable->rwlock, isc_rwlocktype_read);
 	return (result);
 }
 
@@ -598,10 +655,20 @@ dns_keynode_detach(isc_mem_t *mctx, dns_keynode_t **keynode) {
 	if (refs == 0) {
 		if (node->key != NULL)
 			dst_key_free(&node->key);
-		if (node->next != NULL)
-			dns_keynode_detach(mctx, &node->next);
 		isc_refcount_destroy(&node->refcount);
 		isc_mem_put(mctx, node, sizeof(dns_keynode_t));
+	}
+	*keynode = NULL;
+}
+
+void
+dns_keynode_detachall(isc_mem_t *mctx, dns_keynode_t **keynode) {
+	dns_keynode_t *next = NULL, *node = *keynode;
+	REQUIRE(VALID_KEYNODE(node));
+	while (node != NULL) {
+		next = node->next;
+		dns_keynode_detach(mctx, &node);
+		node = next;
 	}
 	*keynode = NULL;
 }

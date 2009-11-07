@@ -1,5 +1,5 @@
 /*	$OpenBSD: ts102.c,v 1.14 2005/01/27 17:03:23 millert Exp $	*/
-/*	$NetBSD: ts102.c,v 1.14 2009/09/17 16:28:12 tsutsui Exp $ */
+/*	$NetBSD: ts102.c,v 1.16 2011/07/26 22:52:49 dyoung Exp $ */
 /*
  * Copyright (c) 2003, 2004, Miodrag Vallat.
  * Copyright (c) 2005, Michael Lorenz.
@@ -77,7 +77,7 @@
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 
@@ -407,8 +407,6 @@ tslot_reset(struct tslot_data *td, uint32_t iosize)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t)td->td_parent->sc_pct;
 	paa.pch = (pcmcia_chipset_handle_t)td;
-	paa.iobase = 0;
-	paa.iosize = iosize;
 
 	td->td_pcmcia = config_found(td->td_parent->sc_dev, &paa, tslot_print);
 

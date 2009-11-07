@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.h,v 1.5 2008/05/29 14:51:26 mrg Exp $	*/
+/*	$NetBSD: netbsd32_machdep.h,v 1.7 2011/06/20 06:21:45 matt Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -45,7 +45,7 @@ typedef	u_int32_t netbsd32_pointer_t;
 #include <compat/netbsd32/netbsd32.h>
 #include <powerpc/frame.h>
 
-/* from <arch/sparc/include/signal.h> */
+/* from <sparc/include/signal.h> */
 typedef u_int32_t netbsd32_sigcontextp_t;
 
 struct netbsd32_sigcontext {
@@ -64,7 +64,7 @@ struct netbsd32_sigcontext13 {
 };
 
 struct exec_package;
-void netbsd32_setregs (struct lwp *, struct exec_package *, u_long);
+void netbsd32_setregs (struct lwp *, struct exec_package *, vaddr_t);
 int netbsd32_sigreturn (struct lwp *, void *, register_t *);
 void netbsd32_sendsig (int sig, sigset_t *, u_long);
 

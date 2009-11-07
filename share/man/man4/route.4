@@ -1,4 +1,4 @@
-.\"	$NetBSD: route.4,v 1.15 2003/08/07 10:31:03 agc Exp $
+.\"	$NetBSD: route.4,v 1.18 2011/07/03 07:25:52 kefren Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)route.4	8.6 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd November 13, 2010
 .Dt ROUTE 4
 .Os
 .Sh NAME
@@ -74,11 +74,12 @@ Normally the protocol specifies the route
 through each interface as a
 .Dq direct
 connection to the destination host
-or network.  If the route is direct, the transport layer of
-a protocol family usually requests the packet be sent to the
-same host specified in the packet.  Otherwise, the interface
-is requested to address the packet to the gateway listed in the routing entry
-(i.e. the packet is forwarded).
+or network.
+If the route is direct, the transport layer of a protocol family
+usually requests the packet be sent to the same host specified in
+the packet.
+Otherwise, the interface is requested to address the packet to the
+gateway listed in the routing entry (i.e. the packet is forwarded).
 .Pp
 When routing a packet,
 the kernel will attempt to find
@@ -95,9 +96,9 @@ A wildcard routing entry is specified with a zero
 destination address value, and a mask of all zeroes.
 Wildcard routes will be used
 when the system fails to find other routes matching the
-destination.  The combination of wildcard
-routes and routing redirects can provide an economical
-mechanism for routing traffic.
+destination.
+The combination of wildcard routes and routing redirects can provide
+an economical mechanism for routing traffic.
 .Pp
 One opens the channel for passing routing control messages
 by using the socket call shown in the synopsis above:
@@ -126,10 +127,11 @@ bit mask within the header, and the sequence is least significant
 to most significant bit within the vector.
 .Pp
 Any messages sent to the kernel are returned, and copies are sent
-to all interested listeners.  The kernel will provide the process
-ID for the sender, and the sender may use an additional sequence
-field to distinguish between outstanding messages.  However,
-message replies may be lost when kernel buffers are exhausted.
+to all interested listeners.
+The kernel will provide the process ID for the sender, and the
+sender may use an additional sequence field to distinguish between
+outstanding messages.
+However, message replies may be lost when kernel buffers are exhausted.
 .Pp
 The kernel may reject certain messages, and will indicate this
 by filling in the
@@ -192,9 +194,11 @@ The messages are:
 #define	RTM_RESOLVE	0xb    /* request to resolve dst to LL addr */
 #define	RTM_NEWADDR	0xc    /* address being added to iface */
 #define	RTM_DELADDR	0xd    /* address being removed from iface */
-#define	RTM_OIFINFO	0xe    /* Old (pre-1.5) RTM_IFINFO message */
-#define	RTM_IFINFO	0xf    /* iface/link going up/down etc. */
+#define	RTM_OOIFINFO	0xe    /* Old (pre-1.5) RTM_IFINFO message */
+#define	RTM_OIFINFO	0xf    /* Old (pre-6.0) RTM_IFINFO message */
 #define	RTM_IFANNOUNCE	0x10   /* iface arrival/departure */
+#define	RTM_IFINFO	0x14   /* iface/link going up/down etc. */
+#define	RTM_CHGADDR	0x15   /* address has changed on iface */
 .Ed
 .Pp
 A message header consists of one of the following:
@@ -249,7 +253,8 @@ The
 message uses a
 .Ar if_msghdr
 header, the
-.Dv RTM_NEWADDR
+.Dv RTM_NEWADDR ,
+.Dv RTM_CHGADDR ,
 and
 .Dv RTM_DELADDR
 messages use a
@@ -322,6 +327,7 @@ Specifiers for which addresses are present in the messages are:
 #define RTA_IFA       0x20   /* interface addr sockaddr present */
 #define RTA_AUTHOR    0x40   /* sockaddr for author of redirect */
 #define RTA_BRD       0x80   /* for NEWADDR, broadcast or p-p dest addr */
+#define RTA_TAG       0x100  /* route tag */
 .Ed
 .Sh SEE ALSO
 .Xr socket 2 ,

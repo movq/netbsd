@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_machdep.c,v 1.37 2009/03/14 15:36:13 dsl Exp $	*/
+/*	$NetBSD: shark_machdep.c,v 1.39 2011/06/06 16:29:16 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.37 2009/03/14 15:36:13 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.39 2011/06/06 16:29:16 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_modular.h"
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.37 2009/03/14 15:36:13 dsl Exp $
 #include <sys/buf.h>
 #include <sys/exec.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -113,8 +114,8 @@ extern void data_abort_handler(trapframe_t *frame);
 extern void prefetch_abort_handler(trapframe_t *frame);
 extern void undefinedinstruction_bounce(trapframe_t *frame);
 extern void consinit(void);
-int	ofbus_match(struct device *, struct cfdata *, void *);
-void	ofbus_attach(struct device *, struct device *, void *);
+int	ofbus_match(device_t, cfdata_t, void *);
+void	ofbus_attach(device_t, device_t, void *);
 
 
 paddr_t isa_io_physaddr, isa_mem_physaddr;
@@ -143,7 +144,7 @@ int ofw_handleticks = 0;	/* set to TRUE by cpu_initclocks */
 extern unsigned int sa1_cache_clean_addr;
 extern unsigned int sa1_cache_clean_size;
 
-CFATTACH_DECL(ofbus_root, sizeof(struct device),
+CFATTACH_DECL_NEW(ofbus_root, 0,
     ofbus_match, ofbus_attach, NULL, NULL);
 
 /*
@@ -155,7 +156,7 @@ extern void ofrootfound(void);
 
 /* Local routines */
 static void process_kernel_args(void);
-void ofw_device_register(struct device *, void *);
+void ofw_device_register(device_t, void *);
 
 /* Kernel text starts at the base of the kernel address space. */
 #define	KERNEL_TEXT_BASE	(KERNEL_BASE + 0x00000000)
@@ -380,11 +381,11 @@ ofrootfound(void)
 }
 
 void
-ofw_device_register(struct device *dev, void *aux)
+ofw_device_register(device_t dev, void *aux)
 {
-	static struct device *parent;
+	static device_t parent;
 #if NSD > 0 || NCD > 0
-	static struct device *scsipidev;
+	static device_t scsipidev;
 #endif
 	static char *boot_component;
 	struct ofbus_attach_args *oba;

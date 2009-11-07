@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.8 2008/05/03 23:19:17 martin Exp $	*/
+/*	$NetBSD: pchb.c,v 1.13 2011/06/22 18:06:33 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.8 2008/05/03 23:19:17 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.13 2011/06/22 18:06:33 matt Exp $");
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.8 2008/05/03 23:19:17 martin Exp $");
 #include <sys/malloc.h>
 
 #define _IBM4XX_BUS_DMA_PRIVATE
+
 #include <machine/walnut.h>
 
 #include <powerpc/ibm4xx/ibm405gp.h>
@@ -52,14 +53,14 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.8 2008/05/03 23:19:17 martin Exp $");
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pciconf.h>
 
-static int	pchbmatch(struct device *, struct cfdata *, void *);
-static void	pchbattach(struct device *, struct device *, void *);
+static int	pchbmatch(device_t, cfdata_t, void *);
+static void	pchbattach(device_t, device_t, void *);
 static int	pchbprint(void *, const char *);
 
-CFATTACH_DECL(pchb, sizeof(struct device),
+CFATTACH_DECL_NEW(pchb, 0,
     pchbmatch, pchbattach, NULL, NULL);
 
-static int pcifound = 0;
+static bool pcifound;
 
 /* IO window located @ e8000000 and maps to 0-0xffff */
 static struct powerpc_bus_space pchb_io_tag = {
@@ -79,7 +80,7 @@ static struct powerpc_bus_space pchb_mem_tag = {
 
 
 static int
-pchbmatch(struct device *parent, struct cfdata *cf, void *aux)
+pchbmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct plb_attach_args *paa = aux;
 	/* XXX chipset tag unused by walnut, so just pass 0 */
@@ -115,7 +116,7 @@ pchbmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pchbattach(struct device *parent, struct device *self, void *aux)
+pchbattach(device_t parent, device_t self, void *aux)
 {
 	struct plb_attach_args *paa = aux;
 	struct pcibus_attach_args pba;
@@ -138,8 +139,8 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	class = pci_conf_read(pc, tag, PCI_CLASS_REG);
 	id = pci_conf_read(pc, tag, PCI_ID_REG);
 
-	printf("\n");
-	pcifound++;
+	aprint_normal("\n");
+	pcifound = true;
 	/*
 	 * All we do is print out a description.  Eventually, we
 	 * might want to add code that does something that's
@@ -147,7 +148,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	 */
 
 	pci_devinfo(id, class, 0, devinfo, sizeof(devinfo));
-	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
+	aprprint_normal_dev(self, "%s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(class));
 
 	pci_machdep_init(); /* Redundant... */
@@ -183,7 +184,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_dmat64 = NULL;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
+	pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY;
 	config_found_ia(self, "pcibus", &pba, pchbprint);
 }
 

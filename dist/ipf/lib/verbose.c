@@ -1,4 +1,4 @@
-/*	$NetBSD: verbose.c,v 1.1.1.2 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: verbose.c,v 1.2 2012/02/15 17:55:08 riz Exp $	*/
 
 /*
  * Copyright (C) 2000-2001 by Darren Reed.

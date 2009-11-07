@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_hb.c,v 1.16 2008/12/10 14:19:02 tsutsui Exp $	*/
+/*	$NetBSD: timer_hb.c,v 1.19 2011/11/22 14:31:02 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_hb.c,v 1.16 2008/12/10 14:19:02 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_hb.c,v 1.19 2011/11/22 14:31:02 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -106,7 +106,7 @@ timer_hb_attach(device_t parent, device_t self, void *aux)
 	if (ha->ha_ipl != TIMER_LEVEL)
 		panic("clock_hb_attach: wrong interrupt level");
 
-	ctrl_timer = (uint8_t *)IIOV(ha->ha_address); /* XXX needs bus_space */
+	ctrl_timer = (uint8_t *)(ha->ha_address); /* XXX needs bus_space */
 
 	printf("\n");
 
@@ -139,7 +139,7 @@ timer_hb_initclocks(int prof, int stat)
 
 /*
  * Clock interrupt handler.
- * This is is called by the "custom" interrupt handler.
+ * This is called by the "custom" interrupt handler.
  *
  * from sun3/sun3x/clock.c -tsutsui
  */
@@ -163,7 +163,7 @@ clock_intr(struct clockframe *cf)
 
 	/* Call common clock interrupt handler. */
 	hardclock(cf);
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 }
 
 /* heartbeat LED */

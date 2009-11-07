@@ -1,4 +1,4 @@
-/*	$NetBSD: sequoia.c,v 1.10 2007/10/17 19:57:10 garbled Exp $	*/
+/*	$NetBSD: sequoia.c,v 1.12 2011/07/19 15:07:43 dyoung Exp $	*/
 
 /*
  * Copyright 1997
@@ -40,14 +40,14 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sequoia.c,v 1.10 2007/10/17 19:57:10 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sequoia.c,v 1.12 2011/07/19 15:07:43 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/syslog.h>
 #include <sys/types.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 
@@ -130,7 +130,7 @@ static bus_space_handle_t sequoia_ioh;
 
 static struct timeval ledLastActive;      /* last time we get net activity */
 static int      ledColor;           /* present color of led */
-static int      ledBlockCount;;     /* reference count of block calles */                            
+static int      ledBlockCount;      /* reference count of block calles */                            
 int sequoia_index_cache = -1;       /* set to silly value so that we dont cache on init */
 
 static callout_t led_timo_ch;

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.4 2009/08/20 11:07:42 plunky Exp $	*/
+/*	$NetBSD: print.c,v 1.19 2011/09/15 17:52:53 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: print.c,v 1.4 2009/08/20 11:07:42 plunky Exp $");
+__RCSID("$NetBSD: print.c,v 1.19 2011/09/15 17:52:53 plunky Exp $");
 
 #include <ctype.h>
 #include <iconv.h>
@@ -64,10 +64,10 @@ typedef struct {
 } language_t;
 
 static const char *string_uuid(uuid_t *);
-static const char *string_vis(int, const char *, size_t);
+static const char *string_vis(const char *, size_t);
 
 static void print_hexdump(const char *, const uint8_t *, size_t);
-static bool print_attribute(uint16_t, sdp_data_t *, attr_t *, int);
+static bool print_attribute(uint16_t, sdp_data_t *, attr_t *, size_t);
 static bool print_universal_attribute(uint16_t, sdp_data_t *);
 static bool print_language_attribute(uint16_t, sdp_data_t *);
 static bool print_service_attribute(uint16_t, sdp_data_t *);
@@ -77,14 +77,17 @@ static void print_uint8d(sdp_data_t *);
 static void print_uint8x(sdp_data_t *);
 static void print_uint16d(sdp_data_t *);
 static void print_uint16x(sdp_data_t *);
-static void print_uint32x(sdp_data_t *);
 static void print_uint32d(sdp_data_t *);
+static void print_uint32x(sdp_data_t *);
 static void print_uuid(sdp_data_t *);
 static void print_uuid_list(sdp_data_t *);
 static void print_string(sdp_data_t *);
+static void print_string_list(sdp_data_t *);
 static void print_url(sdp_data_t *);
 static void print_profile_version(sdp_data_t *);
+static void print_codeset_string(const char *, size_t, const char *);
 static void print_language_string(sdp_data_t *);
+static void print_utf8_string(sdp_data_t *);
 
 static void print_service_class_id_list(sdp_data_t *);
 static void print_protocol_descriptor(sdp_data_t *);
@@ -111,6 +114,12 @@ static void print_net_access_type(sdp_data_t *);
 static void print_pnp_source(sdp_data_t *);
 static void print_mas_types(sdp_data_t *);
 static void print_supported_repositories(sdp_data_t *);
+static void print_character_repertoires(sdp_data_t *);
+static void print_bip_capabilities(sdp_data_t *);
+static void print_bip_features(sdp_data_t *);
+static void print_bip_functions(sdp_data_t *);
+static void print_bip_capacity(sdp_data_t *);
+static void print_1284id(sdp_data_t *);
 
 static void print_rfcomm(sdp_data_t *);
 static void print_bnep(sdp_data_t *);
@@ -238,6 +247,34 @@ attr_t gn_attrs[] = {	/* Group Network */
 	{ 0x030e, "IPv6Subnet",				print_string },
 };
 
+attr_t bp_attrs[] = {	/* Basic Printing */
+	{ 0x0350, "DocumentFormatsSupported",		print_string_list },
+	{ 0x0352, "CharacterRepertoiresSupported",	print_character_repertoires },
+	{ 0x0354, "XHTML-PrintImageFormatsSupported",	print_string_list },
+	{ 0x0356, "ColorSupported",			print_bool },
+	{ 0x0358, "1284ID",				print_1284id },
+	{ 0x035a, "PrinterName",			print_utf8_string },
+	{ 0x035c, "PrinterLocation",			print_utf8_string },
+	{ 0x035e, "DuplexSupported",			print_bool },
+	{ 0x0360, "MediaTypesSupported",		print_string_list },
+	{ 0x0362, "MaxMediaWidth",			print_uint16d },
+	{ 0x0364, "MaxMediaLength",			print_uint16d },
+	{ 0x0366, "EnhancedLayoutSupport",		print_bool },
+	{ 0x0368, "RUIFormatsSupported",		print_string_list },
+	{ 0x0370, "ReferencePrintingRUISupported",	print_bool },
+	{ 0x0372, "DirectPrintingRUISupported",		print_bool },
+	{ 0x0374, "ReferencePrintingTopURL",		print_url },
+	{ 0x0376, "DirectPrintingTopURL",		print_url },
+	{ 0x037a, "DeviceName",				print_utf8_string },
+};
+
+attr_t bi_attrs[] = {	/* Basic Imaging */
+	{ 0x0310, "SupportedCapabilities",		print_bip_capabilities },
+	{ 0x0311, "SupportedFeatures",			print_bip_features },
+	{ 0x0312, "SupportedFunctions",			print_bip_functions },
+	{ 0x0313, "TotalImagingDataCapacity",		print_bip_capacity },
+};
+
 attr_t hf_attrs[] = {	/* Handsfree */
 	{ 0x0311, "SupportedFeatures",			print_hf_features },
 };
@@ -245,6 +282,11 @@ attr_t hf_attrs[] = {	/* Handsfree */
 attr_t hfag_attrs[] = {	/* Handsfree Audio Gateway */
 	{ 0x0301, "Network",				print_hfag_network },
 	{ 0x0311, "SupportedFeatures",			print_hfag_features },
+};
+
+attr_t rui_attrs[] = {	/* Reflected User Interface */
+	{ 0x0368, "RUIFormatsSupported",		print_string_list },
+	{ 0x0378, "PrinterAdminRUITopURL",		print_url },
 };
 
 attr_t hid_attrs[] = {	/* Human Interface Device */
@@ -263,6 +305,13 @@ attr_t hid_attrs[] = {	/* Human Interface Device */
 	{ 0x020c, "HIDSupervisionTimeout",		print_uint16d },
 	{ 0x020d, "HIDNormallyConnectable",		print_bool },
 	{ 0x020e, "HIDBootDevice",			print_bool },
+};
+
+attr_t hcr_attrs[] = {	/* Hardcopy Cable Replacement */
+	{ 0x0300, "1284ID",				print_1284id },
+	{ 0x0302, "DeviceName",				print_utf8_string },
+	{ 0x0304, "FriendlyName",			print_utf8_string },
+	{ 0x0306, "DeviceLocation",			print_utf8_string },
 };
 
 attr_t pnp_attrs[] = {	/* Device ID */
@@ -311,22 +360,22 @@ service_t service_list[] = {
 	{ 0x1115, "Personal Area Networking User",	A(panu_attrs) },
 	{ 0x1116, "Network Access Point",		A(nap_attrs) },
 	{ 0x1117, "Group Network",			A(gn_attrs) },
-	{ 0x1118, "Direct Printing",			NULL, 0 },
-	{ 0x1119, "Reference Printing",			NULL, 0 },
+	{ 0x1118, "Direct Printing",			A(bp_attrs) },
+	{ 0x1119, "Reference Printing",			A(bp_attrs) },
 	{ 0x111a, "Imaging",				NULL, 0 },
-	{ 0x111b, "Imaging Responder",			NULL, 0 },
-	{ 0x111c, "Imaging Automatic Archive",		NULL, 0 },
-	{ 0x111d, "Imaging Referenced Objects",		NULL, 0 },
+	{ 0x111b, "Imaging Responder",			A(bi_attrs) },
+	{ 0x111c, "Imaging Automatic Archive",		A(bi_attrs) },
+	{ 0x111d, "Imaging Referenced Objects",		A(bi_attrs) },
 	{ 0x111e, "Handsfree",				A(hf_attrs) },
 	{ 0x111f, "Handsfree Audio Gateway",		A(hfag_attrs) },
 	{ 0x1120, "Direct Printing Reference Objects",	NULL, 0 },
-	{ 0x1121, "Reflected User Interface",		NULL, 0 },
+	{ 0x1121, "Reflected User Interface",		A(rui_attrs) },
 	{ 0x1122, "Basic Printing",			NULL, 0 },
-	{ 0x1123, "Printing Status",			NULL, 0 },
+	{ 0x1123, "Printing Status",			A(bp_attrs) },
 	{ 0x1124, "Human Interface Device",		A(hid_attrs) },
 	{ 0x1125, "Hardcopy Cable Replacement",		NULL, 0 },
-	{ 0x1126, "Hardcopy Cable Replacement Print",	NULL, 0 },
-	{ 0x1127, "Hardcopy Cable Replacement Scan",	NULL, 0 },
+	{ 0x1126, "Hardcopy Cable Replacement Print",	A(hcr_attrs) },
+	{ 0x1127, "Hardcopy Cable Replacement Scan",	A(hcr_attrs) },
 	{ 0x1128, "Common ISDN Access",			NULL, 0 },
 	{ 0x1129, "Video Conferencing GW",		NULL, 0 },
 	{ 0x112a, "UDI MT",				NULL, 0 },
@@ -409,6 +458,19 @@ sdp_get_uint32(sdp_data_t *d, uint32_t *vp)
 	return true;
 }
 
+static bool
+sdp_get_uint64(sdp_data_t *d, uint64_t *vp)
+{
+	uintmax_t v;
+
+	if (sdp_data_type(d) != SDP_DATA_UINT64
+	    || !sdp_get_uint(d, &v))
+		return false;
+
+	*vp = (uint64_t)v;
+	return true;
+}
+
 void
 print_record(sdp_data_t *rec)
 {
@@ -422,7 +484,8 @@ print_record(sdp_data_t *rec)
 	while (sdp_get_attr(rec, &id, &value)) {
 		if (Xflag) {
 			printf("AttributeID 0x%04x:\n", id);
-			print_hexdump("     ", value.next, value.end - value.next);
+			print_hexdump("     ", value.next,
+			    (size_t)(value.end - value.next));
 		} else if (Rflag) {
 			printf("AttributeID 0x%04x:\n", id);
 			sdp_data_print(&value, 4);
@@ -490,12 +553,14 @@ string_uuid(uuid_t *uuid)
 }
 
 static const char *
-string_vis(int style, const char *src, size_t len)
+string_vis(const char *src, size_t len)
 {
 	static char buf[50];
 	char *dst = buf;
+	int style;
 
-	style |= VIS_NL;
+	buf[0] = '\0';
+	style = VIS_CSTYLE | VIS_NL;
 	while (len > 0 && (dst + 5) < (buf + sizeof(buf))) {
 		dst = vis(dst, src[0], style, (len > 1 ? src[1] : 0));
 		src++;
@@ -526,9 +591,9 @@ print_hexdump(const char *title, const uint8_t *data, size_t len)
 }
 
 static bool
-print_attribute(uint16_t id, sdp_data_t *value, attr_t *attr, int count)
+print_attribute(uint16_t id, sdp_data_t *value, attr_t *attr, size_t count)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < count; i++) {
 		if (id == attr[i].id) {
@@ -588,10 +653,10 @@ print_service_attribute(uint16_t id, sdp_data_t *value)
 
 	for (i = 0; i < nservices; i++) {
 		for (j = 0; j < __arraycount(service_list); j++) {
-			if (service_class[i] == service_list[j].class)
-				return print_attribute(id, value,
-				    service_list[j].attrs,
-				    service_list[j].nattr);
+			if (service_class[i] == service_list[j].class
+			    && print_attribute(id, value,
+			    service_list[j].attrs, service_list[j].nattr))
+				return true;
 		}
 	}
 
@@ -712,7 +777,32 @@ print_string(sdp_data_t *data)
 	if (!sdp_get_str(data, &str, &len))
 		return;
 
-	printf("\"%s\"\n", string_vis(VIS_CSTYLE, str, len));
+	printf("\"%s\"\n", string_vis(str, len));
+}
+
+static void
+print_string_list(sdp_data_t *data)
+{
+	char *str, *ep;
+	size_t len, l;
+
+	if (!sdp_get_str(data, &str, &len))
+		return;
+
+	printf("\n");
+	while (len > 0) {
+		ep = memchr(str, (int)',', len);
+		if (ep == NULL) {
+			l = len;
+			len = 0;
+		} else {
+			l = (size_t)(ep - str);
+			len -= l + 1;
+			ep++;
+		}
+		printf("    %s\n", string_vis(str, l));
+		str = ep;
+	}
 }
 
 static void
@@ -724,7 +814,7 @@ print_url(sdp_data_t *data)
 	if (!sdp_get_url(data, &url, &len))
 		return;
 
-	printf("\"%s\"\n", string_vis(VIS_HTTPSTYLE, url, len));
+	printf("\"%s\"\n", string_vis(url, len));
 }
 
 static void
@@ -738,6 +828,30 @@ print_profile_version(sdp_data_t *data)
 	printf("v%d.%d\n", (v >> 8), (v & 0xff));
 }
 
+static void
+print_codeset_string(const char *src, size_t srclen, const char *codeset)
+{
+	char buf[50], *dst;
+	iconv_t ih;
+	size_t n, dstlen;
+
+	dst = buf;
+	dstlen = sizeof(buf);
+
+	ih = iconv_open(nl_langinfo(CODESET), codeset);
+	if (ih == (iconv_t)-1) {
+		printf("Can't convert %s string\n", codeset);
+		return;
+	}
+
+	n = iconv(ih, &src, &srclen, &dst, &dstlen);
+
+	iconv_close(ih);
+
+	printf("\"%.*s%s\n", (int)(sizeof(buf) - dstlen), buf,
+	    (srclen > 0 ? " ..." : "\""));
+}
+
 /*
  * This should only be called through print_language_attribute() which
  * sets codeset of the string to be printed.
@@ -745,31 +859,26 @@ print_profile_version(sdp_data_t *data)
 static void
 print_language_string(sdp_data_t *data)
 {
-	char buf[50], *dst, *src;
-	iconv_t ih;
-	size_t n, srcleft, dstleft;
+	char *str;
+	size_t len;
 
-	if (!sdp_get_str(data, &src, &srcleft))
+	if (!sdp_get_str(data, &str, &len))
 		return;
 
-	dst = buf;
-	dstleft = sizeof(buf);
+	print_codeset_string(str, len, language[current].codeset);
+}
 
-	ih = iconv_open(nl_langinfo(CODESET), language[current].codeset);
-	if (ih == (iconv_t)-1) {
-		printf("Can't convert %s string\n", language[current].codeset);
+
+static void
+print_utf8_string(sdp_data_t *data)
+{
+	char *str;
+	size_t len;
+
+	if (!sdp_get_str(data, &str, &len))
 		return;
-	}
 
-	n = iconv(ih, (const char **)&src, &srcleft, &dst, &dstleft);
-
-	iconv_close(ih);
-
-	if (Nflag || n > 0)
-		printf("(%s) ", language[current].codeset);
-
-	printf("\"%.*s%s\n", (int)(sizeof(buf) - dstleft), buf,
-	    (srcleft > 0 ? " ..." : "\""));
+	print_codeset_string(str, len, "UTF-8");
 }
 
 static void
@@ -1070,7 +1179,7 @@ print_supported_data_stores(sdp_data_t *data)
 
 	sep = "\n    ";
 	while (sdp_get_uint8(&list, &v)) {
-		printf(sep);
+		printf("%s", sep);
 		sep = ", ";
 
 		switch(v) {
@@ -1100,7 +1209,7 @@ print_supported_formats(sdp_data_t *data)
 
 	sep = "\n    ";
 	while (sdp_get_uint8(&list, &v)) {
-		printf(sep);
+		printf("%s", sep);
 		sep = ", ";
 
 		switch(v) {
@@ -1346,6 +1455,167 @@ print_supported_repositories(sdp_data_t *data)
 }
 
 static void
+print_character_repertoires(sdp_data_t *data)
+{
+	uintmax_t v;
+
+	/*
+	 * we have no uint128 type so use uintmax as only
+	 * only 17-bits are currently defined, and if the
+	 * value is out of bounds it will be printed anyway
+	 */
+	if (sdp_data_type(data) != SDP_DATA_UINT128
+	    || !sdp_get_uint(data, &v))
+		return;
+
+	if (Nflag)
+		printf("(0x%016jx)", v);
+
+	printf("\n");
+	if (v & (1<< 0)) printf("    ISO-8859-1\n");
+	if (v & (1<< 1)) printf("    ISO-8859-2\n");
+	if (v & (1<< 2)) printf("    ISO-8859-3\n");
+	if (v & (1<< 3)) printf("    ISO-8859-4\n");
+	if (v & (1<< 4)) printf("    ISO-8859-5\n");
+	if (v & (1<< 5)) printf("    ISO-8859-6\n");
+	if (v & (1<< 6)) printf("    ISO-8859-7\n");
+	if (v & (1<< 7)) printf("    ISO-8859-8\n");
+	if (v & (1<< 8)) printf("    ISO-8859-9\n");
+	if (v & (1<< 9)) printf("    ISO-8859-10\n");
+	if (v & (1<<10)) printf("    ISO-8859-13\n");
+	if (v & (1<<11)) printf("    ISO-8859-14\n");
+	if (v & (1<<12)) printf("    ISO-8859-15\n");
+	if (v & (1<<13)) printf("    GB18030\n");
+	if (v & (1<<14)) printf("    JIS X0208-1990, JIS X0201-1976\n");
+	if (v & (1<<15)) printf("    KSC 5601-1992\n");
+	if (v & (1<<16)) printf("    Big5\n");
+	if (v & (1<<17)) printf("    TIS-620\n");
+}
+
+static void
+print_bip_capabilities(sdp_data_t *data)
+{
+	uint8_t v;
+
+	if (!sdp_get_uint8(data, &v))
+		return;
+
+	if (Nflag)
+		printf("(0x%02x)", v);
+
+	printf("\n");
+	if (v & (1<< 0)) printf("    Generic imaging\n");
+	if (v & (1<< 1)) printf("    Capturing\n");
+	if (v & (1<< 2)) printf("    Printing\n");
+	if (v & (1<< 3)) printf("    Displaying\n");
+}
+
+static void
+print_bip_features(sdp_data_t *data)
+{
+	uint16_t v;
+
+	if (!sdp_get_uint16(data, &v))
+		return;
+
+	if (Nflag)
+		printf("(0x%04x)", v);
+
+	printf("\n");
+	if (v & (1<<0))	printf("    ImagePush\n");
+	if (v & (1<<1))	printf("    ImagePush-Store\n");
+	if (v & (1<<2))	printf("    ImagePush-Print\n");
+	if (v & (1<<3))	printf("    ImagePush-Display\n");
+	if (v & (1<<4))	printf("    ImagePull\n");
+	if (v & (1<<5))	printf("    AdvancedImagePrinting\n");
+	if (v & (1<<6))	printf("    AutomaticArchive\n");
+	if (v & (1<<7))	printf("    RemoteCamera\n");
+	if (v & (1<<8))	printf("    RemoteDisplay\n");
+}
+
+static void
+print_bip_functions(sdp_data_t *data)
+{
+	uint32_t v;
+
+	if (!sdp_get_uint32(data, &v))
+		return;
+
+	if (Nflag)
+		printf("(0x%08x)", v);
+
+	printf("\n");
+	if (v & (1<< 0)) printf("    GetCapabilities\n");
+	if (v & (1<< 1)) printf("    PutImage\n");
+	if (v & (1<< 2)) printf("    PutLinkedAttachment\n");
+	if (v & (1<< 3)) printf("    PutLinkedThumbnail\n");
+	if (v & (1<< 4)) printf("    RemoteDisplay\n");
+	if (v & (1<< 5)) printf("    GetImagesList\n");
+	if (v & (1<< 6)) printf("    GetImageProperties\n");
+	if (v & (1<< 7)) printf("    GetImage\n");
+	if (v & (1<< 8)) printf("    GetLinkedThumbnail\n");
+	if (v & (1<< 9)) printf("    GetLinkedAttachment\n");
+	if (v & (1<<10)) printf("    DeleteImage\n");
+	if (v & (1<<11)) printf("    StartPrint\n");
+	if (v & (1<<12)) printf("    GetPartialImage\n");
+	if (v & (1<<13)) printf("    StartArchive\n");
+	if (v & (1<<14)) printf("    GetMonitoringImage\n");
+	if (v & (1<<16)) printf("    GetStatus\n");
+}
+
+static void
+print_bip_capacity(sdp_data_t *data)
+{
+	char buf[9];
+	uint64_t v;
+
+	if (!sdp_get_uint64(data, &v))
+		return;
+
+	if (v > INT64_MAX) {
+		printf("more than ");
+		v = INT64_MAX;
+	}
+
+	(void)humanize_number(buf, sizeof(buf), (int64_t)v,
+	    "bytes", HN_AUTOSCALE, HN_NOSPACE);
+
+	printf("%s\n", buf);
+}
+
+static void
+print_1284id(sdp_data_t *data)
+{
+	char *str, *ep;
+	size_t len, l;
+
+	if (!sdp_get_str(data, &str, &len))
+		return;
+
+	if (len < 2 || len != be16dec(str)) {
+		printf("[invalid IEEE 1284 Device ID]\n");
+		return;
+	}
+
+	str += 2;
+	len -= 2;
+
+	printf("\n");
+	while (len > 0) {
+		ep = memchr(str, (int)';', len);
+		if (ep == NULL) {
+			printf("[invalid IEEE 1284 Device ID]\n");
+			return;
+		}
+
+		l = (size_t)(ep - str + 1);
+		printf("    %s\n", string_vis(str, l));
+		str += l;
+		len -= l;
+	}
+}
+
+static void
 print_rfcomm(sdp_data_t *data)
 {
 	uint8_t v;
@@ -1368,12 +1638,13 @@ print_bnep(sdp_data_t *data)
 	printf(" (v%d.%d", (v >> 8), (v & 0xff));
 	sep = "; ";
 	while (sdp_get_uint16(&seq, &v)) {
-		printf(sep);
+		printf("%s", sep);
 		sep = ", ";
 
 		switch (v) {
 		case 0x0800:	printf("IPv4");		break;
 		case 0x0806:	printf("ARP");		break;
+		case 0x8100:	printf("802.1Q");	break;
 		case 0x86dd:	printf("IPv6");		break;
 		default:	printf("0x%04x", v);	break;
 		}

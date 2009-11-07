@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.276 2009/01/24 05:06:06 mrg Exp $
+# $NetBSD: GENERIC,v 1.297 2012/01/23 13:55:02 hauke Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.276 $"
+#ident 		"GENERIC-$Revision: 1.297 $"
 
 maxusers	32
 
@@ -40,6 +40,7 @@ options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
 options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
+options 	MODULAR		# new style module(7) framework
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -78,11 +79,6 @@ options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
-#options 	COMPAT_DARWIN	# Darwin binary compatibility (experimental)
-#options 	COMPAT_MACH	# Mach compatibility, needed for COMPAT_DARWIN 
-#options 	EXEC_MACHO	# Mach-O binary support, needed for COMPAT_MACH
-#options 	DEBUG_DARWIN	# COMPAT_DARWIN debugging
-#options 	DEBUG_MACH	# COMPAT_MACH debugging
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -98,7 +94,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system 	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -109,9 +105,10 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	HFS		# experimental - Apple HFS+ (read-only)
 
 # File system options
-options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -140,6 +137,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -175,6 +173,7 @@ options 	WS_KERNEL_BG=WSCOL_LIGHT_WHITE
 
 #options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 options 	FONT_GALLANT12x22
+options 	FONT_QVSS8x15		# a smaller font for lower resolutions
 
 # Optional Mac keyboard tweaks
 
@@ -265,6 +264,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 esiop*	at pci? dev ? function ?	# NCR 53c8xx SCSI (enhanced)
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP 10x0/2xx0 SCSI/Fibre Chan
+mpt*	at pci? dev ? function ?	# LSILogic 9x9 and 53c1030
 pcscp*	at pci? dev ? function ?	# AMD Am53c974 PCscsi-PCI SCSI
 siop*	at pci? dev ? function ?	# NCR 53c8xx SCSI
 trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
@@ -300,16 +300,19 @@ wsdisplay*	at wsemuldisplaydev?
 pciide* at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
 acardide* at pci? dev ? function ?	# Acard IDE controllers
 aceride* at pci? dev ? function ?	# Acer Lab IDE controllers
+ahcisata* 	at pci? dev ? function ?	# AHCI SATA controllers
 artsata* at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* at pci? dev ? function ?	# Cypress IDE controllers
 hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
+iteide* at pci? dev ? function ?	# IT Express IDE controllers
 optiide* at pci? dev ? function ?	# Opti IDE controllers
 pdcide* at pci? dev ? function ?	# Promise IDE controllers
 pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
 satalink* at pci? dev ? function ?	# SiI SATALink controllers
 siside* at pci? dev ? function ?	# SiS IDE controllers
 slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers
+stpcide*	at pci? dev ? function ?	# STMicro STPC IDE controllers
 viaide* at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
 wdc*	at pci? dev ? function ?	# Kauai ATA
 cbb*	at pci? dev ? function ?	# PCI-CardBus bridge
@@ -365,7 +368,7 @@ nvram*	at obio?			# nvram
 #ams*	at adb?				# ADB mouse
 #abtn*	at adb?
 
-# the new, improved, experimental ADB subsystem
+# the new, improved ADB subsystem
 
 cuda*	at obio?			# CUDA, for Old World PowerMacs
 pmu*	at obio?			# PMU, *Books and newer PowerMacs
@@ -378,7 +381,7 @@ wskbd*		at wskbddev? console ?
 wsmouse*	at wsmousedev?
 
 battery* at pmu?		# legacy battery, for ohare-based PowerBooks
-smartbat* at pmu?		# Smart battery, sound in newer *Books
+smartbat* at pmu?		# Smart battery, found in newer *Books
 
 iic0	at cuda0		# CUDA's IIC bus
 sgsmix0 at iic0 addr 0x8a	# additional mixer found in beige G3
@@ -471,6 +474,8 @@ ums*	at uhidev? reportid ?				# USB Mice
 
 ukbd*	at uhidev? reportid ?				# USB Keyboards
 
+uthum*	at uhidev? reportid ?				# TEMPerHUM sensors
+
 ucycom*	at uhidev? reportid ?				# USB serial adapter
 
 uhid*	at uhidev? reportid ?				# USB Generic HID
@@ -479,6 +484,17 @@ ulpt*	at uhub? port ? configuration ? interface ?	# USB Printer
 
 umodem*	at uhub? port ? configuration ?			# USB Modem
 ucom*	at umodem?
+
+ubsa*	at uhub? port ?					# Belkin serial adapter
+ucom*	at ubsa? portno ?
+
+uplcom* at uhub? port ?					# Prolific serial
+ucom* at uplcom? portno ?
+
+uftdi* at uhub? port ?					# FTDI serial
+ucom* at uftdi? portno ?
+
+uhso*	at uhub? port ? configuration ?			# Option N.V. Wireless WAN modems
 
 umass*	at uhub? port ? configuration ? interface ?	# USB Mass Storage
 
@@ -505,7 +521,9 @@ ugen*	at uhub? port ? configuration ? interface ?	# USB Generic driver
 
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel at76c50x 802.11b
+otus*	at uhub? port ?		# Atheros AR9001U
 ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
+rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 #zyd*	at uhub? port ?		# Zydas ZD1211
 
 # PCI IEEE1394 controllers
@@ -567,8 +585,8 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options 	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
@@ -586,14 +604,15 @@ pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	openfirm		# /dev/openfirm
-pseudo-device	wsmux			# mouse and keyboard multiplexor
+pseudo-device	wsmux			# mouse and keyboard multiplexer
+pseudo-device	swwdog			# software watchdog driver - swwdog(4)
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	nsmb			# SMB requester
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs and pud
 
 # Veriexec
 #

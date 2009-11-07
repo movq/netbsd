@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $	*/
+/*	$NetBSD: compat.c,v 1.84 2011/09/16 15:38:03 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $";
+static char rcsid[] = "$NetBSD: compat.c,v 1.84 2011/09/16 15:38:03 joerg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)compat.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $");
+__RCSID("$NetBSD: compat.c,v 1.84 2011/09/16 15:38:03 joerg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -121,7 +121,7 @@ static char 	    meta[256];
 
 static GNode	    *curTarg = NULL;
 static GNode	    *ENDNode;
-static void CompatInterrupt(int);
+static void CompatInterrupt(int) __dead;
 
 static void
 Compat_Init(void)
@@ -347,21 +347,32 @@ again:
 		useShell = 1;
 		goto again;
 	}
-	av = (const char **)mav;
+	av = (void *)mav;
     }
 
     local = TRUE;
 
+#ifdef USE_META
+    if (useMeta) {
+	meta_compat_start();
+    }
+#endif
+    
     /*
      * Fork and execute the single command. If the fork fails, we abort.
      */
-    cpid = vfork();
+    cpid = vFork();
     if (cpid < 0) {
 	Fatal("Could not fork");
     }
     if (cpid == 0) {
 	Check_Cwd(av);
 	Var_ExportVars();
+#ifdef USE_META
+	if (useMeta) {
+	    meta_compat_child();
+	}
+#endif
 	if (local)
 	    (void)execvp(av[0], (char *const *)UNCONST(av));
 	else
@@ -375,12 +386,20 @@ again:
 	free(bp);
     Lst_Replace(cmdNode, NULL);
 
+#ifdef USE_META
+    if (useMeta) {
+	meta_compat_parent();
+    }
+#endif
+
     /*
      * The child is off and running. Now all we can do is wait...
      */
     while (1) {
 
 	while ((retstat = wait(&reason)) != cpid) {
+	    if (retstat > 0)
+		JobReapChild(retstat, reason, FALSE); /* not ours? */
 	    if (retstat == -1 && errno != EINTR) {
 		break;
 	    }
@@ -391,6 +410,11 @@ again:
 		status = WSTOPSIG(reason);		/* stopped */
 	    } else if (WIFEXITED(reason)) {
 		status = WEXITSTATUS(reason);		/* exited */
+#if defined(USE_META) && defined(USE_FILEMON_ONCE)
+		if (useMeta) {
+		    meta_cmd_finish(NULL);
+		}
+#endif
 		if (status != 0) {
 		    if (DEBUG(ERROR)) {
 		        fprintf(debug_file, "\n*** Failed target:  %s\n*** Failed command: ",
@@ -407,7 +431,7 @@ again:
 		        }
 			fprintf(debug_file, "\n");
 		    }
-		    fprintf(debug_file, "*** Error code %d", status);
+		    printf("*** Error code %d", status);
 		}
 	    } else {
 		status = WTERMSIG(reason);		/* signaled */
@@ -417,6 +441,11 @@ again:
 
 	    if (!WIFEXITED(reason) || (status != 0)) {
 		if (errCheck) {
+#ifdef USE_META
+		    if (useMeta) {
+			meta_job_error(NULL, gn, 0, status);
+		    }
+#endif
 		    gn->made = ERROR;
 		    if (keepgoing) {
 			/*
@@ -498,10 +527,10 @@ Compat_Make(void *gnp, void *pgnp)
 	}
 
 	/*
-	 * All the children were made ok. Now cmtime contains the modification
-	 * time of the newest child, we need to find out if we exist and when
-	 * we were modified last. The criteria for datedness are defined by the
-	 * Make_OODate function.
+	 * All the children were made ok. Now cmgn->mtime contains the
+	 * modification time of the newest child, we need to find out if we
+	 * exist and when we were modified last. The criteria for datedness
+	 * are defined by the Make_OODate function.
 	 */
 	if (DEBUG(MAKE)) {
 	    fprintf(debug_file, "Examining %s...", gn->name);
@@ -549,6 +578,11 @@ Compat_Make(void *gnp, void *pgnp)
 	     */
 	    if (!touchFlag || (gn->type & OP_MAKE)) {
 		curTarg = gn;
+#ifdef USE_META
+		if (useMeta && !NoExecute(gn)) {
+		    meta_job_start(NULL, gn);
+		}
+#endif
 		Lst_ForEach(gn->commands, CompatRunCommand, gn);
 		curTarg = NULL;
 	    } else {
@@ -557,6 +591,11 @@ Compat_Make(void *gnp, void *pgnp)
 	} else {
 	    gn->made = ERROR;
 	}
+#ifdef USE_META
+	if (useMeta && !NoExecute(gn)) {
+	    meta_job_finish(NULL);
+	}
+#endif
 
 	if (gn->made != ERROR) {
 	    /*
@@ -574,7 +613,7 @@ Compat_Make(void *gnp, void *pgnp)
 	} else if (keepgoing) {
 	    pgn->flags &= ~REMAKE;
 	} else {
-	    PrintOnError("\n\nStop.");
+	    PrintOnError(gn, "\n\nStop.");
 	    exit(1);
 	}
     } else if (gn->made == ERROR) {
@@ -641,17 +680,17 @@ Compat_Run(Lst targs)
 
     Compat_Init();
 
-    if (signal(SIGINT, SIG_IGN) != SIG_IGN) {
-	signal(SIGINT, CompatInterrupt);
+    if (bmake_signal(SIGINT, SIG_IGN) != SIG_IGN) {
+	bmake_signal(SIGINT, CompatInterrupt);
     }
-    if (signal(SIGTERM, SIG_IGN) != SIG_IGN) {
-	signal(SIGTERM, CompatInterrupt);
+    if (bmake_signal(SIGTERM, SIG_IGN) != SIG_IGN) {
+	bmake_signal(SIGTERM, CompatInterrupt);
     }
-    if (signal(SIGHUP, SIG_IGN) != SIG_IGN) {
-	signal(SIGHUP, CompatInterrupt);
+    if (bmake_signal(SIGHUP, SIG_IGN) != SIG_IGN) {
+	bmake_signal(SIGHUP, CompatInterrupt);
     }
-    if (signal(SIGQUIT, SIG_IGN) != SIG_IGN) {
-	signal(SIGQUIT, CompatInterrupt);
+    if (bmake_signal(SIGQUIT, SIG_IGN) != SIG_IGN) {
+	bmake_signal(SIGQUIT, CompatInterrupt);
     }
 
     ENDNode = Targ_FindNode(".END", TARG_CREATE);
@@ -665,7 +704,7 @@ Compat_Run(Lst targs)
 	if (gn != NULL) {
 	    Compat_Make(gn, gn);
             if (gn->made == ERROR) {
-                PrintOnError("\n\nStop.");
+                PrintOnError(gn, "\n\nStop.");
                 exit(1);
             }
 	}
@@ -706,7 +745,7 @@ Compat_Run(Lst targs)
     if (errors == 0) {
 	Compat_Make(ENDNode, ENDNode);
 	if (gn->made == ERROR) {
-	    PrintOnError("\n\nStop.");
+	    PrintOnError(gn, "\n\nStop.");
 	    exit(1);
 	}
     }

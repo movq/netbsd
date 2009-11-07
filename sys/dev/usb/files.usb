@@ -1,12 +1,15 @@
-#	$NetBSD: files.usb,v 1.91 2009/06/19 01:16:23 mrg Exp $
+#	$NetBSD: files.usb,v 1.120.2.2 2012/06/15 08:48:46 sborrill Exp $
 #
 # Config file and device description for machine-independent USB code.
 # Included by ports that need it.  Ports that use it must provide
 # their own "major" declarations for the appropriate devices.
 
 defflag	USBVERBOSE
+defflag	opt_usb.h	USB_FRAG_DMA_WORKAROUND
+defflag	opt_usb.h	EHCI_DEBUG OHCI_DEBUG UHCI_DEBUG UHUB_DEBUG USB_DEBUG
 
 defflag	opt_uvideo.h	UVIDEO_DEBUG
+defflag	opt_umass.h	UMASS_DEBUG
 
 define	usbroothubif { }
 define	usbdevif { [port = -1], [configuration = -1], [interface = -1],
@@ -19,9 +22,10 @@ attach	usb at usbus
 file	dev/usb/usb.c			usb			needs-flag
 file	dev/usb/usbdi.c			usb
 file	dev/usb/usbdi_util.c		usb
-file	dev/usb/usb_mem.c		usb
+file	dev/usb/usb_mem.c		usb & usb_dma
 file	dev/usb/usb_subr.c		usb
 file	dev/usb/usb_quirks.c		usb
+file	dev/usb/usb_verbose.c		usb & usbverbose
 
 # Hub driver
 device	uhub: usbdevif, usbifif
@@ -54,7 +58,6 @@ file	dev/usb/ucom.c			ucom | ucombus		needs-flag
 
 
 # Generic devices
-defflag UGEN_BULK_RA_WB
 device	ugen
 attach	ugen at usbdevif
 file	dev/usb/ugen.c			ugen			needs-flag
@@ -76,6 +79,8 @@ file	dev/usb/uhid.c			uhid			needs-flag
 
 # Keyboards
 defparam	UKBD_LAYOUT
+# Gdium's Fn key needs software translation
+defflag		opt_ukbd.h 	GDIUM_KEYBOARD_HACK
 device	ukbd: hid, wskbddev
 attach	ukbd at uhidbus
 file	dev/usb/ukbd.c			ukbd			needs-flag
@@ -85,6 +90,11 @@ file	dev/usb/ukbdmap.c		ukbd | btkbd
 device	ums: hid, wsmousedev
 attach	ums at uhidbus
 file	dev/usb/ums.c			ums
+
+# Touchscreens
+device	uts: hid, wsmousedev, tpcalib
+attach	uts at uhidbus
+file	dev/usb/uts.c			uts
 
 # eGalax USB Touch Panel
 device	uep: wsmousedev, tpcalib
@@ -126,11 +136,21 @@ device	ustir: irbus, irdasir
 attach	ustir at usbdevif
 file	dev/usb/ustir.c			ustir
 
+# Windows Media Center IR tranceivers
+device	irmce: irbus
+attach	irmce at usbifif
+file	dev/usb/irmce.c			irmce
+
 
 # Bluetooth controllers
 device	ubt: btbus, bluetooth
 attach	ubt at usbdevif
 file	dev/usb/ubt.c			ubt
+
+# Atheros USB Bluetooth firmware load
+device	aubtfwl: firmload
+attach	aubtfwl at usbdevif
+file	dev/usb/aubtfwl.c		aubtfwl
 
 #
 # Capture devices
@@ -146,6 +166,25 @@ device	uvideo: videobus
 attach	uvideo at usbifif
 file	dev/usb/uvideo.c		uvideo
 
+# Auvitek AU0828
+device	auvitek: videobus, dtvbus, i2cbus, i2cexec, usbifif, au8522, xc5k
+attach	auvitek at usbdevif
+file	dev/usb/auvitek.c		auvitek
+file	dev/usb/auvitek_audio.c		auvitek
+file	dev/usb/auvitek_board.c		auvitek
+file	dev/usb/auvitek_dtv.c		auvitek
+file	dev/usb/auvitek_i2c.c		auvitek
+file	dev/usb/auvitek_video.c		auvitek
+
+# Empia EM28xx
+device	emdtv: dtvbus, irbus, i2cexec, lg3303, xc3028
+attach	emdtv at usbdevif
+file	dev/usb/emdtv.c			emdtv
+file	dev/usb/emdtv_board.c		emdtv
+file	dev/usb/emdtv_dtv.c		emdtv
+file	dev/usb/emdtv_i2c.c		emdtv
+file	dev/usb/emdtv_ir.c		emdtv
+
 #
 # Misc
 #
@@ -154,6 +193,11 @@ file	dev/usb/uvideo.c		uvideo
 device	urio
 attach	urio at usbdevif
 file	dev/usb/urio.c			urio			needs-flag
+
+# Apple iPad
+device	uipad
+attach	uipad at usbdevif
+file	dev/usb/uipad.c				uipad
 
 # BlackBerries
 device	uberry
@@ -170,10 +214,12 @@ device	ugensa: ucombus
 attach	ugensa at usbdevif
 file	dev/usb/ugensa.c		ugensa
 
-# Generic Serial Adapter
+# 3G Modem
 device	u3g: ucombus
-attach	u3g at usbdevif
-file	dev/usb/u3g.c			u3g
+attach	u3g at usbifif
+device	u3ginit
+attach	u3ginit at usbdevif
+file	dev/usb/u3g.c			u3g | u3ginit
 
 # YAP phone firmware loader
 device	uyap: ezload
@@ -185,6 +231,10 @@ device	udsbr: radiodev
 attach	udsbr at usbdevif
 file	dev/usb/udsbr.c			udsbr
 
+# TEMPerHUM HID
+device	uthum: hid, sysmon_envsys
+attach	uthum at uhidbus
+file	dev/usb/uthum.c			uthum
 
 # Ethernet adapters
 # ADMtek AN986 Pegasus
@@ -193,9 +243,9 @@ attach	aue at usbdevif
 file	dev/usb/if_aue.c		aue
 
 # CDC Ethernet
-device  cdce: arp, ether, ifnet
-attach  cdce at usbifif
-file    dev/usb/if_cdce.c                cdce
+device	cdce: arp, ether, ifnet
+attach	cdce at usbifif
+file	dev/usb/if_cdce.c		cdce
 
 # CATC USB-EL1201A
 device	cue: arp, ether, ifnet
@@ -227,6 +277,10 @@ device	udav: arp, ether, ifnet, mii, mii_phy
 attach	udav at usbdevif
 file	dev/usb/if_udav.c		udav
 
+# Atheros AR9170
+device	otus: arp, ether, firmload, ifnet, wlan
+attach	otus at usbdevif
+file	dev/usb/if_otus.c		otus
 
 # Serial drivers
 # Modems
@@ -274,18 +328,23 @@ attach	uhmodem at usbifif
 file	dev/usb/uhmodem.c		uhmodem
 
 # iPAQ PDAs
-device  uipaq: ucombus
-attach  uipaq at usbdevif
-file    dev/usb/uipaq.c			uipaq
+device	uipaq: ucombus
+attach	uipaq at usbdevif
+file	dev/usb/uipaq.c			uipaq
 
 # Kyocera AIR-EDGE PHONE
 device	ukyopon: ucombus, umodem_common
 attach	ukyopon at usbifif
 file	dev/usb/ukyopon.c		ukyopon
 
+# ArkMicroChips 3116 based serial (used with some Nokia USB cables too)
+device	uark: ucombus
+attach	uark at usbdevif
+file	dev/usb/uark.c		uark
+
 # Silicon Labs CP210x serial driver
 device	uslsa: ucombus
-attach	uslsa at usbdevif
+attach	uslsa at usbifif
 file	dev/usb/uslsa.c			uslsa
 
 # WinChipHead CH341/340 serial driver
@@ -309,6 +368,11 @@ device	atu: ether, ifnet, arp, wlan
 attach	atu at usbdevif
 file	dev/usb/if_atu.c		atu
 
+# Intersil PrismGT
+device	upgt: ether, ifnet, arp, wlan, firmload
+attach	upgt at usbdevif
+file	dev/usb/if_upgt.c		upgt
+
 # Ralink Technology RT2500USB
 attach	ral at usbdevif with ural
 file	dev/usb/if_ural.c		ural
@@ -322,12 +386,37 @@ device	utoppy
 attach	utoppy at usbdevif
 file	dev/usb/utoppy.c		utoppy
 
-# Microsoft Xbox controller (gamepad)
-device	xboxcontroller: wsmousedev
-attach	xboxcontroller at usbdevif
-file	dev/usb/xboxcontroller.c	xboxcontroller
-
 # Zydas ZD1211
 device	zyd: ether, ifnet, arp, wlan, firmload
 attach	zyd at usbdevif
 file	dev/usb/if_zyd.c		zyd
+
+# DisplayLink DL-1x0/DL-1x5
+device	udl: wsemuldisplaydev, rasops16, edid, firmload
+attach	udl at usbdevif
+file	dev/usb/udl.c			udl
+
+# Wireless WAN modems from Option N.V.
+device	uhso: ifnet
+attach	uhso at usbdevif
+file	dev/usb/uhso.c			uhso
+
+# Maywa-denki/Kayac YUREX
+device	uyurex: hid
+attach	uyurex at uhidbus
+file	dev/usb/uyurex.c		uyurex
+
+# Microsoft RNDIS
+device	urndis: arp, ether, ifnet
+attach	urndis at usbifif
+file	dev/usb/if_urndis.c		urndis
+
+# Realtek RTL8188CU/RTL8192CU
+device	urtwn: ether, ifnet, arp, wlan, firmload
+attach	urtwn at usbdevif
+file	dev/usb/if_urtwn.c              urtwn
+
+# Realtek RTL8187/RTL8187B 802.11b/g USB wireless adapter
+device	urtw: ether, ifnet, arp, wlan
+attach	urtw at usbdevif
+file	dev/usb/if_urtw.c		urtw

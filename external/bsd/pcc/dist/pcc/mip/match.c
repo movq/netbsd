@@ -1,4 +1,5 @@
-/*      $Id: match.c,v 1.1.1.2 2009/09/04 00:27:34 gmcgarry Exp $   */
+/*      Id: match.c,v 1.98 2012/03/22 18:51:41 plunky Exp    */	
+/*      $NetBSD: match.c,v 1.1.1.4.4.1 2012/04/03 16:36:23 riz Exp $   */
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -69,11 +70,11 @@
 void setclass(int tmp, int class);
 int getclass(int tmp);
 
-int s2debug = 0;
-
 extern char *ltyp[], *rtyp[];
 
+#ifdef PCC_DEBUG
 static char *srtyp[] = { "SRNOPE", "SRDIR", "SROREG", "SRREG" };
+#endif
 
 /*
  * return true if shape is appropriate for the node p
@@ -255,7 +256,7 @@ ttype(TWORD t, int tword)
 }
 
 #define FLDSZ(x)	UPKFSZ(x)
-#ifdef RTOLBYTES
+#if TARGET_ENDIAN == TARGET_LE
 #define	FLDSHF(x)	UPKFOFF(x)
 #else
 #define	FLDSHF(x)	(SZINT - FLDSZ(x) - UPKFOFF(x))
@@ -361,13 +362,11 @@ expand(NODE *p, int cookie, char *cp)
 
 	}
 
-NODE resc[4];
+NODE resc[NRESC];
 
 NODE *
 getlr(NODE *p, int c)
 {
-	NODE *q;
-
 	/* return the pointer to the left or right side of p, or p itself,
 	   depending on the optype of p */
 
@@ -381,12 +380,9 @@ getlr(NODE *p, int c)
 			c = 0;
 		else
 			c -= '0';
-		q = &resc[c];
-		q->n_op = REG;
-		q->n_type = p->n_type; /* XXX should be correct type */
-		q->n_rval = DECRA(p->n_reg, c);
-		q->n_su = p->n_su;
-		return q;
+		if (resc[c].n_op == FREE)
+			comperr("getlr: free node");
+		return &resc[c];
 
 	case 'L':
 		return( optype( p->n_op ) == LTYPE ? p : p->n_left );
@@ -569,14 +565,19 @@ findops(NODE *p, int cookie)
 		if ((shl = chcheck(l, q->lshape, q->rewrite & RLEFT)) == SRNOPE)
 			continue;
 
-		F2DEBUG(("findop lshape %d\n", shl));
+		F2DEBUG(("findop lshape %s\n", srtyp[shl]));
 		F2WALK(l);
 
 		if ((shr = chcheck(r, q->rshape, q->rewrite & RRIGHT)) == SRNOPE)
 			continue;
 
-		F2DEBUG(("findop rshape %d\n", shr));
+		F2DEBUG(("findop rshape %s\n", srtyp[shr]));
 		F2WALK(r);
+
+		/* Help register assignment after SSA by preferring */
+		/* 2-op insns instead of 3-ops */
+		if (xssa && (q->rewrite & RLEFT) == 0 && shl == SRDIR)
+			shl = SRREG;
 
 		if (q->needs & REWRITE)
 			break;  /* Done here */
@@ -1136,13 +1137,13 @@ findmops(NODE *p, int cookie)
 		if ((shl = tshape(l, q->lshape)) != SRDIR && (shl != SROREG))
 			continue;
 
-		F2DEBUG(("findmops lshape %d\n", shl));
+		F2DEBUG(("findmops lshape %s\n", srtyp[shl]));
 		F2WALK(l);
 
 		if ((shr = chcheck(r, q->rshape, 0)) == SRNOPE)
 			continue;
 
-		F2DEBUG(("findmops rshape %d\n", shr));
+		F2DEBUG(("findmops rshape %s\n", srtyp[shr]));
 
 		/*
 		 * Only allow RLEFT. XXX
@@ -1207,6 +1208,7 @@ treecmp(NODE *p1, NODE *p2)
 		return 0;
 
 	switch (p1->n_op) {
+	case SCONV:
 	case UMUL:
 		return treecmp(p1->n_left, p2->n_left);
 
@@ -1224,13 +1226,23 @@ treecmp(NODE *p1, NODE *p2)
 			return 0;
 		break;
 
-	case REG:
 	case TEMP:
+#ifdef notyet
+		/* SSA will put assignment in separate register */
+		/* Help out by accepting different regs here */
+		if (xssa)
+			break;
+#endif
+	case REG:
 		if (p1->n_rval != p2->n_rval)
 			return 0;
 		break;
+	case LS:
+	case RS:
 	case PLUS:
 	case MINUS:
+	case MUL:
+	case DIV:
 		if (treecmp(p1->n_left, p2->n_left) == 0 ||
 		    treecmp(p1->n_right, p2->n_right) == 0)
 			return 0;

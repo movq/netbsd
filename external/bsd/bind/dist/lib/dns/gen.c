@@ -1,7 +1,7 @@
-/*	$NetBSD: gen.c,v 1.1.1.1 2009/03/22 15:01:04 christos Exp $	*/
+/*	$NetBSD: gen.c,v 1.2.6.1 2012/06/05 21:15:01 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: gen.c,v 1.83 2008/09/25 04:02:38 tbox Exp */
+/* Id: gen.c,v 1.85 2009/12/04 22:06:37 tbox Exp  */
 
 /*! \file */
 
@@ -633,6 +633,8 @@ main(int argc, char **argv) {
 			 TOWIRETYPE, TOWIRECLASS, TOWIREDEF);
 		doswitch("COMPARESWITCH", "compare", COMPAREARGS,
 			  COMPARETYPE, COMPARECLASS, COMPAREDEF);
+		doswitch("CASECOMPARESWITCH", "casecompare", COMPAREARGS,
+			  COMPARETYPE, COMPARECLASS, COMPAREDEF);
 		doswitch("FROMSTRUCTSWITCH", "fromstruct", FROMSTRUCTARGS,
 			  FROMSTRUCTTYPE, FROMSTRUCTCLASS, FROMSTRUCTDEF);
 		doswitch("TOSTRUCTSWITCH", "tostruct", TOSTRUCTARGS,
@@ -703,7 +705,7 @@ main(int argc, char **argv) {
 		fprintf(stdout, "\t\t\t*(_tp) = _d; \\\n");
 		fprintf(stdout, "\t\t\treturn (ISC_R_SUCCESS); \\\n");
 		fprintf(stdout, "\t\t} \\\n");
-		fprintf(stdout, "\t} while (0)\n\n");
+		fprintf(stdout, "\t} while (/*CONSTCOND*/0)\n\n");
 
 		fprintf(stdout, "#define RDATATYPE_FROMTEXT_SW(_hash,"
 				"_typename,_length,_typep) \\\n");
@@ -839,7 +841,7 @@ main(int argc, char **argv) {
 		       classnum != 255 ? "," : ""); \
 		fprintf(stdout, "#define dns_rdataclass_%s\t" \
 		       "((dns_rdataclass_t)dns_rdataclass_%s)\n", s, s); \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 		for (cc = classes; cc != NULL; cc = cc->next) {
 			if (cc->rdclass == 3)

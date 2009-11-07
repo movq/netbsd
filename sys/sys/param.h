@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.356 2009/10/21 21:28:36 rmind Exp $	*/
+/*	$NetBSD: param.h,v 1.408.2.3 2012/08/17 23:57:22 riz Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	599002100	/* NetBSD 5.99.21 */
+#define	__NetBSD_Version__	600000000	/* NetBSD 6.0_RC1 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
@@ -138,6 +138,7 @@
 #include <sys/resource.h>
 #include <sys/ucred.h>
 #include <sys/uio.h>
+#include <uvm/uvm_param.h>
 #ifndef NPROC
 #define	NPROC	(20 + 16 * MAXUSERS)
 #endif
@@ -203,6 +204,11 @@
  * allocated memory.
  */
 #if defined(_KERNEL) || defined(__EXPOSE_STACK)
+
+#ifndef STACK_ALIGNBYTES
+#define STACK_ALIGNBYTES	__ALIGNBYTES
+#endif
+
 #ifdef __MACHINE_STACK_GROWS_UP
 #define	STACK_GROW(sp, _size)		(((char *)(void *)(sp)) + (_size))
 #define	STACK_SHRINK(sp, _size)		(((char *)(void *)(sp)) - (_size))
@@ -218,7 +224,28 @@
 #define	STACK_ALLOC(sp, _size)		(((char *)(void *)(sp)) - (_size))
 #define	STACK_MAX(p, _size)		((char *)(void *)(p))
 #endif
+#define	STACK_LEN_ALIGN(len, bytes)	(((len) + (bytes)) & ~(bytes))
+
 #endif /* defined(_KERNEL) || defined(__EXPOSE_STACK) */
+
+/*
+ * Round p (pointer or byte index) up to a correctly-aligned value for all
+ * data types (int, long, ...).   The result is u_int and must be cast to
+ * any desired pointer type.
+ *
+ * ALIGNED_POINTER is a boolean macro that checks whether an address
+ * is valid to fetch data elements of type t from on this architecture.
+ * This does not reflect the optimal alignment, just the possibility
+ * (within reasonable limits).
+ *
+ */
+#define ALIGNBYTES	__ALIGNBYTES
+#ifndef ALIGN
+#define	ALIGN(p)		(((uintptr_t)(p) + ALIGNBYTES) & ~ALIGNBYTES)
+#endif
+#ifndef ALIGNED_POINTER
+#define	ALIGNED_POINTER(p,t)	((((uintptr_t)(p)) & (sizeof(t) - 1)) == 0)
+#endif
 
 /*
  * Historic priority levels.  These are meaningless and remain only
@@ -294,12 +321,6 @@
 #define	CMASK	022		/* default file mask: S_IWGRP|S_IWOTH */
 #define	NODEV	(dev_t)(-1)	/* non-existent device */
 
-#define	CBLOCK	64		/* Clist block size, must be a power of 2. */
-#define	CBQSIZE	(CBLOCK/NBBY)	/* Quote bytes/cblock - can do better. */
-				/* Data chars/clist. */
-#define	CBSIZE	(CBLOCK - (int)sizeof(struct cblock *) - CBQSIZE)
-#define	CROUND	(CBLOCK - 1)	/* Clist rounding. */
-
 /*
  * File system parameters and macros.
  *
@@ -327,6 +348,15 @@
  */
 #define	MAXPATHLEN	PATH_MAX
 #define	MAXSYMLINKS	32
+
+/*
+ * This is the maximum individual filename component length enforced by
+ * namei. Filesystems cannot exceed this limit. The upper bound for that
+ * limit is NAME_MAX. We don't bump it for now, for compatibility with
+ * old binaries during the time where MAXPATHLEN was 511 and NAME_MAX was
+ * 255
+ */
+#define	KERNEL_NAME_MAX	255
 
 /* Bit map related macros. */
 #define	setbit(a,i)	((a)[(i)/NBBY] |= 1<<((i)%NBBY))

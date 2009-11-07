@@ -1,4 +1,4 @@
-/* $NetBSD: gpioiic.c,v 1.1 2009/08/09 08:18:00 mbalmer Exp $ */
+/* $NetBSD: gpioiic.c,v 1.5 2011/10/02 09:33:19 mbalmer Exp $ */
 /*	$OpenBSD: gpioiic.c,v 1.8 2008/11/24 12:12:12 mbalmer Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpioiic.c,v 1.1 2009/08/09 08:18:00 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpioiic.c,v 1.5 2011/10/02 09:33:19 mbalmer Exp $");
 
 /*
  * I2C bus bit-banging through GPIO pins.
@@ -29,6 +29,7 @@ __KERNEL_RCSID(0, "$NetBSD: gpioiic.c,v 1.1 2009/08/09 08:18:00 mbalmer Exp $");
 #include <sys/device.h>
 #include <sys/gpio.h>
 #include <sys/rwlock.h>
+#include <sys/module.h>
 
 #include <dev/gpio/gpiovar.h>
 
@@ -42,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: gpioiic.c,v 1.1 2009/08/09 08:18:00 mbalmer Exp $");
 #define GPIOIIC_SDA		0x01
 #define GPIOIIC_SCL		0x02
 
+#define GPIOIIC_PIN_REVERSE	0x01
+
 struct gpioiic_softc {
 	void *			sc_gpio;
 	struct gpio_pinmap	sc_map;
@@ -51,6 +54,9 @@ struct gpioiic_softc {
 	device_t		sc_i2c_dev;
 	krwlock_t		sc_i2c_lock;
 
+	int			sc_pin_sda;
+	int			sc_pin_scl;
+
 	int			sc_sda;
 	int			sc_scl;
 };
@@ -58,22 +64,21 @@ struct gpioiic_softc {
 int		gpioiic_match(device_t, cfdata_t, void *);
 void		gpioiic_attach(device_t, device_t, void *);
 int		gpioiic_detach(device_t, int);
-int		gpioiic_activate(device_t, enum devact);
 
 int		gpioiic_i2c_acquire_bus(void *, int);
 void		gpioiic_i2c_release_bus(void *, int);
 int		gpioiic_i2c_send_start(void *, int);
 int		gpioiic_i2c_send_stop(void *, int);
 int		gpioiic_i2c_initiate_xfer(void *, i2c_addr_t, int);
-int		gpioiic_i2c_read_byte(void *, u_int8_t *, int);
-int		gpioiic_i2c_write_byte(void *, u_int8_t, int);
+int		gpioiic_i2c_read_byte(void *, uint8_t *, int);
+int		gpioiic_i2c_write_byte(void *, uint8_t, int);
 
-void		gpioiic_bb_set_bits(void *, u_int32_t);
-void		gpioiic_bb_set_dir(void *, u_int32_t);
-u_int32_t	gpioiic_bb_read_bits(void *);
+void		gpioiic_bb_set_bits(void *, uint32_t);
+void		gpioiic_bb_set_dir(void *, uint32_t);
+uint32_t	gpioiic_bb_read_bits(void *);
 
 CFATTACH_DECL_NEW(gpioiic, sizeof(struct gpioiic_softc),
-	gpioiic_match, gpioiic_attach, gpioiic_detach, gpioiic_activate);
+	gpioiic_match, gpioiic_attach, gpioiic_detach, NULL);
 
 extern struct cfdriver gpioiic_cd;
 
@@ -115,14 +120,24 @@ gpioiic_attach(struct device *parent, struct device *self, void *aux)
 	/* Map pins */
 	sc->sc_gpio = ga->ga_gpio;
 	sc->sc_map.pm_map = sc->_map;
+
+
 	if (gpio_pin_map(sc->sc_gpio, ga->ga_offset, ga->ga_mask,
 	    &sc->sc_map)) {
 		aprint_error(": can't map pins\n");
 		return;
 	}
 
+	if (ga->ga_flags & GPIOIIC_PIN_REVERSE) {
+		sc->sc_pin_sda = GPIOIIC_PIN_SCL;
+		sc->sc_pin_scl = GPIOIIC_PIN_SDA;
+	} else {
+		sc->sc_pin_sda = GPIOIIC_PIN_SDA;
+		sc->sc_pin_scl = GPIOIIC_PIN_SCL;
+	}
+
 	/* Configure SDA pin */
-	caps = gpio_pin_caps(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SDA);
+	caps = gpio_pin_caps(sc->sc_gpio, &sc->sc_map, sc->sc_pin_sda);
 	if (!(caps & GPIO_PIN_OUTPUT)) {
 		aprint_error(": SDA pin is unable to drive output\n");
 		goto fail;
@@ -131,7 +146,7 @@ gpioiic_attach(struct device *parent, struct device *self, void *aux)
 		aprint_error(": SDA pin is unable to read input\n");
 		goto fail;
 	}
-	aprint_normal(": SDA[%d]", sc->sc_map.pm_map[GPIOIIC_PIN_SDA]);
+	aprint_normal(": SDA[%d]", sc->sc_map.pm_map[sc->sc_pin_sda]);
 	sc->sc_sda = GPIO_PIN_OUTPUT;
 	if (caps & GPIO_PIN_OPENDRAIN) {
 		aprint_normal(" open-drain");
@@ -144,15 +159,15 @@ gpioiic_attach(struct device *parent, struct device *self, void *aux)
 		aprint_normal(" pull-up");
 		sc->sc_sda |= GPIO_PIN_PULLUP;
 	}
-	gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SDA, sc->sc_sda);
+	gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, sc->sc_pin_sda, sc->sc_sda);
 
 	/* Configure SCL pin */
-	caps = gpio_pin_caps(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SCL);
+	caps = gpio_pin_caps(sc->sc_gpio, &sc->sc_map, sc->sc_pin_scl);
 	if (!(caps & GPIO_PIN_OUTPUT)) {
 		aprint_error(": SCL pin is unable to drive output\n");
 		goto fail;
 	}
-	aprint_normal(", SCL[%d]", sc->sc_map.pm_map[GPIOIIC_PIN_SCL]);
+	aprint_normal(", SCL[%d]", sc->sc_map.pm_map[sc->sc_pin_scl]);
 	sc->sc_scl = GPIO_PIN_OUTPUT;
 	if (caps & GPIO_PIN_OPENDRAIN) {
 		aprint_normal(" open-drain");
@@ -165,7 +180,7 @@ gpioiic_attach(struct device *parent, struct device *self, void *aux)
 		aprint_normal(" push-pull");
 		sc->sc_scl |= GPIO_PIN_PUSHPULL;
 	}
-	gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SCL, sc->sc_scl);
+	gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, sc->sc_pin_scl, sc->sc_scl);
 
 	aprint_normal("\n");
 
@@ -212,20 +227,6 @@ gpioiic_detach(struct device *self, int flags)
 }
 
 int
-gpioiic_activate(device_t self, enum devact act)
-{
-	int rv = 0;
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		return EOPNOTSUPP;
-	case DVACT_DEACTIVATE:
-		break;
-	}
-	return rv;
-}
-
-int
 gpioiic_i2c_acquire_bus(void *cookie, int flags)
 {
 	struct gpioiic_softc *sc = cookie;
@@ -267,30 +268,30 @@ gpioiic_i2c_initiate_xfer(void *cookie, i2c_addr_t addr, int flags)
 }
 
 int
-gpioiic_i2c_read_byte(void *cookie, u_int8_t *bytep, int flags)
+gpioiic_i2c_read_byte(void *cookie, uint8_t *bytep, int flags)
 {
 	return i2c_bitbang_read_byte(cookie, bytep, flags, &gpioiic_bbops);
 }
 
 int
-gpioiic_i2c_write_byte(void *cookie, u_int8_t byte, int flags)
+gpioiic_i2c_write_byte(void *cookie, uint8_t byte, int flags)
 {
 	return i2c_bitbang_write_byte(cookie, byte, flags, &gpioiic_bbops);
 }
 
 void
-gpioiic_bb_set_bits(void *cookie, u_int32_t bits)
+gpioiic_bb_set_bits(void *cookie, uint32_t bits)
 {
 	struct gpioiic_softc *sc = cookie;
 
-	gpio_pin_write(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SDA,
+	gpio_pin_write(sc->sc_gpio, &sc->sc_map, sc->sc_pin_sda,
 	    bits & GPIOIIC_SDA ? GPIO_PIN_HIGH : GPIO_PIN_LOW);
 	gpio_pin_write(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SCL,
-	    bits & GPIOIIC_SCL ? GPIO_PIN_HIGH : GPIO_PIN_LOW);
+	    bits & GPIOIIC_SCL ? GPIO_PIN_HIGH : sc->sc_pin_scl);
 }
 
 void
-gpioiic_bb_set_dir(void *cookie, u_int32_t bits)
+gpioiic_bb_set_dir(void *cookie, uint32_t bits)
 {
 	struct gpioiic_softc *sc = cookie;
 	int sda = sc->sc_sda;
@@ -301,16 +302,57 @@ gpioiic_bb_set_dir(void *cookie, u_int32_t bits)
 		sda |= GPIO_PIN_TRISTATE;
 	if (sc->sc_sda != sda) {
 		sc->sc_sda = sda;
-		gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, GPIOIIC_PIN_SDA,
+		gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, sc->sc_pin_sda,
 		    sc->sc_sda);
 	}
 }
 
-u_int32_t
+uint32_t
 gpioiic_bb_read_bits(void *cookie)
 {
 	struct gpioiic_softc *sc = cookie;
+	uint32_t bits = 0;
 
-	return gpio_pin_read(sc->sc_gpio, &sc->sc_map,
-	    GPIOIIC_PIN_SDA) == GPIO_PIN_HIGH ? GPIOIIC_SDA : 0;
+	if (gpio_pin_read(sc->sc_gpio, &sc->sc_map,
+	    sc->sc_pin_sda) == GPIO_PIN_HIGH)
+		bits |= GPIOIIC_SDA;
+	if (gpio_pin_read(sc->sc_gpio, &sc->sc_map,
+	    sc->sc_pin_scl) == GPIO_PIN_HIGH)
+		bits |= GPIOIIC_SCL;
+
+	return bits;
+}
+
+MODULE(MODULE_CLASS_DRIVER, gpioiic, "gpio,iic");
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+gpioiic_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error;
+
+	error = 0;
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_gpioiic,
+		    cfattach_ioconf_gpioiic, cfdata_ioconf_gpioiic);
+		if (error)
+			aprint_error("%s: unable to init component\n",
+			    gpioiic_cd.cd_name);
+#endif
+		break;
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		config_fini_component(cfdriver_ioconf_gpioiic,
+		    cfattach_ioconf_gpioiic, cfdata_ioconf_gpioiic);
+#endif
+		break;
+	default:
+		error = ENOTTY;
+	}
+	return error;
 }

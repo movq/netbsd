@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2009/08/22 02:40:27 mrg Exp $
+#	$NetBSD: Makefile,v 1.14 2011/08/02 09:11:38 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -8,6 +8,7 @@ PROG=	Xnest
 .include "../../Makefile.servermod"
 
 .PATH:		${X11SRCDIR.xorg-server}/hw/xnest
+.PATH:		${X11SRCDIR.xorg-server}/hw/xnest/man
 .PATH:		${X11SRCDIR.xorg-server}/Xext
 .PATH:		${X11SRCDIR.xorg-server}/Xi
 .PATH:		${X11SRCDIR.xorg-server}/mi
@@ -61,6 +62,7 @@ LDADD+=	${LDADD.dix} \
 	${LDADD.miext/damage} \
 	${LDADD.cw/cw} \
 	${LDADD.miext/shadow} \
+	${LDADD.miext/sync} \
 	${LDADD.Xi} \
 	${LDADD.xkb} \
 	${LDADD.xkbstubs} \
@@ -85,6 +87,7 @@ DPADD+=	${LDADD.dix} \
 	${DPADD.miext/damage} \
 	${DPADD.cw/cw} \
 	${DPADD.miext/shadow} \
+	${DPADD.miext/sync} \
 	${DPADD.Xi} \
 	${DPADD.xkb} \
 	${DPADD.composite} \
@@ -108,6 +111,8 @@ DPADD+=	${LIBX86_64}
 LDADD+=	-lalpha
 DPADD+=	${LIBALPHA}
 .endif
+
+COPTS.miinitext.c+=	-Wno-error	# XXX xf86bigfstr.h
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

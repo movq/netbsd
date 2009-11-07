@@ -1,4 +1,4 @@
-/*	$NetBSD: pack.c,v 1.6 2009/04/11 12:41:10 lukem Exp $	*/
+/*	$NetBSD: pack.c,v 1.8 2010/03/08 10:19:14 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -132,7 +132,7 @@ pack(void)
 /*
  * Pack device instances together wherever possible.
  */
-void
+static void
 packdevi(void)
 {
 	struct devi *firststar, *i, **ip, *l, *p;
@@ -187,7 +187,8 @@ packdevi(void)
 		for (i = d->d_ihead; i != NULL; i = i->i_bsame) {
 			m = n;
 			for (l = i; l != NULL; l = l->i_alias) {
-				if (l->i_active != DEVI_ACTIVE)
+				if (l->i_active != DEVI_ACTIVE
+				    || i->i_pseudoroot)
 					continue;
 				l->i_locoff = -1;
 				/* try to find an equivalent for l */

@@ -1,4 +1,4 @@
-/*	$NetBSD: gcscaudio.c,v 1.2 2009/05/06 09:25:15 cegger Exp $	*/
+/*	$NetBSD: gcscaudio.c,v 1.11 2011/11/25 12:50:32 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2008 SHIMIZU Ryo <ryo@nerv.org>
@@ -27,15 +27,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscaudio.c,v 1.2 2009/05/06 09:25:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscaudio.c,v 1.11 2011/11/25 12:50:32 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/device.h>
 #include <sys/queue.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -87,6 +85,8 @@ struct gcscaudio_softc_ch {
 
 struct gcscaudio_softc {
 	struct device sc_dev;
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_pt;
 	void *sc_ih;
@@ -140,8 +140,8 @@ static int gcscaudio_getdev(void *, struct audio_device *);
 static int gcscaudio_set_port(void *, mixer_ctrl_t *);
 static int gcscaudio_get_port(void *, mixer_ctrl_t *);
 static int gcscaudio_query_devinfo(void *, mixer_devinfo_t *);
-static void *gcscaudio_malloc(void *, int, size_t, struct malloc_type *, int);
-static void gcscaudio_free(void *, void *, struct malloc_type *);
+static void *gcscaudio_malloc(void *, int, size_t);
+static void gcscaudio_free(void *, void *, size_t);
 static size_t gcscaudio_round_buffersize(void *, int, size_t);
 static paddr_t gcscaudio_mappage(void *, void *, off_t, int);
 static int gcscaudio_get_props(void *);
@@ -151,7 +151,8 @@ static int gcscaudio_trigger_output(void *, void *, void *, int,
 static int gcscaudio_trigger_input(void *, void *, void *, int,
                                    void (*)(void *), void *,
                                    const audio_params_t *);
-static bool gcscaudio_resume(device_t PMF_FN_PROTO);
+static void gcscaudio_get_locks(void *, kmutex_t **, kmutex_t **);
+static bool gcscaudio_resume(device_t, const pmf_qual_t *);
 static int gcscaudio_intr(void *);
 
 /* for codec_if */
@@ -170,7 +171,7 @@ static int gcscaudio_set_params_ch(struct gcscaudio_softc *,
                                    audio_params_t *, stream_filter_list_t *);
 static int gcscaudio_allocate_dma(struct gcscaudio_softc *, size_t, void **,
                                   bus_dma_segment_t *, int, int *,
-                                  int, bus_dmamap_t *);
+                                  bus_dmamap_t *);
 
 
 CFATTACH_DECL(gcscaudio, sizeof (struct gcscaudio_softc),
@@ -211,7 +212,7 @@ static const struct audio_hw_if gcscaudio_hw_if = {
 	.trigger_output		= gcscaudio_trigger_output,
 	.trigger_input		= gcscaudio_trigger_input,
 	.dev_ioctl		= NULL,
-	.powerstate		= NULL
+	.get_locks		= gcscaudio_get_locks,
 };
 
 static const struct audio_format gcscaudio_formats_2ch = {
@@ -273,6 +274,8 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dmat = pa->pa_dmat;
 	LIST_INIT(&sc->sc_dmalist);
 	sc->sc_mch_split_buf = NULL;
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	aprint_normal(": AMD Geode CS5536 Audio\n");
 
@@ -293,8 +296,8 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		goto attach_failure_unmap;
 	}
 
@@ -303,7 +306,7 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 
 	if (gcscaudio_allocate_dma(sc, sizeof(*sc->sc_prd.p_prdtables),
 	    (void **)&(sc->sc_prd.p_prdtables), sc->sc_prd.p_prdsegs, 1,
-	    &(sc->sc_prd.p_prdnseg), M_WAITOK, &(sc->sc_prd.p_prdmap)) != 0)
+	    &(sc->sc_prd.p_prdnseg), &(sc->sc_prd.p_prdmap)) != 0)
 		goto attach_failure_intr;
 
 	sc->host_if.arg = sc;
@@ -313,7 +316,7 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 	sc->host_if.reset = gcscaudio_reset_codec;
 	sc->host_if.spdif_event = gcscaudio_spdif_event_codec;
 
-	if ((rc = ac97_attach(&sc->host_if, self)) != 0) {
+	if ((rc = ac97_attach(&sc->host_if, self, &sc->sc_lock)) != 0) {
 		aprint_error_dev(&sc->sc_dev,
 		    "can't attach codec (error=%d)\n", rc);
 		goto attach_failure_intr;
@@ -325,6 +328,8 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_nformats = 0;
 	gcscaudio_append_formats(sc, &gcscaudio_formats_2ch);
+
+	mutex_enter(&sc->sc_lock);
 	if (AC97_IS_4CH(sc->codec_if))
 		gcscaudio_append_formats(sc, &gcscaudio_formats_4ch);
 	if (AC97_IS_6CH(sc->codec_if))
@@ -335,6 +340,7 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 			sc->sc_formats[i].frequency[0] = 48000;
 		}
 	}
+	mutex_exit(&sc->sc_lock);
 
 	if ((rc = auconv_create_encodings(sc->sc_formats, sc->sc_nformats,
 	    &sc->sc_encodings)) != 0) {
@@ -344,7 +350,6 @@ gcscaudio_attach(device_t parent, device_t self, void *aux)
 	}
 
 	audio_attach_mi(&gcscaudio_hw_if, sc, &sc->sc_dev);
-	sc->codec_if->vtbl->unlock(sc->codec_if);
 	return;
 
 attach_failure_codec:
@@ -403,7 +408,7 @@ gcscaudio_wait_ready_codec(struct gcscaudio_softc *sc, const char *timeout_msg)
 		delay(1);
 
 	if (i < 0) {
-		aprint_error_dev(&sc->sc_dev, timeout_msg);
+		aprint_error_dev(&sc->sc_dev, "%s", timeout_msg);
 		return 1;
 	}
 
@@ -609,7 +614,7 @@ gcscaudio_halt_output(void *arg)
 	/* channel splitter */
 	sc->sc_mch_splitter = NULL;
 	if (sc->sc_mch_split_buf)
-		gcscaudio_free(sc, sc->sc_mch_split_buf, M_DEVBUF);
+		gcscaudio_free(sc, sc->sc_mch_split_buf, sc->sc_mch_split_size);
 	sc->sc_mch_split_buf = NULL;
 
 	return 0;
@@ -662,8 +667,7 @@ gcscaudio_query_devinfo(void *addr, mixer_devinfo_t *dip)
 }
 
 static void *
-gcscaudio_malloc(void *arg, int direction, size_t size,
-                 struct malloc_type *pool, int flags)
+gcscaudio_malloc(void *arg, int direction, size_t size)
 {
 	struct gcscaudio_softc *sc;
 	struct gcscaudio_dma *p;
@@ -671,17 +675,15 @@ gcscaudio_malloc(void *arg, int direction, size_t size,
 
 	sc = (struct gcscaudio_softc *)arg;
 
-	p = malloc(sizeof(*p), pool, flags);
+	p = kmem_alloc(sizeof(*p), KM_SLEEP);
 	if (p == NULL)
 		return NULL;
 	p->size = size;
 
 	error = gcscaudio_allocate_dma(sc, size, &p->addr,
-	    p->segs, sizeof(p->segs)/sizeof(p->segs[0]), &p->nseg,
-	    BUS_DMA_NOWAIT, &p->map);
-
+	    p->segs, sizeof(p->segs)/sizeof(p->segs[0]), &p->nseg, &p->map);
 	if (error) {
-		free(p, pool);
+		kmem_free(p, sizeof(*p));
 		return NULL;
 	}
 
@@ -690,7 +692,7 @@ gcscaudio_malloc(void *arg, int direction, size_t size,
 }
 
 static void
-gcscaudio_free(void *arg, void *ptr, struct malloc_type *pool)
+gcscaudio_free(void *arg, void *ptr, size_t size)
 {
 	struct gcscaudio_softc *sc;
 	struct gcscaudio_dma *p;
@@ -705,7 +707,7 @@ gcscaudio_free(void *arg, void *ptr, struct malloc_type *pool)
 			bus_dmamem_free(sc->sc_dmat, p->segs, p->nseg);
 
 			LIST_REMOVE(p, list);
-			free(p, pool);
+			kmem_free(p, sizeof(*p));
 			break;
 		}
 	}
@@ -1043,10 +1045,11 @@ gcscaudio_trigger_output(void *addr, void *start, void *end, int blksize,
 		 *                                   BM7: none
 		 */
 		if (sc->sc_mch_split_buf)
-			gcscaudio_free(sc, sc->sc_mch_split_buf, M_DEVBUF);
+			gcscaudio_free(sc, sc->sc_mch_split_buf,
+			    sc->sc_mch_split_size);
 
 		if ((sc->sc_mch_split_buf = gcscaudio_malloc(sc, AUMODE_PLAY,
-		    size, M_DEVBUF, M_WAITOK)) == NULL)
+		    size)) == NULL)
 			return ENOMEM;
 
 		/*
@@ -1098,10 +1101,11 @@ gcscaudio_trigger_output(void *addr, void *start, void *end, int blksize,
 		 *
 		 */
 		if (sc->sc_mch_split_buf)
-			gcscaudio_free(sc, sc->sc_mch_split_buf, M_DEVBUF);
+			gcscaudio_free(sc, sc->sc_mch_split_buf,
+			    sc->sc_mch_split_size);
 
 		if ((sc->sc_mch_split_buf = gcscaudio_malloc(sc, AUMODE_PLAY,
-		    size, M_DEVBUF, M_WAITOK)) == NULL)
+		    size)) == NULL)
 			return ENOMEM;
 
 		/*
@@ -1186,6 +1190,17 @@ gcscaudio_trigger_input(void *addr, void *start, void *end, int blksize,
 	return 0;
 }
 
+static void
+gcscaudio_get_locks(void *arg, kmutex_t **intr, kmutex_t **thread)
+{
+	struct gcscaudio_softc *sc;
+
+	sc = (struct gcscaudio_softc *)arg;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
+}
+
 static int
 gcscaudio_intr(void *arg)
 {
@@ -1196,9 +1211,12 @@ gcscaudio_intr(void *arg)
 
 	nintr = 0;
 	sc = (struct gcscaudio_softc *)arg;
+
+	mutex_spin_enter(&sc->sc_intr_lock);
+
 	intr = bus_space_read_2(sc->sc_iot, sc->sc_ioh, ACC_IRQ_STATUS);
 	if (intr == 0)
-		return 0;
+		goto done;
 
 	/* Front output */
 	if (intr & ACC_IRQ_STATUS_BM0_IRQ_STS) {
@@ -1275,11 +1293,14 @@ gcscaudio_intr(void *arg)
 		aprint_normal_dev(&sc->sc_dev, "Audio Bus Master 5 IRQ Status\n");
 #endif
 
+done:
+	mutex_spin_exit(&sc->sc_intr_lock);
+
 	return nintr ? 1 : 0;
 }
 
 static bool
-gcscaudio_resume(device_t dv PMF_FN_ARGS)
+gcscaudio_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct gcscaudio_softc *sc = device_private(dv);
 
@@ -1293,19 +1314,19 @@ gcscaudio_resume(device_t dv PMF_FN_ARGS)
 static int
 gcscaudio_allocate_dma(struct gcscaudio_softc *sc, size_t size, void **addrp,
                        bus_dma_segment_t *seglist, int nseg, int *rsegp,
-                       int flags, bus_dmamap_t *mapp)
+                       bus_dmamap_t *mapp)
 {
 	int error;
 
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, seglist,
-	    nseg, rsegp, flags)) != 0) {
+	    nseg, rsegp, BUS_DMA_WAITOK)) != 0) {
 		aprint_error_dev(&sc->sc_dev,
 		    "unable to allocate DMA buffer, error=%d\n", error);
 		goto fail_alloc;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, seglist, nseg, size, addrp,
-	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
+	    BUS_DMA_WAITOK | BUS_DMA_COHERENT)) != 0) {
 		aprint_error_dev(&sc->sc_dev,
 		    "unable to map DMA buffer, error=%d\n",
 		    error);
@@ -1313,14 +1334,14 @@ gcscaudio_allocate_dma(struct gcscaudio_softc *sc, size_t size, void **addrp,
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat, size, nseg, size, 0,
-	    BUS_DMA_NOWAIT, mapp)) != 0) {
+	    BUS_DMA_WAITOK, mapp)) != 0) {
 		aprint_error_dev(&sc->sc_dev,
 		    "unable to create DMA map, error=%d\n", error);
 		goto fail_create;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, *mapp, *addrp, size, NULL,
-	    BUS_DMA_NOWAIT)) != 0) {
+	    BUS_DMA_WAITOK)) != 0) {
 		aprint_error_dev(&sc->sc_dev,
 		    "unable to load DMA map, error=%d\n", error);
 		goto fail_load;

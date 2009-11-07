@@ -1,4 +1,4 @@
-/* $NetBSD: tsp_bus_mem.c,v 1.9 2009/10/30 18:55:45 mhitch Exp $ */
+/* $NetBSD: tsp_bus_mem.c,v 1.12 2012/02/06 02:14:15 matt Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.9 2009/10/30 18:55:45 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.12 2012/02/06 02:14:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,9 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.9 2009/10/30 18:55:45 mhitch Exp $
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 
@@ -61,11 +59,11 @@ __KERNEL_RCSID(0, "$NetBSD: tsp_bus_mem.c,v 1.9 2009/10/30 18:55:45 mhitch Exp $
 
 #define CHIP_MEM_SYS_START(v)    (((struct tsp_config *)(v))->pc_iobase)
 
-/* 
- * Tsunami core logic appears on EV6.  We require at least EV56          
+/*
+ * Tsunami core logic appears on EV6.  We require at least EV56
  * support for the assembler to emit BWX opcodes.
- */                                                                      
-__asm(".arch ev6");                                                      
+ */
+__asm(".arch ev6");
 
 #include <alpha/pci/pci_bwx_bus_mem_chipdep.c>
 

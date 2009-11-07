@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380sbc.c,v 1.63 2008/04/04 16:00:58 tsutsui Exp $	*/
+/*	$NetBSD: ncr5380sbc.c,v 1.65 2010/07/27 19:44:16 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1995 David Jones, Gordon W. Ross
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.63 2008/04/04 16:00:58 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.65 2010/07/27 19:44:16 jakllsch Exp $");
 
 #include "opt_ddb.h"
 
@@ -82,7 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.63 2008/04/04 16:00:58 tsutsui Exp 
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -565,11 +564,11 @@ ncr5380_cmd_timeout(void *arg)
 	 * be idle, so try to start another job.
 	 */
 	if (sc->sc_state == NCR_IDLE) {
-		NCR_TRACE("cmd_tmo: call sched, cur=0x%x\n",
-				  (long) sc->sc_current);
+		NCR_TRACE("cmd_tmo: call sched, cur=0x%lx\n",
+		    (long)sc->sc_current);
 		ncr5380_sched(sc);
-		NCR_TRACE("cmd_tmo: sched done, cur=0x%x\n",
-		    (int)sc->sc_current);
+		NCR_TRACE("cmd_tmo: sched done, cur=0x%lx\n",
+		    (long)sc->sc_current);
 	}
 
 out:

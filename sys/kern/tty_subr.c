@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_subr.c,v 1.36 2009/03/09 16:19:22 uebayasi Exp $	*/
+/*	$NetBSD: tty_subr.c,v 1.40 2011/09/24 00:05:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Theo de Raadt
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_subr.c,v 1.36 2009/03/09 16:19:22 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_subr.c,v 1.40 2011/09/24 00:05:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: tty_subr.c,v 1.36 2009/03/09 16:19:22 uebayasi Exp $
 #endif
 
 #ifdef QBITS
-static void	clrbits(u_char *, int, int);
+static void	clrbits(u_char *, unsigned int, unsigned int);
 #endif
 
 /*
@@ -263,7 +263,7 @@ putc(int c, struct clist *clp)
 #if defined(DIAGNOSTIC) || 1
 			printf("putc: required clalloc\n");
 #endif
-			if (clalloc(clp, 1024, 1)) {
+			if (clalloc(clp, clp->c_cn, 1)) {
 out:
 				splx(s);
 				return -1;
@@ -301,33 +301,30 @@ out:
  *	clrbit(cp, off + len);
  */
 static void
-clrbits(u_char *cp, int off, int len)
+clrbits(u_char *cp, unsigned int off, unsigned int len)
 {
-	int sby, sbi, eby, ebi;
-	int i;
-	u_char mask;
+	unsigned int sbi, ebi;
+	u_char *scp, *ecp;
+	unsigned int end;
+	unsigned char mask;
 
-	if (len==1) {
-		clrbit(cp, off);
-		return;
-	}
-
-	sby = off / NBBY;
+	scp = cp + off / NBBY;
 	sbi = off % NBBY;
-	eby = (off+len) / NBBY;
-	ebi = (off+len) % NBBY;
-	if (sby == eby) {
-		mask = ((1 << (ebi - sbi)) - 1) << sbi;
-		cp[sby] &= ~mask;
+	end = off + len + NBBY - 1;
+	ecp = cp + end / NBBY - 1;
+	ebi = end % NBBY + 1;
+	if (scp >= ecp) {
+		mask = ((1 << len) - 1) << sbi;
+		*scp &= ~mask;
 	} else {
 		mask = (1 << sbi) - 1;
-		cp[sby++] &= mask;
+		*scp++ &= mask;
 
 		mask = (1 << ebi) - 1;
-		cp[eby] &= ~mask;
+		*ecp &= ~mask;
 
-		for (i = sby; i < eby; i++)
-			cp[i] = 0x00;
+		while (scp < ecp)
+			*scp++ = 0x00;
 	}
 }
 #endif
@@ -355,7 +352,7 @@ b_to_q(const u_char *cp, int count, struct clist *clp)
 #if defined(DIAGNOSTIC) || 1
 			printf("b_to_q: required clalloc\n");
 #endif
-			if (clalloc(clp, 1024, 1))
+			if (clalloc(clp, clp->c_cn, 1))
 				goto out;
 		}
 		clp->c_cf = clp->c_cl = clp->c_cs;

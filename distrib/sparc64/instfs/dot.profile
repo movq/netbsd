@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.3 2003/07/26 17:07:33 salo Exp $
+# $NetBSD: dot.profile,v 1.6.6.1 2012/06/23 22:54:55 riz Exp $
 #
 # Copyright (c) 1997 Perry E. Metzger
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -36,7 +36,19 @@
 PATH=/sbin:/bin:/usr/bin:/usr/sbin:/
 export PATH
 
-TERM=sun
+# Check if we are on a framebuffer or on serial console and default
+# the terminal type accordingly.
+# There is no /var/db/dev.cdb, so sysctl might not map the devicename properly;
+# ttyE0 is 90,0 -> 0x5a00
+case $(sysctl -nx kern.consdev) in
+ 0000000000005a0*)
+   TERM=wsvt25
+   ;;
+ *)
+   TERM=vt220
+   ;;
+esac
+
 export TERM
 HOME=/
 export HOME
@@ -44,6 +56,8 @@ BLOCKSIZE=1k
 export BLOCKSIZE
 EDITOR=ed
 export EDITOR
+SHELL=/bin/sh
+export SHELL
 
 umask 022
 
@@ -56,11 +70,21 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 	stty newcrt werase ^W intr ^C kill ^U erase ^? 9600
 	echo ''
 
-	echo 'If you are using a SUN type 4 keyboard, please enter "sun-type4".'
-	echo -n "Terminal type (just hit ENTER for '$TERM'): "
-	read ans
-	if [ -n "$ans" ];then
-	    TERM=$ans
+	if [ $TERM != "wsvt25" ]; then
+		cat << "EOM"
+You are using a serial console, we do not know your terminal emulation.
+Please select one, typical values are:
+
+	vt100
+	ansi
+	xterm
+
+EOM
+		echo -n "Terminal type (just hit ENTER for '$TERM'): "
+		read ans
+		if [ -n "$ans" ];then
+		    TERM=$ans
+		fi
 	fi
 
 	# mount the kern_fs so that we can find the root device, and also
@@ -75,4 +99,11 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 
 	# run the installation or upgrade script.
 	sysinst
+	if [ $? = 4 ]; then
+		echo "Oops, something went wrong - we will try again"
+		exit
+	fi
+	echo
+	echo "To return to the installer, quit this shell by typing 'exit'" \
+		"or ^D."
 fi

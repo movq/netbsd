@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.14 2009/10/21 01:07:45 snj Exp $	*/
+/*	$NetBSD: extern.h,v 1.16 2011/08/29 20:30:37 joerg Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -36,7 +36,7 @@ void act_ignore_altar(void);
 void act_open_chest(int, int);
 
 /* bill.c */
-void mailbill(void);
+__dead void mailbill(void);
 
 /* config.c */
 
@@ -116,7 +116,7 @@ int ttgetch(void);
 void scbr(void);
 void sncbr(void);
 void newgame(void);
-void lprintf(const char *, ...) __attribute__((__format__(__printf__, 1, 2)));
+void lprintf(const char *, ...) __printflike(1, 2);
 void lprint(long);
 void lwrite(char *, int);
 long lgetc(void);

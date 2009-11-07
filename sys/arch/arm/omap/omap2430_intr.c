@@ -1,4 +1,4 @@
-/*	$NetBSD: omap2430_intr.c,v 1.4 2008/11/19 06:26:27 matt Exp $	*/
+/*	$NetBSD: omap2430_intr.c,v 1.6 2011/07/01 20:30:21 dyoung Exp $	*/
 /*
  * Define the SDP2430 specific information and then include the generic OMAP
  * interrupt header.
@@ -35,13 +35,11 @@
 #include "opt_omap.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2430_intr.c,v 1.4 2008/11/19 06:26:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2430_intr.c,v 1.6 2011/07/01 20:30:21 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/evcnt.h>
 #include <sys/atomic.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/intr.h>
 
@@ -50,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: omap2430_intr.c,v 1.4 2008/11/19 06:26:27 matt Exp $
 #include <arm/cpufunc.h>
 #include <arm/omap/omap2_reg.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #ifdef OMAP_2430
 #define	NIGROUPS	8
@@ -528,7 +526,7 @@ omap_irq_handler(void *frame)
 	KASSERT((pending_ipls & ~oldipl_mask) < oldipl_mask);
 	pending_ipls |= get_pending_irqs();
 
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 	/*
 	 * We assume this isn't a clock intr.  But if it is, deliver it 
 	 * unconditionally so it will always have the interrupted frame.

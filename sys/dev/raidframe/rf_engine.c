@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_engine.c,v 1.39 2006/11/16 01:33:23 christos Exp $	*/
+/*	$NetBSD: rf_engine.c,v 1.47 2011/09/07 07:46:45 mbalmer Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -55,7 +55,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_engine.c,v 1.39 2006/11/16 01:33:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_engine.c,v 1.47 2011/09/07 07:46:45 mbalmer Exp $");
 
 #include <sys/errno.h>
 
@@ -68,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: rf_engine.c,v 1.39 2006/11/16 01:33:23 christos Exp 
 #include "rf_shutdown.h"
 #include "rf_raid.h"
 #include "rf_kintf.h"
+#include "rf_paritymap.h"
 
 static void rf_ShutdownEngine(void *);
 static void DAGExecutionThread(RF_ThreadArg_t arg);
@@ -76,50 +77,52 @@ static void rf_RaidIOThread(RF_ThreadArg_t arg);
 /* synchronization primitives for this file.  DO_WAIT should be enclosed in a while loop. */
 
 #define DO_LOCK(_r_) \
-do { \
-	ks = splbio(); \
-	RF_LOCK_MUTEX((_r_)->node_queue_mutex); \
-} while (0)
+	rf_lock_mutex2((_r_)->node_queue_mutex)
 
 #define DO_UNLOCK(_r_) \
-do { \
-	RF_UNLOCK_MUTEX((_r_)->node_queue_mutex); \
-	splx(ks); \
-} while (0)
+	rf_unlock_mutex2((_r_)->node_queue_mutex)
 
 #define	DO_WAIT(_r_) \
-	RF_WAIT_COND((_r_)->node_queue, (_r_)->node_queue_mutex)
+	rf_wait_cond2((_r_)->node_queue_cv, (_r_)->node_queue_mutex)
 
 #define	DO_SIGNAL(_r_) \
-	RF_BROADCAST_COND((_r_)->node_queue)	/* XXX RF_SIGNAL_COND? */
+	rf_broadcast_cond2((_r_)->node_queue_cv)	/* XXX rf_signal_cond2? */
 
 static void
 rf_ShutdownEngine(void *arg)
 {
 	RF_Raid_t *raidPtr;
-	int ks;
 
 	raidPtr = (RF_Raid_t *) arg;
 
 	/* Tell the rf_RaidIOThread to shutdown */
-	simple_lock(&(raidPtr->iodone_lock));
+	rf_lock_mutex2(raidPtr->iodone_lock);
 
 	raidPtr->shutdown_raidio = 1;
-	wakeup(&(raidPtr->iodone));
+	rf_signal_cond2(raidPtr->iodone_cv);
 
 	/* ...and wait for it to tell us it has finished */
 	while (raidPtr->shutdown_raidio)
- 		ltsleep(&(raidPtr->shutdown_raidio), PRIBIO, "raidshutdown", 0,
-			&(raidPtr->iodone_lock));
+		rf_wait_cond2(raidPtr->iodone_cv, raidPtr->iodone_lock);
 
-	simple_unlock(&(raidPtr->iodone_lock));
+	rf_unlock_mutex2(raidPtr->iodone_lock);
 
  	/* Now shut down the DAG execution engine. */
  	DO_LOCK(raidPtr);
   	raidPtr->shutdown_engine = 1;
   	DO_SIGNAL(raidPtr);
+
+	/* ...and wait for it to tell us it has finished */
+	while (raidPtr->shutdown_engine)
+		DO_WAIT(raidPtr);
+
  	DO_UNLOCK(raidPtr);
 
+	rf_destroy_mutex2(raidPtr->node_queue_mutex);
+	rf_destroy_cond2(raidPtr->node_queue_cv);
+
+	rf_destroy_mutex2(raidPtr->iodone_lock);
+	rf_destroy_cond2(raidPtr->iodone_cv);
 }
 
 int
@@ -127,7 +130,15 @@ rf_ConfigureEngine(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 		   RF_Config_t *cfgPtr)
 {
 
-	rf_mutex_init(&raidPtr->node_queue_mutex);
+	/*
+	 * Initialise iodone for the IO thread.
+	 */
+	TAILQ_INIT(&(raidPtr->iodone));
+	rf_init_mutex2(raidPtr->iodone_lock, IPL_VM);
+	rf_init_cond2(raidPtr->iodone_cv, "raidiow");
+
+	rf_init_mutex2(raidPtr->node_queue_mutex, IPL_VM);
+	rf_init_cond2(raidPtr->node_queue_cv, "rfnodeq");
 	raidPtr->node_queue = NULL;
 	raidPtr->dags_in_flight = 0;
 
@@ -170,6 +181,7 @@ rf_ConfigureEngine(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 	return (0);
 }
 
+#if 0
 static int
 BranchDone(RF_DagNode_t *node)
 {
@@ -210,6 +222,7 @@ BranchDone(RF_DagNode_t *node)
 		break;
 	}
 }
+#endif
 
 static int
 NodeReady(RF_DagNode_t *node)
@@ -414,7 +427,7 @@ PropagateResults(RF_DagNode_t *node, int context)
 {
 	RF_DagNode_t *s, *a;
 	RF_Raid_t *raidPtr;
-	int     i, ks;
+	int     i;
 	RF_DagNode_t *finishlist = NULL;	/* a list of NIL nodes to be
 						 * finished */
 	RF_DagNode_t *skiplist = NULL;	/* list of nodes with failed truedata
@@ -651,7 +664,7 @@ ProcessNode(RF_DagNode_t *node, int context)
 		break;
 	case rf_panic:
 		/* an undo node failed!!! */
-		printf("UNDO of a node failed!!!/n");
+		printf("UNDO of a node failed!!!\n");
 		break;
 	default:
 		printf("node finished execution with an illegal status!!!\n");
@@ -739,8 +752,6 @@ DAGExecutionThread(RF_ThreadArg_t arg)
 {
 	RF_DagNode_t *nd, *local_nq, *term_nq, *fire_nq;
 	RF_Raid_t *raidPtr;
-	int     ks;
-	int     s;
 
 	raidPtr = (RF_Raid_t *) arg;
 
@@ -749,7 +760,6 @@ DAGExecutionThread(RF_ThreadArg_t arg)
 		printf("raid%d: Engine thread is running\n", raidPtr->raidid);
 	}
 #endif
-	s = splbio();
 
 	DO_LOCK(raidPtr);
 	while (!raidPtr->shutdown_engine) {
@@ -819,9 +829,13 @@ DAGExecutionThread(RF_ThreadArg_t arg)
 			DO_WAIT(raidPtr);
 		}
 	}
+
+	/* Let rf_ShutdownEngine know that we're done... */
+	raidPtr->shutdown_engine = 0;
+	DO_SIGNAL(raidPtr);
+
 	DO_UNLOCK(raidPtr);
 
-	splx(s);
 	kthread_exit(0);
 }
 
@@ -840,43 +854,46 @@ rf_RaidIOThread(RF_ThreadArg_t arg)
 {
 	RF_Raid_t *raidPtr;
 	RF_DiskQueueData_t *req;
-	int s;
 
 	raidPtr = (RF_Raid_t *) arg;
 
-	s = splbio();
-	simple_lock(&(raidPtr->iodone_lock));
+	rf_lock_mutex2(raidPtr->iodone_lock);
 
 	while (!raidPtr->shutdown_raidio) {
 		/* if there is nothing to do, then snooze. */
 		if (TAILQ_EMPTY(&(raidPtr->iodone)) &&
 		    rf_buf_queue_check(raidPtr->raidid)) {
-			ltsleep(&(raidPtr->iodone), PRIBIO, "raidiow", 0,
-				&(raidPtr->iodone_lock));
+			rf_wait_cond2(raidPtr->iodone_cv, raidPtr->iodone_lock);
+		}
+
+		/* Check for deferred parity-map-related work. */
+		if (raidPtr->parity_map != NULL) {
+			rf_unlock_mutex2(raidPtr->iodone_lock);
+			rf_paritymap_checkwork(raidPtr->parity_map);
+			rf_lock_mutex2(raidPtr->iodone_lock);
 		}
 
 		/* See what I/Os, if any, have arrived */
 		while ((req = TAILQ_FIRST(&(raidPtr->iodone))) != NULL) {
 			TAILQ_REMOVE(&(raidPtr->iodone), req, iodone_entries);
-			simple_unlock(&(raidPtr->iodone_lock));
+			rf_unlock_mutex2(raidPtr->iodone_lock);
 			rf_DiskIOComplete(req->queue, req, req->error);
 			(req->CompleteFunc) (req->argument, req->error);
-			simple_lock(&(raidPtr->iodone_lock));
+			rf_lock_mutex2(raidPtr->iodone_lock);
 		}
 
 		/* process any pending outgoing IO */
-		simple_unlock(&(raidPtr->iodone_lock));
+		rf_unlock_mutex2(raidPtr->iodone_lock);
 		raidstart(raidPtr);
-		simple_lock(&(raidPtr->iodone_lock));
+		rf_lock_mutex2(raidPtr->iodone_lock);
 
 	}
 
 	/* Let rf_ShutdownEngine know that we're done... */
 	raidPtr->shutdown_raidio = 0;
-	wakeup(&(raidPtr->shutdown_raidio));
+	rf_signal_cond2(raidPtr->iodone_cv);
 
-	simple_unlock(&(raidPtr->iodone_lock));
-	splx(s);
+	rf_unlock_mutex2(raidPtr->iodone_lock);
 
 	kthread_exit(0);
 }

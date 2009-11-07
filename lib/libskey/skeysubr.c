@@ -1,4 +1,4 @@
-/*	$NetBSD: skeysubr.c,v 1.26 2006/10/28 15:35:28 agc Exp $	*/
+/*	$NetBSD: skeysubr.c,v 1.26.42.2 2012/04/23 23:40:41 riz Exp $	*/
 
 /* S/KEY v1.1b (skeysubr.c)
  *
@@ -15,7 +15,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: skeysubr.c,v 1.26 2006/10/28 15:35:28 agc Exp $");
+__RCSID("$NetBSD: skeysubr.c,v 1.26.42.2 2012/04/23 23:40:41 riz Exp $");
 
 #include <ctype.h>
 #include <stdio.h>

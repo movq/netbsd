@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.138 2009/08/11 17:29:04 dsl Exp $
+#	$NetBSD: Makefile,v 1.149 2012/01/20 16:31:29 joerg Exp $
 #	@(#)Makefile	8.2 (Berkeley) 2/3/94
 #
 # All library objects contain sccsid strings by default; they may be
@@ -55,6 +55,7 @@ COMPATDIR=${.CURDIR}/compat
 
 .include "${.CURDIR}/../../common/lib/libc/Makefile.inc"
 .include "${.CURDIR}/atomic/Makefile.inc"
+.include "${.CURDIR}/cdb/Makefile.inc"
 .include "${.CURDIR}/db/Makefile.inc"
 .include "${.CURDIR}/citrus/Makefile.inc"
 .include "${.CURDIR}/compat-43/Makefile.inc"
@@ -72,10 +73,14 @@ COMPATDIR=${.CURDIR}/compat
 .include "${.CURDIR}/net/Makefile.inc"
 .include "${.CURDIR}/nameser/Makefile.inc"
 .include "${.CURDIR}/nls/Makefile.inc"
-.if (${MACHINE_ARCH} != "alpha") && (${MACHINE_ARCH} != "sparc64")
+.if (${MACHINE_ARCH} != "alpha") && (${ARCHSUBDIR} != "sparc64")
 .include "${.CURDIR}/quad/Makefile.inc"
 .endif
+.if (${USE_LIBTRE} == "yes")
+.include "${NETBSDSRCDIR}/external/bsd/tre/Makefile.inc"
+.else
 .include "${.CURDIR}/regex/Makefile.inc"
+.endif
 .include "${.CURDIR}/resolv/Makefile.inc"
 .include "${.CURDIR}/rpc/Makefile.inc"
 .include "${.CURDIR}/ssp/Makefile.inc"
@@ -85,6 +90,7 @@ COMPATDIR=${.CURDIR}/compat
 .include "${.CURDIR}/termios/Makefile.inc"
 .include "${.CURDIR}/thread-stub/Makefile.inc"
 .include "${.CURDIR}/time/Makefile.inc"
+.include "${.CURDIR}/tls/Makefile.inc"
 .include "${.CURDIR}/sys/Makefile.inc"
 .include "${.CURDIR}/uuid/Makefile.inc"
 .if (${MKYP} != "no")
@@ -136,4 +142,3 @@ CSHLIBFLAGS+=	-D_I18N_DYNAMIC
 
 # force the dynamic linker to initialize libc first
 SHLIB_SHFLAGS+=	-Wl,-z,initfirst
-

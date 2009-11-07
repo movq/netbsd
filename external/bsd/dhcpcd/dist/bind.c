@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2009 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2010 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -73,7 +73,7 @@ daemonise(void)
 		syslog(LOG_ERR, "pipe: %m");
 		return -1;
 	}
-	syslog(LOG_INFO, "forking to background");
+	syslog(LOG_DEBUG, "forking to background");
 	switch (pid = fork()) {
 	case -1:
 		syslog(LOG_ERR, "fork: %m");
@@ -105,6 +105,7 @@ daemonise(void)
 	}
 	/* Done with the fd now */
 	if (pid != 0) {
+		syslog(LOG_INFO, "forked to background, child pid %d",pid);
 		writepid(pidfd, pid);
 		close(pidfd);
 		pidfd = -1;
@@ -143,7 +144,7 @@ bind_interface(void *arg)
 		lease->leasetime = ~0U;
 		lease->net.s_addr = ifo->req_mask.s_addr;
 		state->reason = "STATIC";
-	} else if (IN_LINKLOCAL(htonl(state->new->yiaddr))) {
+	} else if (state->new->cookie != htonl(MAGIC_COOKIE)) {
 		syslog(LOG_INFO, "%s: using IPv4LL address %s",
 		    iface->name, inet_ntoa(lease->addr));
 		lease->leasetime = ~0U;
@@ -222,6 +223,7 @@ bind_interface(void *arg)
 		add_timeout_sec(lease->rebindtime, start_rebind, iface);
 		add_timeout_sec(lease->leasetime, start_expire, iface);
 	}
+	ifo->options &= ~ DHCPCD_CSR_WARNED;
 	configure(iface);
 	daemonise();
 	state->state = DHS_BOUND;

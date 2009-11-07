@@ -1,4 +1,4 @@
-/*	$NetBSD: jmide.c,v 1.7 2009/10/19 18:41:15 bouyer Exp $	*/
+/*	$NetBSD: jmide.c,v 1.12.2.1 2012/04/03 15:38:31 riz Exp $	*/
 
 /*
  * Copyright (c) 2007 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jmide.c,v 1.7 2009/10/19 18:41:15 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jmide.c,v 1.12.2.1 2012/04/03 15:38:31 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,7 @@ static int  jmide_match(device_t, cfdata_t, void *);
 static void jmide_attach(device_t, device_t, void *);
 static int  jmide_intr(void *);
 
-static void jmpata_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void jmpata_chip_map(struct pciide_softc*, const struct pci_attach_args*);
 static void jmpata_setup_channel(struct ata_channel*);
 
 static int  jmahci_print(void *, const char *);
@@ -67,6 +67,10 @@ static const struct jmide_product jm_products[] =  {
 	{ PCI_PRODUCT_JMICRON_JMB361,
 	  1,
 	  1
+	},
+	{ PCI_PRODUCT_JMICRON_JMB362,
+	  0,
+	  2
 	},
 	{ PCI_PRODUCT_JMICRON_JMB363,
 	  1,
@@ -107,7 +111,7 @@ struct jmide_softc {
 };
 
 struct jmahci_attach_args {
-	struct pci_attach_args *jma_pa;
+	const struct pci_attach_args *jma_pa;
 	bus_space_tag_t jma_ahcit;
 	bus_space_handle_t jma_ahcih;
 };
@@ -135,7 +139,7 @@ jmide_match(device_t parent, cfdata_t match, void *aux)
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_JMICRON) {
 		if (jmide_lookup(pa->pa_id))
-			return (4); /* highter than ahcisata */
+			return (4); /* higher than ahcisata */
 	}
 	return (0);
 }
@@ -146,7 +150,6 @@ jmide_attach(device_t parent, device_t self, void *aux)
 	struct pci_attach_args *pa = aux;
 	struct jmide_softc *sc = device_private(self);
 	const struct jmide_product *jp;
-        char devinfo[256];
 	const char *intrstr;
         pci_intr_handle_t intrhandle;
 	u_int32_t pcictrl0 = pci_conf_read(pa->pa_pc, pa->pa_tag,
@@ -166,9 +169,7 @@ jmide_attach(device_t parent, device_t self, void *aux)
 	sc->sc_npata = jp->jm_npata;
 	sc->sc_nsata = jp->jm_nsata;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-        aprint_naive(": JMICRON PATA/SATA disk controller\n");
-        aprint_normal(": %s\n", devinfo);
+        pci_aprint_devinfo(pa, "JMICRON PATA/SATA disk controller");
 
 	aprint_normal("%s: ", JM_NAME(sc));
 	if (sc->sc_npata)
@@ -303,12 +304,11 @@ jmide_intr(void *arg)
 }
 
 static void
-jmpata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+jmpata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct jmide_softc *jmidesc = (struct jmide_softc *)sc;
 	int channel;
 	pcireg_t interface;
-	bus_size_t cmdsize, ctlsize;
 	struct pciide_channel *cp;
 
 	if (pciide_chipen(sc, pa) == 0)
@@ -358,8 +358,7 @@ jmpata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 		}
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-			pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }
 
@@ -431,9 +430,11 @@ jmahci_print(void *aux, const char *pnp)
 #ifdef NJMAHCI
 static int  jmahci_match(device_t, cfdata_t, void *);
 static void jmahci_attach(device_t, device_t, void *);
+static int  jmahci_detach(device_t, int);
+static bool jmahci_resume(device_t, const pmf_qual_t *);
 
 CFATTACH_DECL_NEW(jmahci, sizeof(struct ahci_softc),
-	jmahci_match, jmahci_attach, NULL, NULL);
+	jmahci_match, jmahci_attach, jmahci_detach, NULL);
 
 static int
 jmahci_match(device_t parent, cfdata_t match, void *aux)
@@ -445,8 +446,9 @@ static void
 jmahci_attach(device_t parent, device_t self, void *aux)
 {
 	struct jmahci_attach_args *jma = aux;
-	struct pci_attach_args *pa = jma->jma_pa;
+	const struct pci_attach_args *pa = jma->jma_pa;
 	struct ahci_softc *sc = device_private(self);
+	uint32_t ahci_cap;
 
 	aprint_naive(": AHCI disk controller\n");
 	aprint_normal("\n");
@@ -454,11 +456,49 @@ jmahci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_atac.atac_dev = self;
 	sc->sc_ahcit = jma->jma_ahcit;
 	sc->sc_ahcih = jma->jma_ahcih;
-	sc->sc_dmat = jma->jma_pa->pa_dmat;
+
+	ahci_cap = AHCI_READ(sc, AHCI_CAP);
+
+	if (pci_dma64_available(jma->jma_pa) && (ahci_cap & AHCI_CAP_64BIT))
+		sc->sc_dmat = jma->jma_pa->pa_dmat64;
+	else
+		sc->sc_dmat = jma->jma_pa->pa_dmat;
 
 	if (PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_MASS_STORAGE_RAID)
 		sc->sc_atac_capflags = ATAC_CAP_RAID;
 
 	ahci_attach(sc);
+
+	if (!pmf_device_register(self, NULL, jmahci_resume))
+	    aprint_error_dev(self, "couldn't establish power handler\n");
+}
+
+static int
+jmahci_detach(device_t dv, int flags)
+{
+	struct ahci_softc *sc;
+	sc = device_private(dv);
+
+	int rv;
+
+	if ((rv = ahci_detach(sc, flags)))
+		return rv;
+
+	return 0;
+}
+
+static bool
+jmahci_resume(device_t dv, const pmf_qual_t *qual)
+{
+	struct ahci_softc *sc;
+	int s;
+
+	sc = device_private(dv);
+
+	s = splbio();
+	ahci_resume(sc);
+	splx(s);
+
+	return true;
 }
 #endif

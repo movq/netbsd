@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.33 2009/04/11 12:41:10 lukem Exp $	*/
+/*	$NetBSD: sem.c,v 1.38 2010/05/02 15:35:00 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -922,6 +922,7 @@ newdevi(const char *name, int unit, struct devbase *d)
 	i->i_srcfile = yyfile;
 	i->i_active = DEVI_ORPHAN; /* Proper analysis comes later */
 	i->i_level = devilevel;
+	i->i_pseudoroot = 0;
 	if (unit >= d->d_umax)
 		d->d_umax = unit + 1;
 	return (i);
@@ -1406,6 +1407,89 @@ deldev(const char *name)
 	nvfreel(stack);
 }
 
+/*
+ * Insert given device "name" into devroottab.  In case "name"
+ * designates a pure interface attribute, create a fake device
+ * instance for the attribute and insert that into the roottab
+ * (this scheme avoids mucking around with the orphanage analysis).
+ */
+void
+addpseudoroot(const char *name)
+{
+	char buf[NAMESIZE];
+	int unit;
+	struct attr *attr;
+	struct devi *i;
+	struct deva *iba;
+	struct devbase *ib;
+
+	fprintf(stderr, "WARNING: pseudo-root is an experimental feature\n");
+
+	if (split(name, strlen(name), buf, sizeof(buf), &unit)) {
+		cfgerror("invalid pseudo-root name `%s'", name);
+		return;
+	}
+
+	/*
+	 * Prefer device because devices with locators define an
+	 * implicit interface attribute.  However, if a device is
+	 * not available, try to attach to the interface attribute.
+	 * This makes sure adddev() doesn't get confused when we
+	 * are really attaching to a device (alternatively we maybe
+	 * could specify a non-NULL atlist to defdevattach() below).
+	 */
+	ib = ht_lookup(devbasetab, intern(buf));
+	if (ib == NULL) {
+		struct devbase *fakedev;
+		char fakename[NAMESIZE];
+
+		attr = ht_lookup(attrtab, intern(buf));
+		if (!(attr && attr->a_iattr)) {
+			cfgerror("pseudo-root `%s' not available", name);
+			return;
+		}
+
+		/*
+		 * here we cheat a bit: create a fake devbase with the
+		 * interface attribute and instantiate it.  quick, cheap,
+		 * dirty & bad for you, much like the stuff in the fridge.
+		 * and, it works, since the pseudoroot device is not included
+		 * in ioconf, just used by config to make sure we start from
+		 * the right place.
+		 */ 
+		snprintf(fakename, sizeof(fakename), "%s_devattrs", buf);
+		fakedev = getdevbase(intern(fakename));
+		fakedev->d_isdef = 1;
+		fakedev->d_ispseudo = 0;
+		fakedev->d_attrs = newnv(NULL, NULL, attr, 0, NULL);
+		defdevattach(NULL, fakedev, NULL, NULL);
+
+		if (unit == STAR)
+			snprintf(buf, sizeof(buf), "%s*", fakename);
+		else
+			snprintf(buf, sizeof(buf), "%s%d", fakename, unit);
+		name = buf;
+	}
+
+	/* ok, everything should be set up, so instantiate a fake device */
+	i = getdevi(name);
+	if (i == NULL)
+		panic("device `%s' expected to be present", name);
+	ib = i->i_base;
+	iba = ib->d_ahead;
+
+	i->i_atdeva = iba;
+	i->i_cfflags = 0;
+	i->i_locs = fixloc(name, &errattr, NULL);
+	i->i_pseudoroot = 1;
+	i->i_active = DEVI_ORPHAN; /* set active by kill_orphans() */
+
+	*iba->d_ipp = i;
+	iba->d_ipp = &i->i_asame;
+
+	ht_insert(devroottab, ib->d_name, ib);
+}
+
 void
 addpseudo(const char *name, int number)
 {
@@ -1464,24 +1548,27 @@ delpseudo(const char *name)
 
 void
 adddevm(const char *name, devmajor_t cmajor, devmajor_t bmajor,
-	struct nvlist *nv)
+	struct nvlist *nv_opts, struct nvlist *nv_nodes)
 {
 	struct devm *dm;
 
 	if (cmajor != NODEVMAJOR && (cmajor < 0 || cmajor >= 4096)) {
 		cfgerror("character major %d is invalid", cmajor);
-		nvfreel(nv);
+		nvfreel(nv_opts);
+		nvfreel(nv_nodes);
 		return;
 	}
 
 	if (bmajor != NODEVMAJOR && (bmajor < 0 || bmajor >= 4096)) {
 		cfgerror("block major %d is invalid", bmajor);
-		nvfreel(nv);
+		nvfreel(nv_opts);
+		nvfreel(nv_nodes);
 		return;
 	}
 	if (cmajor == NODEVMAJOR && bmajor == NODEVMAJOR) {
 		cfgerror("both character/block majors are not specified");
-		nvfreel(nv);
+		nvfreel(nv_opts);
+		nvfreel(nv_nodes);
 		return;
 	}
 
@@ -1491,7 +1578,8 @@ adddevm(const char *name, devmajor_t cmajor, devmajor_t bmajor,
 	dm->dm_name = name;
 	dm->dm_cmajor = cmajor;
 	dm->dm_bmajor = bmajor;
-	dm->dm_opts = nv;
+	dm->dm_opts = nv_opts;
+	dm->dm_devnodes = nv_nodes;
 
 	TAILQ_INSERT_TAIL(&alldevms, dm, dm_next);
 

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.README,v 1.256 2009/10/23 22:14:37 joerg Exp $
+#	$NetBSD: bsd.README,v 1.292.2.2 2012/03/02 18:27:55 riz Exp $
 #	@(#)bsd.README	8.2 (Berkeley) 4/2/94
 
 This is the README file for the make "include" files for the NetBSD
@@ -56,7 +56,7 @@ the tree where the file gets installed.
 
 The profiled libraries are no longer built in a different directory than
 the regular libraries.  A new suffix, ".po", is used to denote a profiled
-object, and ".so" denotes a shared (position-independent) object.
+object, and ".pico" denotes a shared (position-independent) object.
 
 There are various make variables used during the build.
 
@@ -119,11 +119,16 @@ MKATF		If "no", don't build libatf-c, libatf-c++ libraries associated
 
 MKBFD		Obsolete, use MKBINUTILS
 
-MKBINUTILS	If "no", don't build binutils (gas, ld, etc and libbfd, libopcodes)
+MKBINUTILS	If "no", don't build binutils (gas, ld, etc and libbfd,
+		libopcodes)
 		Default: yes
 
+MKBSDTAR	If "yes", use the libarchive based cpio and tar instead of
+		the pax frontends.
+		Default: no
+
 MKCATPAGES	If "no", don't build or install the catman pages.
-		Default: yes
+		Default: no
 
 MKCOMPAT  	If "no", don't build or install the src/compat.
 		Default: yes on amd64/sparc64, no elsewhere.
@@ -163,6 +168,11 @@ MKDYNAMICROOT	If "no", build programs in /bin and /sbin statically,
 		install the shared linker into /libexec.
 		Default: yes
 
+MKEXTSRC        If not "no", 'make build' also descends into either src/extsrc
+		to cross-build programs and libraries externally added by
+		users, and automatically enables creation of those sets.
+		Default: no
+
 MKGCC		If "no", don't build gcc(1) or any of the GCC-related
 		libraries (libgcc, libobjc, libstdc++).
 		Default: yes
@@ -195,7 +205,8 @@ MKSTRIPIDENT	Strip the RCS IDs from program binaries and shared libraries.
 		Default: no
 
 MKINET6		If "no", disables building of INET6 (IPv6) infrastructure
-		(libraries and support programs).
+		(libraries and support programs).  This option must not be
+		set to "no" if MKX11 is not "no".
 		Default: yes
 
 MKINFO		If "no", don't build or install Info documentation from
@@ -230,9 +241,9 @@ MKLINKLIB	If "no", act as "MKLINT=no MKPICINSTALL=no MKPROFILE=no".
 MKLINT		If "no", don't build or install the lint libraries.
 		Default: yes
 
-MKLVM		If "no", don't build or install teh logical volume manager
+MKLVM		If "no", don't build or install the logical volume manager
 		and device mapper tools and libraries
-		Default: no
+		Default: yes
 
 MKMAN		If "no", don't build or install the man or catman pages,
 		and also acts as "MKCATPAGES=no MKHTML=no".
@@ -241,8 +252,8 @@ MKMAN		If "no", don't build or install the man or catman pages,
 MKMANDOC	If "yes", mandoc is built as tool and used to compile
 		catman or html pages.  A directory can be exempted by
 		defining NOMANDOC.  Individual man pages are exempted
-		if USETBL is set or NOMANDOC.${target} is set to "yes".
-		Default: no
+		if NOMANDOC.${target} is set to "yes".
+		Default: yes
 
 MKMANZ		If not "no", compress manual pages at installation time.
 		Default: no
@@ -253,6 +264,9 @@ MKMDNS		If "no", disables building of mDNS infrastructure
 
 MKNLS		If "no", don't build or install the NLS files and locale
 		definition files.
+		Default: yes
+
+MKNPF		If "no", don't build or install the NPF and its modules.
 		Default: yes
 
 MKOBJ		If "no", don't enable the rule which creates objdirs,
@@ -267,10 +281,6 @@ MKPAM		If "no", disables building of PAM authentication
 		Default: yes
 
 MKPCC		If "no", don't build pcc(1) or any of the PCC-related
-		libraries (libpcc, libpccsoftfloat).
-		Default: no
-
-MKPCCCMDS	If "no", don't build pcc(1), but do build the PCC-related
 		libraries (libpcc, libpccsoftfloat).
 		Default: no
 
@@ -292,6 +302,9 @@ MKPICLIB	If "no", don't build *_pic.a libraries, and build the
 
 MKPIE		If "no", create regular executables. Otherwise create
 		PIE (Position Independent Executables).
+		Default: no
+
+MKPIGZGZIP	If "no", only install pigz as pigz, not gzip.
 		Default: no
 
 MKPOSTFIX	If "no", don't build or install postfix(1).
@@ -348,7 +361,7 @@ MKYP		If "no", disables building of YP (NIS)
 MKZFS		If "no", do not build and install utilities and libraries 
 		used to manage ZFS file system. Do not build zfs and solaris 
 		compatibility kernel modules.
-		Default: no
+		Default: yes on i386/amd64, no elsewhere.
 
 USE_HESIOD	If "no", disables building Hesiod support into
 		various system utilities/libraries that support it.
@@ -385,9 +398,10 @@ USE_SKEY	If "no", disables building S/key authentication
 		Default: no
 
 USE_SSP		If "no", disables GCC stack protection code, which
-		detects stack overflows and aborts the program. This
-		imposes some performance penalty.
-		Default: no
+		detects stack overflows and aborts the program. The
+		stack protection code imposes a performance penalty
+		of about 5%.
+		Default: "no", unless "USE_FORT" is set to "yes"
 
 USE_FORT 	If "yes" turns on substitute wrappers for commonly used
 		functions that do not do bounds checking regularly, but
@@ -395,11 +409,16 @@ USE_FORT 	If "yes" turns on substitute wrappers for commonly used
 		__builtin_object_size() function to determine the buffer 
 		size where it is known and detect buffer overflows.
 		These substitute functions are in /usr/include/ssp.
-		Default: no
+		Default: depends on the part of the source tree
 
 USE_YP		If "no", disables building YP (NIS) support into
 		various system utilities/libraries that support it.
 		If ${MKYP} is "no", USE_YP will also be forced to "no".
+
+USE_PIGZGZIP	If "no", use the host "gzip" program to compress things.
+		Otherwise, build tools/pigz and use nbpigz to compress
+		things.
+		Default: "no".
 
 X11FLAVOUR	Set to "Xorg" or "XFree86", depending on whether to build
 		XFree86 or modular Xorg.  Only matters if MKX11!=no.
@@ -422,6 +441,20 @@ CXXFLAGS.<prog>	These provide a way to specify additions to the associated
 		or PROG_CXX (if set).  For example, if COPTS.libcrypto is
 		set to "-g", "-g" will be added to COPTS only when compiling
 		the crypto library.
+
+The active compiler is selected using the following variables:
+AVAILABLE_COMPILER
+		List of available compiler suites.  Processed in order
+		for selecting the active compiler for each frontend.
+HAVE_PCC	If defined, PCC is present and enabled.
+HAVE_LLVM	If defined, LLVM/Clang is present and enabled.
+UNSUPPORTED_COMPILER.xxx
+		If defined, the support for compiler "xxx" is disabled.
+
+For the frontends (CC, CPP, CXX, FC and OBJC) the following variables exist:
+ACTIVE_CC	Active compile suite for the CC frontend.
+SUPPORTED_CC	Compile suite with support for the CC frontend.
+TOOL_CC.xxx	Path to the CC frontend for compiler "xxx"
 
 =-=-=-=-=   sys.mk   =-=-=-=-=
 
@@ -479,7 +512,7 @@ MANMODE		Manual mode.  [${NONBINMODE}]
 
 MANINSTALL	Manual installation type.  Space separated list:
 			catinstall, htmlinstall, maninstall
-		[catinstall maninstall htmlinstall]
+		Default value derived from MKCATPAGES and MKHTML.
 
 LDSTATIC	Control program linking; if set blank, link everything
 		dynamically.  If set to "-static", link everything statically.
@@ -644,8 +677,6 @@ TOOL_AMIGATXLT		Amige assembly language format translator.  [amiga-txlt]
 
 TOOL_ASN1_COMPILE	ASN1 compiler.  [asn1_compile]
 
-TOOL_ATF_COMPILE	Generate POSIX shell test programs.  [atf-compile]
-
 TOOL_AWK		Pattern-directed scanning/processing language.  [awk]
 
 TOOL_CAP_MKDB		Create capability database.  [cap_mkdb]
@@ -731,6 +762,8 @@ TOOL_PAX		Manipulate file archives and copy directories.  [pax]
 
 TOOL_PIC		Compile pictures for groff.  [pic]
 
+TOOL_PIGZ		Parallel compressor.  [pigz]
+
 TOOL_POWERPCMKBOOTIMAGE	Make bootable image for powerpc.  [powerpc-mkbootimage]
 
 TOOL_PWD_MKDB		Generate the password databases.  [pwd_mkdb]
@@ -774,6 +807,65 @@ TOOL_ZIC		Time zone compiler.  [zic]
 
 <bsd.own.mk> is generally useful when building your own Makefiles so that
 they use the same default owners etc. as the rest of the tree.
+
+
+=-=-=-=-=   bsd.clean.mk   =-=-=-=-=
+
+The include file <bsd.clean.mk> defines the clean and cleandir
+targets.  It uses the following variables:
+
+CLEANFILES	Files to remove for both the clean and cleandir targets.
+
+CLEANDIRFILES	Files to remove for the cleandir target, but not for
+		the clean target.
+
+MKCLEANSRC	Controls whether or not the clean and cleandir targets
+		will delete files from both the object directory,
+		${.OBJDIR}, and the source directory, ${.CURDIR}.
+
+		If MKCLEANSRC is set to "no", then the file names in
+		CLEANFILES or CLEANDIRFILES are interpreted relative
+		to the object directory, ${.OBJDIR}.  This is the
+		traditional behaviour.
+
+		If MKCLEANSRC is set to "yes", then the file deletion
+		is performed relative to both the object directory,
+		${.OBJDIR}, and the source directory, ${.CURDIR}.  (This
+		has no effect if ${.OBJDIR} is the same as ${.CURDIR}.)
+		Deleting files from ${.CURDIR} is intended to remove
+		stray output files that had been left in the source
+		directory by an earlier build that did not use object
+		directories.
+
+		The default is MKCLEANSRC=yes.  If you always build with
+		separate object directories, and you are sure that there
+		are no stray files in the source directories, then you
+		may set MKCLEANSRC=no to save some time.
+
+MKCLEANVERIFY	Controls whether or not the clean and cleandir targets
+		will verify that files have been deleted.
+
+		If MKCLEANVERIFY is set to "no", then the files will
+		be deleted using a "rm -f" command, and its success or
+		failure will be ignored.
+
+		If MKCLEANVERIFY is set to "yes", then the success of
+		the "rm -f" command will be verified using an "ls"
+		command.
+
+		The default is MKCLEANVERIFY=yes.  If you are sure that
+		there will be no problems caused by file permissions,
+		read-only file systems, or the like, then you may set
+		MKCLEANVERIFY=no to save some time.
+
+To use the clean and cleandir targets defined in <bsd.clean.mk>, other
+Makefiles or bsd.*.mk files should append file names to the CLEANFILES
+or CLEANDIRFILES variables.  For example:
+
+	    CLEANFILES+= a.out
+	    CLEANDIRFILES+= .depend
+
+	    .include <bsd.clean.mk>
 
 
 =-=-=-=-=   bsd.dep.mk   =-=-=-=-=
@@ -823,6 +915,10 @@ FILESMODE_<fn>	File mode of the specific file <fn>.
 FILESDIR_<fn>	The location to install the specific file <fn>.
 
 FILESNAME_<fn>	Optional name to install <fn> as.
+
+FILESBUILD	If this variable is defined, then its value will be
+		used as the default for all FILESBUILD_<fn> variables.
+		Otherwise, the default will be "no".
 
 FILESBUILD_<fn>	A value different from "no" will add the file to the list of
 		targets to be built by `realall'.  Users of that variable
@@ -972,6 +1068,10 @@ MKARZERO	Normally, ar(1) sets the timestamps, uid, gid and
 SHLIBINSTALLDIR	Target directory for shared libraries if ${USE_SHLIBDIR}
 		is not "no".
 
+SHLIB_MAJOR
+SHLIB_MINOR
+SHLIB_TEENY	Major, minor, and teeny version numbers of shared library
+
 USE_SHLIBDIR	If not "no", use ${SHLIBINSTALLDIR} instead of ${LIBDIR}
 		as the path to install shared libraries to.
 		USE_SHLIBDIR must be defined before <bsd.own.mk> is included.
@@ -1116,7 +1216,7 @@ MAN		The manual pages to be installed (use a .1 - .9 suffix).
 
 MLINKS		List of manual page links (using a .1 - .9 suffix).  The
 		linked-to file must come first, the linked file second,
-		and there may be multiple pairs.  The files are soft-linked.
+		and there may be multiple pairs.
 
 The include file <bsd.man.mk> includes a file named "../Makefile.inc" if
 it exists.
@@ -1212,6 +1312,8 @@ BINOWN		Binary owner.
 
 BINMODE		Binary mode.
 
+CLEANDIRFILES	Additional files to remove for the cleandir target.
+
 CLEANFILES	Additional files to remove for the clean and cleandir targets.
 
 COPTS		Additional flags to the compiler when creating C objects.
@@ -1284,36 +1386,49 @@ DPADD		Additional dependencies for the program.  Usually used for
 
 			DPADD+=${LIBCOMPAT} ${LIBUTIL}
 
-		The following libraries are predefined for DPADD:
+		The following system libraries are predefined for DPADD:
 
-		LIBCRT0?=	${DESTDIR}/usr/lib/crt0.o
 		LIBARCHIVE?=	${DESTDIR}/usr/lib/libarchive.a
 		LIBASN1?=	${DESTDIR}/usr/lib/libasn1.a
+		LIBATF_C?=	${DESTDIR}/usr/lib/libatf-c.a
+		LIBATF_CXX?=	${DESTDIR}/usr/lib/libatf-c++.a
+		LIBBIND9?=	${DESTDIR}/usr/lib/libbind9.a
 		LIBBLUETOOTH?=	${DESTDIR}/usr/lib/libbluetooth.a
 		LIBBSDMALLOC?=	${DESTDIR}/usr/lib/libbsdmalloc.a
 		LIBBZ2?=	${DESTDIR}/usr/lib/libbz2.a
 		LIBC?=		${DESTDIR}/usr/lib/libc.a
-		LIBC_PIC?=	${DESTDIR}/usr/lib/libc_pic.a
-		LIBCOM_ERR?=	${DESTDIR}/usr/lib/libcom_err.a
 		LIBCOMPAT?=	${DESTDIR}/usr/lib/libcompat.a
+		LIBCOM_ERR?=	${DESTDIR}/usr/lib/libcom_err.a
+		LIBCRT0?=	${DESTDIR}/usr/lib/crt0.o
 		LIBCRYPT?=	${DESTDIR}/usr/lib/libcrypt.a
 		LIBCRYPTO?=	${DESTDIR}/usr/lib/libcrypto.a
 		LIBCRYPTO_IDEA?=${DESTDIR}/usr/lib/libcrypto_idea.a
 		LIBCRYPTO_MDC2?=${DESTDIR}/usr/lib/libcrypto_mdc2.a
 		LIBCRYPTO_RC5?=	${DESTDIR}/usr/lib/libcrypto_rc5.a
 		LIBCURSES?=	${DESTDIR}/usr/lib/libcurses.a
+		LIBC_PIC?=	${DESTDIR}/usr/lib/libc_pic.a
 		LIBDBM?=	${DESTDIR}/usr/lib/libdbm.a
 		LIBDES?=	${DESTDIR}/usr/lib/libdes.a
+		LIBDNS?=	${DESTDIR}/usr/lib/libdns.a
 		LIBEDIT?=	${DESTDIR}/usr/lib/libedit.a
 		LIBEVENT?=	${DESTDIR}/usr/lib/libevent.a
+		LIBEXPAT?=	${DESTDIR}/usr/lib/libexpat.a
 		LIBFETCH?=	${DESTDIR}/usr/lib/libfetch.a
 		LIBFORM?=	${DESTDIR}/usr/lib/libform.a
+		LIBFL?=		${DESTDIR}/usr/lib/libfl.a
+		LIBG2C?=	${DESTDIR}/usr/lib/libg2c.a
 		LIBGCC?=	${DESTDIR}/usr/lib/libgcc.a
 		LIBGNUMALLOC?=	${DESTDIR}/usr/lib/libgnumalloc.a
 		LIBGSSAPI?=	${DESTDIR}/usr/lib/libgssapi.a
 		LIBHDB?=	${DESTDIR}/usr/lib/libhdb.a
+		LIBHEIMBASE?=	${DESTDIR}/usr/lib/libheimbase.a
+		LIBHEIMNTLM?=	${DESTDIR}/usr/lib/libheimntlm.a
+		LIBHX500?=	${DESTDIR}/usr/lib/libhx500.a
 		LIBINTL?=	${DESTDIR}/usr/lib/libintl.a
 		LIBIPSEC?=	${DESTDIR}/usr/lib/libipsec.a
+		LIBISC?=	${DESTDIR}/usr/lib/libisc.a
+		LIBISCCC?=	${DESTDIR}/usr/lib/libisccc.a
+		LIBISCFG?=	${DESTDIR}/usr/lib/libiscfg.a
 		LIBKADM5CLNT?=	${DESTDIR}/usr/lib/libkadm5clnt.a
 		LIBKADM5SRV?=	${DESTDIR}/usr/lib/libkadm5srv.a
 		LIBKAFS?=	${DESTDIR}/usr/lib/libkafs.a
@@ -1323,7 +1438,10 @@ DPADD		Additional dependencies for the program.  Usually used for
 		LIBLBER?=	${DESTDIR}/usr/lib/liblber.a
 		LIBLDAP?=	${DESTDIR}/usr/lib/libldap.a
 		LIBLDAP_R?=	${DESTDIR}/usr/lib/libldap_r.a
+		LIBLUA?=	${DESTDIR}/usr/lib/liblua.a
+		LIBLWRES?=	${DESTDIR}/usr/lib/liblwres.a
 		LIBM?=		${DESTDIR}/usr/lib/libm.a
+		LIBMAGIC?=	${DESTDIR}/usr/lib/libmagic.a
 		LIBMENU?=	${DESTDIR}/usr/lib/libmenu.a
 		LIBOBJC?=	${DESTDIR}/usr/lib/libobjc.a
 		LIBOSSAUDIO?=	${DESTDIR}/usr/lib/libossaudio.a
@@ -1334,26 +1452,85 @@ DPADD		Additional dependencies for the program.  Usually used for
 		LIBPOSIX?=	${DESTDIR}/usr/lib/libposix.a
 		LIBPTHREAD?=	${DESTDIR}/usr/lib/libpthread.a
 		LIBPTHREAD_DBG?=${DESTDIR}/usr/lib/libpthread_dbg.a
+		LIBPUFFS?=	${DESTDIR}/usr/lib/libpuffs.a
+		LIBQUOTA?=	${DESTDIR}/usr/lib/libquota.a
 		LIBRADIUS?=	${DESTDIR}/usr/lib/libradius.a
 		LIBRESOLV?=	${DESTDIR}/usr/lib/libresolv.a
 		LIBRMT?=	${DESTDIR}/usr/lib/librmt.a
 		LIBROKEN?=	${DESTDIR}/usr/lib/libroken.a
 		LIBRPCSVC?=	${DESTDIR}/usr/lib/librpcsvc.a
 		LIBRT?=		${DESTDIR}/usr/lib/librt.a
+		LIBRUMP?=	${DESTDIR}/usr/lib/librump.a
+		LIBRUMPFS_CD9660FS?=${DESTDIR}/usr/lib/librumpfs_cd9660fs.a
+		LIBRUMPFS_EFS?=	${DESTDIR}/usr/lib/librumpfs_efs.a
+		LIBRUMPFS_EXT2FS?=${DESTDIR}/usr/lib/librumpfs_ext2fs.a
+		LIBRUMPFS_FFS?=	${DESTDIR}/usr/lib/librumpfs_ffs.a
+		LIBRUMPFS_HFS?=	${DESTDIR}/usr/lib/librumpfs_hfs.a
+		LIBRUMPFS_LFS?=	${DESTDIR}/usr/lib/librumpfs_lfs.a
+		LIBRUMPFS_MSDOSFS?=${DESTDIR}/usr/lib/librumpfs_msdosfs.a
+		LIBRUMPFS_NFS?=	${DESTDIR}/usr/lib/librumpfs_nfs.a
+		LIBRUMPFS_NTFS?=${DESTDIR}/usr/lib/librumpfs_ntfs.a
+		LIBRUMPFS_SYSPUFFS?=${DESTDIR}/usr/lib/librumpfs_syspuffs.a
+		LIBRUMPFS_TMPFS?=${DESTDIR}/usr/lib/librumpfs_tmpfs.a
+		LIBRUMPFS_UDF?=	${DESTDIR}/usr/lib/librumpfs_udf.a
+		LIBRUMPFS_UFS?=	${DESTDIR}/usr/lib/librumpfs_ufs.a
+		LIBRUMPUSER?=	${DESTDIR}/usr/lib/librumpuser.a
+		LIBSASLC?=	${DESTDIR}/usr/lib/libsaslc.a
 		LIBSKEY?=	${DESTDIR}/usr/lib/libskey.a
 		LIBSL?=		${DESTDIR}/usr/lib/libsl.a
+		LIBSQLITE3?=	${DESTDIR}/usr/lib/libsqlite3.a
 		LIBSS?=		${DESTDIR}/usr/lib/libss.a
 		LIBSSH?=	${DESTDIR}/usr/lib/libssh.a
 		LIBSSL?=	${DESTDIR}/usr/lib/libssl.a
 		LIBSSP?=	${DESTDIR}/usr/lib/libssp.a
 		LIBSTDCXX?=	${DESTDIR}/usr/lib/libstdc++.a
 		LIBSUPCXX?=	${DESTDIR}/usr/lib/libsupc++.a
-		LIBTERMCAP?=	${DESTDIR}/usr/lib/libtermcap.a
+		LIBTERMINFO?=	${DESTDIR}/usr/lib/libterminfo.a
+		LIBTRE?=	${DESTDIR}/usr/lib/libtre.a
 		LIBUSBHID?=	${DESTDIR}/usr/lib/libusbhid.a
 		LIBUTIL?=	${DESTDIR}/usr/lib/libutil.a
+		LIBWIND?=	${DESTDIR}/usr/lib/libwind.a
 		LIBWRAP?=	${DESTDIR}/usr/lib/libwrap.a
 		LIBY?=		${DESTDIR}/usr/lib/liby.a
 		LIBZ?=		${DESTDIR}/usr/lib/libz.a
+
+		The following X-Windows libraries are predefined for DPADD:
+
+		LIBFS?=		${DESTDIR}/usr/X11R7/lib/libFS.a
+		LIBGL?=		${DESTDIR}/usr/X11R7/lib/libGL.a
+		LIBGLU?=	${DESTDIR}/usr/X11R7/lib/libGLU.a
+		LIBICE?=	${DESTDIR}/usr/X11R7/lib/libICE.a
+		LIBSM?=		${DESTDIR}/usr/X11R7/lib/libSM.a
+		LIBX11?=	${DESTDIR}/usr/X11R7/lib/libX11.a
+		LIBXTRAP?=	${DESTDIR}/usr/X11R7/lib/libXTrap.a
+		LIBXAU?=	${DESTDIR}/usr/X11R7/lib/libXau.a
+		LIBXAW?=	${DESTDIR}/usr/X11R7/lib/libXaw.a
+		LIBXDMCP?=	${DESTDIR}/usr/X11R7/lib/libXdmcp.a
+		LIBXEXT?=	${DESTDIR}/usr/X11R7/lib/libXext.a
+		LIBXFONT?=	${DESTDIR}/usr/X11R7/lib/libXfont.a
+		LIBXFT?=	${DESTDIR}/usr/X11R7/lib/libXft.a
+		LIBXI?=		${DESTDIR}/usr/X11R7/lib/libXi.a
+		LIBXINERAMA?=	${DESTDIR}/usr/X11R7/lib/libXinerama.a
+		LIBXMU?=	${DESTDIR}/usr/X11R7/lib/libXmu.a
+		LIBXMUU?=	${DESTDIR}/usr/X11R7/lib/libXmuu.a
+		LIBXPM?=	${DESTDIR}/usr/X11R7/lib/libXpm.a
+		LIBXRANDR?=	${DESTDIR}/usr/X11R7/lib/libXrandr.a
+		LIBXRENDER?=	${DESTDIR}/usr/X11R7/lib/libXrender.a
+		LIBXSS?=	${DESTDIR}/usr/X11R7/lib/libXss.a
+		LIBXT?=		${DESTDIR}/usr/X11R7/lib/libXt.a
+		LIBXTST?=	${DESTDIR}/usr/X11R7/lib/libXtst.a
+		LIBXV?=		${DESTDIR}/usr/X11R7/lib/libXv.a
+		LIBXXF86DGA?=	${DESTDIR}/usr/X11R7/lib/libXxf86dga.a
+		LIBXXF86MISC?=	${DESTDIR}/usr/X11R7/lib/libXxf86misc.a
+		LIBXXF86VM?=	${DESTDIR}/usr/X11R7/lib/libXxf86vm.a
+		LIBDPS?=	${DESTDIR}/usr/X11R7/lib/libdps.a
+		LIBFNTSTUBS?=	${DESTDIR}/usr/X11R7/lib/libfntstubs.a
+		LIBFONTCACHE?=	${DESTDIR}/usr/X11R7/lib/libfontcache.a
+		LIBFONTCONFIG?=	${DESTDIR}/usr/X11R7/lib/libfontconfig.a
+		LIBFONTENC?=	${DESTDIR}/usr/X11R7/lib/libfontenc.a
+		LIBFREETYPE?=	${DESTDIR}/usr/X11R7/lib/libfreetype.a
+		LIBLBXUTIL?=	${DESTDIR}/usr/X11R7/lib/liblbxutil.a
+		LIBXKBFILE?=	${DESTDIR}/usr/X11R7/lib/libxkbfile.a
 
 SHAREDSTRINGS	If defined, a new .c.o rule is used that results in shared
 		strings, using xstr(1). Note that this will not work with
@@ -1463,9 +1640,6 @@ NOSUBDIR	If this variable is defined, then the SUBDIR variable
 
 SUBDIR		For all of the directories listed in ${SUBDIR}, the
 		specified directory will be visited and the target made.
-		There is also a default target which allows the command
-		"make subdir" where subdir is any directory listed in
-		${SUBDIR}.
 
 		As a special case, the use of a token .WAIT as an
 		entry in SUBDIR acts as a synchronization barrier
@@ -1557,6 +1731,9 @@ OBJCFLAGS	Options to ${OBJC}.  [${CFLAGS}]
 
 OBJCOPY		Copy and translate object files.  [objcopy]
 
+OBJCOPYLIBFLAGS	Flags to pass to objcopy when library objects are
+		being built. [${.TARGET} =~ "*.po" ? -X : -x]
+
 OBJDUMP		Display information from object files.  [objdump]
 
 RANLIB		Generate index to archive.  [ranlib]
@@ -1585,6 +1762,9 @@ NOGCCERROR	If defined, prevents passing certain ${CFLAGS} to GCC
 			-Werror -Wa,--fatal-warnings
 		(The latter being for as(1).)
 
+NOCLANGERROR	If defined and clang is used as C compiler, -Werror is not
+		passed to it.
+
 WARNS		Crank up GCC warning options; the distinct levels are:
 			WARNS=1
 			WARNS=2
@@ -1603,8 +1783,6 @@ It provides the following targets:
 		If ${MAN} or ${PROG} is set and ${MKMAN} != "no",
 		these rules convert from X11's manual page source
 		into an mdoc.old source file.
-	cleanx11man:
-		Clean up the mdoc.old files generated by the above.
 
 It sets the following variables:
 

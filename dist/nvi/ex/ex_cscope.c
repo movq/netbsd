@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_cscope.c,v 1.4 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: ex_cscope.c,v 1.8 2011/06/22 03:57:46 mrg Exp $ */
 
 /*-
  * Copyright (c) 1994, 1996
@@ -128,18 +128,18 @@ ex_cscope(SCR *sp, EXCMD *cmdp)
 
 	/* Skip leading whitespace. */
 	for (p = cmdp->argv[0]->bp, i = cmdp->argv[0]->len; i > 0; --i, ++p)
-		if (!isspace(*p))
+		if (!ISBLANK((UCHAR_T)*p))
 			break;
 	if (i == 0)
 		goto usage;
 
 	/* Skip the command to any arguments. */
 	for (cmd = p; i > 0; --i, ++p)
-		if (isspace(*p))
+		if (ISBLANK((UCHAR_T)*p))
 			break;
 	if (*p != '\0') {
 		*p++ = '\0';
-		for (; *p && isspace(*p); ++p);
+		for (; *p && ISBLANK((UCHAR_T)*p); ++p);
 	}
 
 	INT2CHAR(sp, cmd, STRLEN(cmd) + 1, np, nlen);
@@ -242,14 +242,14 @@ cscope_add(SCR *sp, EXCMD *cmdp, const CHAR_T *dname)
 	 * name regardless so that we can use it as a base for searches.
 	 */
 	if (stat(np, &sb)) {
-		msgq(sp, M_SYSERR, np);
+		msgq(sp, M_SYSERR, "%s", np);
 		return (1);
 	}
 	if (S_ISDIR(sb.st_mode)) {
 		(void)snprintf(path, sizeof(path),
 		    "%s/%s", np, CSCOPE_DBFILE);
 		if (stat(path, &sb)) {
-			msgq(sp, M_SYSERR, path);
+			msgq(sp, M_SYSERR, "%s", path);
 			return (1);
 		}
 		dbname = CSCOPE_DBFILE;
@@ -379,7 +379,7 @@ run_cscope(SCR *sp, CSC *csc, const char *dbname)
 	 * Cscope reads from to_cs[0] and writes to from_cs[1]; vi reads from
 	 * from_cs[0] and writes to to_cs[1].
 	 */
-	to_cs[0] = to_cs[1] = from_cs[0] = from_cs[0] = -1;
+	to_cs[0] = to_cs[1] = from_cs[0] = from_cs[1] = -1;
 	if (pipe(to_cs) < 0 || pipe(from_cs) < 0) {
 		msgq(sp, M_SYSERR, "pipe");
 		goto err;
@@ -606,8 +606,8 @@ create_cs_cmd(SCR *sp, const char *pattern, size_t *searchp)
 		goto usage;
 
 	/* Skip leading blanks, check for command character. */
-	for (; isblank(pattern[0]); ++pattern);
-	if (pattern[0] == '\0' || !isblank(pattern[1]))
+	for (; isblank((unsigned char)pattern[0]); ++pattern);
+	if (pattern[0] == '\0' || !isblank((unsigned char)pattern[1]))
 		goto usage;
 	for (*searchp = 0, p = CSCOPE_QUERIES;
 	    *p != '\0' && *p != pattern[0]; ++*searchp, ++p);
@@ -619,7 +619,7 @@ create_cs_cmd(SCR *sp, const char *pattern, size_t *searchp)
 	}
 
 	/* Skip <blank> characters to the pattern. */
-	for (p = pattern + 1; *p != '\0' && isblank(*p); ++p);
+	for (p = pattern + 1; *p != '\0' && isblank((unsigned char)*p); ++p);
 	if (*p == '\0') {
 usage:		(void)csc_help(sp, "find");
 		return (NULL);

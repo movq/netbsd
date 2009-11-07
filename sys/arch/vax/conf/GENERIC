@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.170 2009/01/24 05:06:07 mrg Exp $
+# $NetBSD: GENERIC,v 1.179.2.2 2012/07/04 20:41:45 jdc Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/vax/conf/std.vax"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.170 $"
+#ident 		"GENERIC-$Revision: 1.179.2.2 $"
 
 # Here are all different supported CPU types listed.
 #options 	VAX8800		# VAX 8500, 8530, 8550, 8700, 8800
@@ -49,7 +49,7 @@ maxusers	8
 # Kernel compiled-in symbolic debugger & system call tracer
 makeoptions	DEBUG="-g"
 options 	DDB
-#options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
+options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 options 	KTRACE
 #options 	DIAGNOSTIC
 #options 	DEBUG
@@ -82,6 +82,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
@@ -111,12 +112,13 @@ file-system 	UMAPFS
 file-system 	UNION
 file-system 	CD9660
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
-options 	QUOTA
-#options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER
 options 	NFS_BOOT_BOOTP,NFS_BOOT_DHCP	# Use bootp <> dhcp
@@ -126,6 +128,7 @@ options 	NFS_BOOT_BOOTPARAM	# Use the Sun way for netbooting.
 # WS console uses VT100 terminal emulation
 options 	WSEMUL_VT100
 options 	WSDISPLAY_DEFAULTSCREENS=8
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_QVSS8x15
 
 # System V shared memory & semaphores support.
@@ -175,7 +178,8 @@ mainbus0	at root
 cpu*		at mainbus0
 
 # All buses; from the beginning attached to mainbus.
-sbi0		at mainbus0		# SBI, master bus on 11/780, 8600.
+abus0		at mainbus0		# Master bus on VAX 86x0
+sbi0		at mainbus0		# SBI, master bus on 11/78x.
 cmi0		at mainbus0		# 11/750 internal bus.
 bi0		at mainbus0		# VAX 8200
 vsbus0		at mainbus0		# All VAXstations
@@ -231,6 +235,9 @@ mem*		at cmi? tr?		# Memory subsystems
 uba*		at cmi? tr?		# Unibus adapters
 mba*		at cmi? tr?		# Massbus adapters
 
+# ABUS (VAX 86x0)
+sbi*		at abus0		# VAX 86x0 can have up to 2 SBI's.
+
 # SBI (VAX 11/780, VAX 8600)
 mem*		at sbi? tr?		# Memory subsystems
 uba*		at sbi? tr?		# Unibus adapters
@@ -264,7 +271,8 @@ mscpbus*	at uda?
 mscpbus*	at mtc?
 mscpbus*	at kdb?
 
-ra*		at mscpbus? drive?	# MSCP disk
+ra*		at mscpbus? drive?	# MSCP disk 
+racd*		at mscpbus? drive?	# MSCP CD-ROM (RRD40)
 rx*		at mscpbus? drive?	# MSCP floppy
 mt*		at mscpbus? drive?	# MSCP tape
 
@@ -300,10 +308,10 @@ pseudo-device	pty			# pseudo-terminals
 pseudo-device	bpfilter
 #pseudo-device	carp			# Common Address Redundancy Protocol
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
-#pseudo-device	sl	
-pseudo-device	ppp	
+#pseudo-device	sl
+pseudo-device	ppp
 #pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
-pseudo-device	tun	
+pseudo-device	tun
 pseudo-device	tap			# virtual Ethernet
 #pseudo-device	gre			# generic L3 over IP tunnel
 pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
@@ -313,7 +321,7 @@ pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
-pseudo-device	vnd	
+pseudo-device	vnd
 #options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	ccd	4
 #pseudo-device	cgd	4		# cryptographic disk devices
@@ -327,8 +335,7 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss	4		# file system snapshot device
-pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	fss			# file system snapshot device
 #pseudo-device	leds			# control the leds on vaxstations.
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms

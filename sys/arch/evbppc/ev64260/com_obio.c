@@ -1,4 +1,4 @@
-/*	$NetBSD: com_obio.c,v 1.8 2008/04/28 20:23:17 martin Exp $	*/
+/*	$NetBSD: com_obio.c,v 1.11 2011/07/01 20:46:39 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_obio.c,v 1.8 2008/04/28 20:23:17 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_obio.c,v 1.11 2011/07/01 20:46:39 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: com_obio.c,v 1.8 2008/04/28 20:23:17 martin Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -79,13 +78,15 @@ __KERNEL_RCSID(0, "$NetBSD: com_obio.c,v 1.8 2008/04/28 20:23:17 martin Exp $");
 #include <sys/device.h>
 #include <sys/termios.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
 
 #include <dev/marvell/gtvar.h>
+
+#include "locators.h"
 
 struct com_obio_softc {
 	struct com_softc osc_com;	/* real "com" softc */
@@ -106,8 +107,8 @@ com_obio_match(device_t parent, cfdata_t cf, void *aux)
 	bus_space_handle_t ioh;
 	int rv = 0;
 
-	if (oa->oa_offset == OBIO_UNK_OFFSET ||
-	    oa->oa_size == OBIO_UNK_SIZE)
+	if (oa->oa_offset == OBIOCF_OFFSET_DEFAULT ||
+	    oa->oa_size == OBIOCF_SIZE_DEFAULT)
 		return (0);
 
 	if (com_is_console(oa->oa_memt, oa->oa_offset, NULL)) {
@@ -147,7 +148,6 @@ com_obio_attach(device_t parent, device_t self, void *aux)
 
 	if (oa->oa_irq >= 0) {
 		intr_establish(oa->oa_irq, IST_EDGE, IPL_SERIAL, comintr, sc);
-		aprint_normal_dev(self, "interrupting at %s\n",
-		    intr_string(oa->oa_irq));
+		aprint_normal_dev(self, "interrupting at %d\n", oa->oa_irq);
 	}
 }

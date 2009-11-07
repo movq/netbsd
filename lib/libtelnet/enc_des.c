@@ -1,4 +1,4 @@
-/*	$NetBSD: enc_des.c,v 1.13 2007/01/17 23:24:22 hubertf Exp $	*/
+/*	$NetBSD: enc_des.c,v 1.15 2012/01/09 15:25:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)enc_des.c	8.3 (Berkeley) 5/30/95"; */
 #else
-__RCSID("$NetBSD: enc_des.c,v 1.13 2007/01/17 23:24:22 hubertf Exp $");
+__RCSID("$NetBSD: enc_des.c,v 1.15 2012/01/09 15:25:33 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -85,7 +85,7 @@ struct fb {
 static struct fb fb[2];
 
 struct keyidlist {
-	char	*keyid;
+	const char	*keyid;
 	int	keyidlen;
 	char	*key;
 	int	keylen;
@@ -181,7 +181,7 @@ fb64_start(fbp, dir, server)
 	int dir;
 	int server;
 {
-	int x;
+	size_t x;
 	unsigned char *p;
 	register int state;
 
@@ -365,7 +365,7 @@ fb64_reply(data, cnt, fbp)
 		if (state == FAILED)
 			state = IN_PROGRESS;
 		state &= ~NO_RECV_IV;
-		encrypt_send_keyid(DIR_ENCRYPT, (unsigned char *)"\0", 1, 1);
+		encrypt_send_keyid(DIR_ENCRYPT, (const unsigned char *)"\0", 1, 1);
 		break;
 
 	case FB64_IV_BAD:
@@ -428,9 +428,8 @@ fb64_session(key, server, fbp)
 	}
 	des_key_sched(&fbp->krbdes_key, fbp->krbdes_sched);
 	/*
-	 * Now look to see if krbdes_start() was was waiting for
-	 * the key to show up.  If so, go ahead an call it now
-	 * that we have the key.
+	 * Now look to see if krbdes_start() was waiting for the key to
+	 * show up.  If so, go ahead an call it now that we have the key.
 	 */
 	if (fbp->need_start) {
 		fbp->need_start = 0;
@@ -480,9 +479,8 @@ fb64_keyid(dir, kp, lenp, fbp)
 }
 
 	void
-fb64_printsub(data, cnt, buf, buflen, type)
-	unsigned char *data, *buf, *type;
-	int cnt, buflen;
+fb64_printsub(const unsigned char *data, int cnt, unsigned char *buf,
+    int buflen, const unsigned char *type)
 {
 	char lbuf[32];
 	register int i;

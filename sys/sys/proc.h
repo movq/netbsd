@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.293 2009/11/04 21:23:02 rmind Exp $	*/
+/*	$NetBSD: proc.h,v 1.315 2012/02/11 23:16:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -123,7 +123,6 @@ struct pgrp {
  * One structure allocated per emulation.
  */
 struct exec_package;
-struct ps_strings;
 struct ras;
 struct kauth_cred;
 
@@ -149,11 +148,11 @@ struct emul {
 					/* Set registers before execution */
 	struct uvm_object **e_sigobject;/* shared sigcode object */
 	void		(*e_setregs)(struct lwp *, struct exec_package *,
-					  u_long);
+					  vaddr_t);
 
 					/* Per-process hooks */
 	void		(*e_proc_exec)(struct proc *, struct exec_package *);
-	void		(*e_proc_fork)(struct proc *, struct proc *, int);
+	void		(*e_proc_fork)(struct proc *, struct lwp *, int);
 	void		(*e_proc_exit)(struct proc *);
 	void		(*e_lwp_fork)(struct lwp *, struct lwp *);
 	void		(*e_lwp_exit)(struct lwp *);
@@ -195,17 +194,18 @@ struct emul {
  * which might be addressible only on a processor on which the process
  * is running.
  *
- * Field markings and the corresponding locks (not yet fully implemented,
- * more a statement of intent):
+ * Field markings and the corresponding locks:
  *
  * a:	p_auxlock
  * k:	ktrace_mutex
  * l:	proc_lock
  * t:	p_stmutex
  * p:	p_lock
- * q:	mqlist_mtx
+ * (:	updated atomically
  * ::	unlocked, stable
  */
+struct vmspace;
+
 struct proc {
 	LIST_ENTRY(proc) p_list;	/* l: List of all processes */
 
@@ -225,7 +225,7 @@ struct proc {
 	struct vmspace	*p_vmspace;	/* :: Address space */
 	struct sigacts	*p_sigacts;	/* :: Process sigactions */
 	struct aioproc	*p_aio;		/* p: Asynchronous I/O data */
-	u_int		p_mqueue_cnt;	/* q: Count of open mqueues */
+	u_int		p_mqueue_cnt;	/* (: Count of open message queues */
 	specificdata_reference
 			p_specdataref;	/*    subsystem proc-specific data */
 
@@ -281,17 +281,16 @@ struct proc {
 	void		*p_tracep;	/* k: Trace private data */
 	struct vnode 	*p_textvp;	/* :: Vnode of executable */
 
-	void	     (*p_userret)(void);/* p: return-to-user hook */
 	struct emul	*p_emul;	/* :: emulation information */
 	void		*p_emuldata;	/* :: per-proc emul data, or NULL */
 	const struct execsw *p_execsw;	/* :: exec package information */
 	struct klist	p_klist;	/* p: knotes attached to proc */
 
 	LIST_HEAD(, lwp) p_sigwaiters;	/* p: LWPs waiting for signals */
-	sigstore_t	p_sigstore;	/* p: process-wide signal state */
 	sigpend_t	p_sigpend;	/* p: pending signals */
 	struct lcproc	*p_lwpctl;	/* p, a: _lwp_ctl() information */
 	pid_t		p_ppid;		/* :: cached parent pid */
+	pid_t 		p_fpid;		/* :: forked pid */
 
 /*
  * End area that is zeroed on creation
@@ -310,11 +309,7 @@ struct proc {
 					/* p: basename of last exec file */
 	struct pgrp 	*p_pgrp;	/* l: Pointer to process group */
 
-	struct ps_strings *p_psstr;	/* :: address of process's ps_strings */
-	size_t 		p_psargv;	/* :: offset of ps_argvstr in above */
-	size_t 		p_psnargv;	/* :: offset of ps_nargvstr in above */
-	size_t 		p_psenv;	/* :: offset of ps_envstr in above */
-	size_t 		p_psnenv;	/* :: offset of ps_nenvstr in above */
+	vaddr_t		p_psstrp;	/* :: address of process's ps_strings */
 	u_int		p_pax;		/* :: PAX flags */
 
 /*
@@ -326,6 +321,7 @@ struct proc {
 	u_short		p_acflag;	/* p: Acc. flags; see struct lwp also */
 	struct mdproc	p_md;		/* p: Any machine-dependent fields */
 	vaddr_t		p_stackbase;	/* :: ASLR randomized stack base */
+	struct kdtrace_proc *p_dtrace;	/* :: DTrace-specific data. */
 };
 
 #define	p_rlimit	p_limit->pl_rlimit
@@ -373,15 +369,18 @@ struct proc {
 #define	PS_NOTIFYSTOP	0x10000000 /* Notify parent of successful STOP */
 #define	PS_NOSA 	0x40000000 /* Do not enable SA */
 #define	PS_STOPPING	0x80000000 /* Transitioning SACTIVE -> SSTOP */
+#define	PS_RUMP_LWPEXIT PS_SA      /* LWPs in rump kernel should exit for g/c */
 
 /*
  * These flags are kept in p_sflag and are protected by the proc_lock
  * and p_lock.  Access from process context only.
  */
+#define	PSL_TRACEFORK	0x00000001 /* traced process wants fork events */
 #define	PSL_TRACED	0x00000800 /* Debugged process being traced */
 #define	PSL_FSTRACE	0x00010000 /* Debugger process being traced by procfs */
 #define	PSL_CHTRACED	0x00400000 /* Child has been traced & reparented */
 #define	PSL_SYSCALL	0x04000000 /* process has PT_SYSCALL enabled */
+#define	PSL_SYSCALLEMU	0x08000000 /* cancel in-progress syscall */
 
 /*
  * Kept in p_stflag and protected by p_stmutex.
@@ -416,9 +415,6 @@ struct proclist_desc {
 };
 
 #ifdef _KERNEL
-#include <sys/mallocvar.h>
-MALLOC_DECLARE(M_EMULDATA);
-MALLOC_DECLARE(M_SUBPROC);	/* XXX - only used by sparc/sparc64 */
 
 /*
  * We use process IDs <= PID_MAX until there are > 16k processes.
@@ -440,7 +436,6 @@ MALLOC_DECLARE(M_SUBPROC);	/* XXX - only used by sparc/sparc64 */
 #define	FORK_NOWAIT	0x0020		/* Make init the parent of the child */
 #define	FORK_CLEANFILES	0x0040		/* Start with a clean descriptor set */
 #define	FORK_SYSTEM	0x0080		/* Fork a kernel thread */
-#define	FORK_SHARELIMIT	0x0100		/* Share rlimit values */
 
 extern struct proc	proc0;		/* Process slot for swapper */
 extern u_int		nprocs;		/* Current number of procs */
@@ -457,37 +452,30 @@ extern const struct proclist_desc proclists[];
 
 extern struct pool	ptimer_pool;	/* Memory pool for ptimers */
 
-struct proc *p_find(pid_t, uint);	/* Find process by id */
-struct pgrp *pg_find(pid_t, uint);	/* Find process group by id */
-/* Flags values for p_find() and pg_find(). */
-#define PFIND_ZOMBIE		1	/* look for zombies as well */
-#define PFIND_LOCKED		2	/* proclist locked on entry */
-#define PFIND_UNLOCK_FAIL	4	/* unlock proclist on failure */
-#define PFIND_UNLOCK_OK		8	/* unlock proclist on success */
-#define PFIND_UNLOCK		(PFIND_UNLOCK_OK | PFIND_UNLOCK_FAIL)
-/* For source compatibility. but UNLOCK_OK gives a stale answer... */
-#define pfind(pid) p_find((pid), PFIND_UNLOCK)
-#define pgfind(pgid) pg_find((pgid), PFIND_UNLOCK)
-
 struct simplelock;
 
+proc_t *	proc_find_raw(pid_t);
+proc_t *	proc_find(pid_t);		/* Find process by ID */
+struct pgrp *	pgrp_find(pid_t);		/* Find process group by ID */
+
 void	procinit(void);
+void	procinit_sysctl(void);
 int	proc_enterpgrp(struct proc *, pid_t, pid_t, bool);
 void	proc_leavepgrp(struct proc *);
 void	proc_sesshold(struct session *);
 void	proc_sessrele(struct session *);
 void	fixjobc(struct proc *, struct pgrp *, int);
 
-int	ltsleep(wchan_t, pri_t, const char *, int, volatile struct simplelock *);
+int	tsleep(wchan_t, pri_t, const char *, int);
 int	mtsleep(wchan_t, pri_t, const char *, int, kmutex_t *);
 void	wakeup(wchan_t);
-void	wakeup_one(wchan_t);
 int	kpause(const char *, bool, int, kmutex_t *);
 void	exit1(struct lwp *, int) __dead;
 int	do_sys_wait(int *, int *, int, struct rusage *);
 struct proc *proc_alloc(void);
 void	proc0_init(void);
-void	proc_free_pid(struct proc *);
+pid_t	proc_alloc_pid(struct proc *);
+void	proc_free_pid(pid_t);
 void	proc_free_mem(struct proc *);
 void	exit_lwps(struct lwp *l);
 int	fork1(struct lwp *, int, int, void *, size_t,
@@ -497,6 +485,7 @@ void	cpu_lwp_fork(struct lwp *, struct lwp *, void *, size_t,
 	    void (*)(void *), void *);
 void	cpu_lwp_free(struct lwp *, int);
 void	cpu_lwp_free2(struct lwp *);
+void	cpu_spawn_return(struct lwp*);
 
 #ifdef __HAVE_SYSCALL_INTERN
 void	syscall_intern(struct proc *);
@@ -518,6 +507,8 @@ void	proc_initspecific(struct proc *);
 void	proc_finispecific(struct proc *);
 void *	proc_getspecific(struct proc *, specificdata_key_t);
 void	proc_setspecific(struct proc *, specificdata_key_t, void *);
+int	proc_compare(const struct proc *, const struct lwp *,
+    const struct proc *, const struct lwp *);
 
 int	proclist_foreach_call(struct proclist *,
     int (*)(struct proc *, void *arg), void *);
@@ -532,14 +523,14 @@ _proclist_skipmarker(struct proc *p0)
 
 	return p;
 }
+
+/*
+ * PROCLIST_FOREACH: iterate on the given proclist, skipping PK_MARKER ones.
+ */
 #define	PROCLIST_FOREACH(var, head)					\
 	for ((var) = LIST_FIRST(head);					\
 		((var) = _proclist_skipmarker(var)) != NULL;		\
 		(var) = LIST_NEXT(var, p_list))
-
-/* Compatibility with old, non-interlocked tsleep call */
-#define	tsleep(chan, pri, wmesg, timo)					\
-	ltsleep(chan, pri, wmesg, timo, NULL)
 
 #ifdef KSTACK_CHECK_MAGIC
 void	kstack_setup_magic(const struct lwp *);
@@ -549,29 +540,29 @@ void	kstack_check_magic(const struct lwp *);
 #define	kstack_check_magic(x)
 #endif
 
+extern struct emul emul_netbsd;
+
+#endif	/* _KERNEL */
+
+#if defined(_KMEMUSER) || defined(_KERNEL)
+
 /*
- * kernel stack paramaters
- * XXX require sizeof(struct user)
- */
-/*
- * KSTACK_LOWEST_ADDR: return the lowest address of the lwp's kernel stack,
- * excluding redzone etc.
+ * Kernel stack parameters.
+ *
+ * KSTACK_LOWEST_ADDR: return the lowest address of the LWP's kernel stack,
+ * excluding red-zone.
+ *
+ * KSTACK_SIZE: the size kernel stack for a LWP, excluding red-zone.
  *
  * if <machine/proc.h> provides the MD definition, it will be used.
  */
 #ifndef KSTACK_LOWEST_ADDR
-#define	KSTACK_LOWEST_ADDR(l)	((void *)ALIGN((l)->l_addr + 1))
+#define	KSTACK_LOWEST_ADDR(l)	((void *)ALIGN((struct pcb *)((l)->l_addr) + 1))
 #endif
-/*
- * KSTACK_SIZE: the size kernel stack for a lwp, excluding redzone etc.
- *
- * if <machine/proc.h> provides the MD definition, it will be used.
- */
 #ifndef KSTACK_SIZE
-#define	KSTACK_SIZE	(USPACE - ALIGN(sizeof(struct user)))
+#define	KSTACK_SIZE		(USPACE - ALIGN(sizeof(struct pcb)))
 #endif
 
-extern struct emul emul_netbsd;
+#endif	/* _KMEMUSER || _KERNEL */
 
-#endif	/* _KERNEL */
 #endif	/* !_SYS_PROC_H_ */

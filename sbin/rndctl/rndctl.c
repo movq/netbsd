@@ -1,4 +1,4 @@
-/*	$NetBSD: rndctl.c,v 1.19 2009/04/05 12:06:33 lukem Exp $	*/
+/*	$NetBSD: rndctl.c,v 1.24 2012/02/02 19:42:57 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997 Michael Graff.
@@ -29,14 +29,17 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
+#include <sys/types.h>
+#include <sha1.h>
 
 #ifndef lint
-__RCSID("$NetBSD: rndctl.c,v 1.19 2009/04/05 12:06:33 lukem Exp $");
+__RCSID("$NetBSD: rndctl.c,v 1.24 2012/02/02 19:42:57 tls Exp $");
 #endif
 
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/param.h>
 #include <sys/rnd.h>
 
 #include <stdio.h>
@@ -52,23 +55,27 @@ typedef struct {
 	u_int32_t a_type;
 } arg_t;
 
-arg_t source_types[] = {
+static const arg_t source_types[] = {
 	{ "???",     RND_TYPE_UNKNOWN },
 	{ "disk",    RND_TYPE_DISK },
 	{ "net",     RND_TYPE_NET },
 	{ "tape",    RND_TYPE_TAPE },
 	{ "tty",     RND_TYPE_TTY },
 	{ "rng",     RND_TYPE_RNG },
+	{ "skew",    RND_TYPE_SKEW },
+	{ "env",     RND_TYPE_ENV },
+	{ "vm",      RND_TYPE_VM },
+	{ "power",   RND_TYPE_POWER },
 	{ NULL,      0 }
 };
 
-static void usage(void);
-u_int32_t find_type(char *name);
-const char *find_name(u_int32_t);
-void do_ioctl(rndctl_t *);
-char * strflags(u_int32_t);
-void do_list(int, u_int32_t, char *);
-void do_stats(void);
+__dead static void usage(void);
+static u_int32_t find_type(const char *name);
+static const char *find_name(u_int32_t);
+static void do_ioctl(rndctl_t *);
+static char * strflags(u_int32_t);
+static void do_list(int, u_int32_t, char *);
+static void do_stats(void);
 
 static void
 usage(void)
@@ -78,13 +85,14 @@ usage(void)
 	    getprogname());
 	fprintf(stderr, "       %s -ls [-d devname | -t devtype]\n",
 	    getprogname());
+	fprintf(stderr, "	%s -[L|S] save-file\n", getprogname());
 	exit(1);
 }
 
-u_int32_t
-find_type(char *name)
+static u_int32_t
+find_type(const char *name)
 {
-	arg_t *a;
+	const arg_t *a;
 
 	a = source_types;
 
@@ -98,10 +106,10 @@ find_type(char *name)
 	return (0);
 }
 
-const char *
+static const char *
 find_name(u_int32_t type)
 {
-	arg_t *a;
+	const arg_t *a;
 
 	a = source_types;
 
@@ -115,7 +123,116 @@ find_name(u_int32_t type)
 	return ("???");
 }
 
-void
+static void
+do_save(const char *const filename)
+{
+	int est1, est2;
+	rndpoolstat_t rp;
+	rndsave_t rs;
+	SHA1_CTX s;
+
+	int fd;
+
+	fd = open("/dev/urandom", O_RDONLY, 0644);
+	if (fd < 0) {
+		err(1, "device open");
+	}
+	
+	if (ioctl(fd, RNDGETPOOLSTAT, &rp) < 0) {
+		err(1, "ioctl(RNDGETPOOLSTAT)");
+	}
+
+	est1 = rp.curentropy;
+
+	if (read(fd, rs.data, sizeof(rs.data)) != sizeof(rs.data)) {
+		err(1, "entropy read");
+	}
+
+	if (ioctl(fd, RNDGETPOOLSTAT, &rp) < 0) {
+		err(1, "ioctl(RNDGETPOOLSTAT)");
+	}
+
+	est2 = rp.curentropy;
+
+	if (est1 - est2 < 0) {
+		rs.entropy = 0;
+	} else {
+		rs.entropy = est1 - est2;
+	}
+
+	SHA1Init(&s);
+	SHA1Update(&s, (uint8_t *)&rs.entropy, sizeof(rs.entropy));
+	SHA1Update(&s, rs.data, sizeof(rs.data));
+	SHA1Final(rs.digest, &s);
+
+	close(fd);
+	unlink(filename);
+	fd = open(filename, O_CREAT|O_EXCL|O_WRONLY, 0600);
+	if (fd < 0) {
+		err(1, "output open");
+	}
+	
+	if (write(fd, &rs, sizeof(rs)) != sizeof(rs)) {
+		unlink(filename);
+		fsync_range(fd, FDATASYNC|FDISKSYNC, (off_t)0, (off_t)0);
+		err(1, "write");
+	}
+	fsync_range(fd, FDATASYNC|FDISKSYNC, (off_t)0, (off_t)0);
+	close(fd);
+}
+
+static void
+do_load(const char *const filename)
+{
+	int fd;
+	rndsave_t rs, rszero;
+	rnddata_t rd;
+	SHA1_CTX s;
+	uint8_t digest[SHA1_DIGEST_LENGTH];
+
+	fd = open(filename, O_RDWR, 0600);
+	if (fd < 0) {
+		err(1, "input open");
+	}
+
+	unlink(filename);
+
+	if (read(fd, &rs, sizeof(rs)) != sizeof(rs)) {
+		err(1, "read");
+	}
+
+	memset(&rszero, 0, sizeof(rszero));
+	if (write(fd, &rszero, sizeof(rszero) != sizeof(rszero))) {
+		err(1, "overwrite");
+	}
+	fsync_range(fd, FDATASYNC|FDISKSYNC, (off_t)0, (off_t)0);
+	close(fd);
+
+	SHA1Init(&s);
+	SHA1Update(&s, (uint8_t *)&rs.entropy, sizeof(rs.entropy));
+	SHA1Update(&s, rs.data, sizeof(rs.data));
+	SHA1Final(digest, &s);
+
+	if (memcmp(digest, rs.digest, sizeof(digest))) {
+		errx(1, "bad digest");
+	}
+
+	rd.len = MIN(sizeof(rd.data), sizeof(rs.data));
+	rd.entropy = rs.entropy;
+	memcpy(rd.data, rs.data, MIN(sizeof(rd.data), sizeof(rs.data)));
+
+	fd = open("/dev/urandom", O_RDWR, 0644);
+	if (fd < 0) {
+		err(1, "device open");
+	}
+
+	if (ioctl(fd, RNDADDDATA, &rd) < 0) {
+		err(1, "ioctl");
+	}
+	close(fd);
+}
+
+static void
 do_ioctl(rndctl_t *rctl)
 {
 	int fd;
@@ -132,7 +249,7 @@ do_ioctl(rndctl_t *rctl)
 	close(fd);
 }
 
-char *
+static char *
 strflags(u_int32_t fl)
 {
 	static char str[512];
@@ -156,7 +273,7 @@ strflags(u_int32_t fl)
 
 #define HEADER "Source                 Bits Type      Flags\n"
 
-void
+static void
 do_list(int all, u_int32_t type, char *name)
 {
 	rndstat_t rstat;
@@ -216,8 +333,8 @@ do_list(int all, u_int32_t type, char *name)
 	close(fd);
 }
 
-void
-do_stats()
+static void
+do_stats(void)
 {
 	rndpoolstat_t rs;
 	int fd;
@@ -247,6 +364,7 @@ main(int argc, char **argv)
 	int ch, cmd, lflag, mflag, sflag;
 	u_int32_t type;
 	char name[16];
+	const char *filename = NULL;
 
 	rctl.mask = 0;
 	rctl.flags = 0;
@@ -257,7 +375,7 @@ main(int argc, char **argv)
 	sflag = 0;
 	type = 0xff;
 
-	while ((ch = getopt(argc, argv, "CEcelt:d:s")) != -1) {
+	while ((ch = getopt(argc, argv, "CES:L:celt:d:s")) != -1) {
 		switch (ch) {
 		case 'C':
 			rctl.flags |= RND_FLAG_NO_COLLECT;
@@ -268,6 +386,18 @@ main(int argc, char **argv)
 			rctl.flags |= RND_FLAG_NO_ESTIMATE;
 			rctl.mask |= RND_FLAG_NO_ESTIMATE;
 			mflag++;
+			break;
+		case 'L':
+			if (cmd != 0)
+				usage();
+			cmd = 'L';
+			filename = optarg;
+			break;
+		case 'S':
+			if (cmd != 0)
+				usage();
+			cmd = 'S';
+			filename = optarg;
 			break;
 		case 'c':
 			rctl.flags &= ~RND_FLAG_NO_COLLECT;
@@ -313,6 +443,22 @@ main(int argc, char **argv)
 	 */
 	if (argc > 0)
 		usage();
+
+	/*
+	 * Save.
+	 */
+	if (cmd == 'S') {
+		do_save(filename);
+		exit(0);
+	}
+
+	/*
+	 * Load.
+	 */
+	if (cmd == 'L') {
+		do_load(filename);
+		exit(0);
+	}
 
 	/*
 	 * Cannot list and modify at the same time.

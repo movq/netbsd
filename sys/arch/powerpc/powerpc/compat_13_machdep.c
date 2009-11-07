@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.15 2008/11/21 20:17:51 he Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.21 2011/12/13 11:03:52 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.15 2008/11/21 20:17:51 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.21 2011/12/13 11:03:52 kiyohara Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ppcarch.h"
@@ -43,22 +43,26 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.15 2008/11/21 20:17:51 he Ex
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/mount.h>  
+#include <sys/mount.h>
 #include <sys/syscallargs.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
 
+#include <powerpc/psl.h>
+
 int
-compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
+compat_13_sys_sigreturn(struct lwp *l,
+    const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
 	} */
-	struct proc *p = l->l_proc;
+	struct proc * const p = l->l_proc;
+	struct trapframe * const tf = l->l_md.md_utf;
 	struct sigcontext13 sc;
-	struct trapframe *tf;
 	int error;
 	sigset_t mask;
 
@@ -70,22 +74,20 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	if ((error = copyin(SCARG(uap, sigcntxp), &sc, sizeof sc)) != 0)
 		return (error);
 
-	/* Restore the register context. */
-	tf = trapframe(l);
 	if (!PSL_USEROK_P(sc.sc_frame.srr1))
 		return (EINVAL);
 
 	/* Restore register context. */
-	memcpy(tf->fixreg, sc.sc_frame.fixreg, sizeof(tf->fixreg));
-	tf->lr   = sc.sc_frame.lr;
-	tf->cr   = sc.sc_frame.cr;
-	tf->xer  = sc.sc_frame.xer;
-	tf->ctr  = sc.sc_frame.ctr;
-	tf->srr0 = sc.sc_frame.srr0;
-	tf->srr1 = sc.sc_frame.srr1;
+	memcpy(tf->tf_fixreg, sc.sc_frame.fixreg, sizeof(tf->tf_fixreg));
+	tf->tf_lr   = sc.sc_frame.lr;
+	tf->tf_cr   = sc.sc_frame.cr;
+	tf->tf_xer  = sc.sc_frame.xer;
+	tf->tf_ctr  = sc.sc_frame.ctr;
+	tf->tf_srr0 = sc.sc_frame.srr0;
+	tf->tf_srr1 = sc.sc_frame.srr1;
 #ifdef PPC_OEA
-	tf->tf_xtra[TF_VRSAVE] = sc.sc_frame.vrsave;
-	tf->tf_xtra[TF_MQ] = sc.sc_frame.mq;
+	tf->tf_vrsave = sc.sc_frame.vrsave;
+	tf->tf_mq = sc.sc_frame.mq;
 #endif
 
 	mutex_enter(p->p_lock);

@@ -1,4 +1,4 @@
-/*	$NetBSD: adlookup.c,v 1.12 2009/03/14 21:04:23 dsl Exp $	*/
+/*	$NetBSD: adlookup.c,v 1.15.14.1 2012/08/12 12:59:49 martin Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.12 2009/03/14 21:04:23 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.15.14.1 2012/08/12 12:59:49 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -142,7 +142,7 @@ adosfs_lookup(void *v)
 		 * and fail. Otherwise we have succeded.
 		 *
 		 */
-		VOP_UNLOCK(vdp, 0); /* race */
+		VOP_UNLOCK(vdp); /* race */
 		error = VFS_VGET(vdp->v_mount, (ino_t)adp->pblock, vpp);
 		vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -205,13 +205,12 @@ adosfs_lookup(void *v)
 #endif
 			return (error);
 		}
-		cnp->cn_nameiop |= SAVENAME;
 #ifdef ADOSFS_DIAGNOSTIC
 		printf("EJUSTRETURN)");
 #endif
 		return(EJUSTRETURN);
 	}
-	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
+	if (nameiop != CREATE)
 		cache_enter(vdp, NULL, cnp);
 #ifdef ADOSFS_DIAGNOSTIC
 	printf("ENOENT)");
@@ -236,13 +235,12 @@ found:
 			*vpp = NULL;
 			return (error);
 		}
-		cnp->cn_flags |= SAVENAME;
 		nocache = 1;
 	}
 	if (vdp == *vpp)
-		VREF(vdp);
+		vref(vdp);
 found_lockdone:
-	if ((cnp->cn_flags & MAKEENTRY) && nocache == 0)
+	if (nocache == 0)
 		cache_enter(vdp, *vpp, cnp);
 
 #ifdef ADOSFS_DIAGNOSTIC

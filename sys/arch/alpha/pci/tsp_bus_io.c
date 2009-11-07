@@ -1,4 +1,4 @@
-/* $NetBSD: tsp_bus_io.c,v 1.6 2009/10/30 18:55:45 mhitch Exp $ */
+/* $NetBSD: tsp_bus_io.c,v 1.8 2011/07/01 19:19:50 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: tsp_bus_io.c,v 1.6 2009/10/30 18:55:45 mhitch Exp $");
+__KERNEL_RCSID(1, "$NetBSD: tsp_bus_io.c,v 1.8 2011/07/01 19:19:50 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,9 +41,7 @@ __KERNEL_RCSID(1, "$NetBSD: tsp_bus_io.c,v 1.6 2009/10/30 18:55:45 mhitch Exp $"
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.31 2009/10/21 21:12:02 rmind Exp $ */
+/*	$NetBSD: db_trace.c,v 1.34 2011/04/14 08:59:09 mrg Exp $ */
 
 /*
  * Mach Operating System
@@ -27,11 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.31 2009/10/21 21:12:02 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.34 2011/04/14 08:59:09 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
 #include <machine/db_machdep.h>
 
 #include <ddb/db_access.h>
@@ -78,7 +78,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 	} else {
 		if (trace_thread) {
 			struct proc *p;
-			struct user *u;
+			struct pcb *pcb;
 			struct lwp *l;
 			if (lwpaddr) {
 				l = (struct lwp *)addr;
@@ -86,7 +86,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
+				p = proc_find_raw(addr);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
@@ -95,9 +95,9 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
-			u = l->l_addr;
-			frame = (struct frame *)u->u_pcb.pcb_sp;
-			pc = u->u_pcb.pcb_pc;
+			pcb = lwp_getpcb(l);
+			frame = (struct frame *)pcb->pcb_sp;
+			pc = pcb->pcb_pc;
 			(*pr)("at %p\n", frame);
 		} else {
 			frame = (struct frame *)addr;

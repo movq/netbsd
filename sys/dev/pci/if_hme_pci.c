@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hme_pci.c,v 1.30 2009/05/17 01:33:25 tsutsui Exp $	*/
+/*	$NetBSD: if_hme_pci.c,v 1.36 2011/05/10 18:31:33 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000 Matthew R. Green
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hme_pci.c,v 1.30 2009/05/17 01:33:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hme_pci.c,v 1.36 2011/05/10 18:31:33 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,17 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_hme_pci.c,v 1.30 2009/05/17 01:33:25 tsutsui Exp 
 #include <dev/pci/pcidevs.h>
 
 #include <dev/ic/hmevar.h>
-#ifdef __sparc__
-#include <machine/promlib.h>
-#endif
 
-#ifndef HME_USE_LOCAL_MAC_ADDRESS
-#ifdef __sparc__
-#define HME_USE_LOCAL_MAC_ADDRESS	0	/* use system-wide address */
-#else
-#define HME_USE_LOCAL_MAC_ADDRESS	1
-#endif
-#endif
+#define PCI_HME_BASEADDR	PCI_BAR(0)
 
 struct hme_pci_softc {
 	struct	hme_softc	hsc_hme;	/* HME device */
@@ -92,7 +83,6 @@ hmematch_pci(device_t parent, cfdata_t cf, void *aux)
 	return (0);
 }
 
-#if HME_USE_LOCAL_MAC_ADDRESS
 static inline int
 hmepromvalid(uint8_t* buf)
 {
@@ -118,7 +108,6 @@ hmevpdoff(bus_space_tag_t romt, bus_space_handle_t romh, int vpdoff, int dev)
 	}
 	return vpdoff;
 }
-#endif
 
 void
 hmeattach_pci(device_t parent, device_t self, void *aux)
@@ -130,8 +119,8 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 	pcireg_t csr;
 	const char *intrstr;
 	int type;
-#if HME_USE_LOCAL_MAC_ADDRESS
 	struct pci_attach_args	ebus_pa;
+	prop_data_t		eaddrprop;
 	pcireg_t		ebus_cl, ebus_id;
 	uint8_t			*enaddr;
 	bus_space_tag_t		romt;
@@ -150,30 +139,29 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 	};
 #define PROMDATA_PTR_VPD	0x08
 #define PROMDATA_DATA2		0x0a
-#endif	/* HME_USE_LOCAL_MAC_ADDRESS */
 
 	sc->sc_dev = self;
 
 	aprint_normal(": Sun Happy Meal Ethernet, rev. %d\n",
 	    PCI_REVISION(pa->pa_class));
+	aprint_naive(": Ethernet controller\n");
+
+	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
+	type = pci_mapreg_type(pa->pa_pc, pa->pa_tag, PCI_HME_BASEADDR);
 
 	/*
 	 * enable io/memory-space accesses.  this is kinda of gross; but
-	 # the hme comes up with neither IO space enabled, or memory space.
+	 * the hme comes up with neither IO space enabled, or memory space.
 	 */
-	if (pa->pa_memt)
-		pa->pa_flags |= PCI_FLAGS_MEM_ENABLED;
-	if (pa->pa_iot)
-		pa->pa_flags |= PCI_FLAGS_IO_ENABLED;
-	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
-	if (pa->pa_memt) {
-		type = PCI_MAPREG_TYPE_MEM;
+	switch (type) {
+	case PCI_MAPREG_TYPE_MEM:
 		csr |= PCI_COMMAND_MEM_ENABLE;
 		sc->sc_bustag = pa->pa_memt;
-	} else {
-		type = PCI_MAPREG_TYPE_IO;
+		break;
+	case PCI_MAPREG_TYPE_IO:
 		csr |= PCI_COMMAND_IO_ENABLE;
 		sc->sc_bustag = pa->pa_iot;
+		break;
 	}
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
 	    csr | PCI_COMMAND_MEM_ENABLE);
@@ -192,7 +180,6 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 	 *
 	 */
 
-#define PCI_HME_BASEADDR	0x10
 	if (pci_mapreg_map(pa, PCI_HME_BASEADDR, type, 0,
 	    &hsc->hsc_memt, &hsc->hsc_memh, NULL, NULL) != 0) {
 		aprint_error_dev(self, "unable to map device registers\n");
@@ -220,7 +207,18 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-#if HME_USE_LOCAL_MAC_ADDRESS
+
+	/*
+	 * Check if we got a mac-address property passed
+	 */
+	eaddrprop = prop_dictionary_get(device_properties(self), "mac-address");
+
+	if (eaddrprop != NULL && prop_data_size(eaddrprop) == ETHER_ADDR_LEN) {
+		memcpy(&sc->sc_enaddr, prop_data_data_nocopy(eaddrprop),
+			    ETHER_ADDR_LEN);
+		goto got_eaddr;
+	}
+
 	/*
 	 * Dig out VPD (vital product data) and acquire Ethernet address.
 	 * The VPD of hme resides in the Boot PROM (PCI FCode) attached
@@ -291,15 +289,13 @@ hmeattach_pci(device_t parent, device_t self, void *aux)
 		bus_space_unmap(romt, romh, romsize);
 	}
 
-	if (enaddr)
+	if (enaddr) {
 		memcpy(sc->sc_enaddr, enaddr, ETHER_ADDR_LEN);
-	else
-#endif	/* HME_USE_LOCAL_MAC_ADDRESS */
-#ifdef __sparc__
-		prom_getether(PCITAG_NODE(pa->pa_tag), sc->sc_enaddr);
-#else
-		printf("%s: no Ethernet address found\n", device_xname(self));
-#endif
+		goto got_eaddr;
+	}
+
+	aprint_error_dev(self, "no Ethernet address found\n");
+got_eaddr:
 
 	/*
 	 * Map and establish our interrupt.

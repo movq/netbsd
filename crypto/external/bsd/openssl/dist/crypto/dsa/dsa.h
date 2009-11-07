@@ -97,6 +97,21 @@
                                               * be used for all exponents.
                                               */
 
+/* If this flag is set the DSA method is FIPS compliant and can be used
+ * in FIPS mode. This is set in the validated module method. If an
+ * application sets this flag in its own methods it is its reposibility
+ * to ensure the result is compliant.
+ */
+
+#define DSA_FLAG_FIPS_METHOD			0x0400
+
+/* If this flag is set the operations normally disabled in FIPS mode are
+ * permitted it is then the applications responsibility to ensure that the
+ * usage is compliant.
+ */
+
+#define DSA_FLAG_NON_FIPS_ALLOW			0x0400
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -165,7 +180,6 @@ struct dsa_st
 	ENGINE *engine;
 	};
 
-#define DSAparams_dup(x) ASN1_dup_of_const(DSA,i2d_DSAparams,d2i_DSAparams,x)
 #define d2i_DSAparams_fp(fp,x) (DSA *)ASN1_d2i_fp((char *(*)())DSA_new, \
 		(char *(*)())d2i_DSAparams,(fp),(unsigned char **)(x))
 #define i2d_DSAparams_fp(fp,x) ASN1_i2d_fp(i2d_DSAparams,(fp), \
@@ -174,6 +188,7 @@ struct dsa_st
 #define i2d_DSAparams_bio(bp,x) ASN1_i2d_bio_of_const(DSA,i2d_DSAparams,bp,x)
 
 
+DSA *DSAparams_dup(DSA *x);
 DSA_SIG * DSA_SIG_new(void);
 void	DSA_SIG_free(DSA_SIG *a);
 int	i2d_DSA_SIG(const DSA_SIG *a, unsigned char **pp);
@@ -272,6 +287,8 @@ void ERR_load_DSA_strings(void);
 #define DSA_F_DSAPARAMS_PRINT_FP			 101
 #define DSA_F_DSA_DO_SIGN				 112
 #define DSA_F_DSA_DO_VERIFY				 113
+#define DSA_F_DSA_GENERATE_KEY				 124
+#define DSA_F_DSA_GENERATE_PARAMETERS_EX		 123
 #define DSA_F_DSA_NEW_METHOD				 103
 #define DSA_F_DSA_PARAM_DECODE				 119
 #define DSA_F_DSA_PRINT_FP				 105
@@ -282,6 +299,7 @@ void ERR_load_DSA_strings(void);
 #define DSA_F_DSA_SIGN					 106
 #define DSA_F_DSA_SIGN_SETUP				 107
 #define DSA_F_DSA_SIG_NEW				 109
+#define DSA_F_DSA_SIG_PRINT				 125
 #define DSA_F_DSA_VERIFY				 108
 #define DSA_F_I2D_DSA_SIG				 111
 #define DSA_F_OLD_DSA_PRIV_DECODE			 122
@@ -298,6 +316,8 @@ void ERR_load_DSA_strings(void);
 #define DSA_R_INVALID_DIGEST_TYPE			 106
 #define DSA_R_MISSING_PARAMETERS			 101
 #define DSA_R_MODULUS_TOO_LARGE				 103
+#define DSA_R_NEED_NEW_SETUP_VALUES			 110
+#define DSA_R_NON_FIPS_DSA_METHOD			 111
 #define DSA_R_NO_PARAMETERS_SET				 107
 #define DSA_R_PARAMETER_ENCODING_ERROR			 105
 

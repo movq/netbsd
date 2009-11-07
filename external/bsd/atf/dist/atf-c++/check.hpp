@@ -1,7 +1,7 @@
 //
 // Automated Testing Framework (atf)
 //
-// Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
+// Copyright (c) 2007 The NetBSD Foundation, Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,15 +30,23 @@
 #if !defined(_ATF_CXX_CHECK_HPP_)
 #define _ATF_CXX_CHECK_HPP_
 
-#include <string>
-
 extern "C" {
-#include "atf-c/check.h"
+#include <atf-c/check.h>
 }
 
-#include "atf-c++/fs.hpp"
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include <atf-c++/utils.hpp>
 
 namespace atf {
+
+namespace process {
+class argv_array;
+} // namespace process
+
 namespace check {
 
 // ------------------------------------------------------------------------
@@ -52,7 +60,7 @@ namespace check {
 //! of executing arbitrary command and manages files containing
 //! its output.
 //!
-class check_result {
+class check_result : utils::noncopyable {
     //!
     //! \brief Internal representation of a result.
     //!
@@ -64,8 +72,8 @@ class check_result {
     //!
     check_result(const atf_check_result_t* result);
 
-    friend check_result test_constructor(void);
-    friend check_result exec(char* const*);
+    friend check_result test_constructor(const char* const*);
+    friend std::auto_ptr< check_result > exec(const atf::process::argv_array&);
 
 public:
     //!
@@ -84,21 +92,37 @@ public:
     int exitcode(void) const;
 
     //!
+    //! \brief Returns whether the command received a signal or not.
+    //!
+    bool signaled(void) const;
+
+    //!
+    //! \brief Returns the signal that terminated the command.
+    //!
+    int termsig(void) const;
+
+    //!
     //! \brief Returns the path to file contaning command's stdout.
     //!
-    const atf::fs::path stdout_path(void) const;
+    const std::string stdout_path(void) const;
 
     //!
     //! \brief Returns the path to file contaning command's stderr.
     //!
-    const atf::fs::path stderr_path(void) const;
+    const std::string stderr_path(void) const;
 };
 
 // ------------------------------------------------------------------------
 // Free functions.
 // ------------------------------------------------------------------------
 
-check_result exec(char* const*);
+bool build_c_o(const std::string&, const std::string&,
+               const atf::process::argv_array&);
+bool build_cpp(const std::string&, const std::string&,
+               const atf::process::argv_array&);
+bool build_cxx_o(const std::string&, const std::string&,
+                 const atf::process::argv_array&);
+std::auto_ptr< check_result > exec(const atf::process::argv_array&);
 
 // Useful for testing only.
 check_result test_constructor(void);

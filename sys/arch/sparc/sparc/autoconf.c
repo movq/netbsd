@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.235 2009/11/07 07:27:46 cegger Exp $ */
+/*	$NetBSD: autoconf.c,v 1.242.8.2 2012/08/08 15:51:11 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.235 2009/11/07 07:27:46 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.242.8.2 2012/08/08 15:51:11 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -73,17 +73,19 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.235 2009/11/07 07:27:46 cegger Exp $"
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/msgbuf.h>
-#include <sys/user.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
+#include <sys/userconf.h>
 
 #include <net/if.h>
+#include <net/if_ether.h>
 
 #include <dev/cons.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <machine/pcb.h>
+#include <sys/bus.h>
 #include <machine/promlib.h>
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
@@ -130,8 +132,8 @@ static	void crazymap(const char *, int *);
 int	st_crazymap(int);
 int	sd_crazymap(int);
 void	sync_crash(void);
-int	mainbus_match(struct device *, struct cfdata *, void *);
-static	void mainbus_attach(struct device *, struct device *, void *);
+int	mainbus_match(device_t, cfdata_t, void *);
+static	void mainbus_attach(device_t, device_t, void *);
 
 struct	bootpath bootpath[8];
 int	nbootpath;
@@ -263,20 +265,19 @@ static void bootstrapIIep(void);
 void
 bootstrap(void)
 {
-	extern struct user *proc0paddr;
+	extern uint8_t u0[];
 #if NKSYMS || defined(DDB) || defined(MODULAR)
 	struct btinfo_symtab *bi_sym;
 #else
 	extern int end[];
 #endif
+	struct btinfo_boothowto *bi_howto;
 
 	prom_init();
 
 	/* Find the number of CPUs as early as possible */
 	sparc_ncpus = find_cpus();
-
-	/* Attach user structure to proc0 */
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, (vaddr_t)u0);
 
 	cpuinfo.master = 1;
 	getcpuinfo(&cpuinfo, 0);
@@ -353,6 +354,11 @@ bootstrap(void)
 		    (void*)bi_sym->esym);
 	}
 #endif
+
+	if ((bi_howto = lookup_bootinfo(BTINFO_BOOTHOWTO)) != NULL) {
+		boothowto = bi_howto->boothowto;
+printf("initialized boothowt from bootloader: %x\n", boothowto);
+	}
 }
 
 #if defined(SUN4M) && !defined(MSIIEP)
@@ -915,12 +921,22 @@ st_crazymap(int n)
 void
 cpu_configure(void)
 {
+	struct pcb *pcb0;
+	bool userconf = (boothowto & RB_USERCONF) != 0;
 
 	/* initialise the softintr system */
 	sparc_softintr_init();
 
 	/* build the bootpath */
 	bootpath_build();
+	if (((boothowto & RB_USERCONF) != 0) && !userconf)
+		/*
+		 * Old bootloaders do not pass boothowto, and MI code
+		 * has already handled userconfig before we get here
+		 * and finally fetch the right options. So if we missed
+		 * it, just do it here.
+ 		 */
+		userconf_prompt();
 
 #if defined(SUN4)
 	if (CPU_ISSUN4) {
@@ -970,14 +986,12 @@ cpu_configure(void)
 		panic("mainbus not configured");
 
 	/*
-	 * XXX Re-zero proc0's user area, to nullify the effect of the
+	 * XXX Re-zero lwp0's pcb, to nullify the effect of the
 	 * XXX stack running into it during auto-configuration.
 	 * XXX - should fix stack usage.
 	 */
-	{
-		extern struct user *proc0paddr;
-		memset(proc0paddr, 0, sizeof(struct user));
-	}
+	pcb0 = lwp_getpcb(&lwp0);
+	memset(pcb0, 0, sizeof(struct pcb));
 
 	spl0();
 }
@@ -986,17 +1000,15 @@ void
 cpu_rootconf(void)
 {
 	struct bootpath *bp;
-	int bootpartition;
 
 	bp = nbootpath == 0 ? NULL : &bootpath[nbootpath-1];
 	if (bp == NULL)
-		bootpartition = 0;
+		booted_partition = 0;
 	else if (booted_device != bp->dev)
-		bootpartition = 0;
+		booted_partition = 0;
 	else
-		bootpartition = bp->val[2];
-
-	setroot(booted_device, bootpartition);
+		booted_partition = bp->val[2];
+	rootconf();
 }
 
 /*
@@ -1046,7 +1058,7 @@ mbprint(void *aux, const char *name)
 }
 
 int
-mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
@@ -1071,7 +1083,7 @@ static int	prom_getprop_address1(int, void **);
  * We also record the `node id' of the default frame buffer, if any.
  */
 static void
-mainbus_attach(struct device *parent, struct device *dev, void *aux)
+mainbus_attach(device_t parent, device_t dev, void *aux)
 {
 extern struct sparc_bus_dma_tag mainbus_dma_tag;
 extern struct sparc_bus_space_tag mainbus_space_tag;
@@ -1367,8 +1379,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 #endif /* SUN4C || SUN4M || SUN4D */
 }
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
-    mainbus_match, mainbus_attach, NULL, NULL);
+CFATTACH_DECL_NEW(mainbus, 0, mainbus_match, mainbus_attach, NULL, NULL);
 
 
 #if defined(SUN4C) || defined(SUN4M) || defined(SUN4D)
@@ -1491,6 +1502,7 @@ static int bus_class(struct device *);
 static const char *bus_compatible(const char *);
 static int instance_match(struct device *, void *, struct bootpath *);
 static void nail_bootdev(struct device *, struct bootpath *);
+static void set_network_props(struct device *, void *);
 
 static struct {
 	const char	*name;
@@ -1569,6 +1581,45 @@ bus_class(struct device *dev)
 		class = BUSCLASS_SBUS;
 
 	return (class);
+}
+
+static void
+set_network_props(struct device *dev, void *aux)
+{
+	struct mainbus_attach_args *ma;
+	struct sbus_attach_args *sa;
+	struct iommu_attach_args *iom;
+	struct pci_attach_args *pa;
+	uint8_t eaddr[ETHER_ADDR_LEN];
+	prop_dictionary_t dict;
+	prop_data_t blob;
+	int ofnode;
+
+	ofnode = 0;
+	switch (bus_class(device_parent(dev))) {
+	case BUSCLASS_MAINBUS:
+		ma = aux;
+		ofnode = ma->ma_node;
+		break;
+	case BUSCLASS_SBUS:
+		sa = aux;
+		ofnode = sa->sa_node;
+		break;
+	case BUSCLASS_IOMMU:
+		iom = aux;
+		ofnode = iom->iom_node;
+		break;
+	case BUSCLASS_PCI:
+		pa = aux;
+		ofnode = PCITAG_NODE(pa->pa_tag);
+		break;
+	}
+
+	prom_getether(ofnode, eaddr);
+	dict = device_properties(dev);
+	blob = prop_data_create_data(eaddr, ETHER_ADDR_LEN);
+	prop_dictionary_set(dict, "mac-address", blob);
+	prop_object_release(blob);
 }
 
 int
@@ -1745,7 +1796,11 @@ device_register(struct device *dev, void *aux)
 		}
 	} else if (device_is_a(dev, "le") ||
 		   device_is_a(dev, "hme") ||
-		   device_is_a(dev, "be")) {
+		   device_is_a(dev, "be") ||
+		   device_is_a(dev, "ie")) {
+
+		set_network_props(dev, aux);
+
 		/*
 		 * LANCE, Happy Meal, or BigMac ethernet device
 		 */

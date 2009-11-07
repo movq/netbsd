@@ -1,4 +1,4 @@
-/* $NetBSD: lca_dma.c,v 1.20 2009/03/14 15:35:59 dsl Exp $ */
+/* $NetBSD: lca_dma.c,v 1.23 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lca_dma.c,v 1.20 2009/03/14 15:35:59 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lca_dma.c,v 1.23 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: lca_dma.c,v 1.20 2009/03/14 15:35:59 dsl Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -166,7 +164,7 @@ lca_dma_init(struct lca_config *lcp)
 	 */
 	alpha_sgmap_init(t, &lcp->lc_sgmap, "lca_sgmap",
 	    LCA_SGMAP_MAPPED_BASE, 0, LCA_SGMAP_MAPPED_SIZE,
-	    sizeof(u_int64_t), NULL, 0);
+	    sizeof(uint64_t), NULL, 0);
 
 	/*
 	 * Set up window 0 as an 8MB SGMAP-mapped window

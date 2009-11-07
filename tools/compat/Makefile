@@ -1,11 +1,14 @@
-#	$NetBSD: Makefile,v 1.53 2009/06/17 23:34:45 christos Exp $
+#	$NetBSD: Makefile,v 1.55.2.2 2012/06/23 22:54:56 riz Exp $
 
 HOSTLIB=	nbcompat
 
-SRCS=		atoll.c basename.c dirname.c fgetln.c flock.c fparseln.c \
-		fpurge.c getmode.c getopt_long.c gettemp.c heapsort.c \
+SRCS=		atoll.c basename.c cdbr.c cdbw.c dirname.c \
+		fgetln.c flock.c fparseln.c fpurge.c \
+		getline.c getmode.c getopt_long.c gettemp.c \
+		heapsort.c \
 		issetugid.c lchflags.c lchmod.c lchown.c libyywrap.c \
-		md2.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c mkdtemp.c \
+		md2.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c \
+		mi_vector_hash.c mkdtemp.c \
 		mkstemp.c pread.c putc_unlocked.c pwcache.c pwrite.c \
 		pw_scan.c \
 		raise_default_signal.c rmd160.c rmd160hl.c \
@@ -29,7 +32,8 @@ CPPFLAGS+=	-no-cpp-precomp
 CPPFLAGS+=	-I. -I./include -I${.CURDIR} -I${.CURDIR}/sys \
 		-DHAVE_NBTOOL_CONFIG_H=1 -D_FILE_OFFSET_BITS=64
 
-.PATH:		${.CURDIR}/../../lib/libc/gen \
+.PATH:		${.CURDIR}/../../lib/libc/cdb \
+		${.CURDIR}/../../lib/libc/gen \
 		${.CURDIR}/../../lib/libc/hash \
 		${.CURDIR}/../../lib/libc/hash/md2 \
 		${.CURDIR}/../../lib/libc/hash/md5 \
@@ -47,7 +51,7 @@ CPPFLAGS+=	-I. -I./include -I${.CURDIR} -I${.CURDIR}/sys \
 		${.CURDIR}/../../common/lib/libc/hash/sha2 \
 		${.CURDIR}/../../common/lib/libc/md \
 		${.CURDIR}/../../common/lib/libc/stdlib \
-		${.CURDIR}/../../usr.bin/lex
+		${.CURDIR}/../../external/bsd/flex/dist
 
 DPSRCS+=	defs.mk
 CLEANFILES+=	config.log config.status configure.lineno *.stamp
@@ -58,7 +62,7 @@ _CURDIR:=	${.CURDIR}
 .include "${.CURDIR}/db/Makefile.inc"
 .CURDIR:=	${_CURDIR}
 
-SRCS:=		${SRCS:Nndbm*.c}
+SRCS:=		${SRCS:M*.c}
 
 config.cache: include/.stamp configure nbtool_config.h.in defs.mk.in
 	rm -f ${.TARGET}

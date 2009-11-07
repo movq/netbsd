@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.h,v 1.106 2009/11/06 13:32:41 pooka Exp $	*/
+/*	$NetBSD: malloc.h,v 1.110 2011/11/24 16:16:49 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -71,7 +71,6 @@ MALLOC_DECLARE(M_IPMOPTS);
 MALLOC_DECLARE(M_IPMADDR);
 MALLOC_DECLARE(M_MRTABLE);
 MALLOC_DECLARE(M_BWMETER);
-MALLOC_DECLARE(M_1394DATA);
 #endif /* _KERNEL */
 
 /*
@@ -109,7 +108,8 @@ int	debug_malloc(unsigned long, struct malloc_type *, int, void **);
 int	debug_free(void *, struct malloc_type *);
 
 void	debug_malloc_print(void);
-void	debug_malloc_printit(void (*)(const char *, ...), vaddr_t);
+void	debug_malloc_printit(void (*)(const char *, ...)
+    __printflike(1, 2), vaddr_t);
 #endif /* MALLOC_DEBUG */
 
 void	*kern_realloc(void *, unsigned long, struct malloc_type *, int);

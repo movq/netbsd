@@ -1,10 +1,7 @@
-/*      $NetBSD: scheduler.c,v 1.6 2009/11/06 16:15:16 pooka Exp $	*/
+/*      $NetBSD: scheduler.c,v 1.27.8.1 2012/06/26 14:49:09 riz Exp $	*/
 
 /*
- * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
- *
- * Development of this software was supported by
- * The Finnish Cultural Foundation.
+ * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,33 +26,82 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.6 2009/11/06 16:15:16 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.27.8.1 2012/06/26 14:49:09 riz Exp $");
 
 #include <sys/param.h>
+#include <sys/atomic.h>
 #include <sys/cpu.h>
 #include <sys/kmem.h>
 #include <sys/mutex.h>
+#include <sys/namei.h>
 #include <sys/queue.h>
 #include <sys/select.h>
+#include <sys/systm.h>
 
 #include <rump/rumpuser.h>
 
 #include "rump_private.h"
 
-/* should go for MAXCPUS at some point */
-static struct cpu_info rump_cpus[1];
+static struct cpu_info rump_cpus[MAXCPUS];
 static struct rumpcpu {
+	/* needed in fastpath */
 	struct cpu_info *rcpu_ci;
-	SLIST_ENTRY(rumpcpu) rcpu_entries;
-} rcpu_storage[1];
+	void *rcpu_prevlwp;
+
+	/* needed in slowpath */
+	struct rumpuser_mtx *rcpu_mtx;
+	struct rumpuser_cv *rcpu_cv;
+	int rcpu_wanted;
+
+	/* offset 20 (P=4) or 36 (P=8) here */
+
+	/*
+	 * Some stats.  Not really that necessary, but we should
+	 * have room.  Note that these overflow quite fast, so need
+	 * to be collected often.
+	 */
+	unsigned int rcpu_fastpath;
+	unsigned int rcpu_slowpath;
+	unsigned int rcpu_migrated;
+
+	/* offset 32 (P=4) or 50 (P=8) */
+
+	int rcpu_align[0] __aligned(CACHE_LINE_SIZE);
+} rcpu_storage[MAXCPUS];
+
 struct cpu_info *rump_cpu = &rump_cpus[0];
-int ncpu = 1;
+kcpuset_t *kcpuset_attached = NULL;
+kcpuset_t *kcpuset_running = NULL;
+int ncpu;
 
-static SLIST_HEAD(,rumpcpu) cpu_freelist = SLIST_HEAD_INITIALIZER(cpu_freelist);
-static struct rumpuser_mtx *schedmtx;
-static struct rumpuser_cv *schedcv, *lwp0cv;
+#define RCPULWP_BUSY	((void *)-1)
+#define RCPULWP_WANTED	((void *)-2)
 
-static bool lwp0busy = false;
+static struct rumpuser_mtx *lwp0mtx;
+static struct rumpuser_cv *lwp0cv;
+static unsigned nextcpu;
+
+kmutex_t unruntime_lock; /* unruntime lwp lock.  practically unused */
+
+static bool lwp0isbusy = false;
+
+/*
+ * Keep some stats.
+ *
+ * Keeping track of there is not really critical for speed, unless
+ * stats happen to be on a different cache line (CACHE_LINE_SIZE is
+ * really just a coarse estimate), so default for the performant case
+ * (i.e. no stats).
+ */
+#ifdef RUMPSCHED_STATS
+#define SCHED_FASTPATH(rcpu) rcpu->rcpu_fastpath++;
+#define SCHED_SLOWPATH(rcpu) rcpu->rcpu_slowpath++;
+#define SCHED_MIGRATED(rcpu) rcpu->rcpu_migrated++;
+#else
+#define SCHED_FASTPATH(rcpu)
+#define SCHED_SLOWPATH(rcpu)
+#define SCHED_MIGRATED(rcpu)
+#endif
 
 struct cpu_info *
 cpu_lookup(u_int index)
@@ -64,27 +110,125 @@ cpu_lookup(u_int index)
 	return &rump_cpus[index];
 }
 
+static inline struct rumpcpu *
+getnextcpu(void)
+{
+	unsigned newcpu;
+
+	newcpu = atomic_inc_uint_nv(&nextcpu);
+	if (__predict_false(ncpu > UINT_MAX/2))
+		atomic_and_uint(&nextcpu, 0);
+	newcpu = newcpu % ncpu;
+
+	return &rcpu_storage[newcpu];
+}
+
+/* this could/should be mi_attach_cpu? */
 void
-rump_scheduler_init()
+rump_cpus_bootstrap(int *nump)
+{
+	struct rumpcpu *rcpu;
+	struct cpu_info *ci;
+	int num = *nump;
+	int i;
+
+	if (num > MAXCPUS) {
+		aprint_verbose("CPU limit: %d wanted, %d (MAXCPUS) "
+		    "available (adjusted)\n", num, MAXCPUS);
+		num = MAXCPUS;
+	}
+
+	for (i = 0; i < num; i++) {
+		rcpu = &rcpu_storage[i];
+		ci = &rump_cpus[i];
+		ci->ci_index = i;
+	}
+
+	kcpuset_create(&kcpuset_attached, true);
+	kcpuset_create(&kcpuset_running, true);
+
+	/* attach first cpu for bootstrap */
+	rump_cpu_attach(&rump_cpus[0]);
+	ncpu = 1;
+	*nump = num;
+}
+
+void
+rump_scheduler_init(int numcpu)
 {
 	struct rumpcpu *rcpu;
 	struct cpu_info *ci;
 	int i;
 
-	rumpuser_mutex_init(&schedmtx);
-	rumpuser_cv_init(&schedcv);
+	rumpuser_mutex_init(&lwp0mtx);
 	rumpuser_cv_init(&lwp0cv);
-	for (i = 0; i < ncpu; i++) {
+	for (i = 0; i < numcpu; i++) {
 		rcpu = &rcpu_storage[i];
 		ci = &rump_cpus[i];
-		rump_cpu_bootstrap(ci);
+		rcpu->rcpu_ci = ci;
 		ci->ci_schedstate.spc_mutex =
 		    mutex_obj_alloc(MUTEX_DEFAULT, IPL_NONE);
-		rcpu->rcpu_ci = ci;
-		SLIST_INSERT_HEAD(&cpu_freelist, rcpu, rcpu_entries);
+		ci->ci_schedstate.spc_flags = SPCF_RUNNING;
+		rcpu->rcpu_wanted = 0;
+		rumpuser_cv_init(&rcpu->rcpu_cv);
+		rumpuser_mutex_init(&rcpu->rcpu_mtx);
 	}
+
+	mutex_init(&unruntime_lock, MUTEX_DEFAULT, IPL_NONE);
 }
 
+/*
+ * condvar ops using scheduler lock as the rumpuser interlock.
+ */
+void
+rump_schedlock_cv_wait(struct rumpuser_cv *cv)
+{
+	struct lwp *l = curlwp;
+	struct rumpcpu *rcpu = &rcpu_storage[l->l_cpu-&rump_cpus[0]];
+
+	/* mutex will be taken and released in cpu schedule/unschedule */
+	rumpuser_cv_wait(cv, rcpu->rcpu_mtx);
+}
+
+int
+rump_schedlock_cv_timedwait(struct rumpuser_cv *cv, const struct timespec *ts)
+{
+	struct lwp *l = curlwp;
+	struct rumpcpu *rcpu = &rcpu_storage[l->l_cpu-&rump_cpus[0]];
+
+	/* mutex will be taken and released in cpu schedule/unschedule */
+	return rumpuser_cv_timedwait(cv, rcpu->rcpu_mtx,
+	    ts->tv_sec, ts->tv_nsec);
+}
+
+static void
+lwp0busy(void)
+{
+
+	/* busy lwp0 */
+	KASSERT(curlwp == NULL || curlwp->l_stat != LSONPROC);
+	rumpuser_mutex_enter_nowrap(lwp0mtx);
+	while (lwp0isbusy)
+		rumpuser_cv_wait_nowrap(lwp0cv, lwp0mtx);
+	lwp0isbusy = true;
+	rumpuser_mutex_exit(lwp0mtx);
+}
+
+static void
+lwp0rele(void)
+{
+
+	rumpuser_mutex_enter_nowrap(lwp0mtx);
+	KASSERT(lwp0isbusy == true);
+	lwp0isbusy = false;
+	rumpuser_cv_signal(lwp0cv);
+	rumpuser_mutex_exit(lwp0mtx);
+}
+
+/*
+ * rump_schedule: ensure that the calling host thread has a valid lwp context.
+ * ie. ensure that rumpuser_get_curlwp() != NULL.
+ */
 void
 rump_schedule()
 {
@@ -93,103 +237,239 @@ rump_schedule()
 	/*
 	 * If there is no dedicated lwp, allocate a temp one and
 	 * set it to be free'd upon unschedule().  Use lwp0 context
-	 * for reserving the necessary resources.
+	 * for reserving the necessary resources.  Don't optimize
+	 * for this case -- anyone who cares about performance will
+	 * start a real thread.
 	 */
-	l = rumpuser_get_curlwp();
-	if (l == NULL) {
-		/* busy lwp0 */
-		rumpuser_mutex_enter_nowrap(schedmtx);
-		while (lwp0busy)
-			rumpuser_cv_wait_nowrap(lwp0cv, schedmtx);
-		lwp0busy = true;
-		rumpuser_mutex_exit(schedmtx);
+	if (__predict_true((l = rumpuser_get_curlwp()) != NULL)) {
+		rump_schedule_cpu(l);
+		LWP_CACHE_CREDS(l, l->l_proc);
+	} else {
+		lwp0busy();
 
 		/* schedule cpu and use lwp0 */
 		rump_schedule_cpu(&lwp0);
 		rumpuser_set_curlwp(&lwp0);
-		l = rump_lwp_alloc(0, rump_nextlid());
 
-		/* release lwp0 */
-		rump_lwp_switch(l);
-		rumpuser_mutex_enter_nowrap(schedmtx);
-		lwp0busy = false;
-		rumpuser_cv_signal(lwp0cv);
-		rumpuser_mutex_exit(schedmtx);
+		/* allocate thread, switch to it, and release lwp0 */
+		l = rump__lwproc_alloclwp(initproc);
+		rump_lwproc_switch(l);
+		lwp0rele();
 
-		/* mark new lwp as dead-on-exit */
-		rump_lwp_release(l);
-	} else {
-		rump_schedule_cpu(l);
+		/*
+		 * mark new thread dead-on-unschedule.  this
+		 * means that we'll be running with l_refcnt == 0.
+		 * relax, it's fine.
+		 */
+		rump_lwproc_releaselwp();
 	}
 }
 
 void
 rump_schedule_cpu(struct lwp *l)
 {
-	struct rumpcpu *rcpu;
 
-	rumpuser_mutex_enter_nowrap(schedmtx);
-	while ((rcpu = SLIST_FIRST(&cpu_freelist)) == NULL)
-		rumpuser_cv_wait_nowrap(schedcv, schedmtx);
-	SLIST_REMOVE_HEAD(&cpu_freelist, rcpu_entries);
-	rumpuser_mutex_exit(schedmtx);
-	KASSERT(l->l_cpu == NULL);
-	l->l_cpu = rcpu->rcpu_ci;
+	rump_schedule_cpu_interlock(l, NULL);
+}
+
+/*
+ * Schedule a CPU.  This optimizes for the case where we schedule
+ * the same thread often, and we have nCPU >= nFrequently-Running-Thread
+ * (where CPU is virtual rump cpu, not host CPU).
+ */
+void
+rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
+{
+	struct rumpcpu *rcpu;
+	void *old;
+	bool domigrate;
+	bool bound = l->l_pflag & LP_BOUND;
+
+	l->l_stat = LSRUN;
+
+	/*
+	 * First, try fastpath: if we were the previous user of the
+	 * CPU, everything is in order cachewise and we can just
+	 * proceed to use it.
+	 *
+	 * If we are a different thread (i.e. CAS fails), we must go
+	 * through a memory barrier to ensure we get a truthful
+	 * view of the world.
+	 */
+
+	KASSERT(l->l_target_cpu != NULL);
+	rcpu = &rcpu_storage[l->l_target_cpu-&rump_cpus[0]];
+	if (atomic_cas_ptr(&rcpu->rcpu_prevlwp, l, RCPULWP_BUSY) == l) {
+		if (__predict_true(interlock == rcpu->rcpu_mtx))
+			rumpuser_mutex_exit(rcpu->rcpu_mtx);
+		SCHED_FASTPATH(rcpu);
+		/* jones, you're the man */
+		goto fastlane;
+	}
+
+	/*
+	 * Else, it's the slowpath for us.  First, determine if we
+	 * can migrate.
+	 */
+	if (ncpu == 1)
+		domigrate = false;
+	else
+		domigrate = true;
+
+	/* Take lock.  This acts as a load barrier too. */
+	if (__predict_true(interlock != rcpu->rcpu_mtx))
+		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
+
+	for (;;) {
+		SCHED_SLOWPATH(rcpu);
+		old = atomic_swap_ptr(&rcpu->rcpu_prevlwp, RCPULWP_WANTED);
+
+		/* CPU is free? */
+		if (old != RCPULWP_BUSY && old != RCPULWP_WANTED) {
+			if (atomic_cas_ptr(&rcpu->rcpu_prevlwp,
+			    RCPULWP_WANTED, RCPULWP_BUSY) == RCPULWP_WANTED) {
+				break;
+			}
+		}
+
+		/*
+		 * Do we want to migrate once?
+		 * This may need a slightly better algorithm, or we
+		 * might cache pingpong eternally for non-frequent
+		 * threads.
+		 */
+		if (domigrate && !bound) {
+			domigrate = false;
+			SCHED_MIGRATED(rcpu);
+			rumpuser_mutex_exit(rcpu->rcpu_mtx);
+			rcpu = getnextcpu();
+			rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
+			continue;
+		}
+
+		/* Want CPU, wait until it's released an retry */
+		rcpu->rcpu_wanted++;
+		rumpuser_cv_wait_nowrap(rcpu->rcpu_cv, rcpu->rcpu_mtx);
+		rcpu->rcpu_wanted--;
+	}
+	rumpuser_mutex_exit(rcpu->rcpu_mtx);
+
+ fastlane:
+	l->l_cpu = l->l_target_cpu = rcpu->rcpu_ci;
 	l->l_mutex = rcpu->rcpu_ci->ci_schedstate.spc_mutex;
+	l->l_ncsw++;
+	l->l_stat = LSONPROC;
+
+	rcpu->rcpu_ci->ci_curlwp = l;
 }
 
 void
 rump_unschedule()
 {
-	struct lwp *l;
+	struct lwp *l = rumpuser_get_curlwp();
+#ifdef DIAGNOSTIC
+	int nlock;
 
-	l = rumpuser_get_curlwp();
+	KERNEL_UNLOCK_ALL(l, &nlock);
+	KASSERT(nlock == 0);
+#endif
+
 	KASSERT(l->l_mutex == l->l_cpu->ci_schedstate.spc_mutex);
 	rump_unschedule_cpu(l);
-	l->l_mutex = NULL;
+	l->l_mutex = &unruntime_lock;
+	l->l_stat = LSSTOP;
 
 	/*
-	 * If we're using a temp lwp, need to take lwp0 for rump_lwp_free().
-	 * (we could maybe cache idle lwp's to avoid constant bouncing)
+	 * Check special conditions:
+	 *  1) do we need to free the lwp which just unscheduled?
+	 *     (locking order: lwp0, cpu)
+	 *  2) do we want to clear curlwp for the current host thread
 	 */
-	if (l->l_flag & LW_WEXIT) {
-		rumpuser_set_curlwp(NULL);
+	if (__predict_false(l->l_flag & LW_WEXIT)) {
+		lwp0busy();
 
-		/* busy lwp0 */
-		rumpuser_mutex_enter_nowrap(schedmtx);
-		while (lwp0busy)
-			rumpuser_cv_wait_nowrap(lwp0cv, schedmtx);
-		lwp0busy = true;
-		rumpuser_mutex_exit(schedmtx);
+		/* Now that we have lwp0, we can schedule a CPU again */
+		rump_schedule_cpu(l);
 
-		rump_schedule_cpu(&lwp0);
-		rumpuser_set_curlwp(&lwp0);
-		rump_lwp_free(l);
+		/* switch to lwp0.  this frees the old thread */
+		KASSERT(l->l_flag & LW_WEXIT);
+		rump_lwproc_switch(&lwp0);
+
+		/* release lwp0 */
 		rump_unschedule_cpu(&lwp0);
+		lwp0.l_mutex = &unruntime_lock;
+		lwp0.l_pflag &= ~LP_RUNNING;
+		lwp0rele();
 		rumpuser_set_curlwp(NULL);
 
-		rumpuser_mutex_enter_nowrap(schedmtx);
-		lwp0busy = false;
-		rumpuser_cv_signal(lwp0cv);
-		rumpuser_mutex_exit(schedmtx);
+	} else if (__predict_false(l->l_flag & LW_RUMP_CLEAR)) {
+		rumpuser_set_curlwp(NULL);
+		l->l_flag &= ~LW_RUMP_CLEAR;
 	}
 }
 
 void
 rump_unschedule_cpu(struct lwp *l)
 {
+
+	rump_unschedule_cpu_interlock(l, NULL);
+}
+
+void
+rump_unschedule_cpu_interlock(struct lwp *l, void *interlock)
+{
+
+	if ((l->l_pflag & LP_INTR) == 0)
+		rump_softint_run(l->l_cpu);
+	rump_unschedule_cpu1(l, interlock);
+}
+
+void
+rump_unschedule_cpu1(struct lwp *l, void *interlock)
+{
 	struct rumpcpu *rcpu;
 	struct cpu_info *ci;
+	void *old;
 
 	ci = l->l_cpu;
-	l->l_cpu = NULL;
+	ci->ci_curlwp = NULL;
 	rcpu = &rcpu_storage[ci-&rump_cpus[0]];
+
 	KASSERT(rcpu->rcpu_ci == ci);
 
-	rumpuser_mutex_enter_nowrap(schedmtx);
-	SLIST_INSERT_HEAD(&cpu_freelist, rcpu, rcpu_entries);
-	rumpuser_cv_signal(schedcv);
-	rumpuser_mutex_exit(schedmtx);
+	/*
+	 * Make sure all stores are seen before the CPU release.  This
+	 * is relevant only in the non-fastpath scheduling case, but
+	 * we don't know here if that's going to happen, so need to
+	 * expect the worst.
+	 */
+	membar_exit();
+
+	/* Release the CPU. */
+	old = atomic_swap_ptr(&rcpu->rcpu_prevlwp, l);
+
+	/* No waiters?  No problems.  We're outta here. */
+	if (old == RCPULWP_BUSY) {
+		/* Was the scheduler interlock requested? */
+		if (__predict_false(interlock == rcpu->rcpu_mtx))
+			rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
+		return;
+	}
+
+	KASSERT(old == RCPULWP_WANTED);
+
+	/*
+	 * Ok, things weren't so snappy.
+	 *
+	 * Snailpath: take lock and signal anyone waiting for this CPU.
+	 */
+
+	rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
+	if (rcpu->rcpu_wanted)
+		rumpuser_cv_broadcast(rcpu->rcpu_cv);
+
+	if (__predict_true(interlock != rcpu->rcpu_mtx))
+		rumpuser_mutex_exit(rcpu->rcpu_mtx);
 }
 
 /* Give up and retake CPU (perhaps a different one) */
@@ -210,4 +490,47 @@ preempt()
 {
 
 	yield();
+}
+
+bool
+kpreempt(uintptr_t where)
+{
+
+	return false;
+}
+
+/*
+ * There is no kernel thread preemption in rump currently.  But call
+ * the implementing macros anyway in case they grow some side-effects
+ * down the road.
+ */
+void
+kpreempt_disable(void)
+{
+
+	KPREEMPT_DISABLE(curlwp);
+}
+
+void
+kpreempt_enable(void)
+{
+
+	KPREEMPT_ENABLE(curlwp);
+}
+
+void
+suspendsched(void)
+{
+
+	/*
+	 * Could wait until everyone is out and block further entries,
+	 * but skip that for now.
+	 */
+}
+
+void
+sched_nice(struct proc *p, int level)
+{
+
+	/* nothing to do for now */
 }

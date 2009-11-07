@@ -30,8 +30,26 @@
 #if !defined(ATF_C_MACROS_H)
 #define ATF_C_MACROS_H
 
+#include <atf-c/defs.h>
 #include <atf-c/tc.h>
 #include <atf-c/tp.h>
+#include <atf-c/utils.h>
+
+#define ATF_TC_NAME(tc) \
+    (atfu_ ## tc ## _tc)
+
+#define ATF_TC_PACK_NAME(tc) \
+    (atfu_ ## tc ## _tc_pack)
+
+#define ATF_TC_WITHOUT_HEAD(tc) \
+    static void atfu_ ## tc ## _body(const atf_tc_t *); \
+    static atf_tc_t atfu_ ## tc ## _tc; \
+    static atf_tc_pack_t atfu_ ## tc ## _tc_pack = { \
+        .m_ident = #tc, \
+        .m_head = NULL, \
+        .m_body = atfu_ ## tc ## _body, \
+        .m_cleanup = NULL, \
+    }
 
 #define ATF_TC(tc) \
     static void atfu_ ## tc ## _head(atf_tc_t *); \
@@ -43,9 +61,6 @@
         .m_body = atfu_ ## tc ## _body, \
         .m_cleanup = NULL, \
     }
-
-#define ATF_TC_NAME(tc) \
-    (atfu_ ## tc ## _tc)
 
 #define ATF_TC_WITH_CLEANUP(tc) \
     static void atfu_ ## tc ## _head(atf_tc_t *); \
@@ -70,7 +85,7 @@
 #define ATF_TC_BODY(tc, tcptr) \
     static \
     void \
-    atfu_ ## tc ## _body(const atf_tc_t *tcptr)
+    atfu_ ## tc ## _body(const atf_tc_t *tcptr ATF_DEFS_ATTRIBUTE_UNUSED)
 
 #define ATF_TC_BODY_NAME(tc) \
     (atfu_ ## tc ## _body)
@@ -78,7 +93,7 @@
 #define ATF_TC_CLEANUP(tc, tcptr) \
     static \
     void \
-    atfu_ ## tc ## _cleanup(const atf_tc_t *tcptr)
+    atfu_ ## tc ## _cleanup(const atf_tc_t *tcptr ATF_DEFS_ATTRIBUTE_UNUSED)
 
 #define ATF_TC_CLEANUP_NAME(tc) \
     (atfu_ ## tc ## _cleanup)
@@ -99,9 +114,13 @@
 #define ATF_TP_ADD_TC(tp, tc) \
     do { \
         atf_error_t atfu_err; \
+        char **atfu_config = atf_tp_get_config(tp); \
+        if (atfu_config == NULL) \
+            return atf_no_memory_error(); \
         atfu_err = atf_tc_init_pack(&atfu_ ## tc ## _tc, \
                                     &atfu_ ## tc ## _tc_pack, \
-                                    atf_tp_get_config(tp)); \
+                                    (const char *const *)atfu_config); \
+        atf_utils_free_charpp(atfu_config); \
         if (atf_is_error(atfu_err)) \
             return atfu_err; \
         atfu_err = atf_tp_add_tc(tp, &atfu_ ## tc ## _tc); \
@@ -122,10 +141,16 @@
     } while(0)
 
 #define ATF_REQUIRE(x) \
-    ATF_REQUIRE_MSG(x, #x " not met")
+    do { \
+        if (!(x)) \
+            atf_tc_fail_requirement(__FILE__, __LINE__, "%s", #x " not met"); \
+    } while(0)
 
 #define ATF_CHECK(x) \
-    ATF_CHECK_MSG(x, #x " not met")
+    do { \
+        if (!(x)) \
+            atf_tc_fail_check(__FILE__, __LINE__, "%s", #x " not met"); \
+    } while(0)
 
 #define ATF_REQUIRE_EQ(x, y) \
     ATF_REQUIRE_MSG((x) == (y), "%s != %s", #x, #y)
@@ -140,15 +165,23 @@
     ATF_CHECK_MSG((x) == (y), "%s != %s: " fmt, #x, #y, ##__VA_ARGS__)
 
 #define ATF_REQUIRE_STREQ(x, y) \
-    ATF_REQUIRE_MSG(strcmp(x, y) == 0, "%s != %s", #x, #y)
+    ATF_REQUIRE_MSG(strcmp(x, y) == 0, "%s != %s (%s != %s)", #x, #y, x, y)
 
 #define ATF_CHECK_STREQ(x, y) \
-    ATF_CHECK_MSG(strcmp(x, y) == 0, "%s != %s", #x, #y)
+    ATF_CHECK_MSG(strcmp(x, y) == 0, "%s != %s (%s != %s)", #x, #y, x, y)
 
 #define ATF_REQUIRE_STREQ_MSG(x, y, fmt, ...) \
-    ATF_REQUIRE_MSG(strcmp(x, y) == 0, "%s != %s: " fmt, #x, #y, ##__VA_ARGS__)
+    ATF_REQUIRE_MSG(strcmp(x, y) == 0, "%s != %s (%s != %s): " fmt, \
+                    #x, #y, x, y, ##__VA_ARGS__)
 
 #define ATF_CHECK_STREQ_MSG(x, y, fmt, ...) \
-    ATF_CHECK_MSG(strcmp(x, y) == 0, "%s != %s: " fmt, #x, #y, ##__VA_ARGS__)
+    ATF_CHECK_MSG(strcmp(x, y) == 0, "%s != %s (%s != %s): " fmt, \
+                    #x, #y, x, y, ##__VA_ARGS__)
+
+#define ATF_CHECK_ERRNO(exp_errno, bool_expr) \
+    atf_tc_check_errno(__FILE__, __LINE__, exp_errno, #bool_expr, bool_expr)
+
+#define ATF_REQUIRE_ERRNO(exp_errno, bool_expr) \
+    atf_tc_require_errno(__FILE__, __LINE__, exp_errno, #bool_expr, bool_expr)
 
 #endif /* !defined(ATF_C_MACROS_H) */

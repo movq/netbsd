@@ -1,4 +1,4 @@
-/*	$NetBSD: xmalloc.c,v 1.9 2009/05/19 20:44:52 christos Exp $	*/
+/*	$NetBSD: xmalloc.c,v 1.11 2011/05/25 14:41:46 christos Exp $	*/
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -77,7 +77,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: xmalloc.c,v 1.9 2009/05/19 20:44:52 christos Exp $");
+__RCSID("$NetBSD: xmalloc.c,v 1.11 2011/05/25 14:41:46 christos Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -148,6 +148,7 @@ static	union overhead *nextf[NBUCKETS];
 
 static	size_t pagesz;			/* page size */
 static	size_t pagebucket;		/* page size bucket */
+static	size_t pageshift;		/* page size shift */
 
 #ifdef MSTATS
 /*
@@ -160,8 +161,7 @@ static	u_int nmalloc[NBUCKETS];
 #if defined(MALLOC_DEBUG) || defined(RCHECK)
 #define	ASSERT(p)   if (!(p)) botch("p")
 static void
-botch(
-    const char *s)
+botch(const char *s)
 {
     xwarnx("\r\nassertion botched: %s\r\n", s);
     abort();
@@ -204,6 +204,7 @@ imalloc(size_t nbytes)
 			bucket++;
 		}
 		pagebucket = bucket;
+		pageshift = ffs(pagesz) - 1;
 	}
 	/*
 	 * Convert amount of memory requested into closest block size
@@ -278,13 +279,13 @@ morecore(size_t bucket)
 #endif
 	if (sz < pagesz) {
 		amt = pagesz;
-  		nblks = amt / sz;
+		nblks = amt >> (bucket + 3);
 	} else {
 		amt = sz + pagesz;
 		nblks = 1;
 	}
 	if (amt > PAGEPOOL_SIZE)
-		if (morepages(amt/pagesz + NPOOLPAGES) == 0)
+		if (morepages((amt >> pageshift) + NPOOLPAGES) == 0)
 			return;
 	op = (union overhead *)pagepool_start;
 	pagepool_start += amt;
@@ -301,8 +302,7 @@ morecore(size_t bucket)
 }
 
 void
-xfree(cp)
-	void *cp;
+xfree(void *cp)
 {
   	int size;
 	union overhead *op;
@@ -386,6 +386,7 @@ irealloc(void *cp, size_t nbytes)
  * for each size category, the second showing the number of mallocs -
  * frees for each size category.
  */
+void
 mstats(char *s)
 {
   	int i, j;

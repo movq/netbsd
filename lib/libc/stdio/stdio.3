@@ -1,4 +1,4 @@
-.\"	$NetBSD: stdio.3,v 1.22 2009/07/13 22:31:59 wiz Exp $
+.\"	$NetBSD: stdio.3,v 1.24 2010/05/05 04:13:16 jruoho Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)stdio.3	8.7 (Berkeley) 4/19/94
 .\"
-.Dd July 13, 2009
+.Dd May 5, 2010
 .Dt STDIO 3
 .Os
 .Sh NAME
@@ -39,9 +39,9 @@
 .Lb libc
 .Sh SYNOPSIS
 .In stdio.h
-.Fd FILE *stdin;
-.Fd FILE *stdout;
-.Fd FILE *stderr;
+.Vt FILE *stdin;
+.Vt FILE *stdout;
+.Vt FILE *stderr;
 .Sh DESCRIPTION
 The standard
 .Tn I/O
@@ -52,8 +52,6 @@ Input and output is mapped into logical data streams
 and the physical
 .Tn I/O
 characteristics are concealed.
-The functions and macros are listed below;
-more information is available from the individual man pages.
 .Pp
 A stream is associated with an external file (which may be a physical
 device) by
@@ -108,21 +106,24 @@ No translation is performed and no extra padding appears on any stream.
 .Pp
 At program startup, three streams are predefined and need not be
 opened explicitly:
-.Bl -bullet -compact -offset indent
+.Bl -enum -offset indent
 .It
 .Em standard input
-(for reading conventional input),
+for reading conventional input,
 .It
 .Em standard output
-(for writing conventional output), and
+for writing conventional output, and
 .It
 .Em standard error
-(for writing diagnostic output).
+for writing diagnostic output.
 .El
+.Pp
 These streams are abbreviated
-.Em stdin , stdout
+.Em stdin ,
+.Em stdout ,
 and
 .Em stderr .
+.Pp
 Initially, the standard error stream
 is unbuffered; the standard input and output streams are
 fully buffered if and only if the streams do not refer to
@@ -150,33 +151,20 @@ will appear.
 Alternatively, these defaults may be modified via the
 .Xr setvbuf 3
 function.
-.Pp
-The
-.Nm
-library is a part of the library
-.Pa libc.a
-and routines are automatically loaded as needed by compilers such
-as
-.Xr cc 1 .
-The
-.Tn SYNOPSIS
-sections of the following manual pages indicate which include files
-are to be used, what the compiler declaration for the function
-looks like and which external variables are of interest.
-.Pp
+.Sh IMPLEMENTATION NOTES
 In multi-threaded applications, operations on streams perform implicit
 locking, except for the
-.Fa getc_unlocked ,
-.Fa getchar_unlocked ,
-.Fa putc_unlocked ,
+.Fn getc_unlocked ,
+.Fn getchar_unlocked ,
+.Fn putc_unlocked ,
 and
-.Fa putchar_unlocked
+.Fn putchar_unlocked
 functions.
 Explicit control of stream locking is available through the
-.Fa flockfile ,
-.Fa ftrylockfile ,
+.Fn flockfile ,
+.Fn ftrylockfile ,
 and
-.Fa funlockfile
+.Fn funlockfile
 functions .
 .Pp
 The following are defined as macros; these names may not be re-used
@@ -211,6 +199,7 @@ without first removing their current definitions with
 .Dv stderr ,
 .Dv stdin ,
 .Dv stdout .
+.Pp
 Function versions of the macro functions
 .Fn feof ,
 .Fn ferror ,

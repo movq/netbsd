@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.41 2009/03/06 20:31:52 joerg Exp $
+#	$NetBSD: INSTALL,v 1.49.2.1 2012/06/12 17:47:54 riz Exp $
 #
 #	Shark installation kernel
 #
@@ -16,7 +16,6 @@ maxusers	32
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	HZ=64
 #options 	NTP		# NTP phase/frequency locked loop
-options 	NMBCLUSTERS=1024 # XXX, temporarily required
 #options 	BOOT_QUIETLY	# twiddle instead of normal boot msg output
 
 # CPU options
@@ -51,18 +50,18 @@ file-system	MSDOSFS		# MS-DOS file system
 #file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
 #options 	NFSSERVER
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 
 # Networking options
 
@@ -162,7 +161,7 @@ options 	WSEMUL_VT100		# VT100 / VT220 emulation
 # compatibility to other console drivers
 #options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 #options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-#options 	WSDISPLAY_COMPAT_USL		# VT handling
+#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 # see dev/pckbport/wskbdmap_mfii.c for implemented layouts
 #options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
@@ -256,10 +255,9 @@ pseudo-device	bpfilter		# packet filter
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	fss	4		# file system snapshot device
-pseudo-device	rnd			# /dev/random and /dev/urandom
+#pseudo-device	fss			# file system snapshot device
 
-pseudo-device	md	1		# Ramdisk driver
+pseudo-device	md			# Ramdisk driver
 #pseudo-device	profiler 1		# fiq based profiling device
 #pseudo-device	sequencer 1		# MIDI sequencer
 pseudo-device	wsmux			# mouse & keyboard multiplexor

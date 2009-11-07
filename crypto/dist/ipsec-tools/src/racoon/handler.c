@@ -1,4 +1,4 @@
-/*	$NetBSD: handler.c,v 1.30 2009/09/03 09:29:07 tteras Exp $	*/
+/*	$NetBSD: handler.c,v 1.41 2012/01/01 15:57:31 tteras Exp $	*/
 
 /* Id: handler.c,v 1.28 2006/05/26 12:17:29 manubsd Exp */
 
@@ -120,11 +120,11 @@ enumph1(sel, enum_func, enum_arg)
 	LIST_FOREACH(p, &ph1tree, chain) {
 		if (sel != NULL) {
 			if (sel->local != NULL &&
-			    cmpsaddr(sel->local, p->local) != 0)
+			    cmpsaddr(sel->local, p->local) > CMPSADDR_WILDPORT_MATCH)
 				continue;
 
 			if (sel->remote != NULL &&
-			    cmpsaddr(sel->remote, p->remote) != 0)
+			    cmpsaddr(sel->remote, p->remote) > CMPSADDR_WILDPORT_MATCH)
 				continue;
 		}
 
@@ -213,7 +213,7 @@ getph1(ph1hint, local, remote, flags)
 			    (ph1hint->id->l != p->id->l ||
 			     memcmp(ph1hint->id->v, p->id->v, p->id->l) != 0)) {
 				plog(LLV_DEBUG2, LOCATION, NULL,
-				     "local identity does match hint\n");
+				     "local identity does not match hint\n");
 				continue;
 			}
 			if (ph1hint->id_p && ph1hint->id_p->l &&
@@ -221,7 +221,7 @@ getph1(ph1hint, local, remote, flags)
 			    (ph1hint->id_p->l != p->id_p->l ||
 			     memcmp(ph1hint->id_p->v, p->id_p->v, p->id_p->l) != 0)) {
 				plog(LLV_DEBUG2, LOCATION, NULL,
-				     "remote identity does match hint\n");
+				     "remote identity does not match hint\n");
 				continue;
 			}
 		}
@@ -300,8 +300,8 @@ void migrate_dying_ph12(iph1)
 		if (p->status < PHASE1ST_DYING)
 			continue;
 
-		if (cmpsaddr(iph1->local, p->local) == 0
-		 && cmpsaddr(iph1->remote, p->remote) == 0)
+		if (cmpsaddr(iph1->local, p->local) == CMPSADDR_MATCH
+		 && cmpsaddr(iph1->remote, p->remote) == CMPSADDR_MATCH)
 			migrate_ph12(p, iph1);
 	}
 }
@@ -514,6 +514,22 @@ initph1tree()
 	LIST_INIT(&ph1tree);
 }
 
+int
+ph1_rekey_enabled(iph1)
+	struct ph1handle *iph1;
+{
+	if (iph1->rmconf == NULL)
+		return 0;
+	if (iph1->rmconf->rekey == REKEY_FORCE)
+		return 1;
+#ifdef ENABLE_DPD
+	if (iph1->rmconf->rekey == REKEY_ON && iph1->dpd_support &&
+	    iph1->rmconf->dpd_interval)
+		return 1;
+#endif
+	return 0;
+}
+
 /* %%% management phase 2 handler */
 
 int
@@ -531,11 +547,11 @@ enumph2(sel, enum_func, enum_arg)
 				continue;
 
 			if (sel->src != NULL &&
-			    cmpsaddr(sel->src, p->src) != 0)
+			    cmpsaddr(sel->src, p->src) != CMPSADDR_MATCH)
 				continue;
 
 			if (sel->dst != NULL &&
-			    cmpsaddr(sel->dst, p->dst) != 0)
+			    cmpsaddr(sel->dst, p->dst) != CMPSADDR_MATCH)
 				continue;
 		}
 
@@ -573,7 +589,7 @@ getph2bymsgid(iph1, msgid)
 {
 	struct ph2handle *p;
 
-	LIST_FOREACH(p, &ph2tree, chain) {
+	LIST_FOREACH(p, &iph1->ph2tree, ph1bind) {
 		if (p->msgid == msgid && p->ph1 == iph1)
 			return p;
 	}
@@ -595,12 +611,14 @@ getph2byid(src, dst, spid)
 	struct sockaddr *src, *dst;
 	u_int32_t spid;
 {
-	struct ph2handle *p;
+	struct ph2handle *p, *next;
 
-	LIST_FOREACH(p, &ph2tree, chain) {
+	for (p = LIST_FIRST(&ph2tree); p; p = next) {
+		next = LIST_NEXT(p, chain);
+
 		if (spid == p->spid &&
-		    cmpsaddr(src, p->src) == 0 &&
-		    cmpsaddr(dst, p->dst) == 0){
+		    cmpsaddr(src, p->src) <= CMPSADDR_WILDPORT_MATCH &&
+		    cmpsaddr(dst, p->dst) <= CMPSADDR_WILDPORT_MATCH){
 			/* Sanity check to detect zombie handlers
 			 * XXX Sould be done "somewhere" more interesting,
 			 * because we have lots of getph2byxxxx(), but this one
@@ -627,8 +645,8 @@ getph2bysaddr(src, dst)
 	struct ph2handle *p;
 
 	LIST_FOREACH(p, &ph2tree, chain) {
-		if (cmpsaddr(src, p->src) == 0 &&
-		    cmpsaddr(dst, p->dst) == 0)
+		if (cmpsaddr(src, p->src) <= CMPSADDR_WILDPORT_MATCH &&
+		    cmpsaddr(dst, p->dst) <= CMPSADDR_WILDPORT_MATCH)
 			return p;
 	}
 
@@ -931,7 +949,7 @@ getcontacted(remote)
 	struct contacted *p;
 
 	LIST_FOREACH(p, &ctdtree, chain) {
-		if (cmpsaddr(remote, p->remote) == 0)
+		if (cmpsaddr(remote, p->remote) <= CMPSADDR_WILDPORT_MATCH)
 			return p;
 	}
 
@@ -963,6 +981,24 @@ inscontacted(remote)
 	LIST_INSERT_HEAD(&ctdtree, new, chain);
 
 	return 0;
+}
+
+void
+remcontacted(remote)
+	struct sockaddr *remote;
+{
+	struct contacted *p, *next;
+
+	for (p = LIST_FIRST(&ctdtree); p; p = next) {
+		next = LIST_NEXT(p, chain);
+
+		if (cmpsaddr(remote, p->remote) <= CMPSADDR_WILDPORT_MATCH) {
+			LIST_REMOVE(p, chain);
+			racoon_free(p->remote);
+			racoon_free(p);
+			break;
+		}
+	}	
 }
 
 void
@@ -1010,7 +1046,7 @@ check_recvdpkt(remote, local, rbuf)
 	/*
 	 * the packet was processed before, but the remote address mismatches.
 	 */
-	if (cmpsaddr(remote, r->remote) != 0)
+	if (cmpsaddr(remote, r->remote) != CMPSADDR_MATCH)
 		return 2;
 
 	/*
@@ -1436,19 +1472,24 @@ static void remove_ph1(struct ph1handle *iph1){
 	if (iph1->status == PHASE1ST_ESTABLISHED ||
 	    iph1->status == PHASE1ST_DYING) {
 		for (iph2 = LIST_FIRST(&iph1->ph2tree); iph2; iph2 = iph2_next) {
-			iph2_next = LIST_NEXT(iph2, chain);
+			iph2_next = LIST_NEXT(iph2, ph1bind);
 			remove_ph2(iph2);
 		}
 		isakmp_info_send_d1(iph1);
 	}
 	iph1->status = PHASE1ST_EXPIRED;
-	sched_schedule(&iph1->sce, 1, isakmp_ph1delete_stub);
+	/* directly call isakmp_ph1delete to avoid as possible a race
+	 * condition where we'll try to access iph1->rmconf after it has
+	 * freed
+	 */
+	isakmp_ph1delete(iph1);
 }
 
 
 static int revalidate_ph1tree_rmconf(void)
 {
 	struct ph1handle *p, *next;
+	struct remoteconf *rmconf;
 
 	for (p = LIST_FIRST(&ph1tree); p; p = next) {
 		next = LIST_NEXT(p, chain);
@@ -1458,9 +1499,11 @@ static int revalidate_ph1tree_rmconf(void)
 		if (p->rmconf == NULL)
 			continue;
 
-		p->rmconf = getrmconf_by_ph1(p);
-		if (p->rmconf == NULL || p->rmconf == RMCONF_ERR_MULTIPLE)
+		rmconf = getrmconf_by_ph1(p);
+		if (rmconf == NULL || rmconf == RMCONF_ERR_MULTIPLE)
 			remove_ph1(p);
+		else
+			p->rmconf = rmconf;
 	}
 
 	return 1;
@@ -1516,10 +1559,12 @@ int
 purgeph1bylogin(login)
 	char *login;
 {
-	struct ph1handle *p;
+	struct ph1handle *p, *next;
 	int found = 0;
 
-	LIST_FOREACH(p, &ph1tree, chain) {
+	for (p = LIST_FIRST(&ph1tree); p; p = next) {
+		next = LIST_NEXT(p, chain);
+
 		if (p->mode_cfg == NULL)
 			continue;
 		if (strncmp(p->mode_cfg->login, login, LOGINLEN) == 0) {

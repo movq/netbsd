@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pset.c,v 1.13 2009/10/02 21:56:28 elad Exp $	*/
+/*	$NetBSD: sys_pset.c,v 1.17 2011/08/07 21:13:05 rmind Exp $	*/
 
 /*
  * Copyright (c) 2008, Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.13 2009/10/02 21:56:28 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.17 2011/08/07 21:13:05 rmind Exp $");
 
 #include <sys/param.h>
 
@@ -94,7 +94,7 @@ void
 psets_init(void)
 {
 
-	psets_max = max(MAXCPUS, 32);
+	psets_max = max(maxcpus, 32);
 	psets = kmem_zalloc(psets_max * sizeof(void *), KM_SLEEP);
 	psets_count = 0;
 
@@ -366,14 +366,15 @@ sys_pset_assign(struct lwp *l, const struct sys_pset_assign_args *uap,
 		 * with this target CPU in it.
 		 */
 		LIST_FOREACH(t, &alllwp, l_list) {
-			if ((t->l_flag & LW_AFFINITY) == 0)
+			if (t->l_affinity == NULL) {
 				continue;
+			}
 			lwp_lock(t);
-			if ((t->l_flag & LW_AFFINITY) == 0) {
+			if (t->l_affinity == NULL) {
 				lwp_unlock(t);
 				continue;
 			}
-			if (kcpuset_isset(cpu_index(ci), t->l_affinity)) {
+			if (kcpuset_isset(t->l_affinity, cpu_index(ci))) {
 				lwp_unlock(t);
 				mutex_exit(proc_lock);
 				mutex_exit(&cpu_lock);
@@ -486,7 +487,7 @@ sys__pset_bind(struct lwp *l, const struct sys__pset_bind_args *uap,
 
 	/* Find the process */
 	mutex_enter(proc_lock);
-	p = p_find(pid, PFIND_LOCKED);
+	p = proc_find(pid);
 	if (p == NULL) {
 		mutex_exit(proc_lock);
 		error = ESRCH;

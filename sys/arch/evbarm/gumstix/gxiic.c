@@ -1,4 +1,4 @@
-/*	$NetBSD: gxiic.c,v 1.5 2009/08/09 06:12:34 kiyohara Exp $ */
+/*	$NetBSD: gxiic.c,v 1.7 2011/06/21 11:38:03 kiyohara Exp $ */
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gxiic.c,v 1.5 2009/08/09 06:12:34 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gxiic.c,v 1.7 2011/06/21 11:38:03 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -58,7 +58,7 @@ static int gxiic_exec(void *cookie, i2c_op_t, i2c_addr_t, const void *, size_t,
     void *, size_t, int);
 
 
-CFATTACH_DECL(gxiic, sizeof(struct gxiic_softc),
+CFATTACH_DECL_NEW(gxiic, sizeof(struct gxiic_softc),
     gxiicmatch, gxiicattach, NULL, NULL);
 
 
@@ -86,8 +86,11 @@ gxiicattach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 	aprint_naive("\n");
 
+	sc->sc_pxa_i2c.sc_dev = self;
 	sc->sc_pxa_i2c.sc_iot = pxa->pxa_iot;
+	sc->sc_pxa_i2c.sc_addr = pxa->pxa_addr;
 	sc->sc_pxa_i2c.sc_size = pxa->pxa_size;
+	sc->sc_pxa_i2c.sc_flags = 0;
 	if (pxa2x0_i2c_attach_sub(&sc->sc_pxa_i2c)) {
 		aprint_error_dev(self, "unable to attach PXA I2C\n");
 		return;
@@ -108,7 +111,7 @@ gxiicattach(device_t parent, device_t self, void *aux)
 
 	iba.iba_tag = &sc->sc_i2c;
 	pxa2x0_i2c_open(&sc->sc_pxa_i2c);
-	config_found_ia(&sc->sc_pxa_i2c.sc_dev, "i2cbus", &iba, iicbus_print);
+	config_found_ia(sc->sc_pxa_i2c.sc_dev, "i2cbus", &iba, iicbus_print);
 	pxa2x0_i2c_close(&sc->sc_pxa_i2c);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.63 2009/02/13 22:41:02 apb Exp $	*/
+/*	$NetBSD: locore.S,v 1.70 2011/06/20 19:56:12 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -45,14 +45,13 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
-#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
-#include <machine/vmparam.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
+
 /*
  * Some instructions gas doesn't understand (yet?)
  */
@@ -64,8 +63,6 @@
 	.data
 GLOBAL(esym)
 	.long	0			/* end of symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 

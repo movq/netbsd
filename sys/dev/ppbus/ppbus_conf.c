@@ -1,4 +1,4 @@
-/* $NetBSD: ppbus_conf.c,v 1.17 2009/11/07 00:05:49 dyoung Exp $ */
+/* $NetBSD: ppbus_conf.c,v 1.19 2011/05/13 22:28:40 rmind Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 1999 Nicolas Souchu
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppbus_conf.c,v 1.17 2009/11/07 00:05:49 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppbus_conf.c,v 1.19 2011/05/13 22:28:40 rmind Exp $");
 
 #include "opt_ppbus.h"
 #include "opt_ppbus_1284.h"
@@ -155,7 +155,7 @@ ppbus_attach(device_t parent, device_t self, void *aux)
 		printf("%s: IEEE1284 device found.\n", device_xname(self));
 		/*
 		 * Detect device ID (interrupts must be disabled because we
-		 * cannot do a ltsleep() to wait for it - no context)
+		 * cannot do a block to wait for it - no context)
 		 */
 		if (args.capabilities & PPBUS_HAS_INTR) {
 			int val = 0;
@@ -181,13 +181,16 @@ ppbus_attach(device_t parent, device_t self, void *aux)
 static void
 ppbus_childdet(device_t self, device_t target)
 {
+	struct ppbus_softc * ppbus = device_private(self);
+	struct ppbus_device_softc * child;
+
 	SLIST_FOREACH(child, &ppbus->sc_childlist_head, entries) {
 		if (child->sc_dev == target)
 			break;
 	}
 	if (child != NULL)
 		SLIST_REMOVE(&ppbus->sc_childlist_head, child,
-		    struct ppbus_device_softc, entries);
+		    ppbus_device_softc, entries);
 }
 
 /* Detach function for ppbus. */

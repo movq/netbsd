@@ -1,4 +1,4 @@
-/*	$NetBSD: load_poolnode.c,v 1.1.1.2 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: load_poolnode.c,v 1.2 2012/02/15 17:55:06 riz Exp $	*/
 
 /*
  * Copyright (C) 2003-2004 by Darren Reed.

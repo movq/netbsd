@@ -1,4 +1,4 @@
-/*	$NetBSD: thread.h,v 1.1 2009/08/07 20:57:55 haad Exp $	*/
+/*	$NetBSD: thread.h,v 1.3 2010/05/10 06:26:11 haad Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -52,6 +52,7 @@ typedef pthread_rwlock_t rwlock_t;
 #define	thr_main()		(1)
 #define	_mutex_init(l,f,a)	pthread_mutex_init(l,NULL)
 #define	_mutex_destroy(l)	pthread_mutex_destroy(l)
+#define _mutex_held(l)		pthread_mutex_held_np(l)
 #define	mutex_lock(l)		pthread_mutex_lock(l)
 #define	mutex_trylock(l)	pthread_mutex_trylock(l)
 #define	mutex_unlock(l)		pthread_mutex_unlock(l)
@@ -90,9 +91,16 @@ thr_create(void *stack_base, size_t stack_size, void *(*start_func) (void*),
 	if(flags & THR_DETACHED)
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
+	thread_t th_id;
+	thread_t *t_id;
+	if(new_thread_ID != NULL)
+		t_id = new_thread_ID;
+	else
+		t_id = &th_id;
+
 	/* This function ignores the THR_BOUND flag, since NPTL doesn't seem to support PTHREAD_SCOPE_PROCESS */
 
-	ret = pthread_create(new_thread_ID, &attr, start_func, arg);
+	ret = pthread_create(t_id, &attr, start_func, arg);
 
 	pthread_attr_destroy(&attr);
 

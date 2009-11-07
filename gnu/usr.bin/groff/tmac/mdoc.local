@@ -1,4 +1,4 @@
-.\" $NetBSD: mdoc.local,v 1.53 2009/06/25 17:40:07 agc Exp $
+.\" $NetBSD: mdoc.local,v 1.66.2.1 2012/02/15 23:45:50 riz Exp $
 .\"
 .\" Copyright (c) 2003, 2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -44,9 +44,9 @@
 .as doc-str-St--ieee1275-94     " (\*[Lq]\*[doc-Tn-font-size]Open Firmware\*[doc-str-St]\*[Rq])
 .
 .\" Default .Os value
-.ds doc-operating-system NetBSD\~5.0
+.ds doc-operating-system NetBSD\~6.0
 .\" Default footer operating system value
-.ds doc-default-operating-system NetBSD\~5.0
+.ds doc-default-operating-system NetBSD\~6.0
 .\" Other known versions, not yet in groff distribution
 .ds doc-operating-system-NetBSD-1.3.3  1.3.3
 .ds doc-operating-system-NetBSD-1.6.3  1.6.3
@@ -60,9 +60,17 @@
 .ds doc-operating-system-NetBSD-5.1    5.1
 .ds doc-operating-system-NetBSD-6.0    6.0
 .ds doc-operating-system-FreeBSD-4.11  4.11
+.ds doc-operating-system-FreeBSD-5.4   5.4
+.ds doc-operating-system-FreeBSD-5.5   5.5
 .ds doc-operating-system-FreeBSD-6.1   6.1
+.ds doc-operating-system-FreeBSD-6.2   6.2
 .ds doc-operating-system-FreeBSD-6.3   6.3
+.ds doc-operating-system-FreeBSD-6.4   6.4
 .ds doc-operating-system-FreeBSD-7.0   7.0
+.ds doc-operating-system-FreeBSD-7.1   7.1
+.ds doc-operating-system-FreeBSD-7.2   7.2
+.ds doc-operating-system-FreeBSD-8.0   8.0
+.ds doc-operating-system-FreeBSD-9.0   9.0
 .\" Platforms not yet in groff distribution
 .ds doc-volume-as-amigappc              amigappc
 .ds doc-volume-as-evbsh5                evbsh5
@@ -70,14 +78,23 @@
 .ds doc-volume-as-ibmnws                ibmnws
 .ds doc-volume-as-iyonix                iyonix
 .ds doc-volume-as-landisk               landisk
+.ds doc-volume-as-x86                   x86
+.ds doc-volume-as-xen                   xen
 .
 .\" Local libraries not in groff
 .ds doc-str-Lb-libarchive       Reading and Writing Streaming Archives Library (libarchive, \-larchive)
 .ds doc-str-Lb-libbluetooth     Bluetooth Library (libbluetooth, \-lbluetooth)
+.ds doc-str-Lb-libdm            Device-mapper Library (libdm, \-ldm)
+.ds doc-str-Lb-libfetch         File Transfer Library for URLs (libfetch, \-lfetch)
 .ds doc-str-Lb-libiscsi         iSCSI protocol library (libiscsi, \-liscsi)
+.ds doc-str-Lb-libisns          Internet Storage Name Service Library (libisns, \-lisns)
 .ds doc-str-Lb-libnetpgp        Netpgp signing, verification, encryption and decryption (libnetpgp, \-lnetpgp)
+.ds doc-str-Lb-libperfuse       PUFFS enabled relay to FUSE Library (libperfuse, \-lperfuse)
+.ds doc-str-Lb-libppath         Property-List Paths Library (libppath, \-lppath)
 .ds doc-str-Lb-libprop          Property Container Object Library (libprop, \-lprop)
 .ds doc-str-Lb-libpuffs         puffs Convenience Library (libpuffs, \-lpuffs)
+.ds doc-str-Lb-libquota		Disk Quota Access and Control Library (libquota, \-lquota)
 .ds doc-str-Lb-librefuse        File System in Userspace Convenience Library (librefuse, \-lrefuse)
+.ds doc-str-Lb-libsaslc         Simple Authentication and Security Layer client library (libsaslc, \-lsaslc)
 .ds doc-str-Lb-libssp           Buffer Overflow Protection Library (libssp, \-lssp)
-.ds doc-str-Lb-libfetch		File Transfer Library for URLs (libfetch, \-lfetch)
+.ds doc-str-Lb-libterminfo      Terminal Information Library (libterminfo, \-lterminfo)

@@ -1,11 +1,24 @@
-#	$NetBSD: bsd.sys.mk,v 1.180 2009/02/12 22:49:05 lukem Exp $
+#	$NetBSD: bsd.sys.mk,v 1.211.2.1 2012/06/30 10:13:02 bouyer Exp $
 #
 # Build definitions used for NetBSD source tree builds.
 
 .if !defined(_BSD_SYS_MK_)
 _BSD_SYS_MK_=1
 
+.if ${MKREPRO:Uno} == "yes"
+CPPFLAGS+=	-Wp,-iremap,${NETBSDSRCDIR}:/usr/src
+CPPFLAGS+=	-Wp,-iremap,${DESTDIR}/:/
+.endif
+
+# Enable c99 mode by default.
+# This has the side effect of complaining for missing prototypes
+# implicit type declarations and missing return statements.
+.if defined(HAVE_GCC)
+CFLAGS+=	-std=gnu99
+.endif
+
 .if defined(WARNS)
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -Wno-sign-compare -Wno-pointer-sign :}
 .if ${WARNS} > 0
 CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 #CFLAGS+=	-Wmissing-declarations -Wredundant-decls -Wnested-externs
@@ -15,7 +28,8 @@ CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 # in a traditional environment' warning, as opposed to 'this code behaves
 # differently in traditional and ansi environments' which is the warning
 # we wanted, and now we don't get anymore.
-CFLAGS+=	-Wno-sign-compare -Wno-traditional
+CFLAGS+=	-Wno-sign-compare
+CFLAGS+=	${${ACTIVE_CC} != "clang":? -Wno-traditional :}
 .if !defined(NOGCCERROR)
 # Set assembler warnings to be fatal
 CFLAGS+=	-Wa,--fatal-warnings
@@ -25,7 +39,10 @@ CFLAGS+=	-Wa,--fatal-warnings
 # XXX on linking static libs
 .if (!defined(MKPIC) || ${MKPIC} != "no") && \
     (!defined(LDSTATIC) || ${LDSTATIC} != "-static")
+# XXX there are some strange problems not yet resolved
+. if !defined(HAVE_GCC)
 LDFLAGS+=	-Wl,--fatal-warnings
+. endif
 .endif
 .endif
 .if ${WARNS} > 1
@@ -34,48 +51,69 @@ CFLAGS+=	-Wreturn-type -Wswitch -Wshadow
 .if ${WARNS} > 2
 CFLAGS+=	-Wcast-qual -Wwrite-strings
 CFLAGS+=	-Wextra -Wno-unused-parameter
+# Readd -Wno-sign-compare to override -Wextra with clang
+CFLAGS+=	-Wno-sign-compare
 CXXFLAGS+=	-Wabi
 CXXFLAGS+=	-Wold-style-cast
 CXXFLAGS+=	-Wctor-dtor-privacy -Wnon-virtual-dtor -Wreorder \
-		-Wno-deprecated -Wno-non-template-friend \
-		-Woverloaded-virtual -Wno-pmf-conversions -Wsign-promo -Wsynth
+		-Wno-deprecated -Woverloaded-virtual -Wsign-promo -Wsynth
+CXXFLAGS+=	${${ACTIVE_CXX} == "gcc":? -Wno-non-template-friend -Wno-pmf-conversions :}
 .endif
-.if ${WARNS} > 3 && defined(HAVE_GCC) && ${HAVE_GCC} >= 3
-CFLAGS+=	-Wsign-compare
-CFLAGS+=	-std=gnu99
+.if ${WARNS} > 3 && defined(HAVE_GCC)
+CFLAGS+=	-Wsign-compare -Wformat=2
+.endif
+.if ${WARNS} > 3 && defined(HAVE_LLVM)
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -Wpointer-sign -Wmissing-noreturn :}
+.endif
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 45 \
+     && (${MACHINE_ARCH} == "sh3eb" || \
+	 ${MACHINE_ARCH} == "sh3el" || \
+	 ${MACHINE_ARCH} == "m68k" || \
+	 ${MACHINE_ARCH} == "m68000"))
+# XXX GCC 4.5 for sh3 and m68k (which we compile with -Os) is extra noisy for
+# cases it should be better with
+CFLAGS+=	-Wno-uninitialized
 .endif
 .endif
+
+CWARNFLAGS+=	${CWARNFLAGS.${ACTIVE_CC}}
 
 CPPFLAGS+=	${AUDIT:D-D__AUDIT__}
-CFLAGS+=	${CWARNFLAGS} ${NOGCCERROR:D:U-Werror}
+_NOWERROR=	${defined(NOGCCERROR) || (${ACTIVE_CC} == "clang" && defined(NOCLANGERROR)):?yes:no}
+CFLAGS+=	${${_NOWERROR} == "no" :?-Werror:} ${CWARNFLAGS}
 LINTFLAGS+=	${DESTDIR:D-d ${DESTDIR}/usr/include}
 
-.if (${MACHINE_ARCH} == "alpha") || (${MACHINE_ARCH} == "hppa") || \
-	(${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb")
+.if (${MACHINE_ARCH} == "alpha") || \
+    (${MACHINE_ARCH} == "hppa") || \
+    (${MACHINE_ARCH} == "ia64") || \
+    (${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb") || \
+    (${MACHINE_ARCH} == "mips64el") || (${MACHINE_ARCH} == "mips64eb")
 HAS_SSP=	no
 .else
 HAS_SSP=	yes
 .endif
 
-.if defined(USE_FORT) && (${USE_FORT} != "no")
+.if ${USE_FORT:Uno} != "no"
 USE_SSP?=	yes
 .if !defined(KERNSRCDIR) && !defined(KERN) # not for kernels nor kern modules
 CPPFLAGS+=	-D_FORTIFY_SOURCE=2
 .endif
 .endif
 
-.if defined(USE_SSP) && (${USE_SSP} != "no") && (${BINDIR:Ux} != "/usr/mdec")
+.if (${USE_SSP:Uno} != "no") && (${BINDIR:Ux} != "/usr/mdec")
 .if ${HAS_SSP} == "yes"
-COPTS+=		-fstack-protector -Wstack-protector --param ssp-buffer-size=1
+COPTS+=	-fstack-protector -Wstack-protector 
+COPTS+=	${${ACTIVE_CC} == "clang":? -mllvm -stack-protector-buffer-size=1 :}
+COPTS+=	${${ACTIVE_CC} == "gcc":? --param ssp-buffer-size=1 :}
 .endif
 .endif
 
-.if defined(MKSOFTFLOAT) && (${MKSOFTFLOAT} != "no")
+.if ${MKSOFTFLOAT:Uno} != "no"
 COPTS+=		-msoft-float
 FOPTS+=		-msoft-float
 .endif
 
-.if defined(MKIEEEFP) && (${MKIEEEFP} != "no")
+.if ${MKIEEEFP:Uno} != "no"
 .if ${MACHINE_ARCH} == "alpha"
 CFLAGS+=	-mieee
 FFLAGS+=	-mieee
@@ -86,13 +124,29 @@ FFLAGS+=	-mieee
 CFLAGS+=	-Wa,-Av8plus
 .endif
 
+.if !defined(NOGCCERROR)
+.if (${MACHINE_ARCH} == "mips64el") || (${MACHINE_ARCH} == "mips64eb")
+CPUFLAGS+=	-Wa,--fatal-warnings
+.endif
+.endif
+
+#.if ${MACHINE} == "sbmips"
+#CFLAGS+=	-mips64 -mtune=sb1
+#.endif
+
+#.if (${MACHINE_ARCH} == "mips64el" || ${MACHINE_ARCH} == "mips64eb") && \
+#    (defined(MKPIC) && ${MKPIC} == "no")
+#CPUFLAGS+=	-mno-abicalls -fno-PIC
+#.endif
 CFLAGS+=	${CPUFLAGS}
 AFLAGS+=	${CPUFLAGS}
 
+.if !defined(LDSTATIC) || ${LDSTATIC} != "-static"
 # Position Independent Executable flags
 PIE_CFLAGS?=        -fPIC -DPIC
 PIE_LDFLAGS?=       -Wl,-pie -shared-libgcc
 PIE_AFLAGS?=	    -fPIC -DPIC
+.endif
 
 # Helpers for cross-compiling
 HOST_CC?=	cc
@@ -137,6 +191,9 @@ STRIP?=		strip
 .c.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 .c.ln:
 	${_MKTARGET_COMPILE}
@@ -156,6 +213,9 @@ STRIP?=		strip
 .m.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.m} ${OBJCOPTS} ${OBJCOPTS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 # Host-compiled C objects
 # The intermediate step is necessary for Sun CC, which objects to calling
@@ -175,10 +235,16 @@ STRIP?=		strip
 .s.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.s} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 .S.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.S} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 # Lex
 LFLAGS+=	${LPREFIX.${.IMPSRC:T}:D-P${LPREFIX.${.IMPSRC:T}}}
@@ -197,7 +263,12 @@ YFLAGS+=	${YPREFIX:D-p${YPREFIX}} ${YHEADER:D-d}
 	${YACC.y} -o ${.TARGET} ${.IMPSRC}
 
 .ifdef YHEADER
+.if empty(.MAKEFLAGS:M-n)
 .y.h: ${.TARGET:.h=.c}
 .endif
+.endif
+
+# Objcopy
+OBJCOPYLIBFLAGS?=${"${.TARGET:M*.po}" != "":?-X:-x}
 
 .endif	# !defined(_BSD_SYS_MK_)

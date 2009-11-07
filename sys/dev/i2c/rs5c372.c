@@ -1,7 +1,7 @@
-/*	$NetBSD: rs5c372.c,v 1.9 2008/05/04 15:26:29 xtraeme Exp $	*/
+/*	$NetBSD: rs5c372.c,v 1.12 2012/01/21 19:44:30 nonaka Exp $	*/
 
-/*
- * Copyright (c) 2005 Kimihiro Nonaka
+/*-
+ * Copyright (C) 2005 NONAKA Kimihiro <nonaka@netbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -13,21 +13,20 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY WASABI SYSTEMS, INC. ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL WASABI SYSTEMS, INC
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rs5c372.c,v 1.9 2008/05/04 15:26:29 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rs5c372.c,v 1.12 2012/01/21 19:44:30 nonaka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,17 +58,24 @@ CFATTACH_DECL_NEW(rs5c372rtc, sizeof(struct rs5c372rtc_softc),
 static void rs5c372rtc_reg_write(struct rs5c372rtc_softc *, int, uint8_t);
 static int rs5c372rtc_clock_read(struct rs5c372rtc_softc *, struct clock_ymdhms *);
 static int rs5c372rtc_clock_write(struct rs5c372rtc_softc *, struct clock_ymdhms *);
-static int rs5c372rtc_gettime(struct todr_chip_handle *, volatile struct timeval *);
-static int rs5c372rtc_settime(struct todr_chip_handle *, volatile struct timeval *);
+static int rs5c372rtc_gettime(struct todr_chip_handle *, struct timeval *);
+static int rs5c372rtc_settime(struct todr_chip_handle *, struct timeval *);
 
 static int
 rs5c372rtc_match(device_t parent, cfdata_t cf, void *arg)
 {
 	struct i2c_attach_args *ia = arg;
 
-	if (ia->ia_addr == RS5C372_ADDR)
-		return (1);
-	return (0);
+	if (ia->ia_name) {
+		/* direct config - check name */
+		if (strcmp(ia->ia_name, "rs5c372rtc") == 0)
+			return 1;
+	} else {
+		/* indirect config - check typical address */
+		if (ia->ia_addr == RS5C372_ADDR)
+			return 1;
+	}
+	return 0;
 }
 
 static void
@@ -97,7 +103,7 @@ rs5c372rtc_attach(device_t parent, device_t self, void *arg)
 }
 
 static int
-rs5c372rtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+rs5c372rtc_gettime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct rs5c372rtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -114,7 +120,7 @@ rs5c372rtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 }
 
 static int
-rs5c372rtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+rs5c372rtc_settime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct rs5c372rtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;

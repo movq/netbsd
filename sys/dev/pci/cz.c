@@ -1,4 +1,4 @@
-/*	$NetBSD: cz.c,v 1.52 2009/05/12 08:23:00 cegger Exp $	*/
+/*	$NetBSD: cz.c,v 1.55 2011/04/24 16:27:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cz.c,v 1.52 2009/05/12 08:23:00 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cz.c,v 1.55 2011/04/24 16:27:00 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -348,8 +348,8 @@ cz_attach(device_t parent, device_t self, void *aux)
 	if (cz->cz_ih == NULL) {
 		aprint_error_dev(&cz->cz_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		/* We will fall-back on polling mode. */
 	} else
 		aprint_normal_dev(&cz->cz_dev, "interrupting at %s\n",
@@ -412,7 +412,7 @@ cz_attach(device_t parent, device_t self, void *aux)
 
 		callout_init(&sc->sc_diag_ch, 0);
 
-		tp = ttymalloc();
+		tp = tty_alloc();
 		tp->t_dev = makedev(cdevsw_lookup_major(&cz_cdevsw),
 		    (device_unit(&cz->cz_dev) * ZFIRM_MAX_CHANNELS) + i);
 		tp->t_oproc = czttystart;
@@ -613,8 +613,8 @@ cz_load_firmware(struct cz_softc *cz)
 	cz->cz_fwctl = bus_space_read_4(cz->cz_win_st, cz->cz_win_sh,
 	    ZFIRM_CTRLADDR_OFF);
 #ifdef CZ_DEBUG
-	aprint_debug_dev(&cz->cz_dev, "FWCTL structure at offset 0x%08lx\n",
-	    cz->cz_fwctl);
+	aprint_debug_dev(&cz->cz_dev, "FWCTL structure at offset "
+	    "%#08" PRIxPADDR "\n", cz->cz_fwctl);
 #endif
 
 	CZ_FWCTL_WRITE(cz, BRDCTL_C_OS, C_OS_BSD);

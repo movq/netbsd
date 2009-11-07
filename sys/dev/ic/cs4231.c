@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4231.c,v 1.23 2008/04/28 20:23:49 martin Exp $	*/
+/*	$NetBSD: cs4231.c,v 1.28 2011/11/28 11:46:54 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4231.c,v 1.23 2008/04/28 20:23:49 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4231.c,v 1.28 2011/11/28 11:46:54 jmcneill Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -39,10 +39,11 @@ __KERNEL_RCSID(0, "$NetBSD: cs4231.c,v 1.23 2008/04/28 20:23:49 martin Exp $");
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
+#include <sys/bus.h>
+#include <sys/kmem.h>
 #include <sys/malloc.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
 #include <sys/cpu.h>
 
 #include <sys/audioio.h>
@@ -107,12 +108,14 @@ cs4231_write(struct ad1848_softc *sc, int index, int value)
 
 
 void
-cs4231_common_attach(struct cs4231_softc *sc, bus_space_handle_t ioh)
+cs4231_common_attach(struct cs4231_softc *sc, device_t self,
+    bus_space_handle_t ioh)
 {
 	char *buf;
 	int reg;
 
 	sc->sc_ad1848.parent = sc;
+	sc->sc_ad1848.sc_dev = self;
 	sc->sc_ad1848.sc_iot = sc->sc_bustag;
 	sc->sc_ad1848.sc_ioh = ioh;
 	sc->sc_ad1848.sc_readreg = cs4231_read;
@@ -123,23 +126,23 @@ cs4231_common_attach(struct cs4231_softc *sc, bus_space_handle_t ioh)
 
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR,
 			     NULL,
-			     device_xname(&sc->sc_ad1848.sc_dev), "total");
+			     device_xname(sc->sc_ad1848.sc_dev), "total");
 
 	evcnt_attach_dynamic(&sc->sc_playback.t_intrcnt, EVCNT_TYPE_INTR,
 			     &sc->sc_intrcnt,
-			     device_xname(&sc->sc_ad1848.sc_dev), "playback");
+			     device_xname(sc->sc_ad1848.sc_dev), "playback");
 
 	evcnt_attach_dynamic(&sc->sc_playback.t_ierrcnt, EVCNT_TYPE_INTR,
 			     &sc->sc_intrcnt,
-			     device_xname(&sc->sc_ad1848.sc_dev), "perrors");
+			     device_xname(sc->sc_ad1848.sc_dev), "perrors");
 
 	evcnt_attach_dynamic(&sc->sc_capture.t_intrcnt, EVCNT_TYPE_INTR,
 			     &sc->sc_intrcnt,
-			     device_xname(&sc->sc_ad1848.sc_dev), "capture");
+			     device_xname(sc->sc_ad1848.sc_dev), "capture");
 
 	evcnt_attach_dynamic(&sc->sc_capture.t_ierrcnt, EVCNT_TYPE_INTR,
 			     &sc->sc_intrcnt,
-			     device_xname(&sc->sc_ad1848.sc_dev), "cerrors");
+			     device_xname(sc->sc_ad1848.sc_dev), "cerrors");
 
 	/* put chip in native mode to access (extended) ID register */
 	reg = ad_read(&sc->sc_ad1848, SP_MISC_INFO);
@@ -173,8 +176,7 @@ cs4231_common_attach(struct cs4231_softc *sc, bus_space_handle_t ioh)
 }
 
 void *
-cs4231_malloc(void *addr, int direction, size_t size,
-    struct malloc_type *pool, int flags)
+cs4231_malloc(void *addr, int direction, size_t size)
 {
 	struct cs4231_softc *sc;
 	bus_dma_tag_t dmatag;
@@ -182,7 +184,7 @@ cs4231_malloc(void *addr, int direction, size_t size,
 
 	sc = addr;
 	dmatag = sc->sc_dmatag;
-	p = malloc(sizeof(*p), pool, flags);
+	p = kmem_alloc(sizeof(*p), KM_SLEEP);
 	if (p == NULL)
 		return NULL;
 
@@ -219,12 +221,12 @@ fail3:
 fail2:
 	bus_dmamap_destroy(dmatag, p->dmamap);
 fail1:
-	free(p, pool);
+	kmem_free(p, sizeof(*p));
 	return NULL;
 }
 
 void
-cs4231_free(void *addr, void *ptr, struct malloc_type *pool)
+cs4231_free(void *addr, void *ptr, size_t size)
 {
 	struct cs4231_softc *sc;
 	bus_dma_tag_t dmatag;
@@ -240,7 +242,7 @@ cs4231_free(void *addr, void *ptr, struct malloc_type *pool)
 		bus_dmamem_free(dmatag, p->segs, p->nsegs);
 		bus_dmamap_destroy(dmatag, p->dmamap);
 		*pp = p->next;
-		free(p, pool);
+		kmem_free(p, sizeof(*p));
 		return;
 	}
 	printf("cs4231_free: rogue pointer\n");
@@ -267,7 +269,7 @@ cs4231_transfer_init(
 
 	if (t->t_active) {
 		printf("%s: %s already running\n",
-		       device_xname(&sc->sc_ad1848.sc_dev), t->t_name);
+		       device_xname(sc->sc_ad1848.sc_dev), t->t_name);
 		return EINVAL;
 	}
 
@@ -278,7 +280,7 @@ cs4231_transfer_init(
 		continue;
 	if (p == NULL) {
 		printf("%s: bad %s addr %p\n",
-		       device_xname(&sc->sc_ad1848.sc_dev), t->t_name, start);
+		       device_xname(sc->sc_ad1848.sc_dev), t->t_name, start);
 		return EINVAL;
 	}
 
@@ -299,7 +301,7 @@ cs4231_transfer_init(
 
 	DPRINTF(("%s: init %s: [%p..%p] %lu bytes %lu blocks;"
 		 " DMA at 0x%lx count %lu\n",
-		 device_xname(&sc->sc_ad1848.sc_dev), t->t_name,
+		 device_xname(sc->sc_ad1848.sc_dev), t->t_name,
 		 start, end, (u_long)t->t_segsz, (u_long)t->t_blksz,
 		 (u_long)*paddr, (u_long)*psize));
 
@@ -489,6 +491,7 @@ cs4231_query_devinfo(void *addr, mixer_devinfo_t *dip)
 		dip->next = dip->prev = AUDIO_MIXER_LAST;
 		strcpy(dip->label.name, AudioNmaster);
 		dip->un.v.num_channels = 2;
+		dip->un.v.delta = 16;
 		strcpy(dip->un.v.units.name, AudioNvolume);
 		break;
 
@@ -586,7 +589,7 @@ cs4231_query_devinfo(void *addr, mixer_devinfo_t *dip)
 		dip->type = AUDIO_MIXER_CLASS;
 		dip->mixer_class = CSAUDIO_MONITOR_CLASS;
 		dip->next = dip->prev = AUDIO_MIXER_LAST;
-		strcpy(dip->label.name, AudioCmonitor);
+		strcpy(dip->label.name, AudioCoutputs);
 		break;
 
 	case CSAUDIO_RECORD_CLASS:		/* record source class */

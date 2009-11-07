@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.55 2009/09/19 14:57:29 abs Exp $ */
+/*	$NetBSD: md.c,v 1.61 2012/01/06 20:41:28 riz Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -59,7 +55,7 @@ static char	*getUse(struct apple_part_map_entry *, int, char *);
 static char	*getName(struct apple_part_map_entry *, int, char *);
 static int	findStdType(int, char *, int, int *, int);
 static int	check_for_errors(void);
-static int	edit_diskmap(void);		
+static int	edit_diskmap(void);
 #ifdef MD_DEBUG_SORT_MERGE
 static int	md_debug_dump(char *);
 #endif
@@ -109,11 +105,11 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
        struct utsname instsys;
 
-	(void)minimal;
+	(void)flags;
 
 	/*
 	 * Get the name of the Install Kernel we are running under and
@@ -200,7 +196,7 @@ md_get_info(void)
 	 *  to see if the disk have a Boot Block
 	 */
 	if (lseek(fd, (off_t)0 * blk_size, SEEK_SET) < 0 ||
-	    read(fd,  &block, sizeof(block)) < sizeof(block) ||
+	    read(fd,  &block, sizeof(block)) - sizeof(block) != 0 ||
 	    block.pmSig != 0x4552) {
              process_menu(MENU_nodiskmap, NULL);
         }
@@ -283,7 +279,7 @@ md_make_bsd_partitions(void)
 		pl = bzb->flags.part - 'a';
 		switch (whichType(&map.blk[j])) {
 		    case HFS_PART:
-			bsdlabel[pl].pi_fstype = FS_HFS; 
+			bsdlabel[pl].pi_fstype = FS_HFS;
 			strcpy (bsdlabel[pl].pi_mount, (char *)bzb->mount_point);
 			break;
 		    case ROOT_PART:
@@ -340,7 +336,7 @@ md_make_bsd_partitions(void)
 		    (void)fprintf (f, "\t:p%c#%d:o%c#%d:t%c=%s:",
 			       'a'+i, bsdlabel[i].pi_size,
 			       'a'+i, bsdlabel[i].pi_offset,
-			       'a'+i, fstypenames[bsdlabel[i].pi_fstype]);
+			       'a'+i, getfslabelname(bsdlabel[i].pi_fstype));
 		if (bsdlabel[i].pi_fstype == FS_BSDFFS)
 			(void)fprintf (f, "b%c#%d:f%c#%d",
 			   'a'+i, bsdlabel[i].pi_fsize * bsdlabel[i].pi_frag,
@@ -464,11 +460,11 @@ md_post_disklabel(void)
     struct disklabel updated_label;
     int fd, i, no_match;
     char dev_name[100], buf[80];
-    const char *fst[] = {"free", "swap", " v6 ", " v7 ", "sysv", "v71k", 
+    const char *fst[] = {"free", "swap", " v6 ", " v7 ", "sysv", "v71k",
 			" v8 ", "ffs ", "dos ", "lfs ", "othr", "hpfs",
 			"9660", "boot", "ados", "hfs ", "fcor", "ex2f",
 			"ntfs", "raid", "ccd "};
-      
+
     snprintf(dev_name, sizeof(dev_name), "/dev/r%sc", diskdev);
     /*
      * Open the disk as a raw device
@@ -626,7 +622,7 @@ whichType(part)
 	if (part->pmSig != APPLE_PART_MAP_ENTRY_MAGIC)
 	    return 0;
 	maxsiz = sizeof(part->pmPartType);
-	if (maxsiz > sizeof(partyp))
+	if (maxsiz > (int)sizeof(partyp))
 	    maxsiz = sizeof(partyp);
 	strncpy(partyp, (char *)part->pmPartType, maxsiz);
 	partyp[maxsiz-1] = '\0';
@@ -777,6 +773,7 @@ getName(part, len_name, name)
 		    strncat(name, " (", len_name-strlen(name));
 		    strncat(name, &macosblk[37], len_name-strlen(name));
 		    strncat(name, ")", len_name-strlen(name));
+		    close(fd);
 		}
 		break;
 	    default:
@@ -1077,7 +1074,7 @@ check_for_errors()
 		errs++;
 	if ((map.blk[j].pmPyPartStart + map.blk[j].pmPartBlkCnt) > dlsize + 1)
 		errs++;
-    } 
+    }
     return(errs);
 }
 
@@ -1196,3 +1193,9 @@ md_debug_dump(title)
 	return(yesno);
 }
 #endif /* MD_DEBUG_SORT_MERGE */
+
+int
+md_pre_mount()
+{
+	return 0;
+}

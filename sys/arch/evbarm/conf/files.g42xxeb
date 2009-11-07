@@ -1,4 +1,4 @@
-#	$NetBSD: files.g42xxeb,v 1.5 2008/03/17 09:30:02 kiyohara Exp $
+#	$NetBSD: files.g42xxeb,v 1.7 2010/09/23 07:08:57 kiyohara Exp $
 #
 # Genetec corp. G4255EB evaluation board configuration info
 #
@@ -39,3 +39,6 @@ file	arch/evbarm/g42xxeb/gb225_pcic.c	opcic
 # Cypress SL811HS USB host controller
 attach	slhci at opio with slhci_opio
 file	arch/evbarm/g42xxeb/gb225_slhci.c	slhci_opio
+
+attach pxamci at obio with pxamci_obio
+file   arch/evbarm/g42xxeb/g42xxeb_mci.c	pxamci_obio

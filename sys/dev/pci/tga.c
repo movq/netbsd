@@ -1,4 +1,4 @@
-/* $NetBSD: tga.c,v 1.77 2009/05/16 14:27:30 tsutsui Exp $ */
+/* $NetBSD: tga.c,v 1.83 2012/01/11 20:50:00 macallan Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tga.c,v 1.77 2009/05/16 14:27:30 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tga.c,v 1.83 2012/01/11 20:50:00 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: tga.c,v 1.77 2009/05/16 14:27:30 tsutsui Exp $");
 #include <dev/wscons/wscons_raster.h>
 #include <dev/rasops/rasops.h>
 #include <dev/wsfont/wsfont.h>
-#include <uvm/uvm_extern.h>
+#include <dev/pci/wsdisplay_pci.h>
 
 int	tgamatch(device_t, cfdata_t, void *);
 void	tgaattach(device_t, device_t, void *);
@@ -331,6 +331,8 @@ tga_init(bus_space_tag_t memt, pci_chipset_tag_t pc, pcitag_t tag,
 	rip->ri_height = dc->dc_ht;
 	rip->ri_stride = dc->dc_rowbytes;
 	rip->ri_hw = dc;
+	if (dc == &tga_console_dc)
+		rip->ri_flg |= RI_NO_AUTO;
 
 	if (tgac->tgac_phys_depth == 32) {
 		rip->ri_rnum = 8;
@@ -344,10 +346,10 @@ tga_init(bus_space_tag_t memt, pci_chipset_tag_t pc, pcitag_t tag,
 	wsfont_init();
 	/* prefer 8 pixel wide font */
 	cookie = wsfont_find(NULL, 8, 0, 0, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_R2L,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("tga: no appropriate fonts.\n");
 		return;
@@ -402,6 +404,7 @@ tgaattach(device_t parent, device_t self, void *aux)
 #endif
 	if (console) {
 		sc->sc_dc = &tga_console_dc;
+		sc->sc_dc->dc_rinfo.ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	} else {
 		sc->sc_dc = malloc(sizeof(struct tga_devconfig), M_DEVBUF,
@@ -593,6 +596,10 @@ tga_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 	case PCI_IOC_CFGWRITE:
 		return pci_devioctl(dc->dc_pc, dc->dc_pcitag,
 		    cmd, data, flag, l);
+
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(sc->sc_dev, dc->dc_pc,
+		    dc->dc_pcitag, data);
 	}
 	return EPASSTHROUGH;
 }

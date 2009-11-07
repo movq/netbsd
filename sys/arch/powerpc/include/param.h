@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.20 2006/08/28 13:43:35 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.27 2012/01/30 06:04:32 matt Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -38,23 +38,23 @@
 #if defined(_KERNEL_OPT)
 #include "opt_ppcarch.h"
 #endif
-#ifndef	_LOCORE
-#include <machine/cpu.h>
-#endif	/* _LOCORE */
 #endif
 
 /*
  * Machine dependent constants for PowerPC (32-bit only currently)
+ * For userland regardless of port, force MACHINE to be "powerpc"
  */
+#ifndef _KERNEL
+#undef MACHINE
+#endif
 #ifndef MACHINE
 #define	MACHINE		"powerpc"
 #endif
 #define	MACHINE_ARCH	"powerpc"
 #define	MID_MACHINE	MID_POWERPC
 
-#define	ALIGNBYTES		(sizeof(double) - 1)
-#define	ALIGN(p)		(((u_long)(p) + ALIGNBYTES) & ~ALIGNBYTES)
-#define	ALIGNED_POINTER(p,t)	((((u_long)(p)) & (sizeof(t)-1)) == 0)
+/* PowerPC-specific macro to align a stack pointer (downwards). */
+#define	STACK_ALIGNBYTES	(16 - 1)	/* AltiVec */
 
 #ifdef PPC_IBM4XX
 #define	PGSHIFT		14	/* Use 16KB to reduce TLB thrashing */
@@ -91,25 +91,16 @@
  * of the hardware page size.
  */
 #ifndef MSIZE
+#ifdef _LP64
+#define	MSIZE		512		/* size of an mbuf */
+#else  /* _LP64 */
 #define	MSIZE		256		/* size of an mbuf */
+#endif /* _LP64 */
 #endif
 #ifndef MCLSHIFT
 #define	MCLSHIFT	11		/* convert bytes to m_buf clusters */
 #endif
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
-
-#ifndef NMBCLUSTERS
-
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
 
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
@@ -121,5 +112,9 @@
 #ifndef NKMEMPAGES_MAX_DEFAULT
 #define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
 #endif
+
+#if defined(_KERNEL) && !defined(_LOCORE)
+#include <machine/cpu.h>
+#endif	/* _KERNEL && !_LOCORE */
 
 #endif /* _POWERPC_PARAM_H_ */

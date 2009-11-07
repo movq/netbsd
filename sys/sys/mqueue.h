@@ -1,4 +1,4 @@
-/*	$NetBSD: mqueue.h,v 1.12 2009/11/01 21:46:09 rmind Exp $	*/
+/*	$NetBSD: mqueue.h,v 1.16 2011/11/21 04:36:05 christos Exp $	*/
 
 /*
  * Copyright (c) 2007-2009 Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -50,19 +50,20 @@ struct mq_attr {
 #include <sys/queue.h>
 #include <sys/selinfo.h>
 #include <sys/types.h>
+#include <sys/param.h>
 
 /*
- * Flags below are used in mq_flags for internal
- * purposes, this is appropriate according to POSIX.
+ * Flags below are used in mq_flags for internal purposes.
+ * This is permitted according to POSIX.
  */
 
-/* Message queue is unlinking */
-#define	MQ_UNLINK		0x10000000
+/* Message queue is unlinked */
+#define	MQ_UNLINKED		0x10000000
 /* There are receive-waiters */
 #define	MQ_RECEIVE		0x20000000
 
 /* Maximal length of mqueue name */
-#define	MQ_NAMELEN		(NAME_MAX + 1)
+#define	MQ_NAMELEN		(KERNEL_NAME_MAX + 1)
 
 /* Default size of the message */
 #define	MQ_DEF_MSGSIZE		1024
@@ -71,9 +72,9 @@ struct mq_attr {
 #define	MQ_PQSIZE		32
 #define	MQ_PQRESQ		0
 
-/* Structure of the message queue */
-struct mqueue {
-	char			mq_name[MQ_NAMELEN];
+/* Structure of the message queue. */
+typedef struct mqueue {
+	char *			mq_name;
 	kmutex_t		mq_mtx;
 	kcondvar_t		mq_send_cv;
 	kcondvar_t		mq_recv_cv;
@@ -97,18 +98,18 @@ struct mqueue {
 	struct timespec		mq_atime;
 	struct timespec		mq_mtime;
 	struct timespec		mq_btime;
-};
+} mqueue_t;
 
-/* Structure of the message */
-struct mq_msg {
+/* Structure of the message. */
+typedef struct mq_msg {
 	TAILQ_ENTRY(mq_msg)	msg_queue;
 	size_t			msg_len;
 	u_int			msg_prio;
 	uint8_t			msg_ptr[1];
-};
+} mq_msg_t;
 
 /* Prototypes */
-void	mqueue_print_list(void (*pr)(const char *, ...));
+void	mqueue_print_list(void (*pr)(const char *, ...) __printflike(1, 2));
 int	mq_send1(mqd_t, const char *, size_t, u_int, struct timespec *);
 int	mq_recv1(mqd_t, void *, size_t, u_int *, struct timespec *, ssize_t *);
 

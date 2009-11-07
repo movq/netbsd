@@ -2,7 +2,7 @@
                "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
 	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -17,7 +17,7 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Id: named.conf.docbook,v 1.43 2009/10/16 02:59:41 each Exp -->
+<!-- Id: named.conf.docbook,v 1.55 2011/11/07 00:25:53 each Exp  -->
 <refentry>
   <refentryinfo>
     <date>Aug 13, 2004</date>
@@ -42,6 +42,8 @@
       <year>2007</year>
       <year>2008</year>
       <year>2009</year>
+      <year>2010</year>
+      <year>2011</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
@@ -224,6 +226,7 @@ options {
 	tcp-listen-queue <replaceable>integer</replaceable>;
 	tkey-dhkey <replaceable>quoted_string</replaceable> <replaceable>integer</replaceable>;
 	tkey-gssapi-credential <replaceable>quoted_string</replaceable>;
+	tkey-gssapi-keytab <replaceable>quoted_string</replaceable>;
 	tkey-domain <replaceable>quoted_string</replaceable>;
 	transfers-per-ns <replaceable>integer</replaceable>;
 	transfers-in <replaceable>integer</replaceable>;
@@ -252,6 +255,7 @@ options {
 	queryport-pool-ports <replaceable>integer</replaceable>;
 	queryport-pool-updateinterval <replaceable>integer</replaceable>;
 	cleaning-interval <replaceable>integer</replaceable>;
+	resolver-query-timeout <replaceable>integer</replaceable>;
 	min-roots <replaceable>integer</replaceable>; // not implemented
 	lame-ttl <replaceable>integer</replaceable>;
 	max-ncache-ttl <replaceable>integer</replaceable>;
@@ -281,10 +285,20 @@ options {
 	disable-algorithms <replaceable>string</replaceable> { <replaceable>string</replaceable>; ... };
 	dnssec-enable <replaceable>boolean</replaceable>;
 	dnssec-validation <replaceable>boolean</replaceable>;
-	dnssec-lookaside <replaceable>string</replaceable> trust-anchor <replaceable>string</replaceable>;
-	dnssec-lookaside ( <replaceable>auto</replaceable> | <replaceable>domain</replaceable> trust-anchor <replaceable>domain</replaceable> );
+	dnssec-lookaside ( <replaceable>auto</replaceable> | <replaceable>no</replaceable> | <replaceable>domain</replaceable> trust-anchor <replaceable>domain</replaceable> );
 	dnssec-must-be-secure <replaceable>string</replaceable> <replaceable>boolean</replaceable>;
 	dnssec-accept-expired <replaceable>boolean</replaceable>;
+
+	dns64-server <replaceable>string</replaceable>;
+	dns64-contact <replaceable>string</replaceable>;
+	dns64 <replaceable>prefix</replaceable> {
+		clients { <replacable>acl</replacable>; };
+		exclude { <replacable>acl</replacable>; };
+		mapped { <replacable>acl</replacable>; };
+		break-dnssec <replaceable>boolean</replaceable>;
+		recursive-only <replaceable>boolean</replaceable>;
+		suffix <replaceable>ipv6_address</replaceable>;
+	};
 
 	empty-server <replaceable>string</replaceable>;
 	empty-contact <replaceable>string</replaceable>;
@@ -302,7 +316,7 @@ options {
 	allow-update { <replaceable>address_match_element</replaceable>; ... };
 	allow-update-forwarding { <replaceable>address_match_element</replaceable>; ... };
 	update-check-ksk <replaceable>boolean</replaceable>;
-	dnskey-ksk-only <replaceable>boolean</replaceable>;
+	dnssec-dnskey-kskonly <replaceable>boolean</replaceable>;
 
 	masterfile-format ( text | raw );
 	notify <replaceable>notifytype</replaceable>;
@@ -311,7 +325,8 @@ options {
 	notify-delay <replaceable>seconds</replaceable>;
 	notify-to-soa <replaceable>boolean</replaceable>;
 	also-notify <optional> port <replaceable>integer</replaceable> </optional> { ( <replaceable>ipv4_address</replaceable> | <replaceable>ipv6_address</replaceable> )
-		<optional> port <replaceable>integer</replaceable> </optional>; ... };
+		<optional> port <replaceable>integer</replaceable> </optional>; ...
+		<optional> key <replaceable>keyname</replaceable> </optional> ... };
 	allow-notify { <replaceable>address_match_element</replaceable>; ... };
 
 	forward ( first | only );
@@ -349,11 +364,12 @@ options {
 
 	zone-statistics <replaceable>boolean</replaceable>;
 	key-directory <replaceable>quoted_string</replaceable>;
+	managed-keys-directory <replaceable>quoted_string</replaceable>;
 	auto-dnssec <constant>allow</constant>|<constant>maintain</constant>|<constant>create</constant>|<constant>off</constant>;
 	try-tcp-refresh <replaceable>boolean</replaceable>;
 	zero-no-soa-ttl <replaceable>boolean</replaceable>;
 	zero-no-soa-ttl-cache <replaceable>boolean</replaceable>;
-	secure-to-insecure <replaceable>boolean</replaceable>;
+	dnssec-secure-to-insecure <replaceable>boolean</replaceable>;
 	deny-answer-addresses {
 		<replaceable>address_match_list</replaceable>
 	} <optional> except-from { <replaceable>namelist</replaceable> } </optional>;
@@ -427,6 +443,7 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	queryport-pool-ports <replaceable>integer</replaceable>;
 	queryport-pool-updateinterval <replaceable>integer</replaceable>;
 	cleaning-interval <replaceable>integer</replaceable>;
+	resolver-query-timeout <replaceable>integer</replaceable>;
 	min-roots <replaceable>integer</replaceable>; // not implemented
 	lame-ttl <replaceable>integer</replaceable>;
 	max-ncache-ttl <replaceable>integer</replaceable>;
@@ -456,9 +473,20 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	disable-algorithms <replaceable>string</replaceable> { <replaceable>string</replaceable>; ... };
 	dnssec-enable <replaceable>boolean</replaceable>;
 	dnssec-validation <replaceable>boolean</replaceable>;
-	dnssec-lookaside <replaceable>string</replaceable> trust-anchor <replaceable>string</replaceable>;
+	dnssec-lookaside ( <replaceable>auto</replaceable> | <replaceable>no</replaceable> | <replaceable>domain</replaceable> trust-anchor <replaceable>domain</replaceable> );
 	dnssec-must-be-secure <replaceable>string</replaceable> <replaceable>boolean</replaceable>;
 	dnssec-accept-expired <replaceable>boolean</replaceable>;
+
+	dns64-server <replaceable>string</replaceable>;
+	dns64-contact <replaceable>string</replaceable>;
+	dns64 <replaceable>prefix</replaceable> {
+		clients { <replacable>acl</replacable>; };
+		exclude { <replacable>acl</replacable>; };
+		mapped { <replacable>acl</replacable>; };
+		break-dnssec <replaceable>boolean</replaceable>;
+		recursive-only <replaceable>boolean</replaceable>;
+		suffix <replaceable>ipv6_address</replaceable>;
+	};
 
 	empty-server <replaceable>string</replaceable>;
 	empty-contact <replaceable>string</replaceable>;
@@ -476,7 +504,7 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	allow-update { <replaceable>address_match_element</replaceable>; ... };
 	allow-update-forwarding { <replaceable>address_match_element</replaceable>; ... };
 	update-check-ksk <replaceable>boolean</replaceable>;
-	dnskey-ksk-only <replaceable>boolean</replaceable>;
+	dnssec-dnskey-kskonly <replaceable>boolean</replaceable>;
 
 	masterfile-format ( text | raw );
 	notify <replaceable>notifytype</replaceable>;
@@ -485,7 +513,8 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	notify-delay <replaceable>seconds</replaceable>;
 	notify-to-soa <replaceable>boolean</replaceable>;
 	also-notify <optional> port <replaceable>integer</replaceable> </optional> { ( <replaceable>ipv4_address</replaceable> | <replaceable>ipv6_address</replaceable> )
-		<optional> port <replaceable>integer</replaceable> </optional>; ... };
+		<optional> port <replaceable>integer</replaceable> </optional>; ...
+		<optional> key <replaceable>keyname</replaceable> </optional> ... };
 	allow-notify { <replaceable>address_match_element</replaceable>; ... };
 
 	forward ( first | only );
@@ -521,7 +550,7 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	key-directory <replaceable>quoted_string</replaceable>;
 	zero-no-soa-ttl <replaceable>boolean</replaceable>;
 	zero-no-soa-ttl-cache <replaceable>boolean</replaceable>;
-	secure-to-insecure <replaceable>boolean</replaceable>;
+	dnssec-secure-to-insecure <replaceable>boolean</replaceable>;
 
 	allow-v6-synthesis { <replaceable>address_match_element</replaceable>; ... }; // obsolete
 	fetch-glue <replaceable>boolean</replaceable>; // obsolete
@@ -535,7 +564,7 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
     <title>ZONE</title>
     <literallayout>
 zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable> {
-	type ( master | slave | stub | hint |
+	type ( master | slave | stub | hint | redirect |
 		forward | delegation-only );
 	file <replaceable>quoted_string</replaceable>;
 
@@ -556,7 +585,7 @@ zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	ixfr-from-differences <replaceable>boolean</replaceable>;
 	journal <replaceable>quoted_string</replaceable>;
 	zero-no-soa-ttl <replaceable>boolean</replaceable>;
-	secure-to-insecure <replaceable>boolean</replaceable>;
+	dnssec-secure-to-insecure <replaceable>boolean</replaceable>;
 
 	allow-query { <replaceable>address_match_element</replaceable>; ... };
 	allow-query-on { <replaceable>address_match_element</replaceable>; ... };
@@ -572,7 +601,7 @@ zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 		<optional>...</optional>
 	}</replaceable>;
 	update-check-ksk <replaceable>boolean</replaceable>;
-	dnskey-ksk-only <replaceable>boolean</replaceable>;
+	dnssec-dnskey-kskonly <replaceable>boolean</replaceable>;
 
 	masterfile-format ( text | raw );
 	notify <replaceable>notifytype</replaceable>;
@@ -581,7 +610,8 @@ zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	notify-delay <replaceable>seconds</replaceable>;
 	notify-to-soa <replaceable>boolean</replaceable>;
 	also-notify <optional> port <replaceable>integer</replaceable> </optional> { ( <replaceable>ipv4_address</replaceable> | <replaceable>ipv6_address</replaceable> )
-		<optional> port <replaceable>integer</replaceable> </optional>; ... };
+		<optional> port <replaceable>integer</replaceable> </optional>; ...
+		<optional> key <replaceable>keyname</replaceable> </optional> ... };
 	allow-notify { <replaceable>address_match_element</replaceable>; ... };
 
 	forward ( first | only );
@@ -599,6 +629,7 @@ zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	max-refresh-time <replaceable>integer</replaceable>;
 	min-refresh-time <replaceable>integer</replaceable>;
 	multi-master <replaceable>boolean</replaceable>;
+	request-ixfr <replaceable>boolean</replaceable>;
 	sig-validity-interval <replaceable>integer</replaceable>;
 
 	transfer-source ( <replaceable>ipv4_address</replaceable> | * )

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.42 2009/10/21 21:12:03 rmind Exp $ */
+/*	$NetBSD: db_trace.c,v 1.49 2012/02/12 16:34:10 matt Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -28,12 +28,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.42 2009/10/21 21:12:03 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.49 2012/02/12 16:34:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
+#include <sys/cpu.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <machine/db_machdep.h>
 #include <machine/ctlreg.h>
 
@@ -41,6 +41,10 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.42 2009/10/21 21:12:03 rmind Exp $");
 #include <ddb/db_sym.h>
 #include <ddb/db_interface.h>
 #include <ddb/db_output.h>
+
+#ifndef _KERNEL
+#include <stdbool.h>
+#endif
 
 void db_print_window(uint64_t);
 
@@ -50,33 +54,41 @@ void db_print_window(uint64_t);
 #define INKERNEL(va)	1	/* Everything's in the kernel now. 8^) */
 #endif
 
+#ifdef _KERNEL
 #define	KLOAD(x)	probeget((paddr_t)(u_long)&(x), ASI_PRIMARY, sizeof(x))	
-#define ULOAD(x)	probeget((paddr_t)(u_long)&(x), ASI_AIUS, sizeof(x))	
+#else
+static long
+kload(db_addr_t addr)
+{
+	long val;
+
+	db_read_bytes(addr, sizeof val, (char *)&val);
+
+	return val;
+}
+#define	KLOAD(x)	kload((db_addr_t)(u_long)&(x))
+#endif
 
 void
-db_stack_trace_print(addr, have_addr, count, modif, pr)
-	db_expr_t       addr;
-	bool            have_addr;
-	db_expr_t       count;
-	const char      *modif;
- 	void		(*pr) (const char *, ...);
+db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
+	const char *modif, void (*pr) (const char *, ...))
 {
 	vaddr_t		frame;
-	bool		kernel_only = TRUE;
-	bool		trace_thread = FALSE;
-	bool		lwpaddr = FALSE;
+	bool		kernel_only = true;
+	bool		trace_thread = false;
+	bool		lwpaddr = false;
 	char		c;
 	const char	*cp = modif;
 
 	while ((c = *cp++) != 0) {
 		if (c == 'a') {
-			lwpaddr = TRUE;
-			trace_thread = TRUE;
+			lwpaddr = true;
+			trace_thread = true;
 		}
 		if (c == 't')
-			trace_thread = TRUE;
+			trace_thread = true;
 		if (c == 'u')
-			kernel_only = FALSE;
+			kernel_only = false;
 	}
 
 	if (!have_addr)
@@ -85,24 +97,29 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 		if (trace_thread) {
 			struct proc *p;
 			struct lwp *l;
-			struct user *u;
+			struct pcb *pcb;
 			if (lwpaddr) {
 				l = (struct lwp *)(uintptr_t)addr;
 				p = l->l_proc;
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
+#ifdef _KERNEL
+				p = proc_find_raw(addr);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
 				l = LIST_FIRST(&p->p_lwps);
 				KASSERT(l != NULL);
+#else
+				(*pr)("no proc_find_raw() in crash\n");
+				return;
+#endif
 			}
 			(*pr)("lid %d ", l->l_lid);
-			u = l->l_addr;
-			frame = (vaddr_t)u->u_pcb.pcb_sp;
+			pcb = lwp_getpcb(l);
+			frame = (vaddr_t)pcb->pcb_sp;
 			(*pr)("at %p\n", frame);
 		} else {
 			frame = (vaddr_t)addr;
@@ -283,13 +300,13 @@ db_dump_stack(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif
 {
 	int		i;
 	uint64_t	frame, oldframe;
-	bool		kernel_only = TRUE;
+	bool		kernel_only = true;
 	char		c;
 	const char	*cp = modif;
 
 	while ((c = *cp++) != 0)
 		if (c == 'u')
-			kernel_only = FALSE;
+			kernel_only = false;
 
 	if (count == -1)
 		count = 65535;
@@ -514,9 +531,9 @@ db_dump_ts(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	ts = &DDB_REGS->db_ts[0];
 	tl = DDB_REGS->db_tl;
 	for (i=0; i<tl; i++) {
-		printf("%d tt=%lx tstate=%lx tpc=%p tnpc=%p\n",
-		       i+1, (long)ts[i].tt, (u_long)ts[i].tstate,
-		       (void*)(u_long)ts[i].tpc, (void*)(u_long)ts[i].tnpc);
+		db_printf("%d tt=%lx tstate=%lx tpc=%p tnpc=%p\n",
+		          i+1, (long)ts[i].tt, (u_long)ts[i].tstate,
+		          (void*)(u_long)ts[i].tpc, (void*)(u_long)ts[i].tnpc);
 	}
 
 }

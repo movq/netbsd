@@ -1,4 +1,4 @@
-/*	$NetBSD: libkern.h,v 1.92 2009/07/21 14:55:33 joerg Exp $	*/
+/*	$NetBSD: libkern.h,v 1.105 2012/01/22 02:57:36 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -174,16 +174,13 @@ tolower(int ch)
 
 #define	__NULL_STMT		do { } while (/* CONSTCOND */ 0)
 
+#define __KASSERTSTR  "kernel %sassertion \"%s\" failed: file \"%s\", line %d "
+
 #ifdef NDEBUG						/* tradition! */
 #define	assert(e)	((void)0)
 #else
-#ifdef __STDC__
 #define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("", __FILE__, __LINE__, #e))
-#else
-#define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("", __FILE__, __LINE__, "e"))
-#endif
+			    kern_assert(__KASSERTSTR, "", #e, __FILE__, __LINE__))
 #endif
 
 #ifdef __COVERITY__
@@ -192,57 +189,62 @@ tolower(int ch)
 #endif
 #endif
 
-#define	CTASSERT(x)		_CTASSERT(x, __LINE__)
-#define	_CTASSERT(x, y)		__CTASSERT(x, y)
-#define	__CTASSERT(x, y)	typedef char __ctassert ## y[(x) ? 1 : -1];
+#define	CTASSERT(x)		__CTASSERT(x)
+#define	CTASSERT_SIGNED(x)	__CTASSERT(((typeof(x))-1) < 0)
+#define	CTASSERT_UNSIGNED(x)	__CTASSERT(((typeof(x))-1) >= 0)
 
 #ifndef DIAGNOSTIC
 #define _DIAGASSERT(a)	(void)0
 #ifdef lint
-#define	KASSERTMSG(e, msg)	/* NOTHING */
+#define	KASSERTMSG(e, msg, ...)	/* NOTHING */
 #define	KASSERT(e)		/* NOTHING */
 #else /* !lint */
-#define	KASSERTMSG(e, msg)	((void)0)
+#define	KASSERTMSG(e, msg, ...)	((void)0)
 #define	KASSERT(e)		((void)0)
 #endif /* !lint */
 #else /* DIAGNOSTIC */
 #define _DIAGASSERT(a)	assert(a)
-#define	KASSERTMSG(e, msg) do {		\
-	if (__predict_false((e)))	\
-		panic msg;		\
-	} while (/*CONSTCOND*/ 0)
-#ifdef __STDC__
+#define	KASSERTMSG(e, msg, ...)		\
+			(__predict_true((e)) ? (void)0 :		    \
+			    kern_assert(__KASSERTSTR msg, "diagnostic ", #e,	    \
+				__FILE__, __LINE__, ## __VA_ARGS__))
+
 #define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("diagnostic ", __FILE__, __LINE__, #e))
-#else
-#define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("diagnostic ", __FILE__, __LINE__,"e"))
-#endif
+			    kern_assert(__KASSERTSTR, "diagnostic ", #e,	    \
+				__FILE__, __LINE__))
 #endif
 
 #ifndef DEBUG
 #ifdef lint
-#define	KDASSERT(e)	/* NOTHING */
+#define	KDASSERTMSG(e,msg, ...)	/* NOTHING */
+#define	KDASSERT(e)		/* NOTHING */
 #else /* lint */
-#define	KDASSERT(e)	((void)0)
+#define	KDASSERTMSG(e,msg, ...)	((void)0)
+#define	KDASSERT(e)		((void)0)
 #endif /* lint */
 #else
-#ifdef __STDC__
+#define	KDASSERTMSG(e, msg, ...)	\
+			(__predict_true((e)) ? (void)0 :		    \
+			    kern_assert(__KASSERTSTR msg, "debugging ", #e,	    \
+				__FILE__, __LINE__, ## __VA_ARGS__))
+
 #define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("debugging ", __FILE__, __LINE__, #e))
-#else
-#define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("debugging ", __FILE__, __LINE__, "e"))
+			    kern_assert(__KASSERTSTR, "debugging ", #e,	    \
+				__FILE__, __LINE__))
 #endif
-#endif
+
 /*
  * XXX: For compatibility we use SMALL_RANDOM by default.
  */
 #define SMALL_RANDOM
 
 #ifndef offsetof
+#if __GNUC_PREREQ__(4, 0)
+#define offsetof(type, member)	__builtin_offsetof(type, member)
+#else
 #define	offsetof(type, member) \
     ((size_t)(unsigned long)(&(((type *)0)->member)))
+#endif
 #endif
 
 #define	MTPRNG_RLEN		624
@@ -257,18 +259,18 @@ struct mtprng_state {
 void	*memcpy(void *, const void *, size_t);
 int	 memcmp(const void *, const void *, size_t);
 void	*memset(void *, int, size_t);
-#if __GNUC_PREREQ__(2, 95) && (__GNUC_PREREQ__(4, 0) || !defined(__vax__)) && \
-    !defined(_STANDALONE)
+#if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	memcpy(d, s, l)		__builtin_memcpy(d, s, l)
 #define	memcmp(a, b, l)		__builtin_memcmp(a, b, l)
 #endif
-#if __GNUC_PREREQ__(2, 95) && !defined(__vax__) && !defined(_STANDALONE)
+#if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	memset(d, v, l)		__builtin_memset(d, v, l)
 #endif
 
 char	*strcpy(char *, const char *);
 int	 strcmp(const char *, const char *);
 size_t	 strlen(const char *);
+size_t	 strnlen(const char *, size_t);
 char	*strsep(char **, const char *);
 #if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	strcpy(d, s)		__builtin_strcpy(d, s)
@@ -298,7 +300,8 @@ int	 ffs(int);
 #define	ffs(x)		__builtin_ffs(x)
 #endif
 
-void	 __kernassert(const char *, const char *, int, const char *);
+void	 kern_assert(const char *, ...)
+    __attribute__((__format__(__printf__, 1, 2)));
 unsigned int
 	bcdtobin(unsigned int);
 unsigned int
@@ -312,8 +315,6 @@ char	*intoa(u_int32_t);
 void	*memchr(const void *, int, size_t);
 void	*memmove(void *, const void *, size_t);
 int	 pmatch(const char *, const char *, const char **);
-u_int32_t arc4random(void);
-void	 arc4randbytes(void *, size_t);
 #ifndef SMALL_RANDOM
 void	 srandom(unsigned long);
 char	*initstate(unsigned long, char *, size_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: alist.h,v 1.1.1.1 2009/03/22 15:02:31 christos Exp $	*/
+/*	$NetBSD: alist.h,v 1.2.6.1 2012/06/05 21:15:30 bouyer Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
@@ -31,7 +31,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: alist.h,v 1.10 2007/08/28 07:20:43 tbox Exp */
+/* Id: alist.h,v 1.10 2007/08/28 07:20:43 tbox Exp  */
 
 #ifndef ISCCC_ALIST_H
 #define ISCCC_ALIST_H 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.17 2009/03/14 21:04:11 dsl Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.22 2011/07/26 08:36:02 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@bga.com>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.17 2009/03/14 21:04:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.22 2011/07/26 08:36:02 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -48,11 +48,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.17 2009/03/14 21:04:11 dsl Exp $");
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/ofw/openfirm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 
@@ -61,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.17 2009/03/14 21:04:11 dsl Exp $");
 
 #define MC_BUFSIZE 0x800
 
-hide int	mc_match(struct device *, struct cfdata *, void *);
-hide void	mc_attach(struct device *, struct device *, void *);
+hide int	mc_match(device_t, cfdata_t, void *);
+hide void	mc_attach(device_t, device_t, void *);
 hide void	mc_init(struct mc_softc *sc);
 hide void	mc_putpacket(struct mc_softc *sc, u_int len);
 hide int	mc_dmaintr(void *arg);
@@ -81,11 +79,11 @@ int mc_supmedia[] = {
 
 #define N_SUPMEDIA (sizeof(mc_supmedia) / sizeof(int));
 
-CFATTACH_DECL(mc, sizeof(struct mc_softc),
+CFATTACH_DECL_NEW(mc, sizeof(struct mc_softc),
     mc_match, mc_attach, NULL, NULL);
 
 hide int
-mc_match(struct device *parent, struct cfdata *cf, void *aux)
+mc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -104,13 +102,14 @@ mc_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 hide void
-mc_attach(struct device *parent, struct device *self, void *aux)
+mc_attach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct mc_softc *sc = (struct mc_softc *)self;
+	struct mc_softc *sc = device_private(self);
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 	u_int *reg;
 
+	sc->sc_dev = self;
 	sc->sc_node = ca->ca_node;
 	sc->sc_regt = ca->ca_tag;
 
@@ -119,8 +118,8 @@ mc_attach(struct device *parent, struct device *self, void *aux)
 	reg[2] += ca->ca_baseaddr;
 	reg[4] += ca->ca_baseaddr;
 
-	sc->sc_txdma = mapiodev(reg[2], reg[3]);
-	sc->sc_rxdma = mapiodev(reg[4], reg[5]);
+	sc->sc_txdma = mapiodev(reg[2], reg[3], false);
+	sc->sc_rxdma = mapiodev(reg[4], reg[5], false);
 	bus_space_map(sc->sc_regt, reg[0], reg[1], 0, &sc->sc_regh);
 
 	sc->sc_tail = 0;

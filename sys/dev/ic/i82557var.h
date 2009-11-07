@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557var.h,v 1.47 2009/05/12 14:25:17 cegger Exp $	*/
+/*	$NetBSD: i82557var.h,v 1.50 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -166,6 +166,7 @@ struct fxp_softc {
 	device_t sc_dev;
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
+	bus_size_t sc_size;		/* bus space size */
 	bus_dma_tag_t sc_dmat;		/* bus dma tag */
 	struct ethercom sc_ethercom;	/* ethernet common part */
 	void *sc_ih;			/* interrupt handler cookie */
@@ -240,10 +241,7 @@ struct fxp_softc {
 	void	(*sc_disable)(struct fxp_softc *);
 
 	int	sc_eeprom_size;		/* log2 size of EEPROM */
-#if NRND > 0
-	rndsource_element_t rnd_source;	/* random source */
-#endif
-
+	krndsource_t rnd_source;	/* random source */
 };
 
 #ifdef FXP_EVENT_COUNTERS
@@ -365,7 +363,7 @@ do {									\
 
 void	fxp_attach(struct fxp_softc *);
 int	fxp_activate(device_t, enum devact);
-int	fxp_detach(struct fxp_softc *);
+int	fxp_detach(struct fxp_softc *, int);
 int	fxp_intr(void *);
 
 int	fxp_enable(struct fxp_softc*);

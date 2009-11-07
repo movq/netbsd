@@ -1,4 +1,4 @@
-.\" $NetBSD: modunload.8,v 1.16 2008/11/12 12:35:53 ad Exp $
+.\" $NetBSD: modunload.8,v 1.20 2010/12/14 16:24:00 jruoho Exp $
 .\"
 .\" Copyright (c) 1993 Christopher G. Demetriou
 .\" All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 .\"
-.Dd November 12, 2008
+.Dd December 14, 2010
 .Dt MODUNLOAD 8
 .Os
 .Sh NAME
@@ -41,6 +41,7 @@
 .Sh SYNOPSIS
 .Nm
 .Ar name
+\&...
 .Sh DESCRIPTION
 The
 .Nm
@@ -49,12 +50,18 @@ utility unloads a loadable kernel module from a running system.
 .Ar name
 is name of the module to be unloaded, as shown by
 .Xr modstat 8 .
+.Pp
+Builtin modules will not be unloaded from memory, but they will be
+disabled.
+They can be re-enabled using
+.Xr modload 8 .
 .Sh DIAGNOSTICS
 The
 .Nm
 utility exits with a status of 0 on success
 and with a nonzero status if an error occurs.
 .Sh SEE ALSO
+.Xr module 7 ,
 .Xr modload 8 ,
 .Xr modstat 8
 .Sh HISTORY

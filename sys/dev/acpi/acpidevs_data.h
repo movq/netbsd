@@ -1,10 +1,10 @@
-/*	$NetBSD: acpidevs_data.h,v 1.11 2009/09/27 14:11:58 jmcneill Exp $	*/
+/*	$NetBSD: acpidevs_data.h,v 1.26 2011/06/22 19:26:36 jruoho Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	# NetBSD: acpidevs,v 1.13 2009/09/27 14:11:07 jmcneill Exp
+ *	# NetBSD: acpidevs,v 1.35 2011/06/22 19:26:22 jruoho Exp
  */
 
 const struct { const char *pnp, *str; } acpi_knowndevs[] = {
@@ -179,14 +179,6 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	{
 	    "PNP0502",
 	    "Multiport serial device (non-intelligent 16550)",
-	},
-	{
-	    "PNP0510",
-	    "Generic IRDA-compatible device",
-	},
-	{
-	    "PNP0511",
-	    "Generic IRDA-compatible device",
 	},
 	{
 	    "PNP0600",
@@ -385,8 +377,16 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	    "AT Real-Time Clock",
 	},
 	{
+	    "PNP0B01",
+	    "AT Real-Time Clock (PIIX4)",
+	},
+	{
+	    "PNP0B02",
+	    "AT Real-Time Clock (Dallas Semiconductor)",
+	},
+	{
 	    "PNP0C00",
-	    "Plug and Play BIOS (only created by the root enumerator)",
+	    "Plug and Play BIOS",
 	},
 	{
 	    "PNP0C01",
@@ -394,11 +394,11 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNP0C02",
-	    "Plug and Play motherboard register resources",
+	    "Motherboard Register Resources",
 	},
 	{
 	    "PNP0C03",
-	    "Plug and Play BIOS Event Notification Interrupt",
+	    "BIOS Event Notification Interrupt",
 	},
 	{
 	    "PNP0C04",
@@ -406,19 +406,19 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNP0C05",
-	    "APM BIOS (Version independent)",
+	    "APM BIOS",
 	},
 	{
 	    "PNP0C06",
-	    "Reserved for identification of early Plug and Play BIOS implementation",
+	    "Reserved",
 	},
 	{
 	    "PNP0C07",
-	    "Reserved for identification of early Plug and Play BIOS implementation",
+	    "Reserved",
 	},
 	{
 	    "PNP0C08",
-	    "ACPI system board hardware",
+	    "ACPI System Board Hardware",
 	},
 	{
 	    "PNP0C09",
@@ -434,27 +434,27 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNP0C0C",
-	    "ACPI power button device",
+	    "ACPI Power Button Device",
 	},
 	{
 	    "PNP0C0D",
-	    "ACPI lid device",
+	    "ACPI Lid Device",
 	},
 	{
 	    "PNP0C0E",
-	    "ACPI sleep button device",
+	    "ACPI Sleep Button Device",
 	},
 	{
 	    "PNP0C0F",
-	    "PCI interrupt link device",
+	    "PCI Interrupt Link Device",
 	},
 	{
 	    "PNP0C10",
-	    "ACPI system indicator device",
+	    "ACPI System Indicator Device",
 	},
 	{
 	    "PNP0C11",
-	    "ACPI thermal zone",
+	    "ACPI Thermal Zone",
 	},
 	{
 	    "PNP0C12",
@@ -462,15 +462,27 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNP0C13",
-	    "Plug and Play BIOS (used when ACPI mode cannot be used)",
+	    "Plug and Play BIOS (for non-ACPI)",
 	},
 	{
 	    "PNP0C14",
-	    "WMI mapper device",
+	    "WMI Mapper Device",
+	},
+	{
+	    "PNP0C15",
+	    "ACPI Docking Station",
+	},
+	{
+	    "PNP0C32",
+	    "ACPI Quickstart Button",
+	},
+	{
+	    "PNP0C33",
+	    "ACPI Hardware Error Device",
 	},
 	{
 	    "PNP0C80",
-	    "Memory Device",
+	    "Hotplug Memory Device",
 	},
 	{
 	    "PNP0E00",
@@ -638,6 +650,10 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "SYN1003",
+	    "Synaptics PS/2-style Touchpad",
+	},
+	{
+	    "SYN013B",
 	    "Synaptics PS/2-style Touchpad",
 	},
 	{
@@ -1081,10 +1097,6 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	    "AMD PCNet32 (VL version)",
 	},
 	{
-	    "PNP8294",
-	    "IrDA Infrared NDIS driver (Microsoft-supplied)",
-	},
-	{
 	    "PNP82BD",
 	    "IBM PCMCIA-NIC",
 	},
@@ -1129,16 +1141,40 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	    "Reserved for Microsoft Networking components",
 	},
 	{
-	    "PNP8389",
-	    "Peer IrLAN infrared driver (Microsoft-supplied)",
-	},
-	{
 	    "PNP8390",
 	    "Generic network adapter",
 	},
 	{
+	    "PNP0510",
+	    "Generic IrDA-compatible device",
+	},
+	{
+	    "PNP0511",
+	    "Generic IrDA-compatible device",
+	},
+	{
+	    "PNP8294",
+	    "IrDA Infrared NDIS driver (Microsoft-supplied)",
+	},
+	{
+	    "PNP8389",
+	    "Peer IrLAN infrared driver (Microsoft-supplied)",
+	},
+	{
+	    "HWPC224",
+	    "NSC SuperIO chip (inc. IrDA device)",
+	},
+	{
+	    "IBM0071",
+	    "NSC SuperIO chip (inc. IrDA device)",
+	},
+	{
+	    "ITE8708",
+	    "ITE Tech IrDA Infrared device",
+	},
+	{
 	    "NSC6001",
-	    "NSC IrDA Fast Infrared Port",
+	    "NSC SuperIO chip (inc. IrDA device)",
 	},
 	{
 	    "PNPA002",
@@ -1238,7 +1274,7 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNPB00A",
-	    "MediaVision Pro Audio Spectrum (Trantor SCSI enabled, Thunder Chip Disabled)",
+	    "MediaVision Pro Audio Spectrum (SCSI)",
 	},
 	{
 	    "PNPB00B",
@@ -1250,11 +1286,11 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNPB00D",
-	    "MediaVision Pro Audio Spectrum Basic (No Trantor SCSI, Thunder Chip Enabled)",
+	    "MediaVision Pro Audio Spectrum Basic (Thunder Chip)",
 	},
 	{
 	    "PNPB00E",
-	    "MediaVision Pro Audio Spectrum (Trantor SCSI enabled, Thunder Chip Enabled)",
+	    "MediaVision Pro Audio Spectrum (SCSI, Thunder Chip)",
 	},
 	{
 	    "PNPB00F",
@@ -1270,7 +1306,7 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	},
 	{
 	    "PNPB019",
-	    "MediaVision Pro Audio Spectrum Basic (no Trantor SCSI, Thunder chip Disabled)",
+	    "MediaVision Pro Audio Spectrum Basic",
 	},
 	{
 	    "PNPB020",
@@ -1281,12 +1317,64 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	    "Joystick/Game port",
 	},
 	{
+	    "CSC0000",
+	    "Crystal PnP Audio (codec)",
+	},
+	{
+	    "CSC0003",
+	    "Crystal PnP Audio (MPU-401)",
+	},
+	{
+	    "CSC0010",
+	    "Crystal PnP Audio (registers)",
+	},
+	{
 	    "PNPC000",
 	    "Compaq 14400 Modem (TBD)",
 	},
 	{
 	    "PNPC001",
 	    "Compaq 2400/9600 Modem (TBD)",
+	},
+	{
+	    "ATM1200",
+	    "Atmel Trusted Platform Module",
+	},
+	{
+	    "BCM0101",
+	    "Broadcom Trusted Platform Module",
+	},
+	{
+	    "BCM0102",
+	    "Broadcom Trusted Platform Module",
+	},
+	{
+	    "ICO0102",
+	    "Intel Trusted Platform Module",
+	},
+	{
+	    "IFX0102",
+	    "Infineon Trusted Platform Module",
+	},
+	{
+	    "INTC0102",
+	    "Intel Trusted Platform Module",
+	},
+	{
+	    "NSC1100",
+	    "NSC Trusted Platform Module",
+	},
+	{
+	    "NSC1200",
+	    "NSC Trusted Platform Module",
+	},
+	{
+	    "PNP0C31",
+	    "Trusted Platform Module",
+	},
+	{
+	    "SMO1200",
+	    "STMicroelectronics Trusted Platform Module",
 	},
 	{
 	    "ACPI0001",
@@ -1313,7 +1401,63 @@ const struct { const char *pnp, *str; } acpi_knowndevs[] = {
 	    "GPE Block Device",
 	},
 	{
+	    "ACPI0007",
+	    "Processor Device",
+	},
+	{
+	    "ACPI0008",
+	    "Ambient Light Sensor",
+	},
+	{
+	    "ACPI0009",
+	    "I/O APIC/SAPIC Device",
+	},
+	{
+	    "ACPI000A",
+	    "I/O APIC Device",
+	},
+	{
+	    "ACPI000B",
+	    "I/O SAPIC Device",
+	},
+	{
+	    "ACPI000C",
+	    "Processor Aggregator",
+	},
+	{
+	    "ACPI000D",
+	    "Power Meter",
+	},
+	{
+	    "ACPI000E",
+	    "Wake Alarm Device",
+	},
+	{
+	    "ENE0100",
+	    "KB3924-based CIR Port Reciever",
+	},
+	{
+	    "HPQ0004",
+	    "Hewlett-Packard 3D DriveGuard accelerometer",
+	},
+	{
+	    "IBM0079",
+	    "IBM Docking Station",
+	},
+	{
 	    "INT0800",
-	    "Intel FWH Random Number Generator",
+	    "Intel Firmware Hub Device",
+	},
+	{
+	    "IPI0001",
+	    "Intelligent Platform Management Interface",
+	},
+	{
+	    "LEN0014",
+	    "Lenovo ThinkPad Extras",
+	},
+	{
+	    "SMO8800",
+	    "ST Microelectronics Accelerometer",
 	},
 };

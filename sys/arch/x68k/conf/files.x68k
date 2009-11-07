@@ -1,11 +1,9 @@
-#	$NetBSD: files.x68k,v 1.70 2009/08/21 04:12:27 thorpej Exp $
+#	$NetBSD: files.x68k,v 1.77 2011/11/27 09:00:32 isaki Exp $
 #
 # new style config file for x68k architecture
 #
 
 defflag				M060SP
-
-defflag	opt_m680x0.h		M68020 M68030 M68040 M68060
 
 defflag				JUPITER
 defflag				PANICBUTTON
@@ -26,18 +24,16 @@ file	arch/x68k/x68k/mainbus.c
 define	event {}
 file	arch/x68k/dev/event.c		event
 
-file	arch/x68k/x68k/x68k_init.c
 file	arch/x68k/x68k/autoconf.c
 file	arch/x68k/x68k/conf.c
 file	arch/x68k/x68k/disksubr.c	disk
 file	arch/x68k/x68k/machdep.c
-file	arch/x68k/x68k/mem.c
 file	arch/x68k/x68k/pmap_bootstrap.c	compile-with "${NOPROF_C}"
 file	arch/x68k/x68k/trap.c
-file	arch/x68k/x68k/fpu.c
 file	arch/x68k/x68k/bus.c
 file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c	ddb
+file	arch/m68k/m68k/fpu.c
 file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c	procfs
 file	arch/m68k/m68k/sys_machdep.c
@@ -100,9 +96,9 @@ device kbd: event
 attach	kbd at mfp
 file	arch/x68k/dev/kbd.c		kbd needs-flag
 
-device pow: sysmon_power, sysmon_taskq
-attach	pow at mfp
-file	arch/x68k/dev/pow.c		pow
+device powsw: sysmon_power, sysmon_taskq
+attach	powsw at mfp
+file	arch/x68k/dev/powsw.c		powsw
 
 device rtc
 attach	rtc at intio
@@ -212,5 +208,8 @@ include "compat/ossaudio/files.ossaudio"
 
 # USB support
 include "dev/usb/files.usb"
+
+# ATA and ATAPI support
+include "dev/ata/files.ata"
 
 include "arch/x68k/conf/majors.x68k"

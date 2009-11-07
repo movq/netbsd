@@ -1,6 +1,6 @@
-/*	$NetBSD: if_ie_vme.c,v 1.27 2009/05/12 14:47:27 cegger Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.30 2011/06/03 16:28:41 tsutsui Exp $	*/
 
-/*-
+/*
  * Copyright (c) 1995 Charles D. Cranor
  * All rights reserved.
  *
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -145,7 +140,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.27 2009/05/12 14:47:27 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.30 2011/06/03 16:28:41 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -162,9 +157,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.27 2009/05/12 14:47:27 cegger Exp $"
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-#ifdef __sparc__
-#include <machine/autoconf.h>
-#endif
 #include <dev/vme/vmevar.h>
 
 #include <dev/ic/i82586reg.h>
@@ -247,7 +239,7 @@ struct ie_vme_softc {
 	bus_space_handle_t ievh;
 };
 
-CFATTACH_DECL(ie_vme, sizeof(struct ie_vme_softc),
+CFATTACH_DECL_NEW(ie_vme, sizeof(struct ie_vme_softc),
     ie_vme_match, ie_vme_attach, NULL, NULL);
 
 #define read_iev(sc, reg) \
@@ -299,7 +291,7 @@ ie_vmeintr(struct ie_softc *sc, int where)
          * check for parity error
          */
 	if (read_iev(vsc, status) & IEVME_PERR) {
-		aprint_error_dev(&sc->sc_dev, "parity error (ctrl 0x%x @ 0x%02x%04x)\n",
+		aprint_error_dev(sc->sc_dev, "parity error (ctrl 0x%x @ 0x%02x%04x)\n",
 		       read_iev(vsc, pectrl),
 		       read_iev(vsc, pectrl) & IEVME_HADDR,
 		       read_iev(vsc, peaddr));
@@ -467,7 +459,7 @@ void
 ie_vme_attach(device_t parent, device_t self, void *aux)
 {
 	u_int8_t myaddr[ETHER_ADDR_LEN];
-	struct ie_vme_softc *vsc = (void *) self;
+	struct ie_vme_softc *vsc = device_private(self);
 	struct vme_attach_args *va = aux;
 	vme_chipset_tag_t ct = va->va_vct;
 	struct ie_softc *sc;
@@ -476,7 +468,7 @@ ie_vme_attach(device_t parent, device_t self, void *aux)
 	vme_size_t memsize;
 	vme_mapresc_t resc;
 	int lcv;
-
+	prop_data_t eaddrprop;
 	vme_am_t mod;
 
 	/*
@@ -492,6 +484,7 @@ ie_vme_attach(device_t parent, device_t self, void *aux)
 		panic("if_ie: vme alloc");
 
 	sc = &vsc->ie;
+	sc->sc_dev = self;
 
 	sc->hwreset = ie_vmereset;
 	sc->hwinit = ie_vmerun;
@@ -567,9 +560,11 @@ ie_vme_attach(device_t parent, device_t self, void *aux)
 
 	printf("\n%s:", device_xname(self));
 
-#ifdef __sparc__
-	prom_getether(0, myaddr);
-#endif
+	eaddrprop = prop_dictionary_get(device_properties(self), "mac-address");
+	if (eaddrprop != NULL && prop_data_size(eaddrprop) == ETHER_ADDR_LEN)
+		memcpy(myaddr, prop_data_data_nocopy(eaddrprop),
+			ETHER_ADDR_LEN);
+
 	i82586_attach(sc, "multibus/vme", myaddr, media, NMEDIA, media[0]);
 
 	vme_intr_map(ct, va->ilevel, va->ivector, &ih);

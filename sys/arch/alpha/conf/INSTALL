@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.98 2009/03/29 10:12:31 tsutsui Exp $
+# $NetBSD: INSTALL,v 1.102 2011/12/18 05:49:23 dholland Exp $
 #
 # Alpha INSTALL kernel.
 
@@ -50,7 +50,7 @@ file-system	NFS		# Sun NFS-compatible file system client
 # File system options
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
-options 	WAPBL		# File system journaling support - Experimental
+options 	WAPBL		# File system journaling support
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
@@ -341,10 +341,9 @@ wskbd*		at	pckbd?
 wsmouse*	at	pms?
 
 pseudo-device	loop		1
-pseudo-device	md		1
+pseudo-device	md		
 pseudo-device	ppp		
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 pseudo-device	sl		
 
-pseudo-device	rnd			# /dev/random and in-kernel generator
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device

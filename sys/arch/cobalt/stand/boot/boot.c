@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.17 2008/05/29 14:25:00 tsutsui Exp $	*/
+/*	$NetBSD: boot.c,v 1.20 2011/01/22 19:19:16 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -377,9 +377,8 @@ print_banner(unsigned int memsize)
 	printf("\n");
 	printf(">> %s " NETBSD_VERS " Bootloader, Revision %s [@%p]\n",
 			bootprog_name, bootprog_rev, (void*)&start);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 	printf(">> Model:\t\t%s\n", cobalt_model[cobalt_id]);
-	printf(">> Memory:\t\t%u k\n", (memsize - MIPS_KSEG0_START) / 1024);
+	printf(">> Memory:\t\t%lu k\n", (memsize - MIPS_KSEG0_START) / 1024);
 	printf(">> PROM boot string:\t%s\n", bootstring);
 }
 
@@ -485,8 +484,8 @@ main(unsigned int memsize)
 
 		entry = (void *)marks[MARK_ENTRY];
 
-		DPRINTF(("Bootinfo @ 0x%x\n", bi_addr));
-		printf("Starting at 0x%x\n\n", (u_int)entry);
+		DPRINTF(("Bootinfo @ 0x%lx\n", (u_long)bi_addr));
+		printf("Starting at 0x%lx\n\n", (u_long)entry);
 		(*entry)(memsize, BOOTINFO_MAGIC, bi_addr);
 	}
 

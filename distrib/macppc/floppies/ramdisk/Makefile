@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.36 2009/09/24 21:04:46 he Exp $
+#	$NetBSD: Makefile,v 1.39 2010/12/24 10:11:39 aymeric Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 IMAGE=		ramdisk.fs
-IMAGESIZE=	2048k
+IMAGESIZE=	2112k
 MAKEFS_FLAGS=	-f 15
 
 WARNS=		1
@@ -17,7 +17,7 @@ MTREECONF=	${DISTRIBDIR}/common/mtree.common
 IMAGEENDIAN=	be
 MAKEDEVTARGETS=	floppy
 IMAGEDEPENDS=	${CRUNCHBIN} \
-		dot.profile ${DISTRIBDIR}/common/termcap \
+		dot.profile \
 		${DESTDIR}/usr/mdec/ofwboot ${DESTDIR}/usr/mdec/bootxx \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \

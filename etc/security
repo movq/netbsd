@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: security,v 1.106 2009/01/27 10:32:18 haad Exp $
+#	$NetBSD: security,v 1.110 2011/03/02 17:00:28 christos Exp $
 #	from: @(#)security	8.1 (Berkeley) 6/9/93
 #
 
@@ -25,7 +25,6 @@ fi
 # Set reasonable defaults (if they're not set in security.conf)
 #
 backup_dir=${backup_dir:-/var/backups}
-pkgdb_dir=${pkgdb_dir:-/var/db/pkg}
 max_loginlen=${max_loginlen:-8}
 max_grouplen=${max_grouplen:-8}
 pkg_info=${pkg_info:-/usr/sbin/pkg_info}
@@ -62,6 +61,16 @@ LVM_LABELS=lvm.$$
 PKGS=pkgs.$$
 CHANGEFILES=changefiles.$$
 SPECIALSPEC=specialspec.$$
+
+if [ -n "${pkgdb_dir}" ]; then
+    echo "WARNING: Setting pkgdb_dir in security.conf(5) is deprecated"
+    echo "WARNING: Please define PKG_DBDIR in pkg_install.conf(5) instead"
+    _compat_K_flag="-K ${pkgdb_dir}"
+fi
+
+have_pkgs() {
+	$pkg_info ${_compat_K_flag} -q -E '*'
+}
 
 # migrate_file old new
 #	Determine if the "${old}" path name needs to be migrated to the
@@ -399,8 +408,8 @@ end-of-csh
 			unset PATH
 			/bin/sh << end-of-sh > /dev/null 2>&1
 				. $i
-				list=\`echo \$PATH | /usr/bin/sed -e \
-				    's/^:/.:/;s/:$/:./;s/::/:.:/g;s/:/ /g'\`
+				list=\$(echo \$PATH | /usr/bin/sed -e \
+				    's/^:/.:/;s/:$/:./;s/::/:.:/g;s/:/ /g')
 				/bin/ls -ldgT \$list > $TMP1
 end-of-sh
 			export PATH=$SAVE_PATH
@@ -432,7 +441,7 @@ fi
 # Root and uucp should both be in /etc/ftpusers.
 #
 if checkyesno check_ftpusers; then
-	list="uucp "`awk '$2 == 0 { print $1 }' $MPBYUID`
+	list="uucp "$(awk '$2 == 0 { print $1 }' $MPBYUID)
 	for i in $list; do
 		if /usr/libexec/ftpd -C $i ; then
 			printf "\t$i is not denied\n"
@@ -472,7 +481,7 @@ if checkyesno check_rhosts; then
 	sort -k2 |
 	while read uid homedir; do
 		if [ -f ${homedir}/.rhosts ] ; then
-			rhost=`ls -ldgT ${homedir}/.rhosts`
+			rhost=$(ls -ldgT ${homedir}/.rhosts)
 			printf -- "$uid: $rhost\n"
 		fi
 	done > $OUTPUT
@@ -501,7 +510,7 @@ if checkyesno check_homes; then
 		permit_usergroups=1 || permit_usergroups=0
 	while read uid homedir; do
 		if [ -d ${homedir}/ ] ; then
-			file=`ls -ldgT ${homedir}`
+			file=$(ls -ldgT ${homedir})
 			printf -- "$uid $file\n"
 		fi
 	done < $MPBYPATH |
@@ -524,7 +533,7 @@ if checkyesno check_homes; then
 		for f in $list ; do
 			file=${homedir}/${f}
 			if [ -f $file ] ; then
-				printf -- "$uid $f `ls -ldgT $file`\n"
+				printf -- "$uid $f $(ls -ldgT $file)\n"
 			fi
 		done
 	done < $MPBYPATH |
@@ -553,7 +562,7 @@ if checkyesno check_homes; then
 		for f in $list ; do
 			file=${homedir}/${f}
 			if [ -f $file ] ; then
-				printf -- "$uid $f `ls -ldgT $file`\n"
+				printf -- "$uid $f $(ls -ldgT $file)\n"
 			fi
 		done
 	done < $MPBYPATH |
@@ -840,7 +849,7 @@ if checkyesno check_mtree; then
 
 	for file in /etc/mtree/*.secure; do
 		[ $file = '/etc/mtree/*.secure' ] && continue
-		tree=`sed -n -e '3s/.* //p' -e 3q $file`
+		tree=$(sed -n -e '3s/.* //p' -e 3q $file)
 		mtree $check_mtree_flags -f $file -p $tree > $TMP1
 		if [ -s $TMP1 ]; then
 			printf "\nChecking $tree:\n"
@@ -857,8 +866,8 @@ fi
 #
 if checkyesno check_disklabels; then
 		# migrate old disklabels
-	for file in `ls -1d $backup_dir/$backup_dir/disklabel.* \
-	    $backup_dir/disklabel.* 2>/dev/null`; do
+	for file in $(ls -1d $backup_dir/$backup_dir/disklabel.* \
+	    $backup_dir/disklabel.* 2>/dev/null); do
 		migrate_file "$file" "$work_dir/${file##*/}"
 	done
 
@@ -868,14 +877,14 @@ if checkyesno check_disklabels; then
 	xargs rm < $LABELS
 
 		# generate disklabels of all disks excluding:	cd dk fd md st
-	disks=`iostat -x | awk 'NR > 1 && $1 !~ /^[cfm]d|dk|st|nfs/ { print $1; }'`
+	disks=$(iostat -x | awk 'NR > 1 && $1 !~ /^[cfm]d|dk|st|nfs/ { print $1; }')
 	for i in $disks; do
 		disklabel $i > "$work_dir/disklabel.$i" 2>/dev/null
 	done
 
 		# if fdisk is available, generate fdisks for:	ed ld sd wd
 	if [ -x /sbin/fdisk ]; then
-		disks=`iostat -x| awk 'NR > 1 && $1 ~ /^[elsw]d/ { print $1; }'`
+		disks=$(iostat -x | awk 'NR > 1 && $1 ~ /^[elsw]d/ { print $1; }')
 		for i in $disks; do
 			/sbin/fdisk $i > "$work_dir/fdisk.$i" 2>/dev/null
 		done
@@ -883,7 +892,7 @@ if checkyesno check_disklabels; then
 
 		# if dkctl is available, generate dkctl listwedges for:	ed ld sd wd cgd ofdisk ra rl raid
 	if [ -x /sbin/dkctl ]; then
-		disks=`iostat -x| awk 'NR > 1 && $1 ~ /^[elsw]d|cgd|ofdisk|r[al]|raid/ { print $1; }'`
+		disks=$(iostat -x | awk 'NR > 1 && $1 ~ /^[elsw]d|cgd|ofdisk|r[al]|raid/ { print $1; }')
 		for i in $disks; do
 			/sbin/dkctl $i listwedges > "$work_dir/wedges.$i" 2>/dev/null
 		done
@@ -910,10 +919,12 @@ fi
 
 # Check for changes in the list of installed pkgs
 #
-if checkyesno check_pkgs && [ -d $pkgdb_dir ]; then
+if checkyesno check_pkgs && have_pkgs; then
 	pkgs=$work_dir/pkgs
 	migrate_file "$backup_dir/pkgs" "$pkgs"
-	(	cd $pkgdb_dir
+	pkg_dbdir=$(pkg_admin config-var PKG_DBDIR)
+	: ${pkg_dbdir:=/var/db/pkg}
+	(	cd $pkg_dbdir
 		$pkg_info | sort
 		echo ""
 		find . \( -name +REQUIRED_BY -o -name +CONTENTS \) -print0 |
@@ -990,6 +1001,24 @@ if [ -n "$CHANGELIST" ]; then
 	comm -23 $TMP1 $TMP2 | while read file; do
 		backup_and_diff "$file" yes
 	done
+fi
+
+if have_pkgs; then
+	if checkyesno check_pkg_vulnerabilities; then
+		pkg_admin ${_compat_K_flag} audit >${OUTPUT} 2>&1
+		if [ -s ${OUTPUT} ]; then
+			printf "\nInstalled vulnerable packages:\n"
+			cat ${OUTPUT}
+		fi
+	fi
+
+	if checkyesno check_pkg_signatures; then
+		pkg_admin ${_compat_K_flag} check >${OUTPUT} 2>&1
+		if [ $? -ne 0 ]; then
+			printf "\nFiles with invalid signatures:\n"
+			cat ${OUTPUT}
+		fi
+	fi
 fi
 
 if [ -f /etc/security.local ]; then

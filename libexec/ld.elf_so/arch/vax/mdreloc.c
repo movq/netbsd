@@ -1,17 +1,16 @@
-/*	$NetBSD: mdreloc.c,v 1.25 2009/08/29 13:46:55 jmmv Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.28 2011/03/25 18:07:07 joerg Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.25 2009/08/29 13:46:55 jmmv Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.28 2011/03/25 18:07:07 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.25 2009/08/29 13:46:55 jmmv Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.28 2011/03/25 18:07:07 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
-#include <sys/stat.h>
 
 #include "debug.h"
 #include "rtld.h"
@@ -54,7 +53,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 
@@ -156,12 +155,15 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 	Elf_Addr new_value;
 	const Elf_Sym  *def;
 	const Obj_Entry *defobj;
+	unsigned long info = rela->r_info;
 
-	assert(ELF_R_TYPE(rela->r_info) == R_TYPE(JMP_SLOT));
+	assert(ELF_R_TYPE(info) == R_TYPE(JMP_SLOT));
 
-	def = _rtld_find_symdef(ELF_R_SYM(rela->r_info), obj, &defobj, true);
-	if (def == NULL)
+	def = _rtld_find_plt_symdef(ELF_R_SYM(info), obj, &defobj, tp != NULL);
+	if (__predict_false(def == NULL))
 		return -1;
+	if (__predict_false(def == &_rtld_sym_zero))
+		return 0;
 
 	new_value = (Elf_Addr)(defobj->relocbase + def->st_value +
 	    rela->r_addend);
@@ -185,9 +187,11 @@ _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 
 	result = 0;	/* XXX gcc */
 
+	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &result);
-	if (err || result == 0)
+	if (err)
 		_rtld_die();
+	_rtld_shared_exit();
 
 	return (caddr_t)result;
 }

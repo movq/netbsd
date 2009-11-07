@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.93 2009/10/22 19:50:55 rmind Exp $	*/
+/*	$NetBSD: pmap.h,v 1.101 2012/01/28 00:18:30 matt Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -126,7 +126,7 @@
  * tell MI code that the cache is virtually-indexed.
  * ARMv6 is physically-tagged but all others are virtually-tagged.
  */
-#if ARM_MMU_V6 > 0
+#if (ARM_MMU_V6 + ARM_MMU_V7) > 0
 #define PMAP_CACHE_VIPT
 #else
 #define PMAP_CACHE_VIVT
@@ -190,6 +190,7 @@ struct pmap {
 	pd_entry_t		pm_l1vec;
 	union pmap_cache_state	pm_cstate;
 	struct uvm_object	pm_obj;
+	kmutex_t		pm_obj_lock;
 #define	pm_lock pm_obj.vmobjlock
 	struct l2_dtable	*pm_l2[L2_SIZE];
 	struct pmap_statistics	pm_stats;
@@ -272,12 +273,16 @@ extern int		pmap_debug_level; /* Only exists if PMAP_DEBUG */
 	(((pg)->mdpage.pvh_attrs & PVF_MOD) != 0)
 #define	pmap_is_referenced(pg)	\
 	(((pg)->mdpage.pvh_attrs & PVF_REF) != 0)
-#define	pmap_is_page_colored_p(pg)	\
-	(((pg)->mdpage.pvh_attrs & PVF_COLORED) != 0)
+#define	pmap_is_page_colored_p(md)	\
+	(((md)->pvh_attrs & PVF_COLORED) != 0)
 
 #define	pmap_copy(dp, sp, da, l, sa)	/* nothing */
 
 #define pmap_phys_address(ppn)		(arm_ptob((ppn)))
+u_int arm32_mmap_flags(paddr_t);
+#define ARM32_MMAP_WRITECOMBINE	0x40000000
+#define ARM32_MMAP_CACHEABLE		0x20000000
+#define pmap_mmap_flags(ppn)			arm32_mmap_flags(ppn)
 
 /*
  * Functions that we need to export
@@ -290,7 +295,7 @@ bool	pmap_extract(pmap_t, vaddr_t, paddr_t *);
 #define PMAP_GROWKERNEL		/* turn on pmap_growkernel interface */
 #define	PMAP_ENABLE_PMAP_KMPAGE	/* enable the PMAP_KMPAGE flag */
 
-#if ARM_MMU_V6 > 0
+#if (ARM_MMU_V6 + ARM_MMU_V7) > 0
 #define	PMAP_PREFER(hint, vap, sz, td)	pmap_prefer((hint), (vap), (td))
 void	pmap_prefer(vaddr_t, vaddr_t *, int);
 #endif
@@ -390,7 +395,7 @@ extern int pmap_needs_pte_sync;
  * we need to do PTE syncs.  If only SA-1 is configured, then evaluate
  * this at compile time.
  */
-#if (ARM_MMU_SA1 + ARM_MMU_V6 != 0) && (ARM_NMMUS == 1) 
+#if (ARM_MMU_SA1 + ARM_MMU_V6 + ARM_MMU_V7 != 0) && (ARM_NMMUS == 1) 
 #define	PMAP_NEEDS_PTE_SYNC	1
 #define	PMAP_INCLUDE_PTE_SYNC
 #elif (ARM_MMU_SA1 == 0)
@@ -448,7 +453,7 @@ do {									\
 
 /************************* ARM MMU configuration *****************************/
 
-#if (ARM_MMU_GENERIC + ARM_MMU_SA1 + ARM_MMU_V6) != 0
+#if (ARM_MMU_GENERIC + ARM_MMU_SA1 + ARM_MMU_V6 + ARM_MMU_V7) != 0
 void	pmap_copy_page_generic(paddr_t, paddr_t);
 void	pmap_zero_page_generic(paddr_t);
 
@@ -462,6 +467,12 @@ void	pmap_pte_init_arm9(void);
 #if defined(CPU_ARM10)
 void	pmap_pte_init_arm10(void);
 #endif /* CPU_ARM10 */
+#if defined(CPU_ARM11)
+void	pmap_pte_init_arm11(void);
+#endif /* CPU_ARM11 */
+#if defined(CPU_ARM11MPCORE)
+void	pmap_pte_init_arm11mpcore(void);
+#endif
 #endif /* (ARM_MMU_GENERIC + ARM_MMU_SA1) != 0 */
 
 #if ARM_MMU_SA1 == 1
@@ -480,6 +491,10 @@ void	xscale_setup_minidata(vaddr_t, vaddr_t, paddr_t);
 void	pmap_uarea(vaddr_t);
 #endif /* ARM_MMU_XSCALE == 1 */
 
+#if ARM_MMU_V7 == 1
+void	pmap_pte_init_armv7(void);
+#endif /* ARM_MMU_V7 */
+
 extern pt_entry_t		pte_l1_s_cache_mode;
 extern pt_entry_t		pte_l1_s_cache_mask;
 
@@ -493,10 +508,25 @@ extern pt_entry_t		pte_l1_s_cache_mode_pt;
 extern pt_entry_t		pte_l2_l_cache_mode_pt;
 extern pt_entry_t		pte_l2_s_cache_mode_pt;
 
+extern pt_entry_t		pte_l1_s_wc_mode;
+extern pt_entry_t		pte_l2_l_wc_mode;
+extern pt_entry_t		pte_l2_s_wc_mode;
+
+extern pt_entry_t		pte_l1_s_prot_u;
+extern pt_entry_t		pte_l1_s_prot_w;
+extern pt_entry_t		pte_l1_s_prot_ro;
+extern pt_entry_t		pte_l1_s_prot_mask;
+
 extern pt_entry_t		pte_l2_s_prot_u;
 extern pt_entry_t		pte_l2_s_prot_w;
+extern pt_entry_t		pte_l2_s_prot_ro;
 extern pt_entry_t		pte_l2_s_prot_mask;
- 
+
+extern pt_entry_t		pte_l2_l_prot_u;
+extern pt_entry_t		pte_l2_l_prot_w;
+extern pt_entry_t		pte_l2_l_prot_ro;
+extern pt_entry_t		pte_l2_l_prot_mask;
+
 extern pt_entry_t		pte_l1_s_proto;
 extern pt_entry_t		pte_l1_c_proto;
 extern pt_entry_t		pte_l2_s_proto;
@@ -520,41 +550,109 @@ extern void (*pmap_zero_page_func)(paddr_t);
  * We use these macros since we use different bits on different processor
  * models.
  */
-#define	L1_S_PROT_U		(L1_S_AP(AP_U))
-#define	L1_S_PROT_W		(L1_S_AP(AP_W))
-#define	L1_S_PROT_MASK		(L1_S_PROT_U|L1_S_PROT_W)
+#define	L1_S_PROT_U_generic	(L1_S_AP(AP_U))
+#define	L1_S_PROT_W_generic	(L1_S_AP(AP_W))
+#define	L1_S_PROT_RO_generic	(0)
+#define	L1_S_PROT_MASK_generic	(L1_S_PROT_U|L1_S_PROT_W|L1_S_PROT_RO)
+
+#define	L1_S_PROT_U_xscale	(L1_S_AP(AP_U))
+#define	L1_S_PROT_W_xscale	(L1_S_AP(AP_W))
+#define	L1_S_PROT_RO_xscale	(0)
+#define	L1_S_PROT_MASK_xscale	(L1_S_PROT_U|L1_S_PROT_W|L1_S_PROT_RO)
+
+#define	L1_S_PROT_U_armv6	(L1_S_AP(AP_R) | L1_S_AP(AP_U))
+#define	L1_S_PROT_W_armv6	(L1_S_AP(AP_W))
+#define	L1_S_PROT_RO_armv6	(L1_S_AP(AP_R) | L1_S_AP(AP_RO))
+#define	L1_S_PROT_MASK_armv6	(L1_S_PROT_U|L1_S_PROT_W|L1_S_PROT_RO)
+
+#define	L1_S_PROT_U_armv7	(L1_S_AP(AP_R) | L1_S_AP(AP_U))
+#define	L1_S_PROT_W_armv7	(L1_S_AP(AP_W))
+#define	L1_S_PROT_RO_armv7	(L1_S_AP(AP_R) | L1_S_AP(AP_RO))
+#define	L1_S_PROT_MASK_armv7	(L1_S_PROT_U|L1_S_PROT_W|L1_S_PROT_RO)
 
 #define	L1_S_CACHE_MASK_generic	(L1_S_B|L1_S_C)
 #define	L1_S_CACHE_MASK_xscale	(L1_S_B|L1_S_C|L1_S_XS_TEX(TEX_XSCALE_X))
+#define	L1_S_CACHE_MASK_armv6	(L1_S_B|L1_S_C|L1_S_XS_TEX(TEX_ARMV6_TEX))
+#define	L1_S_CACHE_MASK_armv7	(L1_S_B|L1_S_C)
 
-#define	L2_L_PROT_U		(L2_AP(AP_U))
-#define	L2_L_PROT_W		(L2_AP(AP_W))
-#define	L2_L_PROT_MASK		(L2_L_PROT_U|L2_L_PROT_W)
+#define	L2_L_PROT_U_generic	(L2_AP(AP_U))
+#define	L2_L_PROT_W_generic	(L2_AP(AP_W))
+#define	L2_L_PROT_RO_generic	(0)
+#define	L2_L_PROT_MASK_generic	(L2_L_PROT_U|L2_L_PROT_W|L2_L_PROT_RO)
+
+#define	L2_L_PROT_U_xscale	(L2_AP(AP_U))
+#define	L2_L_PROT_W_xscale	(L2_AP(AP_W))
+#define	L2_L_PROT_RO_xscale	(0)
+#define	L2_L_PROT_MASK_xscale	(L2_L_PROT_U|L2_L_PROT_W|L2_L_PROT_RO)
+
+#define	L2_L_PROT_U_armv6n	(L2_AP0(AP_R) | L2_AP0(AP_U))
+#define	L2_L_PROT_W_armv6n	(L2_AP0(AP_W))
+#define	L2_L_PROT_RO_armv6n	(L2_AP0(AP_R) | L2_AP0(AP_RO))
+#define	L2_L_PROT_MASK_armv6n	(L2_L_PROT_U|L2_L_PROT_W|L2_L_PROT_RO)
+
+#define	L2_L_PROT_U_armv7	(L2_AP0(AP_R) | L2_AP0(AP_U))
+#define	L2_L_PROT_W_armv7	(L2_AP0(AP_W))
+#define	L2_L_PROT_RO_armv7	(L2_AP0(AP_R) | L2_AP0(AP_RO))
+#define	L2_L_PROT_MASK_armv7	(L2_L_PROT_U|L2_L_PROT_W|L2_L_PROT_RO)
 
 #define	L2_L_CACHE_MASK_generic	(L2_B|L2_C)
 #define	L2_L_CACHE_MASK_xscale	(L2_B|L2_C|L2_XS_L_TEX(TEX_XSCALE_X))
+#define	L2_L_CACHE_MASK_armv6	(L2_B|L2_C|L2_V6_L_TEX(TEX_ARMV6_TEX))
+#define	L2_L_CACHE_MASK_armv7	(L2_B|L2_C)
 
 #define	L2_S_PROT_U_generic	(L2_AP(AP_U))
 #define	L2_S_PROT_W_generic	(L2_AP(AP_W))
-#define	L2_S_PROT_MASK_generic	(L2_S_PROT_U|L2_S_PROT_W)
+#define	L2_S_PROT_RO_generic	(0)
+#define	L2_S_PROT_MASK_generic	(L2_S_PROT_U|L2_S_PROT_W|L2_S_PROT_RO)
 
 #define	L2_S_PROT_U_xscale	(L2_AP0(AP_U))
 #define	L2_S_PROT_W_xscale	(L2_AP0(AP_W))
-#define	L2_S_PROT_MASK_xscale	(L2_S_PROT_U|L2_S_PROT_W)
+#define	L2_S_PROT_RO_xscale	(0)
+#define	L2_S_PROT_MASK_xscale	(L2_S_PROT_U|L2_S_PROT_W|L2_S_PROT_RO)
+
+#define	L2_S_PROT_U_armv6n	(L2_AP0(AP_R) | L2_AP0(AP_U))
+#define	L2_S_PROT_W_armv6n	(L2_AP0(AP_W))
+#define	L2_S_PROT_RO_armv6n	(L2_AP0(AP_R) | L2_AP0(AP_RO))
+#define	L2_S_PROT_MASK_armv6n	(L2_S_PROT_U|L2_S_PROT_W|L2_S_PROT_RO)
+
+#define	L2_S_PROT_U_armv7	(L2_AP0(AP_R) | L2_AP0(AP_U))
+#define	L2_S_PROT_W_armv7	(L2_AP0(AP_W))
+#define	L2_S_PROT_RO_armv7	(L2_AP0(AP_R) | L2_AP0(AP_RO))
+#define	L2_S_PROT_MASK_armv7	(L2_S_PROT_U|L2_S_PROT_W|L2_S_PROT_RO)
 
 #define	L2_S_CACHE_MASK_generic	(L2_B|L2_C)
 #define	L2_S_CACHE_MASK_xscale	(L2_B|L2_C|L2_XS_T_TEX(TEX_XSCALE_X))
+#define	L2_XS_CACHE_MASK_armv6	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX))
+#define	L2_S_CACHE_MASK_armv6n	L2_XS_CACHE_MASK_armv6
+#ifdef	ARMV6_EXTENDED_SMALL_PAGE
+#define	L2_S_CACHE_MASK_armv6c	L2_XS_CACHE_MASK_armv6
+#else
+#define	L2_S_CACHE_MASK_armv6c	L2_S_CACHE_MASK_generic
+#endif
+#define	L2_S_CACHE_MASK_armv7	(L2_B|L2_C)
+
 
 #define	L1_S_PROTO_generic	(L1_TYPE_S | L1_S_IMP)
 #define	L1_S_PROTO_xscale	(L1_TYPE_S)
+#define	L1_S_PROTO_armv6	(L1_TYPE_S)
+#define	L1_S_PROTO_armv7	(L1_TYPE_S)
 
 #define	L1_C_PROTO_generic	(L1_TYPE_C | L1_C_IMP2)
 #define	L1_C_PROTO_xscale	(L1_TYPE_C)
+#define	L1_C_PROTO_armv6	(L1_TYPE_C)
+#define	L1_C_PROTO_armv7	(L1_TYPE_C)
 
 #define	L2_L_PROTO		(L2_TYPE_L)
 
 #define	L2_S_PROTO_generic	(L2_TYPE_S)
 #define	L2_S_PROTO_xscale	(L2_TYPE_XS)
+#ifdef	ARMV6_EXTENDED_SMALL_PAGE
+#define	L2_S_PROTO_armv6c	(L2_TYPE_XS)    /* XP=0, extended small page */
+#else
+#define	L2_S_PROTO_armv6c	(L2_TYPE_S)	/* XP=0, subpage APs */
+#endif
+#define	L2_S_PROTO_armv6n	(L2_TYPE_S)	/* with XP=1 */
+#define	L2_S_PROTO_armv7	(L2_TYPE_S)
 
 /*
  * User-visible names for the ones that vary with MMU class.
@@ -562,9 +660,20 @@ extern void (*pmap_zero_page_func)(paddr_t);
 
 #if ARM_NMMUS > 1
 /* More than one MMU class configured; use variables. */
+#define	L1_S_PROT_U		pte_l1_s_prot_u
+#define	L1_S_PROT_W		pte_l1_s_prot_w
+#define	L1_S_PROT_RO		pte_l1_s_prot_ro
+#define	L1_S_PROT_MASK		pte_l1_s_prot_mask
+
 #define	L2_S_PROT_U		pte_l2_s_prot_u
 #define	L2_S_PROT_W		pte_l2_s_prot_w
+#define	L2_S_PROT_RO		pte_l2_s_prot_ro
 #define	L2_S_PROT_MASK		pte_l2_s_prot_mask
+
+#define	L2_L_PROT_U		pte_l2_l_prot_u
+#define	L2_L_PROT_W		pte_l2_l_prot_w
+#define	L2_L_PROT_RO		pte_l2_l_prot_ro
+#define	L2_L_PROT_MASK		pte_l2_l_prot_mask
 
 #define	L1_S_CACHE_MASK		pte_l1_s_cache_mask
 #define	L2_L_CACHE_MASK		pte_l2_l_cache_mask
@@ -576,10 +685,75 @@ extern void (*pmap_zero_page_func)(paddr_t);
 
 #define	pmap_copy_page(s, d)	(*pmap_copy_page_func)((s), (d))
 #define	pmap_zero_page(d)	(*pmap_zero_page_func)((d))
-#elif (ARM_MMU_GENERIC + ARM_MMU_SA1 + ARM_MMU_V6) != 0
+#elif (ARM_MMU_GENERIC + ARM_MMU_SA1) != 0
+#define	L1_S_PROT_U		L1_S_PROT_U_generic
+#define	L1_S_PROT_W		L1_S_PROT_W_generic
+#define	L1_S_PROT_RO		L1_S_PROT_RO_generic
+#define	L1_S_PROT_MASK		L1_S_PROT_MASK_generic
+
 #define	L2_S_PROT_U		L2_S_PROT_U_generic
 #define	L2_S_PROT_W		L2_S_PROT_W_generic
+#define	L2_S_PROT_RO		L2_S_PROT_RO_generic
 #define	L2_S_PROT_MASK		L2_S_PROT_MASK_generic
+
+#define	L2_L_PROT_U		L2_L_PROT_U_generic
+#define	L2_L_PROT_W		L2_L_PROT_W_generic
+#define	L2_L_PROT_RO		L2_L_PROT_RO_generic
+#define	L2_L_PROT_MASK		L2_L_PROT_MASK_generic
+
+#define	L1_S_CACHE_MASK		L1_S_CACHE_MASK_generic
+#define	L2_L_CACHE_MASK		L2_L_CACHE_MASK_generic
+#define	L2_S_CACHE_MASK		L2_S_CACHE_MASK_generic
+
+#define	L1_S_PROTO		L1_S_PROTO_generic
+#define	L1_C_PROTO		L1_C_PROTO_generic
+#define	L2_S_PROTO		L2_S_PROTO_generic
+
+#define	pmap_copy_page(s, d)	pmap_copy_page_generic((s), (d))
+#define	pmap_zero_page(d)	pmap_zero_page_generic((d))
+#elif ARM_MMU_V6N != 0
+#define	L1_S_PROT_U		L1_S_PROT_U_armv6
+#define	L1_S_PROT_W		L1_S_PROT_W_armv6
+#define	L1_S_PROT_RO		L1_S_PROT_RO_armv6
+#define	L1_S_PROT_MASK		L1_S_PROT_MASK_armv6
+
+#define	L2_S_PROT_U		L2_S_PROT_U_armv6n
+#define	L2_S_PROT_W		L2_S_PROT_W_armv6n
+#define	L2_S_PROT_RO		L2_S_PROT_RO_armv6n
+#define	L2_S_PROT_MASK		L2_S_PROT_MASK_armv6n
+
+#define	L2_L_PROT_U		L2_L_PROT_U_armv6n
+#define	L2_L_PROT_W		L2_L_PROT_W_armv6n
+#define	L2_L_PROT_RO		L2_L_PROT_RO_armv6n
+#define	L2_L_PROT_MASK		L2_L_PROT_MASK_armv6n
+
+#define	L1_S_CACHE_MASK		L1_S_CACHE_MASK_armv6
+#define	L2_L_CACHE_MASK		L2_L_CACHE_MASK_armv6
+#define	L2_S_CACHE_MASK		L2_S_CACHE_MASK_armv6n
+
+/* These prototypes make writeable mappings, while the other MMU types
+ * make read-only mappings. */
+#define	L1_S_PROTO		L1_S_PROTO_armv6
+#define	L1_C_PROTO		L1_C_PROTO_armv6
+#define	L2_S_PROTO		L2_S_PROTO_armv6n
+
+#define	pmap_copy_page(s, d)	pmap_copy_page_generic((s), (d))
+#define	pmap_zero_page(d)	pmap_zero_page_generic((d))
+#elif ARM_MMU_V6C != 0
+#define	L1_S_PROT_U		L1_S_PROT_U_generic
+#define	L1_S_PROT_W		L1_S_PROT_W_generic
+#define	L1_S_PROT_RO		L1_S_PROT_RO_generic
+#define	L1_S_PROT_MASK		L1_S_PROT_MASK_generic
+
+#define	L2_S_PROT_U		L2_S_PROT_U_generic
+#define	L2_S_PROT_W		L2_S_PROT_W_generic
+#define	L2_S_PROT_RO		L2_S_PROT_RO_generic
+#define	L2_S_PROT_MASK		L2_S_PROT_MASK_generic
+
+#define	L2_L_PROT_U		L2_L_PROT_U_generic
+#define	L2_L_PROT_W		L2_L_PROT_W_generic
+#define	L2_L_PROT_RO		L2_L_PROT_RO_generic
+#define	L2_L_PROT_MASK		L2_L_PROT_MASK_generic
 
 #define	L1_S_CACHE_MASK		L1_S_CACHE_MASK_generic
 #define	L2_L_CACHE_MASK		L2_L_CACHE_MASK_generic
@@ -592,9 +766,20 @@ extern void (*pmap_zero_page_func)(paddr_t);
 #define	pmap_copy_page(s, d)	pmap_copy_page_generic((s), (d))
 #define	pmap_zero_page(d)	pmap_zero_page_generic((d))
 #elif ARM_MMU_XSCALE == 1
+#define	L1_S_PROT_U		L1_S_PROT_U_generic
+#define	L1_S_PROT_W		L1_S_PROT_W_generic
+#define	L1_S_PROT_RO		L1_S_PROT_RO_generic
+#define	L1_S_PROT_MASK		L1_S_PROT_MASK_generic
+
 #define	L2_S_PROT_U		L2_S_PROT_U_xscale
 #define	L2_S_PROT_W		L2_S_PROT_W_xscale
+#define	L2_S_PROT_RO		L2_S_PROT_RO_xscale
 #define	L2_S_PROT_MASK		L2_S_PROT_MASK_xscale
+
+#define	L2_L_PROT_U		L2_L_PROT_U_generic
+#define	L2_L_PROT_W		L2_L_PROT_W_generic
+#define	L2_L_PROT_RO		L2_L_PROT_RO_generic
+#define	L2_L_PROT_MASK		L2_L_PROT_MASK_generic
 
 #define	L1_S_CACHE_MASK		L1_S_CACHE_MASK_xscale
 #define	L2_L_CACHE_MASK		L2_L_CACHE_MASK_xscale
@@ -606,20 +791,60 @@ extern void (*pmap_zero_page_func)(paddr_t);
 
 #define	pmap_copy_page(s, d)	pmap_copy_page_xscale((s), (d))
 #define	pmap_zero_page(d)	pmap_zero_page_xscale((d))
+#elif ARM_MMU_V7 == 1
+#define	L1_S_PROT_U		L1_S_PROT_U_armv7
+#define	L1_S_PROT_W		L1_S_PROT_W_armv7
+#define	L1_S_PROT_RO		L1_S_PROT_RO_armv7
+#define	L1_S_PROT_MASK		L1_S_PROT_MASK_armv7
+
+#define	L2_S_PROT_U		L2_S_PROT_U_armv7
+#define	L2_S_PROT_W		L2_S_PROT_W_armv7
+#define	L2_S_PROT_RO		L2_S_PROT_RO_armv7
+#define	L2_S_PROT_MASK		L2_S_PROT_MASK_armv7
+
+#define	L2_L_PROT_U		L2_L_PROT_U_armv7
+#define	L2_L_PROT_W		L2_L_PROT_W_armv7
+#define	L2_L_PROT_RO		L2_L_PROT_RO_armv7
+#define	L2_L_PROT_MASK		L2_L_PROT_MASK_armv7
+
+#define	L1_S_CACHE_MASK		L1_S_CACHE_MASK_armv7
+#define	L2_L_CACHE_MASK		L2_L_CACHE_MASK_armv7
+#define	L2_S_CACHE_MASK		L2_S_CACHE_MASK_armv7
+
+/* These prototypes make writeable mappings, while the other MMU types
+ * make read-only mappings. */
+#define	L1_S_PROTO		L1_S_PROTO_armv7
+#define	L1_C_PROTO		L1_C_PROTO_armv7
+#define	L2_S_PROTO		L2_S_PROTO_armv7
+
+#define	pmap_copy_page(s, d)	pmap_copy_page_generic((s), (d))
+#define	pmap_zero_page(d)	pmap_zero_page_generic((d))
 #endif /* ARM_NMMUS > 1 */
+
+/*
+ * Macros to set and query the write permission on page descriptors.
+ */
+#define l1pte_set_writable(pte)	(((pte) & ~L1_S_PROT_RO) | L1_S_PROT_W)
+#define l1pte_set_readonly(pte)	(((pte) & ~L1_S_PROT_W) | L1_S_PROT_RO)
+#define l2pte_set_writable(pte)	(((pte) & ~L2_S_PROT_RO) | L2_S_PROT_W)
+#define l2pte_set_readonly(pte)	(((pte) & ~L2_S_PROT_W) | L2_S_PROT_RO)
+
+#define l2pte_writable_p(pte)	(((pte) & L2_S_PROT_W) == L2_S_PROT_W && \
+				 (L2_S_PROT_RO == 0 || \
+				  ((pte) & L2_S_PROT_RO) != L2_S_PROT_RO))
 
 /*
  * These macros return various bits based on kernel/user and protection.
  * Note that the compiler will usually fold these at compile time.
  */
 #define	L1_S_PROT(ku, pr)	((((ku) == PTE_USER) ? L1_S_PROT_U : 0) | \
-				 (((pr) & VM_PROT_WRITE) ? L1_S_PROT_W : 0))
+				 (((pr) & VM_PROT_WRITE) ? L1_S_PROT_W : L1_S_PROT_RO))
 
 #define	L2_L_PROT(ku, pr)	((((ku) == PTE_USER) ? L2_L_PROT_U : 0) | \
-				 (((pr) & VM_PROT_WRITE) ? L2_L_PROT_W : 0))
+				 (((pr) & VM_PROT_WRITE) ? L2_L_PROT_W : L2_L_PROT_RO))
 
 #define	L2_S_PROT(ku, pr)	((((ku) == PTE_USER) ? L2_S_PROT_U : 0) | \
-				 (((pr) & VM_PROT_WRITE) ? L2_S_PROT_W : 0))
+				 (((pr) & VM_PROT_WRITE) ? L2_S_PROT_W : L2_S_PROT_RO))
 
 /*
  * Macros to test if a mapping is mappable with an L1 Section mapping
@@ -635,6 +860,48 @@ extern void (*pmap_zero_page_func)(paddr_t);
  * Hooks for the pool allocator.
  */
 #define	POOL_VTOPHYS(va)	vtophys((vaddr_t) (va))
+
+#ifndef _LOCORE
+
+/*
+ * pmap-specific data store in the vm_page structure.
+ */
+#define	__HAVE_VM_PAGE_MD
+struct vm_page_md {
+	SLIST_HEAD(,pv_entry) pvh_list;		/* pv_entry list */
+	int pvh_attrs;				/* page attributes */
+	u_int uro_mappings;
+	u_int urw_mappings;
+	union {
+		u_short s_mappings[2];	/* Assume kernel count <= 65535 */
+		u_int i_mappings;
+	} k_u;
+#define	kro_mappings	k_u.s_mappings[0]
+#define	krw_mappings	k_u.s_mappings[1]
+#define	k_mappings	k_u.i_mappings
+};
+
+/*
+ * Set the default color of each page.
+ */
+#if ARM_MMU_V6 > 0
+#define	VM_MDPAGE_PVH_ATTRS_INIT(pg) \
+	(pg)->mdpage.pvh_attrs = (pg)->phys_addr & arm_cache_prefer_mask
+#else
+#define	VM_MDPAGE_PVH_ATTRS_INIT(pg) \
+	(pg)->mdpage.pvh_attrs = 0
+#endif
+ 
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	SLIST_INIT(&(pg)->mdpage.pvh_list);				\
+	VM_MDPAGE_PVH_ATTRS_INIT(pg);					\
+	(pg)->mdpage.uro_mappings = 0;					\
+	(pg)->mdpage.urw_mappings = 0;					\
+	(pg)->mdpage.k_mappings = 0;					\
+} while (/*CONSTCOND*/0)
+
+#endif /* !_LOCORE */
 
 #endif /* _KERNEL */
 

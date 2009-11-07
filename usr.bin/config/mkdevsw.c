@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdevsw.c,v 1.7 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: mkdevsw.c,v 1.10 2010/07/30 16:23:49 cube Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -83,9 +83,7 @@ emitheader(FILE *fp)
 	autogen_comment(fp, "devsw.c");
 
 	fputs("#include <sys/param.h>\n"
-		  "#include <sys/conf.h>\n"
-		  "\n#define\tDEVSW_ARRAY_SIZE(x)\t"
-		  "(sizeof((x))/sizeof((x)[0]))\n", fp);
+		  "#include <sys/conf.h>\n", fp);
 }
 
 /*
@@ -122,8 +120,8 @@ emitdevm(FILE *fp)
 
 	fputs("};\n\nconst struct bdevsw **bdevsw = bdevsw0;\n", fp);
 
-	fputs("const int sys_bdevsws = DEVSW_ARRAY_SIZE(bdevsw0);\n"
-		  "int max_bdevsws = DEVSW_ARRAY_SIZE(bdevsw0);\n", fp);
+	fputs("const int sys_bdevsws = __arraycount(bdevsw0);\n"
+		  "int max_bdevsws = __arraycount(bdevsw0);\n", fp);
 
 	fputs("\n/* device switch table for character device */\n", fp);
 
@@ -149,8 +147,8 @@ emitdevm(FILE *fp)
 
 	fputs("};\n\nconst struct cdevsw **cdevsw = cdevsw0;\n", fp);
 
-	fputs("const int sys_cdevsws = DEVSW_ARRAY_SIZE(cdevsw0);\n"
-		  "int max_cdevsws = DEVSW_ARRAY_SIZE(cdevsw0);\n", fp);
+	fputs("const int sys_cdevsws = __arraycount(cdevsw0);\n"
+		  "int max_cdevsws = __arraycount(cdevsw0);\n", fp);
 }
 
 /*
@@ -164,12 +162,44 @@ emitconv(FILE *fp)
 	fputs("\n/* device conversion table */\n"
 		  "struct devsw_conv devsw_conv0[] = {\n", fp);
 	TAILQ_FOREACH(dm, &alldevms, dm_next) {
-		fprintf(fp, "\t{ \"%s\", %d, %d },\n", dm->dm_name,
+		if (version < 20100430) {
+			/* Emit compatible structure */
+			fprintf(fp, "\t{ \"%s\", %d, %d },\n", dm->dm_name,
 			    dm->dm_bmajor, dm->dm_cmajor);
+			continue;
+		}
+		struct nvlist *nv;
+		const char *d_class, *d_flags = "0";
+		int d_vec[2] = { 0, 0 };
+		int i = 0;
+
+		/*
+		 * "parse" info.  currently the rules are simple:
+		 *  1) first entry defines class
+		 *  2) next ones without n_str are d_vectdim
+		 *  3) next one with n_str is d_flags
+		 *  4) EOL
+		 */
+		nv = dm->dm_devnodes;
+		d_class = nv->nv_str;
+		while ((nv = nv->nv_next) != NULL) {
+			if (i > 2)
+				panic("invalid devnode definition");
+			if (nv->nv_str) {
+				d_flags = nv->nv_str;
+				break;
+			}
+			d_vec[i++] = nv->nv_num;
+		}
+
+		fprintf(fp, "\t{ \"%s\", %d, %d, %s, %s, { %d, %d }},\n",
+			    dm->dm_name, dm->dm_bmajor, dm->dm_cmajor,
+			    d_class, d_flags, d_vec[0], d_vec[1]);
+
 	}
 	fputs("};\n\n"
 		  "struct devsw_conv *devsw_conv = devsw_conv0;\n"
-		  "int max_devsw_convs = DEVSW_ARRAY_SIZE(devsw_conv0);\n",
+		  "int max_devsw_convs = __arraycount(devsw_conv0);\n",
 		  fp);
 }
 

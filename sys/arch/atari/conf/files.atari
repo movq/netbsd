@@ -1,5 +1,5 @@
 #
-#	$NetBSD: files.atari,v 1.114 2009/10/19 13:40:28 tsutsui Exp $
+#	$NetBSD: files.atari,v 1.120 2011/11/15 12:23:21 tsutsui Exp $
 
 maxpartitions 16
 
@@ -91,15 +91,19 @@ file	arch/atari/vme/vme_machdep.c	vme
 attach	le at vme with le_vme: le24
 file	arch/atari/vme/if_le_vme.c	le_vme
 
+# SMC Elite Ultra (8216) with SMC_TT VME-ISA bridge
+attach	we at vme with we_vme
+file	arch/atari/vme/if_we_vme.c	we_vme
+
 # Circad Leonardo 24-bit true color video
 device	leo
 attach	leo at vme
 file	arch/atari/vme/leo.c		leo needs-count
 
 # ET4000 (Crazy Dots II) color video
-device	et
-attach	et at vme
-file	arch/atari/vme/et4000.c		et needs-count
+device	et4k
+attach	et4k at vme
+file	arch/atari/vme/et4000.c		et4k needs-count
 
 # graphic devices
 define	grfb {}
@@ -178,6 +182,10 @@ file	dev/isa/fd.c			fdisa needs-flag
 attach	wdc at mainbus with wdc_mb: mbdma
 file	arch/atari/dev/wdc_mb.c		wdc_mb
 
+# EtherNEC on Atari ROM cartridge slot
+attach	ne at mainbus with ne_mb: rtl80x9
+file	arch/atari/dev/if_ne_mb.c	ne_mb
+
 # ISA Plug 'n Play devices
 file	arch/atari/isa/isapnp_machdep.c	isapnp
 
@@ -201,16 +209,15 @@ file	arch/atari/atari/dkbad.c
 file	arch/atari/atari/le_bus.c		pci | isa
 file	arch/atari/atari/machdep.c
 file	arch/atari/atari/mainbus.c
-file	arch/atari/atari/mem.c
-#file	arch/atari/atari/pmap.c
 file	arch/atari/atari/pmap_bootstrap.c
 file	arch/atari/atari/trap.c
 file	arch/atari/atari/stalloc.c
-file	arch/atari/atari/fpu.c
+file	arch/atari/atari/fpu_machdep.c
 file	arch/atari/dev/ym2149.c			_atarihw_
 file	arch/atari/atari/intr.c
 file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c		ddb
+file	arch/m68k/m68k/fpu.c
 file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c		procfs
 file	arch/m68k/m68k/sys_machdep.c

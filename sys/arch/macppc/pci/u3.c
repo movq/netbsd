@@ -1,4 +1,4 @@
-/* $NetBSD: u3.c,v 1.2 2007/10/17 19:55:35 garbled Exp $ */
+/* $NetBSD: u3.c,v 1.5 2011/06/30 00:52:58 matt Exp $ */
 
 /*
  * Copyright 2006 Kyma Systems LLC.
@@ -55,8 +55,8 @@ struct ibmcpc_softc
 	struct powerpc_bus_space sc_memt;
 };
 
-static void ibmcpc_attach(struct device *, struct device *, void *);
-static int ibmcpc_match(struct device *, struct cfdata *, void *);
+static void ibmcpc_attach(device_t, device_t, void *);
+static int ibmcpc_match(device_t, cfdata_t, void *);
 
 static pcireg_t ibmcpc_conf_read(void *, pcitag_t, int);
 static void ibmcpc_conf_write(void *, pcitag_t, int, pcireg_t);
@@ -67,7 +67,7 @@ CFATTACH_DECL(ibmcpc, sizeof(struct ibmcpc_softc),
 #define PCI_DEVFN(slot,func)    ((((slot) & 0x1f) << 3) | ((func) & 0x07))
 
 static int
-ibmcpc_match(struct device *parent, struct cfdata *cf, void *aux)
+ibmcpc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	char compat[32];
@@ -85,7 +85,7 @@ ibmcpc_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-ibmcpc_attach(struct device *parent, struct device *self, void *aux)
+ibmcpc_attach(device_t parent, device_t self, void *aux)
 {
 	struct ibmcpc_softc *sc = (void *) self;
 	pci_chipset_tag_t pc = sc->sc_pc;
@@ -104,7 +104,7 @@ ibmcpc_attach(struct device *parent, struct device *self, void *aux)
 	}
 	aprint_normal("Mapping in config space @ pa 0x%08x, size: 0x%08x\n",
 	    reg[1], reg[2]);
-	pc_data = mapiodev(reg[1], reg[2]);
+	pc_data = mapiodev(reg[1], reg[2], false);
 
 	for (child = OF_child(OF_finddevice("/ht")), i = 1; child;
 	    child = OF_peer(child), i++) {
@@ -152,7 +152,7 @@ ibmcpc_attach(struct device *parent, struct device *self, void *aux)
 		pba.pba_bridgetag = NULL;
 		pba.pba_pc = pc;
 		pba.pba_bus = pc->pc_bus;
-		pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
+		pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY;
 		config_found_ia(self, "pcibus", &pba, pcibusprint);
 
 		pc++;

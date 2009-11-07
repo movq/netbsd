@@ -1,4 +1,4 @@
-/*	$NetBSD: eeprom.c,v 1.7 2008/04/28 20:23:36 martin Exp $ */
+/*	$NetBSD: eeprom.c,v 1.9 2011/07/17 23:32:37 mrg Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eeprom.c,v 1.7 2008/04/28 20:23:36 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eeprom.c,v 1.9 2011/07/17 23:32:37 mrg Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: eeprom.c,v 1.7 2008/04/28 20:23:36 martin Exp $");
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/eeprom.h>
 
@@ -58,10 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: eeprom.c,v 1.7 2008/04/28 20:23:36 martin Exp $");
 /* Imported from clock.c: */
 extern char	*eeprom_va;
 
-static int	eeprom_match(struct device *, struct cfdata *, void *);
-static void	eeprom_attach(struct device *, struct device *, void *);
+static int	eeprom_match(device_t, cfdata_t, void *);
+static void	eeprom_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(eeprom, sizeof(struct device),
+CFATTACH_DECL_NEW(eeprom, 0,
     eeprom_match, eeprom_attach, NULL, NULL);
 
 /* We support only one eeprom device */
@@ -71,7 +71,7 @@ static int eeprom_attached;
  * Sun 4/100, 4/200 EEPROM match routine.
  */
 static int
-eeprom_match(struct device *parent, struct cfdata *cf, void *aux)
+eeprom_match(device_t parent, cfdata_t cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba;
@@ -99,7 +99,7 @@ eeprom_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-eeprom_attach(struct device *parent, struct device *self, void *aux)
+eeprom_attach(device_t parent, device_t self, void *aux)
 {
 #if defined(SUN4)
 	union obio_attach_args *uoba = aux;
@@ -114,7 +114,8 @@ eeprom_attach(struct device *parent, struct device *self, void *aux)
 			  EEPROM_SIZE,
 			  BUS_SPACE_MAP_LINEAR,	/* flags */
 			  &bh) != 0) {
-		printf("%s: can't map register\n", self->dv_xname);
+		printf("%s: can't map register\n",
+			device_xname(self));
 		return;
 	}
 	eeprom_va = (char *)bh;

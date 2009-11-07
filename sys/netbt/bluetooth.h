@@ -1,4 +1,4 @@
-/*	$NetBSD: bluetooth.h,v 1.8 2008/09/08 23:36:55 gmcgarry Exp $	*/
+/*	$NetBSD: bluetooth.h,v 1.11 2011/04/27 00:36:48 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -103,6 +103,7 @@ struct sockaddr_bt {
 
 #ifdef _KERNEL
 
+#include <sys/mallocvar.h>
 MALLOC_DECLARE(M_BLUETOOTH);
 
 /*
@@ -122,18 +123,20 @@ struct btproto {
 /*
  * Debugging stuff
  */
-#include "opt_bluetooth.h"
-
 #ifdef BLUETOOTH_DEBUG
 extern int bluetooth_debug;
-# define DPRINTF(fmt, args...)	do {			\
-	if (bluetooth_debug)				\
-		printf("%s: "fmt, __func__ , ##args);	\
+# define DPRINTF(...)	do {			\
+	if (bluetooth_debug) {			\
+		printf("%s: ", __func__);	\
+		printf(__VA_ARGS__);		\
+	}					\
 } while (/* CONSTCOND */0)
 
-# define DPRINTFN(n, fmt, args...)	do {		\
-	if (bluetooth_debug > (n))			\
-		printf("%s: "fmt, __func__ , ##args);	\
+# define DPRINTFN(n, ...)	do {		\
+	if (bluetooth_debug > (n)) {		\
+		printf("%s: ", __func__);	\
+		printf(__VA_ARGS__);		\
+	}					\
 } while (/* CONSTCOND */0)
 
 # define UNKNOWN(value)			\

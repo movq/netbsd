@@ -1,4 +1,4 @@
-/*	$NetBSD: pass2.c,v 1.45 2008/02/23 21:41:48 christos Exp $	*/
+/*	$NetBSD: pass2.c,v 1.48 2011/08/14 12:32:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass2.c	8.9 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass2.c,v 1.45 2008/02/23 21:41:48 christos Exp $");
+__RCSID("$NetBSD: pass2.c,v 1.48 2011/08/14 12:32:01 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,6 +70,7 @@ pass2(void)
 	struct inodesc curino;
 	union dinode dino;
 	int i, maxblk;
+	unsigned ii;
 	char pathbuf[MAXPATHLEN + 1];
 
 	rinfo = inoinfo(ROOTINO);
@@ -79,7 +80,7 @@ pass2(void)
 		pfatal("ROOT INODE UNALLOCATED");
 		if (reply("ALLOCATE") == 0) {
 			markclean = 0;
-			ckfini();
+			ckfini(1);
 			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
@@ -96,7 +97,7 @@ pass2(void)
 		}
 		markclean = 0;
 		if (reply("CONTINUE") == 0) {
-			ckfini();
+			ckfini(1);
 			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		break;
@@ -112,7 +113,7 @@ pass2(void)
 		}
 		if (reply("FIX") == 0) {
 			markclean = 0;
-			ckfini();
+			ckfini(1);
 			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		dp = ginode(ROOTINO);
@@ -217,6 +218,8 @@ pass2(void)
 		}
 		curino.id_number = inp->i_number;
 		curino.id_parent = inp->i_parent;
+		curino.id_uid = iswap32(DIP(dp, uid));
+		curino.id_gid = iswap32(DIP(dp, gid));
 		(void)ckinode(&dino, &curino);
 	}
 
@@ -234,16 +237,18 @@ pass2(void)
 			if (!is_ufs2) {
 				dino.dp1.di_mode = iswap16(IFDIR);
 				dino.dp1.di_size = iswap64(inp->i_isize);
-				for (i = 0; i < inp->i_numblks; i++)
-					dino.dp1.di_db[i] = inp->i_blks[i];
+				for (ii = 0; ii < inp->i_numblks; ii++)
+					dino.dp1.di_db[ii] = inp->i_blks[ii];
 			} else {
 				dino.dp2.di_mode = iswap16(IFDIR);
 				dino.dp2.di_size = iswap64(inp->i_isize);
-				for (i = 0; i < inp->i_numblks; i++)
-					dino.dp2.di_db[i] = inp->i_blks[i];
+				for (ii = 0; ii < inp->i_numblks; ii++)
+					dino.dp2.di_db[ii] = inp->i_blks[ii];
 			}
 			curino.id_number = inp->i_number;
 			curino.id_parent = inp->i_parent;
+			curino.id_uid = iswap32(DIP(&dino, uid));
+			curino.id_gid = iswap32(DIP(&dino, gid));
 			(void)ckinode(&dino, &curino);
 		}
 	}

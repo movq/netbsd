@@ -1,4 +1,4 @@
-/*	$NetBSD: undefined.c,v 1.37 2009/03/15 22:23:16 cegger Exp $	*/
+/*	$NetBSD: undefined.c,v 1.43 2011/11/16 16:59:47 he Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris.
@@ -54,14 +54,13 @@
 #include <sys/kgdb.h>
 #endif
 
-__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.37 2009/03/15 22:23:16 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.43 2011/11/16 16:59:47 he Exp $");
 
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/signal.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/syslog.h>
 #include <sys/vmmeter.h>
 #ifdef FAST_FPE
@@ -123,12 +122,59 @@ remove_coproc_handler(void *cookie)
 	free(uh, M_TEMP);
 }
 
+static int
+cp15_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
+{
+	struct lwp * const l = curlwp;
+
+#ifdef THUMB_CODE
+	if (frame->tf_spsr & PSR_T_bit)
+		return 1;
+#endif
+	if (code != FAULT_USER)
+		return 1;
+
+	/*
+	 * Don't overwrite sp, pc, etc.
+	 */
+	const u_int regno = (insn >> 12) & 15;
+	if (regno > 12)
+		return 1;
+
+	/*
+	 * Get a pointer to the register used in the instruction to be emulated.
+	 */
+	register_t * const regp = &frame->tf_r0 + regno;
+
+	/*
+	 * Handle MRC p15, 0, <Rd>, c13, c0, 3 (Read User read-only thread id)
+	 */
+	if ((insn & 0xffff0fff) == 0xee1d0f70) {
+		*regp = (uintptr_t)l->l_private;
+		frame->tf_pc += INSN_SIZE;
+		return 0;
+	}
+
+	/*
+	 * Handle {MRC,MCR} p15, 0, <Rd>, c13, c0, 2 (User read/write thread id)
+	 */
+	if ((insn & 0xffef0fff) == 0xee0d0f50) {
+		struct pcb * const pcb = lwp_getpcb(l);
+		if (insn & 0x00100000)
+			*regp = pcb->pcb_user_pid_rw;
+		else
+			pcb->pcb_user_pid_rw = *regp;
+		frame->tf_pc += INSN_SIZE;
+		return 0;
+	}
+
+	return 1;
+}
 
 static int
 gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 {
-	struct lwp *l;
-	l = curlwp;
+	struct lwp * const l = curlwp;
 
 #ifdef THUMB_CODE
 	if (frame->tf_spsr & PSR_T_bit) {
@@ -161,6 +207,7 @@ gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 	return 1;
 }
 
+static struct undefined_handler cp15_uh;
 static struct undefined_handler gdb_uh;
 #ifdef THUMB_CODE
 static struct undefined_handler gdb_uh_thumb;
@@ -174,6 +221,10 @@ undefined_init(void)
 	/* Not actually necessary -- the initialiser is just NULL */
 	for (loop = 0; loop < NUM_UNKNOWN_HANDLERS; ++loop)
 		LIST_INIT(&undefined_handlers[loop]);
+
+	/* Install handler for CP15 emulation */
+	cp15_uh.uh_handler = cp15_trapper;
+	install_coproc_handler_static(SYSTEM_COPROC, &cp15_uh);
 
 	/* Install handler for GDB breakpoints */
 	gdb_uh.uh_handler = gdb_trapper;
@@ -272,7 +323,7 @@ undefinedinstruction(trapframe_t *frame)
 	}
 
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 #ifdef THUMB_CODE
 	if (frame->tf_spsr & PSR_T_bit) {
@@ -301,12 +352,13 @@ undefinedinstruction(trapframe_t *frame)
 	}
 
 	if (user) {
+		struct pcb *pcb = lwp_getpcb(l);
 		/*
 		 * Modify the fault_code to reflect the USR/SVC state at
 		 * time of fault.
 		 */
 		fault_code = FAULT_USER;
-		l->l_addr->u_pcb.pcb_tf = frame;
+		pcb->pcb_tf = frame;
 	} else
 		fault_code = 0;
 

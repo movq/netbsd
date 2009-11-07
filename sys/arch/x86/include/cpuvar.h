@@ -1,4 +1,4 @@
-/* 	$NetBSD: cpuvar.h,v 1.31 2009/10/02 18:50:03 jmcneill Exp $ */
+/* 	$NetBSD: cpuvar.h,v 1.45.8.1 2012/05/09 03:22:52 riz Exp $ */
 
 /*-
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -67,7 +67,11 @@
 #define	_X86_CPUVAR_H_
 
 struct cpu_functions {
+#ifndef XEN
 	int (*start)(struct cpu_info *, paddr_t);
+#else /* XEN */
+   	int (*start)(struct cpu_info *, vaddr_t);
+#endif /* XEN */
 	int (*stop)(struct cpu_info *);
 	void (*cleanup)(struct cpu_info *);
 };
@@ -79,26 +83,22 @@ extern const struct cpu_functions mp_cpu_funcs;
 #define CPU_ROLE_AP	2
 
 struct cpu_attach_args {
+	int cpu_id;
 	int cpu_number;
 	int cpu_role;
 	const struct cpu_functions *cpu_func;
 };
 
-#ifdef _KERNEL
+struct cpufeature_attach_args {
+	struct cpu_info *ci;
+	const char *name;
+};
 
+#ifdef _KERNEL
+#include <sys/kcpuset.h>
 #if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
-#include "opt_enhanced_speedstep.h"
-#ifndef XEN
-#include "opt_intel_coretemp.h"
-#include "opt_intel_odcm.h"
-#include "opt_via_c7temp.h"
-#endif
 #endif /* defined(_KERNEL_OPT) */
-
-#ifdef MULTIPROCESSOR
-extern uint32_t cpus_running;
-#endif
 
 int x86_ipi(int, int, int);
 void x86_self_ipi(int);
@@ -119,31 +119,14 @@ void x86_cpu_idle_mwait(void);
 void x86_cpu_idle_xen(void);
 #endif
 
-#ifdef VIA_C7TEMP
-void viac7temp_register(struct cpu_info *);
-#endif
-
-#ifdef INTEL_CORETEMP
-void coretemp_register(struct cpu_info *);
-#endif
-
-#ifdef INTEL_ONDEMAND_CLOCKMOD
-void clockmod_init(void);
-#endif
-
-#ifdef ENHANCED_SPEEDSTEP
-void	est_init(int);
-int	via_get_bus_clock(struct cpu_info *);
-int	viac7_get_bus_clock(struct cpu_info *);
-int	p3_get_bus_clock(struct cpu_info *);
-int	p4_get_bus_clock(struct cpu_info *);
-#endif
-
 void	cpu_get_tsc_freq(struct cpu_info *);
+void	pat_init(struct cpu_info *);
 
 extern int cpu_vendor;
 extern bool x86_mp_online;
 
-#endif
+extern uint32_t cpu_feature[5];
+
+#endif /* _KERNEL */
 
 #endif /* !_X86_CPUVAR_H_ */

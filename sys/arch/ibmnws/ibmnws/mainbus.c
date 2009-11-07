@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.8 2009/03/18 16:00:13 cegger Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.11 2012/01/27 18:52:57 para Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
 #include <sys/malloc.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/isa_machdep.h>
 
 #include <dev/pci/pcivar.h>
@@ -124,9 +124,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	ibmnws_pci_get_chipset_tag_indirect (genppc_pct);
 
 #ifdef PCI_NETBSD_CONFIGURE
-	ioext  = extent_create("pciio",  0x00008000, 0x0000ffff, M_DEVBUF,
+	ioext  = extent_create("pciio",  0x00008000, 0x0000ffff,
 	    NULL, 0, EX_NOWAIT);
-	memext = extent_create("pcimem", 0x00000000, 0x0fffffff, M_DEVBUF,
+	memext = extent_create("pcimem", 0x00000000, 0x0fffffff,
 	    NULL, 0, EX_NOWAIT);
 
 	pci_configure_bus(genppc_pct, ioext, memext, NULL, 0, CACHELINESIZE);
@@ -143,7 +143,7 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	mba.mba_pba.pba_pc = genppc_pct;
 	mba.mba_pba.pba_bus = 0;
 	mba.mba_pba.pba_bridgetag = NULL;
-	mba.mba_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	mba.mba_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	config_found_ia(self, "pcibus", &mba.mba_pba, pcibusprint);
 #endif
 

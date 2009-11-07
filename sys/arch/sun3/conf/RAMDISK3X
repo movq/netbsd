@@ -1,4 +1,4 @@
-# $NetBSD: RAMDISK3X,v 1.38 2009/02/06 18:50:28 jym Exp $
+# $NetBSD: RAMDISK3X,v 1.40 2010/11/23 11:14:07 hannken Exp $
 
 # RAMDISK: Root/swap on ramdisk
 # This kernel is used to:
@@ -136,9 +136,9 @@ cd* at scsibus? target ? lun ?		# SCSI CD-ROMs
 #uk* at scsibus? target ? lun ?		# unknown SCSI devices
 
 # Memory-disk drivers (root for install tape)
-pseudo-device	md		2
+pseudo-device	md		
 
 # Misc.
 pseudo-device	loop		1	# network loopback
 pseudo-device	sl			# CSLIP
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device

@@ -1,4 +1,4 @@
-.\"     $NetBSD: wsfont.9,v 1.14 2009/05/18 00:07:47 snj Exp $
+.\"     $NetBSD: wsfont.9,v 1.18 2012/01/13 23:09:51 wiz Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 7, 2001
+.Dd January 13, 2012
 .Dt WSFONT 9
 .Os
 .Sh NAME
@@ -40,7 +40,6 @@
 .Nm wsfont_enum ,
 .Nm wsfont_lock ,
 .Nm wsfont_unlock ,
-.Nm wsfont_getflg ,
 .Nm wsfont_map_unichar
 .Nd wscons font support
 .Sh SYNOPSIS
@@ -50,10 +49,10 @@
 .Fn wsfont_init "void"
 .Ft int
 .Fn wsfont_matches "struct wsdisplay_font *font" "const char *name" \
-"int width" "int height" "int stride"
+"int width" "int height" "int stride" "int flags"
 .Ft int
 .Fn wsfont_find "const char *name" "int width" "int height" "int stride" \
-"int bitorder" "int byteorder"
+"int bitorder" "int byteorder" "int flags"
 .Ft int
 .Fn wsfont_add "struct wsdisplay_font *font" "int copy"
 .Ft int
@@ -64,8 +63,6 @@
 .Fn wsfont_lock "int cookie" "struct wsdisplay_font **ptr"
 .Ft int
 .Fn wsfont_unlock "int cookie"
-.Ft int
-.Fn wsfont_getflg "int cookie" "int *flg" "int *lc"
 .Ft int
 .Fn wsfont_map_unichar "struct wsdisplay_font *font" "int c"
 .Sh DESCRIPTION
@@ -86,12 +83,12 @@ structure in
 .Pa dev/wscons/wsconsio.h :
 .Bd -literal
 struct wsdisplay_font {
-	char *name;		/* font name */
+	const char *name;	/* font name */
 	int firstchar;
 	int numchars;		/* size of font table */
-	int encoding;		/* font encoding
+	int encoding;		/* font encoding */
 	u_int fontwidth;	/* character width */
-	u_int fontheight;	/* character width */
+	u_int fontheight;	/* character height */
 	u_int stride;
 	int bitorder;
 	int byteorder;
@@ -106,17 +103,17 @@ The
 .Nm
 framework supports fonts with the following encodings:
 .Bl -tag -width compact
-.It WSDISPLAY_FONTENC_ISO
+.It Dv WSDISPLAY_FONTENC_ISO
 ISO-encoded fonts.
-.It WSDISPLAY_FONTENC_IBM
+.It Dv WSDISPLAY_FONTENC_IBM
 IBM-encoded fonts commonly available for IBM CGA, EGA and VGA display
 adapters.
-.It WSDISPLAY_FONTENC_PCVT
+.It Dv WSDISPLAY_FONTENC_PCVT
 PCVT-encoding fonts distributed as part of the old PCVT terminal
 emulation driver.
-.It WSDISPLAY_FONTENC_ISO7
+.It Dv WSDISPLAY_FONTENC_ISO7
 ISO-encoded Greek fonts.
-.It WSDISPLAY_FONTENC_ISO2
+.It Dv WSDISPLAY_FONTENC_ISO2
 ISO-encoded East European fonts.
 .El
 .Sh FUNCTIONS
@@ -129,11 +126,16 @@ Matches the font
 with the specifications
 .Fa name ,
 .Fa width ,
-.Fa height
+.Fa height ,
+.Fa stride
 and
-.Fa stride .
+.Fa flags .
 Return zero if not matched and non-zero if matched.
-.It Fn wsfont_find "name" "width" "height" "stride" "bitorder" "byteorder"
+The
+.Fa flags
+parameter has the same meaning as in
+.Fn wsfont_find .
+.It Fn wsfont_find "name" "width" "height" "stride" "bitorder" "byteorder" "flags"
 Find the font called
 .Fa name
 from the fonts loaded into the kernel.
@@ -156,14 +158,24 @@ and
 arguments are the bit order and byte order required.
 Valid values are:
 .Bl -tag -width compact
-.It WSDISPLAY_FONTORDER_KNOWN
+.It Dv WSDISPLAY_FONTORDER_KNOWN
 The font is in known ordered format and doesn't need converting.
-.It WSDISPLAY_FONTORDER_L2R
+.It Dv WSDISPLAY_FONTORDER_L2R
 The font is ordered left to right.
-.It WSDISPLAY_FONTORDER_R2L
+.It Dv WSDISPLAY_FONTORDER_R2L
 The font is ordered right to left.
 .El
 .Pp
+The
+.Fa flags
+parameter determines what type of font can be returned.
+Any combination of the following values is allowed:
+.Bl -tag -width compact
+.It Dv WSFONT_FIND_BITMAP
+To search bitmap fonts,
+.It Dv WSFONT_FIND_ALPHA
+to search anti-aliased fonts.
+.El
 When more flexibility is required,
 .Fn wsfont_enum
 should be used.
@@ -221,13 +233,6 @@ to glyph for font
 Returns the glyph on success or \-1 on error.
 .El
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing or using the
-machine-independent wsfont subsystem can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The wscons subsystem is implemented within the directory
 .Pa sys/dev/wscons .
 The wsfont subsystem itself is implemented within the file

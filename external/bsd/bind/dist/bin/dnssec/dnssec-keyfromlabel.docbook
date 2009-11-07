@@ -2,7 +2,7 @@
                "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
 	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2008, 2009  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2008-2011  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -17,7 +17,7 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Id: dnssec-keyfromlabel.docbook,v 1.12 2009/10/06 22:58:45 each Exp -->
+<!-- Id: dnssec-keyfromlabel.docbook,v 1.21 2011/03/17 01:40:34 each Exp  -->
 <refentry id="man.dnssec-keyfromlabel">
   <refentryinfo>
     <date>February 8, 2008</date>
@@ -38,6 +38,8 @@
     <copyright>
       <year>2008</year>
       <year>2009</year>
+      <year>2010</year>
+      <year>2011</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
@@ -57,12 +59,14 @@
       <arg><option>-I <replaceable class="parameter">date/offset</replaceable></option></arg>
       <arg><option>-k</option></arg>
       <arg><option>-K <replaceable class="parameter">directory</replaceable></option></arg>
+      <arg><option>-L <replaceable class="parameter">ttl</replaceable></option></arg>
       <arg><option>-n <replaceable class="parameter">nametype</replaceable></option></arg>
       <arg><option>-P <replaceable class="parameter">date/offset</replaceable></option></arg>
       <arg><option>-p <replaceable class="parameter">protocol</replaceable></option></arg>
       <arg><option>-R <replaceable class="parameter">date/offset</replaceable></option></arg>
       <arg><option>-t <replaceable class="parameter">type</replaceable></option></arg>
       <arg><option>-v <replaceable class="parameter">level</replaceable></option></arg>
+      <arg><option>-y</option></arg>
       <arg choice="req">name</arg>
     </cmdsynopsis>
   </refsynopsisdiv>
@@ -90,14 +94,16 @@
         <listitem>
 	  <para>
 	    Selects the cryptographic algorithm.  The value of
-	    <option>algorithm</option> must be one of RSAMD5 (RSA),
-	    RSASHA1, DSA, NSEC3RSASHA1, NSEC3DSA or DH (Diffie Hellman).
+            <option>algorithm</option> must be one of RSAMD5, RSASHA1,
+	    DSA, NSEC3RSASHA1, NSEC3DSA, RSASHA256, RSASHA512 or ECCGOST.
 	    These values are case insensitive.
 	  </para>
           <para>
             If no algorithm is specified, then RSASHA1 will be used by
             default, unless the <option>-3</option> option is specified,
-            in which case NSEC3RSASHA1 will be used instead.
+            in which case NSEC3RSASHA1 will be used instead.  (If
+            <option>-3</option> is used and an algorithm is specified,
+            that algorithm will be checked for compatibility with NSEC3.)
           </para>
           <para>
             Note 1: that for DNSSEC, RSASHA1 is a mandatory to implement
@@ -126,7 +132,7 @@
         <listitem>
           <para>
             Specifies the name of the crypto hardware (OpenSSL engine).
-            When compiled with PKCS#11 support it defaults to "pcks11".
+            When compiled with PKCS#11 support it defaults to "pkcs11".
           </para>
         </listitem>
       </varlistentry>
@@ -230,6 +236,20 @@
       </varlistentry>
 
       <varlistentry>
+        <term>-L <replaceable class="parameter">ttl</replaceable></term>
+        <listitem>
+          <para>
+            Sets the default TTL to use for this key when it is converted
+            into a DNSKEY RR.  If the key is imported into a zone,
+            this is the TTL that will be used for it, unless there was
+            already a DNSKEY RRset in place, in which case the existing TTL
+            would take precedence.  Setting the default TTL to
+            <literal>0</literal> or <literal>none</literal> removes it.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
         <term>-p <replaceable class="parameter">protocol</replaceable></term>
         <listitem>
           <para>
@@ -258,6 +278,19 @@
         <listitem>
           <para>
             Sets the debugging level.
+          </para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term>-y</term>
+        <listitem>
+          <para>
+            Allows DNSSEC key files to be generated even if the key ID
+	    would collide with that of an existing key, in the event of
+	    either key being revoked.  (This is only safe to use if you
+            are sure you won't be using RFC 5011 trust anchor maintenance
+            with either of the keys involved.)
           </para>
         </listitem>
       </varlistentry>
@@ -297,7 +330,7 @@
         <listitem>
           <para>
             Sets the date on which the key is to be activated.  After that
-            date, the key will be included and the zone and used to sign
+            date, the key will be included in the zone and used to sign
             it.  If not set, and if the -G option has not been used, the
             default is "now".
           </para>
@@ -316,7 +349,7 @@
       </varlistentry>
 
       <varlistentry>
-        <term>-U <replaceable class="parameter">date/offset</replaceable></term>
+        <term>-I <replaceable class="parameter">date/offset</replaceable></term>
         <listitem>
           <para>
             Sets the date on which the key is to be retired.  After that
@@ -394,9 +427,7 @@
         <refentrytitle>dnssec-signzone</refentrytitle><manvolnum>8</manvolnum>
       </citerefentry>,
       <citetitle>BIND 9 Administrator Reference Manual</citetitle>,
-      <citetitle>RFC 2539</citetitle>,
-      <citetitle>RFC 2845</citetitle>,
-      <citetitle>RFC 4033</citetitle>.
+      <citetitle>RFC 4034</citetitle>.
     </para>
   </refsect1>
 

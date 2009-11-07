@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.h,v 1.12 2005/12/11 12:16:16 christos Exp $ */
+/* $NetBSD: pci_machdep.h,v 1.15 2012/02/06 02:14:13 matt Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -50,8 +50,8 @@ struct pci_attach_args;
  */
 struct alpha_pci_chipset {
 	void		*pc_conf_v;
-	void		(*pc_attach_hook)(struct device *,
-			    struct device *, struct pcibus_attach_args *);
+	void		(*pc_attach_hook)(device_t, device_t,
+			    struct pcibus_attach_args *);
 	int		(*pc_bus_maxdevs)(void *, int);
 	pcitag_t	(*pc_make_tag)(void *, int, int, int);
 	void		(*pc_decompose_tag)(void *, pcitag_t, int *,
@@ -60,7 +60,7 @@ struct alpha_pci_chipset {
 	void		(*pc_conf_write)(void *, pcitag_t, int, pcireg_t);
 
 	void		*pc_intr_v;
-	int		(*pc_intr_map)(struct pci_attach_args *, 
+	int		(*pc_intr_map)(const struct pci_attach_args *,
 			    pci_intr_handle_t *);
 	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
 	const struct evcnt *(*pc_intr_evcnt)(void *, pci_intr_handle_t);
@@ -68,8 +68,8 @@ struct alpha_pci_chipset {
 			    int, int (*)(void *), void *);
 	void		(*pc_intr_disestablish)(void *, void *);
 
-	void		*(*pc_pciide_compat_intr_establish)(void *,
-			    struct device *, struct pci_attach_args *, int,
+	void		*(*pc_pciide_compat_intr_establish)(void *, device_t,
+			    const struct pci_attach_args *, int,
 			    int (*)(void *), void *);
 };
 

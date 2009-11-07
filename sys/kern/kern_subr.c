@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_subr.c,v 1.203 2009/11/05 18:07:19 dyoung Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.212.8.1 2012/07/05 18:12:47 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -79,20 +79,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.203 2009/11/05 18:07:19 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.212.8.1 2012/07/05 18:12:47 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
 #include "opt_syscall_debug.h"
 #include "opt_ktrace.h"
 #include "opt_ptrace.h"
-#include "opt_powerhook.h"
 #include "opt_tftproot.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/device.h>
 #include <sys/reboot.h>
@@ -104,12 +102,9 @@ __KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.203 2009/11/05 18:07:19 dyoung Exp $
 #include <sys/ptrace.h>
 #include <sys/fcntl.h>
 #include <sys/kauth.h>
+#include <sys/stat.h>
 #include <sys/vnode.h>
-#include <sys/syscallvar.h>
-#include <sys/xcall.h>
 #include <sys/module.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
@@ -121,338 +116,11 @@ static device_t getdisk(char *, int, int, dev_t *, int);
 static device_t parsedisk(char *, int, int, dev_t *);
 static const char *getwedgename(const char *, int);
 
-/*
- * A generic linear hook.
- */
-struct hook_desc {
-	LIST_ENTRY(hook_desc) hk_list;
-	void	(*hk_fn)(void *);
-	void	*hk_arg;
-};
-typedef LIST_HEAD(, hook_desc) hook_list_t;
-
 #ifdef TFTPROOT
 int tftproot_dhcpboot(device_t);
 #endif
 
 dev_t	dumpcdev;	/* for savecore */
-
-static void *
-hook_establish(hook_list_t *list, void (*fn)(void *), void *arg)
-{
-	struct hook_desc *hd;
-
-	hd = malloc(sizeof(*hd), M_DEVBUF, M_NOWAIT);
-	if (hd == NULL)
-		return (NULL);
-
-	hd->hk_fn = fn;
-	hd->hk_arg = arg;
-	LIST_INSERT_HEAD(list, hd, hk_list);
-
-	return (hd);
-}
-
-static void
-hook_disestablish(hook_list_t *list, void *vhook)
-{
-#ifdef DIAGNOSTIC
-	struct hook_desc *hd;
-
-	LIST_FOREACH(hd, list, hk_list) {
-                if (hd == vhook)
-			break;
-	}
-
-	if (hd == NULL)
-		panic("hook_disestablish: hook %p not established", vhook);
-#endif
-	LIST_REMOVE((struct hook_desc *)vhook, hk_list);
-	free(vhook, M_DEVBUF);
-}
-
-static void
-hook_destroy(hook_list_t *list)
-{
-	struct hook_desc *hd;
-
-	while ((hd = LIST_FIRST(list)) != NULL) {
-		LIST_REMOVE(hd, hk_list);
-		free(hd, M_DEVBUF);
-	}
-}
-
-static void
-hook_proc_run(hook_list_t *list, struct proc *p)
-{
-	struct hook_desc *hd;
-
-	LIST_FOREACH(hd, list, hk_list)
-		((void (*)(struct proc *, void *))*hd->hk_fn)(p, hd->hk_arg);
-}
-
-/*
- * "Shutdown hook" types, functions, and variables.
- *
- * Should be invoked immediately before the
- * system is halted or rebooted, i.e. after file systems unmounted,
- * after crash dump done, etc.
- *
- * Each shutdown hook is removed from the list before it's run, so that
- * it won't be run again.
- */
-
-static hook_list_t shutdownhook_list;
-
-void *
-shutdownhook_establish(void (*fn)(void *), void *arg)
-{
-	return hook_establish(&shutdownhook_list, fn, arg);
-}
-
-void
-shutdownhook_disestablish(void *vhook)
-{
-	hook_disestablish(&shutdownhook_list, vhook);
-}
-
-/*
- * Run shutdown hooks.  Should be invoked immediately before the
- * system is halted or rebooted, i.e. after file systems unmounted,
- * after crash dump done, etc.
- *
- * Each shutdown hook is removed from the list before it's run, so that
- * it won't be run again.
- */
-void
-doshutdownhooks(void)
-{
-	struct hook_desc *dp;
-
-	while ((dp = LIST_FIRST(&shutdownhook_list)) != NULL) {
-		LIST_REMOVE(dp, hk_list);
-		(*dp->hk_fn)(dp->hk_arg);
-#if 0
-		/*
-		 * Don't bother freeing the hook structure,, since we may
-		 * be rebooting because of a memory corruption problem,
-		 * and this might only make things worse.  It doesn't
-		 * matter, anyway, since the system is just about to
-		 * reboot.
-		 */
-		free(dp, M_DEVBUF);
-#endif
-	}
-}
-
-/*
- * "Mountroot hook" types, functions, and variables.
- */
-
-static hook_list_t mountroothook_list;
-
-void *
-mountroothook_establish(void (*fn)(device_t), device_t dev)
-{
-	return hook_establish(&mountroothook_list, (void (*)(void *))fn, dev);
-}
-
-void
-mountroothook_disestablish(void *vhook)
-{
-	hook_disestablish(&mountroothook_list, vhook);
-}
-
-void
-mountroothook_destroy(void)
-{
-	hook_destroy(&mountroothook_list);
-}
-
-void
-domountroothook(void)
-{
-	struct hook_desc *hd;
-
-	LIST_FOREACH(hd, &mountroothook_list, hk_list) {
-		if (hd->hk_arg == (void *)root_device) {
-			(*hd->hk_fn)(hd->hk_arg);
-			return;
-		}
-	}
-}
-
-static hook_list_t exechook_list;
-
-void *
-exechook_establish(void (*fn)(struct proc *, void *), void *arg)
-{
-	return hook_establish(&exechook_list, (void (*)(void *))fn, arg);
-}
-
-void
-exechook_disestablish(void *vhook)
-{
-	hook_disestablish(&exechook_list, vhook);
-}
-
-/*
- * Run exec hooks.
- */
-void
-doexechooks(struct proc *p)
-{
-	hook_proc_run(&exechook_list, p);
-}
-
-static hook_list_t exithook_list;
-extern krwlock_t exec_lock;
-
-void *
-exithook_establish(void (*fn)(struct proc *, void *), void *arg)
-{
-	void *rv;
-
-	rw_enter(&exec_lock, RW_WRITER);
-	rv = hook_establish(&exithook_list, (void (*)(void *))fn, arg);
-	rw_exit(&exec_lock);
-	return rv;
-}
-
-void
-exithook_disestablish(void *vhook)
-{
-
-	rw_enter(&exec_lock, RW_WRITER);
-	hook_disestablish(&exithook_list, vhook);
-	rw_exit(&exec_lock);
-}
-
-/*
- * Run exit hooks.
- */
-void
-doexithooks(struct proc *p)
-{
-	hook_proc_run(&exithook_list, p);
-}
-
-static hook_list_t forkhook_list;
-
-void *
-forkhook_establish(void (*fn)(struct proc *, struct proc *))
-{
-	return hook_establish(&forkhook_list, (void (*)(void *))fn, NULL);
-}
-
-void
-forkhook_disestablish(void *vhook)
-{
-	hook_disestablish(&forkhook_list, vhook);
-}
-
-/*
- * Run fork hooks.
- */
-void
-doforkhooks(struct proc *p2, struct proc *p1)
-{
-	struct hook_desc *hd;
-
-	LIST_FOREACH(hd, &forkhook_list, hk_list) {
-		((void (*)(struct proc *, struct proc *))*hd->hk_fn)
-		    (p2, p1);
-	}
-}
-
-/*
- * "Power hook" types, functions, and variables.
- * The list of power hooks is kept ordered with the last registered hook
- * first.
- * When running the hooks on power down the hooks are called in reverse
- * registration order, when powering up in registration order.
- */
-struct powerhook_desc {
-	CIRCLEQ_ENTRY(powerhook_desc) sfd_list;
-	void	(*sfd_fn)(int, void *);
-	void	*sfd_arg;
-	char	sfd_name[16];
-};
-
-static CIRCLEQ_HEAD(, powerhook_desc) powerhook_list =
-    CIRCLEQ_HEAD_INITIALIZER(powerhook_list);
-
-void *
-powerhook_establish(const char *name, void (*fn)(int, void *), void *arg)
-{
-	struct powerhook_desc *ndp;
-
-	ndp = (struct powerhook_desc *)
-	    malloc(sizeof(*ndp), M_DEVBUF, M_NOWAIT);
-	if (ndp == NULL)
-		return (NULL);
-
-	ndp->sfd_fn = fn;
-	ndp->sfd_arg = arg;
-	strlcpy(ndp->sfd_name, name, sizeof(ndp->sfd_name));
-	CIRCLEQ_INSERT_HEAD(&powerhook_list, ndp, sfd_list);
-
-	aprint_error("%s: WARNING: powerhook_establish is deprecated\n", name);
-	return (ndp);
-}
-
-void
-powerhook_disestablish(void *vhook)
-{
-#ifdef DIAGNOSTIC
-	struct powerhook_desc *dp;
-
-	CIRCLEQ_FOREACH(dp, &powerhook_list, sfd_list)
-                if (dp == vhook)
-			goto found;
-	panic("powerhook_disestablish: hook %p not established", vhook);
- found:
-#endif
-
-	CIRCLEQ_REMOVE(&powerhook_list, (struct powerhook_desc *)vhook,
-	    sfd_list);
-	free(vhook, M_DEVBUF);
-}
-
-/*
- * Run power hooks.
- */
-void
-dopowerhooks(int why)
-{
-	struct powerhook_desc *dp;
-
-#ifdef POWERHOOK_DEBUG
-	const char *why_name;
-	static const char * pwr_names[] = {PWR_NAMES};
-	why_name = why < __arraycount(pwr_names) ? pwr_names[why] : "???";
-#endif
-
-	if (why == PWR_RESUME || why == PWR_SOFTRESUME) {
-		CIRCLEQ_FOREACH_REVERSE(dp, &powerhook_list, sfd_list) {
-#ifdef POWERHOOK_DEBUG
-			printf("dopowerhooks %s: %s (%p)\n", why_name, dp->sfd_name, dp);
-#endif
-			(*dp->sfd_fn)(why, dp->sfd_arg);
-		}
-	} else {
-		CIRCLEQ_FOREACH(dp, &powerhook_list, sfd_list) {
-#ifdef POWERHOOK_DEBUG
-			printf("dopowerhooks %s: %s (%p)\n", why_name, dp->sfd_name, dp);
-#endif
-			(*dp->sfd_fn)(why, dp->sfd_arg);
-		}
-	}
-
-#ifdef POWERHOOK_DEBUG
-	printf("dopowerhooks: %s done\n", why_name);
-#endif
-}
 
 static int
 isswap(device_t dv)
@@ -483,24 +151,19 @@ isswap(device_t dv)
  * Determine the root device and, if instructed to, the root file system.
  */
 
-#include "md.h"
-
-#if NMD > 0
-extern struct cfdriver md_cd;
 #ifdef MEMORY_DISK_IS_ROOT
 int md_is_root = 1;
 #else
 int md_is_root = 0;
 #endif
-#endif
 
 /*
- * The device and wedge that we booted from.  If booted_wedge is NULL,
- * the we might consult booted_partition.
+ * The device and partition that we booted from.
  */
 device_t booted_device;
-device_t booted_wedge;
 int booted_partition;
+daddr_t booted_startblk;
+uint64_t booted_nblks;
 
 /*
  * Use partition letters if it's a disk class but not a wedge.
@@ -532,16 +195,23 @@ setroot(device_t bootdv, int bootpartition)
 		boothowto |= RB_ASKNAME;
 #endif
 
-#if NMD > 0
+	/*
+	 * For root on md0 we have to force the attachment of md0.
+	 */
 	if (md_is_root) {
-		/*
-		 * XXX there should be "root on md0" in the config file,
-		 * but it isn't always
-		 */
-		bootdv = md_cd.cd_devs[0];
-		bootpartition = 0;
+		int md_major;
+		dev_t md_dev;
+
+		bootdv = NULL;
+		md_major = devsw_name2blk("md", NULL, 0);
+		if (md_major >= 0) {
+			md_dev = MAKEDISKDEV(md_major, 0, RAW_PART);
+			if (bdev_open(md_dev, FREAD, S_IFBLK, curlwp) == 0)
+				bootdv = device_find_by_xname("md0");
+		}
+		if (bootdv == NULL)
+			panic("Cannot open \"md0\" (root)");
 	}
-#endif
 
 	/*
 	 * If NFS is specified as the file system, and we found
@@ -1016,6 +686,8 @@ trace_is_enabled(struct proc *p)
 int
 trace_enter(register_t code, const register_t *args, int narg)
 {
+	int error = 0;
+
 #ifdef SYSCALL_DEBUG
 	scdebug_call(code, args);
 #endif /* SYSCALL_DEBUG */
@@ -1024,10 +696,15 @@ trace_enter(register_t code, const register_t *args, int narg)
 
 #ifdef PTRACE
 	if ((curlwp->l_proc->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
-	    (PSL_SYSCALL|PSL_TRACED))
+	    (PSL_SYSCALL|PSL_TRACED)) {
 		process_stoptrace();
+		if (curlwp->l_proc->p_slflag & PSL_SYSCALLEMU) {
+			/* tracer will emulate syscall for us */
+			error = EJUSTRETURN;
+		}
+	}
 #endif
-	return 0;
+	return error;
 }
 
 /*
@@ -1040,6 +717,10 @@ trace_enter(register_t code, const register_t *args, int narg)
 void
 trace_exit(register_t code, register_t rval[], int error)
 {
+#ifdef PTRACE
+	struct proc *p = curlwp->l_proc;
+#endif
+
 #ifdef SYSCALL_DEBUG
 	scdebug_ret(code, error, rval);
 #endif /* SYSCALL_DEBUG */
@@ -1047,106 +728,9 @@ trace_exit(register_t code, register_t rval[], int error)
 	ktrsysret(code, error, rval);
 	
 #ifdef PTRACE
-	if ((curlwp->l_proc->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
+	if ((p->p_slflag & (PSL_SYSCALL|PSL_TRACED|PSL_SYSCALLEMU)) ==
 	    (PSL_SYSCALL|PSL_TRACED))
 		process_stoptrace();
+	CLR(p->p_slflag, PSL_SYSCALLEMU);
 #endif
-}
-
-int
-syscall_establish(const struct emul *em, const struct syscall_package *sp)
-{
-	struct sysent *sy;
-	int i;
-
-	KASSERT(mutex_owned(&module_lock));
-
-	if (em == NULL) {
-		em = &emul_netbsd;
-	}
-	sy = em->e_sysent;
-
-	/*
-	 * Ensure that all preconditions are valid, since this is
-	 * an all or nothing deal.  Once a system call is entered,
-	 * it can become busy and we could be unable to remove it
-	 * on error.
-	 */
-	for (i = 0; sp[i].sp_call != NULL; i++) {
-		if (sy[sp[i].sp_code].sy_call != sys_nomodule) {
-#ifdef DIAGNOSTIC
-			printf("syscall %d is busy\n", sp[i].sp_code);
-#endif
-			return EBUSY;
-		}
-	}
-	/* Everything looks good, patch them in. */
-	for (i = 0; sp[i].sp_call != NULL; i++) {
-		sy[sp[i].sp_code].sy_call = sp[i].sp_call;
-	}
-
-	return 0;
-}
-
-int
-syscall_disestablish(const struct emul *em, const struct syscall_package *sp)
-{
-	struct sysent *sy;
-	uint64_t where;
-	lwp_t *l;
-	int i;
-
-	KASSERT(mutex_owned(&module_lock));
-
-	if (em == NULL) {
-		em = &emul_netbsd;
-	}
-	sy = em->e_sysent;
-
-	/*
-	 * First, patch the system calls to sys_nomodule to gate further
-	 * activity.
-	 */
-	for (i = 0; sp[i].sp_call != NULL; i++) {
-		KASSERT(sy[sp[i].sp_code].sy_call == sp[i].sp_call);
-		sy[sp[i].sp_code].sy_call = sys_nomodule;
-	}
-
-	/*
-	 * Run a cross call to cycle through all CPUs.  This does two
-	 * things: lock activity provides a barrier and makes our update
-	 * of sy_call visible to all CPUs, and upon return we can be sure
-	 * that we see pertinent values of l_sysent posted by remote CPUs.
-	 */
-	where = xc_broadcast(0, (xcfunc_t)nullop, NULL, NULL);
-	xc_wait(where);
-
-	/*
-	 * Now it's safe to check l_sysent.  Run through all LWPs and see
-	 * if anyone is still using the system call.
-	 */
-	for (i = 0; sp[i].sp_call != NULL; i++) {
-		mutex_enter(proc_lock);
-		LIST_FOREACH(l, &alllwp, l_list) {
-			if (l->l_sysent == &sy[sp[i].sp_code]) {
-				break;
-			}
-		}
-		mutex_exit(proc_lock);
-		if (l == NULL) {
-			continue;
-		}
-		/*
-		 * We lose: one or more calls are still in use.  Put back
-		 * the old entrypoints and act like nothing happened.
-		 * When we drop module_lock, any system calls held in
-		 * sys_nomodule() will be restarted.
-		 */
-		for (i = 0; sp[i].sp_call != NULL; i++) {
-			sy[sp[i].sp_code].sy_call = sp[i].sp_call;
-		}
-		return EBUSY;
-	}
-
-	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.28 2008/04/28 20:23:15 martin Exp $	*/
+/*	$NetBSD: intr.h,v 1.31 2011/08/07 15:13:07 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -40,15 +40,10 @@
 void enable_intr(void);
 void disable_intr(void);
 
-extern int imask[];
-extern paddr_t bebox_mb_reg;
 
-#define ICU_LEN		32
-#define IRQ_SLAVE	2
-#define LEGAL_IRQ(x)	((x) >= 0 && (x) < ICU_LEN && (x) != IRQ_SLAVE)
-
-#define BEBOX_INTR_REG	0x7ffff000
-#define INTR_VECTOR_REG	0xff0
+#define ICU_LEN			32
+#define IRQ_SLAVE		2
+#define LEGAL_HWIRQ_P(x)	((u_int)(x) < ICU_LEN && (x) != IRQ_SLAVE)
 
 #endif /* !_LOCORE */
 

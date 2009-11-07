@@ -1,17 +1,20 @@
-/*	$NetBSD: ialloc.c,v 1.5 1997/07/13 20:26:49 christos Exp $	*/
+/*	$NetBSD: ialloc.c,v 1.7 2010/01/02 10:42:49 tsutsui Exp $	*/
+/*
+** This file is in the public domain, so clarified as of
+** 2006-07-17 by Arthur David Olson.
+*/
+
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
 #include <sys/cdefs.h>
-#ifndef lint
-#ifndef NOID
-#if 0
-static char	elsieid[] = "@(#)ialloc.c	8.29";
-#else
-__RCSID("$NetBSD: ialloc.c,v 1.5 1997/07/13 20:26:49 christos Exp $");
-#endif
-#endif /* !defined NOID */
-#endif /* !defined lint */
 
-/*LINTLIBRARY*/
+#if 0
+static char	elsieid[] = "@(#)ialloc.c	8.30";
+#else
+__RCSID("$NetBSD: ialloc.c,v 1.7 2010/01/02 10:42:49 tsutsui Exp $");
+#endif
 
 #include "private.h"
 

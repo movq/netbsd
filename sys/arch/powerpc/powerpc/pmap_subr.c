@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_subr.c,v 1.21 2008/04/28 20:23:32 martin Exp $	*/
+/*	$NetBSD: pmap_subr.c,v 1.27 2012/02/01 09:54:03 matt Exp $	*/
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,19 +29,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.21 2008/04/28 20:23:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.27 2012/02/01 09:54:03 matt Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_altivec.h"
 #include "opt_pmap.h"
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/sched.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #if defined (PPC_OEA) || defined (PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 #include <powerpc/oea/vmparam.h>
@@ -53,10 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.21 2008/04/28 20:23:32 martin Exp $"
 
 #define	MFMSR()		mfmsr()
 #define	MTMSR(psl)	__asm volatile("sync; mtmsr %0; isync" :: "r"(psl))
-
-#ifdef PMAP_EXCLUDE_DECLS
-const struct pmap_ops *pmapops;
-#endif
 
 #ifdef PMAPCOUNTERS
 #define	PMAPCOUNT(ev)	((pmap_evcnt_ ## ev).ev_count++)
@@ -285,21 +280,22 @@ pmap_zero_page(paddr_t pa)
 	size_t linewidth;
 	register_t msr = 0; /* XXX: gcc */
 
-#if defined(PPC_OEA) || defined (PPC_OEA64_BIRDGE)
+#if defined(PPC_OEA) || defined (PPC_OEA64_BRIDGE)
 	{
 		/*
 		 * If we are zeroing this page, we must clear the EXEC-ness
 		 * of this page since the page contents will have changed.
 		 */
 		struct vm_page *pg = PHYS_TO_VM_PAGE(pa);
+		struct vm_page_md * const md = VM_PAGE_TO_MD(pg);
 		KDASSERT(pg != NULL);
-		KDASSERT(LIST_EMPTY(&pg->mdpage.mdpg_pvoh));
+		KDASSERT(LIST_EMPTY(&md->mdpg_pvoh));
 #ifdef PMAPCOUNTERS
-		if (pg->mdpage.mdpg_attrs & PTE_EXEC) {
+		if (md->mdpg_attrs & PTE_EXEC) {
 			PMAPCOUNT(exec_uncached_zero_page);
 		}
 #endif
-		pg->mdpage.mdpg_attrs &= ~PTE_EXEC;
+		md->mdpg_attrs &= ~PTE_EXEC;
 	}
 #endif
 
@@ -372,14 +368,15 @@ pmap_copy_page(paddr_t src, paddr_t dst)
 		 * changed.
 		 */
 		struct vm_page *pg = PHYS_TO_VM_PAGE(dst);
+		struct vm_page_md * const md = VM_PAGE_TO_MD(pg);
 		KDASSERT(pg != NULL);
-		KDASSERT(LIST_EMPTY(&pg->mdpage.mdpg_pvoh));
+		KDASSERT(LIST_EMPTY(&md->mdpg_pvoh));
 #ifdef PMAPCOUNTERS
-		if (pg->mdpage.mdpg_attrs & PTE_EXEC) {
+		if (md->mdpg_attrs & PTE_EXEC) {
 			PMAPCOUNT(exec_uncached_copy_page);
 		}
 #endif
-		pg->mdpage.mdpg_attrs &= ~PTE_EXEC;
+		md->mdpg_attrs &= ~PTE_EXEC;
 	}
 #endif
 

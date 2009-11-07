@@ -1,4 +1,4 @@
-/* $NetBSD: tsvar.h,v 1.7 2009/10/30 18:55:45 mhitch Exp $ */
+/* $NetBSD: tsvar.h,v 1.10 2012/02/06 02:14:15 matt Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -39,14 +39,10 @@
 
 #define	tsvar() { Generate ctags(1) key. }
 
-struct tsc_softc {
-	struct	device tsc_dev;
-};
-
 struct tsp_config {
 	int	pc_pslot;		/* Pchip 0 or 1 */
 	int	pc_initted;		/* Initialized */
-	u_int64_t pc_iobase;		/* All Pchip space starts here */
+	uint64_t pc_iobase;		/* All Pchip space starts here */
 	struct	ts_pchip *pc_csr;	/* Pchip CSR space starts here */
 
 	struct	alpha_bus_space pc_iot, pc_memt;
@@ -57,18 +53,13 @@ struct tsp_config {
 
 	struct alpha_sgmap pc_sgmap;
 
-	u_int32_t pc_hae_mem;
-	u_int32_t pc_hae_io;
+	uint32_t pc_hae_mem;
+	uint32_t pc_hae_io;
 
 	long	pc_io_exstorage[_FSTORE];
 	long	pc_mem_exstorage[_FSTORE];
 	struct	extent *pc_io_ex, *pc_mem_ex;
 	int	pc_mallocsafe;
-};
-
-struct tsp_softc {
-	struct	device sc_dev;
-	struct	tsp_config *sc_ccp;
 };
 
 struct tsp_attach_args {
@@ -86,3 +77,9 @@ void	tsp_bus_io_init(bus_space_tag_t, void *);
 void	tsp_bus_mem_init(bus_space_tag_t, void *);
 
 void	tsp_bus_mem_init2(bus_space_tag_t, void *);
+
+void	tsp_print_error(unsigned int, unsigned long);
+void	tsc_print_misc(unsigned int, unsigned long);
+void	tsc_print_dir(unsigned int, unsigned long);
+
+#define IPRINTF(i, f, ...)	printf("%*s" f, i * 4, "", ##__VA_ARGS__)

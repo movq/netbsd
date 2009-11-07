@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_malloc_debug.c,v 1.22 2009/11/07 07:27:49 cegger Exp $	*/
+/*	$NetBSD: kern_malloc_debug.c,v 1.26 2011/09/01 18:29:29 matt Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Artur Grabowski <art@openbsd.org>
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_malloc_debug.c,v 1.22 2009/11/07 07:27:49 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_malloc_debug.c,v 1.26 2011/09/01 18:29:29 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -156,7 +156,7 @@ debug_malloc(unsigned long size, struct malloc_type *type, int flags,
 	splx(s);
 
 	pmap_kenter_pa(md->md_va, md->md_pa,
-	    VM_PROT_READ|VM_PROT_WRITE|PMAP_KMPAGE, 0);
+	    VM_PROT_READ|VM_PROT_WRITE, PMAP_KMPAGE);
 	pmap_update(pmap_kernel());
 
 	md->md_size = size;
@@ -247,7 +247,7 @@ debug_malloc_allocate_free(int wait)
 
 	offset = va - vm_map_min(kernel_map);
 	for (;;) {
-		pg = uvm_pagealloc(NULL, offset, NULL, 0);
+		pg = uvm_pagealloc(NULL, offset, NULL, UVM_FLAG_COLORMATCH);
 		if (pg) {
 			pg->flags &= ~PG_BUSY;  /* new page */
 			UVM_PAGE_OWN(pg, NULL);

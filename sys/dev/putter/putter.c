@@ -1,4 +1,4 @@
-/*	$NetBSD: putter.c,v 1.23 2009/04/11 23:05:26 christos Exp $	*/
+/*	$NetBSD: putter.c,v 1.32 2011/07/23 14:28:28 hannken Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.23 2009/04/11 23:05:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.32 2011/07/23 14:28:28 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.23 2009/04/11 23:05:26 christos Exp $")
 #include <dev/putter/putter_sys.h>
 
 /*
- * Device routines.  These are for when /dev/puffs is initially
+ * Device routines.  These are for when /dev/putter is initially
  * opened before it has been cloned.
  */
 
@@ -206,7 +206,7 @@ static const struct fileops putter_fileops = {
 	.fo_stat = putter_fop_stat,
 	.fo_close = putter_fop_close,
 	.fo_kqfilter = putter_fop_kqfilter,
-	.fo_drain = fnullop_drain,
+	.fo_restart = fnullop_restart,
 };
 
 static int
@@ -357,7 +357,7 @@ putter_fop_close(file_t *fp)
  restart:
 	mutex_enter(&pi_mtx);
 	/*
-	 * First check if the fs was never mounted.  In that case
+	 * First check if the driver was never born.  In that case
 	 * remove the instance from the list.  If mount is attempted later,
 	 * it will simply fail.
 	 */
@@ -386,7 +386,8 @@ putter_fop_close(file_t *fp)
 	}
 
 	/*
-	 * So we have a reference.  Proceed to unwrap the file system.
+	 * So we have a reference.  Proceed to unravel the
+	 * underlying driver.
 	 */
 	mutex_exit(&pi_mtx);
 
@@ -419,6 +420,7 @@ putter_fop_stat(file_t *fp, struct stat *st)
 	st->st_ctimespec = st->st_birthtimespec = pi->pi_btime;
 	st->st_uid = kauth_cred_geteuid(fp->f_cred);
 	st->st_gid = kauth_cred_getegid(fp->f_cred);
+	st->st_mode = S_IFCHR;
 	KERNEL_UNLOCK_ONE(NULL);
 	return 0;
 }
@@ -429,7 +431,7 @@ putter_fop_ioctl(file_t *fp, u_long cmd, void *data)
 
 	/*
 	 * work already done in sys_ioctl().  skip sanity checks to enable
-	 * setting non-blocking fd without yet having mounted the fs
+	 * setting non-blocking fd on an embryotic driver.
 	 */
 	if (cmd == FIONBIO)
 		return 0;
@@ -605,6 +607,7 @@ putter_detach(struct putter_instance *pi)
 	TAILQ_REMOVE(&putter_ilist, pi, pi_entries);
 	pi->pi_private = PUTTER_DEAD;
 	mutex_exit(&pi_mtx);
+	seldestroy(&pi->pi_sel);
 
 	DPRINTF(("putter_nukebypmp: nuked %p\n", pi));
 }
@@ -642,7 +645,7 @@ get_pi_idx(struct putter_instance *pi_i)
 	return i;
 }
 
-MODULE(MODULE_CLASS_MISC, putter, NULL);
+MODULE(MODULE_CLASS_DRIVER, putter, NULL);
 
 static int
 putter_modcmd(modcmd_t cmd, void *arg)
@@ -652,10 +655,11 @@ putter_modcmd(modcmd_t cmd, void *arg)
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
+		putterattach();
 		return devsw_attach("putter", NULL, &bmajor,
 		    &putter_cdevsw, &cmajor);
 	case MODULE_CMD_FINI:
-		return devsw_detach(NULL, &putter_cdevsw);
+		return ENOTTY; /* XXX: putterdetach */
 	default:
 		return ENOTTY;
 	}

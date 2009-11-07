@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_verifiedexec.c,v 1.118 2009/11/07 07:27:49 cegger Exp $	*/
+/*	$NetBSD: kern_verifiedexec.c,v 1.128 2011/11/20 10:32:33 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_verifiedexec.c,v 1.118 2009/11/07 07:27:49 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_verifiedexec.c,v 1.128 2011/11/20 10:32:33 hannken Exp $");
 
 #include "opt_veriexec.h"
 
@@ -145,39 +145,52 @@ static krwlock_t veriexec_op_lock;
  * Sysctl helper routine for Veriexec.
  */
 static int
-sysctl_kern_veriexec(SYSCTLFN_ARGS)
+sysctl_kern_veriexec_algorithms(SYSCTLFN_ARGS)
 {
-	int newval, error;
-	int *var = NULL, raise_only = 0;
+	size_t len;
+	int error;
+	const char *p;
+
+	if (newp != NULL)
+		return EPERM;
+
+	if (namelen != 0)
+		return EINVAL;
+
+	p = veriexec_fp_names == NULL ? "" : veriexec_fp_names;
+
+	len = strlen(p) + 1;
+
+	if (*oldlenp < len && oldp)
+		return ENOMEM;
+
+	if (oldp && (error = copyout(p, oldp, len)) != 0)
+		return error;
+
+	*oldlenp = len;
+	return 0;
+}
+
+static int
+sysctl_kern_veriexec_strict(SYSCTLFN_ARGS)
+{
 	struct sysctlnode node;
+	int error, newval;
 
 	node = *rnode;
-
-	if (strcmp(rnode->sysctl_name, "strict") == 0) {
-		raise_only = 1;
-		var = &veriexec_strict;
-	} else if (strcmp(rnode->sysctl_name, "algorithms") == 0) {
-		node.sysctl_data = veriexec_fp_names;
-		node.sysctl_size = strlen(veriexec_fp_names) + 1;
-		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-	} else {
-		return (EINVAL);
-	}
-
-	newval = *var;
-
 	node.sysctl_data = &newval;
+
+	newval = veriexec_strict;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL) {
-		return (error);
-	}
+	if (error || newp == NULL)
+		return error;
 
-	if (raise_only && (newval < *var))
-		return (EPERM);
+	if (newval < veriexec_strict)
+		return EPERM;
 
-	*var = newval;
+	veriexec_strict = newval;
 
-	return (error);
+	return 0;
 }
 
 SYSCTL_SETUP(sysctl_kern_veriexec_setup, "sysctl kern.veriexec setup")
@@ -207,14 +220,14 @@ SYSCTL_SETUP(sysctl_kern_veriexec_setup, "sysctl kern.veriexec setup")
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "strict",
 		       SYSCTL_DESCR("Veriexec strict level"),
-		       sysctl_kern_veriexec, 0, NULL, 0,
+		       sysctl_kern_veriexec_strict, 0, NULL, 0,
 		       CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, &rnode, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "algorithms",
 		       SYSCTL_DESCR("Veriexec supported hashing "
 				    "algorithms"),
-		       sysctl_kern_veriexec, 0, NULL, 0,
+		       sysctl_kern_veriexec_algorithms, 0, NULL, 0,
 		       CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, &rnode, &veriexec_count_node,
 		       CTLFLAG_PERMANENT,
@@ -398,7 +411,11 @@ veriexec_fp_calc(struct lwp *l, struct vnode *vp, int lock_state,
 	size_t resid, npages;
 	int error, do_perpage, pagen;
 
+	if (lock_state == VERIEXEC_UNLOCKED)
+		vn_lock(vp, LK_SHARED | LK_RETRY);
 	error = VOP_GETATTR(vp, &va, l->l_cred);
+	if (lock_state == VERIEXEC_UNLOCKED)
+		VOP_UNLOCK(vp);
 	if (error)
 		return (error);
 
@@ -629,7 +646,8 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 			    name, NULL, REPORT_ALWAYS);
 			kmem_free(digest, vfe->ops->hash_len);
 			rw_exit(&vfe->lock);
-			rw_exit(&veriexec_op_lock);
+			if (lockstate == VERIEXEC_UNLOCKED)
+				rw_exit(&veriexec_op_lock);
 			return (error);
 		}
 
@@ -650,7 +668,8 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 		/* IPS mode: Enforce access type. */
 		if (veriexec_strict >= VERIEXEC_IPS) {
 			rw_exit(&vfe->lock);
-			rw_exit(&veriexec_op_lock);
+			if (lockstate == VERIEXEC_UNLOCKED)
+				rw_exit(&veriexec_op_lock);
 			return (EPERM);
 		}
 	}
@@ -679,7 +698,8 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 	case FINGERPRINT_NOTEVAL:
 		/* Should not happen. */
 		rw_exit(&vfe->lock);
-		rw_exit(&veriexec_op_lock);
+		if (lockstate == VERIEXEC_UNLOCKED)
+			rw_exit(&veriexec_op_lock);
 		veriexec_file_report(vfe, "Not-evaluated status "
 		    "post evaluation; inconsistency detected.", name,
 		    NULL, REPORT_ALWAYS|REPORT_PANIC);
@@ -709,7 +729,8 @@ veriexec_file_verify(struct lwp *l, struct vnode *vp, const u_char *name,
 	default:
 		/* Should never happen. */
 		rw_exit(&vfe->lock);
-		rw_exit(&veriexec_op_lock);
+		if (lockstate == VERIEXEC_UNLOCKED)
+			rw_exit(&veriexec_op_lock);
 		veriexec_file_report(vfe, "Invalid status "
 		    "post evaluation.", name, NULL, REPORT_ALWAYS|REPORT_PANIC);
         }
@@ -765,7 +786,8 @@ veriexec_page_verify(struct veriexec_file_entry *vfe, struct vm_page *pg,
 
 	ctx = kmem_alloc(vfe->ops->context_size, KM_SLEEP);
 	fp = kmem_alloc(vfe->ops->hash_len, KM_SLEEP);
-	kva = uvm_km_alloc(kernel_map, PAGE_SIZE, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	kva = uvm_km_alloc(kernel_map, PAGE_SIZE, VM_PGCOLOR_BUCKET(pg),
+	    UVM_KMF_COLORMATCH | UVM_KMF_VAONLY | UVM_KMF_WAITVA);
 	pmap_kenter_pa(kva, VM_PAGE_TO_PHYS(pg), VM_PROT_READ, 0);
 	pmap_update(pmap_kernel());
 
@@ -853,7 +875,7 @@ veriexec_removechk(struct lwp *l, struct vnode *vp, const char *pathbuf)
 }
 
 /*
- * Veriexe rename policy.
+ * Veriexec rename policy.
  *
  * XXX: Once there's a way to hook after a successful rename, it would be
  * XXX: nice to update vfe->filename to the new name if it's not NULL and
@@ -913,9 +935,12 @@ veriexec_renamechk(struct lwp *l, struct vnode *fromvp, const char *fromname,
 			 * entries so we can destroy the object.
 			 */
 
-			kmem_free(vfe->filename, vfe->filename_len);
+			if (vfe->filename_len > 0)
+				kmem_free(vfe->filename, vfe->filename_len);
+
 			vfe->filename = NULL;
 			vfe->filename_len = 0;
+
 			rw_downgrade(&veriexec_op_lock);
 		}
 
@@ -1165,6 +1190,8 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 
 	vfe = kmem_zalloc(sizeof(*vfe), KM_SLEEP);
 
+	rw_init(&vfe->lock);
+
 	/* Lookup fingerprint hashing algorithm. */
 	fp_type = prop_string_cstring_nocopy(prop_dictionary_get(dict,
 	    "fp-type"));
@@ -1253,7 +1280,6 @@ veriexec_file_add(struct lwp *l, prop_dictionary_t dict)
 	vfe->page_fp_status = PAGE_FP_NONE;
 	vfe->npages = 0;
 	vfe->last_page_size = 0;
-	rw_init(&vfe->lock);
 
 	vte = veriexec_table_lookup(vp->v_mount);
 	if (vte == NULL)

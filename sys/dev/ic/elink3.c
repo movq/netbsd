@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3.c,v 1.129 2009/09/15 19:20:29 dyoung Exp $	*/
+/*	$NetBSD: elink3.c,v 1.132 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -62,11 +62,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.129 2009/09/15 19:20:29 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.132 2012/02/02 19:43:03 tls Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,19 +77,15 @@ __KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.129 2009/09/15 19:20:29 dyoung Exp $");
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -493,10 +487,8 @@ epconfig(struct ep_softc *sc, u_short chipset, u_int8_t *enaddr)
 
 	GO_WINDOW(1);		/* Window 1 is operating window */
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
 
 	sc->tx_start_thresh = 20;	/* probably a good starting point. */
 
@@ -1158,10 +1150,7 @@ startagain:
 	bus_space_write_2(iot, ioh, ELINK_COMMAND, SET_TX_START_THRESH |
 	    ((len / 4 + sc->tx_start_thresh) /* >> sc->ep_pktlenshift*/));
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	/*
 	 * Do the output at a high interrupt priority level so that an
@@ -1439,10 +1428,8 @@ epintr(void *arg)
 			epstart(ifp);
 		}
 
-#if NRND > 0
 		if (status)
 			rnd_add_uint32(&sc->rnd_source, status);
-#endif
 	}
 
 	/* no more interrupts */
@@ -1503,14 +1490,11 @@ again:
 
 	++ifp->if_ipackets;
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.
 	 * If so, hand off the raw packet to BPF.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 
@@ -2040,9 +2024,7 @@ ep_detach(device_t self, int flags)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 

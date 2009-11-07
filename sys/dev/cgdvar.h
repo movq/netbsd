@@ -1,4 +1,4 @@
-/* $NetBSD: cgdvar.h,v 1.12 2008/09/12 16:51:55 christos Exp $ */
+/* $NetBSD: cgdvar.h,v 1.14 2010/01/12 21:08:09 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -69,6 +69,7 @@ struct cryptdata {
 };
 
 struct cgd_softc {
+	device_t		sc_dev;
 	struct dk_softc		 sc_dksc;	/* generic disk interface */
 	struct cryptinfo	*sc_crypt;	/* the alg/key/etc */
 	struct vnode		*sc_tvn;	/* target device's vnode */
@@ -86,5 +87,8 @@ struct cgd_softc {
 /* XXX XAX XXX elric:  check these out properly. */
 #define CGDIOCSET	_IOWR('F', 18, struct cgd_ioctl)
 #define CGDIOCCLR	_IOW('F', 19, struct cgd_ioctl)
+
+/* Maximum block sized to be used by the ciphers */
+#define CGD_MAXBLOCKSIZE	128
 
 #endif /* _DEV_CGDVAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_exec.h,v 1.5 2008/11/19 18:36:04 ad Exp $ */
+/*	$NetBSD: linux32_exec.h,v 1.7 2010/07/07 01:30:35 chs Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -44,11 +44,6 @@ extern struct emul emul_linux32;
 
 /* XXXmanu Do a.out later... */
 
-#ifdef LINUX32_NPTL
-void linux_nptl_exit_hook(struct proc *);
-#endif
-
-
 #ifdef EXEC_ELF32
 int linux32_elf32_probe(struct lwp *, struct exec_package *, void *,
     char *, vaddr_t *); 
@@ -71,7 +66,7 @@ int linux_elf32_atexit_signature(struct lwp *l,
 
 #endif /* EXEC_ELF32 */
 
-void linux32_setregs (struct lwp *, struct exec_package *, u_long stack);
+void linux32_setregs (struct lwp *, struct exec_package *, vaddr_t stack);
 int linux32_sigreturn (struct proc *, void *, register_t *);
 void linux32_sendsig (const ksiginfo_t *, const sigset_t *);
 

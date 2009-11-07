@@ -1,4 +1,4 @@
-/*	$NetBSD: rfc931.c,v 1.8 2002/06/06 21:45:19 itojun Exp $	*/
+/*	$NetBSD: rfc931.c,v 1.8.56.2 2012/04/23 23:40:41 riz Exp $	*/
 
  /*
   * rfc931() speaks a common subset of the RFC 931, AUTH, TAP, IDENT and RFC
@@ -16,7 +16,7 @@
 #if 0
 static char sccsid[] = "@(#) rfc931.c 1.10 95/01/02 16:11:34";
 #else
-__RCSID("$NetBSD: rfc931.c,v 1.8 2002/06/06 21:45:19 itojun Exp $");
+__RCSID("$NetBSD: rfc931.c,v 1.8.56.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif
 

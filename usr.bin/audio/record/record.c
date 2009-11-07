@@ -1,7 +1,7 @@
-/*	$NetBSD: record.c,v 1.47 2009/04/11 10:43:10 lukem Exp $	*/
+/*	$NetBSD: record.c,v 1.52 2011/09/21 14:32:14 christos Exp $	*/
 
 /*
- * Copyright (c) 1999, 2002 Matthew R. Green
+ * Copyright (c) 1999, 2002, 2003, 2005, 2010 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,11 +32,11 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: record.c,v 1.47 2009/04/11 10:43:10 lukem Exp $");
+__RCSID("$NetBSD: record.c,v 1.52 2011/09/21 14:32:14 christos Exp $");
 #endif
 
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <sys/audioio.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
@@ -55,49 +55,46 @@ __RCSID("$NetBSD: record.c,v 1.47 2009/04/11 10:43:10 lukem Exp $");
 #include "libaudio.h"
 #include "auconv.h"
 
-audio_info_t info, oinfo;
-ssize_t	total_size = -1;
-const char *device;
-int	format = AUDIO_FORMAT_DEFAULT;
-char	*header_info;
-char	default_info[8] = { '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0' };
-int	audiofd, outfd;
-int	qflag, aflag, fflag;
+static audio_info_t info, oinfo;
+static ssize_t	total_size = -1;
+static const char *device;
+static int	format = AUDIO_FORMAT_DEFAULT;
+static char	*header_info;
+static char	default_info[8] = { '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0' };
+static int	audiofd, outfd;
+static int	qflag, aflag, fflag;
 int	verbose;
-int	monitor_gain, omonitor_gain;
-int	gain;
-int	balance;
-int	port;
-int	encoding;
-char	*encoding_str;
-int	precision;
-int	sample_rate;
-int	channels;
-struct timeval record_time;
-struct timeval start_time;
+static int	monitor_gain, omonitor_gain;
+static int	gain;
+static int	balance;
+static int	port;
+static int	encoding;
+static char	*encoding_str;
+static int	precision;
+static int	sample_rate;
+static int	channels;
+static struct timeval record_time;
+static struct timeval start_time;
 
-void (*conv_func) (u_char *, int);
+static void (*conv_func) (u_char *, int);
 
-void usage (void);
-int main (int, char *[]);
-int timeleft (struct timeval *, struct timeval *);
-void cleanup (int) __dead;
-int write_header_sun (void **, size_t *, int *);
-int write_header_wav (void **, size_t *, int *);
-void write_header (void);
-void rewrite_header (void);
+static void usage (void) __dead;
+static int timeleft (struct timeval *, struct timeval *);
+static void cleanup (int) __dead;
+static int write_header_sun (void **, size_t *, int *);
+static int write_header_wav (void **, size_t *, int *);
+static void write_header (void);
+static void rewrite_header (void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	u_char	*buffer;
-	size_t	len, bufsize;
+	size_t	len, bufsize = 0;
 	int	ch, no_time_limit = 1;
 	const char *defdevice = _PATH_SOUND;
 
-	while ((ch = getopt(argc, argv, "ab:C:F:c:d:e:fhi:m:P:p:qt:s:Vv:")) != -1) {
+	while ((ch = getopt(argc, argv, "ab:B:C:F:c:d:e:fhi:m:P:p:qt:s:Vv:")) != -1) {
 		switch (ch) {
 		case 'a':
 			aflag++;
@@ -106,6 +103,10 @@ main(argc, argv)
 			decode_int(optarg, &balance);
 			if (balance < 0 || balance > 63)
 				errx(1, "balance must be between 0 and 63");
+			break;
+		case 'B':
+			bufsize = strsuftoll("read buffer size", optarg,
+					     1, UINT_MAX);
 			break;
 		case 'C':
 			/* Ignore, compatibility */
@@ -199,10 +200,6 @@ main(argc, argv)
 		if (encoding == -1)
 			errx(1, "unknown encoding, bailing...");
 	}
-#if 0
-	else
-		encoding = AUDIO_ENCODING_ULAW;
-#endif
 
 	/*
 	 * open the output file
@@ -246,9 +243,11 @@ main(argc, argv)
 	 */
 	if (ioctl(audiofd, AUDIO_GETINFO, &oinfo) < 0)
 		err(1, "failed to get audio info");
-	bufsize = oinfo.record.buffer_size;
-	if (bufsize < 32 * 1024)
-		bufsize = 32 * 1024;
+	if (bufsize == 0) {
+		bufsize = oinfo.record.buffer_size;
+		if (bufsize < 32 * 1024)
+			bufsize = 32 * 1024;
+	}
 	omonitor_gain = oinfo.monitor_gain;
 
 	buffer = malloc(bufsize);
@@ -346,9 +345,7 @@ main(argc, argv)
 }
 
 int
-timeleft(start_tvp, record_tvp)
-	struct timeval *start_tvp;
-	struct timeval *record_tvp;
+timeleft(struct timeval *start_tvp, struct timeval *record_tvp)
 {
 	struct timeval now, diff;
 
@@ -360,8 +357,7 @@ timeleft(start_tvp, record_tvp)
 }
 
 void
-cleanup(signo)
-	int signo;
+cleanup(int signo)
 {
 
 	rewrite_header();
@@ -379,11 +375,8 @@ cleanup(signo)
 	exit(0);
 }
 
-int
-write_header_sun(hdrp, lenp, leftp)
-	void **hdrp;
-	size_t *lenp;
-	int *leftp;
+static int
+write_header_sun(void **hdrp, size_t *lenp, int *leftp)
 {
 	static int warned = 0;
 	static sun_audioheader auh;
@@ -476,11 +469,8 @@ write_header_sun(hdrp, lenp, leftp)
 	return 0;
 }
 
-int
-write_header_wav(hdrp, lenp, leftp)
-	void **hdrp;
-	size_t *lenp;
-	int *leftp;
+static int
+write_header_wav(void **hdrp, size_t *lenp, int *leftp)
 {
 	/*
 	 * WAV header we write looks like this:
@@ -707,8 +697,8 @@ fmt_pcm:
 	return 0;
 }
 
-void
-write_header()
+static void
+write_header(void)
 {
 	struct iovec iv[3];
 	int veclen, left, tlen;
@@ -757,26 +747,27 @@ write_header()
 		err(1, "could not write audio header");
 }
 
-void
-rewrite_header()
+static void
+rewrite_header(void)
 {
 
 	/* can't do this here! */
 	if (outfd == STDOUT_FILENO)
 		return;
 
-	if (lseek(outfd, SEEK_SET, 0) < 0)
+	if (lseek(outfd, (off_t)0, SEEK_SET) == (off_t)-1)
 		err(1, "could not seek to start of file for header rewrite");
 	write_header();
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
 	fprintf(stderr, "Usage: %s [-afhqV] [options] {files ...|-}\n",
 	    getprogname());
 	fprintf(stderr, "Options:\n\t"
+	    "-B buffer size\n\t"
 	    "-b balance (0-63)\n\t"
 	    "-c channels\n\t"
 	    "-d audio device\n\t"

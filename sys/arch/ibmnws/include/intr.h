@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.12 2008/04/28 20:23:26 martin Exp $	*/
+/*	$NetBSD: intr.h,v 1.15 2011/06/17 23:36:17 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,31 +32,27 @@
 #ifndef _IBMNWS_INTR_H_
 #define _IBMNWS_INTR_H_
 
-#include <powerpc/intr.h>
-
 #ifndef _LOCORE
-#include <machine/cpu.h>
-#include <sys/device.h>
-
 void init_intr_ivr(void);
 void init_intr_openpic(void);
 void openpic_init(unsigned char *);
 void enable_intr(void);
 void disable_intr(void);
 
-extern int imask[];
 extern vaddr_t prep_intr_reg;
 extern uint32_t prep_intr_reg_off;
 
 #define	ICU_LEN			32
 
 #define	IRQ_SLAVE		2
-#define	LEGAL_IRQ(x)		((x) >= 0 && (x) < ICU_LEN && (x) != IRQ_SLAVE)
+#define	LEGAL_HWIRQ_P(x)	((u_int)(x) < ICU_LEN && (x) != IRQ_SLAVE)
 #define	I8259_INTR_NUM		16
 
 #define	PREP_INTR_REG	0xbffff000
 #define	INTR_VECTOR_REG	0xff0
 
 #endif /* !_LOCORE */
+
+#include <powerpc/intr.h>
 
 #endif /* !_IBMNWS_INTR_H_ */

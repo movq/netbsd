@@ -1,4 +1,4 @@
-.\"	$NetBSD: aps.4,v 1.2 2007/09/11 22:27:04 wiz Exp $
+.\"	$NetBSD: aps.4,v 1.6 2012/02/10 23:47:49 riz Exp $
 .\"	$OpenBSD: aps.4,v 1.7 2007/05/31 19:19:49 jmc Exp $
 .\"
 .\" Copyright (c) 2005 Jonathan Gray <jsg@openbsd.org>
@@ -15,7 +15,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd September 11, 2007
+.Dd July 13, 2011
 .Dt APS 4
 .Os
 .Sh NAME
@@ -31,27 +31,29 @@ driver provides support for several sensors found in some ThinkPad laptops.
 The sensors currently exposed via the
 .Xr envsys 4
 interface are:
-.Bl -column "Sensor          " "Units" "Typical" -offset indent
-.It Sy "Sensor" Ta Sy "Units" Ta Sy "Typical Use"
-.It Li "X_ACCEL" Ta "Integer" Ta "X Acceleration"
-.It Li "Y_ACCEL" Ta "Integer" Ta "Y Acceleration"
-.It Li "X_VAR" Ta "Integer" Ta "Weighted X Acceleration?"
-.It Li "Y_VAR" Ta "Integer" Ta "Weighted Y Acceleration?"
-.It Li "Temp1" Ta "uK" Ta "Unknown"
-.It Li "Temp2" Ta "uK" Ta "Unknown"
-.It Li "Keyboard Active" Ta "Boolean" Ta "Keyboard activity"
-.It Li "Mouse Active" Ta "Boolean" Ta "Mouse activity"
-.It Li "Lid Open" Ta "Boolean" Ta "Lid state"
+.Bl -column "Sensor        " "Units    " "Typical" -offset indent
+.It Sy "Sensor        " Ta Sy "Units    " Ta Sy "Typical Use"
+.It Li "x-acceleration" Ta "integer" Ta "X-axis acceleration"
+.It Li "y-acceleration" Ta "integer" Ta "Y-axis acceleration"
+.It Li "x-variable" Ta "integer" Ta "Weighted X acceleration?"
+.It Li "y-variable" Ta "integer" Ta "Weighted Y acceleration?"
+.It Li "temperature 1" Ta "degC" Ta "Unknown temperature"
+.It Li "temperature 2" Ta "degC" Ta "Unknown temperature"
+.It Li "keyboard active" Ta "boolean" Ta "Keyboard activity"
+.It Li "mouse active" Ta "boolean" Ta "Mouse activity"
+.It Li "lid open" Ta "boolean" Ta "Lid state"
 .El
 .Sh SEE ALSO
 .Xr envsys 4 ,
+.Xr hpacel 4 ,
+.Xr thinkpad 4 ,
 .Xr envstat 8
 .Sh HISTORY
 The
 .Nm
 driver first appeared in
 .Ox 3.8
-and then was ported to
+and was then ported to
 .Nx
 5.0.
 .Sh AUTHORS
@@ -60,14 +62,24 @@ The
 driver was written by
 .An Jonathan Gray Aq jsg@openbsd.org .
 .Sh CAVEATS
+Few issues can be mentioned.
+.Bl -bullet
+.It
 The
 .Nm
-driver does not yet maintain state and subsequently does not take
+driver does not maintain state and subsequently does not take
 evasive action when it thinks the hard drive is in danger.
-.Pp
+Possible actions would include spinning down the hard drive
+in case excessive tremor is detected by the sensors.
+.It
 The Y axis on X40 and possibly other models seems to be inverted.
 It is unknown how to distinguish between different versions of the
 accelerometer to compensate for this in the driver at this time.
-.Pp
+.It
+The sensor values are refreshed every 0.5 seconds.
+Because no protection measures are taken,
+this is unnecessary and may have a negative effect on battery life.
+.It
 As IBM provides no documentation, it is not known what all the available
 sensors are used for.
+.El

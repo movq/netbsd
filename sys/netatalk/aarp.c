@@ -1,4 +1,4 @@
-/*	$NetBSD: aarp.c,v 1.34 2009/09/12 20:43:18 tsutsui Exp $	*/
+/*	$NetBSD: aarp.c,v 1.36 2012/01/31 09:53:44 hauke Exp $	*/
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aarp.c,v 1.34 2009/09/12 20:43:18 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aarp.c,v 1.36 2012/01/31 09:53:44 hauke Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -222,11 +222,19 @@ aarpwhohas(struct ifnet *ifp, const struct sockaddr_at *sat)
 		ea->aarp_tpa = sat->sat_addr.s_node;
 	}
 
+	/* If we are talking to ourselves, use the loopback interface. */
+	if (AA_SAT(aa)->sat_addr.s_net == sat->sat_addr.s_net &&
+	    AA_SAT(aa)->sat_addr.s_node == sat->sat_addr.s_node)
+		ifp = lo0ifp;
+
 #ifdef NETATALKDEBUG
-	printf("aarp: sending request via %u.%u seaking %u.%u\n",
-	    ntohs(AA_SAT(aa)->sat_addr.s_net), AA_SAT(aa)->sat_addr.s_node,
-	    ntohs(sat->sat_addr.s_net), sat->sat_addr.s_node);
-#endif	/* NETATALKDEBUG */
+	printf("aarp: sending request via %u.%u through %s seeking %u.%u\n",
+	    ntohs(AA_SAT(aa)->sat_addr.s_net),
+	    AA_SAT(aa)->sat_addr.s_node,
+	    ifp->if_xname,
+	    ntohs(sat->sat_addr.s_net),
+	    sat->sat_addr.s_node);
+#endif /* NETATALKDEBUG */
 
 	sa.sa_len = sizeof(struct sockaddr);
 	sa.sa_family = AF_UNSPEC;
@@ -508,7 +516,6 @@ aarptnew(const struct at_addr *addr)
 		first = 0;
 		callout_init(&aarptimer_callout, 0);
 		callout_reset(&aarptimer_callout, hz, aarptimer, NULL);
-		MOWNER_ATTACH(&aarp_mowner);
 	}
 	aat = &aarptab[AARPTAB_HASH(*addr) * AARPTAB_BSIZ];
 	for (n = 0; n < AARPTAB_BSIZ; n++, aat++) {

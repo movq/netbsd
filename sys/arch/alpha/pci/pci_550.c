@@ -1,4 +1,4 @@
-/* $NetBSD: pci_550.c,v 1.32 2009/03/16 23:11:09 dsl Exp $ */
+/* $NetBSD: pci_550.c,v 1.36 2012/02/06 02:14:15 matt Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -59,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.32 2009/03/16 23:11:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.36 2012/02/06 02:14:15 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -69,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.32 2009/03/16 23:11:09 dsl Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -90,7 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.32 2009/03/16 23:11:09 dsl Exp $");
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_550_intr_map(struct pci_attach_args *,
+int	dec_550_intr_map(const struct pci_attach_args *,
 	    pci_intr_handle_t *);
 const char *dec_550_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *dec_550_intr_evcnt(void *, pci_intr_handle_t);
@@ -98,8 +96,8 @@ void	*dec_550_intr_establish(void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *);
 void	dec_550_intr_disestablish(void *, void *);
 
-void	*dec_550_pciide_compat_intr_establish(void *, struct device *,
-	    struct pci_attach_args *, int, int (*)(void *), void *);
+void	*dec_550_pciide_compat_intr_establish(void *, device_t,
+	    const struct pci_attach_args *, int, int (*)(void *), void *);
 
 #define	DEC_550_PCI_IRQ_BEGIN	8
 #define	DEC_550_MAX_IRQ		(64 - DEC_550_PCI_IRQ_BEGIN)
@@ -133,12 +131,12 @@ pci_550_pickintr(struct cia_config *ccp)
 	char *cp;
 	int i;
 
-        pc->pc_intr_v = ccp;
-        pc->pc_intr_map = dec_550_intr_map;
-        pc->pc_intr_string = dec_550_intr_string;
+	pc->pc_intr_v = ccp;
+	pc->pc_intr_map = dec_550_intr_map;
+	pc->pc_intr_string = dec_550_intr_string;
 	pc->pc_intr_evcnt = dec_550_intr_evcnt;
-        pc->pc_intr_establish = dec_550_intr_establish;
-        pc->pc_intr_disestablish = dec_550_intr_disestablish;
+	pc->pc_intr_establish = dec_550_intr_establish;
+	pc->pc_intr_disestablish = dec_550_intr_disestablish;
 
 	pc->pc_pciide_compat_intr_establish =
 	    dec_550_pciide_compat_intr_establish;
@@ -169,8 +167,8 @@ pci_550_pickintr(struct cia_config *ccp)
 #endif
 }
 
-int     
-dec_550_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+int
+dec_550_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin, line = pa->pa_intrline;
@@ -336,7 +334,7 @@ dec_550_intr_disestablish(void *ccv, void *cookie)
 		return;
 	}
 #endif
- 
+
 	s = splhigh();
 
 	alpha_shared_intr_disestablish(dec_550_pci_intr, cookie,
@@ -347,12 +345,13 @@ dec_550_intr_disestablish(void *ccv, void *cookie)
 		    IST_NONE);
 		scb_free(0x900 + SCB_IDXTOVEC(irq));
 	}
- 
+
 	splx(s);
 }
 
 void *
-dec_550_pciide_compat_intr_establish(void *v, struct device *dev, struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
+dec_550_pciide_compat_intr_establish(void *v, device_t dev,
+    const struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	void *cookie = NULL;
@@ -372,7 +371,7 @@ dec_550_pciide_compat_intr_establish(void *v, struct device *dev, struct pci_att
 	    func, arg);
 	if (cookie == NULL)
 		return (NULL);
-	printf("%s: %s channel interrupting at %s\n", dev->dv_xname,
+	aprint_normal_dev(dev, "%s channel interrupting at %s\n",
 	    PCIIDE_CHANNEL_NAME(chan), sio_intr_string(NULL /*XXX*/, irq));
 #endif
 	return (cookie);
@@ -381,7 +380,7 @@ dec_550_pciide_compat_intr_establish(void *v, struct device *dev, struct pci_att
 void
 dec_550_iointr(void *arg, unsigned long vec)
 {
-	int irq; 
+	int irq;
 
 	irq = SCB_VECTOIDX(vec - 0x900);
 

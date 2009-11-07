@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2009/09/25 06:07:06 mrg Exp $
+#	$NetBSD: Makefile,v 1.8 2010/11/23 08:22:35 mrg Exp $
 
 .include "../Makefile.serverlib"
 .include "../Makefile.servermod"
@@ -8,9 +8,9 @@ LIB=		xkb
 .PATH:		${X11SRCDIR.xorg-server}/${LIB}
 .PATH:		${X11SRCDIR.X11}/src
 .PATH:		${X11SRCDIR.xkbfile}/src
-DDXSRCS=	ddxBeep.c ddxCtrls.c ddxFakeMtn.c \
-		ddxInit.c ddxKeyClick.c ddxLEDs.c ddxLoad.c \
-		ddxList.c ddxDevBtn.c
+DDXSRCS=	ddxBeep.c ddxCtrls.c \
+		ddxLEDs.c ddxLoad.c \
+		ddxList.c
 DIXSRCS=	xkb.c xkbUtils.c xkbEvents.c xkbAccessX.c xkbSwap.c \
 		xkbLEDs.c xkbInit.c xkbActions.c xkbPrKeyEv.c
 XKBFILESRCS=	maprules.c xkmread.c xkbtext.c xkbfmisc.c \
@@ -26,17 +26,20 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/Xext \
 		-I${X11SRCDIR.xorg-server}/Xext/extmod \
 		-I${X11SRCDIR.xorg-server}/mi \
+		-I${X11SRCDIR.xorg-server}/Xi \
 		-I${X11SRCDIR.xorg-server}/${LIB} \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${X11SRCDIR.xorg-server}/../include
 
-# For ${XKBCOMPDIR}
+# For ${XKBROOTDIR} and ${XKBCOMPDIR}
 .include "../../../bin/xkbcomp/Makefile.common"
 
+# XXX: ddxLoad.c expects XKM_OUTPUT_DIR to have a trailing '/'.
+
 CPPFLAGS+=	-DXKB_IN_SERVER -DHAVE_XKB_CONFIG_H \
-		-DXKB_BASE_DIRECTORY=\"${X11LIBDIR}/xkb\" \
+		-DXKB_BASE_DIRECTORY=\"${XKBROOTDIR}\" \
 		-DXKB_BIN_DIRECTORY=\"${X11BINDIR}\" \
-		-DXKM_OUTPUT_DIR=\"${XKBCOMPDIR}\" \
+		-DXKM_OUTPUT_DIR=\"${XKBCOMPDIR}/\" \
 		-DXKB_DFLT_DISABLED=0
 
 COPTS.XKBAlloc.c=	-Wno-error	# XXX gcc 3.3

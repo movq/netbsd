@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_mremap.c,v 1.15 2009/08/02 16:07:34 yamt Exp $	*/
+/*	$NetBSD: uvm_mremap.c,v 1.17 2011/06/12 03:36:03 rmind Exp $	*/
 
 /*-
  * Copyright (c)2006,2007,2009 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_mremap.c,v 1.15 2009/08/02 16:07:34 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_mremap.c,v 1.17 2011/06/12 03:36:03 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>
@@ -80,10 +80,10 @@ uvm_mapent_extend(struct vm_map *map, vaddr_t endva, vsize_t size)
 			error = E2BIG; /* XXX */
 			goto done;
 		}
-		mutex_enter(&uobj->vmobjlock);
+		mutex_enter(uobj->vmobjlock);
 		KASSERT(uobj->uo_refs > 0);
 		atomic_inc_uint(&uobj->uo_refs);
-		mutex_exit(&uobj->vmobjlock);
+		mutex_exit(uobj->vmobjlock);
 		reserved_entry->object.uvm_obj = uobj;
 		reserved_entry->offset = newoffset;
 	}
@@ -287,8 +287,7 @@ sys_mremap(struct lwp *l, const struct sys_mremap_args *uap, register_t *retval)
 
 	p = l->l_proc;
 	map = &p->p_vmspace->vm_map;
-	error = uvm_mremap(map, oldva, oldsize, map, &newva, newsize, p,
-	    flags);
+	error = uvm_mremap(map, oldva, oldsize, map, &newva, newsize, p, flags);
 
 done:
 	*retval = (error != 0) ? 0 : (register_t)newva;

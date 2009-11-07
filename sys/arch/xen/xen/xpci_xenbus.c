@@ -1,4 +1,4 @@
-/*      $NetBSD: xpci_xenbus.c,v 1.3 2009/10/19 18:41:12 bouyer Exp $      */
+/*      $NetBSD: xpci_xenbus.c,v 1.10 2012/02/02 19:43:01 tls Exp $      */
 
 /*
  * Copyright (c) 2009 Manuel Bouyer.
@@ -26,10 +26,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.3 2009/10/19 18:41:12 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.10 2012/02/02 19:43:01 tls Exp $");
 
 #include "opt_xen.h"
-#include "rnd.h"
+
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.3 2009/10/19 18:41:12 bouyer Exp $
 #include <xen/hypervisor.h>
 #include <xen/evtchn.h>
 #include <xen/granttables.h>
-#include <xen/xen3-public/io/pciif.h>
+#include <xen/xen-public/io/pciif.h>
 #include <xen/xenbus.h>
 
 #include "locators.h"
@@ -91,56 +91,26 @@ CFATTACH_DECL_NEW(xpci_xenbus, sizeof(struct xpci_xenbus_softc),
    xpci_xenbus_match, xpci_xenbus_attach, xpci_xenbus_detach, NULL);
 
 struct x86_bus_dma_tag pci_bus_dma_tag = {
-	0,			     /* tag_needs_free */
+	._tag_needs_free	= 0,
 #if defined(_LP64) || defined(PAE)
-	PCI32_DMA_BOUNCE_THRESHOLD,     /* bounce_thresh */
-	0,       			/* bounce_alloclo */
-	PCI32_DMA_BOUNCE_THRESHOLD,     /* bounce_allochi */
+	._bounce_thresh		= PCI32_DMA_BOUNCE_THRESHOLD,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= PCI32_DMA_BOUNCE_THRESHOLD,
 #else
-	0,
-	0,
-	0,
+	._bounce_thresh		= 0,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= 0,
 #endif
-	NULL,		  /* _may_bounce */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._may_bounce		= NULL,
 };
 
 #ifdef _LP64
 struct x86_bus_dma_tag pci_bus_dma64_tag = {
-	0,			     /* tag_needs_free */
-	0,
-	0,
-	0,
-	NULL,		  /* _may_bounce */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	NULL,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._tag_needs_free	= 0,
+	._bounce_thresh		= 0,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= 0,
+	._may_bounce		= NULL,
 };
 #endif
 
@@ -382,15 +352,15 @@ xpci_attach_pcibus(int domain, int busn)
 	struct pcibus_attach_args pba;
 
 	memset(&pba, 0, sizeof(struct pcibus_attach_args));
-	pba.pba_iot = X86_BUS_SPACE_IO;
-	pba.pba_memt = X86_BUS_SPACE_MEM;
+	pba.pba_iot = x86_bus_space_io;
+	pba.pba_memt = x86_bus_space_mem;
 	pba.pba_dmat = &pci_bus_dma_tag;
 #ifdef _LP64
 	pba.pba_dmat64 = &pci_bus_dma64_tag;
 #else
 	pba.pba_dmat64 = NULL;
 #endif /* _LP64 */
-	pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED |
+	pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	pba.pba_bridgetag = NULL;
 	pba.pba_bus = busn;
@@ -561,7 +531,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 
 int
 xpci_enumerate_bus(struct pci_softc *sc, const int *locators,
-    int (*match)(struct pci_attach_args *), struct pci_attach_args *pap)
+    int (*match)(const struct pci_attach_args *), struct pci_attach_args *pap)
 {
 #if 0
 	char *string;

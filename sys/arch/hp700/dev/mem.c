@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.21 2009/05/09 11:39:30 skrll Exp $	*/
+/*	$NetBSD: mem.c,v 1.28 2011/06/12 03:35:41 rmind Exp $	*/
 
 /*	$OpenBSD: mem.c,v 1.30 2007/09/22 16:21:32 krw Exp $	*/
 /*
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.21 2009/05/09 11:39:30 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.28 2011/06/12 03:35:41 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -152,22 +152,6 @@ void	memattach(device_t, device_t, void *);
 CFATTACH_DECL_NEW(mem, sizeof(struct mem_softc), memmatch, memattach,
     NULL, NULL);
 
-extern struct cfdriver mem_cd;
-
-dev_type_read(mmrw);
-dev_type_ioctl(mmioctl);
-dev_type_mmap(mmmmap);
-
-const struct cdevsw mem_cdevsw = {
-	nullopen, nullclose, mmrw, mmrw, mmioctl,
-	nostop, notty, nopoll, mmmmap,
-};
-
-static void *zeropage;
-
-/* A lock for the vmmap. */
-kmutex_t vmmap_lock;
-
 int
 memmatch(device_t parent, cfdata_t cf, void *aux)
 {
@@ -182,7 +166,7 @@ memmatch(device_t parent, cfdata_t cf, void *aux)
 void
 memattach(device_t parent, device_t self, void *aux)
 {
-	struct pdc_iodc_minit pdc_minit PDC_ALIGNMENT;
+	struct pdc_iodc_minit pdc_minit;
 	struct confargs *ca = aux;
 	struct mem_softc *sc = device_private(self);
 	int err, pagezero_cookie;
@@ -205,7 +189,7 @@ memattach(device_t parent, device_t self, void *aux)
 			uint32_t vic;
 			int s, settimeout;
 
-			switch (cpu_hvers) {
+			switch (cpu_modelno) {
 			case HPPA_BOARD_HP715_33:
 			case HPPA_BOARD_HP715S_33:
 			case HPPA_BOARD_HP715T_33:
@@ -236,8 +220,10 @@ memattach(device_t parent, device_t self, void *aux)
 			((struct vi_ctrl *)&vic)->eisa_den = 1;
 			((struct vi_ctrl *)&vic)->core_prf = 1;
 
-			if (settimeout && ((struct vi_ctrl *)&vic)->vsc_tout == 0)
-				((struct vi_ctrl *)&vic)->vsc_tout = 850;	/* clks */
+			if (settimeout &&
+			    ((struct vi_ctrl *)&vic)->vsc_tout == 0)
+				/* clks */
+				((struct vi_ctrl *)&vic)->vsc_tout = 850;
 
 			sc->sc_vp->vi_control = vic;
 
@@ -253,8 +239,8 @@ memattach(device_t parent, device_t self, void *aux)
 	} else
 		sc->sc_vp = NULL;
 
-	if ((err = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_NINIT,
-			    &pdc_minit, ca->ca_hpa, PAGE0->imm_spa_size)) < 0)
+	err = pdcproc_iodc_ninit(&pdc_minit, ca->ca_hpa, PAGE0->imm_spa_size);
+	if (err < 0)
 		pdc_minit.max_spa = PAGE0->imm_max_mem;
 
 	hp700_pagezero_unmap(pagezero_cookie);
@@ -283,9 +269,11 @@ memattach(device_t parent, device_t self, void *aux)
 void
 viper_setintrwnd(uint32_t mask)
 {
+	device_t dv;
 	struct mem_softc *sc;
 
-	sc = device_lookup_private(&mem_cd,0);
+	dv = device_find_by_driver_unit("mem", 0);
+	sc = device_private(dv);
 
 	if (sc->sc_vp)
 		sc->sc_vp->vi_intrwd;
@@ -294,9 +282,11 @@ viper_setintrwnd(uint32_t mask)
 void
 viper_eisa_en(void)
 {
+	device_t dv;
 	struct mem_softc *sc;
 
-	sc = device_lookup_private(&mem_cd, 0);
+	dv = device_find_by_driver_unit("mem", 0);
+	sc = device_private(dv);
 
 	if (sc->sc_vp) {
 		int pagezero_cookie;
@@ -313,101 +303,4 @@ viper_eisa_en(void)
 		splx(s);
 		hp700_pagezero_unmap(pagezero_cookie);
 	}
-}
-
-int
-mmrw(dev_t dev, struct uio *uio, int flags)
-{
-	struct iovec *iov;
-	vaddr_t	v, o;
-	u_int c;
-	int error = 0;
-	int rw;
-
-	while (uio->uio_resid > 0 && error == 0) {
-		iov = uio->uio_iov;
-		if (iov->iov_len == 0) {
-			uio->uio_iov++;
-			uio->uio_iovcnt--;
-			if (uio->uio_iovcnt < 0)
-				panic("mmrw");
-			continue;
-		}
-		switch (minor(dev)) {
-
-		case DEV_MEM:				/*  /dev/mem  */
-
-			/* If the address isn't in RAM, bail. */
-			v = uio->uio_offset;
-			if (atop(v) > physmem) {
-				error = EFAULT;
-				/* this will break us out of the loop */
-				continue;
-			}
-
-			c = ptoa(physmem) - v;
-			c = min(c, uio->uio_resid);
-			error = uiomove((char *)v, c, uio);
-			break;
-
-		case DEV_KMEM:				/*  /dev/kmem  */
-			v = uio->uio_offset;
-			o = v & PGOFSET;
-			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
-			rw = (uio->uio_rw == UIO_READ) ? B_READ : B_WRITE;
-			if (atop(v) > physmem && !uvm_kernacc((void *)v, c, rw)) {
-				error = EFAULT;
-				/* this will break us out of the loop */
-				continue;
-			}
-			error = uiomove((void *)v, c, uio);
-			break;
-
-		case DEV_NULL:				/*  /dev/null  */
-			if (uio->uio_rw == UIO_WRITE)
-				uio->uio_resid = 0;
-			return (0);
-
-		case DEV_ZERO:			/*  /dev/zero  */
-			/* Write to /dev/zero is ignored. */
-			if (uio->uio_rw == UIO_WRITE) {
-				uio->uio_resid = 0;
-				return (0);
-			}
-			/*
-			 * On the first call, allocate and zero a page
-			 * of memory for use with /dev/zero.
-			 */
-			if (zeropage == NULL) {
-				zeropage = (void *)
-				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
-				memset(zeropage, 0, PAGE_SIZE);
-			}
-			c = min(iov->iov_len, PAGE_SIZE);
-			error = uiomove(zeropage, c, uio);
-			break;
-
-		default:
-			return (ENXIO);
-		}
-	}
-	return (error);
-}
-
-paddr_t
-mmmmap(dev_t dev, off_t off, int prot)
-{
-
-	if (minor(dev) != 0)
-		return (-1);
-
-	/*
-	 * Allow access only in RAM.
-	 */
-#if 0
-	if (off < ptoa(firstusablepage) ||
-	    off >= ptoa(lastusablepage + 1))
-		return (-1);
-#endif
-	return (btop(off));
 }

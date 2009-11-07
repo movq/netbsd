@@ -1,4 +1,4 @@
-/*	$NetBSD: atwvar.h,v 1.33 2009/09/16 16:34:50 dyoung Exp $	*/
+/*	$NetBSD: atwvar.h,v 1.37 2010/03/14 21:25:59 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 The NetBSD Foundation, Inc.  All rights reserved.
@@ -168,8 +168,8 @@ enum atw_revision {
 
 struct atw_softc {
 	device_t		sc_dev;
-	struct device_suspensor		sc_suspensor;
-	struct pmf_qual			sc_qual;
+	device_suspensor_t	sc_suspensor;
+	pmf_qual_t		sc_qual;
 
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
@@ -200,7 +200,7 @@ struct atw_softc {
 	u_int16_t		*sc_srom;
 	u_int16_t		sc_sromsz;
 
-	void *			sc_radiobpf;
+	struct bpf_if *		sc_radiobpf;
 
 	bus_dma_segment_t	sc_cdseg;	/* control data memory */
 	int			sc_cdnseg;	/* number of segments */
@@ -448,6 +448,6 @@ int	atw_detach(struct atw_softc *);
 int	atw_activate(device_t, enum devact);
 int	atw_intr(void *arg);
 bool	atw_shutdown(device_t, int);
-bool	atw_suspend(device_t PMF_FN_PROTO);
+bool	atw_suspend(device_t, const pmf_qual_t *);
 
 #endif /* _DEV_IC_ATWVAR_H_ */

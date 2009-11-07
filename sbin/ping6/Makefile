@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.12 2007/05/28 12:06:23 tls Exp $
+# $NetBSD: Makefile,v 1.14 2011/08/14 12:09:35 christos Exp $
 
 USE_FORT?= yes	# setuid
 PROG=	ping6

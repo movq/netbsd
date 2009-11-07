@@ -1,4 +1,4 @@
-/*      $NetBSD: xen_shm_machdep.c,v 1.7 2009/10/19 18:41:11 bouyer Exp $      */
+/*      $NetBSD: xen_shm_machdep.c,v 1.10 2011/09/02 22:25:08 dyoung Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_shm_machdep.c,v 1.7 2009/10/19 18:41:11 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_shm_machdep.c,v 1.10 2011/09/02 22:25:08 dyoung Exp $");
 
 
 #include <sys/types.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: xen_shm_machdep.c,v 1.7 2009/10/19 18:41:11 bouyer E
  * functions to map a bunch of pages from foreign domains in our kernel VM
  * space, do I/O to it, and unmap it.
  *
- * At boot time, we grap some kernel VM space that we'll use to map the foreign
+ * At boot time, we grab some kernel VM space that we'll use to map the foreign
  * pages. We also maintain a virtual to machine mapping table to give back
  * the appropriate address to bus_dma if requested.
  * If no more VM space is available, we return an error. The caller can then
@@ -61,7 +61,7 @@ static vaddr_t xen_shm_base_address;
 static u_long xen_shm_base_address_pg;
 static vaddr_t xen_shm_end_address;
 
-/* Grab enouth VM space to map an entire vbd ring. */
+/* Grab enough VM space to map an entire vbd ring. */
 /* Xen3 linux guests seems to eat more pages, gives enough for 10 vbd rings */
 #define BLKIF_RING_SIZE __RING_SIZE((blkif_sring_t *)0, PAGE_SIZE)
 #define XENSHM_NPAGES (BLKIF_RING_SIZE * (BLKIF_MAX_SEGMENTS_PER_REQUEST + 1) * 10)
@@ -122,7 +122,7 @@ xen_shm_map(int nentries, int domid, grant_ref_t *grefp, vaddr_t *vap,
 {
 	int s, i;
 	vaddr_t new_va;
-	u_long new_va_pg;
+	vmem_addr_t new_va_pg;
 	int err;
 	gnttab_map_grant_ref_t op[XENSHM_MAX_PAGES_PER_REQUEST];
 
@@ -151,9 +151,8 @@ xen_shm_map(int nentries, int domid, grant_ref_t *grefp, vaddr_t *vap,
 		return ENOMEM;
 	}
 	/* allocate the needed virtual space */
-	new_va_pg = vmem_alloc(xen_shm_arena, nentries,
-	    VM_INSTANTFIT | VM_NOSLEEP);
-	if (new_va_pg == 0) {
+	if (vmem_alloc(xen_shm_arena, nentries,
+	    VM_INSTANTFIT | VM_NOSLEEP, &new_va_pg) != 0) {
 #ifdef DEBUG
 		static struct timeval lasttime;
 #endif

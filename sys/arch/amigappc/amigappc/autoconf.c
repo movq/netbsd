@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.1 2009/07/21 09:49:15 phx Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.4.8.1 2012/08/08 15:51:07 martin Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1 2009/07/21 09:49:15 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4.8.1 2012/08/08 15:51:07 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,14 +42,14 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1 2009/07/21 09:49:15 phx Exp $");
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/proc.h>
-#include <machine/cpu.h>
+#include <sys/kernel.h>
+#include <sys/cpu.h>
+
 #include <amiga/amiga/cfdev.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/custom.h>
 
 static void findroot(void);
-
-#include <sys/kernel.h>
 
 u_long boot_partition;
 
@@ -61,12 +61,12 @@ int amiga_realconfig;
 void
 cpu_configure(void)
 {
+
 	/*
 	 * this is the real thing baby (i.e. not console init)
 	 */
 	amiga_realconfig = 1;
 	custom.intena = INTF_INTEN;
-	printf("spl was %d\n",splhigh()); /* XXX */
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");
@@ -75,8 +75,8 @@ cpu_configure(void)
 	printf("survived autoconf, going to enable interrupts\n");
 #endif
 
-	custom.intena = INTF_SETCLR | INTF_INTEN;
 	genppc_cpu_configure();
+	custom.intena = INTF_SETCLR | INTF_INTEN;
 
 #ifdef DEBUG_KERNEL_START
 	printf("survived configure...\n");
@@ -91,10 +91,7 @@ cpu_rootconf(void)
 #ifdef DEBUG_KERNEL_START
 	printf("survived findroot()\n");
 #endif
-	setroot(booted_device, booted_partition);
-#ifdef DEBUG_KERNEL_START
-	printf("survived setroot()\n");
-#endif
+	rootconf();
 }
 
 /*ARGSUSED*/
@@ -102,7 +99,7 @@ int
 simple_devprint(void *auxp, const char *pnp)
 {
 
-	return(QUIET);
+	return QUIET;
 }
 
 int
@@ -112,10 +109,10 @@ matchname(const char *fp, const char *sp)
 
 	len = strlen(fp);
 	if (strlen(sp) != len)
-		return(0);
+		return 0;
 	if (bcmp(fp, sp, len) == 0)
-		return(1);
-	return(0);
+		return 1;
+	return 0;
 }
 
 /*
@@ -125,15 +122,14 @@ matchname(const char *fp, const char *sp)
  * by checking for NULL.
  */
 int
-amiga_config_found(struct cfdata *pcfp, struct device *pdp, void *auxp,
-    cfprint_t pfn)
+amiga_config_found(cfdata_t pcfp, device_t pdp, void *auxp, cfprint_t pfn)
 {
 	struct device temp;
-	struct cfdata *cf;
+	cfdata_t cf;
 	const struct cfattach *ca;
 
 	if (amiga_realconfig)
-		return(config_found(pdp, auxp, pfn) != NULL);
+		return config_found(pdp, auxp, pfn) != NULL;
 
 	if (pdp == NULL) {
 		memset(&temp, 0, sizeof temp);
@@ -149,11 +145,11 @@ amiga_config_found(struct cfdata *pcfp, struct device *pdp, void *auxp,
 		if (ca != NULL) {
 			(*ca->ca_attach)(pdp, NULL, auxp);
 			pdp->dv_cfdata = NULL;
-			return(1);
+			return 1;
 		}
 	}
 	pdp->dv_cfdata = NULL;
-	return(0);
+	return 0;
 }
 
 /*
@@ -164,7 +160,7 @@ amiga_config_found(struct cfdata *pcfp, struct device *pdp, void *auxp,
 void
 config_console(void)
 {
-	struct cfdata *cf;
+	cfdata_t cf;
 
 	config_init();
 
@@ -172,15 +168,8 @@ config_console(void)
 	 * we need mainbus' cfdata.
 	 */
 	cf = config_rootsearch(NULL, "mainbus", NULL);
-	if (cf == NULL) {
+	if (cf == NULL)
 		panic("no mainbus");
-	}
-#if 0 /* XXX doesn't exist on amigappc */
-	/*
-	 * delay clock calibration.
-	 */
-	amiga_config_found(cf, NULL, __UNCONST("clock"), NULL);
-#endif
 
 	/*
 	 * internal grf.
@@ -247,7 +236,7 @@ findroot(void)
 {
 	struct disk *dkp;
 	struct partition *pp;
-	struct device **devs;
+	device_t*devs;
 	int i, maj, unit;
 	const struct bdevsw *bdp;
 
@@ -272,7 +261,7 @@ findroot(void)
 			 * Find the disk corresponding to the current
 			 * device.
 			 */
-			devs = (struct device **)sd_cd.cd_devs;
+			devs = (device_t*)sd_cd.cd_devs;
 			if ((dkp = disk_find(devs[unit]->dv_xname)) == NULL)
 				continue;
 
@@ -321,7 +310,7 @@ findroot(void)
 			 * Find the disk structure corresponding to the
 			 * current device.
 			 */
-			devs = (struct device **)genericconf[i]->cd_devs;
+			devs = (device_t*)genericconf[i]->cd_devs;
 			if ((dkp = disk_find(devs[unit]->dv_xname)) == NULL)
 				continue;
 
@@ -374,7 +363,6 @@ findroot(void)
  * realtime clock and scsi controller, so that this hardware is only
  * included as "configured" if this IS an A3000
  */
-
 int a3000_flag = 1;		/* patchable */
 #ifdef A4000
 int a4000_flag = 1;		/* patchable - default to A4000 */
@@ -390,14 +378,14 @@ is_a3000(void)
 	short sc;
 
 	if ((machineid >> 16) == 3000)
-		return (1);			/* It's an A3000 */
+		return 1;			/* It's an A3000 */
 	if (machineid >> 16)
-		return (0);			/* It's not an A3000 */
+		return 0;			/* It's not an A3000 */
 	/* Machine type is unknown, so try to guess it */
 	/* where is fastram on the A4000 ?? */
 	/* if fastram is below 0x07000000, assume it's not an A3000 */
 	if (boot_fphystart < 0x07000000)
-		return(0);
+		return 0;
 	/*
 	 * OK, fastram starts at or above 0x07000000, check specific
 	 * machines
@@ -408,23 +396,23 @@ is_a3000(void)
 			switch (cfdev[sc].rom.prodid) {
 			case 0:		/* PPI Mercury - A3000 */
 			case 1:		/* PP&S A3000 '040 */
-				return(1);
+				return 1;
 			case 150:	/* PPI Zeus - it's an A2000 */
 			case 105:	/* PP&S A2000 '040 */
 			case 187:	/* PP&S A500 '040 */
-				return(0);
+				return 0;
 			}
 			break;
 
 		case 2112:			/* IVS */
 			switch (cfdev[sc].rom.prodid) {
 			case 242:
-				return(0);	/* A2000 accelerator? */
+				return 0;	/* A2000 accelerator? */
 			}
 			break;
 		}
 	}
-	return (a3000_flag);		/* XXX let flag tell now */
+	return a3000_flag;		/* XXX let flag tell now */
 }
 
 int
@@ -432,19 +420,19 @@ is_a4000(void)
 {
 
 	if ((machineid >> 16) == 4000)
-		return (1);		/* It's an A4000 */
+		return 1;		/* It's an A4000 */
 	if ((machineid >> 16) == 1200)
-		return (0);		/* It's an A1200, so not A4000 */
+		return 0;		/* It's an A1200, so not A4000 */
 	/* Do I need this any more? */
 	if ((custom.deniseid & 0xff) == 0xf8)
-		return (1);
+		return 1;
 #ifdef DEBUG
 	if (a4000_flag)
 		printf("Denise ID = %04x\n", (unsigned short)custom.deniseid);
 #endif
 	if (machineid >> 16)
-		return (0);		/* It's not an A4000 */
-	return (a4000_flag);		/* Machine type not set */
+		return 0;		/* It's not an A4000 */
+	return a4000_flag;		/* Machine type not set */
 }
 
 int
@@ -452,6 +440,6 @@ is_a1200(void)
 {
 
 	if ((machineid >> 16) == 1200)
-		return (1);		/* It's an A1200 */
-	return (0);			/* Machine type not set */
+		return 1;		/* It's an A1200 */
+	return 0;			/* Machine type not set */
 }

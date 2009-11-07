@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.7 2009/02/13 22:41:03 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10 2011/06/20 07:18:07 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -38,11 +38,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/02/13 22:41:03 apb Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
+#include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
@@ -50,30 +53,23 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/02/13 22:41:03 apb Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
+#include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/sysctl.h>
-
-#include <net/netisr.h>
-
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
-
 #include <machine/iplcb.h>
+
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
 
 #include <powerpc/oea/bat.h>
 #include <powerpc/pio.h>
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 
 #include <dev/cons.h>
 
@@ -86,7 +82,7 @@ void comsoft(void);
 #endif
 
 #ifdef DDB
-#include <machine/db_machdep.h>
+#include <powerpc/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
@@ -95,7 +91,6 @@ void comsoft(void);
 void initppc(u_long, u_long, u_int, void *);
 void dumpsys(void);
 void strayintr(int);
-int lcsplx(int);
 void rs6000_bus_space_init(void);
 void setled(uint32_t);
 void say_hi(void);

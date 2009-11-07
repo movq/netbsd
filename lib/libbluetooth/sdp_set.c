@@ -1,4 +1,4 @@
-/*	$NetBSD: sdp_set.c,v 1.2 2009/05/14 19:12:45 plunky Exp $	*/
+/*	$NetBSD: sdp_set.c,v 1.4 2011/04/05 18:58:43 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sdp_set.c,v 1.2 2009/05/14 19:12:45 plunky Exp $");
+__RCSID("$NetBSD: sdp_set.c,v 1.4 2011/04/05 18:58:43 plunky Exp $");
 
 #include <bluetooth.h>
 #include <limits.h>
@@ -48,7 +48,7 @@ sdp_set_bool(const sdp_data_t *data, bool value)
 	uint8_t *p = data->next;
 
 	if (p + 2 > data->end
-	    || *p != SDP_DATA_BOOL)
+	    || *p++ != SDP_DATA_BOOL)
 		return false;
 
 	*p = (value ? 0x01 : 0x00);
@@ -187,7 +187,7 @@ _sdp_set_ext(uint8_t type, const sdp_data_t *data, ssize_t len)
 				return false;
 
 			len = data->end - p - 1;
-		} else if (p + 1 + len > data->end)
+		} else if (len > data->end - 1 - p)
 			return false;
 
 		if (len > UINT8_MAX)
@@ -202,7 +202,7 @@ _sdp_set_ext(uint8_t type, const sdp_data_t *data, ssize_t len)
 				return false;
 
 			len = data->end - p - 2;
-		} else if (p + 2 + len > data->end)
+		} else if (len > data->end - 2 - p)
 			return false;
 
 		if (len > UINT16_MAX)
@@ -217,7 +217,7 @@ _sdp_set_ext(uint8_t type, const sdp_data_t *data, ssize_t len)
 				return false;
 
 			len = data->end - p - 4;
-		} else if (p + 4 + len > data->end)
+		} else if (len > data->end - 4 - p)
 			return false;
 
 		if ((size_t)len > UINT32_MAX)

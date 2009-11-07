@@ -1,7 +1,7 @@
-/*	$NetBSD: hmacsha.c,v 1.1.1.2 2009/10/25 00:02:42 christos Exp $	*/
+/*	$NetBSD: hmacsha.c,v 1.3.4.1 2012/06/05 21:15:08 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2005-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2005-2007, 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: hmacsha.c,v 1.10 2009/02/06 23:47:42 tbox Exp */
+/* Id */
 
 /*
  * This code implements the HMAC-SHA1, HMAC-SHA224, HMAC-SHA256, HMAC-SHA384
@@ -227,7 +227,7 @@ void
 isc_hmacsha1_invalidate(isc_hmacsha1_t *ctx) {
 	isc_sha1_invalidate(&ctx->sha1ctx);
 	memset(ctx->key, 0, sizeof(ctx->key));
-	memset(ctx, 0, sizeof(ctx));
+	memset(ctx, 0, sizeof(*ctx));
 }
 
 /*
@@ -295,7 +295,7 @@ isc_hmacsha224_init(isc_hmacsha224_t *ctx, const unsigned char *key,
 void
 isc_hmacsha224_invalidate(isc_hmacsha224_t *ctx) {
 	memset(ctx->key, 0, sizeof(ctx->key));
-	memset(ctx, 0, sizeof(ctx));
+	memset(ctx, 0, sizeof(*ctx));
 }
 
 /*
@@ -362,7 +362,7 @@ isc_hmacsha256_init(isc_hmacsha256_t *ctx, const unsigned char *key,
 void
 isc_hmacsha256_invalidate(isc_hmacsha256_t *ctx) {
 	memset(ctx->key, 0, sizeof(ctx->key));
-	memset(ctx, 0, sizeof(ctx));
+	memset(ctx, 0, sizeof(*ctx));
 }
 
 /*
@@ -429,7 +429,7 @@ isc_hmacsha384_init(isc_hmacsha384_t *ctx, const unsigned char *key,
 void
 isc_hmacsha384_invalidate(isc_hmacsha384_t *ctx) {
 	memset(ctx->key, 0, sizeof(ctx->key));
-	memset(ctx, 0, sizeof(ctx));
+	memset(ctx, 0, sizeof(*ctx));
 }
 
 /*
@@ -496,7 +496,7 @@ isc_hmacsha512_init(isc_hmacsha512_t *ctx, const unsigned char *key,
 void
 isc_hmacsha512_invalidate(isc_hmacsha512_t *ctx) {
 	memset(ctx->key, 0, sizeof(ctx->key));
-	memset(ctx, 0, sizeof(ctx));
+	memset(ctx, 0, sizeof(*ctx));
 }
 
 /*

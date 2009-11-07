@@ -1,4 +1,4 @@
-/*	$NetBSD: bha.c,v 1.71 2008/04/28 20:23:49 martin Exp $	*/
+/*	$NetBSD: bha.c,v 1.74 2010/11/13 13:52:00 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha.c,v 1.71 2008/04/28 20:23:49 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha.c,v 1.74 2010/11/13 13:52:00 uebayasi Exp $");
 
 #include "opt_ddb.h"
 
@@ -60,9 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: bha.c,v 1.71 2008/04/28 20:23:49 martin Exp $");
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -938,7 +935,7 @@ bha_find(bus_space_tag_t iot, bus_space_handle_t ioh)
 	 */
 	if (i) {
 #ifdef BHADEBUG
-		printf("bha_find: board returned %d instead of %d to %s\n",
+		printf("bha_find: board returned %d instead of %zu to %s\n",
 		       i, sizeof(inquire.reply), "INQUIRE_EXTENDED");
 #endif
 		return (0);

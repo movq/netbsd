@@ -1,6 +1,10 @@
-# $NetBSD: Makefile.bootxx,v 1.36 2009/04/03 10:38:12 tsutsui Exp $
+# $NetBSD: Makefile.bootxx,v 1.42 2011/06/20 06:52:38 mrg Exp $
 
 S=	${.CURDIR}/../../../../..
+
+AFLAGS.bootxx.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.label.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.pbr.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
 
 PIE_CFLAGS=
 PIE_LDFLAGS=
@@ -10,7 +14,7 @@ PROG?= bootxx_${FS}
 BINDIR= /usr/mdec
 BINMODE= 0444
 
-PRIMARY_LOAD_ADDRESS=0x600
+PRIMARY_LOAD_ADDRESS=0x1000
 SECONDARY_LOAD_ADDRESS=0x10000
 
 # We ought (need?) to fit into track 0 of a 1.2M floppy.
@@ -46,9 +50,11 @@ CPPFLAGS+= -DXXfs_close=${FS}_close
 CPPFLAGS+= -DXXfs_read=${FS}_read
 CPPFLAGS+= -DXXfs_stat=${FS}_stat
 CPPFLAGS+= -DFS=${FS}
+# CPPFLAGS+= -DBOOT_MSG_COM0
 
 # Make sure we override any optimization options specified by the user
-COPTS=  -Os -momit-leaf-frame-pointer
+.include "${.PARSEDIR}/../Makefile.inc"
+COPTS=	${OPT_SIZE.${ACTIVE_CC}}
 DBG=
 
 CPPFLAGS+= -DNO_LBA_CHECK
@@ -62,15 +68,10 @@ LIBKERN_ARCH=i386
 KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
 .else
 CPPFLAGS+= -DEPIA_HACK
-.if ${HAVE_GCC} == 3
-CPUFLAGS=  -mcpu=i386
-.else
 CPUFLAGS=  -march=i386 -mtune=i386
 .endif
 .endif
-.endif
 
-COPTS+=    -ffreestanding
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes
 CPPFLAGS+= -nostdinc -D_STANDALONE
 CPPFLAGS+= -I$S
@@ -123,7 +124,7 @@ KERN_AS=        library
 LIBKERN=        ${KERNLIB}
 
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib

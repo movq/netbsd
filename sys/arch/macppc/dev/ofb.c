@@ -1,4 +1,4 @@
-/*	$NetBSD: ofb.c,v 1.64 2009/05/06 18:41:54 elad Exp $	*/
+/*	$NetBSD: ofb.c,v 1.67 2011/07/01 18:41:52 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.64 2009/05/06 18:41:54 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.67 2011/07/01 18:41:52 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.64 2009/05/06 18:41:54 elad Exp $");
 #include <sys/systm.h>
 #include <sys/kauth.h>
 #include <sys/lwp.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
@@ -56,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.64 2009/05/06 18:41:54 elad Exp $");
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_pci.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/grfioctl.h>
 
@@ -84,8 +82,8 @@ struct ofb_softc {
 	struct vcons_data vd;
 };
 
-static int	ofbmatch(struct device *, struct cfdata *, void *);
-static void	ofbattach(struct device *, struct device *, void *);
+static int	ofbmatch(device_t, cfdata_t, void *);
+static void	ofbattach(device_t, device_t, void *);
 
 CFATTACH_DECL(ofb, sizeof(struct ofb_softc),
     ofbmatch, ofbattach, NULL, NULL);
@@ -127,7 +125,7 @@ extern int console_node;
 extern int console_instance;
 
 static int
-ofbmatch(struct device *parent, struct cfdata *match, void *aux)
+ofbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -142,9 +140,9 @@ ofbmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-ofbattach(struct device *parent, struct device *self, void *aux)
+ofbattach(device_t parent, device_t self, void *aux)
 {
-	struct ofb_softc *sc = (struct ofb_softc *)self;
+	struct ofb_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct wsemuldisplaydev_attach_args a;
 	struct rasops_info *ri = &rascons_console_screen.scr_ri;

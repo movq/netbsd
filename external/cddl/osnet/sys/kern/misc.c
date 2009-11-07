@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.1 2009/08/07 20:57:57 haad Exp $	*/
+/*	$NetBSD: misc.c,v 1.3 2011/03/10 19:35:24 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -90,7 +90,8 @@ thread_create(void * stk, size_t stksize, void (*proc)(), void *arg,
 	int error;
 	lwp_t *thr;
 
-	ASSERT(stk == NULL && stksize == 0 && len == 0);
+	//ASSERT(stk == NULL && stksize == 0 && len == 0);
+	ASSERT(stk == NULL && len == 0);
 	ASSERT(state == TS_RUN);
 
 	error = kthread_create(pri, KTHREAD_MPSAFE, NULL,
@@ -104,6 +105,28 @@ thread_exit(void)
 {
 
 	kthread_exit(0);
+}
+
+void
+thread_join(uint64_t kid)
+{
+
+	return;
+}
+
+int
+newproc(void (*pc)(), caddr_t arg, id_t cid, int pri, struct contract **ct,
+    pid_t pid)
+{
+	int error;
+
+	ASSERT(cid == PRI_NONE);
+	
+	error = kthread_create(pri, KTHREAD_MPSAFE, NULL,
+	    pc, arg, NULL, "zfs_proc");
+	KASSERT(error == 0);
+
+	return 0;
 }
 
 void

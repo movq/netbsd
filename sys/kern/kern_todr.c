@@ -1,6 +1,7 @@
-/*	$NetBSD: kern_todr.c,v 1.29 2009/03/21 15:01:57 ad Exp $	*/
+/*	$NetBSD: kern_todr.c,v 1.34 2011/02/08 20:20:27 rmind Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,47 +37,9 @@
  *
  *	@(#)clock.c	8.1 (Berkeley) 6/10/93
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah Hdr: clock.c 1.18 91/01/21
- *
- *	@(#)clock.c	8.1 (Berkeley) 6/10/93
- */
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_todr.c,v 1.29 2009/03/21 15:01:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_todr.c,v 1.34 2011/02/08 20:20:27 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -103,7 +66,7 @@ todr_attach(todr_chip_handle_t todr)
 	todr_handle = todr;
 }
 
-static int timeset = 0;
+static bool timeset = false;
 
 /*
  * Set up the system's time, given a `reasonable' time value.
@@ -111,7 +74,10 @@ static int timeset = 0;
 void
 inittodr(time_t base)
 {
-	int badbase = 0, waszero = (base == 0), goodtime = 0, badrtc = 0;
+	bool badbase = false;
+	bool waszero = (base == 0);
+	bool goodtime = false;
+	bool badrtc = false;
 	int s;
 	struct timespec ts;
 	struct timeval tv;
@@ -126,14 +92,14 @@ inittodr(time_t base)
 		if (base != 0)
 			printf("WARNING: preposterous time in file system\n");
 		/* not going to use it anyway, if the chip is readable */
-		basedate.dt_year = 2006;
+		basedate.dt_year = 2010;
 		basedate.dt_mon = 1;
 		basedate.dt_day = 1;
 		basedate.dt_hour = 12;
 		basedate.dt_min = 0;
 		basedate.dt_sec = 0;
 		base = clock_ymdhms_to_secs(&basedate);
-		badbase = 1;
+		badbase = true;
 	}
 
 	/*
@@ -150,14 +116,14 @@ inittodr(time_t base)
 			printf("WARNING: preposterous TOD clock time\n");
 		else
 			printf("WARNING: no TOD clock present\n");
-		badrtc = 1;
+		badrtc = true;
 	} else {
-		int deltat = tv.tv_sec - base;
+		time_t deltat = tv.tv_sec - base;
 
 		if (deltat < 0)
 			deltat = -deltat;
 
-		if ((badbase == 0) && deltat >= 2 * SECDAY) {
+		if (!badbase && deltat >= 2 * SECDAY) {
 			
 			if (tv.tv_sec < base) {
 				/*
@@ -166,16 +132,16 @@ inittodr(time_t base)
 				 * does by more than the threshold,
 				 * believe the filesystem.
 				 */
-				printf("WARNING: clock lost %d days\n",
+				printf("WARNING: clock lost %" PRId64 " days\n",
 				    deltat / SECDAY);
-				badrtc = 1;
+				badrtc = true;
 			} else {
-				aprint_verbose("WARNING: clock gained %d "
-				    "days\n", deltat / SECDAY);
-				goodtime = 1;
+				aprint_verbose("WARNING: clock gained %" PRId64
+				    " days\n", deltat / SECDAY);
+				goodtime = true;
 			}
 		} else {
-			goodtime = 1;
+			goodtime = true;
 		}
 	}
 
@@ -190,7 +156,7 @@ inittodr(time_t base)
 		tv.tv_usec = 0;
 	}
 
-	timeset = 1;
+	timeset = true;
 
 	ts.tv_sec = tv.tv_sec;
 	ts.tv_nsec = tv.tv_usec * 1000;
@@ -237,7 +203,7 @@ resettodr(void)
 #ifdef	TODR_DEBUG
 static void
 todr_debug(const char *prefix, int rv, struct clock_ymdhms *dt,
-    volatile struct timeval *tvp)
+    struct timeval *tvp)
 {
 	struct timeval tv_val;
 	struct clock_ymdhms dt_val;
@@ -265,7 +231,7 @@ todr_debug(const char *prefix, int rv, struct clock_ymdhms *dt,
 
 
 int
-todr_gettime(todr_chip_handle_t tch, volatile struct timeval *tvp)
+todr_gettime(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct clock_ymdhms	dt;
 	int			rv;
@@ -314,7 +280,7 @@ todr_gettime(todr_chip_handle_t tch, volatile struct timeval *tvp)
 }
 
 int
-todr_settime(todr_chip_handle_t tch, volatile struct timeval *tvp)
+todr_settime(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct clock_ymdhms	dt;
 	int			rv;

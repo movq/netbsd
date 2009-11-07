@@ -1,4 +1,4 @@
-/* $NetBSD: imx31lk_machdep.c,v 1.5 2009/08/11 17:04:16 matt Exp $ */
+/* $NetBSD: imx31lk_machdep.c,v 1.13 2011/07/01 20:41:16 dyoung Exp $ */
 
 /*
  * Startup routines for the ZOOM iMX31 LITEKIT.
@@ -33,7 +33,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup for 
+ * Machine dependent functions for kernel setup for 
  * Intel DBPXA250 evaluation board (a.k.a. Lubbock).
  * Based on iq80310_machhdep.c
  */
@@ -105,12 +105,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup for Intel IQ80310 evaluation
+ * Machine dependent functions for kernel setup for Intel IQ80310 evaluation
  * boards using RedBoot firmware.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.5 2009/08/11 17:04:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.13 2011/07/01 20:41:16 dyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -118,7 +118,6 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.5 2009/08/11 17:04:16 matt Exp
 #include "opt_pmap_debug.h"
 #include "opt_md.h"
 #include "opt_com.h"
-#include "md.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -145,7 +144,7 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.5 2009/08/11 17:04:16 matt Exp
 #endif
 
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/undefined.h>
@@ -153,6 +152,7 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.5 2009/08/11 17:04:16 matt Exp
 #include <arm/arm32/pte.h>
 #include <arm/arm32/machdep.h>
 
+#include <arm/imx/imx31reg.h>
 #include <arm/imx/imxuartreg.h>
 #include <arm/imx/imxuartvar.h>
 #include <evbarm/imx31/imx31lk_reg.h>
@@ -170,7 +170,7 @@ __KERNEL_RCSID(0, "$NetBSD: imx31lk_machdep.c,v 1.5 2009/08/11 17:04:16 matt Exp
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
+ * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
 
@@ -194,7 +194,6 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
-vm_offset_t pagetables_start;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
@@ -226,8 +225,6 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -343,7 +340,7 @@ cpu_reboot(int howto, char *bootstr)
 static const struct pmap_devmap imx31lk_devmap[] = {
     {
 	IMX31LITEKIT_UART1_VBASE,
-	_A(IMX_UART1_BASE),
+	_A(UART1_BASE),
 	_S(L1_S_SIZE),
 	VM_PROT_READ|VM_PROT_WRITE,
 	PTE_NOCACHE,
@@ -401,7 +398,7 @@ initarm(void *arg)
 	/* Calibrate the delay loop. */
 #endif
 
-	imx31lk_consinit(1);
+	consinit();
 
 #ifdef KGDB
 	kgdb_port_init();
@@ -672,17 +669,16 @@ printf("%s: textsize %#lx, totalsize %#lx\n",
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
-	imx31lk_consinit(2);
+	//imx31lk_consinit(2);
 
 	/*
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -813,6 +809,7 @@ int comkgdbmode = KGDB_DEVMODE;
 #endif /* KGDB */
 
 
+#if 0
 void
 imx31lk_consinit(int phase)
 {
@@ -823,39 +820,22 @@ imx31lk_consinit(int phase)
 		ophase = phase;
 		switch (phase) {
 		case 1:
-			imxuart_init(0, IMX_UART1_BASE);
+			imxuart_init(0, UART1_BASE);
 			break;
 		case 2:
 			bh = IMX31LITEKIT_UART1_VBASE;
-			bh |= (IMX_UART1_BASE & ~_A(IMX_UART1_BASE));
+			bh |= (UART1_BASE & ~_A(UART1_BASE));
 			imxuart_init(0, bh);
 			break;
 		}
 	}
 }
+#endif
 
 void
 consinit(void)
 {
-	imx31lk_consinit(2);
-}
-
-void consinit_test(void);
-void
-consinit_test(void)
-{
-	imxuart_softc_t *sc, softc;
-	extern int imxuart_puts(imxuart_softc_t *sc, const char *s);
-
-	printf("\n%s start\n", __func__);
-	sc = &softc;
-	sc->sc_init_cnt = 0;
-	imxuart_init(sc, IMX_UART1_BASE);
-	imxuart_puts(sc, "test1\r\n");
-	imxuart_init(sc,
-	    IMX31LITEKIT_UART1_VBASE|(IMX_UART1_BASE & ~_A(IMX_UART1_BASE)));
-	imxuart_puts(sc, "test2\r\n");
-	printf("%s done\n", __func__);
+	// imx31lk_consinit(2);
 }
 
 #ifdef KGDB

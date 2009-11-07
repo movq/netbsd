@@ -62,6 +62,7 @@
 #include <openssl/e_os2.h>	/* OPENSSL_EXTERN, OPENSSL_NO_DES,
 				   DES_LONG (via openssl/opensslconf.h */
 
+#include <sys/types.h>
 #ifdef OPENSSL_NO_DES
 #error DES is disabled.
 #endif
@@ -92,23 +93,23 @@ typedef struct DES_ks
     } DES_key_schedule;
 
 #ifndef __NetBSD__
-#ifndef OPENSSL_DISABLE_OLD_DES_SUPPORT
-# ifndef OPENSSL_ENABLE_OLD_DES_SUPPORT
-#  define OPENSSL_ENABLE_OLD_DES_SUPPORT
+# ifndef OPENSSL_DISABLE_OLD_DES_SUPPORT
+#  ifndef OPENSSL_ENABLE_OLD_DES_SUPPORT
+#   define OPENSSL_ENABLE_OLD_DES_SUPPORT
+#  endif
 # endif
-#endif
 
-#ifdef OPENSSL_ENABLE_OLD_DES_SUPPORT
-# include <openssl/des_old.h>
-#endif
+# ifdef OPENSSL_ENABLE_OLD_DES_SUPPORT
+#  include <openssl/des_old.h>
+# endif
 
-#define DES_KEY_SZ 	(sizeof(DES_cblock))
-#define DES_SCHEDULE_SZ (sizeof(DES_key_schedule))
+# define DES_KEY_SZ 	(sizeof(DES_cblock))
+# define DES_SCHEDULE_SZ (sizeof(DES_key_schedule))
 #else
-#include <sys/types.h>
-#define DES_LONG uint32_t
-#define DES_KEY_SZ 	8 /* (sizeof(DES_cblock)) */
-#define DES_SCHEDULE_SZ 128 /* (sizeof(DES_key_schedule)) */
+# include <sys/types.h>
+# define DES_KEY_SZ 	8 /* (sizeof(DES_cblock)) */
+# define DES_SCHEDULE_SZ 128 /* (sizeof(DES_key_schedule)) */
+# define OPENSSL_DISABLE_OLD_DES_SUPPORT
 #endif
 
 #define DES_ENCRYPT	1
@@ -231,6 +232,9 @@ int DES_set_key(const_DES_cblock *key,DES_key_schedule *schedule);
 int DES_key_sched(const_DES_cblock *key,DES_key_schedule *schedule);
 int DES_set_key_checked(const_DES_cblock *key,DES_key_schedule *schedule);
 void DES_set_key_unchecked(const_DES_cblock *key,DES_key_schedule *schedule);
+#ifdef OPENSSL_FIPS
+void private_DES_set_key_unchecked(const_DES_cblock *key,DES_key_schedule *schedule);
+#endif
 void DES_string_to_key(const char *str,DES_cblock *key);
 void DES_string_to_2keys(const char *str,DES_cblock *key1,DES_cblock *key2);
 void DES_cfb64_encrypt(const unsigned char *in,unsigned char *out,long length,

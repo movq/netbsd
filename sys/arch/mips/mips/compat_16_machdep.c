@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.13 2008/11/21 06:57:35 he Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.20 2011/05/02 00:29:54 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 	
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.13 2008/11/21 06:57:35 he Exp $"); 
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.20 2011/05/02 00:29:54 rmind Exp $"); 
 
 #ifdef _KERNEL_OPT
 #include "opt_cputype.h"
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.13 2008/11/21 06:57:35 he Ex
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/mount.h>
@@ -66,10 +66,15 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.13 2008/11/21 06:57:35 he Ex
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
 
-#include <machine/cpu.h>
-
 #include <mips/regnum.h>
 #include <mips/frame.h>
+#include <mips/locore.h>
+#include <mips/pcb.h>
+#include <mips/reg.h>
+
+#if !defined(__mips_o32)
+#define	fpreg		fpreg_oabi
+#endif
 
 #ifdef DEBUG
 int sigdebug = 0;
@@ -86,15 +91,20 @@ void
 sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *returnmask)
 {
 	int sig = ksi->ksi_signo;
-	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
-	struct sigacts *ps = p->p_sigacts;
+	struct lwp * const l = curlwp;
+	struct proc * const p = l->l_proc;
+	struct sigacts * const ps = p->p_sigacts;
+	struct pcb * const pcb = lwp_getpcb(l);
 	int onstack, error;
-	struct sigcontext *scp = getframe(l, sig, &onstack), ksc;
-	struct frame *f;
+	struct sigcontext *scp = getframe(l, sig, &onstack);
+	struct sigcontext ksc;
+	struct trapframe * const tf = l->l_md.md_utf;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
-	f = (struct frame *)l->l_md.md_regs;
+#if !defined(__mips_o32)
+	if (p->p_md.md_abi != _MIPS_BSD_API_O32)
+		sigexit(l, SIGILL);
+#endif
 
 	scp--;
 
@@ -106,27 +116,29 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *returnmask)
 #endif
 
 	/* Build stack frame for signal trampoline. */
-	ksc.sc_pc = f->f_regs[_R_PC];
-	ksc.mullo = f->f_regs[_R_MULLO];
-	ksc.mulhi = f->f_regs[_R_MULHI];
+	ksc.sc_pc = tf->tf_regs[_R_PC];
+	ksc.mullo = tf->tf_regs[_R_MULLO];
+	ksc.mulhi = tf->tf_regs[_R_MULHI];
 
 	/* Save register context. */
 	ksc.sc_regs[_R_ZERO] = 0xACEDBADE;		/* magic number */
-	memcpy(&ksc.sc_regs[1], &f->f_regs[1],
+#if defined(__mips_o32)
+	memcpy(&ksc.sc_regs[1], &tf->tf_regs[1],
 	    sizeof(ksc.sc_regs) - sizeof(ksc.sc_regs[0]));
+#else
+	for (size_t i = 1; i < 32; i++)
+		ksc.sc_regs[i] = tf->tf_regs[i];
+#endif
 
 	/* Save the FP state, if necessary, then copy it. */
-#ifndef SOFTFLOAT
-	ksc.sc_fpused = l->l_md.md_flags & MDP_FPUSED;
+	ksc.sc_fpused = fpu_used_p();
+#if !defined(NOFPU)
 	if (ksc.sc_fpused) {
 		/* if FPU has current state, save it first */
-		if (l == fpcurlwp)
-			savefpregs(l);
-		*(struct fpreg *)ksc.sc_fpregs = l->l_addr->u_pcb.pcb_fpregs;
+		fpu_save();
 	}
-#else
-	*(struct fpreg *)ksc.sc_fpregs = l->l_addr->u_pcb.pcb_fpregs;
 #endif
+	*(struct fpreg *)ksc.sc_fpregs = *(struct fpreg *)&pcb->pcb_fpregs;
 
 	/* Save signal stack. */
 	ksc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
@@ -170,22 +182,22 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *returnmask)
 	 * handler.  The return address will be set up to point
 	 * to the signal trampoline to bounce us back.
 	 */
-	f->f_regs[_R_A0] = sig;
-	f->f_regs[_R_A1] = ksi->ksi_trap;
-	f->f_regs[_R_A2] = (intptr_t)scp;
-	f->f_regs[_R_A3] = (intptr_t)catcher;		/* XXX ??? */
+	tf->tf_regs[_R_A0] = sig;
+	tf->tf_regs[_R_A1] = ksi->ksi_trap;
+	tf->tf_regs[_R_A2] = (intptr_t)scp;
+	tf->tf_regs[_R_A3] = (intptr_t)catcher;		/* XXX ??? */
 
-	f->f_regs[_R_PC] = (intptr_t)catcher;
-	f->f_regs[_R_T9] = (intptr_t)catcher;
-	f->f_regs[_R_SP] = (intptr_t)scp;
+	tf->tf_regs[_R_PC] = (intptr_t)catcher;
+	tf->tf_regs[_R_T9] = (intptr_t)catcher;
+	tf->tf_regs[_R_SP] = (intptr_t)scp;
 
 	switch (ps->sa_sigdesc[sig].sd_vers) {
 	case 0:		/* legacy on-stack sigtramp */
-		f->f_regs[_R_RA] = (intptr_t)p->p_sigctx.ps_sigcode;
+		tf->tf_regs[_R_RA] = (intptr_t)p->p_sigctx.ps_sigcode;
 		break;
 #ifdef COMPAT_16
 	case 1:
-		f->f_regs[_R_RA] = (intptr_t)ps->sa_sigdesc[sig].sd_tramp;
+		tf->tf_regs[_R_RA] = (intptr_t)ps->sa_sigdesc[sig].sd_tramp;
 		break;
 #endif
 	default:
@@ -224,9 +236,15 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 		syscallarg(struct sigcontext *) sigcntxp;
 	} */
 	struct sigcontext *scp, ksc;
-	struct frame *f;
-	struct proc *p = l->l_proc;
+	struct trapframe * const tf = l->l_md.md_utf;
+	struct proc * const p = l->l_proc;
+	struct pcb * const pcb = lwp_getpcb(l);
 	int error;
+
+#if !defined(__mips_o32)
+	if (p->p_md.md_abi != _MIPS_BSD_API_O32)
+		return ENOSYS;
+#endif
 
 	/*
 	 * The trampoline code hands us the context.
@@ -245,23 +263,22 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 		return (EINVAL);
 
 	/* Restore the register context. */
-	f = (struct frame *)l->l_md.md_regs;
-	f->f_regs[_R_PC] = ksc.sc_pc;
-	f->f_regs[_R_MULLO] = ksc.mullo;
-	f->f_regs[_R_MULHI] = ksc.mulhi;
-	memcpy(&f->f_regs[1], &scp->sc_regs[1],
+	tf->tf_regs[_R_PC] = ksc.sc_pc;
+	tf->tf_regs[_R_MULLO] = ksc.mullo;
+	tf->tf_regs[_R_MULHI] = ksc.mulhi;
+#if defined(__mips_o32)
+	memcpy(&tf->tf_regs[1], &scp->sc_regs[1],
 	    sizeof(scp->sc_regs) - sizeof(scp->sc_regs[0]));
-#ifndef	SOFTFLOAT
-	if (scp->sc_fpused) {
-		/* Disable the FPU to fault in FP registers. */
-		f->f_regs[_R_SR] &= ~MIPS_SR_COP_1_BIT;
-		if (l == fpcurlwp)
-			fpcurlwp = NULL;
-		l->l_addr->u_pcb.pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
-	}
 #else
-	l->l_addr->u_pcb.pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
+	for (size_t i = 1; i < __arraycount(tf->tf_regs); i++)
+		tf->tf_regs[i] = ksc.sc_regs[i];
 #endif
+#if !defined(NOFPU)
+	if (scp->sc_fpused) {
+		fpu_discard();
+	}
+#endif
+	*(struct fpreg *)&pcb->pcb_fpregs = *(struct fpreg *)scp->sc_fpregs;
 
 	mutex_enter(p->p_lock);
 	/* Restore signal stack. */

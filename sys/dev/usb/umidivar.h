@@ -1,4 +1,4 @@
-/*	$NetBSD: umidivar.h,v 1.13 2008/07/08 11:34:43 gmcgarry Exp $	*/
+/*	$NetBSD: umidivar.h,v 1.18 2012/02/14 19:28:23 mrg Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -48,8 +48,10 @@ struct umidi_mididev {
 	struct umidi_jack	*in_jack;
 	struct umidi_jack	*out_jack;
 	char			*label;
+	size_t			label_len;
 	/* */
 	int			opened;
+	int			closing;
 	int			flags;
 };
 
@@ -97,7 +99,7 @@ struct umidi_endpoint {
 
 /* software context */
 struct umidi_softc {
-	USBBASEDEVICE		sc_dev;
+	device_t		sc_dev;
 	usbd_device_handle	sc_udev;
 	usbd_interface_handle	sc_iface;
 	const struct umidi_quirk	*sc_quirk;
@@ -118,5 +120,9 @@ struct umidi_softc {
 	int			sc_in_num_endpoints;
 	struct umidi_endpoint	*sc_in_ep;
 	struct umidi_endpoint	*sc_endpoints;
+	size_t			sc_endpoints_len;
 	int			cblnums_global;
+
+	kmutex_t		sc_lock;
+	kcondvar_t		sc_cv;
 };

@@ -1,4 +1,4 @@
-/*      $NetBSD: cpu.h,v 1.86 2009/10/24 20:03:56 rmind Exp $      */
+/*      $NetBSD: cpu.h,v 1.93.8.1 2012/07/12 17:07:38 riz Exp $      */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
@@ -48,7 +48,7 @@
 
 #include <sys/cdefs.h>
 #include <sys/queue.h>
-#include <sys/device.h>
+#include <sys/device_if.h>
 #include <sys/cpu_data.h>
 
 #include <machine/mtpr.h>
@@ -70,10 +70,8 @@ struct cpu_dep {
 	void	(*cpu_memerr)(void); /* Memory subsystem errors */
 	    /* Autoconfiguration */
 	void	(*cpu_conf)(void);
-	int	(*cpu_gettime)(volatile struct timeval *);
-					/* Read cpu clock time */
-	void	(*cpu_settime)(volatile struct timeval *);
-					/* Write system time to cpu */
+	int	(*cpu_gettime)(struct timeval *); /* Read cpu clock time */
+	void	(*cpu_settime)(struct timeval *); /* Write system time to cpu */
 	short	cpu_vups;		/* speed of cpu */
 	short	cpu_scbsz;		/* (estimated) size of SCB */
 	void	(*cpu_halt)(void);	/* Cpu dependent halt call */
@@ -81,7 +79,6 @@ struct cpu_dep {
 	void	(*cpu_clrf)(void);	/* Clear cold/warm start flags */
 	const char * const *cpu_devs;	/* mainbus devices */
 	void	(*cpu_attach_cpu)(device_t);	/* print CPU info */
-	void	(*cpu_subconf)(device_t, void *, cfprint_t);	/* attach dep. dev */
 	int     cpu_flags;
 	void	(*cpu_badaddr)(void);	/* cpu-specific badaddr() */
 };
@@ -103,6 +100,7 @@ struct cpu_mp_dep {
 #define	IPI_RUNNING	3	/* This CPU just started to run */
 #define	IPI_TBIA	4	/* Flush the TLB */
 #define	IPI_DDB		5	/* Jump into the DDB loop */
+#define	IPI_XCALL	6	/* Helper for xcall(9) */
 
 #define	IPI_DEST_MASTER	-1	/* Destination is mastercpu */
 #define	IPI_DEST_ALL	-2	/* Broadcast */
@@ -125,7 +123,7 @@ struct cpu_info {
 	 * Public members.
 	 */
 	struct cpu_data ci_data;	/* MI per-cpu data */
-	struct device *ci_dev;		/* device struct for this cpu */
+	device_t ci_dev;		/* device struct for this cpu */
 	int ci_mtx_oldspl;		/* saved spl */
 	int ci_mtx_count;		/* negative count of mutexes */
 	int ci_cpuid;			/* h/w specific cpu id */
@@ -147,6 +145,7 @@ struct cpu_info {
 	struct trapframe *ci_ddb_regs;	/* Used by DDB */
 	SIMPLEQ_ENTRY(cpu_info) ci_next; /* next cpu_info */
 #endif
+	uintptr_t ci_cas_addr;		/* current address doing CAS in a RAS */
 };
 #define	CI_MASTERCPU	1		/* Set if master CPU */
 #define	CI_RUNNING	2		/* Set when a slave CPU is running */
@@ -163,7 +162,18 @@ extern int cpu_printfataltraps;
 		mtpr(AST_OK,PR_ASTLVL);		\
 	} while (/*CONSTCOND*/ 0)
 #define	cpu_proc_fork(x, y)	do { } while (/*CONSCOND*/0)
-#define	cpu_idle()		do { } while (/*CONSCOND*/0)
+
+/*
+ * This allows SIMH to recognize the kernel wants to sleep.
+ */
+static inline void
+cpu_idle(void)
+{
+	int ipl = mfpr(PR_IPL);
+	mtpr(1, PR_IPL);
+	mtpr(ipl, PR_IPL);
+}
+
 static inline bool
 cpu_intr_p(void)
 {
@@ -203,6 +213,8 @@ extern char vax_mp_tramp;
  */
 #define	IOSPSZ	((64*1024) / VAX_NBPG)	/* 64k == 128 pages */
 
+#define	LWP_PC(l)	cpu_lwp_pc(l)
+
 struct device;
 struct buf;
 struct pte;
@@ -216,6 +228,7 @@ void	cpu_boot_secondary_processors(void);
 void	cpu_send_ipi(int, int);
 void	cpu_handle_ipi(void);
 #endif
+vaddr_t	cpu_lwp_pc(struct lwp *);
 int	badaddr(volatile void *, int);
 void	dumpconf(void);
 void	dumpsys(void);

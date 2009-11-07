@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.46 2009/10/29 14:49:03 christos Exp $ */
+/* $NetBSD: scan.l,v 1.49 2011/10/02 19:45:10 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.46 2009/10/29 14:49:03 christos Exp $");
+__RCSID("$NetBSD: scan.l,v 1.49 2011/10/02 19:45:10 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -89,6 +89,8 @@ NZD	[1-9]
 OD	[0-7]
 HD	[0-9A-Fa-f]
 EX	([eE][+-]?[0-9]+)
+HX	(p[+-]?[0-9A-Fa-f]+)
+TL	([fFlL]?[i]?)
 
 %option nounput
 
@@ -98,10 +100,11 @@ EX	([eE][+-]?[0-9]+)
 0{OD}*[lLuU]*			return (icon(8));
 {NZD}{D}*[lLuU]*		return (icon(10));
 0[xX]{HD}+[lLuU]*		return (icon(16));
-{D}+\.{D}*{EX}?[fFlL]?[i]?	|
-{D}+{EX}[fFlL]?[i]?		|
-0[xX]{HD}+p{HD}+[fFlL]?[i]? 	|
-\.{D}+{EX}?[fFlL]?[i]?		return (fcon());
+{D}+\.{D}*{EX}?{TL}	|
+{D}+{EX}{TL}		|
+0[xX]{HD}+\.{HD}*{HX}{TL} |
+0[xX]{HD}+{HX}{TL} 	|
+\.{D}+{EX}?{TL}		return (fcon());
 "="				return (operator(T_ASSIGN, ASSIGN));
 "*="				return (operator(T_OPASS, MULASS));
 "/="				return (operator(T_OPASS, DIVASS));
@@ -713,6 +716,8 @@ fcon(void)
 		typ = LDOUBLE;
 		len--;
 	} else {
+		if (c == 'd' || c == 'D') 
+			len--;
 		typ = DOUBLE;
 	}
 
@@ -738,7 +743,7 @@ fcon(void)
 			errno = 0;
 			break;
 		default:
-			LERROR("fcon()");
+			LERROR("fcon(%s->%s)", cp, eptr);
 		}
 	}
 	if (errno != 0)
@@ -1281,7 +1286,7 @@ wcstrg(void)
 		/* unterminated string constant */
 		error(258);
 
-	/* get length of wide character string */
+	/* get length of wide-character string */
 	(void)mblen(NULL, 0);
 	for (i = 0, wlen = 0; i < len; i += n, wlen++) {
 		if ((n = mblen(&s[i], MB_CUR_MAX)) == -1) {

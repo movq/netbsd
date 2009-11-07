@@ -1,4 +1,4 @@
-/*	$NetBSD: core_machdep.c,v 1.3 2009/08/15 23:45:00 matt Exp $	*/
+/*	$NetBSD: core_machdep.c,v 1.8 2011/06/13 21:32:43 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.3 2009/08/15 23:45:00 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.8 2011/06/13 21:32:43 matt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altivec.h"
@@ -44,14 +44,13 @@ __KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.3 2009/08/15 23:45:00 matt Exp $"
 #include <sys/exec.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 
 #include <sys/exec_aout.h>
 
 #include <uvm/uvm_extern.h>
 
-#ifdef ALTIVEC
+#if defined(ALTIVEC) || defined(PPC_HAVE_SPE)
 #include <powerpc/altivec.h>
 #endif
 #include <machine/fpu.h>
@@ -65,7 +64,7 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 {
 	struct coreseg cseg;
 	struct md_coredump md_core;
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb * const pcb = lwp_getpcb(l);
 	int error;
 
 	if (iocookie == NULL) {
@@ -77,20 +76,15 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 		return 0;
 	}
 
-	md_core.frame = *trapframe(l);
-	if (pcb->pcb_flags & PCB_FPU) {
-#ifdef PPC_HAVE_FPU
-		if (pcb->pcb_fpcpu)
-			save_fpu_lwp(l, FPU_SAVE);
-#endif
+	md_core.frame = *l->l_md.md_utf;
+	pcu_save_all(l);
+	if (fpu_used_p(l)) {
 		md_core.fpstate = pcb->pcb_fpu;
 	} else
 		memset(&md_core.fpstate, 0, sizeof(md_core.fpstate));
 
-#ifdef ALTIVEC
-	if (pcb->pcb_flags & PCB_ALTIVEC) {
-		if (pcb->pcb_veccpu)
-			save_vec_lwp(l, ALTIVEC_SAVE);
+#if defined(ALTIVEC) || defined(PPC_HAVE_SPE)
+	if (vec_used_p(l)) {
 		md_core.vstate = pcb->pcb_vr;
 	} else
 #endif

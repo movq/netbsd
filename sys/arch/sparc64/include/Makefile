@@ -1,14 +1,14 @@
-#	$NetBSD: Makefile,v 1.24 2007/02/09 21:55:12 ad Exp $
+#	$NetBSD: Makefile,v 1.28 2011/07/17 20:54:47 joerg Exp $
 
 INCSDIR= /usr/include/sparc64
 
 INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
-	bswap.h bsd_openprom.h bus.h \
+	bswap.h bsd_openprom.h \
 	cdefs.h cgtworeg.h cpu.h ctlreg.h \
 	disklabel.h \
 	eeprom.h elf_machdep.h endian.h endian_machdep.h \
-	float.h frame.h fsr.h \
-	idprom.h ieee.h ieeefp.h instr.h \
+	fenv.h float.h frame.h fsr.h \
+	idprom.h ieee.h ieeefp.h instr.h intr.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	joystick.h \
 	kbd.h kbio.h kcore.h \
@@ -17,9 +17,9 @@ INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
 	oldmon.h openpromio.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \
 	reg.h reloc.h remote-sl.h rwlock.h \
-	setjmp.h signal.h stdarg.h svr4_machdep.h \
+	setjmp.h signal.h svr4_machdep.h \
 	trap.h types.h \
-	varargs.h vmparam.h vuid_event.h \
+	vmparam.h vuid_event.h \
 	wchar_limits.h \
 	z8530var.h
 

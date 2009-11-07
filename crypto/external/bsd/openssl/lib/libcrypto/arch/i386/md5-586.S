@@ -1,4 +1,4 @@
-.file	"/net/shiny/src-6/NetBSD/cvsroot/src/crypto/dist/openssl/crypto/md5/asm/md5-586.s"
+#include <machine/asm.h>
 .text
 .globl	md5_block_asm_data_order
 .type	md5_block_asm_data_order,@function

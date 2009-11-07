@@ -1,7 +1,7 @@
-/*	$NetBSD: diff.c,v 1.1.1.2 2009/10/25 00:02:28 christos Exp $	*/
+/*	$NetBSD: diff.c,v 1.3.4.1 2012/06/05 21:15:00 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007-2009, 2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: diff.c,v 1.21 2009/04/30 06:53:10 marka Exp */
+/* Id: diff.c,v 1.26 2011/03/25 23:53:02 each Exp  */
 
 /*! \file */
 
@@ -44,7 +44,7 @@
 #define CHECK(op) \
 	do { result = (op);					\
 		if (result != ISC_R_SUCCESS) goto failure;	\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define DIFF_COMMON_LOGARGS \
 	dns_lctx, DNS_LOGCATEGORY_GENERAL, DNS_LOGMODULE_DIFF
@@ -266,7 +266,6 @@ diff_apply(dns_diff_t *diff, dns_db_t *db, dns_dbversion_t *ver,
 			dns_rdataset_t rds;
 			dns_rdataset_t ardataset;
 			dns_rdataset_t *modified = NULL;
-			isc_boolean_t offline;
 
 			op = t->op;
 			type = t->rdata.type;
@@ -303,7 +302,6 @@ diff_apply(dns_diff_t *diff, dns_db_t *db, dns_dbversion_t *ver,
 				CHECK(dns_db_findnsec3node(db, name, ISC_TRUE,
 							   &node));
 
-			offline = ISC_FALSE;
 			while (t != NULL &&
 			       dns_name_equal(&t->name, name) &&
 			       t->op == op &&
@@ -325,8 +323,6 @@ diff_apply(dns_diff_t *diff, dns_db_t *db, dns_dbversion_t *ver,
 						namebuf, typebuf, classbuf,
 						(unsigned long) t->ttl,
 						(unsigned long) rdl.ttl);
-				if (t->rdata.flags & DNS_RDATA_OFFLINE)
-					offline = ISC_TRUE;
 				ISC_LIST_APPEND(rdl.rdata, &t->rdata, link);
 				t = ISC_LIST_NEXT(t, link);
 			}
@@ -379,6 +375,15 @@ diff_apply(dns_diff_t *diff, dns_db_t *db, dns_dbversion_t *ver,
 							   diff->resign);
 					dns_db_setsigningtime(db, modified,
 							      resign);
+					if (diff->resign == 0 &&
+					    (op == DNS_DIFFOP_ADDRESIGN ||
+					     op == DNS_DIFFOP_DELRESIGN))
+						isc_log_write(
+							DIFF_COMMON_LOGARGS,
+							ISC_LOG_WARNING,
+							"resign requested "
+							"with 0 resign "
+							"interval");
 				}
 			} else if (result == DNS_R_UNCHANGED) {
 				/*
@@ -401,9 +406,9 @@ diff_apply(dns_diff_t *diff, dns_db_t *db, dns_dbversion_t *ver,
 							      sizeof(classbuf));
 					isc_log_write(DIFF_COMMON_LOGARGS,
 						      ISC_LOG_WARNING,
-						      "%s/%s: update with no "
-						      " effect", namebuf,
-						      classbuf);
+						      "%s/%s: dns_diff_apply: "
+						      "update with no effect",
+						      namebuf, classbuf);
 				}
 			} else if (result == DNS_R_NXRRSET) {
 				/*
@@ -492,6 +497,7 @@ dns_diff_load(dns_diff_t *diff, dns_addrdatasetfunc_t addfunc,
 			if (result == DNS_R_UNCHANGED) {
 				isc_log_write(DIFF_COMMON_LOGARGS,
 					      ISC_LOG_WARNING,
+					      "dns_diff_load: "
 					      "update with no effect");
 			} else if (result == ISC_R_SUCCESS ||
 				   result == DNS_R_NXRRSET) {
@@ -529,7 +535,6 @@ dns_diff_sort(dns_diff_t *diff, dns_diff_compare_func *compare) {
 	v = isc_mem_get(diff->mctx, length * sizeof(dns_difftuple_t *));
 	if (v == NULL)
 		return (ISC_R_NOMEMORY);
-	i = 0;
 	for (i = 0; i < length; i++) {
 		p = ISC_LIST_HEAD(diff->tuples);
 		v[i] = p;

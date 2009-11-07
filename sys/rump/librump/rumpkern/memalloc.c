@@ -1,4 +1,4 @@
-/*	$NetBSD: memalloc.c,v 1.1 2009/11/04 20:38:58 pooka Exp $	*/
+/*	$NetBSD: memalloc.c,v 1.12 2012/02/04 22:11:43 para Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,14 +26,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD");
+__KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.12 2012/02/04 22:11:43 para Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>
 #include <sys/malloc.h>
+#include <sys/percpu.h>
 #include <sys/pool.h>
+#include <sys/vmem.h>
 
 #include <rump/rumpuser.h>
+
+#include "rump_private.h"
 
 /*
  * Allocator "implementations" which relegate tasks to the host
@@ -69,7 +73,11 @@ kern_malloc(unsigned long size, struct malloc_type *type, int flags)
 {
 	void *rv;
 
-	rv = rumpuser_malloc(size, (flags & (M_CANFAIL | M_NOWAIT)) != 0);
+	rv = rumpuser_malloc(size, 0);
+
+	if (__predict_false(rv == NULL && (flags & (M_CANFAIL|M_NOWAIT)) == 0))
+		panic("malloc %lu bytes failed", size);
+
 	if (rv && flags & M_ZERO)
 		memset(rv, 0, size);
 
@@ -80,7 +88,7 @@ void *
 kern_realloc(void *ptr, unsigned long size, struct malloc_type *type, int flags)
 {
 
-	return rumpuser_realloc(ptr, size, (flags & (M_CANFAIL|M_NOWAIT)) != 0);
+	return rumpuser_realloc(ptr, size);
 }
 
 void
@@ -94,7 +102,7 @@ kern_free(void *ptr, struct malloc_type *type)
  * Kmem
  */
 
-#ifndef RUMP_USE_REAL_ALLOCATORS
+#ifdef RUMP_USE_UNREAL_ALLOCATORS
 void
 kmem_init()
 {
@@ -106,7 +114,7 @@ void *
 kmem_alloc(size_t size, km_flag_t kmflag)
 {
 
-	return rumpuser_malloc(size, kmflag == KM_NOSLEEP);
+	return rump_hypermalloc(size, 0, kmflag == KM_SLEEP, "kmem_alloc");
 }
 
 void *
@@ -149,6 +157,7 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int align_offset,
 {
 
 	pp->pr_size = size;
+	pp->pr_align = align;
 }
 
 void
@@ -166,7 +175,7 @@ pool_cache_init(size_t size, u_int align, u_int align_offset, u_int flags,
 {
 	pool_cache_t pc;
 
-	pc = rumpuser_malloc(sizeof(*pc), 0);
+	pc = rump_hypermalloc(sizeof(*pc), 0, true, "pcinit");
 	pool_cache_bootstrap(pc, size, align, align_offset, flags, wchan,
 	    palloc, ipl, ctor, dtor, arg);
 	return pc;
@@ -225,21 +234,24 @@ pool_cache_reclaim(pool_cache_t pc)
 	return true;
 }
 
+void
+pool_cache_cpu_init(struct cpu_info *ci)
+{
+
+	return;
+}
+
 void *
 pool_get(struct pool *pp, int flags)
 {
-	void *rv;
 
 #ifdef DIAGNOSTIC
 	if (pp->pr_size == 0)
 		panic("%s: pool unit size 0.  not initialized?", __func__);
 #endif
 
-	rv = rumpuser_malloc(pp->pr_size, 1);
-	if (rv == NULL && (flags & PR_WAITOK && (flags & PR_LIMITFAIL) == 0))
-		panic("%s: out of memory and PR_WAITOK", __func__);
-
-	return rv;
+	return rump_hypermalloc(pp->pr_size, pp->pr_align,
+	    (flags & PR_WAITOK) != 0, "pget");
 }
 
 void
@@ -287,6 +299,21 @@ pool_cache_set_drain_hook(pool_cache_t pc, void (*fn)(void *, int), void *arg)
 	pc->pc_pool.pr_drain_hook_arg = arg;
 }
 
+void
+pool_drain_start(struct pool **ppp, uint64_t *wp)
+{
+
+	/* nada */
+}
+
+bool
+pool_drain_end(struct pool *pp, uint64_t w)
+{
+
+	/* can't reclaim anything in this model */
+	return false;
+}
+
 int
 pool_prime(struct pool *pp, int nitems)
 {
@@ -295,19 +322,84 @@ pool_prime(struct pool *pp, int nitems)
 }
 
 /* XXX: for tmpfs, shouldn't be here */
-void *pool_page_alloc_nointr(struct pool *, int);
-void pool_page_free_nointr(struct pool *, void *);
+void *pool_page_alloc(struct pool *, int);
+void pool_page_free(struct pool *, void *);
 void *
-pool_page_alloc_nointr(struct pool *pp, int flags)
+pool_page_alloc(struct pool *pp, int flags)
 {
 
 	return pool_get(pp, flags);
 }
 
 void
-pool_page_free_nointr(struct pool *pp, void *item)
+pool_page_free(struct pool *pp, void *item)
 {
 
 	return pool_put(pp, item);
 }
-#endif /* RUMP_USE_REAL_ALLOCATORS */
+
+void
+vmem_rehash_start()
+{
+
+	return;
+}
+
+/*
+ * A simplified percpu is included in here since subr_percpu.c uses
+ * the vmem allocator and I don't want to reimplement vmem.  So use
+ * this simplified percpu for non-vmem systems.
+ */
+
+static kmutex_t pcmtx;
+
+void
+percpu_init(void)
+{
+
+	mutex_init(&pcmtx, MUTEX_DEFAULT, IPL_NONE);
+}
+
+void
+percpu_init_cpu(struct cpu_info *ci)
+{
+
+	/* nada */
+}
+
+void *
+percpu_getref(percpu_t *pc)
+{
+
+	mutex_enter(&pcmtx);
+	return pc;
+}
+
+void
+percpu_putref(percpu_t *pc)
+{
+
+	mutex_exit(&pcmtx);
+}
+
+percpu_t *
+percpu_alloc(size_t size)
+{
+
+	return kmem_alloc(size, KM_SLEEP);
+}
+
+void
+percpu_free(percpu_t *pc, size_t size)
+{
+
+	kmem_free(pc, size);
+}
+
+void
+percpu_foreach(percpu_t *pc, percpu_callback_t cb, void *arg)
+{
+
+	cb(pc, arg, rump_cpu);
+}
+#endif /* RUMP_USE_UNREAL_ALLOCATORS */

@@ -1,4 +1,4 @@
-/*	$NetBSD: pickup.c,v 1.1.1.1 2009/06/23 10:08:51 tron Exp $	*/
+/*	$NetBSD: pickup.c,v 1.1.1.4 2011/03/02 19:32:24 tron Exp $	*/
 
 /*++
 /* NAME
@@ -48,8 +48,8 @@
 /* .ad
 /* .fi
 /* .IP "\fBcontent_filter (empty)\fR"
-/*	The name of a mail delivery transport that filters mail after
-/*	it is queued.
+/*	After the message is queued, send the entire message to the
+/*	specified \fItransport:destination\fR.
 /* .IP "\fBreceive_override_options (empty)\fR"
 /*	Enable or disable recipient validation, built-in content
 /*	filtering, or address mapping.
@@ -193,10 +193,15 @@ static int cleanup_service_error_reason(PICKUP_INFO *info, int status,
     /*
      * XXX If the cleanup server gave a reason, then it was already logged.
      * Don't bother logging it another time.
+     * 
+     * XXX Discard a message without recipient. This can happen with "postsuper
+     * -r" when a message is already delivered (or bounced). The Postfix
+     * sendmail command rejects submissions without recipients.
      */
-    if (reason == 0)
-	msg_warn("%s: %s", info->path, cleanup_strerror(status));
-    return ((status & CLEANUP_STAT_BAD) ?
+    if (reason == 0 || *reason == 0)
+	msg_warn("%s: error writing %s: %s",
+		  info->path, info->id, cleanup_strerror(status));
+    return ((status & (CLEANUP_STAT_BAD | CLEANUP_STAT_RCPT)) ?
 	    REMOVE_MESSAGE_FILE : KEEP_MESSAGE_FILE);
 }
 

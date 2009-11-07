@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39.c,v 1.40 2009/03/18 10:22:29 cegger Exp $ */
+/*	$NetBSD: tx39.c,v 1.44 2011/12/02 18:07:26 shattered Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39.c,v 1.40 2009/03/18 10:22:29 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39.c,v 1.44 2011/12/02 18:07:26 shattered Exp $");
 
 #include "opt_vr41xx.h"
 #include "opt_tx39xx.h"
@@ -39,12 +39,13 @@ __KERNEL_RCSID(0, "$NetBSD: tx39.c,v 1.40 2009/03/18 10:22:29 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <mips/cache.h>
+#include <mips/locore.h>
 
-#include <machine/locore.h>   /* cpu_id */
 #include <machine/bootinfo.h> /* bootinfo */
 #include <machine/sysconf.h>  /* platform */
 
@@ -84,7 +85,7 @@ void	tx_init(void);
 #define	TX_INTR	cpu_intr	/* locore_mips3 directly call this */
 #endif
 
-extern void TX_INTR(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+extern void TX_INTR(int, vaddr_t, uint32_t);
 
 void	tx39clock_cpuspeed(int *, int *);
 
@@ -114,17 +115,18 @@ tx_init(void)
 	platform.reboot		= tx_reboot;
 
 
-	model = MIPS_PRID_REV(cpu_id);
+	model = MIPS_PRID_REV(mips_options.mips_cpu_id);
 
 	switch (model) {
 	default:
 		/* Unknown TOSHIBA TX39-series */
-		sprintf(cpu_name, "Unknown TOSHIBA TX39-series %x", model);
+		sprintf(hpcmips_cpuname,
+		    "Unknown TOSHIBA TX39-series %x", model);
 		break;
 	case TMPR3912:
 		tx39clock_cpuspeed(&cpuclock, &cpuspeed);
 
-		sprintf(cpu_name, "TOSHIBA TMPR3912 %d.%02d MHz",
+		sprintf(hpcmips_cpuname, "TOSHIBA TMPR3912 %d.%02d MHz",
 		    cpuclock / 1000000, (cpuclock % 1000000) / 10000);
 		tc->tc_chipset = __TX391X;
 		break;
@@ -132,7 +134,7 @@ tx_init(void)
 		tx39clock_cpuspeed(&cpuclock, &cpuspeed);
 		rev = tx_conf_read(tc, TX3922_REVISION_REG);
 
-		sprintf(cpu_name, "TOSHIBA TMPR3922 rev. %x.%x "
+		sprintf(hpcmips_cpuname, "TOSHIBA TMPR3922 rev. %x.%x "
 		    "%d.%02d MHz", (rev >> 4) & 0xf, rev & 0xf, 
 		    cpuclock / 1000000, (cpuclock % 1000000) / 10000);
 		tc->tc_chipset = __TX392X;
@@ -180,9 +182,9 @@ void
 tx_find_dram(paddr_t start, paddr_t end)
 {
 	char *page, *startaddr, *endaddr;
-	u_int32_t magic0, magic1;
-#define MAGIC0		(*(volatile u_int32_t *)(page + 0))
-#define MAGIC1		(*(volatile u_int32_t *)(page + 4))
+	uint32_t magic0, magic1;
+#define MAGIC0		(*(volatile uint32_t *)(page + 0))
+#define MAGIC1		(*(volatile uint32_t *)(page + 4))
 
 	startaddr = (char *)MIPS_PHYS_TO_KSEG1(start);
 	endaddr = (char *)MIPS_PHYS_TO_KSEG1(end);
@@ -237,7 +239,7 @@ void
 tx_reboot(int howto, char *bootstr)
 {
 
-	goto *(u_int32_t *)MIPS_RESET_EXC_VEC;
+	goto *(uint32_t *)MIPS_RESET_EXC_VEC;
 }
 
 void
@@ -283,7 +285,9 @@ tx_cons_init(void)
 	}
 	
 	return;
+#if (NM38813C > 0) || (NTC5165BUF > 0)
  panic:
+#endif
 	panic("tx_cons_init: can't init console");
 	/* NOTREACHED */
 }

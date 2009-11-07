@@ -1,11 +1,12 @@
-#	$NetBSD: Makefile.inc,v 1.168 2009/04/08 19:28:48 wiz Exp $
+#	$NetBSD: Makefile.inc,v 1.182 2012/02/11 23:31:24 martin Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
 .PATH: ${ARCHDIR}/gen ${.CURDIR}/gen
 
 SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
-	closedir.c closefrom.c confstr.c ctermid.c ctype_.c daemon.c \
+	closedir.c closefrom.c \
+	confstr.c ctermid.c ctype_.c daemon.c \
 	dehumanize_number.c devname.c dirname.c disklabel.c err.c errx.c \
 	errlist.c errno.c execl.c execle.c execlp.c execv.c execvp.c \
 	extattr.c fmtcheck.c fmtmsg.c fnmatch.c fstab.c ftok.c \
@@ -15,13 +16,13 @@ SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
 	getloadavg.c getlogin.c getmntinfo.c \
 	getnetgrent.c getpagesize.c \
 	getpass.c getprogname.c getpwent.c getttyent.c \
-	getusershell.c glob.c humanize_number.c initgroups.c \
+	getusershell.c glob.c humanize_number.c initdir.c initgroups.c \
 	isascii.c isatty.c isctype.c lockf.c nftw.c \
-	nice.c nlist.c nlist_aout.c \
-	nlist_coff.c nlist_ecoff.c nlist_elf32.c nlist_elf64.c opendir.c \
-	pause.c popen.c psignal.c pthread_atfork.c ptree.c pwcache.c \
-	pw_scan.c raise.c randomid.c rb.c readdir.c rewinddir.c \
-	scandir.c seekdir.c setdomainname.c \
+	nice.c nlist.c nlist_aout.c nlist_coff.c nlist_ecoff.c nlist_elf32.c \
+	nlist_elf64.c opendir.c pause.c popen.c posix_spawn_sched.c \
+	posix_spawn_fileactions.c posix_spawnp.c psignal.c pthread_atfork.c \
+	ptree.c pwcache.c pw_scan.c raise.c randomid.c rb.c readdir.c \
+	rewinddir.c scandir.c seekdir.c setdomainname.c \
 	sethostname.c setjmperr.c setmode.c setproctitle.c setprogname.c \
 	shquote.c shquotev.c sighold.c sigignore.c siginterrupt.c \
 	siglist.c signal.c signame.c sigrelse.c \
@@ -42,6 +43,7 @@ COPTS.execvp.c = -Wno-stack-protector
 COPTS.execl.c = -Wno-stack-protector
 COPTS.execle.c = -Wno-stack-protector
 COPTS.execlp.c = -Wno-stack-protector
+COPTS.syslog.c = -Wno-format-nonliteral
 
 # machine-dependent gen sources
 # m-d Makefile.inc must include sources for:
@@ -50,9 +52,10 @@ COPTS.execlp.c = -Wno-stack-protector
 
 .include "${ARCHDIR}/gen/Makefile.inc"
 
-MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
+MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 \
+	confstr.3 \
 	cpuset.3 ctermid.3 ctype.3 daemon.3 devname.3 directory.3 dirname.3 \
-	endutxent.3 err.3 exec.3 extattr.3 \
+	endutxent.3 err.3 exec.3 extattr_copy_file.3 extattr_namespace_to_string.3 \
 	fmtcheck.3 fmtmsg.3 fnmatch.3 fpclassify.3 fpgetmask.3 \
 	ftok.3 fts.3 ftw.3 \
 	getbsize.3 cgetcap.3 getcwd.3 getdevmajor.3 \
@@ -66,7 +69,13 @@ MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
 	isnormal.3 isprint.3 ispunct.3 isspace.3 isupper.3 isxdigit.3 \
 	lockf.3 _lwp_makecontext.3 makecontext.3 \
 	nice.3 nlist.3 \
-	pause.3 popen.3 psignal.3 pwcache.3 pthread_atfork.3 \
+	pause.3 popen.3 \
+	posix_spawn.3 posix_spawn_file_actions_addopen.3 \
+	posix_spawn_file_actions_init.3 posix_spawnattr_getflags.3 \
+	posix_spawnattr_getpgroup.3 posix_spawnattr_getschedparam.3 \
+	posix_spawnattr_getschedpolicy.3 posix_spawnattr_init.3 \
+	posix_spawnattr_getsigdefault.3 posix_spawnattr_getsigmask.3 \
+	psignal.3 pwcache.3 pthread_atfork.3 \
 	raise.3 randomid.3 realpath.3 scandir.3 setjmp.3 setmode.3 \
 	setproctitle.3 shquote.3 sighold.3 sigignore.3 siginterrupt.3 \
 	signal.3 signbit.3 sigrelse.3 sigset.3 sigsetops.3 sleep.3 \
@@ -90,11 +99,16 @@ MLINKS+=err.3 verr.3 err.3 errx.3 err.3 verrx.3 err.3 warn.3 err.3 vwarn.3 \
         err.3 warnx.3 err.3 vwarnx.3
 MLINKS+=exec.3 execl.3 exec.3 execle.3 exec.3 execlp.3 exec.3 execv.3 \
 	exec.3 execvp.3 exec.3 exect.3
-MLINKS+=extattr.3 extattr_namespace_to_string.3 \
-	extattr.3 extattr_string_to_namespace.3
+MLINKS+=extattr_namespace_to_string.3 extattr_string_to_namespace.3 \
+	extattr_copy_file.3 extattr_copy_fd.3 \
+	extattr_copy_file.3 extattr_copy_link.3 \
+	extattr_copy_file.3 cpxattr.3 \
+	extattr_copy_file.3 fcpxattr.3 \
+	extattr_copy_file.3 lcpxattr.3
 MLINKS+=fpgetmask.3 fpgetround.3 fpgetmask.3 fpgetsticky.3 \
 	fpgetmask.3 fpsetmask.3  fpgetmask.3 fpsetround.3 \
-	fpgetmask.3 fpsetsticky.3
+	fpgetmask.3 fpsetsticky.3 fpgetmask.3 fpgetprec.3 \
+	fpgetmask.3 fpsetprec.3
 MLINKS+=fts.3 fts_open.3 fts.3 fts_read.3 fts.3 fts_children.3 \
 	fts.3 fts_set.3 fts.3 fts_close.3
 MLINKS+=ftw.3 nftw.3
@@ -130,7 +144,18 @@ MLINKS+=glob.3 glob_pattern_p.3
 MLINKS+=humanize_number.3 dehumanize_number.3
 MLINKS+=makecontext.3 swapcontext.3
 MLINKS+=popen.3 pclose.3
-MLINKS+=psignal.3 sys_siglist.3 psignal.3 sys_signame.3
+MLINKS+=posix_spawn.3 posix_spawnp.3 \
+	posix_spawn_file_actions_addopen.3 posix_spawn_file_actions_addclose.3 \
+	posix_spawn_file_actions_addopen.3 posix_spawn_file_actions_adddup2.3 \
+	posix_spawn_file_actions_init.3 posix_spawn_file_actions_destroy.3 \
+	posix_spawnattr_getflags.3 posix_spawnattr_setflags.3 \
+	posix_spawnattr_getpgroup.3 posix_spawnattr_setpgroup.3 \
+	posix_spawnattr_getschedparam.3 posix_spawnattr_setschedparam.3 \
+	posix_spawnattr_getschedpolicy.3 posix_spawnattr_setschedpolicy.3 \
+	posix_spawnattr_getsigdefault.3 posix_spawnattr_setsigdefault.3 \
+	posix_spawnattr_getsigmask.3 posix_spawnattr_setsigmask.3 \
+	posix_spawnattr_init.3 posix_spawnattr_destroy.3
+MLINKS+=psignal.3 sys_siglist.3 psignal.3 sys_signame.3 psignal.3 psiginfo.3
 MLINKS+=pwcache.3 user_from_uid.3 pwcache.3 group_from_gid.3
 MLINKS+=pwcache.3 uid_from_user.3 pwcache.3 gid_from_group.3
 MLINKS+=pwcache.3 pwcache_userdb.3 pwcache.3 pwcache_groupdb.3
@@ -151,9 +176,22 @@ MLINKS+=syslog.3 closelog.3 syslog.3 openlog.3 syslog.3 setlogmask.3 \
 	syslog.3 vsyslog.3
 MLINKS+=syslog.3 closelog_r.3 syslog.3 openlog_r.3 syslog.3 setlogmask_r.3 \
 	syslog.3 syslog_r.3 syslog.3 vsyslog_r.3
+MLINKS+=syslog.3 syslogp.3 syslog.3 syslogp_r.3 \
+	syslog.3 vsyslogp.3 syslog.3 vsyslogp_r.3
 MLINKS+=ttyname.3 isatty.3 ttyname.3 ttyslot.3 ttyname.3 ttyname_r.3
 MLINKS+=unvis.3 strunvis.3 unvis.3 strunvisx.3
+MLINKS+=unvis.3 strnunvis.3 unvis.3 strnunvisx.3
 MLINKS+=vis.3 svis.3 vis.3 strvis.3 vis.3 strvisx.3 vis.3 strsvis.3 \
-	vis.3 strsvisx.3
+	vis.3 strsvisx.3 vis.3 nvis.3
+MLINKS+=vis.3 snvis.3 vis.3 strnvis.3 vis.3 strnvisx.3 vis.3 strsnvis.3 \
+	vis.3 strsnvisx.3
 
+CPPFLAGS.ctype_.c+=	-I${LIBCDIR}/locale
 CPPFLAGS.isctype.c+=	-I${LIBCDIR}/locale
+CPPFLAGS.tolower_.c+=	-I${LIBCDIR}/locale
+CPPFLAGS.toupper_.c+=	-I${LIBCDIR}/locale
+
+errlist.c: errlist.awk ${NETBSDSRCDIR}/sys/sys/errno.h
+	${TOOL_AWK} -f ${.ALLSRC} > ${.TARGET}
+
+CLEANFILES+= errlist.c

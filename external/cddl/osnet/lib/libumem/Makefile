@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/08/07 20:57:56 haad Exp $
+#	$NetBSD: Makefile,v 1.5 2010/05/10 06:27:57 haad Exp $
 
 LIB=	umem
 SRCS=	umem.c

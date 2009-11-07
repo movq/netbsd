@@ -1,7 +1,7 @@
-/*	$NetBSD: assert_p.h,v 1.1.1.1 2009/03/22 15:02:35 christos Exp $	*/
+/*	$NetBSD: assert_p.h,v 1.3.4.1 2012/06/05 21:14:54 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005, 2007, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: assert_p.h,v 1.14 2007/06/19 23:47:22 tbox Exp */
+/* Id */
 
 #ifndef LWRES_ASSERT_P_H
 #define LWRES_ASSERT_P_H 1
@@ -30,6 +30,7 @@
 #define INSIST(x)		assert(x)
 
 #define UNUSED(x)		((void)(x))
+#define POST(x)			((void)(x))
 
 #define SPACE_OK(b, s)		(LWRES_BUFFER_AVAILABLECOUNT(b) >= (s))
 #define SPACE_REMAINING(b, s)	(LWRES_BUFFER_REMAINING(b) >= (s))

@@ -1,4 +1,4 @@
-/*	$NetBSD: gdium_genfb.c,v 1.3 2009/08/08 20:48:33 matt Exp $	*/
+/*	$NetBSD: gdium_genfb.c,v 1.6 2011/07/10 00:03:53 matt Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,18 +28,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gdium_genfb.c,v 1.3 2009/08/08 20:48:33 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gdium_genfb.c,v 1.6 2011/07/10 00:03:53 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
-
-#include <machine/bus.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -83,7 +82,7 @@ gdium_cnattach(struct gdium_config *gc)
 	    PCI_MAPREG_START);
 
 	ri->ri_bits = (char *)MIPS_PHYS_TO_KSEG1(BONITO_PCILO_BASE + reg);
-	ri->ri_flg = RI_CENTER;
+	ri->ri_flg = RI_CENTER | RI_NO_AUTO;
 
 	memset(ri->ri_bits, 0, 0x200000);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mlfk_rule.c,v 1.1.1.2 2004/07/23 05:34:04 martti Exp $	*/
+/*	$NetBSD: mlfk_rule.c,v 1.3 2012/02/15 17:55:04 riz Exp $	*/
 
 /*
  * Copyright (C) 2000 by Darren Reed.

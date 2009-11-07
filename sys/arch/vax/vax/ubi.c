@@ -1,4 +1,4 @@
-/*	$NetBSD: ubi.c,v 1.1 2009/01/22 18:49:03 christos Exp $ */
+/*	$NetBSD: ubi.c,v 1.4 2011/06/05 16:59:21 matt Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,23 +31,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubi.c,v 1.1 2009/01/22 18:49:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubi.c,v 1.4 2011/06/05 16:59:21 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 
-#include <machine/bus.h>
 #include <machine/nexus.h>
-#include <machine/cpu.h>
 #include <machine/sid.h>
 #include <machine/ka730.h>
 
 static	int ubi_print(void *, const char *);
-static	int ubi_match(struct device *, struct cfdata *, void *);
-static	void ubi_attach(struct device *, struct device *, void*);
+static	int ubi_match(device_t, cfdata_t, void *);
+static	void ubi_attach(device_t, device_t, void*);
 
-CFATTACH_DECL_NEW(ubi, sizeof(struct device),
+CFATTACH_DECL_NEW(ubi, 0,
     ubi_match, ubi_attach, NULL, NULL);
 
 int
@@ -64,7 +64,7 @@ ubi_print(void *aux, const char *name)
 
 
 int
-ubi_match(struct device *parent, struct cfdata *cf, void *aux)
+ubi_match(device_t parent, cfdata_t cf, void *aux)
 {
 	if (vax_bustype == VAX_UNIBUS)
 		return 1;
@@ -72,11 +72,13 @@ ubi_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-ubi_attach(struct device *parent, struct device *self, void *aux)
+ubi_attach(device_t parent, device_t self, void *aux)
 {
 	struct	sbi_attach_args sa;
 
 	printf("\n");
+
+        sa.sa_base = NEX730;
 
 #define NEXPAGES (sizeof(struct nexus) / VAX_NBPG)
 

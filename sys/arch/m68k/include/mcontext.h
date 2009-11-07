@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.6 2008/04/28 20:23:26 martin Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.9 2011/11/22 15:25:28 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@ typedef struct {
 	__gregset_t	__gregs;	/* General Register set */
 	__fpregset_t	__fpregs;	/* Floating Point Register set */
 	union {
-		long	__mc_state[202];	/* Only need 308 bytes... */
+		long	__mc_state[201];	/* Only need 308 bytes... */
 #if defined(_KERNEL) || defined(__M68K_MCONTEXT_PRIVATE)
 		struct {
 			/* Rest of the frame. */
@@ -92,17 +92,48 @@ typedef struct {
 		} __mc_frame;
 #endif /* _KERNEL || __M68K_MCONTEXT_PRIVATE */
 	}		__mc_pad;
+	__greg_t	_mc_tlsbase;
 } mcontext_t;
 
 /* Note: no additional padding is to be performed in ucontext_t. */
 
 /* Machine-specific uc_flags value */
 #define _UC_M68K_UC_USER 0x40000000
+#define	_UC_TLSBASE	0x00080000
 
 #define _UC_MACHINE_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_A7])
 #define _UC_MACHINE_PC(uc)	((uc)->uc_mcontext.__gregs[_REG_PC])
 #define _UC_MACHINE_INTRV(uc)	((uc)->uc_mcontext.__gregs[_REG_D0])
 
 #define	_UC_MACHINE_SET_PC(uc, pc)	_UC_MACHINE_PC(uc) = (pc)
+
+#define	__UCONTEXT_SIZE	1024
+
+#if defined(_LIBC_SOURCE) || defined(_RTLD_SOURCE) || defined(__LIBPTHREAD_SOURCE__)
+#define	TLS_TP_OFFSET	0x7000
+#define	TLS_DTV_OFFSET	0x8000
+
+#include <sys/tls.h>
+
+__CTASSERT(TLS_TP_OFFSET + sizeof(struct tls_tcb) < 0x8000);
+__CTASSERT(TLS_TP_OFFSET % sizeof(struct tls_tcb) == 0);
+
+void *_lwp_getprivate(void);
+void _lwp_setprivate(void *);
+
+static __inline struct tls_tcb *
+__lwp_gettcb_fast(void)
+{
+	unsigned int __tcb = (unsigned int)_lwp_getprivate();
+	return (void *)(__tcb - TLS_TP_OFFSET - sizeof(struct tls_tcb));
+}
+
+static inline void
+__lwp_settcb(struct tls_tcb *__tcb)
+{
+	__tcb += TLS_TP_OFFSET / sizeof(*__tcb) + 1;
+	_lwp_setprivate(__tcb);
+}
+#endif
 
 #endif	/* !_M68K_MCONTEXT_H_ */

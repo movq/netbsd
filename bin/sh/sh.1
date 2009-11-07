@@ -1,4 +1,4 @@
-.\"	$NetBSD: sh.1,v 1.93 2009/03/29 08:55:27 wiz Exp $
+.\"	$NetBSD: sh.1,v 1.106 2011/10/05 13:15:30 christos Exp $
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -31,7 +31,7 @@
 .\"
 .\"	@(#)sh.1	8.6 (Berkeley) 5/4/95
 .\"
-.Dd March 29, 2009
+.Dd October 4, 2011
 .Dt SH 1
 .Os
 .Sh NAME
@@ -298,7 +298,7 @@ if it has been set).
 section below.)
 .It Fl b Em notify
 Enable asynchronous notification of background job completion.
-(UNIMPLEMENTED for 4.4alpha)
+(Not implemented.)
 .It "\ \ " Em cdprint
 Make an interactive shell always print the new directory name when
 changed by the
@@ -310,6 +310,11 @@ Typing a tab character will extend the current input word to match a
 filename.
 If more than one filename matches it is only extended to be the common prefix.
 Typing a second tab character will list all the matching names.
+One of the editing modes, either
+.Fl E
+or
+.Fl V ,
+must be enabled for this to work.
 .El
 .Ss Lexical Structure
 The shell reads input in terms of lines from a file and breaks it up into
@@ -960,6 +965,10 @@ expansion, with the exception of the special rules for @.
 .Pp
 In addition, a parameter expansion can be modified by using one of the
 following formats.
+If the
+.Dq Dv \&:
+is omitted in the following modifiers, then the expansion is applied only
+to unset parameters, not null ones.
 .Bl -tag -width aaparameterwordaaaaa
 .It ${parameter:-word}
 Use Default Values.
@@ -985,9 +994,6 @@ If parameter is unset or null, null is
 substituted; otherwise, the expansion of word is substituted.
 .El
 .Pp
-In the parameter expansions shown previously, use of the colon in the
-format results in a test for a parameter that is unset or null; omission
-of the colon results in a test for a parameter that is only unset.
 .Bl -tag -width aaparameterwordaaaaa
 .It ${#parameter}
 String Length.
@@ -1219,7 +1225,7 @@ Do not execute the command but
 search for the command and print the absolute pathname
 of utilities, the name for built-ins or the expansion of aliases.
 .El
-.It cd Op Ar directory Op Ar replace
+.It cd Oo Fl P Oc Op Ar directory Op Ar replace
 Switch to the specified directory (default
 .Ev $HOME ) .
 If
@@ -1229,6 +1235,13 @@ the first occurrence of
 .Ar directory
 in the current directory name with
 .Ar replace .
+If
+.Ar directory
+is
+.Sq - ,
+then the current working directory is changed to the previous current
+working directory as set in
+.Ev OLDPWD .
 Otherwise if an entry for
 .Ev CDPATH
 appears in the environment of the
@@ -1244,6 +1257,25 @@ The format of
 .Ev CDPATH
 is the same as that of
 .Ev PATH .
+.Pp
+The
+.Fl P
+option instructs the shell to update
+.Ev PWD
+with the specified physical directory path and change to that directory.
+This is the default.
+.Pp
+When the directory changes, the variable
+.Ev OLDPWD
+is set to the working directory before the change.
+.Pp
+Some shells also support a
+.Fl L
+option, which instructs the shell to update
+.Ev PWD
+with the logical path and to change the current directory
+accordingly.
+This is not supported.
 .Pp
 In an interactive shell, the
 .Ic cd
@@ -1456,10 +1488,10 @@ do
 	case $f in
 	a | b)	flag=$f;;
 	c)	carg=$OPTARG;;
-	\\?)	echo $USAGE; exit 1;;
+	\e?)	echo $USAGE; exit 1;;
 	esac
 done
-shift `expr $OPTIND - 1`
+shift $(expr $OPTIND - 1)
 .Ed
 .Pp
 This code will accept any of the following as equivalent:
@@ -1512,24 +1544,22 @@ If
 .Fl L
 is specified the cached value (initially set from
 .Ev PWD )
-is checked to see if it refers to the current directory, if it does
+is checked to see if it refers to the current directory; if it does
 the value is printed.
 Otherwise the current directory name is found using
 .Xr getcwd 3 .
 The environment variable
 .Ev PWD
-is set to printed value.
+is set to the printed value.
 .Pp
 The default is
 .Ic pwd
 .Fl L ,
 but note that the built-in
 .Ic cd
-command doesn't currently support
+command doesn't currently support the
 .Fl L
-or
-.Fl P
-and will cache (almost) the absolute path.
+option and will cache (almost) the absolute path.
 If
 .Ic cd
 is changed,
@@ -1653,7 +1683,9 @@ the action is executed when the shell exits.
 may be null, which cause the specified signals to be ignored.
 With
 .Ar action
-omitted or set to `-' the specified signals are set to their default action.
+omitted or set to
+.Sq -
+the specified signals are set to their default action.
 When the shell forks off a subshell, it resets trapped (but not ignored)
 signals to the default action.
 On non-interactive shells, the
@@ -1837,15 +1869,6 @@ in the buffer using the control key.
 uses the
 .Xr editline 3
 library.
-.Sh EXIT STATUS
-Errors that are detected by the shell, such as a syntax error, will cause the
-shell to exit with a non-zero exit status.
-If the shell is not an
-interactive shell, the execution of the shell file will be aborted.
-Otherwise
-the shell will return the exit status of the last command executed, or
-if the exit built-in is used with a numeric argument, it will return the
-argument.
 .Sh ENVIRONMENT
 .Bl -tag -width MAILCHECK
 .It Ev HOME
@@ -1925,6 +1948,15 @@ The number of lines in the history buffer for the shell.
 .It
 .Pa /etc/profile
 .El
+.Sh EXIT STATUS
+Errors that are detected by the shell, such as a syntax error, will cause the
+shell to exit with a non-zero exit status.
+If the shell is not an
+interactive shell, the execution of the shell file will be aborted.
+Otherwise
+the shell will return the exit status of the last command executed, or
+if the exit built-in is used with a numeric argument, it will return the
+argument.
 .Sh SEE ALSO
 .Xr csh 1 ,
 .Xr echo 1 ,

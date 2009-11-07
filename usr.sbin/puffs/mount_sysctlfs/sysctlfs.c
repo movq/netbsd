@@ -1,6 +1,6 @@
-/*	$NetBSD: sysctlfs.c,v 1.12 2009/11/05 13:28:20 pooka Exp $	*/
+/*	$NetBSD: sysctlfs.c,v 1.16 2010/08/06 15:26:16 pooka Exp $	*/
 
-/*
+/*-
  * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sysctlfs.c,v 1.12 2009/11/05 13:28:20 pooka Exp $");
+__RCSID("$NetBSD: sysctlfs.c,v 1.16 2010/08/06 15:26:16 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -49,6 +49,13 @@ __RCSID("$NetBSD: sysctlfs.c,v 1.12 2009/11/05 13:28:20 pooka Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
+
+#ifdef RUMP_ACTION
+#include <rump/rump.h>
+#include <rump/rump_syscalls.h>
+
+#define sysctl(a,b,c,d,e,f) rump_sys___sysctl(a,b,c,d,e,f)
+#endif
 
 PUFFSOP_PROTOS(sysctlfs)
 
@@ -77,8 +84,10 @@ static mode_t fileperms;
 static uid_t fileuid;
 static gid_t filegid;
 
+static int rflag;
+
 #define ISADIR(a) ((SYSCTL_TYPE(a->sysctl_flags) == CTLTYPE_NODE))
-#define SFS_MAXFILE 8192
+#define SFS_MAXFILE 32768
 #define SFS_NODEPERDIR 128
 
 static int sysctlfs_domount(struct puffs_usermount *);
@@ -115,7 +124,7 @@ sysctlfs_pathbuild(struct puffs_usermount *pu,
 
 static int
 sysctlfs_pathtransform(struct puffs_usermount *pu,
-	const struct puffs_pathobj *p, const const struct puffs_cn *pcn,
+	const struct puffs_pathobj *p, const struct puffs_cn *pcn,
 	struct puffs_pathobj *res)
 {
 
@@ -230,13 +239,16 @@ main(int argc, char *argv[])
 
 	mntflags = pflags = 0;
 	detach = 1;
-	while ((ch = getopt(argc, argv, "o:s")) != -1) {
+	while ((ch = getopt(argc, argv, "o:rs")) != -1) {
 		switch (ch) {
 		case 'o':
 			mp = getmntopts(optarg, puffsmopts, &mntflags, &pflags);
 			if (mp == NULL)
 				err(1, "getmntopts");
 			freemntopts(mp);
+			break;
+		case 'r':
+			rflag = 1;
 			break;
 		case 's':
 			detach = 0;
@@ -286,6 +298,14 @@ main(int argc, char *argv[])
 	if (detach)
 		if (puffs_daemon(pu, 1, 1) == -1)
 			err(1, "puffs_daemon");
+
+#ifdef RUMP_ACTION
+	{
+	extern int puffs_fakecc;
+	puffs_fakecc = 1;
+	rump_init();
+	}
+#endif
 
 	if (puffs_mount(pu, argv[1], mntflags, puffs_getroot(pu)) == -1)
 		err(1, "puffs_mount");
@@ -370,45 +390,102 @@ sysctlfs_fs_nodetofh(struct puffs_usermount *pu, void *cookie,
 }
 
 static void
-doprint(struct sfsnode *sfs, struct puffs_pathobj *po,
-	char *buf, size_t bufsize)
+getnodedata(struct sfsnode *sfs, struct puffs_pathobj *po,
+	char *buf, size_t *bufsize)
 {
 	size_t sz;
+	int error = 0;
 
 	assert(!ISADIR(sfs));
 
-	memset(buf, 0, bufsize);
+	memset(buf, 0, *bufsize);
 	switch (SYSCTL_TYPE(sfs->sysctl_flags)) {
+	case CTLTYPE_BOOL: {
+		bool b;
+		sz = sizeof(bool);
+		assert(sz <= *bufsize);
+		if (sysctl(po->po_path, po->po_len, &b, &sz, NULL, 0) == -1) {
+			error = errno;
+			break;
+		}
+		if (rflag)
+			memcpy(buf, &b, sz);
+		else
+			snprintf(buf, *bufsize, "%s", b ? "true" : "false");
+		break;
+	}
 	case CTLTYPE_INT: {
 		int i;
 		sz = sizeof(int);
-		if (sysctl(po->po_path, po->po_len, &i, &sz, NULL, 0) == -1)
+		assert(sz <= *bufsize);
+		if (sysctl(po->po_path, po->po_len, &i, &sz, NULL, 0) == -1) {
+			error = errno;
 			break;
-		snprintf(buf, bufsize, "%d", i);
+		}
+		if (rflag)
+			memcpy(buf, &i, sz);
+		else
+			snprintf(buf, *bufsize, "%d", i);
 		break;
 	}
 	case CTLTYPE_QUAD: {
 		quad_t q;
 		sz = sizeof(q);
-		if (sysctl(po->po_path, po->po_len, &q, &sz, NULL, 0) == -1)
+		assert(sz <= *bufsize);
+		if (sysctl(po->po_path, po->po_len, &q, &sz, NULL, 0) == -1) {
+			error = errno;
 			break;
-		snprintf(buf, bufsize, "%" PRId64, q);
+		}
+		if (rflag)
+			memcpy(buf, &q, sz);
+		else
+			snprintf(buf, *bufsize, "%" PRId64, q);
 		break;
 	}
-	case CTLTYPE_STRUCT:
-		snprintf(buf, bufsize, "CTLTYPE_STRUCT: implement me and "
-		    "score a cookie");
-		break;
-	case CTLTYPE_STRING: {
-		sz = bufsize;
-		if (sysctl(po->po_path, po->po_len, buf, &sz, NULL, 0) == -1)
+	case CTLTYPE_STRUCT: {
+		uint8_t snode[SFS_MAXFILE/2-1];
+		unsigned i;
+
+		sz = sizeof(snode);
+		assert(sz <= *bufsize);
+		if (sysctl(po->po_path, po->po_len, snode, &sz, NULL, 0) == -1){
+			error = errno;
 			break;
+		}
+		if (rflag) {
+			memcpy(buf, &snode, sz);
+		} else {
+			for (i = 0; i < sz && 2*i < *bufsize; i++) {
+				sprintf(&buf[2*i], "%02x", snode[i]);
+			}
+			buf[2*i] = '\0';
+		}
+		break;
+	}
+	case CTLTYPE_STRING: {
+		sz = *bufsize;
+		assert(sz <= *bufsize);
+		if (sysctl(po->po_path, po->po_len, buf, &sz, NULL, 0) == -1) {
+			error = errno;
+			break;
+		}
 		break;
 	}
 	default:
-		snprintf(buf, bufsize, "invalid sysctl CTLTYPE");
+		snprintf(buf, *bufsize, "invalid sysctl CTLTYPE %d",
+		    SYSCTL_TYPE(sfs->sysctl_flags));
 		break;
 	}
+
+	if (error) {
+		*bufsize = 0;
+		return;
+	}
+
+	if (rflag)
+		*bufsize = sz;
+	else
+		*bufsize = strlen(buf);
 }
 
 static int
@@ -439,12 +516,16 @@ static int
 getsize(struct sfsnode *sfs, struct puffs_pathobj *po)
 {
 	char buf[SFS_MAXFILE];
+	size_t sz = sizeof(buf);
 
 	if (ISADIR(sfs))
 		return getlinks(sfs, po) * 16; /* totally arbitrary */
 
-	doprint(sfs, po, buf, sizeof(buf));
-	return strlen(buf) + 1;
+	getnodedata(sfs, po, buf, &sz);
+	if (rflag)
+		return sz;
+	else
+		return sz + 1; /* for \n, not \0 */
 }
 
 int
@@ -621,16 +702,17 @@ sysctlfs_node_read(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 	char localbuf[SFS_MAXFILE];
 	struct puffs_node *pn = opc;
 	struct sfsnode *sfs = pn->pn_data;
+	size_t sz = sizeof(localbuf);
 	int xfer;
 
 	if (ISADIR(sfs))
 		return EISDIR;
 
-	doprint(sfs, &pn->pn_po, localbuf, sizeof(localbuf));
-	if ((ssize_t)strlen(localbuf) < offset)
+	getnodedata(sfs, &pn->pn_po, localbuf, &sz);
+	if ((ssize_t)sz < offset)
 		xfer = 0;
 	else
-		xfer = MIN(*resid, strlen(localbuf) - offset);
+		xfer = MIN(*resid, sz - offset);
 
 	if (xfer <= 0)
 		return 0;
@@ -638,7 +720,7 @@ sysctlfs_node_read(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 	memcpy(buf, localbuf + offset, xfer);
 	*resid -= xfer;
 
-	if (*resid) {
+	if (*resid && !rflag) {
 		buf[xfer] = '\n';
 		(*resid)--;
 	}
@@ -655,6 +737,15 @@ sysctlfs_node_write(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 	struct sfsnode *sfs = pn->pn_data;
 	long long ll;
 	int i, rv;
+	bool b;
+
+	/*
+	 * I picked the wrong day to ... um, the wrong place to return errors
+	 */
+
+	/* easy to support, but just unavailable now */
+	if (rflag)
+		return EOPNOTSUPP;
 
 	if (puffs_cred_isjuggernaut(cred) == 0)
 		return EACCES;
@@ -669,6 +760,16 @@ sysctlfs_node_write(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 		return EINVAL;
 
 	switch (SYSCTL_TYPE(sfs->sysctl_flags)) {
+	case CTLTYPE_BOOL:
+		if (strcasestr((const char *)buf, "true"))
+			b = true;
+		else if (strcasestr((const char *)buf, "false"))
+			b = false;
+		else
+			return EINVAL;
+		rv = sysctl(PNPATH(pn), PNPLEN(pn), NULL, NULL,
+		    &b, sizeof(b));
+		break;
 	case CTLTYPE_INT:
 		if (sscanf((const char *)buf, "%d", &i) != 1)
 			return EINVAL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_private.h,v 1.16 2008/01/15 13:57:42 ad Exp $	*/
+/*	$NetBSD: kvm_private.h,v 1.20 2011/09/12 21:11:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -90,6 +90,7 @@ struct __kvm {
 	size_t fdalign;
 	uint8_t *iobuf;
 	size_t iobufsz;
+	char kernelname[MAXPATHLEN];
 };
 
 /* Levels of aliveness */
@@ -104,21 +105,23 @@ struct __kvm {
 /*
  * Functions used internally by kvm, but across kvm modules.
  */
-void	 _kvm_err __P((kvm_t *kd, const char *program, const char *fmt, ...))
-	__attribute__((__format__(__printf__, 3, 4)));
-int	 _kvm_dump_mkheader __P((kvm_t *kd_live, kvm_t *kd_dump));
-void	 _kvm_freeprocs __P((kvm_t *kd));
-void	 _kvm_freevtop __P((kvm_t *));
-int	 _kvm_mdopen __P((kvm_t *));
-int	 _kvm_initvtop __P((kvm_t *));
-int	 _kvm_kvatop __P((kvm_t *, u_long, u_long *));
-void	*_kvm_malloc __P((kvm_t *kd, size_t));
-off_t	 _kvm_pa2off __P((kvm_t *, u_long));
-void	*_kvm_realloc __P((kvm_t *kd, void *, size_t));
-void	 _kvm_syserr
-	    __P((kvm_t *kd, const char *program, const char *fmt, ...))
+void	 _kvm_err(kvm_t *, const char *, const char *, ...)
+	    __attribute__((__format__(__printf__, 3, 4)));
+int	 _kvm_dump_mkheader(kvm_t *, kvm_t *);
+void	 _kvm_freeprocs(kvm_t *);
+void	 _kvm_freevtop(kvm_t *);
+int	 _kvm_mdopen(kvm_t *);
+int	 _kvm_initvtop(kvm_t *);
+int	 _kvm_kvatop(kvm_t *, vaddr_t, paddr_t *);
+void	*_kvm_malloc(kvm_t *, size_t);
+off_t	 _kvm_pa2off(kvm_t *, paddr_t);
+void	*_kvm_realloc(kvm_t *, void *, size_t);
+void	 _kvm_syserr(kvm_t *, const char *, const char *, ...)
 	    __attribute__((__format__(__printf__, 3, 4)));
 ssize_t	_kvm_pread(kvm_t *, int, void *, size_t, off_t);
+
+#define KREAD(kd, addr, obj) \
+	(kvm_read(kd, addr, (obj), sizeof(*obj)) != sizeof(*obj))
 
 #define KVM_ALLOC(kd, member, size) \
     do { \

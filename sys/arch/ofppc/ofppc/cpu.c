@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.11 2008/04/28 20:23:31 martin Exp $	*/
+/*	$NetBSD: cpu.c,v 1.16 2011/06/29 06:13:09 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.11 2008/04/28 20:23:31 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.16 2011/06/29 06:13:09 matt Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -41,13 +41,13 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.11 2008/04/28 20:23:31 martin Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
 #include <dev/ofw/openfirm.h>
+
+#include <powerpc/openpic.h>
+#include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #include <powerpc/oea/hid.h>
 #include <powerpc/oea/bat.h>
-#include <powerpc/openpic.h>
-#include <powerpc/atomic.h>
-#include <powerpc/spr.h>
 #ifdef ALTIVEC
 #include <powerpc/altivec.h>
 #endif
@@ -73,18 +73,18 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.11 2008/04/28 20:23:31 martin Exp $");
 #endif /* NOPENPIC > 0 */
 #endif /* OPENPIC */
 
-static int cpu_match(struct device *, struct cfdata *, void *);
-static void cpu_attach(struct device *, struct device *, void *);
-void cpu_OFgetspeed(struct device *, struct cpu_info *);
+static int cpu_match(device_t, cfdata_t, void *);
+static void cpu_attach(device_t, device_t, void *);
+void cpu_OFgetspeed(device_t, struct cpu_info *);
 
-CFATTACH_DECL(cpu, sizeof(struct device),
+CFATTACH_DECL_NEW(cpu, 0,
     cpu_match, cpu_attach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 extern int machine_has_rtas;
 
 int
-cpu_match(struct device *parent, struct cfdata *cfdata, void *aux)
+cpu_match(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct confargs *ca = aux;
 	int *reg = ca->ca_reg;
@@ -110,7 +110,7 @@ cpu_match(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 void
-cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
+cpu_OFgetspeed(device_t self, struct cpu_info *ci)
 {
 	int node;
 	node = OF_finddevice("/cpus");
@@ -168,7 +168,7 @@ cpu_OFprintcacheinfo(int node)
 }
 
 static void
-cpu_OFgetcache(struct device *self, struct cpu_info *ci)
+cpu_OFgetcache(device_t self, struct cpu_info *ci)
 {
 	int node, cpu=-1;
 	char name[32];
@@ -207,7 +207,7 @@ cpu_OFgetcache(struct device *self, struct cpu_info *ci)
 
 
 void
-cpu_attach(struct device *parent, struct device *self, void *aux)
+cpu_attach(device_t parent, device_t self, void *aux)
 {
 	struct cpu_info *ci;
 	struct confargs *ca = aux;
@@ -241,7 +241,7 @@ md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
 	u_int msr;
 
 	msr = mfmsr();
-	h->running = -1;
+	h->hatch_running = -1;
 	cpu_spinstart_cpunum = ci->ci_cpuid;
 	__asm volatile("dcbf 0,%0"::"r"(&cpu_spinstart_cpunum):"memory");
 
@@ -262,10 +262,10 @@ md_presync_timebase(volatile struct cpu_hatch_data *h)
 		/* Sync timebase. */
 		tb = mftb();
 
-		h->tbu = tb >> 32;
-		h->tbl = tb & 0xffffffff;
+		h->hatch_tbu = tb >> 32;
+		h->hatch_tbl = tb & 0xffffffff;
 
-		h->running = 0;
+		h->hatch_running = 0;
 	}
 	/* otherwise, the machine has no rtas, or if it does, things
 	 * are pre-syncd, per PAPR v2.2.  I don't have anything without
@@ -284,7 +284,7 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 	 * running.
 	 */
 	for (i = 0; i < 100000; i++)
-		if (h->running)
+		if (h->hatch_running)
 			break;
 
 	/* Start timebase. */
@@ -293,17 +293,17 @@ md_start_timebase(volatile struct cpu_hatch_data *h)
 }
 
 /*
- * We wait for h->running to become 0, and then we know that the time is
- * frozen and h->tb is correct.
+ * We wait for h->hatch_running to become 0, and then we know that the time is
+ * frozen and h->hatch_tb is correct.
  */
 
 void
 md_sync_timebase(volatile struct cpu_hatch_data *h)
 {
 	/* Sync timebase. */
-	u_int tbu = h->tbu;
-	u_int tbl = h->tbl;
-	while (h->running == -1)
+	u_int tbu = h->hatch_tbu;
+	u_int tbl = h->hatch_tbl;
+	while (h->hatch_running == -1)
 		;
 	__asm volatile ("sync; isync");
 	__asm volatile ("mttbl %0" :: "r"(0));

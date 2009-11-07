@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs.c,v 1.100 2009/10/18 19:09:20 pooka Exp $	*/
+/*	$NetBSD: puffs.c,v 1.117 2011/11/14 01:27:42 chs Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: puffs.c,v 1.100 2009/10/18 19:09:20 pooka Exp $");
+__RCSID("$NetBSD: puffs.c,v 1.117 2011/11/14 01:27:42 chs Exp $");
 #endif /* !lint */
 
 #include <sys/param.h>
@@ -43,6 +43,7 @@ __RCSID("$NetBSD: puffs.c,v 1.100 2009/10/18 19:09:20 pooka Exp $");
 #include <fcntl.h>
 #include <mntopts.h>
 #include <paths.h>
+#include <pthread.h>
 #include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,10 +60,7 @@ const struct mntopt puffsmopts[] = {
 	MOPT_NULL,
 };
 
-#ifdef PUFFS_WITH_THREADS
-#include <pthread.h>
 pthread_mutex_t pu_lock = PTHREAD_MUTEX_INITIALIZER;
-#endif
 
 #define FILLOP(lower, upper)						\
 do {									\
@@ -70,10 +68,11 @@ do {									\
 		opmask[PUFFS_VN_##upper] = 1;				\
 } while (/*CONSTCOND*/0)
 static void
-fillvnopmask(struct puffs_ops *pops, uint8_t *opmask)
+fillvnopmask(struct puffs_ops *pops, struct puffs_kargs *pa)
 {
+	uint8_t *opmask = pa->pa_vnopmask;
 
-	memset(opmask, 0, PUFFS_VN_MAX);
+	memset(opmask, 0, sizeof(pa->pa_vnopmask));
 
 	FILLOP(create,   CREATE);
 	FILLOP(mknod,    MKNOD);
@@ -82,7 +81,7 @@ fillvnopmask(struct puffs_ops *pops, uint8_t *opmask)
 	FILLOP(access,   ACCESS);
 	FILLOP(getattr,  GETATTR);
 	FILLOP(setattr,  SETATTR);
-	FILLOP(poll,     POLL); /* XXX: not ready in kernel */
+	FILLOP(poll,     POLL);
 	FILLOP(mmap,     MMAP);
 	FILLOP(fsync,    FSYNC);
 	FILLOP(seek,     SEEK);
@@ -99,7 +98,14 @@ fillvnopmask(struct puffs_ops *pops, uint8_t *opmask)
 	FILLOP(print,    PRINT);
 	FILLOP(read,     READ);
 	FILLOP(write,    WRITE);
+	FILLOP(advlock,  ADVLOCK);
 	FILLOP(abortop,  ABORTOP);
+	FILLOP(pathconf, PATHCONF);
+
+	FILLOP(getextattr,  GETEXTATTR);
+	FILLOP(setextattr,  SETEXTATTR);
+	FILLOP(listextattr, LISTEXTATTR);
+	FILLOP(deleteextattr, DELETEEXTATTR);
 }
 #undef FILLOP
 
@@ -121,14 +127,24 @@ finalpush(struct puffs_usermount *pu)
 }
 
 /*ARGSUSED*/
-static void
-puffs_defaulterror(struct puffs_usermount *pu, uint8_t type,
+void
+puffs_kernerr_abort(struct puffs_usermount *pu, uint8_t type,
 	int error, const char *str, puffs_cookie_t cookie)
 {
 
 	fprintf(stderr, "abort: type %d, error %d, cookie %p (%s)\n",
 	    type, error, cookie, str);
 	abort();
+}
+
+/*ARGSUSED*/
+void
+puffs_kernerr_log(struct puffs_usermount *pu, uint8_t type,
+	int error, const char *str, puffs_cookie_t cookie)
+{
+
+	syslog(LOG_WARNING, "kernel: type %d, error %d, cookie %p (%s)\n",
+	    type, error, cookie, str);
 }
 
 int
@@ -144,7 +160,7 @@ puffs__nextreq(struct puffs_usermount *pu)
 	uint64_t rv;
 
 	PU_LOCK();
-	rv = pu->pu_nextreq++;
+	rv = pu->pu_nextreq++ | (uint64_t)1<<63;
 	PU_UNLOCK();
 
 	return rv;
@@ -494,7 +510,6 @@ int
 puffs_mount(struct puffs_usermount *pu, const char *dir, int mntflags,
 	puffs_cookie_t cookie)
 {
-	char rp[MAXPATHLEN];
 	int rv, fd, sverrno;
 	char *comfd;
 
@@ -504,16 +519,6 @@ puffs_mount(struct puffs_usermount *pu, const char *dir, int mntflags,
 	/* kauth doesn't provide this service any longer */
 	if (geteuid() != 0)
 		mntflags |= MNT_NOSUID | MNT_NODEV;
-
-	if (realpath(dir, rp) == NULL) {
-		rv = -1;
-		goto out;
-	}
-
-	if (strcmp(dir, rp) != 0) {
-		warnx("puffs_mount: \"%s\" is a relative path.", dir);
-		warnx("puffs_mount: using \"%s\" instead.", rp);
-	}
 
 	/*
 	 * Undocumented...  Well, documented only here.
@@ -539,8 +544,6 @@ puffs_mount(struct puffs_usermount *pu, const char *dir, int mntflags,
 			rv = -1;
 			goto out;
 		}
-			
-		len = strlen(dir)+1;
 
 #define allwrite(buf, len)						\
 do {									\
@@ -550,22 +553,36 @@ do {									\
 		if (al_rv != -1)					\
 			errno = EIO;					\
 		rv = -1;						\
-		abort();\
 		goto out;						\
 	}								\
 } while (/*CONSTCOND*/0)
+		len = strlen(dir)+1;
 		allwrite(&len, sizeof(len));
 		allwrite(dir, len);
 		len = strlen(pu->pu_kargp->pa_mntfromname)+1;
 		allwrite(&len, sizeof(len));
 		allwrite(pu->pu_kargp->pa_mntfromname, len);
 		allwrite(&mntflags, sizeof(mntflags));
+		len = sizeof(*pu->pu_kargp);
+		allwrite(&len, sizeof(len));
 		allwrite(pu->pu_kargp, sizeof(*pu->pu_kargp));
 		allwrite(&pu->pu_flags, sizeof(pu->pu_flags));
 #undef allwrite
 
 		rv = 0;
 	} else {
+		char rp[MAXPATHLEN];
+
+		if (realpath(dir, rp) == NULL) {
+			rv = -1;
+			goto out;
+		}
+
+		if (strcmp(dir, rp) != 0) {
+			warnx("puffs_mount: \"%s\" is a relative path.", dir);
+			warnx("puffs_mount: using \"%s\" instead.", rp);
+		}
+
 		fd = open(_PATH_PUFFS, O_RDWR);
 		if (fd == -1) {
 			warnx("puffs_mount: cannot open %s", _PATH_PUFFS);
@@ -599,9 +616,8 @@ do {									\
 	return rv;
 }
 
-/*ARGSUSED*/
 struct puffs_usermount *
-_puffs_init(int dummy, struct puffs_ops *pops, const char *mntfromname,
+puffs_init(struct puffs_ops *pops, const char *mntfromname,
 	const char *puffsname, void *priv, uint32_t pflags)
 {
 	struct puffs_usermount *pu;
@@ -625,9 +641,9 @@ _puffs_init(int dummy, struct puffs_ops *pops, const char *mntfromname,
 		goto failfree;
 	memset(pargs, 0, sizeof(struct puffs_kargs));
 
-	pargs->pa_vers = PUFFSDEVELVERS | PUFFSVERSION;
+	pargs->pa_vers = PUFFSVERSION;
 	pargs->pa_flags = PUFFS_FLAG_KERN(pflags);
-	fillvnopmask(pops, pargs->pa_vnopmask);
+	fillvnopmask(pops, pargs);
 	puffs_setmntinfo(pu, mntfromname, puffsname);
 
 	puffs_zerostatvfs(&pargs->pa_svfsb);
@@ -636,6 +652,10 @@ _puffs_init(int dummy, struct puffs_ops *pops, const char *mntfromname,
 	pargs->pa_root_vsize = 0;
 	pargs->pa_root_rdev = 0;
 	pargs->pa_maxmsglen = 0;
+	if (/*CONSTCOND*/ sizeof(time_t) == 4)
+		pargs->pa_time32 = 1;
+	else
+		pargs->pa_time32 = 0;
 
 	pu->pu_flags = pflags;
 	pu->pu_ops = *pops;
@@ -664,7 +684,7 @@ _puffs_init(int dummy, struct puffs_ops *pops, const char *mntfromname,
 	pu->pu_pathtransform = NULL;
 	pu->pu_namemod = NULL;
 
-	pu->pu_errnotify = puffs_defaulterror;
+	pu->pu_errnotify = puffs_kernerr_log;
 
 	PU_SETSTATE(pu, PUFFS_STATE_BEFOREMOUNT);
 
@@ -687,33 +707,61 @@ puffs_cancel(struct puffs_usermount *pu, int error)
 	free(pu);
 }
 
-/*
- * XXX: there's currently no clean way to request unmount from
- * within the user server, so be very brutal about it.
- */
 /*ARGSUSED1*/
 int
-puffs_exit(struct puffs_usermount *pu, int force)
+puffs_exit(struct puffs_usermount *pu, int unused /* strict compat */)
 {
-	struct puffs_node *pn;
+	struct puffs_framebuf *pb;
+	struct puffs_req *preq;
+	void *winp;
+	size_t winlen;
+	int sverrno;
 
-	force = 1; /* currently */
-	assert((pu->pu_state & PU_PUFFSDAEMON) == 0);
+	pb = puffs_framebuf_make();
+	if (pb == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
 
-	if (pu->pu_fd)
-		close(pu->pu_fd);
+	winlen = sizeof(struct puffs_req);
+	if (puffs_framebuf_getwindow(pb, 0, &winp, &winlen) == -1) {
+		sverrno = errno;
+		puffs_framebuf_destroy(pb);
+		errno = sverrno;
+		return -1;
+	}
+	preq = winp;
 
-	while ((pn = LIST_FIRST(&pu->pu_pnodelst)) != NULL)
-		puffs_pn_put(pn);
+	preq->preq_buflen = sizeof(struct puffs_req);
+	preq->preq_opclass = PUFFSOP_UNMOUNT;
+	preq->preq_id = puffs__nextreq(pu);
 
-	finalpush(pu);
-	puffs__framev_exit(pu);
-	puffs__cc_exit(pu);
-	if (pu->pu_state & PU_HASKQ)
-		close(pu->pu_kq);
-	free(pu);
+	puffs_framev_enqueue_justsend(pu, puffs_getselectable(pu), pb, 1, 0);
 
-	return 0; /* always succesful for now, WILL CHANGE */
+	return 0;
+}
+
+/* no sigset_t static intializer */
+static int sigs[NSIG] = { 0, };
+static int sigcatch = 0;
+
+int
+puffs_unmountonsignal(int sig, bool sigignore)
+{
+
+	if (sig < 0 || sig >= (int)NSIG) {
+		errno = EINVAL;
+		return -1;
+	}
+	if (sigignore)
+		if (signal(sig, SIG_IGN) == SIG_ERR)
+			return -1;
+
+	if (!sigs[sig])
+		sigcatch++;
+	sigs[sig] = 1;
+
+	return 0;
 }
 
 /*
@@ -732,6 +780,7 @@ puffs__theloop(struct puffs_cc *pcc)
 	int ndone;
 
 	while (puffs_getstate(pu) != PUFFS_STATE_UNMOUNTED) {
+
 		/*
 		 * Schedule existing requests.
 		 */
@@ -804,11 +853,10 @@ puffs__theloop(struct puffs_cc *pcc)
 				fio->stat &= ~FIO_WR;
 				nchanges++;
 			}
-			assert(nchanges <= pu->pu_nfds);
 		}
 
 		ndone = kevent(pu->pu_kq, pu->pu_evs, nchanges,
-		    pu->pu_evs, 2*pu->pu_nfds, pu->pu_ml_timep);
+		    pu->pu_evs, pu->pu_nevs, pu->pu_ml_timep);
 
 		if (ndone == -1) {
 			if (errno != EINTR)
@@ -835,7 +883,10 @@ puffs__theloop(struct puffs_cc *pcc)
 #endif
 
 			fio = (void *)curev->udata;
-			pfctrl = fio->fctrl;
+			if (__predict_true(fio))
+				pfctrl = fio->fctrl;
+			else
+				pfctrl = NULL;
 			if (curev->flags & EV_ERROR) {
 				assert(curev->filter == EVFILT_WRITE);
 				fio->stat &= ~FIO_WR;
@@ -857,6 +908,13 @@ puffs__theloop(struct puffs_cc *pcc)
 				puffs__framev_output(pu, pfctrl, fio);
 				what |= PUFFS_FBIO_WRITE;
 			}
+
+			else if (__predict_false(curev->filter==EVFILT_SIGNAL)){
+				if ((pu->pu_state & PU_DONEXIT) == 0) {
+					PU_SETSFLAG(pu, PU_DONEXIT);
+					puffs_exit(pu, 0);
+				}
+			}
 			if (what)
 				puffs__framev_notify(fio, what);
 		}
@@ -874,14 +932,14 @@ puffs__theloop(struct puffs_cc *pcc)
 	if (puffs__cc_restoremain(pu) == -1)
 		warn("cannot restore main context.  impending doom");
 }
-
 int
 puffs_mainloop(struct puffs_usermount *pu)
 {
 	struct puffs_fctrl_io *fio;
 	struct puffs_cc *pcc;
 	struct kevent *curev;
-	int sverrno;
+	size_t nevs;
+	int sverrno, i;
 
 	assert(puffs_getstate(pu) >= PUFFS_STATE_RUNNING);
 
@@ -896,10 +954,12 @@ puffs_mainloop(struct puffs_usermount *pu)
 	    &pu->pu_framectrl[PU_FRAMECTRL_FS]) == -1)
 		goto out;
 
-	curev = realloc(pu->pu_evs, (2*pu->pu_nfds)*sizeof(struct kevent));
+	nevs = pu->pu_nevs + sigcatch;
+	curev = realloc(pu->pu_evs, nevs * sizeof(struct kevent));
 	if (curev == NULL)
 		goto out;
 	pu->pu_evs = curev;
+	pu->pu_nevs = nevs;
 
 	LIST_FOREACH(fio, &pu->pu_ios, fio_entries) {
 		EV_SET(curev, fio->io_fd, EVFILT_READ, EV_ADD,
@@ -909,7 +969,15 @@ puffs_mainloop(struct puffs_usermount *pu)
 		    0, 0, (uintptr_t)fio);
 		curev++;
 	}
-	if (kevent(pu->pu_kq, pu->pu_evs, 2*pu->pu_nfds, NULL, 0, NULL) == -1)
+	for (i = 0; i < NSIG; i++) {
+		if (sigs[i]) {
+			EV_SET(curev, i, EVFILT_SIGNAL, EV_ADD | EV_ENABLE,
+			    0, 0, 0);
+			curev++;
+		}
+	}
+	assert(curev - pu->pu_evs == (ssize_t)pu->pu_nevs);
+	if (kevent(pu->pu_kq, pu->pu_evs, pu->pu_nevs, NULL, 0, NULL) == -1)
 		goto out;
 
 	pu->pu_state |= PU_INLOOP;
@@ -925,9 +993,30 @@ puffs_mainloop(struct puffs_usermount *pu)
 	if (puffs__cc_create(pu, puffs__theloop, &pcc) == -1) {
 		goto out;
 	}
+
+#if 0
 	if (puffs__cc_savemain(pu) == -1) {
 		goto out;
 	}
+#else
+	/*
+	 * XXX
+	 * puffs__cc_savemain() uses getcontext() and then returns.
+	 * the caller (this function) may overwrite the stack frame
+	 * of puffs__cc_savemain(), so when we call setcontext() later and
+	 * return from puffs__cc_savemain() again, the return address or
+	 * saved stack pointer can be garbage.
+	 * avoid this by calling getcontext() directly here.
+	 */
+	extern int puffs_fakecc;
+	if (!puffs_fakecc) {
+		PU_CLRSFLAG(pu, PU_MAINRESTORE);
+		if (getcontext(&pu->pu_mainctx) == -1) {
+			goto out;
+		}
+	}
+#endif
+
 	if ((pu->pu_state & PU_MAINRESTORE) == 0)
 		puffs_cc_continue(pcc);
 

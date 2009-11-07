@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.c,v 1.4 2006/01/25 18:28:26 christos Exp $	*/
+/*	$NetBSD: disk.c,v 1.6 2011/07/17 20:54:37 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -35,7 +35,6 @@
  */
 
 #include <lib/libsa/stand.h>
-#include <machine/stdarg.h>
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
@@ -46,8 +45,6 @@
 #include "disk.h"
 
 #define	RF_PROTECTED_SECTORS	64	/* XXX refer to <.../rf_optnames.h> */
-
-extern const struct arcbios_fv *ARCBIOS;
 
 struct	disk_softc {
 	u_long	sc_fd;			/* ARCBIOS file id */
@@ -86,10 +83,10 @@ diskstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr,
 	 */
 	offset *= DEV_BSIZE;
 
-	error = (*ARCBIOS->Seek)(sc->sc_fd, &offset, 0);
+	error = arcbios_Seek(sc->sc_fd, &offset, 0);
 	if (error != ARCBIOS_ESUCCESS)
 		return EIO;
-	error = (*ARCBIOS->Read)(sc->sc_fd, addr, reqcnt, &count);
+	error = arcbios_Read(sc->sc_fd, addr, reqcnt, &count);
 	if (error != ARCBIOS_ESUCCESS)
 		return EIO;
 
@@ -133,7 +130,7 @@ diskopen(struct open_file *f, ...)
 	if (part >= MAXPARTITIONS)
 		return ENXIO;
 
-	error = (*ARCBIOS->Open)(device, 0, &fd);
+	error = arcbios_Open(device, 0, &fd);
 	if (error) {
 		printf("diskopen: open failed, errno = %d\n", error);
 		return ENXIO;
@@ -197,7 +194,7 @@ int
 diskclose(struct open_file *f)
 {
 
-	(*ARCBIOS->Close)(((struct disk_softc *)(f->f_devdata))->sc_fd);
+	arcbios_Close(((struct disk_softc *)(f->f_devdata))->sc_fd);
 	dealloc(f->f_devdata, sizeof(struct disk_softc));
 	f->f_devdata = NULL;
 	return 0;

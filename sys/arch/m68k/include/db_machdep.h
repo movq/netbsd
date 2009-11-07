@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.27 2006/04/01 15:44:59 cherry Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.31 2012/01/31 21:17:57 mlelstv Exp $	*/
 
 /* 
  * Mach Operating System
@@ -32,6 +32,12 @@
 #ifndef	_M68K_DB_MACHDEP_H_
 #define	_M68K_DB_MACHDEP_H_
 
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+#include <stddef.h>
+#include <stdbool.h>
+#include <string.h>
+#endif /* _KERNEL || _STANDALONE */
+
 #include <sys/types.h>
 
 /*
@@ -41,10 +47,12 @@
 #include <uvm/uvm_param.h>
 
 #include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 typedef struct trapframe db_regs_t;
 
@@ -103,9 +111,8 @@ int 	kdb_trap(int, db_regs_t *);
 #endif /* _KERNEL */
 
 /*
- * We use either a.out or Elf32 symbols in DDB.
+ * We use Elf32 symbols in DDB.
  */
-#define	DB_AOUT_SYMBOLS
 #define	DB_ELF_SYMBOLS
 #define	DB_ELFSIZE	32
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.6 2009/10/18 18:13:59 snj Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.8 2011/04/03 22:29:25 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.6 2009/10/18 18:13:59 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.8 2011/04/03 22:29:25 dyoung Exp $");
 
 #include "opt_ddb.h"
 
@@ -69,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.6 2009/10/18 18:13:59 snj Exp $")
 #include <sys/param.h>
 #include <sys/kgdb.h>
 #include <sys/systm.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/pte.h>
 #include <machine/trap.h>
@@ -99,6 +97,13 @@ kgdb_acc(vaddr_t va, size_t len)
 	} while (va < last_va);
 
 	return (1);
+}
+
+void
+kgdb_entry_notice(int type, db_regs_t *regs)
+{
+	if (type == T_NMI)
+		printf("NMI ... going to debugger\n");
 }
 
 /*

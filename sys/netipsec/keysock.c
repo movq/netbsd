@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.18 2009/03/18 16:00:23 cegger Exp $	*/
+/*	$NetBSD: keysock.c,v 1.21 2011/07/17 20:54:54 joerg Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/keysock.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: keysock.c,v 1.25 2001/08/13 20:07:41 itojun Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.18 2009/03/18 16:00:23 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.21 2011/07/17 20:54:54 joerg Exp $");
 
 #include "opt_ipsec.h"
 
@@ -63,8 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.18 2009/03/18 16:00:23 cegger Exp $");
 #include <netipsec/ipsec_osdep.h>
 #include <netipsec/ipsec_private.h>
 
-#include <machine/stdarg.h>
-
 typedef int	pr_output_t (struct mbuf *, struct socket *);
 
 struct key_cb {
@@ -85,7 +83,7 @@ static struct sockaddr key_src = {
 
 static int key_sendup0(struct rawcb *, struct mbuf *, int, int);
 
-int key_registered_sb_max = (NMBCLUSTERS * MHLEN); /* XXX arbitrary */
+int key_registered_sb_max = (2048 * MHLEN); /* XXX arbitrary */
 
 /* XXX sysctl */
 #ifdef __FreeBSD__
@@ -180,7 +178,6 @@ key_sendup0(
 			m = m_pullup(m, sizeof(struct sadb_msg));
 		if (!m) {
 			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
-			m_freem(m);
 			return ENOBUFS;
 		}
 		m->m_pkthdr.len += sizeof(*pmsg);

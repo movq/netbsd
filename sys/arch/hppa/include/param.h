@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.13 2009/04/30 07:01:27 skrll Exp $	*/
+/*	$NetBSD: param.h,v 1.19 2012/02/10 17:35:49 para Exp $	*/
 
 /*	$OpenBSD: param.h,v 1.12 2001/07/06 02:07:41 provos Exp $	*/
 
@@ -25,9 +25,7 @@
  * 	Utah $Hdr: param.h 1.18 94/12/16$
  */
 
-#include <sys/featuretest.h>
-
-#if defined(_NETBSD_SOURCE)
+#ifdef _KERNEL
 #include <machine/cpu.h>
 #endif
 
@@ -38,15 +36,6 @@
 #define	_MACHINE_ARCH	hppa
 #define	MACHINE_ARCH	"hppa"
 #define	MID_MACHINE	MID_HPPA
-
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value for all
- * data types (int, long, ...).   The result is u_int and must be cast to
- * any desired pointer type.
- */
-#define	ALIGNBYTES	7
-#define	ALIGN(p)	(((u_long)(p) + ALIGNBYTES) &~ ALIGNBYTES)
-#define	ALIGNED_POINTER(p,t) ((((u_long)(p)) & (sizeof(t) - 1)) == 0)
 
 #define	PGSHIFT		12		/* LOG2(NBPG) */
 #define	NBPG		(1 << PGSHIFT)	/* bytes/page */
@@ -89,15 +78,12 @@
 #define	MCLSHIFT	11
 #define	MCLBYTES	(1 << MCLSHIFT)	/* large enough for ether MTU */
 #define	MCLOFSET	(MCLBYTES - 1)
-#ifndef NMBCLUSTERS
-#define	NMBCLUSTERS	(2048)		/* cl map size: 1MB */
-#endif
 
 /*
  * Size of kernel malloc arena in logical pages
  */
 #define NKMEMPAGES_MIN_DEFAULT  ((16 * 1024 * 1024) >> PAGE_SHIFT)
-#define NKMEMPAGES_MAX_DEFAULT  ((16 * 1024 * 1024) >> PAGE_SHIFT) 
+#define NKMEMPAGES_MAX_DEFAULT  ((256 * 1024 * 1024) >> PAGE_SHIFT) 
 
 /*
  * Mach derived conversion macros

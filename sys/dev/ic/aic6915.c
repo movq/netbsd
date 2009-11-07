@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6915.c,v 1.25 2009/09/27 10:00:11 tsutsui Exp $	*/
+/*	$NetBSD: aic6915.c,v 1.28 2010/11/13 13:52:00 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,9 +35,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic6915.c,v 1.25 2009/09/27 10:00:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic6915.c,v 1.28 2010/11/13 13:52:00 uebayasi Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,16 +49,12 @@ __KERNEL_RCSID(0, "$NetBSD: aic6915.c,v 1.25 2009/09/27 10:00:11 tsutsui Exp $")
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -460,13 +455,10 @@ sf_start(struct ifnet *ifp)
 		last = producer;
 		producer = SF_NEXTTX(producer);
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txpending == (SF_NTXDESC - 1)) {
@@ -793,13 +785,10 @@ sf_rxintr(struct sf_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);

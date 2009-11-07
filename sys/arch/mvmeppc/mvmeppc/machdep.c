@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.25 2009/03/18 10:22:33 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.29 2011/06/30 00:52:58 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 2009/03/18 10:22:33 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.29 2011/06/30 00:52:58 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_mvmetype.h"
@@ -40,10 +40,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 2009/03/18 10:22:33 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
@@ -54,22 +56,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.25 2009/03/18 10:22:33 cegger Exp $");
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-
-#include <uvm/uvm_extern.h>
-
 #include <sys/sysctl.h>
-
-#include <net/netisr.h>
 
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
 #include <machine/platform.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
+
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
 
 #include <powerpc/oea/bat.h>
 
@@ -169,7 +164,7 @@ cpu_startup(void)
 	/*
 	 * Mapping PReP-compatible interrput vector register.
 	 */
-	prep_intr_reg = (vaddr_t) mapiodev(MVMEPPC_INTR_REG, PAGE_SIZE);
+	prep_intr_reg = (vaddr_t) mapiodev(MVMEPPC_INTR_REG, PAGE_SIZE, false);
 	if (!prep_intr_reg)
 		panic("startup: no room for interrupt register");
 

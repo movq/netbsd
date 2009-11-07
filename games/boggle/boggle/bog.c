@@ -1,4 +1,4 @@
-/*	$NetBSD: bog.c,v 1.24 2009/08/12 05:29:40 dholland Exp $	*/
+/*	$NetBSD: bog.c,v 1.27 2011/08/26 06:18:17 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)bog.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: bog.c,v 1.24 2009/08/12 05:29:40 dholland Exp $");
+__RCSID("$NetBSD: bog.c,v 1.27 2011/08/26 06:18:17 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,7 +64,7 @@ static int validword(const char *);
 static void checkdict(void);
 static void newgame(const char *);
 static int compar(const void *, const void *);
-static void usage(void) __attribute__((__noreturn__));
+static void usage(void) __dead;
 
 struct dictindex dictindex[26];
 
@@ -707,6 +707,7 @@ static void
 usage(void)
 {
 	(void) fprintf(stderr,
-	    "usage: bog [-bd] [-s#] [-t#] [-w#] [+[+]] [boardspec]\n");
+	    "usage: %s [-bd] [-s#] [-t#] [-w#] [+[+]] [boardspec]\n",
+	    getprogname());
 	exit(1);
 }

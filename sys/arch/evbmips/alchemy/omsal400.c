@@ -1,4 +1,4 @@
-/* $NetBSD: omsal400.c,v 1.5 2007/02/23 13:34:34 kiyohara Exp $ */
+/* $NetBSD: omsal400.c,v 1.9 2011/07/10 00:03:52 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -36,13 +36,16 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omsal400.c,v 1.5 2007/02/23 13:34:34 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omsal400.c,v 1.9 2011/07/10 00:03:52 matt Exp $");
 
 #include <sys/param.h>
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/bus.h>
+
+#include <mips/locore.h>
+
 #include <mips/alchemy/dev/augpiovar.h>
 #include <mips/alchemy/dev/aupcmciavar.h>
+
 #include <evbmips/alchemy/obiovar.h>
 #include <evbmips/alchemy/board.h>
 #include <evbmips/alchemy/omsal400reg.h>
@@ -53,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: omsal400.c,v 1.5 2007/02/23 13:34:34 kiyohara Exp $"
 	(*((volatile uint16_t *)MIPS_PHYS_TO_KSEG1(x)) = (v))
 
 static void	omsal400_init(void);
-static int	omsal400_pci_intr_map(struct pci_attach_args *,
+static int	omsal400_pci_intr_map(const struct pci_attach_args *,
 					 pci_intr_handle_t *);
 static void	omsal400_poweroff(void);
 static void	omsal400_reboot(void);
@@ -100,7 +103,7 @@ omsal400_init(void)
 {
 	/* uint16_t whoami; */
 
-	if (MIPS_PRID_COPTS(cpu_id) != MIPS_AU1550)
+	if (MIPS_PRID_COPTS(mips_options.mips_cpu_id) != MIPS_AU1550)
 		panic("omsal400: CPU not Au1550");
 
 #if 0 /* XXX: TODO borad identification */
@@ -124,7 +127,7 @@ omsal400_init(void)
 }
 
 int
-omsal400_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+omsal400_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	/*
 	 * This platform has 4 PCI devices:

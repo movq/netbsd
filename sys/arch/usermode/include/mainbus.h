@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.h,v 1.2 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: mainbus.h,v 1.7 2011/12/29 21:22:49 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -34,6 +34,28 @@ struct thunkbus_attach_args {
 #define THUNKBUS_TYPE_CPU	0
 #define THUNKBUS_TYPE_CLOCK	1
 #define THUNKBUS_TYPE_TTYCONS	2
+#define	THUNKBUS_TYPE_DISKIMAGE	3
+#define THUNKBUS_TYPE_VNCFB	4
+#define THUNKBUS_TYPE_VETH	5
+#define THUNKBUS_TYPE_VAUDIO	6
+
+	union {
+		struct {
+			const char *path;
+		} diskimage;
+		struct {
+			const char *device;
+			const char *eaddr;
+		} veth;
+		struct {
+			const char *device;
+		} vaudio;
+		struct {
+			unsigned int width;
+			unsigned int height;
+			uint16_t port;
+		} vnc;
+	} u;
 };
 
 #endif /* !_ARCH_USERMODE_INCLUDE_MAINBUS_H */

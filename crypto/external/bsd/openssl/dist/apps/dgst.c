@@ -127,6 +127,7 @@ int MAIN(int argc, char **argv)
 #endif
 	char *hmac_key=NULL;
 	char *mac_name=NULL;
+	int non_fips_allow = 0;
 	STACK_OF(OPENSSL_STRING) *sigopts = NULL, *macopts = NULL;
 
 	apps_startup();
@@ -155,6 +156,8 @@ int MAIN(int argc, char **argv)
 		if ((*argv)[0] != '-') break;
 		if (strcmp(*argv,"-c") == 0)
 			separator=1;
+		else if (strcmp(*argv,"-r") == 0)
+			separator=2;
 		else if (strcmp(*argv,"-rand") == 0)
 			{
 			if (--argc < 1) break;
@@ -213,6 +216,10 @@ int MAIN(int argc, char **argv)
 			out_bin = 1;
 		else if (strcmp(*argv,"-d") == 0)
 			debug=1;
+		else if (strcmp(*argv,"-non-fips-allow") == 0)
+			non_fips_allow=1;
+		else if (!strcmp(*argv,"-fips-fingerprint"))
+			hmac_key = "etaonrishdlcupfm";
 		else if (!strcmp(*argv,"-hmac"))
 			{
 			if (--argc < 1)
@@ -262,6 +269,7 @@ int MAIN(int argc, char **argv)
 		BIO_printf(bio_err,"unknown option '%s'\n",*argv);
 		BIO_printf(bio_err,"options are\n");
 		BIO_printf(bio_err,"-c              to output the digest with separating colons\n");
+		BIO_printf(bio_err,"-r              to output the digest in coreutils format\n");
 		BIO_printf(bio_err,"-d              to output debug info\n");
 		BIO_printf(bio_err,"-hex            output as hex dump\n");
 		BIO_printf(bio_err,"-binary         output in binary form\n");
@@ -390,6 +398,13 @@ int MAIN(int argc, char **argv)
 			EVP_PKEY_CTX_free(mac_ctx);
 		if (r == 0)
 			goto end;
+		}
+
+	if (non_fips_allow)
+		{
+		EVP_MD_CTX *md_ctx;
+		BIO_get_md_ctx(bmd,&md_ctx);
+		EVP_MD_CTX_set_flags(md_ctx, EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
 		}
 
 	if (hmac_key)
@@ -602,6 +617,12 @@ int do_fp(BIO *out, unsigned char *buf, BIO *bp, int sep, int binout,
 		}
 
 	if(binout) BIO_write(out, buf, len);
+	else if (sep == 2)
+		{
+		for (i=0; i<(int)len; i++)
+			BIO_printf(out, "%02x",buf[i]);
+		BIO_printf(out, " *%s\n", file);
+		}
 	else 
 		{
 		if (sig_name)

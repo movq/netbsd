@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp.c,v 1.1.1.1 2009/06/23 10:08:54 tron Exp $	*/
+/*	$NetBSD: smtp.c,v 1.4.6.1 2012/06/13 19:29:03 riz Exp $	*/
 
 /*++
 /* NAME
@@ -165,6 +165,9 @@
 /* .IP "\fBsmtp_quote_rfc821_envelope (yes)\fR"
 /*	Quote addresses in SMTP MAIL FROM and RCPT TO commands as required
 /*	by RFC 2821.
+/* .IP "\fBsmtp_reply_filter (empty)\fR"
+/*	A mechanism to transform replies from remote SMTP servers one
+/*	line at a time.
 /* .IP "\fBsmtp_skip_5xx_greeting (yes)\fR"
 /*	Skip SMTP servers that greet with a 5XX status code (go away, do
 /*	not try again later).
@@ -229,6 +232,10 @@
 /*	Available in Postfix version 2.6 and later:
 /* .IP "\fBtcp_windowsize (0)\fR"
 /*	An optional workaround for routers that break TCP window scaling.
+/* .PP
+/*	Available in Postfix version 2.8 and later:
+/* .IP "\fBsmtp_dns_resolver_options (empty)\fR"
+/*	DNS Resolver options for the Postfix SMTP client.
 /* MIME PROCESSING CONTROLS
 /* .ad
 /* .fi
@@ -343,7 +350,7 @@
 /*	Optional lookup tables with the Postfix SMTP client TLS security
 /*	policy by next-hop destination; when a non-empty value is specified,
 /*	this overrides the obsolete smtp_tls_per_site parameter.
-/* .IP "\fBsmtp_tls_mandatory_protocols (SSLv3, TLSv1)\fR"
+/* .IP "\fBsmtp_tls_mandatory_protocols (!SSLv2)\fR"
 /*	List of SSL/TLS protocols that the Postfix SMTP client will use with
 /*	mandatory TLS encryption.
 /* .IP "\fBsmtp_tls_scert_verifydepth (9)\fR"
@@ -402,6 +409,16 @@
 /*	File with the Postfix SMTP client ECDSA certificate in PEM format.
 /* .IP "\fBsmtp_tls_eckey_file ($smtp_tls_eccert_file)\fR"
 /*	File with the Postfix SMTP client ECDSA private key in PEM format.
+/* .PP
+/*	Available in Postfix version 2.7 and later:
+/* .IP "\fBsmtp_tls_block_early_mail_reply (no)\fR"
+/*	Try to detect a mail hijacking attack based on a TLS protocol
+/*	vulnerability (CVE-2009-3555), where an attacker prepends malicious
+/*	HELO, MAIL, RCPT, DATA commands to a Postfix SMTP client TLS session.
+/* .PP
+/*	Available in Postfix version 2.8 and later:
+/* .IP "\fBtls_disable_workarounds (see 'postconf -d' output)\fR"
+/*	List or bit-mask of OpenSSL bug work-arounds to disable.
 /* OBSOLETE STARTTLS CONTROLS
 /* .ad
 /* .fi
@@ -563,6 +580,10 @@
 /* .IP "\fBproxy_interfaces (empty)\fR"
 /*	The network interface addresses that this mail system receives mail
 /*	on by way of a proxy or network address translation unit.
+/* .IP "\fBsmtp_address_preference (ipv6)\fR"
+/*	The address type ("ipv6", "ipv4" or "any") that the Postfix
+/*	SMTP client will try first, when a destination has IPv6 and IPv4
+/*	addresses with equal MX preference.
 /* .IP "\fBsmtp_bind_address (empty)\fR"
 /*	An optional numerical network address that the Postfix SMTP client
 /*	should bind to when making an IPv4 connection.
@@ -574,7 +595,7 @@
 /* .IP "\fBlmtp_lhlo_name ($myhostname)\fR"
 /*	The hostname to send in the LMTP LHLO command.
 /* .IP "\fBsmtp_host_lookup (dns)\fR"
-/*	What mechanisms when the Postfix SMTP client uses to look up a host's IP
+/*	What mechanisms the Postfix SMTP client uses to look up a host's IP
 /*	address.
 /* .IP "\fBsmtp_randomize_addresses (yes)\fR"
 /*	Randomize the order of equal-preference MX host addresses.
@@ -679,6 +700,10 @@
 #include <maps.h>
 #include <ext_prop.h>
 
+/* DNS library. */
+
+#include <dns.h>
+
 /* Single server skeleton. */
 
 #include <mail_server.h>
@@ -734,10 +759,11 @@ int     var_smtp_mxsess_limit;
 int     var_smtp_cache_conn;
 int     var_smtp_reuse_time;
 char   *var_smtp_cache_dest;
-char   *var_scache_service;
+char   *var_scache_service;		/* You can now leave this here. */
 bool    var_smtp_cache_demand;
 char   *var_smtp_ehlo_dis_words;
 char   *var_smtp_ehlo_dis_maps;
+char   *var_smtp_addr_pref;
 
 char   *var_smtp_tls_level;
 bool    var_smtp_use_tls;
@@ -771,6 +797,7 @@ char   *var_smtp_tls_proto;
 char   *var_smtp_tls_ciph;
 char   *var_smtp_tls_eccert_file;
 char   *var_smtp_tls_eckey_file;
+bool    var_smtp_tls_blk_early_mail_reply;
 
 #endif
 
@@ -787,7 +814,9 @@ char   *var_smtp_head_chks;
 char   *var_smtp_mime_chks;
 char   *var_smtp_nest_chks;
 char   *var_smtp_body_chks;
+char   *var_smtp_resp_filter;
 bool    var_lmtp_assume_final;
+char   *var_smtp_dns_res_opt;
 
  /* Special handling of 535 AUTH errors. */
 char   *var_smtp_sasl_auth_cache_name;
@@ -803,6 +832,7 @@ SCACHE *smtp_scache;
 MAPS   *smtp_ehlo_dis_maps;
 MAPS   *smtp_generic_maps;
 int     smtp_ext_prop_mask;
+unsigned smtp_dns_res_opt;
 MAPS   *smtp_pix_bug_maps;
 HBC_CHECKS *smtp_header_checks;		/* limited header checks */
 HBC_CHECKS *smtp_body_checks;		/* limited body checks */
@@ -815,6 +845,11 @@ HBC_CHECKS *smtp_body_checks;		/* limited body checks */
 TLS_APPL_STATE *smtp_tls_ctx;
 
 #endif
+
+ /*
+  * IPv6 preference.
+  */
+static int smtp_addr_pref;
 
 /* deliver_message - deliver message with extreme prejudice */
 
@@ -845,6 +880,7 @@ static int deliver_message(const char *service, DELIVER_REQUEST *request)
     state->request = request;
     state->src = request->fp;
     state->service = service;
+    state->misc_flags |= smtp_addr_pref;
     SMTP_RCPT_INIT(state);
 
     /*
@@ -899,6 +935,11 @@ static void post_init(char *unused_name, char **unused_argv)
 	SMTP_HOST_LOOKUP_NATIVE, SMTP_HOST_FLAG_NATIVE,
 	0,
     };
+    static const NAME_MASK dns_res_opt_masks[] = {
+	SMTP_DNS_RES_OPT_DEFNAMES, RES_DEFNAMES,
+	SMTP_DNS_RES_OPT_DNSRCH, RES_DNSRCH,
+	0,
+    };
 
     /*
      * Select hostname lookup mechanisms.
@@ -925,6 +966,12 @@ static void post_init(char *unused_name, char **unused_argv)
 					 var_ipc_idle_limit,
 					 var_ipc_ttl_limit);
 #endif
+
+    /*
+     * Select DNS query flags.
+     */
+    smtp_dns_res_opt = name_mask(VAR_SMTP_DNS_RES_OPT, dns_res_opt_masks,
+				 var_smtp_dns_res_opt);
 }
 
 /* pre_init - pre-jail initialization */
@@ -932,6 +979,12 @@ static void post_init(char *unused_name, char **unused_argv)
 static void pre_init(char *unused_name, char **unused_argv)
 {
     int     use_tls;
+    static const NAME_CODE addr_pref_map[] = {
+	INET_PROTO_NAME_IPV6, SMTP_MISC_FLAG_PREF_IPV6,
+	INET_PROTO_NAME_IPV4, SMTP_MISC_FLAG_PREF_IPV4,
+	INET_PROTO_NAME_ANY, 0,
+	0, -1,
+    };
 
     /*
      * Turn on per-peer debugging.
@@ -950,6 +1003,7 @@ static void pre_init(char *unused_name, char **unused_argv)
 #endif
 
     if (*var_smtp_tls_level != 0)
+#ifdef USE_TLS
 	switch (tls_level_lookup(var_smtp_tls_level)) {
 	case TLS_LEV_SECURE:
 	case TLS_LEV_VERIFY:
@@ -969,6 +1023,7 @@ static void pre_init(char *unused_name, char **unused_argv)
 	    /* session_tls_init() assumes that var_smtp_tls_level is sane. */
 	    msg_fatal("Invalid TLS level \"%s\"", var_smtp_tls_level);
 	}
+#endif
     use_tls = (var_smtp_use_tls || var_smtp_enforce_tls);
 
     /*
@@ -1055,6 +1110,24 @@ static void pre_init(char *unused_name, char **unused_argv)
     smtp_body_checks = hbc_body_checks_create(
 				     VAR_SMTP_BODY_CHKS, var_smtp_body_chks,
 					      smtp_hbc_callbacks);
+
+    /*
+     * Server reply filter.
+     */
+    if (*var_smtp_resp_filter)
+	smtp_chat_resp_filter =
+	    dict_open(var_smtp_resp_filter, O_RDONLY,
+		      DICT_FLAG_LOCK | DICT_FLAG_FOLD_FIX);
+
+    /*
+     * Address family preference.
+     */
+    if (*var_smtp_addr_pref) {
+	smtp_addr_pref = name_code(addr_pref_map, NAME_CODE_FLAG_NONE,
+				   var_smtp_addr_pref);
+	if (smtp_addr_pref < 0)
+	    msg_fatal("bad %s value: %s", VAR_SMTP_ADDR_PREF, var_smtp_addr_pref);
+    }
 }
 
 /* pre_accept - see if tables have changed */

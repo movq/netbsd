@@ -1,4 +1,4 @@
-/* $NetBSD: sfbplus.c,v 1.33 2009/08/22 17:38:06 tsutsui Exp $ */
+/* $NetBSD: sfbplus.c,v 1.37 2012/01/11 21:12:36 macallan Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sfbplus.c,v 1.33 2009/08/22 17:38:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sfbplus.c,v 1.37 2012/01/11 21:12:36 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,8 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: sfbplus.c,v 1.33 2009/08/22 17:38:06 tsutsui Exp $")
 #include <dev/ic/bt463reg.h>
 #include <dev/tc/sfbreg.h>
 #include <dev/pci/tgareg.h>
-
-#include <uvm/uvm_extern.h>
 
 #if defined(pmax)
 #define	machine_btop(x) mips_btop(MIPS_KSEG1_TO_PHYS(x))
@@ -260,6 +258,7 @@ sfbpattach(device_t parent, device_t self, void *aux)
 	console = (ta->ta_addr == sfbp_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &sfbp_console_ri;
+		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
@@ -369,6 +368,8 @@ sfbp_common_init(struct rasops_info *ri)
 	}
 
 	ri->ri_flg = RI_CENTER;
+	if (ri == &sfbp_console_ri)
+		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_flg = 0;			/* XXX 32bpp RI_CENTER fails XXX */
 	ri->ri_depth = depth;
 	ri->ri_width = (hsetup & 0x1ff) << 2;
@@ -391,10 +392,10 @@ sfbp_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_R2L,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_R2L,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("sfbp: font table is empty\n");
 		return;

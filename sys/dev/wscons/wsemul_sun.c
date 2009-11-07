@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_sun.c,v 1.26 2006/11/16 01:33:31 christos Exp $ */
+/* $NetBSD: wsemul_sun.c,v 1.28 2010/03/12 08:40:50 jdc Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,7 +33,7 @@
 /* XXX DESCRIPTION/SOURCE OF INFORMATION */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.26 2006/11/16 01:33:31 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_sun.c,v 1.28 2010/03/12 08:40:50 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -545,6 +545,13 @@ wsemul_sun_translate(void *cookie, keysym_t in, const char **out)
 {
 	static char c;
 
+	if (KS_GROUP(in) == KS_GROUP_Plain) {
+		/* allow ISO-1 */
+		c = KS_VALUE(in);
+		*out = &c;
+		return (1);
+	}
+
 	if (KS_GROUP(in) == KS_GROUP_Keypad && (in & 0x80) == 0) {
 		c = in & 0xff; /* turn into ASCII */
 		*out = &c;
@@ -569,6 +576,10 @@ wsemul_sun_translate(void *cookie, keysym_t in, const char **out)
 	case KS_KP_Home:
 	case KS_KP_Begin:
 		*out = "\033[214z";
+		return (6);
+	case KS_End:
+	case KS_KP_End:
+		*out = "\033[220z";
 		return (6);
 	case KS_Prior:
 	case KS_KP_Prior:

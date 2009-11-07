@@ -1,16 +1,19 @@
 To Do
 =====
-make netpgpkeys work - add, import, commit, update, sign, passphrase
-return userids from successful verify, and then print id out if required
+check pkt size during read
+list sigs on a per-user basis
+2^n sized packets - regions?
+json for verification in netpgp
+show attributes on key listings
+agent
+agentctl
+convert to and from ascii armored sigs
+gpgme compat lib
+get rid of public key free as part of seckey
 is get_passphrase_cb needed?
 error logging
 separate from libcrypto?
-64-bit offsets
-thresholds
 default compression when signing?
-elgamal enc/decryption?
-Multiple recipients for encryption
-convert tests from ./tst to the autotest ./tests/
 
 Done
 ====
@@ -70,3 +73,37 @@ modify sets lists for netpgpverify
 don't require passphrase for keys without one
 failure to run if no userid in gpg.conf (even if --userid specified)
 don't complain if no .gnupg dir (even when using --homedir)
+make it work with ssh host keys
+regex matching for names and signatures
+in memory encryption and decryption
+ssss
+make netpgp work from stdin/to stdout
+signature duration and expiry
+multisign
+settable from time
+unarmoured static in packet-print.c and skipping in crypto.c
+display expiry properly
+unarmoured static in packet-print.c and skipping in crypto.c
+duration -> expiry
+print signing key info properly when prompting for passphrase
+print decryption key info properly when prompting for passphrase
+hkpd
+hkpclient
+netbsd/pkgsrc pr 42922
+add expiry information to public key display
+trust subpackets
+add revocation information to public key display
+--list-sigs - these come out in __ops_check_subkey_sig()
+hkp to include sigs too
+make netpgpkeys work - add, import, commit, update, sign, passphrase
+fix ssh fingerprints not matching netpgp
+json/yaml output
+return userids from successful verify, and then print id out if required
+convert between pgp and ssh key formats
+PEM ssh keys and passphrases
+camellia addition
+fix calloc return values in symmetric.c/ops_crypt_t
+prog to convert from pgp sec to ssh sec
+add user-specifiable ciphers for encryption
+elgamal enc/decryption?
+thresholds - see sharedkey, ssss, threshold etc

@@ -1,4 +1,4 @@
-/*	$NetBSD: bat.h,v 1.13 2009/07/21 07:08:57 nisimura Exp $	*/
+/*	$NetBSD: bat.h,v 1.17 2012/02/15 04:33:19 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -64,6 +64,8 @@
 #define	_POWERPC_OEA_BAT_H_
 
 #if defined(_KERNEL) && !defined(_LOCORE)
+#include <powerpc/psl.h>
+
 struct bat {
 	register_t batu;
 	register_t batl;
@@ -124,17 +126,19 @@ struct bat {
 #define	BAT_BL_2G	0x0000fffc
 #define	BAT_BL_4G	0x0001fffc
 
+#define	BAT_BL_TO_SIZE(bl)	(((bl)+4) << 15)
+
 #define	BATU(va, len, v)						\
-	(((va) & BAT_EPI) | ((len) & BAT_BL) | ((v) & BAT_V))
+	(((va) & BAT_EPI) | ((len) & (BAT_BL|BAT_XBL)) | ((v) & BAT_V))
 
 #define	BATL(pa, wimg, pp)						\
 	(((pa) & BAT_RPN) | (wimg) | (pp))
 
 #define BAT_VA_MATCH_P(batu,va) \
-  (((~(((batu)&BAT_BL)<<15))&(va)&BAT_EPI)==((batu)&BAT_EPI))
+  (((~(((batu)&(BAT_BL|BAT_XBL))<<15))&(va)&BAT_EPI)==((batu)&BAT_EPI))
 
 #define BAT_PA_MATCH_P(batu,batl,pa) \
-  (((~(((batu)&BAT_BL)<<15))&(pa)&BAT_RPN)==((batl)&BAT_RPN))
+  (((~(((batu)&(BAT_BL|BAT_XBL))<<15))&(pa)&BAT_RPN)==((batl)&BAT_RPN))
 
 #define BAT_VALID_P(batu, msr) \
   (((msr)&PSL_PR)?(((batu)&BAT_Vu)==BAT_Vu):(((batu)&BAT_Vs)==BAT_Vs))
@@ -194,7 +198,8 @@ struct bat {
 #define	BAT601_VALID_P(batl) \
 	((batl) & BAT601_V)
 
-#define	BAT_VA2IDX(va)	((va) >> ADDR_SR_SHFT)
+#define	BAT_VA2IDX(va)	((va) / (8*1024*1024))
+#define	BAT_IDX2VA(i)	((i) * (8*1024*1024))
 
 #if defined(_KERNEL) && !defined(_LOCORE)
 void oea_batinit(paddr_t, ...);

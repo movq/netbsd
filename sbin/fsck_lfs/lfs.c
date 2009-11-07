@@ -1,4 +1,4 @@
-/* $NetBSD: lfs.c,v 1.31 2009/08/06 00:51:55 pooka Exp $ */
+/* $NetBSD: lfs.c,v 1.35 2011/07/12 02:46:03 dholland Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -102,6 +102,8 @@ extern struct uvnodelst vnodelist;
 extern struct uvnodelst getvnodelist[VNODE_HASH_MAX];
 extern int nvnodes;
 
+long dev_bsize = DEV_BSIZE;
+
 static int
 lfs_fragextend(struct uvnode *, int, int, daddr_t, struct ubuf **);
 
@@ -119,12 +121,12 @@ lfs_vop_strategy(struct ubuf * bp)
 
 	if (bp->b_flags & B_READ) {
 		count = kops.ko_pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
-		    dbtob(bp->b_blkno));
+		    bp->b_blkno * dev_bsize);
 		if (count == bp->b_bcount)
 			bp->b_flags |= B_DONE;
 	} else {
 		count = kops.ko_pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
-		    dbtob(bp->b_blkno));
+		    bp->b_blkno * dev_bsize);
 		if (count == 0) {
 			perror("pwrite");
 			return -1;
@@ -360,7 +362,6 @@ lfs_raw_vget(struct lfs * fs, ino_t ino, int fd, ufs_daddr_t daddr)
 	/* ip->i_vnode = vp; */
 	ip->i_number = ino;
 	ip->i_lockf = 0;
-	ip->i_diroff = 0;
 	ip->i_lfs_effnblks = 0;
 	ip->i_flag = 0;
 
@@ -467,22 +468,27 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 	tryalt = 0;
 	if (dummy_read) {
 		if (sblkno == 0)
-			sblkno = btodb(LFS_LABELPAD);
+			sblkno = LFS_LABELPAD / dev_bsize;
 		fs = ecalloc(1, sizeof(*fs));
 		fs->lfs_devvp = devvp;
 	} else {
 		if (sblkno == 0) {
-			sblkno = btodb(LFS_LABELPAD);
+			sblkno = LFS_LABELPAD / dev_bsize;
 			tryalt = 1;
 		} else if (debug) {
 			printf("No -b flag given, not attempting to verify checkpoint\n");
 		}
+
+		dev_bsize = DEV_BSIZE;
+
 		error = bread(devvp, sblkno, LFS_SBPAD, NOCRED, 0, &bp);
 		fs = ecalloc(1, sizeof(*fs));
 		fs->lfs_dlfs = *((struct dlfs *) bp->b_data);
 		fs->lfs_devvp = devvp;
 		bp->b_flags |= B_INVAL;
 		brelse(bp, 0);
+
+		dev_bsize = fs->lfs_fsize >> fs->lfs_fsbtodb;
 	
 		if (tryalt) {
 			error = bread(devvp, fsbtodb(fs, fs->lfs_sboffs[1]),
@@ -977,7 +983,7 @@ lfs_balloc(struct uvnode *vp, off_t startoffset, int iosize, struct ubuf **bpp)
 	struct lfs *fs;
 	struct indir indirs[NIADDR+2], *idp;
 	daddr_t	lbn, lastblock;
-	int bb, bcount;
+	int bcount;
 	int error, frags, i, nsize, osize, num;
 
 	ip = VTOI(vp);
@@ -1013,8 +1019,7 @@ lfs_balloc(struct uvnode *vp, off_t startoffset, int iosize, struct ubuf **bpp)
 						    lastblock,
 						    (bpp ? &bp : NULL))))
 				return (error);
-			ip->i_ffs1_size = ip->i_ffs1_size =
-			    (lastblock + 1) * fs->lfs_bsize;
+			ip->i_ffs1_size = (lastblock + 1) * fs->lfs_bsize;
 			ip->i_flag |= IN_CHANGE | IN_UPDATE;
 			if (bpp)
 				(void) VOP_BWRITE(bp);
@@ -1035,13 +1040,12 @@ lfs_balloc(struct uvnode *vp, off_t startoffset, int iosize, struct ubuf **bpp)
 		if (lblktosize(fs, lbn) >= ip->i_ffs1_size) {
 			/* Brand new block or fragment */
 			frags = numfrags(fs, nsize);
-			bb = fragstofsb(fs, frags);
 			if (bpp) {
 				*bpp = bp = getblk(vp, lbn, nsize);
 				bp->b_blkno = UNWRITTEN;
 			}
-			ip->i_lfs_effnblks += bb;
-			fs->lfs_bfree -= bb;
+			ip->i_lfs_effnblks += frags;
+			fs->lfs_bfree -= frags;
 			ip->i_ffs1_db[lbn] = UNWRITTEN;
 		} else {
 			if (nsize <= osize) {
@@ -1072,14 +1076,14 @@ lfs_balloc(struct uvnode *vp, off_t startoffset, int iosize, struct ubuf **bpp)
 	 * Do byte accounting all at once, so we can gracefully fail *before*
 	 * we start assigning blocks.
 	 */
-        bb = fsbtodb(fs, 1); /* bb = VFSTOUFS(vp->v_mount)->um_seqinc; */
+        frags = fsbtodb(fs, 1); /* frags = VFSTOUFS(vp->v_mount)->um_seqinc; */
 	bcount = 0;
 	if (daddr == UNASSIGNED) {
-		bcount = bb;
+		bcount = frags;
 	}
 	for (i = 1; i < num; ++i) {
 		if (!indirs[i].in_exists) {
-			bcount += bb;
+			bcount += frags;
 		}
 	}
 	fs->lfs_bfree -= bcount;
@@ -1127,7 +1131,6 @@ lfs_balloc(struct uvnode *vp, off_t startoffset, int iosize, struct ubuf **bpp)
 	/*
 	 * Get the existing block from the cache, if requested.
 	 */
-	frags = fsbtofrags(fs, bb);
 	if (bpp)
 		*bpp = bp = getblk(vp, lbn, blksize(fs, ip, lbn));
 
@@ -1191,13 +1194,13 @@ lfs_fragextend(struct uvnode *vp, int osize, int nsize, daddr_t lbn,
 {
 	struct inode *ip;
 	struct lfs *fs;
-	long bb;
+	int frags;
 	int error;
 	size_t obufsize;
 
 	ip = VTOI(vp);
 	fs = ip->i_lfs;
-	bb = (long)fragstofsb(fs, numfrags(fs, nsize - osize));
+	frags = (long)numfrags(fs, nsize - osize);
 	error = 0;
 
 	/*
@@ -1211,8 +1214,8 @@ lfs_fragextend(struct uvnode *vp, int osize, int nsize, daddr_t lbn,
 		goto out;
 	}
 
-	fs->lfs_bfree -= bb;
-	ip->i_lfs_effnblks += bb;
+	fs->lfs_bfree -= frags;
+	ip->i_lfs_effnblks += frags;
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
 
 	if (bpp) {

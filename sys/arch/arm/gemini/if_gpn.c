@@ -1,4 +1,4 @@
-/* $NetBSD: if_gpn.c,v 1.1 2008/12/06 05:22:39 cliff Exp $ */
+/* $NetBSD: if_gpn.c,v 1.4 2011/07/01 19:32:28 dyoung Exp $ */
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -31,9 +31,8 @@
 #include <sys/cdefs.h>
 
 #include "opt_gemini.h"
-#include "bpfilter.h"
 
-__KERNEL_RCSID(0, "$NetBSD: if_gpn.c,v 1.1 2008/12/06 05:22:39 cliff Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gpn.c,v 1.4 2011/07/01 19:32:28 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -45,11 +44,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_gpn.c,v 1.1 2008/12/06 05:22:39 cliff Exp $");
 #include <net/if_ether.h>
 #include <net/if_dl.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/gemini/gemini_var.h>
 #include <arm/gemini/gemini_ipm.h>
@@ -305,10 +302,7 @@ gpn_process_data(struct gpn_softc *sc, const ipm_gpn_desc_t *gd)
 		KASSERT(((m->m_pkthdr.len + 63) >> 6) == gd->gd_pktlen64);
 		ifp->if_ipackets++;
 		ifp->if_ibytes += m->m_pkthdr.len;
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 #ifdef GPNDEBUG
 		printf("%s: rx len=%d crc=%#x\n", ifp->if_xname,
 		    m->m_pkthdr.len, m_crc32_le(m));
@@ -412,10 +406,7 @@ gpn_ifstart(struct ifnet *ifp)
 			return;
 		}
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 #ifdef GPNDEBUG
 		printf("%s: tx len=%d crc=%#x\n", ifp->if_xname,
 		    m->m_pkthdr.len, m_crc32_le(m));

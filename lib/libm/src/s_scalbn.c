@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_scalbn.c,v 1.13 2008/09/28 18:54:55 christos Exp $");
+__RCSID("$NetBSD: s_scalbn.c,v 1.15 2011/07/26 16:10:16 joerg Exp $");
 #endif
 
 /*
@@ -22,8 +22,18 @@ __RCSID("$NetBSD: s_scalbn.c,v 1.13 2008/09/28 18:54:55 christos Exp $");
  * exponentiation or a multiplication.
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
+
+#ifndef __HAVE_LONG_DOUBLE
+__strong_alias(_scalbnl, _scalbn)
+__weak_alias(scalbnl, _scalbnl)
+#endif
+
+#ifdef __weak_alias
+__weak_alias(scalbn, _scalbn)
+#endif
 
 static const double
 two54   =  1.80143985094819840000e+16, /* 0x43500000, 0x00000000 */

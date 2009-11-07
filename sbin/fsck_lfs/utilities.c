@@ -1,4 +1,4 @@
-/* $NetBSD: utilities.c,v 1.27 2008/02/23 21:41:48 christos Exp $	 */
+/* $NetBSD: utilities.c,v 1.31 2011/06/09 19:57:53 christos Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -45,6 +45,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <signal.h>
 
@@ -60,7 +61,6 @@
 
 long diskreads, totalreads;	/* Disk cache statistics */
 
-extern int returntosingle;
 extern off_t locked_queue_bytes;
 
 int
@@ -242,36 +242,6 @@ namelookup:
 	memcpy(namebuf, cp, (size_t) (&namebuf[MAXPATHLEN] - cp));
 }
 
-void
-catch(int n)
-{
-	ckfini(0);
-	exit(FSCK_EXIT_SIGNALLED);
-}
-/*
- * When preening, allow a single quit to signal
- * a special exit after filesystem checks complete
- * so that reboot sequence may be interrupted.
- */
-void
-catchquit(int n)
-{
-	printf("returning to single-user after filesystem check\n");
-	returntosingle = 1;
-	(void) signal(SIGQUIT, SIG_DFL);
-}
-/*
- * Ignore a single quit signal; wait and flush just in case.
- * Used by child processes in preen.
- */
-void
-voidquit(int n)
-{
-
-	sleep(1);
-	(void) signal(SIGQUIT, SIG_IGN);
-	(void) signal(SIGQUIT, SIG_DFL);
-}
 /*
  * determine whether an inode should be fixed.
  */

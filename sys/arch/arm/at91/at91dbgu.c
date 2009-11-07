@@ -1,5 +1,5 @@
-/*	$Id: at91dbgu.c,v 1.3 2009/03/14 15:36:01 dsl Exp $	*/
-/*	$NetBSD: at91dbgu.c,v 1.3 2009/03/14 15:36:01 dsl Exp $ */
+/*	$Id: at91dbgu.c,v 1.8 2012/02/02 19:42:57 tls Exp $	*/
+/*	$NetBSD: at91dbgu.c,v 1.8 2012/02/02 19:42:57 tls Exp $ */
 
 /*
  *
@@ -83,13 +83,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.3 2009/03/14 15:36:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.8 2012/02/02 19:42:57 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
@@ -120,7 +120,7 @@ __KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.3 2009/03/14 15:36:01 dsl Exp $");
 #include <sys/kauth.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/at91/at91reg.h>
 #include <arm/at91/at91var.h>
@@ -167,7 +167,7 @@ static struct at91dbgu_cons_softc {
 
 static struct cnm_state at91dbgu_cnm_state;
 
-CFATTACH_DECL(at91dbgu, sizeof(struct at91dbgu_softc),
+CFATTACH_DECL_NEW(at91dbgu, sizeof(struct at91dbgu_softc),
 	      at91dbgu_match, at91dbgu_attach, NULL, NULL);
 
 extern struct cfdriver at91dbgu_cd;
@@ -243,7 +243,7 @@ at91dbgu_attach(device_t parent, device_t self, void *aux)
 		DBGUREG(DBGU_IER) = DBGU_INT_RXRDY; // @@@@@
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = at91dbgu_start;
 	tp->t_param = at91dbgu_param;
 	tp->t_hwiflow = at91dbgu_hwiflow;
@@ -270,14 +270,14 @@ at91dbgu_attach(device_t parent, device_t self, void *aux)
 
 		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
 
-		aprint_normal("%s: console (maj %u  min %u  cn_dev %u)\n",
+		aprint_normal("%s: console (maj %u min %u cn_dev %#"PRIx64")\n",
 		    device_xname(sc->sc_dev), maj, device_unit(sc->sc_dev),
 		    cn_tab->cn_dev);
 	}
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, at91dbgu_soft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif
@@ -1138,7 +1138,7 @@ dbgu_intr(void* arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 #if 0
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, imr ^ sr ^ c);
 #endif
 #endif

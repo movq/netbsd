@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.113 2009/01/11 21:02:36 sketch Exp $
+# $NetBSD: HACKS,v 1.122.2.1 2012/03/05 20:59:25 sborrill Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -280,6 +280,17 @@ descr
 	-fno-strict-aliasing.
 kcah
 
+hack	emacs aborting on exit (libgcc issue)
+mdate	7 November 2011
+who	christos
+file	external/gpl3/gcc/dist/gcc/unwind-dw2-fde.c : 1.2
+descr
+	GCC 4.5.3 now calls __unregister_frame_info_bases() on unloading/exit
+	to do just that. If the symbol requested is not found, then it aborts.
+	emacs 23.3 triggers this assertion. For now disable aborting, and
+	silently ignore.
+kcah
+
 hack	cross-building hack on Darwin
 mdate	20 July 2008
 who	agc
@@ -319,6 +330,17 @@ descr
 	doesn't have IPv6 support. (see the above PRs for details)
 	For workaround, specify -fno-loop-optimize on m68000,
 	which uses -O1 by default.
+kcah
+
+hack	MKPIE ldscript for /usr.sbin/crash
+cdate	22 April 2010
+who	christos
+file	src/usr.sbin/crash/Makefile	: 1.5
+file	src/usr.sbin/crash/ldscript.crash	: 1.1
+pr	N/A
+descr
+	fixed in binutils-2.20.1. Linking with MKPIE=yes causes overlapping
+	sections
 kcah
 
 port	vax
@@ -515,6 +537,23 @@ port	arm
 		really should be enough, but turns out not to be.
 	kcah
 
+	hack	gcc-4.5 arm CNAME hostname lookup failure on
+		certain DNS environment (probably -ftree-ter problem)
+	cdate	Sat Dec 24 04:59:00 UTC 2011
+	mdate	
+	who	tsutsui
+	file	lib/libc/net/Makefile.inc 1.79
+	descr	Hostname lookup against CNAMEs by some commands fails
+		on certain DNS environments if lib/libc/net/gethnamaddr.c
+		(ping(8) etc) and lib/libc/net/getaddrinfo.c (ftp(1) etc)
+		are compiled with -O2, even though nslookup(1) against
+		the same CNAME returns proper hostname.
+		They works properly if compiled with -O2 -fno-tree-ter.
+		Also -O2 fails but -O2 -fno-tree-ter works on the following
+		test case in gcc bugzilla:
+		http://gcc.gnu.org/bugzilla/show_bug.cgi?id=48863#c4
+	kcah
+
 
 port	sh3
 
@@ -551,17 +590,24 @@ port	m68000
 	kcah
 
 
-port	sparc64
+port	sparc
 
-	hack	disable optimzations for uvm_bio.c on 32 bit kernels
-	cdate	Sun Mar 21 14:14:04 MET 2004
-	who	martin
-	file	sys/arch/sparc64/conf/Makefile.sparc64 : 1.53-1.54
-	file	sys/arch/sparc64/conf/files.sparc64 : 1.93
+	hack	avoid NULL pointer derefs in savefpstate IPIs and GCC 4.5.3
+	cdate	Sun Aug 14 19:26:48 PDT 2011
+	who	mrg
+	file	sys/arch/sparc64/sparc/cpu.c : 1.234
+	file	sys/arch/sparc64/sparc/cpuvar.h : 1.90
+	file	sys/arch/sparc64/sparc/genassym.cf : 1.67
+	file	sys/arch/sparc64/sparc/locore.s : 1.265
 	descr
-		The sparc compiler miscompiles uvm_bio.c when using
-		any optimization. This results in ubc_release panics.
+		Something is wrong with GCC 4.5.3 and the savefpstate IPI.
+		Post newlock2 there was a bug where a lock was reduced from
+		IPL_SCHED to IPL_VM (?) and occasionally savefpstate IPI
+		would crash due to NULL IPI.  This was fixed by re-using the
+		right IPL value.  However, GCC 4.5.3 build kernels have the
+		same problems.  For now, the hack is re-instated.
 	kcah
+
 
 port	mips
 
@@ -624,3 +670,54 @@ port	powerpc
 		workaround for PR port-macppc/37812
 	kcah
 
+	hack	define TARGET_SECURE_PLT and HAVE_AS_TLS because when
+		building the native compiler via build.sh those don't defined
+		properly.
+	cdate	Sat Mar 12 08:00:00 UTC 2011
+	who	matt
+	file	src/gnu/dist/gcc4/gcc/config/rs6000/netbsd.h
+	descr
+		see above
+	kcah
+
+port	powerpc64
+
+	hack	include _errno.c in libposix so that __errno resolves. It
+		should resolve from libc's errno, but somehow it does not.
+		Linker bug?
+	cdate	Thu Oct 27 13:19:47 EDT 2011
+	who	christos
+	file	src/lib/libposix/Makefile: 1.15
+	file	src/lib/librt/Makefile: 1.14
+	descr
+		workaround for:
+		    libposix_pic.a(cerror.pico)(.text+0x14): unresolvable \
+		    R_PPC64_REL24 relocation against symbol `.__errno'
+	kcah
+
+	hack	rename data() function in mdocml to avoid redefined error.
+		Compiler/Assembler bug?
+	cdate	Sat Oct 29 11:16:01 EDT 2011
+	who	christos
+	file	src/external/bsd/mdocml/tbl_data.c: 1.2
+	descr
+		workaround for:
+		    {standard input}: Assembler messages:
+		    {standard input}:105: Error: symbol `.data' is already \
+		    defined
+	kcah
+
+port	emips
+
+	hack	Add nop between ctc1 and mtc0 to avoid assembler internal
+		error
+	cdate	Sat Oct 29 16:57:34 EDT 2011
+	who	christos
+	file	src/sys/arch/mips/mips/mips_fpu.c: 1.7
+	descr
+		workaround for:
+		    {standard input}: Assembler messages:
+		    {standard input}:730: Internal error!
+		    Assertion failure in append_insn at /usr/src/external/gpl3/\
+		    binutils/dist/gas/config/tc-mips.c line 2910.
+	kcah

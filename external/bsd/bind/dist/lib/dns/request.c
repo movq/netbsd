@@ -1,7 +1,7 @@
-/*	$NetBSD: request.c,v 1.1.1.2 2009/10/25 00:02:33 christos Exp $	*/
+/*	$NetBSD: request.c,v 1.4.4.1 2012/06/05 21:15:01 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: request.c,v 1.85 2009/09/01 00:22:26 jinmei Exp */
+/* Id */
 
 /*! \file */
 
@@ -430,12 +430,10 @@ req_send(dns_request_t *request, isc_task_t *task, isc_sockaddr_t *address) {
 	isc_region_t r;
 	isc_socket_t *socket;
 	isc_result_t result;
-	unsigned int dispattr;
 
 	req_log(ISC_LOG_DEBUG(3), "req_send: request %p", request);
 
 	REQUIRE(VALID_REQUEST(request));
-	dispattr = dns_dispatch_getattributes(request->dispatch);
 	socket = req_getsocket(request);
 	isc_buffer_usedregion(request->query, &r);
 	/*
@@ -1061,6 +1059,9 @@ req_render(dns_message_t *message, isc_buffer_t **bufferp,
 		return (result);
 	cleanup_cctx = ISC_TRUE;
 
+	if ((options & DNS_REQUESTOPT_CASE) != 0)
+		dns_compress_setsensitive(&cctx, ISC_TRUE);
+
 	/*
 	 * Render message.
 	 */
@@ -1134,9 +1135,7 @@ req_render(dns_message_t *message, isc_buffer_t **bufferp,
  */
 static void
 send_if_done(dns_request_t *request, isc_result_t result) {
-	if (!DNS_REQUEST_CONNECTING(request) &&
-	    !DNS_REQUEST_SENDING(request) &&
-	    !request->canceling)
+	if (request->event != NULL && !request->canceling)
 		req_sendevent(request, result);
 }
 
@@ -1320,8 +1319,8 @@ req_senddone(isc_task_t *task, isc_event_t *event) {
 		else
 			send_if_done(request, ISC_R_CANCELED);
 	} else if (sevent->result != ISC_R_SUCCESS) {
-			req_cancel(request);
-			send_if_done(request, ISC_R_CANCELED);
+		req_cancel(request);
+		send_if_done(request, ISC_R_CANCELED);
 	}
 	UNLOCK(&request->requestmgr->locks[request->hash]);
 
@@ -1415,7 +1414,7 @@ req_sendevent(dns_request_t *request, isc_result_t result) {
 	task = request->event->ev_sender;
 	request->event->ev_sender = request;
 	request->event->result = result;
-	isc_task_sendanddetach(&task, (isc_event_t **)&request->event);
+	isc_task_sendanddetach(&task, (isc_event_t **)(void *)&request->event);
 }
 
 static void
@@ -1432,7 +1431,7 @@ req_destroy(dns_request_t *request) {
 	if (request->answer != NULL)
 		isc_buffer_free(&request->answer);
 	if (request->event != NULL)
-		isc_event_free((isc_event_t **)&request->event);
+		isc_event_free((isc_event_t **)(void *)&request->event);
 	if (request->dispentry != NULL)
 		dns_dispatch_removeresponse(&request->dispentry, NULL);
 	if (request->dispatch != NULL)

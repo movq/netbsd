@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_50.c,v 1.5 2009/08/09 22:49:00 haad Exp $	*/
+/*	$NetBSD: vfs_syscalls_50.c,v 1.16 2012/02/01 05:34:41 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_50.c,v 1.5 2009/08/09 22:49:00 haad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_50.c,v 1.16 2012/02/01 05:34:41 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_50.c,v 1.5 2009/08/09 22:49:00 haad Exp
 #include <sys/proc.h>
 #include <sys/uio.h>
 #include <sys/dirent.h>
-#include <sys/malloc.h>
 #include <sys/kauth.h>
 #include <sys/time.h>
 #include <sys/vfs_syscalls.h>
@@ -61,6 +60,10 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_50.c,v 1.5 2009/08/09 22:49:00 haad Exp
 #include <sys/syscallargs.h>
 
 #include <ufs/lfs/lfs_extern.h>
+
+#include <sys/quota.h>
+#include <sys/quotactl.h>
+#include <ufs/ufs/quota1.h>
 
 #include <compat/common/compat_util.h>
 #include <compat/sys/time.h>
@@ -93,6 +96,7 @@ cvtstat(struct stat30 *ost, const struct stat *st)
 	ost->st_blksize = st->st_blksize;
 	ost->st_flags = st->st_flags;
 	ost->st_gen = st->st_gen;
+	memset(ost->st_spare, 0, sizeof(ost->st_spare));
 }
 
 /*
@@ -310,4 +314,114 @@ compat_50_sys_mknod(struct lwp *l,
 	} */
 	return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
 	    SCARG(uap, dev), retval, UIO_USERSPACE);
+}
+
+/* ARGSUSED */
+int   
+compat_50_sys_quotactl(struct lwp *l, const struct compat_50_sys_quotactl_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(const char *) path;
+		syscallarg(int) cmd;
+		syscallarg(int) uid;
+		syscallarg(void *) arg; 
+	} */
+	struct vnode *vp;
+	struct mount *mp;
+	int q1cmd;
+	int idtype;
+	char *qfile;
+	struct dqblk dqblk;
+	struct quotakey key;
+	struct quotaval blocks, files;
+	struct quotastat qstat;
+	int error;
+
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
+		return (error);       
+
+	mp = vp->v_mount;
+	q1cmd = SCARG(uap, cmd);
+	idtype = quota_idtype_from_ufs(q1cmd & SUBCMDMASK);
+
+	switch ((q1cmd & ~SUBCMDMASK) >> SUBCMDSHIFT) {
+	case Q_QUOTAON:
+		qfile = PNBUF_GET();
+		error = copyinstr(SCARG(uap, arg), qfile, PATH_MAX, NULL);
+		if (error != 0) {
+			PNBUF_PUT(qfile);
+			break;
+		}
+
+		error = vfs_quotactl_quotaon(mp, idtype, qfile);
+
+		PNBUF_PUT(qfile);
+		break;
+
+	case Q_QUOTAOFF:
+		error = vfs_quotactl_quotaoff(mp, idtype);
+		break;
+
+	case Q_GETQUOTA:
+		key.qk_idtype = idtype;
+		key.qk_id = SCARG(uap, uid);
+
+		key.qk_objtype = QUOTA_OBJTYPE_BLOCKS;
+		error = vfs_quotactl_get(mp, &key, &blocks);
+		if (error) {
+			break;
+		}
+
+		key.qk_objtype = QUOTA_OBJTYPE_FILES;
+		error = vfs_quotactl_get(mp, &key, &files);
+		if (error) {
+			break;
+		}
+
+		quotavals_to_dqblk(&blocks, &files, &dqblk);
+		error = copyout(&dqblk, SCARG(uap, arg), sizeof(dqblk));
+		break;
+		
+	case Q_SETQUOTA:
+		error = copyin(SCARG(uap, arg), &dqblk, sizeof(dqblk));
+		if (error) {
+			break;
+		}
+		dqblk_to_quotavals(&dqblk, &blocks, &files);
+
+		key.qk_idtype = idtype;
+		key.qk_id = SCARG(uap, uid);
+
+		key.qk_objtype = QUOTA_OBJTYPE_BLOCKS;
+		error = vfs_quotactl_put(mp, &key, &blocks);
+		if (error) {
+			break;
+		}
+
+		key.qk_objtype = QUOTA_OBJTYPE_FILES;
+		error = vfs_quotactl_put(mp, &key, &files);
+		break;
+		
+	case Q_SYNC:
+		/*
+		 * not supported but used only to see if quota is supported,
+		 * emulate with stat
+		 *
+		 * XXX should probably be supported
+		 */
+		(void)idtype; /* not used */
+
+		error = vfs_quotactl_stat(mp, &qstat);
+		break;
+
+	case Q_SETUSE:
+	default:
+		error = EOPNOTSUPP;
+		break;
+	}
+
+	vrele(vp);
+	return error;
 }

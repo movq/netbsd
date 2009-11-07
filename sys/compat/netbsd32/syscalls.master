@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.80 2009/05/17 05:54:22 pooka Exp $
+	$NetBSD: syscalls.master,v 1.91.2.1 2012/04/12 17:05:37 riz Exp $
 
 ;	from: NetBSD: syscalls.master,v 1.81 1998/07/05 08:49:50 jonathan Exp
 ;	@(#)syscalls.master	8.2 (Berkeley) 1/13/94
@@ -42,9 +42,6 @@
 #include "opt_sysv.h"
 #include "opt_compat_43.h"
 #include "opt_posix.h"
-
-#include "fs_lfs.h"
-#include "fs_nfs.h"
 #endif
 
 #include <sys/param.h>
@@ -307,7 +304,7 @@
 			    netbsd32_orlimitp_t rlp); }
 146	COMPAT_43	{ int|netbsd32||killpg(int pgid, int signum); }
 147	NOARGS		{ int|sys||setsid(void); }
-148	STD		{ int|netbsd32||quotactl(netbsd32_charp path, int cmd, \
+148	COMPAT_50	{ int|netbsd32||quotactl(netbsd32_charp path, int cmd, \
 			    int uid, netbsd32_voidp arg); }
 149	COMPAT_43	{ int|sys||quota(void); } oquota
 150	COMPAT_43	{ int|netbsd32||ogetsockname(int fdec, \
@@ -321,7 +318,7 @@
 152	UNIMPL
 153	UNIMPL
 154	UNIMPL
-155	STD		{ int|netbsd32||nfssvc(int flag, netbsd32_voidp argp); }
+155	UNIMPL		netbsd32_nfssvc
 156	COMPAT_43	{ int|netbsd32||ogetdirentries(int fd, \
 			    netbsd32_charp buf, u_int count, \
 			    netbsd32_longp basep); }
@@ -384,21 +381,10 @@
 181	STD		{ int|netbsd32||setgid(gid_t gid); }
 182	STD		{ int|netbsd32||setegid(gid_t egid); }
 183	STD		{ int|netbsd32||seteuid(uid_t euid); }
-#if defined(LFS) || !defined(_KERNEL_OPT)
-184	STD		{ int|netbsd32||lfs_bmapv(netbsd32_fsid_tp_t fsidp, \
-			    netbsd32_block_infop_t blkiov, int blkcnt); }
-185	STD		{ int|netbsd32||lfs_markv(netbsd32_fsid_tp_t fsidp, \
-			    netbsd32_block_infop_t blkiov, int blkcnt); }
-186	STD		{ int|netbsd32||lfs_segclean(netbsd32_fsid_tp_t fsidp, \
-			    netbsd32_u_long segment); }
-187	COMPAT_50	{ int|netbsd32||lfs_segwait(netbsd32_fsid_tp_t fsidp, \
-			    netbsd32_timeval50p_t tv); }
-#else
 184	EXCL		netbsd32_lfs_bmapv
 185	EXCL		netbsd32_lfs_markv
 186	EXCL		netbsd32_lfs_segclean
 187	EXCL		netbsd32_lfs_segwait
-#endif
 188	COMPAT_12	{ int|netbsd32||stat12(netbsd32_charp path, \
 			    netbsd32_stat12p_t ub); }
 189	COMPAT_12	{ int|netbsd32||fstat12(int fd, netbsd32_stat12p_t sb); }
@@ -866,7 +852,9 @@
 408	UNIMPL
 409	UNIMPL
 
-410	UNIMPL		sys___mount50
+410	STD		{ int|netbsd32||__mount50(netbsd32_charp type, \
+			    netbsd32_charp path, int flags, \
+			    netbsd32_voidp data, netbsd32_size_t data_len); }
 411	STD 		{ netbsd32_voidp|netbsd32||mremap( \
 			    netbsd32_voidp old_address, \
 			    netbsd32_size_t old_size, \
@@ -893,13 +881,7 @@
 421	STD		{ int|netbsd32|50|adjtime( \
 			    const netbsd32_timevalp_t delta, \
 			    netbsd32_timevalp_t olddelta); }
-#if defined(LFS) || !defined(_KERNEL_OPT)
-422	STD		{ int|netbsd32|50|lfs_segwait( \
-			    netbsd32_fsid_tp_t fsidp, \
-			    netbsd32_timevalp_t tv); }
-#else
 422	EXCL		__lfs_segwait50
-#endif
 423	STD 		{ int|netbsd32|50|futimes(int fd, \
 			    const netbsd32_timevalp_t tptr); }
 424	STD  		{ int|netbsd32|50|lutimes(const netbsd32_charp path, \
@@ -987,3 +969,80 @@
 			    mode_t mode, netbsd32_dev_t dev); }
 451	STD	 	{ int|netbsd32|50|fhstat(const netbsd32_voidp fhp, \
 			    netbsd32_size_t fh_size, netbsd32_statp_t sb); }
+452	OBSOL		5.99 quotactl
+453	STD		{ int|netbsd32||pipe2(netbsd32_intp fildes, int flags); }
+454	STD		{ int|netbsd32||dup3(int from, int to, int flags); }
+455	STD		{ int|netbsd32||kqueue1(int flags); }
+456	STD  		{ int|netbsd32||paccept(int s, \
+			    netbsd32_sockaddrp_t name, \
+			    netbsd32_socklenp_t anamelen, \
+			    const netbsd32_sigsetp_t mask, \
+			    int flags); }
+457	STD  		{ int|netbsd32||linkat(int fd1, \
+			    const netbsd32_charp name1, \
+			    int fd2, \
+			    const netbsd32_charp name2, \
+			    int flags); }
+458	STD  		{ int|netbsd32||renameat(int fromfd, \
+			    const netbsd32_charp from, \
+			    int tofd, \
+			    const netbsd32_charp to); }
+459	STD  		{ int|netbsd32||mkfifoat(int fd, \
+			    const netbsd32_charp path, \
+			    mode_t mode); }
+460	STD  		{ int|netbsd32||mknodat(int fd, \
+			    const netbsd32_charp path, \
+			    mode_t mode, \
+			    uint32_t dev); }
+461	STD  		{ int|netbsd32||mkdirat(int fd, \
+			    const netbsd32_charp path, \
+			    mode_t mode); }
+462	STD  		{ int|netbsd32||faccessat(int fd, \
+			    const netbsd32_charp path, \
+			    int amode, \
+			    int flag); }
+463	STD  		{ int|netbsd32||fchmodat(int fd, \
+			    const netbsd32_charp path, \
+			    mode_t mode, \
+			    int flag); }
+464	STD  		{ int|netbsd32||fchownat(int fd, \
+			    const netbsd32_charp path, \
+			    uid_t owner, \
+			    gid_t group, \
+			    int flag); }
+465	STD  		{ int|netbsd32||fexecve(int fd, \
+			    netbsd32_charpp argp, \
+			    netbsd32_charpp envp); }
+466	STD  		{ int|netbsd32||fstatat(int fd, \
+			    const netbsd32_charp path, \
+			    netbsd32_statp_t buf, \
+			    int flag); }
+467	STD  		{ int|netbsd32||utimensat(int fd, \
+			    const netbsd32_charp path, \
+			    const netbsd32_timespecp_t tptr, \
+			    int flag); }
+468	STD  		{ int|netbsd32||openat(int fd, \
+			    const netbsd32_charp path, \
+			    int oflags, ... \
+			    mode_t mode); }
+469	STD  		{ int|netbsd32||readlinkat(int fd, \
+			    const netbsd32_charp path, \
+			    netbsd32_charp buf, \
+			    size_t bufsize); }
+470	STD  		{ int|netbsd32||symlinkat(const netbsd32_charp path1, \
+			    int fd, \
+			    const netbsd32_charp path2); }
+471	STD  		{ int|netbsd32||unlinkat(int fd, \
+			    const netbsd32_charp path, \
+			    int flag); }
+472	STD  		{ int|netbsd32||futimens(int fd, \
+			    const netbsd32_timespecp_t tptr); }
+473	STD		{ int|netbsd32||__quotactl(const netbsd32_charp path, \
+			    netbsd32_voidp args); }
+474	NOERR		{ int|netbsd32||posix_spawn(netbsd32_pid_tp pid, \
+				const netbsd32_charp path, \
+				const netbsd32_posix_spawn_file_actionsp \
+				    file_actions, \
+				const netbsd32_posix_spawnattrp attrp, \
+				netbsd32_charpp argv, netbsd32_charpp envp); }
+

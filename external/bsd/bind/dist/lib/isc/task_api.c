@@ -1,7 +1,7 @@
-/*	$NetBSD: task_api.c,v 1.1.1.1 2009/10/25 00:02:44 christos Exp $	*/
+/*	$NetBSD: task_api.c,v 1.2.6.1 2012/06/05 21:15:08 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009-2012  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: task_api.c,v 1.5 2009/09/02 23:48:02 tbox Exp */
+/* Id */
 
 #include <config.h>
 
@@ -99,6 +99,20 @@ isc_taskmgr_destroy(isc_taskmgr_t **managerp) {
 	(*managerp)->methods->destroy(managerp);
 
 	ENSURE(*managerp == NULL);
+}
+
+void
+isc_taskmgr_setmode(isc_taskmgr_t *manager, isc_taskmgrmode_t mode) {
+	REQUIRE(ISCAPI_TASKMGR_VALID(manager));
+
+	manager->methods->setmode(manager, mode);
+}
+
+isc_taskmgrmode_t
+isc_taskmgr_mode(isc_taskmgr_t *manager) {
+	REQUIRE(ISCAPI_TASKMGR_VALID(manager));
+
+	return (manager->methods->mode(manager));
 }
 
 isc_result_t
@@ -188,6 +202,35 @@ isc_task_purge(isc_task_t *task, void *sender, isc_eventtype_t type, void *tag)
 
 	return (task->methods->purgeevents(task, sender, type, tag));
 }
+
+isc_result_t
+isc_task_beginexclusive(isc_task_t *task) {
+	REQUIRE(ISCAPI_TASK_VALID(task));
+
+	return (task->methods->beginexclusive(task));
+}
+
+void
+isc_task_endexclusive(isc_task_t *task) {
+	REQUIRE(ISCAPI_TASK_VALID(task));
+
+	task->methods->endexclusive(task);
+}
+
+void
+isc_task_setprivilege(isc_task_t *task, isc_boolean_t priv) {
+	REQUIRE(ISCAPI_TASK_VALID(task));
+
+	task->methods->setprivilege(task, priv);
+}
+
+isc_boolean_t
+isc_task_privilege(isc_task_t *task) {
+	REQUIRE(ISCAPI_TASK_VALID(task));
+
+	return (task->methods->privilege(task));
+}
+
 
 /*%
  * This is necessary for libisc's internal timer implementation.  Other

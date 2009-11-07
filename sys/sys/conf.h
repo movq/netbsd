@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.135 2009/06/20 19:24:27 mrg Exp $	*/
+/*	$NetBSD: conf.h,v 1.141.2.1 2012/08/08 15:51:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -53,7 +53,7 @@ struct uio;
 struct vnode;
 
 /*
- * Types for d_type
+ * Types for d_flag
  */
 #define D_OTHER		0x0000
 #define	D_TAPE		0x0001
@@ -166,6 +166,7 @@ dev_type_kqfilter(cdev_kqfilter);
 
 int	cdev_type(dev_t);
 int	bdev_type(dev_t);
+int	bdev_size(dev_t);
 
 /* symbolic sleep message strings */
 extern	const char devopn[], devio[], devwait[], devin[], devout[];
@@ -228,15 +229,28 @@ int	seltrue_kqfilter(dev_t, struct knote *);
 #endif
 #define	DEV_ZERO	12	/* minor device 12 is '\0'/rathole */
 
-#endif /* _KERNEL */
+enum devnode_class {
+	DEVNODE_DONTBOTHER,
+	DEVNODE_SINGLE,
+	DEVNODE_VECTOR,
+};
+#define DEVNODE_FLAG_LINKZERO	0x01	/* create name -> name0 link */
+#define DEVNODE_FLAG_ISMINOR0	0x02	/* vector[0] specifies minor */
+#ifdef notyet
+#define DEVNODE_FLAG_ISMINOR1	0x04	/* vector[1] specifies starting minor */
+#endif
 
 struct devsw_conv {
 	const char *d_name;
 	devmajor_t d_bmajor;
 	devmajor_t d_cmajor;
+
+	/* information about /dev nodes related to the device */
+	enum devnode_class d_class;
+	int d_flags;
+	int d_vectdim[2];
 };
 
-#ifdef _KERNEL
 void devsw_init(void);
 const char *devsw_blk2name(devmajor_t);
 const char *cdevsw_getname(devmajor_t);
@@ -245,11 +259,14 @@ devmajor_t devsw_name2blk(const char *, char *, size_t);
 devmajor_t devsw_name2chr(const char *, char *, size_t);
 dev_t devsw_chr2blk(dev_t);
 dev_t devsw_blk2chr(dev_t);
+
+void mm_init(void);
 #endif /* _KERNEL */
 
 #ifdef _KERNEL
 struct	device;
 void	setroot(struct device *, int);
+void	rootconf(void);
 void	swapconf(void);
 #endif /* _KERNEL */
 

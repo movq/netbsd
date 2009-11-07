@@ -1,4 +1,4 @@
-/*	$NetBSD: bandit.c,v 1.26 2007/10/17 19:55:34 garbled Exp $	*/
+/*	$NetBSD: bandit.c,v 1.30 2011/10/26 04:56:23 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bandit.c,v 1.26 2007/10/17 19:55:34 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bandit.c,v 1.30 2011/10/26 04:56:23 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -42,25 +42,25 @@ __KERNEL_RCSID(0, "$NetBSD: bandit.c,v 1.26 2007/10/17 19:55:34 garbled Exp $");
 #include <machine/pio.h>
 
 struct bandit_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct genppc_pci_chipset sc_pc;
 	struct powerpc_bus_space sc_iot;
 	struct powerpc_bus_space sc_memt;
 };
 
-static void bandit_attach(struct device *, struct device *, void *);
-static int bandit_match(struct device *, struct cfdata *, void *);
+static void bandit_attach(device_t, device_t, void *);
+static int bandit_match(device_t, cfdata_t, void *);
 
 static pcireg_t bandit_conf_read(void *, pcitag_t, int);
 static void bandit_conf_write(void *, pcitag_t, int, pcireg_t);
 
 static void bandit_init(struct bandit_softc *);
 
-CFATTACH_DECL(bandit, sizeof(struct bandit_softc),
+CFATTACH_DECL_NEW(bandit, sizeof(struct bandit_softc),
     bandit_match, bandit_attach, NULL, NULL);
 
 static int
-bandit_match(struct device *parent, struct cfdata *cf, void *aux)
+bandit_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -72,9 +72,9 @@ bandit_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-bandit_attach(struct device *parent, struct device *self, void *aux)
+bandit_attach(device_t parent, device_t self, void *aux)
 {
-	struct bandit_softc *sc = (void *)self;
+	struct bandit_softc *sc = device_private(self);
 	pci_chipset_tag_t pc = &sc->sc_pc;
 	struct confargs *ca = aux;
 	struct pcibus_attach_args pba;
@@ -87,6 +87,7 @@ bandit_attach(struct device *parent, struct device *self, void *aux)
 	} ranges[6], *rp = ranges;
 
 	aprint_normal("\n");
+	sc->sc_dev = self;
 
 	/* Bandit address */
 	if (OF_getprop(node, "reg", reg, sizeof(reg)) < 8)
@@ -126,8 +127,8 @@ bandit_attach(struct device *parent, struct device *self, void *aux)
 	pc->pc_node = node;
 	pc->pc_iot = &sc->sc_iot;
 	pc->pc_memt = &sc->sc_memt;
-	pc->pc_addr = mapiodev(reg[0] + 0x800000, 4);
-	pc->pc_data = mapiodev(reg[0] + 0xc00000, 8);
+	pc->pc_addr = mapiodev(reg[0] + 0x800000, 4, false);
+	pc->pc_data = mapiodev(reg[0] + 0xc00000, 8, false);
 	pc->pc_bus = busrange[0];
 	pc->pc_conf_read = bandit_conf_read;
 	pc->pc_conf_write = bandit_conf_write;
@@ -142,7 +143,7 @@ bandit_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_bus = pc->pc_bus;
 	pba.pba_bridgetag = NULL;
 	pba.pba_pc = pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }

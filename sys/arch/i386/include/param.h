@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.71 2009/03/10 20:05:30 bouyer Exp $	*/
+/*	$NetBSD: param.h,v 1.76.2.1 2012/05/09 03:22:53 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -41,6 +41,13 @@
  * Machine dependent constants for Intel 386.
  */
 
+/*
+ * MAXCPUS must be defined before cpu.h inclusion.  Note: i386 might
+ * support more CPUs, but due to the limited KVA space available on
+ * i386, such support would be inefficient.  Use amd64 instead.
+ */
+#define	MAXCPUS		32
+
 #ifdef _KERNEL
 #include <machine/cpu.h>
 #endif
@@ -51,20 +58,6 @@
 #define	MACHINE_ARCH	"i386"
 #define	MID_MACHINE	MID_I386
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value
- * for all data types (int, long, ...).   The result is u_int and
- * must be cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-#define ALIGNBYTES		(sizeof(int) - 1)
-#define ALIGN(p)		(((u_int)(u_long)(p) + ALIGNBYTES) &~ \
-    ALIGNBYTES)
 #define ALIGNED_POINTER(p,t)	1
 
 #define	PGSHIFT		12		/* LOG2(NBPG) */
@@ -127,16 +120,8 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
+#ifndef NMBCLUSTERS_MAX
+#define	NMBCLUSTERS_MAX	(0x2000000 / MCLBYTES)	/* Limit to 64MB for clusters */
 #endif
 
 #ifndef NFS_RSIZE
@@ -150,8 +135,8 @@
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((16 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_DEFAULT	((360 * 1024 * 1024) >> PAGE_SHIFT)
 
 /*
  * Mach derived conversion macros

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_alloc.c,v 1.124 2009/05/07 19:26:09 elad Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.130 2011/11/28 08:05:07 tls Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -70,16 +70,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.124 2009/05/07 19:26:09 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.130 2011/11/28 08:05:07 tls Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
 #include "opt_quota.h"
+#include "opt_uvm_page_trkown.h"
 #endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cprng.h>
 #include <sys/fstrans.h>
 #include <sys/kauth.h>
 #include <sys/kernel.h>
@@ -99,6 +101,10 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.124 2009/05/07 19:26:09 elad Exp $")
 
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
+
+#ifdef UVM_PAGE_TRKOWN
+#include <uvm/uvm.h>
+#endif
 
 static daddr_t ffs_alloccg(struct inode *, int, daddr_t, int, int);
 static daddr_t ffs_alloccgblk(struct inode *, struct buf *, daddr_t, int);
@@ -174,7 +180,7 @@ ffs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, int size, int flags,
 	struct fs *fs;
 	daddr_t bno;
 	int cg;
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	int error;
 #endif
 
@@ -184,21 +190,39 @@ ffs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, int size, int flags,
 	KASSERT(mutex_owned(&ump->um_lock));
 
 #ifdef UVM_PAGE_TRKOWN
+
+	/*
+	 * Sanity-check that allocations within the file size
+	 * do not allow other threads to read the stale contents
+	 * of newly allocated blocks.
+	 * Usually pages will exist to cover the new allocation.
+	 * There is an optimization in ffs_write() where we skip
+	 * creating pages if several conditions are met:
+	 *  - the file must not be mapped (in any user address space).
+	 *  - the write must cover whole pages and whole blocks.
+	 * If those conditions are not met then pages must exist and
+	 * be locked by the current thread.
+	 */
+
 	if (ITOV(ip)->v_type == VREG &&
 	    lblktosize(fs, (voff_t)lbn) < round_page(ITOV(ip)->v_size)) {
 		struct vm_page *pg;
-		struct uvm_object *uobj = &ITOV(ip)->v_uobj;
+		struct vnode *vp = ITOV(ip);
+		struct uvm_object *uobj = &vp->v_uobj;
 		voff_t off = trunc_page(lblktosize(fs, lbn));
 		voff_t endoff = round_page(lblktosize(fs, lbn) + size);
 
-		mutex_enter(&uobj->vmobjlock);
+		mutex_enter(uobj->vmobjlock);
 		while (off < endoff) {
 			pg = uvm_pagelookup(uobj, off);
-			KASSERT(pg != NULL);
-			KASSERT(pg->owner == curproc->p_pid);
+			KASSERT((pg == NULL && (vp->v_vflag & VV_MAPPED) == 0 &&
+				 (size & PAGE_MASK) == 0 && 
+				 blkoff(fs, size) == 0) ||
+				(pg != NULL && pg->owner == curproc->p_pid &&
+				 pg->lowner == curlwp->l_lid));
 			off += PAGE_SIZE;
 		}
-		mutex_exit(&uobj->vmobjlock);
+		mutex_exit(uobj->vmobjlock);
 	}
 #endif
 
@@ -219,7 +243,7 @@ ffs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, int size, int flags,
 	    kauth_authorize_system(cred, KAUTH_SYSTEM_FS_RESERVEDSPACE, 0, NULL,
 	    NULL, NULL) != 0)
 		goto nospace;
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	mutex_exit(&ump->um_lock);
 	if ((error = chkdq(ip, btodb(size), cred, 0)) != 0)
 		return (error);
@@ -239,7 +263,7 @@ ffs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, int size, int flags,
 		*bnp = bno;
 		return (0);
 	}
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	/*
 	 * Restore user's disk quota because allocation failed.
 	 */
@@ -293,21 +317,32 @@ ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
 	KASSERT(mutex_owned(&ump->um_lock));
 
 #ifdef UVM_PAGE_TRKOWN
+
+	/*
+	 * Sanity-check that allocations within the file size
+	 * do not allow other threads to read the stale contents
+	 * of newly allocated blocks.
+	 * Unlike in ffs_alloc(), here pages must always exist
+	 * for such allocations, because only the last block of a file
+	 * can be a fragment and ffs_write() will reallocate the
+	 * fragment to the new size using ufs_balloc_range(),
+	 * which always creates pages to cover blocks it allocates.
+	 */
+
 	if (ITOV(ip)->v_type == VREG) {
 		struct vm_page *pg;
 		struct uvm_object *uobj = &ITOV(ip)->v_uobj;
 		voff_t off = trunc_page(lblktosize(fs, lbprev));
 		voff_t endoff = round_page(lblktosize(fs, lbprev) + osize);
 
-		mutex_enter(&uobj->vmobjlock);
+		mutex_enter(uobj->vmobjlock);
 		while (off < endoff) {
 			pg = uvm_pagelookup(uobj, off);
-			KASSERT(pg != NULL);
-			KASSERT(pg->owner == curproc->p_pid);
-			KASSERT((pg->flags & PG_CLEAN) == 0);
+			KASSERT(pg->owner == curproc->p_pid &&
+				pg->lowner == curlwp->l_lid);
 			off += PAGE_SIZE;
 		}
-		mutex_exit(&uobj->vmobjlock);
+		mutex_exit(uobj->vmobjlock);
 	}
 #endif
 
@@ -350,7 +385,7 @@ ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
 		brelse(bp, 0);
 		return (error);
 	}
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	if ((error = chkdq(ip, btodb(nsize - osize), cred, 0)) != 0) {
 		if (bpp != NULL) {
 			brelse(bp, 0);
@@ -483,7 +518,7 @@ ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
 	}
 	mutex_exit(&ump->um_lock);
 
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	/*
 	 * Restore user's disk quota because allocation failed.
 	 */
@@ -1332,17 +1367,13 @@ retry:
 		}
 	}
 	i = start + len - loc;
-	map = inosused[i];
-	ipref = i * NBBY;
-	for (i = 1; i < (1 << NBBY); i <<= 1, ipref++) {
-		if ((map & i) == 0) {
-			cgp->cg_irotor = ufs_rw32(ipref, needswap);
-			goto gotit;
-		}
+	map = inosused[i] ^ 0xff;
+	if (map == 0) {
+		printf("fs = %s\n", fs->fs_fsmnt);
+		panic("ffs_nodealloccg: block not in map");
 	}
-	printf("fs = %s\n", fs->fs_fsmnt);
-	panic("ffs_nodealloccg: block not in map");
-	/* NOTREACHED */
+	ipref = i * NBBY + ffs(map) - 1;
+	cgp->cg_irotor = ufs_rw32(ipref, needswap);
 gotit:
 	UFS_WAPBL_REGISTER_INODE(ip->i_ump->um_mountp, cg * fs->fs_ipg + ipref,
 	    mode);
@@ -1358,7 +1389,7 @@ gotit:
 			 * Don't bother to swap, it's supposed to be
 			 * random, after all.
 			 */
-			dp2->di_gen = (arc4random() & INT32_MAX) / 2 + 1;
+			dp2->di_gen = (cprng_fast32() & INT32_MAX) / 2 + 1;
 			dp2++;
 		}
 		initediblk += INOPB(fs);
@@ -1982,100 +2013,6 @@ ffs_mapsearch(struct fs *fs, struct cg *cgp, daddr_t bpref, int allocsiz)
 	printf("bno = %d, fs = %s\n", bno, fs->fs_fsmnt);
 	panic("ffs_alloccg: block not in map");
 	/* return (-1); */
-}
-
-/*
- * Update the cluster map because of an allocation or free.
- *
- * Cnt == 1 means free; cnt == -1 means allocating.
- */
-void
-ffs_clusteracct(struct fs *fs, struct cg *cgp, int32_t blkno, int cnt)
-{
-	int32_t *sump;
-	int32_t *lp;
-	u_char *freemapp, *mapp;
-	int i, start, end, forw, back, map, bit;
-#ifdef FFS_EI
-	const int needswap = UFS_FSNEEDSWAP(fs);
-#endif
-
-	/* KASSERT(mutex_owned(&ump->um_lock)); */
-
-	if (fs->fs_contigsumsize <= 0)
-		return;
-	freemapp = cg_clustersfree(cgp, needswap);
-	sump = cg_clustersum(cgp, needswap);
-	/*
-	 * Allocate or clear the actual block.
-	 */
-	if (cnt > 0)
-		setbit(freemapp, blkno);
-	else
-		clrbit(freemapp, blkno);
-	/*
-	 * Find the size of the cluster going forward.
-	 */
-	start = blkno + 1;
-	end = start + fs->fs_contigsumsize;
-	if (end >= ufs_rw32(cgp->cg_nclusterblks, needswap))
-		end = ufs_rw32(cgp->cg_nclusterblks, needswap);
-	mapp = &freemapp[start / NBBY];
-	map = *mapp++;
-	bit = 1 << (start % NBBY);
-	for (i = start; i < end; i++) {
-		if ((map & bit) == 0)
-			break;
-		if ((i & (NBBY - 1)) != (NBBY - 1)) {
-			bit <<= 1;
-		} else {
-			map = *mapp++;
-			bit = 1;
-		}
-	}
-	forw = i - start;
-	/*
-	 * Find the size of the cluster going backward.
-	 */
-	start = blkno - 1;
-	end = start - fs->fs_contigsumsize;
-	if (end < 0)
-		end = -1;
-	mapp = &freemapp[start / NBBY];
-	map = *mapp--;
-	bit = 1 << (start % NBBY);
-	for (i = start; i > end; i--) {
-		if ((map & bit) == 0)
-			break;
-		if ((i & (NBBY - 1)) != 0) {
-			bit >>= 1;
-		} else {
-			map = *mapp--;
-			bit = 1 << (NBBY - 1);
-		}
-	}
-	back = start - i;
-	/*
-	 * Account for old cluster and the possibly new forward and
-	 * back clusters.
-	 */
-	i = back + forw + 1;
-	if (i > fs->fs_contigsumsize)
-		i = fs->fs_contigsumsize;
-	ufs_add32(sump[i], cnt, needswap);
-	if (back > 0)
-		ufs_add32(sump[back], -cnt, needswap);
-	if (forw > 0)
-		ufs_add32(sump[forw], -cnt, needswap);
-
-	/*
-	 * Update cluster summary information.
-	 */
-	lp = &sump[fs->fs_contigsumsize];
-	for (i = fs->fs_contigsumsize; i > 0; i--)
-		if (ufs_rw32(*lp--, needswap) > 0)
-			break;
-	fs->fs_maxcluster[ufs_rw32(cgp->cg_cgx, needswap)] = i;
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: dpti.c,v 1.42 2009/05/12 14:23:47 cegger Exp $	*/
+/*	$NetBSD: dpti.c,v 1.44 2011/08/07 13:39:23 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.42 2009/05/12 14:23:47 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.44 2011/08/07 13:39:23 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,8 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.42 2009/05/12 14:23:47 cegger Exp $");
 #include <sys/conf.h>
 #include <sys/ioctl.h>
 #include <sys/kauth.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #ifdef __i386__
@@ -274,16 +272,13 @@ dptiioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		if (rv)
 			break;
 
-		if (sc->sc_nactive++ >= 2)
-			tsleep(&sc->sc_nactive, PRIBIO, "dptislp", 0);
-
-		if (linux)
+		mutex_enter(&iop->sc_conflock);
+		if (linux) {
 			rv = dpti_passthrough(sc, data, l->l_proc);
-		else
+		} else {
 			rv = dpti_passthrough(sc, *(void **)data, l->l_proc);
-
-		sc->sc_nactive--;
-		wakeup_one(&sc->sc_nactive);
+		}
+		mutex_exit(&iop->sc_conflock);
 		break;
 
 	case DPT_I2ORESETCMD:

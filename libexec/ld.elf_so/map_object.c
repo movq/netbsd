@@ -1,4 +1,4 @@
-/*	$NetBSD: map_object.c,v 1.38 2009/05/19 20:44:52 christos Exp $	 */
+/*	$NetBSD: map_object.c,v 1.43 2011/08/13 22:25:20 christos Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: map_object.c,v 1.38 2009/05/19 20:44:52 christos Exp $");
+__RCSID("$NetBSD: map_object.c,v 1.43 2011/08/13 22:25:20 christos Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -46,9 +46,12 @@ __RCSID("$NetBSD: map_object.c,v 1.38 2009/05/19 20:44:52 christos Exp $");
 #include <sys/types.h>
 #include <sys/mman.h>
 
+#include "debug.h"
 #include "rtld.h"
 
 static int protflags(int);	/* Elf flags -> mmap protection */
+
+#define EA_UNDEF		(~(Elf_Addr)0)
 
 /*
  * Map a shared object into memory.  The argument is a file descriptor,
@@ -63,6 +66,10 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	Obj_Entry	*obj;
 	Elf_Ehdr	*ehdr;
 	Elf_Phdr	*phdr;
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	Elf_Phdr	*phtls;
+#endif
+	size_t		 phsize;
 	Elf_Phdr	*phlimit;
 	Elf_Phdr	*segs[2];
 	int		 nsegs;
@@ -83,8 +90,14 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	Elf_Addr	 data_vlimit;
 	int		 data_flags;
 	caddr_t		 data_addr;
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	Elf_Addr	 tls_vaddr = 0; /* Noise GCC */
+#endif
+	Elf_Addr	 phdr_vaddr;
+	size_t		 phdr_memsz;
 	caddr_t		 gap_addr;
 	size_t		 gap_size;
+	int i;
 #ifdef RTLD_LOADER
 	Elf_Addr	 clear_vaddr;
 	caddr_t		 clear_addr;
@@ -114,7 +127,8 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	/* Make sure the file is valid */
 	if (memcmp(ELFMAG, ehdr->e_ident, SELFMAG) != 0 ||
 	    ehdr->e_ident[EI_CLASS] != ELFCLASS) {
-		_rtld_error("%s: unrecognized file format2 [%x != %x]", path, ehdr->e_ident[EI_CLASS], ELFCLASS);
+		_rtld_error("%s: unrecognized file format2 [%x != %x]", path,
+		    ehdr->e_ident[EI_CLASS], ELFCLASS);
 		goto bad;
 	}
 	/* Elf_e_ident includes class */
@@ -151,27 +165,55 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
          * in that order.
          */
 	phdr = (Elf_Phdr *) ((caddr_t)ehdr + ehdr->e_phoff);
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	phtls = NULL;
+#endif
+	phsize = ehdr->e_phnum * sizeof(phdr[0]);
+	obj->phdr = NULL;
+	phdr_vaddr = EA_UNDEF;
+	phdr_memsz = 0;
 	phlimit = phdr + ehdr->e_phnum;
 	nsegs = 0;
 	while (phdr < phlimit) {
 		switch (phdr->p_type) {
 		case PT_INTERP:
 			obj->interp = (void *)(uintptr_t)phdr->p_vaddr;
+ 			dbg(("%s: PT_INTERP %p", obj->path, obj->interp));
 			break;
 
 		case PT_LOAD:
 			if (nsegs < 2)
 				segs[nsegs] = phdr;
 			++nsegs;
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_LOAD",
+			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
 			break;
 
+		case PT_PHDR:
+			phdr_vaddr = phdr->p_vaddr;
+			phdr_memsz = phdr->p_memsz;
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_PHDR",
+			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
+			break;
+		
 		case PT_DYNAMIC:
 			obj->dynamic = (void *)(uintptr_t)phdr->p_vaddr;
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_DYNAMIC",
+			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
 			break;
+
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		case PT_TLS:
+			phtls = phdr;
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_TLS",
+			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
+			break;
+#endif
 		}
 
 		++phdr;
 	}
+	phdr = (Elf_Phdr *) ((caddr_t)ehdr + ehdr->e_phoff);
 	obj->entry = (void *)(uintptr_t)ehdr->e_entry;
 	if (!obj->dynamic) {
 		_rtld_error("%s: not dynamically linked", path);
@@ -214,6 +256,50 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	obj->textsize = text_vlimit - base_vaddr;
 	obj->vaddrbase = base_vaddr;
 	obj->isdynamic = ehdr->e_type == ET_DYN;
+
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	if (phtls != NULL) {
+		++_rtld_tls_dtv_generation;
+		obj->tlsindex = ++_rtld_tls_max_index;
+		obj->tlssize = phtls->p_memsz;
+		obj->tlsalign = phtls->p_align;
+		obj->tlsinitsize = phtls->p_filesz;
+		tls_vaddr = phtls->p_vaddr;
+	}
+#endif
+
+	obj->phdr_loaded = false;
+	for (i = 0; i < nsegs; i++) {
+		if (phdr_vaddr != EA_UNDEF &&
+		    segs[i]->p_vaddr <= phdr_vaddr &&
+		    segs[i]->p_memsz >= phdr_memsz) {
+			obj->phdr_loaded = true;
+			break;
+		}
+		if (segs[i]->p_offset <= ehdr->e_phoff &&
+		    segs[i]->p_memsz >= phsize) {
+			phdr_vaddr = segs[i]->p_vaddr + ehdr->e_phoff;
+			phdr_memsz = phsize;
+			obj->phdr_loaded = true;
+			break;
+		}
+	}
+	if (obj->phdr_loaded) {
+		obj->phdr = (void *)(uintptr_t)phdr_vaddr;
+		obj->phsize = phdr_memsz;
+	} else {
+		Elf_Phdr *buf;
+		buf = xmalloc(phsize);
+		if (buf == NULL) {
+			_rtld_error("%s: cannot allocate program header", path);
+			goto bad;
+		}
+		memcpy(buf, phdr, phsize);
+		obj->phdr = buf;
+		obj->phsize = phsize;
+	}
+	dbg(("%s: phdr %p phsize %zu (%s)", obj->path, obj->phdr, obj->phsize,
+	     obj->phdr_loaded ? "loaded" : "allocated"));
 
 	/* Unmap header if it overlaps the first load section. */
 	if (base_offset < _rtld_pagesz) {
@@ -283,6 +369,11 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 	/* Non-file portion of BSS mapped above. */
 #endif
 
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	if (phtls != NULL)
+		obj->tlsinit = mapbase + tls_vaddr;
+#endif
+
 	obj->mapbase = mapbase;
 	obj->mapsize = mapsize;
 	obj->relocbase = mapbase - base_vaddr;
@@ -293,6 +384,8 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		obj->entry = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->entry);
 	if (obj->interp)
 		obj->interp = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->interp);
+	if (obj->phdr_loaded)
+		obj->phdr =  (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->phdr);
 
 	return obj;
 
@@ -310,6 +403,10 @@ _rtld_obj_free(Obj_Entry *obj)
 {
 	Objlist_Entry *elm;
 
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	if (obj->tls_done)
+		_rtld_tls_offset_free(obj);
+#endif
 	xfree(obj->path);
 	while (obj->needed != NULL) {
 		Needed_Entry *needed = obj->needed;
@@ -324,7 +421,12 @@ _rtld_obj_free(Obj_Entry *obj)
 		SIMPLEQ_REMOVE_HEAD(&obj->dagmembers, link);
 		xfree(elm);
 	}
+	if (!obj->phdr_loaded)
+		xfree((void *)(uintptr_t)obj->phdr);
 	xfree(obj);
+#ifdef COMBRELOC
+	_rtld_combreloc_reset(obj);
+#endif
 }
 
 Obj_Entry *

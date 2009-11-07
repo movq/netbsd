@@ -1,4 +1,4 @@
-/*	$NetBSD: if_spppsubr.c,v 1.118 2009/04/18 14:58:05 tsutsui Exp $	 */
+/*	$NetBSD: if_spppsubr.c,v 1.125 2011/12/17 20:05:39 tls Exp $	 */
 
 /*
  * Synchronous PPP/Cisco link level subroutines.
@@ -41,12 +41,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.118 2009/04/18 14:58:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.125 2011/12/17 20:05:39 tls Exp $");
 
+#if defined(_KERNEL_OPT)
 #include "opt_inet.h"
 #include "opt_ipx.h"
 #include "opt_iso.h"
 #include "opt_pfil_hooks.h"
+#include "opt_modular.h"
+#include "opt_compat_netbsd.h"
+#endif
+
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -61,14 +66,13 @@ __KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.118 2009/04/18 14:58:05 tsutsui Ex
 #include <sys/md5.h>
 #include <sys/inttypes.h>
 #include <sys/kauth.h>
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
 #include <net/if_types.h>
 #include <net/route.h>
 #include <net/ppp_defs.h>
-
-#include <machine/stdarg.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -1042,7 +1046,6 @@ sppp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	s = splnet();
 	switch (cmd) {
-	case SIOCSIFDSTADDR:
 	case SIOCINITIFADDR:
 		break;
 
@@ -1095,6 +1098,10 @@ sppp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SPPPSETAUTHFAILURE:
 	case SPPPSETDNSOPTS:
 	case SPPPSETKEEPALIVE:
+#if defined(COMPAT_50) || defined(MODULAR)
+	case __SPPPSETIDLETO50:
+	case __SPPPSETKEEPALIVE50:
+#endif /* COMPAT_50 || MODULAR */
 		error = kauth_authorize_network(l->l_cred,
 		    KAUTH_NETWORK_INTERFACE,
 		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
@@ -1122,6 +1129,10 @@ sppp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SPPPGETDNSOPTS:
 	case SPPPGETDNSADDRS:
 	case SPPPGETKEEPALIVE:
+#if defined(COMPAT_50) || defined(MODULAR)
+	case __SPPPGETIDLETO50:
+	case __SPPPGETKEEPALIVE50:
+#endif /* COMPAT_50 || MODULAR */
 		error = sppp_params(sp, cmd, data);
 		break;
 
@@ -1192,7 +1203,7 @@ sppp_cisco_input(struct sppp *sp, struct mbuf *m)
 			++sp->pp_loopcnt;
 
 			/* Generate new local sequence number */
-			sp->pp_seq[IDX_LCP] = arc4random();
+			sp->pp_seq[IDX_LCP] = cprng_fast32();
 			break;
 		}
 		sp->pp_loopcnt = 0;
@@ -1989,12 +2000,6 @@ sppp_lcp_init(struct sppp *sp)
 	sp->pp_seq[IDX_LCP] = 0;
 	sp->pp_rseq[IDX_LCP] = 0;
 	sp->lcp.protos = 0;
-	if (sp->pp_if.if_mtu < PP_MTU) {
-		sp->lcp.mru = sp->pp_if.if_mtu;
-		sp->lcp.opts |= (1 << LCP_OPT_MRU);
-	} else
-		sp->lcp.mru = PP_MTU;
-	sp->lcp.their_mru = PP_MTU;
 
 	/*
 	 * Initialize counters and timeout values.  Note that we don't
@@ -2079,6 +2084,13 @@ sppp_lcp_down(struct sppp *sp)
 static void
 sppp_lcp_open(struct sppp *sp)
 {
+	if (sp->pp_if.if_mtu < PP_MTU) {
+		sp->lcp.mru = sp->pp_if.if_mtu;
+		sp->lcp.opts |= (1 << LCP_OPT_MRU);
+	} else
+		sp->lcp.mru = PP_MTU;
+	sp->lcp.their_mru = PP_MTU;
+
 	/*
 	 * If we are authenticator, negotiate LCP_AUTH
 	 */
@@ -2470,7 +2482,7 @@ sppp_lcp_RCN_nak(struct sppp *sp, struct lcp_header *h, int len)
 				if (magic == ~sp->lcp.magic) {
 					if (debug)
 						addlog(" magic glitch");
-					sp->lcp.magic = arc4random();
+					sp->lcp.magic = cprng_fast32();
 				} else {
 					sp->lcp.magic = magic;
 					if (debug)
@@ -2654,7 +2666,7 @@ sppp_lcp_scr(struct sppp *sp)
 
 	if (sp->lcp.opts & (1 << LCP_OPT_MAGIC)) {
 		if (! sp->lcp.magic)
-			sp->lcp.magic = arc4random();
+			sp->lcp.magic = cprng_fast32();
 		opt[i++] = LCP_OPT_MAGIC;
 		opt[i++] = 6;
 		opt[i++] = sp->lcp.magic >> 24;
@@ -3906,7 +3918,7 @@ sppp_chap_input(struct sppp *sp, struct mbuf *m)
 	/* challenge, failure and success are his authproto */
 	case CHAP_CHALLENGE:
 		if (sp->myauth.secret == NULL || sp->myauth.name == NULL) {
-		    /* can't do anything usefull */
+		    /* can't do anything useful */
 		    sp->pp_auth_failures++;
 		    printf("%s: chap input without my name and my secret being set\n",
 		    	ifp->if_xname);
@@ -4009,7 +4021,7 @@ sppp_chap_input(struct sppp *sp, struct mbuf *m)
 	/* response is my authproto */
 	case CHAP_RESPONSE:
 		if (sp->hisauth.secret == NULL) {
-		    /* can't do anything usefull */
+		    /* can't do anything useful */
 		    printf("%s: chap input without his secret being set\n",
 		    	ifp->if_xname);
 		    break;
@@ -4218,7 +4230,7 @@ sppp_chap_tlu(struct sppp *sp)
 		 * Compute the re-challenge timeout.  This will yield
 		 * a number between 300 and 810 seconds.
 		 */
-		i = 300 + ((unsigned)(arc4random() & 0xff00) >> 7);
+		i = 300 + ((unsigned)(cprng_fast32() & 0xff00) >> 7);
 
 		callout_reset(&sp->ch[IDX_CHAP], i * hz, chap.TO, sp);
 	}
@@ -4275,10 +4287,10 @@ static void
 sppp_chap_scr(struct sppp *sp)
 {
 	uint32_t *ch;
-	u_char clen;
+	u_char clen = 4 * sizeof(uint32_t);
 
 	if (sp->myauth.name == NULL) {
-	    /* can't do anything usefull */
+	    /* can't do anything useful */
 	    printf("%s: chap starting without my name being set\n",
 	    	sp->pp_if.if_xname);
 	    return;
@@ -4286,11 +4298,7 @@ sppp_chap_scr(struct sppp *sp)
 
 	/* Compute random challenge. */
 	ch = (uint32_t *)sp->myauth.challenge;
-	ch[0] = arc4random();
-	ch[1] = arc4random();
-	ch[2] = arc4random();
-	ch[3] = arc4random();
-	clen = 16;	/* 4 * sizeof(uint32_t) */
+	cprng_strong(kern_cprng, ch, clen, 0);
 
 	sp->confid[IDX_CHAP] = ++sp->pp_seq[IDX_CHAP];
 
@@ -4349,7 +4357,7 @@ sppp_pap_input(struct sppp *sp, struct mbuf *m)
 	/* PAP request is my authproto */
 	case PAP_REQ:
 		if (sp->hisauth.name == NULL || sp->hisauth.secret == NULL) {
-		    /* can't do anything usefull */
+		    /* can't do anything useful */
 		    printf("%s: pap request without his name and his secret being set\n",
 		    	ifp->if_xname);
 		    break;
@@ -4622,7 +4630,7 @@ sppp_pap_scr(struct sppp *sp)
 	u_char idlen, pwdlen;
 
 	if (sp->myauth.secret == NULL || sp->myauth.name == NULL) {
-	    /* can't do anything usefull */
+	    /* can't do anything useful */
 	    printf("%s: pap starting without my name and secret being set\n",
 	    	sp->pp_if.if_xname);
 	    return;
@@ -5327,6 +5335,36 @@ sppp_params(struct sppp *sp, u_long cmd, void *data)
 		sp->pp_max_noreceive = settings->max_noreceive;
 	    }
 	    break;
+#if defined(COMPAT_50) || defined(MODULAR)
+	case __SPPPGETIDLETO50:
+	    {
+	    	struct spppidletimeout50 *to = (struct spppidletimeout50 *)data;
+		to->idle_seconds = (uint32_t)sp->pp_idle_timeout;
+	    }
+	    break;
+	case __SPPPSETIDLETO50:
+	    {
+	    	struct spppidletimeout50 *to = (struct spppidletimeout50 *)data;
+	    	sp->pp_idle_timeout = (time_t)to->idle_seconds;
+	    }
+	    break;
+	case __SPPPGETKEEPALIVE50:
+	    {
+	    	struct spppkeepalivesettings50 *settings =
+		     (struct spppkeepalivesettings50*)data;
+		settings->maxalive = sp->pp_maxalive;
+		settings->max_noreceive = (uint32_t)sp->pp_max_noreceive;
+	    }
+	    break;
+	case __SPPPSETKEEPALIVE50:
+	    {
+	    	struct spppkeepalivesettings50 *settings =
+		     (struct spppkeepalivesettings50*)data;
+		sp->pp_maxalive = settings->maxalive;
+		sp->pp_max_noreceive = (time_t)settings->max_noreceive;
+	    }
+	    break;
+#endif /* COMPAT_50 || MODULAR */
 	default:
 		return (EINVAL);
 	}

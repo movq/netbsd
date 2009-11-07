@@ -1,21 +1,21 @@
-/* $NetBSD: pcb.h,v 1.18 2008/01/04 21:47:20 ad Exp $ */
+/* $NetBSD: pcb.h,v 1.21 2012/02/06 02:14:13 matt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -34,7 +34,7 @@
 #include "opt_multiprocessor.h"
 #endif
 
-#include <sys/simplelock.h>
+#include <sys/mutex.h>
 
 #include <machine/frame.h>
 #include <machine/reg.h>
@@ -60,17 +60,10 @@ struct pcb {
 	struct fpreg	pcb_fp;			/* FP registers		[SW] */
 	unsigned long	pcb_onfault;		/* for copy faults	[SW] */
 	unsigned long	pcb_accessaddr;		/* for [fs]uswintr	[SW] */
-	struct cpu_info * volatile pcb_fpcpu;	/* CPU with our FP state[SW] */
-	struct simplelock pcb_fpcpu_slock;	/* simple lock on fpcpu [SW] */
 };
 
-/*
- * MULTIPROCESSOR:
- * Need to block IPIs while holding the fpcpu_slock.  That is the
- * responsibility of the CALLER!
- */
-#define	FPCPU_LOCK(pcb)		simple_lock(&(pcb)->pcb_fpcpu_slock)
-#define	FPCPU_UNLOCK(pcb)	simple_unlock(&(pcb)->pcb_fpcpu_slock)
+#define	FPCPU_LOCK(pcb)		mutex_enter(&(pcb)->pcb_fpcpu_lock)
+#define	FPCPU_UNLOCK(pcb)	mutex_exit(&(pcb)->pcb_fpcpu_lock)
 
 /*
  * The pcb is augmented with machine-dependent additional data for

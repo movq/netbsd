@@ -1,4 +1,4 @@
-#	$NetBSD: files.isa,v 1.157 2008/04/03 22:46:22 xtraeme Exp $
+#	$NetBSD: files.isa,v 1.162 2012/01/22 06:44:28 christos Exp $
 #
 # Config file and device description for machine-independent ISA code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -198,8 +198,8 @@ attach	ntwoc at isa with ntwoc_isa
 file	dev/isa/if_ntwoc_isa.c          ntwoc_isa
 
 
-# Allied Telesis MB8695-based boards
-# (Allied Telesis AT1700)
+# Allied Telesis MB86965-based boards
+# (Allied Telesis AT1700/RE2000)
 # device in sys/conf/files
 attach	ate at isa with ate_isa
 file	dev/isa/if_ate.c		ate_isa
@@ -217,12 +217,6 @@ file	dev/isa/if_tscs_isa.c		tscs_isa
 # device in sys/conf/files
 attach	fmv at isa with fmv_isa
 file	dev/isa/if_fmv_isa.c		fmv_isa
-
-# HP Lan Ethernet controllers
-# XXX currently broken
-#device hp: ether, ifnet, arp
-#attach	hp at isa
-#file	dev/isa/if_hp.c			hp
 
 # Intel i82595-based boards.
 # (Intel EtherExpress PRO)
@@ -457,9 +451,17 @@ device	smsc: sysmon_envsys
 attach	smsc at isa with smsc
 file	dev/isa/smsc.c			smsc			needs-flag
 
+# Winbond LPC Super I/O
+device	wbsio {}
+attach	wbsio at isa
+file	dev/isa/wbsio.c			wbsio
+
 # LM78 temp/fanspeed monitor
 attach	lm at isa with lm_isa
+attach	lm at wbsio with lm_wbsio
+file	dev/isa/lm_isa_common.c		lm_isa | lm_wbsio
 file	dev/isa/lm_isa.c		lm_isa
+file	dev/isa/lm_wbsio.c		lm_wbsio
 
 # iTE Super I/O with hardware monitor
 device	itesio: sysmon_envsys, sysmon_wdog
@@ -521,10 +523,13 @@ device toaster
 attach toaster at tsdio
 file	dev/isa/toaster.c		toaster
 
+# Trusted Platform Module
+attach tpm at isa with tpm_isa
+file   dev/isa/tpm_isa.c		tpm_isa	needs-flag
+
 #
 # ISA Plug 'n Play autoconfiguration glue.
 # THIS MUST COME AFTER ALL MI ISA DEVICES ARE DEFINED.  This is because
 # ISA PnP devices often use `device' declarations listed in this file.
 #
 include	"dev/isapnp/files.isapnp"
-

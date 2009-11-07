@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_states.c,v 1.43 2008/05/20 00:29:54 oster Exp $	*/
+/*	$NetBSD: rf_states.c,v 1.49 2011/05/11 18:13:12 mrg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_states.c,v 1.43 2008/05/20 00:29:54 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_states.c,v 1.49 2011/05/11 18:13:12 mrg Exp $");
 
 #include <sys/errno.h>
 
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: rf_states.c,v 1.43 2008/05/20 00:29:54 oster Exp $")
 #include "rf_map.h"
 #include "rf_etimer.h"
 #include "rf_kintf.h"
+#include "rf_paritymap.h"
 
 #ifndef RF_DEBUG_STATES
 #define RF_DEBUG_STATES 0
@@ -216,10 +217,9 @@ rf_State_LastState(RF_RaidAccessDesc_t *desc)
 	callbackArg.p = desc->callbackArg;
 
 	/*
-	 * If this is not an async request, wake up the caller
+	 * We don't support non-async IO.
 	 */
-	if (desc->async_flag == 0)
-		wakeup(desc->bp);
+	KASSERT(desc->async_flag);
 
 	/*
 	 * That's all the IO for this one... unbusy the 'disk'.
@@ -231,11 +231,22 @@ rf_State_LastState(RF_RaidAccessDesc_t *desc)
 	 * Wakeup any requests waiting to go.
 	 */
 
-	RF_LOCK_MUTEX(((RF_Raid_t *) desc->raidPtr)->mutex);
-	((RF_Raid_t *) desc->raidPtr)->openings++;
-	RF_UNLOCK_MUTEX(((RF_Raid_t *) desc->raidPtr)->mutex);
+	rf_lock_mutex2(desc->raidPtr->mutex);
+	desc->raidPtr->openings++;
+	rf_unlock_mutex2(desc->raidPtr->mutex);
 
-	wakeup(&(desc->raidPtr->iodone));
+	rf_lock_mutex2(desc->raidPtr->iodone_lock);
+	rf_signal_cond2(desc->raidPtr->iodone_cv);
+	rf_unlock_mutex2(desc->raidPtr->iodone_lock);
+
+	/*
+	 * The parity_map hook has to go here, because the iodone
+	 * callback goes straight into the kintf layer.
+	 */
+	if (desc->raidPtr->parity_map != NULL &&
+	    desc->type == RF_IO_TYPE_WRITE)
+		rf_paritymap_end(desc->raidPtr->parity_map, 
+		    desc->raidAddress, desc->numBlocks);
 
 	/* printf("Calling biodone on 0x%x\n",desc->bp); */
 	biodone(desc->bp);	/* access came through ioctl */
@@ -255,9 +266,9 @@ rf_State_IncrAccessCount(RF_RaidAccessDesc_t *desc)
 	raidPtr = desc->raidPtr;
 	/* Bummer. We have to do this to be 100% safe w.r.t. the increment
 	 * below */
-	RF_LOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_lock_mutex2(raidPtr->access_suspend_mutex);
 	raidPtr->accs_in_flight++;	/* used to detect quiescence */
-	RF_UNLOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_unlock_mutex2(raidPtr->access_suspend_mutex);
 
 	desc->state++;
 	return RF_FALSE;
@@ -270,12 +281,12 @@ rf_State_DecrAccessCount(RF_RaidAccessDesc_t *desc)
 
 	raidPtr = desc->raidPtr;
 
-	RF_LOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_lock_mutex2(raidPtr->access_suspend_mutex);
 	raidPtr->accs_in_flight--;
 	if (raidPtr->accesses_suspended && raidPtr->accs_in_flight == 0) {
 		rf_SignalQuiescenceLock(raidPtr);
 	}
-	RF_UNLOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_unlock_mutex2(raidPtr->access_suspend_mutex);
 
 	desc->state++;
 	return RF_FALSE;
@@ -304,12 +315,12 @@ rf_State_Quiesce(RF_RaidAccessDesc_t *desc)
 	used_cb = 0;
 	cb = NULL;
 
-	RF_LOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_lock_mutex2(raidPtr->access_suspend_mutex);
 	/* Do an initial check to see if we might need a callback structure */
 	if (raidPtr->accesses_suspended) {
 		need_cb = 1;
 	}
-	RF_UNLOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_unlock_mutex2(raidPtr->access_suspend_mutex);
 
 	if (need_cb) {
 		/* create a callback if we might need it...
@@ -317,7 +328,7 @@ rf_State_Quiesce(RF_RaidAccessDesc_t *desc)
 		cb = rf_AllocCallbackDesc();
 	}
 
-	RF_LOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_lock_mutex2(raidPtr->access_suspend_mutex);
 	if (raidPtr->accesses_suspended) {
 		cb->callbackFunc = (void (*) (RF_CBParam_t)) rf_ContinueRaidAccess;
 		cb->callbackArg.p = (void *) desc;
@@ -326,7 +337,7 @@ rf_State_Quiesce(RF_RaidAccessDesc_t *desc)
 		suspended = RF_TRUE;
 		used_cb = 1;
 	}
-	RF_UNLOCK_MUTEX(raidPtr->access_suspend_mutex);
+	rf_unlock_mutex2(raidPtr->access_suspend_mutex);
 
 	if ((need_cb == 1) && (used_cb == 0)) {
 		rf_FreeCallbackDesc(cb);

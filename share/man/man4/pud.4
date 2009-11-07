@@ -1,4 +1,4 @@
-.\"	$NetBSD: pud.4,v 1.2 2009/05/27 19:24:00 snj Exp $
+.\"	$NetBSD: pud.4,v 1.4 2011/02/01 18:08:38 pooka Exp $
 .\"
 .\" Copyright (c) 2007 Antti Kantee.
 .\" All rights reserved.
@@ -32,6 +32,7 @@
 .Nd Pass-to-Userspace Device
 .Sh SYNOPSIS
 .Cd "pseudo-device pud"
+.Cd "pseudo-device putter"
 .Sh DESCRIPTION
 The
 .Nm
@@ -50,4 +51,6 @@ handle the driver methods the kernel passes down to it.
 .Sh BUGS
 This document is in a hit-in-the-head style obviously not even
 near complete.
-But that does not matter, as neither is the code.
+.Pp
+The subsystem lacks a puffs-style library that servers can be
+written against.

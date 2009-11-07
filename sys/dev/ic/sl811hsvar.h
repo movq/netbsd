@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hsvar.h,v 1.6 2009/05/12 14:25:18 cegger Exp $	*/
+/*	$NetBSD: sl811hsvar.h,v 1.8 2011/06/21 15:13:34 kiyohara Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -15,7 +15,6 @@
 
 #include <sys/gcq.h>
 #include <sys/simplelock.h>
-#include "opt_slhci.h"
 
 #define SC_DEV(sc)	((sc)->sc_dev)
 #define SC_NAME(sc)	(device_xname(SC_DEV(sc)))
@@ -82,14 +81,14 @@ struct slhci_softc {
 	int			sc_mem_use; /* XXX SLHCI_MEM_ACCOUNTING */
 
 	uint8_t			sc_ier; 	/* enabled interrupts */
-	uint8_t			sc_stride;	/* port stride */
+	uint32_t		sc_stride;	/* port stride */
 };
 
 /* last preinit arguments are: max current (in mA, not mA/2), port stride */
 /* register access uses byte access, but stride offsets the data port */
 int  slhci_supported_rev(uint8_t);
 void slhci_preinit(struct slhci_softc *, PowerFunc, bus_space_tag_t, 
-    bus_space_handle_t, uint16_t, uint8_t);
+    bus_space_handle_t, uint16_t, uint32_t);
 int  slhci_attach(struct slhci_softc *);
 int  slhci_detach(struct slhci_softc *, int);
 int  slhci_activate(device_t, enum devact);

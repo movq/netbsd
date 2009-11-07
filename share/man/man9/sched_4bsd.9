@@ -1,4 +1,4 @@
-.\"     $NetBSD: sched_4bsd.9,v 1.3 2008/04/30 13:10:58 martin Exp $
+.\"     $NetBSD: sched_4bsd.9,v 1.8 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -48,9 +48,9 @@
 .Ft void
 .Fn updatepri "lwp_t *l"
 .Sh DESCRIPTION
-The
-.Nx
-thread scheduling sub-system employs a
+The traditional
+.Bx 4.4
+scheduler employs a
 .Dq multilevel feedback queues
 algorithm, favouring interactive, short-running threads to
 CPU-bound ones.
@@ -79,18 +79,15 @@ checks if an LWP has slept for more than one second.
 If so, its priority is updated by
 .Fn updatepri .
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing the scheduler can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
-The 4.4BSD scheduler subsystem is implemented within the file
+The
+.Bx 4.4
+scheduler subsystem is implemented within the file
 .Pa sys/kern/sched_4bsd.c .
 .Sh SEE ALSO
 .Xr csf 9 ,
 .Xr hardclock 9 ,
 .Xr mi_switch 9 ,
+.Xr sched_m2 9 ,
 .Xr userret 9
 .Rs
 .%A Marshall Kirk McKusick

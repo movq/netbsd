@@ -1,8 +1,10 @@
+/*	$NetBSD: detach.c,v 1.2 2011/06/20 09:11:17 mrg Exp $	*/
+
 /* detach.c -- routines to daemonize a process */
-/* $OpenLDAP: pkg/ldap/libraries/liblutil/detach.c,v 1.18.2.3 2008/02/11 23:26:42 kurt Exp $ */
+/* OpenLDAP: pkg/ldap/libraries/liblutil/detach.c,v 1.18.2.5 2010/04/13 20:23:05 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2008 The OpenLDAP Foundation.
+ * Copyright 1998-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -128,7 +130,7 @@ lutil_detach( int debug, int do_close )
 
 #ifdef HAVE_SETSID
 		(void) setsid();
-#elif TIOCNOTTY
+#elif defined(TIOCNOTTY)
 		if ( (sd = open( "/dev/tty", O_RDWR )) != -1 ) {
 			(void) ioctl( sd, TIOCNOTTY, NULL );
 			(void) close( sd );

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_input.c,v 1.284 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: ip_input.c,v 1.298 2012/01/09 14:31:22 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -91,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.284 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.298 2012/01/09 14:31:22 liamjfoy Exp $");
 
 #include "opt_inet.h"
 #include "opt_compat_netbsd.h"
@@ -104,7 +104,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.284 2009/09/16 15:23:05 pooka Exp $")
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/domain.h>
 #include <sys/protosw.h>
@@ -141,7 +140,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.284 2009/09/16 15:23:05 pooka Exp $")
 #include <netinet/ip_mroute.h>
 #endif
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netinet6/ipsec_private.h>
 #include <netkey/key.h>
@@ -222,7 +221,6 @@ int	ip_checkinterface = 0;
 
 struct rttimer_queue *ip_mtudisc_timeout_q = NULL;
 
-int	ipqmaxlen = IFQ_MAXLEN;
 u_long	in_ifaddrhash;				/* size of hash table - 1 */
 int	in_ifaddrentries;			/* total number of addrs */
 struct in_ifaddrhead in_ifaddrhead;
@@ -231,6 +229,8 @@ u_long	in_multihash;				/* size of hash table - 1 */
 int	in_multientries;			/* total number of addrs */
 struct	in_multihashhead *in_multihashtbl;
 struct	ifqueue ipintrq;
+
+ipid_state_t *		ip_ids;
 uint16_t ip_id;
 
 percpu_t *ipstat_percpu;
@@ -239,105 +239,7 @@ percpu_t *ipstat_percpu;
 struct pfil_head inet_pfil_hook;
 #endif
 
-/*
- * Cached copy of nmbclusters. If nbclusters is different,
- * recalculate IP parameters derived from nmbclusters.
- */
-static int	ip_nmbclusters;			/* copy of nmbclusters */
-static void	ip_nmbclusters_changed(void);	/* recalc limits */
-
-#define CHECK_NMBCLUSTER_PARAMS()				\
-do {								\
-	if (__predict_false(ip_nmbclusters != nmbclusters))	\
-		ip_nmbclusters_changed();			\
-} while (/*CONSTCOND*/0)
-
-/* IP datagram reassembly queues (hashed) */
-#define IPREASS_NHASH_LOG2      6
-#define IPREASS_NHASH           (1 << IPREASS_NHASH_LOG2)
-#define IPREASS_HMASK           (IPREASS_NHASH - 1)
-#define IPREASS_HASH(x,y) \
-	(((((x) & 0xF) | ((((x) >> 8) & 0xF) << 4)) ^ (y)) & IPREASS_HMASK)
-struct ipqhead ipq[IPREASS_NHASH];
-int	ipq_locked;
-static int	ip_nfragpackets;	/* packets in reass queue */
-static int	ip_nfrags;		/* total fragments in reass queues */
-
-int	ip_maxfragpackets = 200;	/* limit on packets. XXX sysctl */
-int	ip_maxfrags;		        /* limit on fragments. XXX sysctl */
-
-
-/*
- * Additive-Increase/Multiplicative-Decrease (AIMD) strategy for
- * IP reassembly queue buffer managment.
- *
- * We keep a count of total IP fragments (NB: not fragmented packets!)
- * awaiting reassembly (ip_nfrags) and a limit (ip_maxfrags) on fragments.
- * If ip_nfrags exceeds ip_maxfrags the limit, we drop half the
- * total fragments in  reassembly queues.This AIMD policy avoids
- * repeatedly deleting single packets under heavy fragmentation load
- * (e.g., from lossy NFS peers).
- */
-static u_int	ip_reass_ttl_decr(u_int ticks);
-static void	ip_reass_drophalf(void);
-
-
-static inline int ipq_lock_try(void);
-static inline void ipq_unlock(void);
-
-static inline int
-ipq_lock_try(void)
-{
-	int s;
-
-	/*
-	 * Use splvm() -- we're blocking things that would cause
-	 * mbuf allocation.
-	 */
-	s = splvm();
-	if (ipq_locked) {
-		splx(s);
-		return (0);
-	}
-	ipq_locked = 1;
-	splx(s);
-	return (1);
-}
-
-static inline void
-ipq_unlock(void)
-{
-	int s;
-
-	s = splvm();
-	ipq_locked = 0;
-	splx(s);
-}
-
-#ifdef DIAGNOSTIC
-#define	IPQ_LOCK()							\
-do {									\
-	if (ipq_lock_try() == 0) {					\
-		printf("%s:%d: ipq already locked\n", __FILE__, __LINE__); \
-		panic("ipq_lock");					\
-	}								\
-} while (/*CONSTCOND*/ 0)
-#define	IPQ_LOCK_CHECK()						\
-do {									\
-	if (ipq_locked == 0) {						\
-		printf("%s:%d: ipq lock not held\n", __FILE__, __LINE__); \
-		panic("ipq lock check");				\
-	}								\
-} while (/*CONSTCOND*/ 0)
-#else
-#define	IPQ_LOCK()		(void) ipq_lock_try()
-#define	IPQ_LOCK_CHECK()	/* nothing */
-#endif
-
-#define	IPQ_UNLOCK()		ipq_unlock()
-
 struct pool inmulti_pool;
-struct pool ipqent_pool;
 
 #ifdef INET_CSUM_COUNTERS
 #include <sys/device.h>
@@ -376,6 +278,8 @@ static	struct ip_srcrt {
 	struct	in_addr route[MAX_IPOPTLEN/sizeof(struct in_addr)];
 } ip_srcrt;
 
+static int ip_drainwanted;
+
 static void save_rte(u_char *, struct in_addr);
 
 #ifdef MBUFTRACE
@@ -384,16 +288,6 @@ struct mowner ip_tx_mowner = MOWNER_INIT("internet", "tx");
 #endif
 
 static void sysctl_net_inet_ip_setup(struct sysctllog **);
-
-/*
- * Compute IP limits derived from the value of nmbclusters.
- */
-static void
-ip_nmbclusters_changed(void)
-{
-	ip_maxfrags = nmbclusters / 4;
-	ip_nmbclusters =  nmbclusters;
-}
 
 /*
  * IP initialization: fill in IP protocol switch table.
@@ -409,8 +303,6 @@ ip_init(void)
 
 	pool_init(&inmulti_pool, sizeof(struct in_multi), 0, 0, 0, "inmltpl",
 	    NULL, IPL_SOFTNET);
-	pool_init(&ipqent_pool, sizeof(struct ipqent), 0, 0, 0, "ipqepl",
-	    NULL, IPL_VM);
 
 	pr = pffindproto(PF_INET, IPPROTO_RAW, SOCK_RAW);
 	if (pr == 0)
@@ -423,14 +315,12 @@ ip_init(void)
 		    pr->pr_protocol && pr->pr_protocol != IPPROTO_RAW)
 			ip_protox[pr->pr_protocol] = pr - inetsw;
 
-	for (i = 0; i < IPREASS_NHASH; i++)
-	    	LIST_INIT(&ipq[i]);
+	ip_reass_init();
 
-	ip_initid();
+	ip_ids = ip_id_init();
 	ip_id = time_second & 0xfffff;
 
-	ipintrq.ifq_maxlen = ipqmaxlen;
-	ip_nmbclusters_changed();
+	ipintrq.ifq_maxlen = IFQ_MAXLEN;
 
 	TAILQ_INIT(&in_ifaddrhead);
 	in_ifaddrhashtbl = hashinit(IN_IFADDR_HASH_SIZE, HASH_LIST, true,
@@ -474,18 +364,34 @@ ipintr(void)
 {
 	int s;
 	struct mbuf *m;
+	struct ifqueue lcl_intrq;
+
+	memset(&lcl_intrq, 0, sizeof(lcl_intrq));
 
 	mutex_enter(softnet_lock);
 	KERNEL_LOCK(1, NULL);
-	while (!IF_IS_EMPTY(&ipintrq)) {
+	if (!IF_IS_EMPTY(&ipintrq)) {
 		s = splnet();
-		IF_DEQUEUE(&ipintrq, m);
+
+		/* Take existing queue onto stack */
+		lcl_intrq = ipintrq;
+
+		/* Zero out global queue, preserving maxlen and drops */
+		ipintrq.ifq_head = NULL;
+		ipintrq.ifq_tail = NULL;
+		ipintrq.ifq_len = 0;
+		ipintrq.ifq_maxlen = lcl_intrq.ifq_maxlen;
+		ipintrq.ifq_drops = lcl_intrq.ifq_drops;
+
 		splx(s);
+	}
+	KERNEL_UNLOCK_ONE(NULL);
+	while (!IF_IS_EMPTY(&lcl_intrq)) {
+		IF_DEQUEUE(&lcl_intrq, m);
 		if (m == NULL)
 			break;
 		ip_input(m);
 	}
-	KERNEL_UNLOCK_ONE(NULL);
 	mutex_exit(softnet_lock);
 }
 
@@ -497,28 +403,21 @@ void
 ip_input(struct mbuf *m)
 {
 	struct ip *ip = NULL;
-	struct ipq *fp;
 	struct in_ifaddr *ia;
 	struct ifaddr *ifa;
-	struct ipqent *ipqe;
-	int hlen = 0, mff, len;
+	int hlen = 0, len;
 	int downmatch;
 	int checkif;
 	int srcrt = 0;
-	int s;
-	u_int hash;
 #ifdef FAST_IPSEC
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
 	struct secpolicy *sp;
-	int error;
+	int error, s;
 #endif /* FAST_IPSEC */
 
 	MCLAIM(m, &ip_rx_mowner);
-#ifdef	DIAGNOSTIC
-	if ((m->m_flags & M_PKTHDR) == 0)
-		panic("ipintr no HDR");
-#endif
+	KASSERT((m->m_flags & M_PKTHDR) != 0);
 
 	/*
 	 * If no IP addresses have been set yet but the interfaces
@@ -557,7 +456,7 @@ ip_input(struct mbuf *m)
 		goto bad;
 	}
 	if (hlen > m->m_len) {
-		if ((m = m_pullup(m, hlen)) == 0) {
+		if ((m = m_pullup(m, hlen)) == NULL) {
 			IP_STATINC(IP_STAT_BADHLEN);
 			return;
 		}
@@ -637,7 +536,7 @@ ip_input(struct mbuf *m)
 			m_adj(m, len - m->m_pkthdr.len);
 	}
 
-#if defined(IPSEC)
+#if defined(KAME_IPSEC)
 	/* ipflow (IP fast forwarding) is not compatible with IPsec. */
 	m->m_flags &= ~M_CANFASTFWD;
 #else
@@ -660,7 +559,7 @@ ip_input(struct mbuf *m)
 	 * let ipfilter look at packet on the wire,
 	 * not the decapsulated packet.
 	 */
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	if (!ipsec_getnhist(m))
 #elif defined(FAST_IPSEC)
 	if (!ipsec_indone(m))
@@ -844,7 +743,7 @@ ip_input(struct mbuf *m)
 			IP_STATINC(IP_STAT_CANTFORWARD);
 			return;
 		}
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 		if (ipsec4_in_reject(m, NULL)) {
 			IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
 			goto bad;
@@ -906,105 +805,28 @@ ip_input(struct mbuf *m)
 ours:
 	/*
 	 * If offset or IP_MF are set, must reassemble.
-	 * Otherwise, nothing need be done.
-	 * (We could look in the reassembly queue to see
-	 * if the packet was previously fragmented,
-	 * but it's not worth the time; just let them time out.)
 	 */
 	if (ip->ip_off & ~htons(IP_DF|IP_RF)) {
-		uint16_t off;
 		/*
-		 * Prevent TCP blind data attacks by not allowing non-initial
-		 * fragments to start at less than 68 bytes (minimal fragment
-		 * size) and making sure the first fragment is at least 68
-		 * bytes.
+		 * Pass to IP reassembly mechanism.
 		 */
-		off = (ntohs(ip->ip_off) & IP_OFFMASK) << 3;
-		if ((off > 0 ? off + hlen : len) < IP_MINFRAGSIZE - 1) {
-			IP_STATINC(IP_STAT_BADFRAGS);
+		if (ip_reass_packet(&m, ip) != 0) {
+			/* Failed; invalid fragment(s) or packet. */
 			goto bad;
 		}
-		/*
-		 * Look for queue of fragments
-		 * of this datagram.
-		 */
-		IPQ_LOCK();
-		hash = IPREASS_HASH(ip->ip_src.s_addr, ip->ip_id);
-		LIST_FOREACH(fp, &ipq[hash], ipq_q) {
-			if (ip->ip_id == fp->ipq_id &&
-			    in_hosteq(ip->ip_src, fp->ipq_src) &&
-			    in_hosteq(ip->ip_dst, fp->ipq_dst) &&
-			    ip->ip_p == fp->ipq_p) {
-				/*
-				 * Make sure the TOS is matches previous
-				 * fragments.
-				 */
-				if (ip->ip_tos != fp->ipq_tos) {
-					IP_STATINC(IP_STAT_BADFRAGS);
-					IPQ_UNLOCK();
-					goto bad;
-				}
-				goto found;
-			}
+		if (m == NULL) {
+			/* More fragments should come; silently return. */
+			return;
 		}
-		fp = 0;
-found:
-
 		/*
-		 * Adjust ip_len to not reflect header,
-		 * set ipqe_mff if more fragments are expected,
-		 * convert offset of this to bytes.
+		 * Reassembly is done, we have the final packet.
+		 * Updated cached data in local variable(s).
 		 */
-		ip->ip_len = htons(ntohs(ip->ip_len) - hlen);
-		mff = (ip->ip_off & htons(IP_MF)) != 0;
-		if (mff) {
-		        /*
-		         * Make sure that fragments have a data length
-			 * that's a non-zero multiple of 8 bytes.
-		         */
-			if (ntohs(ip->ip_len) == 0 ||
-			    (ntohs(ip->ip_len) & 0x7) != 0) {
-				IP_STATINC(IP_STAT_BADFRAGS);
-				IPQ_UNLOCK();
-				goto bad;
-			}
-		}
-		ip->ip_off = htons((ntohs(ip->ip_off) & IP_OFFMASK) << 3);
-
-		/*
-		 * If datagram marked as having more fragments
-		 * or if this is not the first fragment,
-		 * attempt reassembly; if it succeeds, proceed.
-		 */
-		if (mff || ip->ip_off != htons(0)) {
-			IP_STATINC(IP_STAT_FRAGMENTS);
-			s = splvm();
-			ipqe = pool_get(&ipqent_pool, PR_NOWAIT);
-			splx(s);
-			if (ipqe == NULL) {
-				IP_STATINC(IP_STAT_RCVMEMDROP);
-				IPQ_UNLOCK();
-				goto bad;
-			}
-			ipqe->ipqe_mff = mff;
-			ipqe->ipqe_m = m;
-			ipqe->ipqe_ip = ip;
-			m = ip_reass(ipqe, fp, &ipq[hash]);
-			if (m == 0) {
-				IPQ_UNLOCK();
-				return;
-			}
-			IP_STATINC(IP_STAT_REASSEMBLED);
-			ip = mtod(m, struct ip *);
-			hlen = ip->ip_hl << 2;
-			ip->ip_len = htons(ntohs(ip->ip_len) + hlen);
-		} else
-			if (fp)
-				ip_freef(fp);
-		IPQ_UNLOCK();
+		ip = mtod(m, struct ip *);
+		hlen = ip->ip_hl << 2;
 	}
 
-#if defined(IPSEC)
+#if defined(KAME_IPSEC)
 	/*
 	 * enforce IPsec policy checking if we are seeing last header.
 	 * note that we do not visit this with protocols with pcb layer
@@ -1079,398 +901,30 @@ badcsum:
 }
 
 /*
- * Take incoming datagram fragment and try to
- * reassemble it into whole datagram.  If a chain for
- * reassembly of this datagram already exists, then it
- * is given as fp; otherwise have to make a chain.
- */
-struct mbuf *
-ip_reass(struct ipqent *ipqe, struct ipq *fp, struct ipqhead *ipqhead)
-{
-	struct mbuf *m = ipqe->ipqe_m;
-	struct ipqent *nq, *p, *q;
-	struct ip *ip;
-	struct mbuf *t;
-	int hlen = ipqe->ipqe_ip->ip_hl << 2;
-	int i, next, s;
-
-	IPQ_LOCK_CHECK();
-
-	/*
-	 * Presence of header sizes in mbufs
-	 * would confuse code below.
-	 */
-	m->m_data += hlen;
-	m->m_len -= hlen;
-
-#ifdef	notyet
-	/* make sure fragment limit is up-to-date */
-	CHECK_NMBCLUSTER_PARAMS();
-
-	/* If we have too many fragments, drop the older half. */
-	if (ip_nfrags >= ip_maxfrags)
-		ip_reass_drophalf(void);
-#endif
-
-	/*
-	 * We are about to add a fragment; increment frag count.
-	 */
-	ip_nfrags++;
-
-	/*
-	 * If first fragment to arrive, create a reassembly queue.
-	 */
-	if (fp == 0) {
-		/*
-		 * Enforce upper bound on number of fragmented packets
-		 * for which we attempt reassembly;
-		 * If maxfrag is 0, never accept fragments.
-		 * If maxfrag is -1, accept all fragments without limitation.
-		 */
-		if (ip_maxfragpackets < 0)
-			;
-		else if (ip_nfragpackets >= ip_maxfragpackets)
-			goto dropfrag;
-		ip_nfragpackets++;
-		fp = malloc(sizeof (struct ipq), M_FTABLE, M_NOWAIT);
-		if (fp == NULL)
-			goto dropfrag;
-		LIST_INSERT_HEAD(ipqhead, fp, ipq_q);
-		fp->ipq_nfrags = 1;
-		fp->ipq_ttl = IPFRAGTTL;
-		fp->ipq_p = ipqe->ipqe_ip->ip_p;
-		fp->ipq_id = ipqe->ipqe_ip->ip_id;
-		fp->ipq_tos = ipqe->ipqe_ip->ip_tos;
-		TAILQ_INIT(&fp->ipq_fragq);
-		fp->ipq_src = ipqe->ipqe_ip->ip_src;
-		fp->ipq_dst = ipqe->ipqe_ip->ip_dst;
-		p = NULL;
-		goto insert;
-	} else {
-		fp->ipq_nfrags++;
-	}
-
-	/*
-	 * Find a segment which begins after this one does.
-	 */
-	for (p = NULL, q = TAILQ_FIRST(&fp->ipq_fragq); q != NULL;
-	    p = q, q = TAILQ_NEXT(q, ipqe_q))
-		if (ntohs(q->ipqe_ip->ip_off) > ntohs(ipqe->ipqe_ip->ip_off))
-			break;
-
-	/*
-	 * If there is a preceding segment, it may provide some of
-	 * our data already.  If so, drop the data from the incoming
-	 * segment.  If it provides all of our data, drop us.
-	 */
-	if (p != NULL) {
-		i = ntohs(p->ipqe_ip->ip_off) + ntohs(p->ipqe_ip->ip_len) -
-		    ntohs(ipqe->ipqe_ip->ip_off);
-		if (i > 0) {
-			if (i >= ntohs(ipqe->ipqe_ip->ip_len))
-				goto dropfrag;
-			m_adj(ipqe->ipqe_m, i);
-			ipqe->ipqe_ip->ip_off =
-			    htons(ntohs(ipqe->ipqe_ip->ip_off) + i);
-			ipqe->ipqe_ip->ip_len =
-			    htons(ntohs(ipqe->ipqe_ip->ip_len) - i);
-		}
-	}
-
-	/*
-	 * While we overlap succeeding segments trim them or,
-	 * if they are completely covered, dequeue them.
-	 */
-	for (; q != NULL &&
-	    ntohs(ipqe->ipqe_ip->ip_off) + ntohs(ipqe->ipqe_ip->ip_len) >
-	    ntohs(q->ipqe_ip->ip_off); q = nq) {
-		i = (ntohs(ipqe->ipqe_ip->ip_off) +
-		    ntohs(ipqe->ipqe_ip->ip_len)) - ntohs(q->ipqe_ip->ip_off);
-		if (i < ntohs(q->ipqe_ip->ip_len)) {
-			q->ipqe_ip->ip_len =
-			    htons(ntohs(q->ipqe_ip->ip_len) - i);
-			q->ipqe_ip->ip_off =
-			    htons(ntohs(q->ipqe_ip->ip_off) + i);
-			m_adj(q->ipqe_m, i);
-			break;
-		}
-		nq = TAILQ_NEXT(q, ipqe_q);
-		m_freem(q->ipqe_m);
-		TAILQ_REMOVE(&fp->ipq_fragq, q, ipqe_q);
-		s = splvm();
-		pool_put(&ipqent_pool, q);
-		splx(s);
-		fp->ipq_nfrags--;
-		ip_nfrags--;
-	}
-
-insert:
-	/*
-	 * Stick new segment in its place;
-	 * check for complete reassembly.
-	 */
-	if (p == NULL) {
-		TAILQ_INSERT_HEAD(&fp->ipq_fragq, ipqe, ipqe_q);
-	} else {
-		TAILQ_INSERT_AFTER(&fp->ipq_fragq, p, ipqe, ipqe_q);
-	}
-	next = 0;
-	for (p = NULL, q = TAILQ_FIRST(&fp->ipq_fragq); q != NULL;
-	    p = q, q = TAILQ_NEXT(q, ipqe_q)) {
-		if (ntohs(q->ipqe_ip->ip_off) != next)
-			return (0);
-		next += ntohs(q->ipqe_ip->ip_len);
-	}
-	if (p->ipqe_mff)
-		return (0);
-
-	/*
-	 * Reassembly is complete.  Check for a bogus message size and
-	 * concatenate fragments.
-	 */
-	q = TAILQ_FIRST(&fp->ipq_fragq);
-	ip = q->ipqe_ip;
-	if ((next + (ip->ip_hl << 2)) > IP_MAXPACKET) {
-		IP_STATINC(IP_STAT_TOOLONG);
-		ip_freef(fp);
-		return (0);
-	}
-	m = q->ipqe_m;
-	t = m->m_next;
-	m->m_next = 0;
-	m_cat(m, t);
-	nq = TAILQ_NEXT(q, ipqe_q);
-	s = splvm();
-	pool_put(&ipqent_pool, q);
-	splx(s);
-	for (q = nq; q != NULL; q = nq) {
-		t = q->ipqe_m;
-		nq = TAILQ_NEXT(q, ipqe_q);
-		s = splvm();
-		pool_put(&ipqent_pool, q);
-		splx(s);
-		m_cat(m, t);
-	}
-	ip_nfrags -= fp->ipq_nfrags;
-
-	/*
-	 * Create header for new ip packet by
-	 * modifying header of first packet;
-	 * dequeue and discard fragment reassembly header.
-	 * Make header visible.
-	 */
-	ip->ip_len = htons(next);
-	ip->ip_src = fp->ipq_src;
-	ip->ip_dst = fp->ipq_dst;
-	LIST_REMOVE(fp, ipq_q);
-	free(fp, M_FTABLE);
-	ip_nfragpackets--;
-	m->m_len += (ip->ip_hl << 2);
-	m->m_data -= (ip->ip_hl << 2);
-	/* some debugging cruft by sklower, below, will go away soon */
-	if (m->m_flags & M_PKTHDR) { /* XXX this should be done elsewhere */
-		int plen = 0;
-		for (t = m; t; t = t->m_next)
-			plen += t->m_len;
-		m->m_pkthdr.len = plen;
-		m->m_pkthdr.csum_flags = 0;
-	}
-	return (m);
-
-dropfrag:
-	if (fp != 0)
-		fp->ipq_nfrags--;
-	ip_nfrags--;
-	IP_STATINC(IP_STAT_FRAGDROPPED);
-	m_freem(m);
-	s = splvm();
-	pool_put(&ipqent_pool, ipqe);
-	splx(s);
-	return (0);
-}
-
-/*
- * Free a fragment reassembly header and all
- * associated datagrams.
- */
-void
-ip_freef(struct ipq *fp)
-{
-	struct ipqent *q, *p;
-	u_int nfrags = 0;
-	int s;
-
-	IPQ_LOCK_CHECK();
-
-	for (q = TAILQ_FIRST(&fp->ipq_fragq); q != NULL; q = p) {
-		p = TAILQ_NEXT(q, ipqe_q);
-		m_freem(q->ipqe_m);
-		nfrags++;
-		TAILQ_REMOVE(&fp->ipq_fragq, q, ipqe_q);
-		s = splvm();
-		pool_put(&ipqent_pool, q);
-		splx(s);
-	}
-
-	if (nfrags != fp->ipq_nfrags)
-	    printf("ip_freef: nfrags %d != %d\n", fp->ipq_nfrags, nfrags);
-	ip_nfrags -= nfrags;
-	LIST_REMOVE(fp, ipq_q);
-	free(fp, M_FTABLE);
-	ip_nfragpackets--;
-}
-
-/*
- * IP reassembly TTL machinery for  multiplicative drop.
- */
-static u_int	fragttl_histo[(IPFRAGTTL+1)];
-
-
-/*
- * Decrement TTL of all reasembly queue entries by `ticks'.
- * Count number of distinct fragments (as opposed to partial, fragmented
- * datagrams) in the reassembly queue.  While we  traverse the entire
- * reassembly queue, compute and return the median TTL over all fragments.
- */
-static u_int
-ip_reass_ttl_decr(u_int ticks)
-{
-	u_int nfrags, median, dropfraction, keepfraction;
-	struct ipq *fp, *nfp;
-	int i;
-
-	nfrags = 0;
-	memset(fragttl_histo, 0, sizeof fragttl_histo);
-
-	for (i = 0; i < IPREASS_NHASH; i++) {
-		for (fp = LIST_FIRST(&ipq[i]); fp != NULL; fp = nfp) {
-			fp->ipq_ttl = ((fp->ipq_ttl  <= ticks) ?
-				       0 : fp->ipq_ttl - ticks);
-			nfp = LIST_NEXT(fp, ipq_q);
-			if (fp->ipq_ttl == 0) {
-				IP_STATINC(IP_STAT_FRAGTIMEOUT);
-				ip_freef(fp);
-			} else {
-				nfrags += fp->ipq_nfrags;
-				fragttl_histo[fp->ipq_ttl] += fp->ipq_nfrags;
-			}
-		}
-	}
-
-	KASSERT(ip_nfrags == nfrags);
-
-	/* Find median (or other drop fraction) in histogram. */
-	dropfraction = (ip_nfrags / 2);
-	keepfraction = ip_nfrags - dropfraction;
-	for (i = IPFRAGTTL, median = 0; i >= 0; i--) {
-		median +=  fragttl_histo[i];
-		if (median >= keepfraction)
-			break;
-	}
-
-	/* Return TTL of median (or other fraction). */
-	return (u_int)i;
-}
-
-void
-ip_reass_drophalf(void)
-{
-
-	u_int median_ticks;
-	/*
-	 * Compute median TTL of all fragments, and count frags
-	 * with that TTL or lower (roughly half of all fragments).
-	 */
-	median_ticks = ip_reass_ttl_decr(0);
-
-	/* Drop half. */
-	median_ticks = ip_reass_ttl_decr(median_ticks);
-
-}
-
-/*
- * IP timer processing;
- * if a timer expires on a reassembly
- * queue, discard it.
+ * IP timer processing.
  */
 void
 ip_slowtimo(void)
 {
-	static u_int dropscanidx = 0;
-	u_int i;
-	u_int median_ttl;
 
 	mutex_enter(softnet_lock);
 	KERNEL_LOCK(1, NULL);
 
-	IPQ_LOCK();
-
-	/* Age TTL of all fragments by 1 tick .*/
-	median_ttl = ip_reass_ttl_decr(1);
-
-	/* make sure fragment limit is up-to-date */
-	CHECK_NMBCLUSTER_PARAMS();
-
-	/* If we have too many fragments, drop the older half. */
-	if (ip_nfrags > ip_maxfrags)
-		ip_reass_ttl_decr(median_ttl);
-
-	/*
-	 * If we are over the maximum number of fragmented packets
-	 * (due to the limit being lowered), drain off
-	 * enough to get down to the new limit. Start draining
-	 * from the reassembly hashqueue most recently drained.
-	 */
-	if (ip_maxfragpackets < 0)
-		;
-	else {
-		int wrapped = 0;
-
-		i = dropscanidx;
-		while (ip_nfragpackets > ip_maxfragpackets && wrapped == 0) {
-			while (LIST_FIRST(&ipq[i]) != NULL)
-				ip_freef(LIST_FIRST(&ipq[i]));
-			if (++i >= IPREASS_NHASH) {
-				i = 0;
-			}
-			/*
-			 * Dont scan forever even if fragment counters are
-			 * wrong: stop after scanning entire reassembly queue.
-			 */
-			if (i == dropscanidx)
-			    wrapped = 1;
-		}
-		dropscanidx = i;
-	}
-	IPQ_UNLOCK();
+	ip_reass_slowtimo();
 
 	KERNEL_UNLOCK_ONE(NULL);
 	mutex_exit(softnet_lock);
 }
 
 /*
- * Drain off all datagram fragments.  Don't acquire softnet_lock as
- * can be called from hardware interrupt context.
+ * IP drain processing.
  */
 void
 ip_drain(void)
 {
 
 	KERNEL_LOCK(1, NULL);
-
-	/*
-	 * We may be called from a device's interrupt context.  If
-	 * the ipq is already busy, just bail out now.
-	 */
-	if (ipq_lock_try() != 0) {
-		/*
-		 * Drop half the total fragments now. If more mbufs are
-		 * needed, we will be called again soon.
-		 */
-		ip_reass_drophalf();
-		IPQ_UNLOCK();
-	}
-
+	ip_reass_drain();
 	KERNEL_UNLOCK_ONE(NULL);
 }
 
@@ -1830,6 +1284,21 @@ const int inetctlerrmap[PRC_NCMDS] = {
 	[PRC_PARAMPROB] = ENOPROTOOPT,
 };
 
+void
+ip_fasttimo(void)
+{
+	if (ip_drainwanted) {
+		ip_drain();
+		ip_drainwanted = 0;
+	}
+}
+
+void
+ip_drainstub(void)
+{
+	ip_drainwanted = 1;
+}
+
 /*
  * Forward a packet.  If some error occurs return the sender
  * an icmp packet.  Note we can't always generate a meaningful
@@ -1936,7 +1405,7 @@ ip_forward(struct mbuf *m, int srcrt)
 
 	error = ip_output(m, NULL, &ipforward_rt,
 	    (IP_FORWARDING | (ip_directedbcast ? IP_ALLOWBROADCAST : 0)),
-	    (struct ip_moptions *)NULL, (struct socket *)NULL);
+	    NULL, NULL);
 
 	if (error)
 		IP_STATINC(IP_STAT_CANTFORWARD);
@@ -1983,7 +1452,7 @@ ip_forward(struct mbuf *m, int srcrt)
 		if ((rt = rtcache_validate(&ipforward_rt)) != NULL)
 			destmtu = rt->rt_ifp->if_mtu;
 
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		{
 			/*
 			 * If the packet is routed over IPsec tunnel, tell the
@@ -2025,14 +1494,14 @@ ip_forward(struct mbuf *m, int srcrt)
 					}
 				}
 
-#ifdef	IPSEC
+#ifdef	KAME_IPSEC
 				key_freesp(sp);
 #else
 				KEY_FREESP(&sp);
 #endif
 			}
 		}
-#endif /*defined(IPSEC) || defined(FAST_IPSEC)*/
+#endif /*defined(KAME_IPSEC) || defined(FAST_IPSEC)*/
 		IP_STATINC(IP_STAT_CANTFRAG);
 		break;
 
@@ -2413,14 +1882,6 @@ sysctl_net_inet_ip_setup(struct sysctllog **clog)
 		       CTL_NET, PF_INET, IPPROTO_IP,
 		       IPCTL_LOWPORTMAX, CTL_EOL);
 #endif /* IPNOPRIVPORTS */
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "maxfragpackets",
-		       SYSCTL_DESCR("Maximum number of fragments to retain for "
-				    "possible reassembly"),
-		       NULL, 0, &ip_maxfragpackets, 0,
-		       CTL_NET, PF_INET, IPPROTO_IP,
-		       IPCTL_MAXFRAGPACKETS, CTL_EOL);
 #if NGRE > 0
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,

@@ -1,4 +1,4 @@
-/*	$NetBSD: pf_ioctl.c,v 1.37 2009/10/03 00:37:02 elad Exp $	*/
+/*	$NetBSD: pf_ioctl.c,v 1.46 2011/11/28 08:05:05 tls Exp $	*/
 /*	$OpenBSD: pf_ioctl.c,v 1.182 2007/06/24 11:17:13 mcbride Exp $ */
 
 /*
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pf_ioctl.c,v 1.37 2009/10/03 00:37:02 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pf_ioctl.c,v 1.46 2011/11/28 08:05:05 tls Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -65,6 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: pf_ioctl.c,v 1.37 2009/10/03 00:37:02 elad Exp $");
 #include <sys/conf.h>
 #include <sys/lwp.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
+#include <sys/cprng.h>
 #endif /* __NetBSD__ */
 
 #include <net/if.h>
@@ -104,6 +106,9 @@ __KERNEL_RCSID(0, "$NetBSD: pf_ioctl.c,v 1.37 2009/10/03 00:37:02 elad Exp $");
 #endif
 
 void			 pfattach(int);
+#ifdef _MODULE
+void			 pfdetach(void);
+#endif /* _MODULE */
 #ifndef __NetBSD__
 void			 pf_thread_create(void *);
 #endif /* !__NetBSD__ */
@@ -133,6 +138,8 @@ void			 pf_state_export(struct pfsync_state *,
 void			 pf_state_import(struct pfsync_state *,
 			    struct pf_state_key *, struct pf_state *);
 
+static	int		pf_state_add(struct pfsync_state*);
+
 struct pf_rule		 pf_default_rule;
 #ifdef __NetBSD__
 krwlock_t		 pf_consistency_lock;
@@ -142,6 +149,8 @@ struct rwlock		 pf_consistency_lock = RWLOCK_INITIALIZER("pfcnslk");
 #ifdef ALTQ
 static int		 pf_altq_running;
 #endif
+
+int		pf_state_lock = 0;
 
 #define	TAGID_MAX	 50000
 TAILQ_HEAD(pf_tags, pf_tagname)	pf_tags = TAILQ_HEAD_INITIALIZER(pf_tags),
@@ -292,7 +301,7 @@ pfattach(int num)
 	pf_status.debug = PF_DEBUG_URGENT;
 
 	/* XXX do our best to avoid a conflict */
-	pf_status.hostid = arc4random();
+	pf_status.hostid = cprng_fast32();
 
 	/* require process context to purge states, so perform in a thread */
 #ifdef __NetBSD__
@@ -308,6 +317,98 @@ pfattach(int num)
 	    pf_listener_cb, NULL);
 #endif /* __NetBSD__ */
 }
+
+#ifdef _MODULE
+void
+pfdetach(void)
+{
+	extern int		 pf_purge_thread_running;
+	extern int		 pf_purge_thread_stop;
+	struct pf_anchor	*anchor;
+	struct pf_state		*state;
+	struct pf_src_node	*node;
+	struct pfioc_table	 pt;
+	u_int32_t		 ticket;
+	int			 i;
+	char			 r = '\0';
+
+	pf_purge_thread_stop = 1;
+	wakeup(pf_purge_thread);
+
+	/* wait until the kthread exits */
+	while (pf_purge_thread_running)
+		tsleep(&pf_purge_thread_running, PWAIT, "pfdown", 0);
+
+	(void)pf_pfil_detach();
+
+	pf_status.running = 0;
+
+	/* clear the rulesets */
+	for (i = 0; i < PF_RULESET_MAX; i++)
+		if (pf_begin_rules(&ticket, i, &r) == 0)
+			pf_commit_rules(ticket, i, &r);
+#ifdef ALTQ
+	if (pf_begin_altq(&ticket) == 0)
+		pf_commit_altq(ticket);
+#endif /* ALTQ */
+
+	/* clear states */
+	RB_FOREACH(state, pf_state_tree_id, &tree_id) {
+		state->timeout = PFTM_PURGE;
+#if NPFSYNC > 0
+		state->sync_flags = PFSTATE_NOSYNC;
+#endif /* NPFSYNC > 0 */
+	}
+	pf_purge_expired_states(pf_status.states);
+#if NPFSYNC > 0
+	pfsync_clear_states(pf_status.hostid, NULL);
+#endif /* NPFSYNC > 0 */
+
+	/* clear source nodes */
+	RB_FOREACH(state, pf_state_tree_id, &tree_id) {
+		state->src_node = NULL;
+		state->nat_src_node = NULL;
+	}
+	RB_FOREACH(node, pf_src_tree, &tree_src_tracking) {
+		node->expire = 1;
+		node->states = 0;
+	}
+	pf_purge_expired_src_nodes(0);
+
+	/* clear tables */
+	memset(&pt, '\0', sizeof(pt));
+	pfr_clr_tables(&pt.pfrio_table, &pt.pfrio_ndel, pt.pfrio_flags);
+
+	/* destroy anchors */
+	while ((anchor = RB_MIN(pf_anchor_global, &pf_anchors)) != NULL) {
+		for (i = 0; i < PF_RULESET_MAX; i++)
+			if (pf_begin_rules(&ticket, i, anchor->name) == 0)
+				pf_commit_rules(ticket, i, anchor->name);
+	}
+
+	/* destroy main ruleset */
+	pf_remove_if_empty_ruleset(&pf_main_ruleset);
+
+	/* destroy the pools */
+	pool_destroy(&pf_pooladdr_pl);
+	pool_destroy(&pf_altq_pl);
+	pool_destroy(&pf_state_key_pl);
+	pool_destroy(&pf_state_pl);
+	pool_destroy(&pf_rule_pl);
+	pool_destroy(&pf_src_tree_pl);
+
+	rw_destroy(&pf_consistency_lock);
+
+	/* destroy subsystems */
+	pf_normalize_destroy();
+	pf_osfp_destroy();
+	pfr_destroy();
+	pfi_destroy();
+
+	/* cleanup kauth listener */
+	kauth_unlisten_scope(pf_listener);
+}
+#endif /* _MODULE */
 
 #ifndef __NetBSD__
 void
@@ -1016,19 +1117,60 @@ pf_state_import(struct pfsync_state *sp, struct pf_state_key *sk,
 	/* copy to state */
 	memcpy(&s->id, &sp->id, sizeof(sp->id));
 	s->creatorid = sp->creatorid;
-	strlcpy(sp->ifname, s->kif->pfik_name, sizeof(sp->ifname));
 	pf_state_peer_from_pfsync(&sp->src, &s->src);
 	pf_state_peer_from_pfsync(&sp->dst, &s->dst);
 
 	s->rule.ptr = &pf_default_rule;
+	s->rule.ptr->states++;
 	s->nat_rule.ptr = NULL;
 	s->anchor.ptr = NULL;
 	s->rt_kif = NULL;
 	s->creation = time_second;
+	s->expire = time_second;
+	s->timeout = sp->timeout;
+	if (sp->expire > 0)
+		s->expire -= pf_default_rule.timeout[sp->timeout] - sp->expire;
 	s->pfsync_time = 0;
 	s->packets[0] = s->packets[1] = 0;
 	s->bytes[0] = s->bytes[1] = 0;
 }
+
+int
+pf_state_add(struct pfsync_state* sp)
+{
+	struct pf_state		*s;
+	struct pf_state_key	*sk;
+	struct pfi_kif		*kif;
+
+	if (sp->timeout >= PFTM_MAX &&
+			sp->timeout != PFTM_UNTIL_PACKET) {
+		return EINVAL;
+	}
+	s = pool_get(&pf_state_pl, PR_NOWAIT);
+	if (s == NULL) {
+		return ENOMEM;
+	}
+	bzero(s, sizeof(struct pf_state));
+	if ((sk = pf_alloc_state_key(s)) == NULL) {
+		pool_put(&pf_state_pl, s);
+		return ENOMEM;
+	}
+	pf_state_import(sp, sk, s);
+	kif = pfi_kif_get(sp->ifname);
+	if (kif == NULL) {
+		pool_put(&pf_state_pl, s);
+		pool_put(&pf_state_key_pl, sk);
+		return ENOENT;
+	}
+	if (pf_insert_state(kif, s)) {
+		pfi_kif_unref(kif, PFI_KIF_REF_NONE);
+		pool_put(&pf_state_pl, s);
+		return ENOMEM;
+	}
+
+	return 0;
+}
+
 
 int
 pf_setup_pfsync_matching(struct pf_ruleset *rs)
@@ -1118,6 +1260,8 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 		case DIOCIGETIFACES:
 		case DIOCSETIFFLAG:
 		case DIOCCLRIFFLAG:
+		case DIOCSETLCK:
+		case DIOCADDSTATES:
 			break;
 		case DIOCRCLRTABLES:
 		case DIOCRADDTABLES:
@@ -1155,6 +1299,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 		case DIOCOSFPGET:
 		case DIOCGETSRCNODES:
 		case DIOCIGETIFACES:
+		case DIOCSETLCK:
 			break;
 		case DIOCRCLRTABLES:
 		case DIOCRADDTABLES:
@@ -1165,6 +1310,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 		case DIOCRDELADDRS:
 		case DIOCRSETADDRS:
 		case DIOCRSETTFLAGS:
+		case DIOCADDSTATES:
 			if (((struct pfioc_table *)addr)->pfrio_flags &
 			    PFR_FLAG_DUMMY) {
 				flags |= FWRITE; /* need write lock for dummy */
@@ -1225,7 +1371,6 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 		struct pfioc_rule	*pr = (struct pfioc_rule *)addr;
 		struct pf_ruleset	*ruleset;
 		struct pf_rule		*rule, *tail;
-		struct pf_pooladdr	*pa;
 		int			 rs_num;
 
 		pr->anchor[sizeof(pr->anchor) - 1] = 0;
@@ -1351,6 +1496,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 			if (pf_tbladdr_setup(ruleset, &pa->addr))
 				error = EINVAL;
 
+		rule->overload_tbl = NULL;
 		if (rule->overload_tblname[0]) {
 			if ((rule->overload_tbl = pfr_attach_table(ruleset,
 			    rule->overload_tblname)) == NULL)
@@ -1602,6 +1748,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 				if (pf_tbladdr_setup(ruleset, &pa->addr))
 					error = EINVAL;
 
+			newrule->overload_tbl = NULL;
 			if (newrule->overload_tblname[0]) {
 				if ((newrule->overload_tbl = pfr_attach_table(
 				    ruleset, newrule->overload_tblname)) ==
@@ -1683,20 +1830,20 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 	}
 
 	case DIOCCLRSTATES: {
-		struct pf_state		*s, *nexts;
+		struct pf_state		*ps, *nexts;
 		struct pfioc_state_kill *psk = (struct pfioc_state_kill *)addr;
 		int			 killed = 0;
 
-		for (s = RB_MIN(pf_state_tree_id, &tree_id); s; s = nexts) {
-			nexts = RB_NEXT(pf_state_tree_id, &tree_id, s);
+		for (ps = RB_MIN(pf_state_tree_id, &tree_id); ps; ps = nexts) {
+			nexts = RB_NEXT(pf_state_tree_id, &tree_id, ps);
 
 			if (!psk->psk_ifname[0] || !strcmp(psk->psk_ifname,
-			    s->kif->pfik_name)) {
+			    ps->kif->pfik_name)) {
 #if NPFSYNC
 				/* don't send out individual delete messages */
-				s->sync_flags = PFSTATE_NOSYNC;
+				ps->sync_flags = PFSTATE_NOSYNC;
 #endif
-				pf_unlink_state(s);
+				pf_unlink_state(ps);
 				killed++;
 			}
 		}
@@ -1708,16 +1855,16 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 	}
 
 	case DIOCKILLSTATES: {
-		struct pf_state		*s, *nexts;
+		struct pf_state		*ps, *nexts;
 		struct pf_state_key	*sk;
 		struct pf_state_host	*src, *dst;
 		struct pfioc_state_kill	*psk = (struct pfioc_state_kill *)addr;
 		int			 killed = 0;
 
-		for (s = RB_MIN(pf_state_tree_id, &tree_id); s;
-		    s = nexts) {
-			nexts = RB_NEXT(pf_state_tree_id, &tree_id, s);
-			sk = s->state_key;
+		for (ps = RB_MIN(pf_state_tree_id, &tree_id); ps;
+		    ps = nexts) {
+			nexts = RB_NEXT(pf_state_tree_id, &tree_id, ps);
+			sk = ps->state_key;
 
 			if (sk->direction == PF_OUT) {
 				src = &sk->lan;
@@ -1746,13 +1893,13 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 			    psk->psk_dst.port[0], psk->psk_dst.port[1],
 			    dst->port)) &&
 			    (!psk->psk_ifname[0] || !strcmp(psk->psk_ifname,
-			    s->kif->pfik_name))) {
+			    ps->kif->pfik_name))) {
 #if NPFSYNC > 0
 				/* send immediate delete of state */
-				pfsync_delete_state(s);
-				s->sync_flags |= PFSTATE_NOSYNC;
+				pfsync_delete_state(ps);
+				ps->sync_flags |= PFSTATE_NOSYNC;
 #endif
-				pf_unlink_state(s);
+				pf_unlink_state(ps);
 				killed++;
 			}
 		}
@@ -1763,60 +1910,57 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 	case DIOCADDSTATE: {
 		struct pfioc_state	*ps = (struct pfioc_state *)addr;
 		struct pfsync_state 	*sp = (struct pfsync_state *)ps->state;
-		struct pf_state		*s;
-		struct pf_state_key	*sk;
-		struct pfi_kif		*kif;
 
-		if (sp->timeout >= PFTM_MAX &&
-		    sp->timeout != PFTM_UNTIL_PACKET) {
-			error = EINVAL;
-			break;
-		}
-		s = pool_get(&pf_state_pl, PR_NOWAIT);
-		if (s == NULL) {
-			error = ENOMEM;
-			break;
-		}
-		bzero(s, sizeof(struct pf_state));
-		if ((sk = pf_alloc_state_key(s)) == NULL) {
-			error = ENOMEM;
-			break;
-		}
-		pf_state_import(sp, sk, s);
-		kif = pfi_kif_get(sp->ifname);
-		if (kif == NULL) {
-			pool_put(&pf_state_pl, s);
-			pool_put(&pf_state_key_pl, sk);
-			error = ENOENT;
-			break;
-		}
-		if (pf_insert_state(kif, s)) {
-			pfi_kif_unref(kif, PFI_KIF_REF_NONE);
-			pool_put(&pf_state_pl, s);
-			pool_put(&pf_state_key_pl, sk);
-			error = ENOMEM;
-		}
+		error = pf_state_add(sp);
 		break;
 	}
 
+	case DIOCADDSTATES: {
+		struct pfioc_states	*ps = (struct pfioc_states *)addr;
+		struct pfsync_state	*p = (struct pfsync_state *) ps->ps_states;
+		struct pfsync_state *pk;
+		int size = ps->ps_len;
+		int i = 0;
+		error = 0;
+
+		pk = malloc(sizeof(*pk), M_TEMP,M_WAITOK);
+
+		while (error == 0 && i < size) 
+		{
+			if (copyin(p, pk, sizeof(struct pfsync_state))) 
+			{
+				error = EFAULT;
+				free(pk, M_TEMP);
+			} else {
+				error = pf_state_add(pk);
+				i += sizeof(*p);
+				p++;
+			}
+		}
+
+		free(pk, M_TEMP);
+		break;
+	}
+
+
 	case DIOCGETSTATE: {
 		struct pfioc_state	*ps = (struct pfioc_state *)addr;
-		struct pf_state		*s;
+		struct pf_state		*pfs;
 		u_int32_t		 nr;
 
 		nr = 0;
-		RB_FOREACH(s, pf_state_tree_id, &tree_id) {
+		RB_FOREACH(pfs, pf_state_tree_id, &tree_id) {
 			if (nr >= ps->nr)
 				break;
 			nr++;
 		}
-		if (s == NULL) {
+		if (pfs == NULL) {
 			error = EBUSY;
 			break;
 		}
 
 		pf_state_export((struct pfsync_state *)&ps->state,
-		    s->state_key, s);
+		    pfs->state_key, pfs);
 		break;
 	}
 
@@ -1862,9 +2006,9 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 	}
 
 	case DIOCGETSTATUS: {
-		struct pf_status *s = (struct pf_status *)addr;
-		bcopy(&pf_status, s, sizeof(struct pf_status));
-		pfi_fill_oldstatus(s);
+		struct pf_status *ps = (struct pf_status *)addr;
+		bcopy(&pf_status, ps, sizeof(struct pf_status));
+		pfi_fill_oldstatus(ps);
 		break;
 	}
 
@@ -2078,10 +2222,10 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 	}
 
 	case DIOCADDALTQ: {
-		struct pfioc_altq	*pa = (struct pfioc_altq *)addr;
+		struct pfioc_altq	*paa = (struct pfioc_altq *)addr;
 		struct pf_altq		*altq, *a;
 
-		if (pa->ticket != ticket_altqs_inactive) {
+		if (paa->ticket != ticket_altqs_inactive) {
 			error = EBUSY;
 			break;
 		}
@@ -2090,7 +2234,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 			error = ENOMEM;
 			break;
 		}
-		bcopy(&pa->altq, altq, sizeof(struct pf_altq));
+		bcopy(&paa->altq, altq, sizeof(struct pf_altq));
 
 		/*
 		 * if this is for a queue, find the discipline and
@@ -2118,33 +2262,33 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 		}
 
 		TAILQ_INSERT_TAIL(pf_altqs_inactive, altq, entries);
-		bcopy(altq, &pa->altq, sizeof(struct pf_altq));
+		bcopy(altq, &paa->altq, sizeof(struct pf_altq));
 		break;
 	}
 
 	case DIOCGETALTQS: {
-		struct pfioc_altq	*pa = (struct pfioc_altq *)addr;
+		struct pfioc_altq	*paa = (struct pfioc_altq *)addr;
 		struct pf_altq		*altq;
 
-		pa->nr = 0;
+		paa->nr = 0;
 		TAILQ_FOREACH(altq, pf_altqs_active, entries)
-			pa->nr++;
-		pa->ticket = ticket_altqs_active;
+			paa->nr++;
+		paa->ticket = ticket_altqs_active;
 		break;
 	}
 
 	case DIOCGETALTQ: {
-		struct pfioc_altq	*pa = (struct pfioc_altq *)addr;
+		struct pfioc_altq	*paa = (struct pfioc_altq *)addr;
 		struct pf_altq		*altq;
 		u_int32_t		 nr;
 
-		if (pa->ticket != ticket_altqs_active) {
+		if (paa->ticket != ticket_altqs_active) {
 			error = EBUSY;
 			break;
 		}
 		nr = 0;
 		altq = TAILQ_FIRST(pf_altqs_active);
-		while ((altq != NULL) && (nr < pa->nr)) {
+		while ((altq != NULL) && (nr < paa->nr)) {
 			altq = TAILQ_NEXT(altq, entries);
 			nr++;
 		}
@@ -2152,7 +2296,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 			error = EBUSY;
 			break;
 		}
-		bcopy(altq, &pa->altq, sizeof(struct pf_altq));
+		bcopy(altq, &paa->altq, sizeof(struct pf_altq));
 		break;
 	}
 
@@ -2992,7 +3136,7 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 
 	case DIOCKILLSRCNODES: {
 		struct pf_src_node	*sn;
-		struct pf_state		*s;
+		struct pf_state		*ps;
 		struct pfioc_src_node_kill *psnk = \
 			(struct pfioc_src_node_kill *) addr;
 		int			killed = 0;
@@ -3008,12 +3152,12 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 				      &sn->raddr, sn->af)) {
 				/* Handle state to src_node linkage */
 				if (sn->states != 0) {
-					RB_FOREACH(s, pf_state_tree_id, 
+					RB_FOREACH(ps, pf_state_tree_id, 
 					    &tree_id) {
-						if (s->src_node == sn)
-							s->src_node = NULL;
-						if (s->nat_src_node == sn)
-							s->nat_src_node = NULL;
+						if (ps->src_node == sn)
+							ps->src_node = NULL;
+						if (ps->nat_src_node == sn)
+							ps->nat_src_node = NULL;
 					}
 					sn->states = 0;
 				}
@@ -3030,12 +3174,12 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 	}
 
 	case DIOCSETHOSTID: {
-		u_int32_t	*hostid = (u_int32_t *)addr;
+		u_int32_t	*hid = (u_int32_t *)addr;
 
-		if (*hostid == 0)
-			pf_status.hostid = arc4random();
+		if (*hid == 0)
+			pf_status.hostid = cprng_fast32();
 		else
-			pf_status.hostid = *hostid;
+			pf_status.hostid = *hid;
 		break;
 	}
 
@@ -3066,6 +3210,11 @@ pfioctl(dev_t dev, u_long cmd, void *addr, int flags, struct lwp *l)
 		struct pfioc_iface *io = (struct pfioc_iface *)addr;
 
 		error = pfi_clear_flags(io->pfiio_name, io->pfiio_flags);
+		break;
+	}
+
+	case DIOCSETLCK: {
+		pf_state_lock = *(uint32_t*)addr;
 		break;
 	}
 
@@ -3245,3 +3394,43 @@ pf_pfil_detach(void)
 	return (0);
 }
 #endif /* __NetBSD__ */
+
+#if defined(__NetBSD__)
+MODULE(MODULE_CLASS_DRIVER, pf, "bpf");
+
+static int
+pf_modcmd(modcmd_t cmd, void *opaque)
+{
+#ifdef _MODULE
+	extern void pflogattach(int);
+	extern void pflogdetach(void);
+
+	devmajor_t cmajor = NODEVMAJOR, bmajor = NODEVMAJOR;
+	int err;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		err = devsw_attach("pf", NULL, &bmajor, &pf_cdevsw, &cmajor);
+		if (err)
+			return err;
+		pfattach(1);
+		pflogattach(1);
+		return 0;
+	case MODULE_CMD_FINI:
+		if (pf_status.running) {
+			return EBUSY;
+		} else {
+			pfdetach();
+			pflogdetach();
+			return devsw_detach(NULL, &pf_cdevsw);
+		}
+	default:
+		return ENOTTY;
+	}
+#else
+	if (cmd == MODULE_CMD_INIT)
+		return 0;
+	return ENOTTY;
+#endif
+}
+#endif

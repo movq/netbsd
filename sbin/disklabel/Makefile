@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.62 2009/02/14 13:52:51 abs Exp $
+#	$NetBSD: Makefile,v 1.69 2011/08/30 12:39:52 bouyer Exp $
 #	@(#)Makefile	8.2 (Berkeley) 3/17/94
 
 PROG=	disklabel
@@ -10,41 +10,24 @@ LDADD+= -lutil
 .endif
 
 # these have additional requirements on the alignment of a partition
-.if (${MACHINE_ARCH} == "sparc") || (${MACHINE_ARCH} == "sparc64") \
+.if (${MACHINE} == "sparc") || (${MACHINE} == "sparc64") \
 	|| (${MACHINE} == "sun3")
 CPPFLAGS+= -DSTRICT_CYLINDER_ALIGNMENT
-.endif
-
-.if ( 0 \
-	|| ${MACHINE} == "acorn26" \
-	|| ${MACHINE} == "acorn32" \
-	|| ${MACHINE} == "amd64" \
-	|| ${MACHINE} == "arc" \
-	|| ${MACHINE} == "cats" \
-	|| ${MACHINE} == "cobalt" \
-	|| ${MACHINE} == "evbarm" \
-	|| ${MACHINE} == "hpcarm" \
-	|| ${MACHINE} == "hpcmips" \
-	|| ${MACHINE} == "hpcsh" \
-	|| ${MACHINE} == "i386" \
-	|| ${MACHINE} == "iyonix" \
-	|| ${MACHINE} == "landisk" \
-	|| ${MACHINE} == "macppc" \
-	|| ${MACHINE} == "netwinder" \
-	|| ${MACHINE} == "playstation2" \
-	|| ${MACHINE} == "prep" \
-	|| ${MACHINE} == "shark" \
-	|| ${MACHINE} == "zaurus" \
-    )
-# use MBR partition info
-CPPFLAGS+= -DUSE_MBR
-# recognize old MBR partition ID for a while
-CPPFLAGS+= -DCOMPAT_386BSD_MBRPART
 .endif
 
 .if (${MACHINE} == "acorn32" || ${MACHINE} == "acorn26")
 # Support FileCore boot block
 CPPFLAGS+= -DUSE_ACORN
+.endif
+
+.if (${MACHINE_ARCH} == "alpha")
+# alpha requires boot block checksum
+CPPFLAGS+= -DALPHA_BOOTBLOCK_CKSUM
+.endif
+
+.if (${MACHINE_ARCH} == "vax")
+# vax requires labels in alternative sectors on SMD disk
+CPPFLAGS+= -DVAX_ALTLABELS
 .endif
 
 .include <bsd.prog.mk>

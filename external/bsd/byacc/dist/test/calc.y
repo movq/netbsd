@@ -1,4 +1,4 @@
-/*	$NetBSD: calc.y,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: calc.y,v 1.1.1.4 2011/09/10 21:22:08 christos Exp $	*/
 
 %{
 # include <stdio.h>
@@ -64,38 +64,47 @@ number:  DIGIT
 
 %% /* start of programs */
 
-main ()
+#ifdef YYBYACC
+extern int YYLEX_DECL();
+static void YYERROR_DECL();
+#endif
 
+int
+main (void)
 {
     while(!feof(stdin)) {
-      yyparse();
-   }
+	yyparse();
+    }
+    return 0;
 }
 
-yyerror(char *s)
-{  
-   fprintf(stderr, "%s\n", s);
+static void
+yyerror(const char *s)
+{
+    fprintf(stderr, "%s\n", s);
 }
 
+int
+yylex(void)
+{
+	/* lexical analysis routine */
+	/* returns LETTER for a lower case letter, yylval = 0 through 25 */
+	/* return DIGIT for a digit, yylval = 0 through 9 */
+	/* all other characters are returned immediately */
 
-yylex() {   /* lexical analysis routine */
-            /* returns LETTER for a lower case letter, yylval = 0 through 25 */
-            /* return DIGIT for a digit, yylval = 0 through 9 */
-            /* all other characters are returned immediately */
+    int c;
 
-      int c;
+    while( (c=getchar()) == ' ' )   { /* skip blanks */ }
 
-      while( (c=getchar()) == ' ' )   { /* skip blanks */ }
+    /* c is now nonblank */
 
-      /* c is now nonblank */
-
-      if( islower( c )) {
-         yylval = c - 'a';
-         return ( LETTER );
-         }
-      if( isdigit( c )) {
-         yylval = c - '0';
-         return ( DIGIT );
-         }
-      return( c );
-      }
+    if( islower( c )) {
+	yylval = c - 'a';
+	return ( LETTER );
+    }
+    if( isdigit( c )) {
+	yylval = c - '0';
+	return ( DIGIT );
+    }
+    return( c );
+}

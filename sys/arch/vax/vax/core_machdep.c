@@ -1,4 +1,4 @@
-/*	$NetBSD: core_machdep.c,v 1.2 2009/08/15 23:45:01 matt Exp $	     */
+/*	$NetBSD: core_machdep.c,v 1.5 2011/07/03 02:18:21 matt Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,33 +31,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.2 2009/08/15 23:45:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.5 2011/07/03 02:18:21 matt Exp $");
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/exec.h>
-#include <sys/vnode.h>
 #include <sys/core.h>
-#include <sys/mount.h>
-#include <sys/device.h>
 
 #include <sys/exec_aout.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/vmparam.h>
-#include <machine/mtpr.h>
-#include <machine/pmap.h>
-#include <machine/pte.h>
-#include <machine/macros.h>
-#include <machine/trap.h>
 #include <machine/pcb.h>
 #include <machine/frame.h>
-#include <machine/cpu.h>
-#include <machine/sid.h>
 
 /*
  * Dump the machine specific header information at the start of a core dump.
@@ -80,7 +65,7 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 		return 0;
 	}
 
-	md_core.md_tf = *(struct trapframe *)l->l_addr->u_pcb.framep; /*XXX*/
+	md_core.md_tf = *l->l_md.md_utf;	/*XXX*/
 
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
 	cseg.c_addr = 0;

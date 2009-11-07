@@ -68,6 +68,10 @@ int status (int argc, char **argv);
 int tag (int argc, char **argv);
 int update (int argc, char **argv);
 
+#if defined AUTH_CLIENT_SUPPORT || defined HAVE_KERBEROS || defined HAVE_GSSAPI
+static int connect_to(char *, unsigned int);
+#endif
+
 static size_t try_read_from_server (char *, size_t);
 
 static void auth_server (cvsroot_t *, struct buffer *, struct buffer *,
@@ -3546,9 +3550,9 @@ connect_to_pserver (cvsroot_t *root, struct buffer **to_server_p,
          * code.
          */
 	read_line_via (from_server, to_server, &read_buf);
-	sscanf (read_buf, "%s %d", write_buf, &codenum);
+	count = sscanf (read_buf, "%*s %d", &codenum);
 
-	if ((codenum / 100) != 2)
+	if (count != 1 || (codenum / 100) != 2)
 	    error (1, 0, "proxy server %s:%d does not support http tunnelling",
 		   root->proxy_hostname, proxy_port_number);
 	free (read_buf);
@@ -5151,7 +5155,7 @@ send_init_command (void)
 
 #if defined AUTH_CLIENT_SUPPORT || defined HAVE_KERBEROS || defined HAVE_GSSAPI
 
-int
+static int
 connect_to(char *hostname, unsigned int port)
 {
     struct addrinfo hints, *res, *res0 = NULL;

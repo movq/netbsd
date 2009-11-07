@@ -1,4 +1,4 @@
-/*	$NetBSD: adutil.c,v 1.11 2009/03/14 21:04:23 dsl Exp $	*/
+/*	$NetBSD: adutil.c,v 1.15 2011/06/12 03:35:52 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,18 +32,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adutil.c,v 1.11 2009/03/14 21:04:23 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adutil.c,v 1.15 2011/06/12 03:35:52 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/time.h>
 #include <sys/queue.h>
 #include <sys/buf.h>
-#include <sys/simplelock.h>
 #include <fs/adosfs/adosfs.h>
 
 /*
@@ -52,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: adutil.c,v 1.11 2009/03/14 21:04:23 dsl Exp $");
 #define AHASH(an) ((an) & (ANODEHASHSZ - 1))
 static int CapitalChar(int, int);
 
-extern struct simplelock adosfs_hashlock;
+extern kmutex_t adosfs_hashlock;
 
 struct vnode *
 adosfs_ahashget(struct mount *mp, ino_t an)
@@ -64,18 +62,18 @@ adosfs_ahashget(struct mount *mp, ino_t an)
 	hp = &VFSTOADOSFS(mp)->anodetab[AHASH(an)];
 
 start_over:
-	simple_lock(&adosfs_hashlock);
+	mutex_enter(&adosfs_hashlock);
 	for (ap = hp->lh_first; ap != NULL; ap = ap->link.le_next) {
 		if (ap->block == an) {
 			vp = ATOV(ap);
-			mutex_enter(&vp->v_interlock);
-			simple_unlock(&adosfs_hashlock);
-			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
+			mutex_enter(vp->v_interlock);
+			mutex_exit(&adosfs_hashlock);
+			if (vget(vp, LK_EXCLUSIVE))
 				goto start_over;
 			return (ATOV(ap));
 		}
 	}
-	simple_unlock(&adosfs_hashlock);
+	mutex_exit(&adosfs_hashlock);
 	return (NULL);
 }
 
@@ -87,19 +85,19 @@ start_over:
 void
 adosfs_ainshash(struct adosfsmount *amp, struct anode *ap)
 {
-	vlockmgr(&ap->vp->v_lock, LK_EXCLUSIVE);
+	VOP_LOCK(ATOV(ap), LK_EXCLUSIVE);
 
-	simple_lock(&adosfs_hashlock);
+	mutex_enter(&adosfs_hashlock);
 	LIST_INSERT_HEAD(&amp->anodetab[AHASH(ap->block)], ap, link);
-	simple_unlock(&adosfs_hashlock);
+	mutex_exit(&adosfs_hashlock);
 }
 
 void
 adosfs_aremhash(struct anode *ap)
 {
-	simple_lock(&adosfs_hashlock);
+	mutex_enter(&adosfs_hashlock);
 	LIST_REMOVE(ap, link);
-	simple_unlock(&adosfs_hashlock);
+	mutex_exit(&adosfs_hashlock);
 }
 
 int

@@ -1,4 +1,4 @@
-#	$NetBSD: special,v 1.131 2009/09/29 23:56:27 tsarna Exp $
+#	$NetBSD: special,v 1.141 2011/12/17 13:37:49 tsutsui Exp $
 #	@(#)special	8.2 (Berkeley) 1/23/94
 #
 # This file may be overwritten on upgrades.
@@ -186,12 +186,9 @@
 ./etc/rc.d/altqd		type=file mode=0555
 ./etc/rc.d/amd			type=file mode=0555
 ./etc/rc.d/apmd			type=file mode=0555
+./etc/rc.d/bluetooth		type=file mode=0555
 ./etc/rc.d/bootconf.sh		type=file mode=0555
 ./etc/rc.d/bootparams		type=file mode=0555
-./etc/rc.d/btattach		type=file mode=0555
-./etc/rc.d/btconfig		type=file mode=0555
-./etc/rc.d/btdevctl		type=file mode=0555
-./etc/rc.d/bthcid		type=file mode=0555
 ./etc/rc.d/ccd			type=file mode=0555
 ./etc/rc.d/cgd			type=file mode=0555
 ./etc/rc.d/cleartmp		type=file mode=0555
@@ -220,6 +217,7 @@
 ./etc/rc.d/irdaattach		type=file mode=0555
 ./etc/rc.d/iscsi_target		type=file mode=0555
 ./etc/rc.d/isdnd		type=file mode=0555
+./etc/rc.d/isibootd		type=file mode=0555
 ./etc/rc.d/kdc			type=file mode=0555
 ./etc/rc.d/ldconfig		type=file mode=0555
 ./etc/rc.d/local		type=file mode=0555
@@ -240,6 +238,7 @@
 ./etc/rc.d/newsyslog		type=file mode=0555
 ./etc/rc.d/nfsd			type=file mode=0555
 ./etc/rc.d/nfslocking		type=file mode=0555
+./etc/rc.d/npf			type=file mode=0555
 ./etc/rc.d/ntpd			type=file mode=0555
 ./etc/rc.d/ntpdate		type=file mode=0555
 ./etc/rc.d/perusertmp		type=file mode=0555
@@ -254,6 +253,7 @@
 ./etc/rc.d/racoon		type=file mode=0555
 ./etc/rc.d/raidframe		type=file mode=0555
 ./etc/rc.d/raidframeparity	type=file mode=0555
+./etc/rc.d/random_seed		type=file mode=0555
 ./etc/rc.d/rarpd		type=file mode=0555
 ./etc/rc.d/rbootd		type=file mode=0555
 ./etc/rc.d/rndctl		type=file mode=0555
@@ -267,7 +267,6 @@
 ./etc/rc.d/rwho			type=file mode=0555
 ./etc/rc.d/savecore		type=file mode=0555
 ./etc/rc.d/screenblank		type=file mode=0555
-./etc/rc.d/sdpd			type=file mode=0555
 ./etc/rc.d/securelevel		type=file mode=0555
 ./etc/rc.d/sshd			type=file mode=0555
 ./etc/rc.d/staticroute		type=file mode=0555
@@ -285,8 +284,8 @@
 ./etc/rc.d/wpa_supplicant	type=file mode=0555
 ./etc/rc.d/wscons		type=file mode=0555
 ./etc/rc.d/wsmoused		type=file mode=0555
-./etc/rc.d/xdm			type=file mode=0555
-./etc/rc.d/xfs			type=file mode=0555
+./etc/rc.d/xdm			type=file mode=0555 optional
+./etc/rc.d/xfs			type=file mode=0555 optional
 ./etc/rc.d/ypbind		type=file mode=0555
 ./etc/rc.d/yppasswdd		type=file mode=0555
 ./etc/rc.d/ypserv		type=file mode=0555
@@ -380,6 +379,7 @@
 ./var/chroot/named/etc		type=dir  mode=0755
 ./var/chroot/named/etc/namedb	type=dir  mode=0755
 ./var/chroot/named/etc/namedb/cache	type=dir mode=0775 uname=named gname=named
+./var/chroot/named/etc/namedb/keys	type=dir mode=0775 uname=named gname=named
 ./var/chroot/named/usr		type=dir  mode=0755
 ./var/chroot/named/usr/libexec	type=dir  mode=0755
 ./var/chroot/named/var		type=dir  mode=0755
@@ -392,6 +392,7 @@
 ./var/chroot/ntpd/var/run	type=dir  mode=0775 gname=ntpd
 ./var/chroot/pflogd		type=dir  mode=0755
 ./var/chroot/sshd		type=dir  mode=0755
+./var/chroot/tcpdump		type=dir  mode=0755
 ./var/chroot/tftp-proxy		type=dir  mode=0755
 ./var/cron			type=dir  mode=0755
 ./var/cron/tabs			type=dir  mode=0700
@@ -406,7 +407,7 @@
 ./var/mail			type=dir  mode=1777 ignore
 ./var/preserve			type=dir  mode=0755 ignore
 ./var/run			type=dir  mode=0755
-./var/run/mdnsd			type=dir  mode=0755 optional
+./var/run/mdnsd			type=dir  mode=0755 gname=_mdnsd uname=_mdnsd optional
 ./var/run/utmp			type=file mode=0664 gname=utmp tags=exclude
 ./var/run/utmpx			type=file mode=0664 gname=utmp tags=exclude
 ./var/spool			type=dir  mode=0755

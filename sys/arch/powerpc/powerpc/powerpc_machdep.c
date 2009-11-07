@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc_machdep.c,v 1.39 2008/10/15 06:51:18 wrstuden Exp $	*/
+/*	$NetBSD: powerpc_machdep.c,v 1.62.2.1 2012/05/17 18:24:27 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,14 +32,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.39 2008/10/15 06:51:18 wrstuden Exp $");
+__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.62.2.1 2012/05/17 18:24:27 riz Exp $");
 
 #include "opt_altivec.h"
+#include "opt_modular.h"
+#include "opt_multiprocessor.h"
+#include "opt_ppcarch.h"
 
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/disklabel.h>
 #include <sys/exec.h>
+#include <sys/kauth.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
 #include <sys/sa.h>
@@ -47,11 +51,30 @@ __KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.39 2008/10/15 06:51:18 wrstude
 #include <sys/signal.h>
 #include <sys/sysctl.h>
 #include <sys/ucontext.h>
-#include <sys/user.h>
 #include <sys/cpu.h>
+#include <sys/module.h>
+#include <sys/device.h>
+#include <sys/pcu.h>
+#include <sys/atomic.h>
+#include <sys/kmem.h>
+#include <sys/xcall.h>
+
+#include <dev/mm.h>
+
+#include <powerpc/fpu.h>
+#include <powerpc/pcb.h>
+#include <powerpc/psl.h>
+#include <powerpc/userret.h>
+#if defined(ALTIVEC) || defined(PPC_HAVE_SPE)
+#include <powerpc/altivec.h>
+#endif
+
+#ifdef MULTIPROCESSOR
+#include <powerpc/pic/ipivar.h>
+#endif
 
 int cpu_timebase;
-int cpu_printfataltraps;
+int cpu_printfataltraps = 1;
 #if !defined(PPC_IBM4XX)
 extern int powersave;
 #endif
@@ -59,24 +82,38 @@ extern int powersave;
 /* exported variable to be filled in by the bootloaders */
 char *booted_kernel;
 
+const pcu_ops_t * const pcu_ops_md_defs[PCU_UNIT_COUNT] = {
+#if defined(PPC_HAVE_FPU)
+	[PCU_FPU] = &fpu_ops,
+#endif
+#if defined(ALTIVEC) || defined(PPC_HAVE_SPE)
+	[PCU_VEC] = &vec_ops,
+#endif
+};
+
+#ifdef MULTIPROCESSOR
+volatile struct cpuset_info cpuset_info;
+#endif
+
 /*
  * Set set up registers on exec.
  */
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
-	struct proc *p = l->l_proc;
-	struct trapframe *tf = trapframe(l);
+	struct proc * const p = l->l_proc;
+	struct trapframe * const tf = l->l_md.md_utf;
+	struct pcb * const pcb = lwp_getpcb(l);
 	struct ps_strings arginfo;
 
 	memset(tf, 0, sizeof *tf);
-	tf->fixreg[1] = -roundup(-stack + 8, 16);
+	tf->tf_fixreg[1] = -roundup(-stack + 8, 16);
 
 	/*
 	 * XXX Machine-independent code has already copied arguments and
 	 * XXX environment to userland.  Get them back here.
 	 */
-	(void)copyin((char *)p->p_psstr, &arginfo, sizeof (arginfo));
+	(void)copyin_psstrings(p, &arginfo);
 
 	/*
 	 * Set up arguments for _start():
@@ -92,19 +129,19 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	 * XXX We have to set both regs and retval here due to different
 	 * XXX calling convention in trap.c and init_main.c.
 	 */
-	tf->fixreg[3] = arginfo.ps_nargvstr;
-	tf->fixreg[4] = (register_t)arginfo.ps_argvstr;
-	tf->fixreg[5] = (register_t)arginfo.ps_envstr;
-	tf->fixreg[6] = 0;			/* auxillary vector */
-	tf->fixreg[7] = 0;			/* termination vector */
-	tf->fixreg[8] = (register_t)p->p_psstr;	/* NetBSD extension */
+	tf->tf_fixreg[3] = arginfo.ps_nargvstr;
+	tf->tf_fixreg[4] = (register_t)arginfo.ps_argvstr;
+	tf->tf_fixreg[5] = (register_t)arginfo.ps_envstr;
+	tf->tf_fixreg[6] = 0;			/* auxillary vector */
+	tf->tf_fixreg[7] = 0;			/* termination vector */
+	tf->tf_fixreg[8] = p->p_psstrp;	/* NetBSD extension */
 
-	tf->srr0 = pack->ep_entry;
-	tf->srr1 = PSL_MBO | PSL_USERSET;
+	tf->tf_srr0 = pack->ep_entry;
+	tf->tf_srr1 = PSL_MBO | PSL_USERSET;
 #ifdef ALTIVEC
-	tf->tf_xtra[TF_VRSAVE] = 0;
+	tf->tf_vrsave = 0;
 #endif
-	l->l_addr->u_pcb.pcb_flags = PSL_FE_DFLT;
+	pcb->pcb_flags = PSL_FE_DFLT;
 }
 
 /*
@@ -127,7 +164,7 @@ sysctl_machdep_powersave(SYSCTLFN_ARGS)
 	struct sysctlnode node = *rnode;
 
 	if (powersave < 0)
-		node.sysctl_flags |= ~CTLFLAG_READWRITE;
+		node.sysctl_flags &= ~CTLFLAG_READWRITE;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 #endif
@@ -140,9 +177,11 @@ sysctl_machdep_booted_device(SYSCTLFN_ARGS)
 	if (booted_device == NULL)
 		return (EOPNOTSUPP);
 
+	const char * const xname = device_xname(booted_device);
+
 	node = *rnode;
-	node.sysctl_data = booted_device->dv_xname;
-	node.sysctl_size = strlen(booted_device->dv_xname) + 1;
+	node.sysctl_data = __UNCONST(xname);
+	node.sysctl_size = strlen(xname) + 1;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
@@ -197,17 +236,26 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_INT, "powersave", NULL,
 		       sysctl_machdep_powersave, 0, &powersave, 0,
 		       CTL_MACHDEP, CPU_POWERSAVE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
-		       CTLTYPE_INT, "altivec", NULL,
-		       NULL, cpu_altivec, NULL, 0,
-		       CTL_MACHDEP, CPU_ALTIVEC, CTL_EOL);
-#else
+#endif
+#if defined(PPC_IBM4XX) || defined(PPC_BOOKE)
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
 		       CTLTYPE_INT, "altivec", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_MACHDEP, CPU_ALTIVEC, CTL_EOL);
+#else
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
+		       CTLTYPE_INT, "altivec", NULL,
+		       NULL, cpu_altivec, NULL, 0,
+		       CTL_MACHDEP, CPU_ALTIVEC, CTL_EOL);
+#endif
+#ifdef PPC_BOOKE
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
+		       CTLTYPE_INT, "execprot", NULL,
+		       NULL, 1, NULL, 0,
+		       CTL_MACHDEP, CPU_EXECPROT, CTL_EOL);
 #endif
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
@@ -239,20 +287,12 @@ long dumplo = -1;			/* blocks */
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks;		/* size of dump device */
 	int skip;
 
 	if (dumpdev == NODEV)
 		return;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	if (bdev->d_psize == NULL)
-		return;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	if (nblks <= ctod(1))
 		return;
 
@@ -272,32 +312,249 @@ cpu_dumpconf(void)
 		dumplo = nblks - ctod(dumpsize);
 }
 
+/* 
+ * Start a new LWP
+ */
+void
+startlwp(void *arg)
+{
+	ucontext_t * const uc = arg;
+	lwp_t * const l = curlwp;
+	struct trapframe * const tf = l->l_md.md_utf;
+	int error;
+
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
+
+	kmem_free(uc, sizeof(ucontext_t));
+	userret(l, tf);
+}
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+	struct trapframe * const tf = l->l_md.md_utf;
+
+	userret(l, tf);
+}
+
+void
+upcallret(struct lwp *l)
+{
+	struct trapframe * const tf = l->l_md.md_utf;
+
+	KERNEL_UNLOCK_LAST(l);
+	userret(l, tf);
+}
+
 void 
 cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
 	void *sas, void *ap, void *sp, sa_upcall_t upcall)
 {
-	struct trapframe *tf;
-
-	tf = trapframe(l);
+	struct trapframe * const tf = l->l_md.md_utf;
 
 	/*
 	 * Build context to run handler in.
 	 */
-	tf->fixreg[1] = (register_t)((struct saframe *)sp - 1);
-	tf->lr = 0;
-	tf->fixreg[3] = (register_t)type;
-	tf->fixreg[4] = (register_t)sas;
-	tf->fixreg[5] = (register_t)nevents;
-	tf->fixreg[6] = (register_t)ninterrupted;
-	tf->fixreg[7] = (register_t)ap;
-	tf->srr0 = (register_t)upcall;
-	tf->srr1 &= ~PSL_SE;
+	tf->tf_fixreg[1] = (register_t)((struct saframe *)sp - 1);
+	tf->tf_lr = 0;
+	tf->tf_fixreg[3] = (register_t)type;
+	tf->tf_fixreg[4] = (register_t)sas;
+	tf->tf_fixreg[5] = (register_t)nevents;
+	tf->tf_fixreg[6] = (register_t)ninterrupted;
+	tf->tf_fixreg[7] = (register_t)ap;
+	tf->tf_srr0 = (register_t)upcall;
+	tf->tf_srr1 &= ~PSL_SE;
 }
 
 bool
 cpu_intr_p(void)
 {
 
-	return curcpu()->ci_idepth != 0;
+	return curcpu()->ci_idepth >= 0;
+}
+
+void
+cpu_idle(void)
+{
+	KASSERT(mfmsr() & PSL_EE);
+	KASSERT(curcpu()->ci_cpl == IPL_NONE);
+	(*curcpu()->ci_idlespin)();
+}
+
+void
+cpu_ast(struct lwp *l, struct cpu_info *ci)
+{
+	l->l_md.md_astpending = 0;	/* we are about to do it */
+
+	if (l->l_pflag & LP_OWEUPC) {
+		l->l_pflag &= ~LP_OWEUPC;
+		ADDUPROF(l);
+	}
+
+	/* Check whether we are being preempted. */
+	if (ci->ci_want_resched) {
+		preempt();
+	}
+}
+
+void
+cpu_need_resched(struct cpu_info *ci, int flags)
+{
+	struct lwp * const l = ci->ci_data.cpu_onproc;
+#if defined(MULTIPROCESSOR)
+	struct cpu_info * const cur_ci = curcpu();
+#endif
+
+	KASSERT(kpreempt_disabled());
+
+#ifdef MULTIPROCESSOR
+	atomic_or_uint(&ci->ci_want_resched, flags);
+#else
+	ci->ci_want_resched |= flags;
+#endif
+
+	if (__predict_false((l->l_pflag & LP_INTR) != 0)) {
+		/*
+		 * No point doing anything, it will switch soon.
+		 * Also here to prevent an assertion failure in
+		 * kpreempt() due to preemption being set on a
+		 * soft interrupt LWP.
+		 */
+		return;
+	}
+
+	if (__predict_false(l == ci->ci_data.cpu_idlelwp)) {
+#if defined(MULTIPROCESSOR)
+		/*
+		 * If the other CPU is idling, it must be waiting for an
+		 * interrupt.  So give it one.
+		 */
+		if (__predict_false(ci != cur_ci))
+			cpu_send_ipi(cpu_index(ci), IPI_NOMESG);
+#endif
+		return;
+	}
+
+#ifdef __HAVE_PREEMPTION
+	if (flags & RESCHED_KPREEMPT) {
+		atomic_or_uint(&l->l_dopreempt, DOPREEMPT_ACTIVE);
+		if (ci == cur_ci) {
+			softint_trigger(SOFTINT_KPREEMPT);
+		} else {
+			cpu_send_ipi(cpu_index(ci), IPI_KPREEMPT);
+		}
+		return;
+	}
+#endif
+	l->l_md.md_astpending = 1;		/* force call to ast() */
+#if defined(MULTIPROCESSOR)
+	if (ci != cur_ci && (flags & RESCHED_IMMED)) {
+		cpu_send_ipi(cpu_index(ci), IPI_NOMESG);
+	} 
+#endif
+}
+
+void
+cpu_need_proftick(lwp_t *l)
+{
+	l->l_pflag |= LP_OWEUPC;
+	l->l_md.md_astpending = 1;
+}
+
+void
+cpu_signotify(lwp_t *l)
+{
+	l->l_md.md_astpending = 1;
+}
+
+vaddr_t
+cpu_lwp_pc(lwp_t *l)
+{
+	return l->l_md.md_utf->tf_srr0;
+}
+
+bool
+cpu_clkf_usermode(const struct clockframe *cf)
+{
+	return (cf->cf_srr1 & PSL_PR) != 0;
+}
+
+vaddr_t
+cpu_clkf_pc(const struct clockframe *cf)
+{
+	return cf->cf_srr0;
+}
+
+bool
+cpu_clkf_intr(const struct clockframe *cf)
+{
+	return cf->cf_idepth > 0;
+}
+
+#ifdef MULTIPROCESSOR
+/*
+ * MD support for xcall(9) interface.
+ */
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+	KASSERT(kpreempt_disabled());
+	KASSERT(curcpu() != ci);
+
+	cpuid_t target = (ci != NULL ? cpu_index(ci) : IPI_DST_NOTME);
+
+	/* Unicast: remote CPU. */
+	/* Broadcast: all, but local CPU (caller will handle it). */
+	cpu_send_ipi(target, IPI_XCALL);
+}
+#endif /* MULTIPROCESSOR */
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the boot loader.
+ */
+void
+module_init_md(void)
+{
+}
+#endif /* MODULAR */
+
+bool
+mm_md_direct_mapped_phys(paddr_t pa, vaddr_t *vap)
+{
+	if (atop(pa) < physmem) {
+		*vap = pa;
+		return true;
+	}
+
+	return false;
+}
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return (atop(pa) < physmem) ? 0 : EFAULT;
+}
+
+int
+mm_md_kernacc(void *va, vm_prot_t prot, bool *handled)
+{
+	if (atop((paddr_t)va) < physmem) {
+		*handled = true;
+		return 0;
+	}
+
+	if ((vaddr_t)va < VM_MIN_KERNEL_ADDRESS
+	    || (vaddr_t)va >= VM_MAX_KERNEL_ADDRESS)
+		return EFAULT;
+
+	*handled = false;
+	return 0;
 }
 

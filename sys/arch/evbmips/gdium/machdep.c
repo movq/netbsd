@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.8 2009/08/17 18:57:34 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.16 2011/08/24 19:03:02 macallan Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -36,6 +36,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -71,65 +72,26 @@
  *	@(#)machdep.c   8.3 (Berkeley) 1/12/94
  *	from: Utah Hdr: machdep.c 1.63 91/04/24
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)machdep.c   8.3 (Berkeley) 1/12/94
- *	from: Utah Hdr: machdep.c 1.63 91/04/24
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.8 2009/08/17 18:57:34 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2011/08/24 19:03:02 macallan Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
 #include "opt_modular.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/buf.h>
-#include <sys/reboot.h>
-#include <sys/user.h>
-#include <sys/mount.h>
-#include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/termios.h>
-#include <sys/ksyms.h>
+#include <sys/buf.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/kcore.h>
+#include <sys/kernel.h>
+#include <sys/ksyms.h>
+#include <sys/mount.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
+#include <sys/termios.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -138,12 +100,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.8 2009/08/17 18:57:34 matt Exp $");
 #include "ksyms.h"
 
 #if NKSYMS || defined(DDB) || defined(MODULAR)
-#include <machine/db_machdep.h>
+#include <mips/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/psl.h>
+#include <mips/locore.h>
+#include <mips/psl.h>
 
 #include <mips/bonito/bonitoreg.h>
 #include <evbmips/gdium/gdiumvar.h>
@@ -165,11 +127,7 @@ struct gdium_config gdium_configuration = {
 /* For sysctl_hw. */
 extern char cpu_model[];
 
-/* Our exported CPU info; we can have only one. */  
-struct cpu_info cpu_info_store;
-
 /* Maps for VM objects. */
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	netboot;		/* Are we netbooting? */
@@ -179,14 +137,6 @@ int mem_cluster_cnt;
 
 void	configure(void);
 void	mach_init(int, char **, char **, void *);
-
-/*
- * safepri is a safe priority for sleep to set for a spin-wait during
- * autoconfiguration or after a panic.  Used as an argument to splx().
- */
-int	safepri = MIPS1_PSL_LOWIPL;
-
-extern struct user *proc0paddr;
 
 /*
  * For some reason, PMON doesn't assign a real address to the Ralink's BAR.
@@ -244,18 +194,18 @@ gdium_pci_attach_hook(device_t parent, device_t self,
  * Do all the stuff that locore normally does before calling main().
  */
 void
-mach_init(int argc, char **argv, char **envp, void *callvec)
+mach_init(int argc, char **argv, char **envp32, void *callvec)
 {
 	struct gdium_config *gc = &gdium_configuration;
-	void *kernend, *v;
-        u_long first, last;
+	void *kernend;
 #ifdef NOTYET
 	char *cp;
 	int howto;
 #endif
 	int i;
 	psize_t memsize;
-
+	char *envp[128];
+	int32_t *eptrs = (int32_t *)envp32; 
 	extern char edata[], end[];
 
 	/*
@@ -265,13 +215,26 @@ mach_init(int argc, char **argv, char **envp, void *callvec)
 	memset(edata, 0, (char *)kernend - edata);
 
 	/*
+	 * the pointer array in envp32 is 32bit - we need to sign extend them
+	 * and put them into a list of actual pointers
+	 * Only strictly necessary on LP64 but it doesn't hurt in LP32, runs only
+	 * once at startup and I'd rather not pollute this file with another
+	 * #ifdef orgy
+	 */
+	i = 0;
+	while ((eptrs[i] != 0) && (i < 128)) {
+		envp[i] = (char *)(intptr_t)eptrs[i];	/* sign extend */
+		i++;
+	}
+
+	/*
 	 * Set up the exception vectors and CPU-specific function
 	 * vectors early on.  We need the wbflush() vector set up
 	 * before comcnattach() is called (or at least before the
 	 * first printf() after that is called).
 	 * Also clears the I+D caches.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
 	/* set the VM page size */
 	uvm_setpagesize();
@@ -306,8 +269,8 @@ mach_init(int argc, char **argv, char **envp, void *callvec)
 			break;
 		}
 	}
-	
-	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
+
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
 		curcpu()->ci_cpu_freq /= 2;
 
 	/* Compute the number of ticks for hz. */
@@ -321,7 +284,7 @@ mach_init(int argc, char **argv, char **envp, void *callvec)
 	 * Get correct cpu frequency if the CPU runs at twice the
 	 * external/cp0-count frequency.
 	 */
-	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
 		curcpu()->ci_cpu_freq *= 2;
 
 #ifdef DEBUG
@@ -376,10 +339,8 @@ mach_init(int argc, char **argv, char **envp, void *callvec)
 	/*
 	 * Load the rest of the available pages into the VM system.
 	 */
-	first = round_page(MIPS_KSEG0_TO_PHYS(kernend));
-	last = mem_clusters[0].start + mem_clusters[0].size;
-	uvm_page_physload(atop(first), atop(last), atop(first), atop(last),
-		VM_FREELIST_DEFAULT);
+	mips_page_physload(MIPS_KSEG0_START, (vaddr_t)kernend,
+	    mem_clusters, mem_cluster_cnt, NULL, 0);
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -389,13 +350,9 @@ mach_init(int argc, char **argv, char **envp, void *callvec)
 	pmap_bootstrap();
 
 	/*
-	 * Allocate space for proc0's USPACE.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE); 
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
@@ -422,15 +379,10 @@ consinit(void)
 void
 cpu_startup(void)
 {
-	vaddr_t minaddr, maxaddr;
-	char pbuf[9];
-
 	/*
-	 * Good {morning,afternoon,evening,night}.
+	 *  Do the common startup items.
 	 */
-	printf("%s%s", copyright, version);
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
+	cpu_startup_common();
 
 	/*
 	 * Virtual memory is bootstrapped -- notify the bus spaces
@@ -438,21 +390,6 @@ cpu_startup(void)
 	 */
 	gdium_configuration.gc_mallocsafe = 1;
 
-	minaddr = 0;
-	/*
-	 * Allocate a submap for physio.
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				    VM_PHYS_SIZE, 0, FALSE, NULL);
-
-	/*
-	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use KSEG to
-	 * map those pages.)
-	 */
-
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
 }
 
 int	waittime = -1;
@@ -462,8 +399,7 @@ cpu_reboot(int howto, char *bootstr)
 {
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curproc)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;

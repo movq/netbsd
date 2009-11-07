@@ -1,4 +1,4 @@
-/*	$NetBSD: if_netdock_nubus.c,v 1.19 2008/11/07 00:20:02 dyoung Exp $	*/
+/*	$NetBSD: if_netdock_nubus.c,v 1.21 2010/04/05 07:19:30 joerg Exp $	*/
 
 /*
  * Copyright (C) 2000,2002 Daishi Kato <daishi@axlight.com>
@@ -43,7 +43,7 @@
 /***********************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.19 2008/11/07 00:20:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.21 2010/04/05 07:19:30 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -62,10 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.19 2008/11/07 00:20:02 dyoung
 #include <netinet/if_inarp.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <machine/bus.h>
 #include <machine/viareg.h>
@@ -454,10 +451,7 @@ netdock_start(struct ifnet *ifp)
 			panic("%s: netdock_start: no header mbuf",
 			    device_xname(sc->sc_dev));
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		if ((netdock_put(sc, m)) == 0) {
 			IF_PREPEND(&ifp->if_snd, m);
@@ -769,10 +763,7 @@ netdock_read(struct netdock_softc *sc, int len)
 	if (m == 0)
 		return (0);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf) 
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 

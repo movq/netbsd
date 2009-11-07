@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.h,v 1.3 2009/10/21 21:12:04 rmind Exp $ */
+/* $NetBSD: cpu.h,v 1.10 2012/02/08 17:55:21 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -36,19 +36,30 @@
 
 extern void	cpu_signotify(struct lwp *);
 extern void	cpu_need_proftick(struct lwp *);
+extern void	userret(struct lwp *);
+
+#define	curcpu()	usermode_curcpu()
+#define cpu_number()	0
+
+#define cpu_proc_fork(p1, p2)
+
+struct cpu_info;
+extern int	astpending;
+#define aston(ci) (astpending++)
+extern void cpu_need_resched(struct cpu_info *ci, int flags);
+
 
 struct cpu_info {
-	device_t	ci_dev;
+	struct cpu_data	ci_data;		/* MI per-cpu data */
+	device_t	ci_dev;			/* pointer to our device */
 	struct cpu_info	*ci_self;
 	struct cpu_info	*ci_next;
-	struct cpu_data	ci_data;
 	u_int		ci_cpuid;
 	int		ci_want_resched;
+	int		ci_idepth;
 	volatile int	ci_mtx_count;
 	volatile int	ci_mtx_oldspl;
-#if notyet
 	lwp_t		*ci_curlwp;
-#endif
 	lwp_t		*ci_stash;
 };
 
@@ -63,15 +74,9 @@ usermode_curcpu(void)
 __inline static void
 usermode_delay(unsigned int ms)
 {
-	extern int usleep(useconds_t);
-
-	usleep(ms);
+	extern int thunk_usleep(unsigned int);
+	thunk_usleep(ms);
 }
-
-#define	curcpu()	usermode_curcpu()
-#define cpu_number()	0
-
-#define cpu_proc_fork(p1, p2)
 
 #define delay(ms)	usermode_delay(ms)
 #define DELAY(ms)	usermode_delay(ms)

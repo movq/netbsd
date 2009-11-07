@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_pax.c,v 1.22 2008/06/04 12:26:20 ad Exp $	*/
+/*	$NetBSD: kern_pax.c,v 1.26 2011/11/19 22:51:25 tls Exp $	*/
 
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.22 2008/06/04 12:26:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.26 2011/11/19 22:51:25 tls Exp $");
 
 #include "opt_pax.h"
 
@@ -37,12 +37,13 @@ __KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.22 2008/06/04 12:26:20 ad Exp $");
 #include <sys/exec_elf.h>
 #include <sys/pax.h>
 #include <sys/sysctl.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/fileassoc.h>
 #include <sys/syslog.h>
 #include <sys/vnode.h>
 #include <sys/queue.h>
 #include <sys/kauth.h>
+#include <sys/cprng.h>
 
 #ifdef PAX_ASLR
 #include <sys/mman.h>
@@ -310,7 +311,7 @@ pax_aslr_init(struct lwp *l, struct vmspace *vm)
 	if (!pax_aslr_active(l))
 		return;
 
-	vm->vm_aslr_delta_mmap = PAX_ASLR_DELTA(arc4random(),
+	vm->vm_aslr_delta_mmap = PAX_ASLR_DELTA(cprng_fast32(),
 	    PAX_ASLR_DELTA_MMAP_LSB, PAX_ASLR_DELTA_MMAP_LEN);
 }
 
@@ -321,7 +322,7 @@ pax_aslr(struct lwp *l, vaddr_t *addr, vaddr_t orig_addr, int f)
 		return;
 
 	if (!(f & MAP_FIXED) && ((orig_addr == 0) || !(f & MAP_ANON))) {
-#ifdef DEBUG_ASLR
+#ifdef PAX_ASLR_DEBUG
 		uprintf("applying to 0x%lx orig_addr=0x%lx f=%x\n",
 		    (unsigned long)*addr, (unsigned long)orig_addr, f);
 #endif
@@ -329,11 +330,11 @@ pax_aslr(struct lwp *l, vaddr_t *addr, vaddr_t orig_addr, int f)
 			*addr += l->l_proc->p_vmspace->vm_aslr_delta_mmap;
 		else
 			*addr -= l->l_proc->p_vmspace->vm_aslr_delta_mmap;
-#ifdef DEBUG_ASLR
+#ifdef PAX_ASLR_DEBUG
 		uprintf("result 0x%lx\n", *addr);
 #endif
 	}
-#ifdef DEBUG_ASLR
+#ifdef PAX_ASLR_DEBUG
 	else
 	    uprintf("not applying to 0x%lx orig_addr=0x%lx f=%x\n",
 		(unsigned long)*addr, (unsigned long)orig_addr, f);
@@ -344,15 +345,17 @@ void
 pax_aslr_stack(struct lwp *l, struct exec_package *epp, u_long *max_stack_size)
 {
 	if (pax_aslr_active(l)) {
-		u_long d =  PAX_ASLR_DELTA(arc4random(),
+		u_long d =  PAX_ASLR_DELTA(cprng_fast32(),
 		    PAX_ASLR_DELTA_STACK_LSB,
 		    PAX_ASLR_DELTA_STACK_LEN);
-#ifdef DEBUG_ASLR
+#ifdef PAX_ASLR_DEBUG
 		uprintf("stack 0x%lx d=0x%lx 0x%lx\n",
 		    epp->ep_minsaddr, d, epp->ep_minsaddr - d);
 #endif
 		epp->ep_minsaddr -= d;
 		*max_stack_size -= d;
+		if (epp->ep_ssize > *max_stack_size)
+			epp->ep_ssize = *max_stack_size;
 	}
 }
 #endif /* PAX_ASLR */
@@ -361,19 +364,17 @@ pax_aslr_stack(struct lwp *l, struct exec_package *epp, u_long *max_stack_size)
 static void
 pax_segvguard_cb(void *v)
 {
-	struct pax_segvguard_entry *p;
+	struct pax_segvguard_entry *p = v;
 	struct pax_segvguard_uid_entry *up;
 
-	if (v == NULL)
+	if (p == NULL) {
 		return;
-
-	p = v;
+	}
 	while ((up = LIST_FIRST(&p->segv_uids)) != NULL) {
 		LIST_REMOVE(up, sue_list);
-		free(up, M_TEMP);
+		kmem_free(up, sizeof(*up));
 	}
-
-	free(v, M_TEMP);
+	kmem_free(p, sizeof(*p));
 }
 
 /*
@@ -415,7 +416,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	 * for it.
 	 */
 	if (p == NULL) {
-		p = malloc(sizeof(*p), M_TEMP, M_WAITOK);
+		p = kmem_alloc(sizeof(*p), KM_SLEEP);
 		fileassoc_add(vp, segvguard_id, p);
 		LIST_INIT(&p->segv_uids);
 
@@ -424,7 +425,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 		 * The expiry time is when we purge the entry if it didn't
 		 * reach the limit.
 		 */
-		up = malloc(sizeof(*up), M_TEMP, M_WAITOK);
+		up = kmem_alloc(sizeof(*up), KM_SLEEP);
 		up->sue_uid = kauth_cred_getuid(l->l_cred);
 		up->sue_ncrashes = 1;
 		up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
@@ -453,7 +454,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	 */
 	if (!have_uid) {
 		if (crashed) {
-			up = malloc(sizeof(*up), M_TEMP, M_WAITOK);
+			up = kmem_alloc(sizeof(*up), KM_SLEEP);
 			up->sue_uid = uid;
 			up->sue_ncrashes = 1;
 			up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
@@ -461,7 +462,6 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 
 			LIST_INSERT_HEAD(&p->segv_uids, up, sue_list);
 		}
-
 		return (0);
 	}
 

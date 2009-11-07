@@ -1,4 +1,4 @@
-/*	$NetBSD: agp.c,v 1.65 2009/01/27 08:39:33 markd Exp $	*/
+/*	$NetBSD: agp.c,v 1.79 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -65,7 +65,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.65 2009/01/27 08:39:33 markd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.79 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,8 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.65 2009/01/27 08:39:33 markd Exp $");
 #include <sys/agpio.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -102,8 +100,12 @@ static int agp_allocate_user(struct agp_softc *, agp_allocate *);
 static int agp_deallocate_user(struct agp_softc *, int);
 static int agp_bind_user(struct agp_softc *, agp_bind *);
 static int agp_unbind_user(struct agp_softc *, agp_unbind *);
-static int agpdev_match(struct pci_attach_args *);
-static bool agp_resume(device_t PMF_FN_PROTO);
+static int agp_generic_enable_v2(struct agp_softc *,
+    const struct pci_attach_args *, int, u_int32_t);
+static int agp_generic_enable_v3(struct agp_softc *,
+    const struct pci_attach_args *, int, u_int32_t);
+static int agpdev_match(const struct pci_attach_args *);
+static bool agp_resume(device_t, const pmf_qual_t *);
 
 #include "agp_ali.h"
 #include "agp_amd.h"
@@ -191,6 +193,26 @@ const struct agp_product {
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82Q45_HB,
 	  NULL, 		agp_i810_attach },
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82G45_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82G41_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_E7221_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82965GME_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82B43_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_D_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_M_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_MA_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_IRONLAKE_MC2_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_PINEVIEW_HB,
+	  NULL, 		agp_i810_attach },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_PINEVIEW_M_HB,
 	  NULL, 		agp_i810_attach },
 #endif
 
@@ -327,7 +349,7 @@ agpattach(device_t parent, device_t self, void *aux)
 	 * Work out an upper bound for agp memory allocation. This
 	 * uses a heuristic table from the Linux driver.
 	 */
-	memsize = ptoa(physmem) >> 20;
+	memsize = physmem >> (20 - PAGE_SHIFT); /* memsize is in MB */
 	for (i = 0; i < agp_max_size; i++) {
 		if (memsize <= agp_max[i][0])
 			break;
@@ -426,7 +448,7 @@ agp_generic_detach(struct agp_softc *sc)
 }
 
 static int
-agpdev_match(struct pci_attach_args *pa)
+agpdev_match(const struct pci_attach_args *pa)
 {
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_DISPLAY_VGA)
@@ -442,8 +464,7 @@ agp_generic_enable(struct agp_softc *sc, u_int32_t mode)
 {
 	struct pci_attach_args pa;
 	pcireg_t tstatus, mstatus;
-	pcireg_t command;
-	int rq, sba, fw, rate, capoff;
+	int capoff;
 
 	if (pci_find_device(&pa, agpdev_match) == 0 ||
 	    pci_get_capability(pa.pa_pc, pa.pa_tag, PCI_CAP_AGP,
@@ -455,6 +476,27 @@ agp_generic_enable(struct agp_softc *sc, u_int32_t mode)
 	tstatus = pci_conf_read(sc->as_pc, sc->as_tag,
 	    sc->as_capoff + AGP_STATUS);
 	mstatus = pci_conf_read(pa.pa_pc, pa.pa_tag,
+	    capoff + AGP_STATUS);
+
+	if (AGP_MODE_GET_MODE_3(mode) &&
+	    AGP_MODE_GET_MODE_3(tstatus) &&
+	    AGP_MODE_GET_MODE_3(mstatus))
+		return agp_generic_enable_v3(sc, &pa, capoff, mode);
+	else
+		return agp_generic_enable_v2(sc, &pa, capoff, mode);
+}
+
+static int
+agp_generic_enable_v2(struct agp_softc *sc, const struct pci_attach_args *pa,
+    int capoff, u_int32_t mode)
+{
+	pcireg_t tstatus, mstatus;
+	pcireg_t command;
+	int rq, sba, fw, rate;
+
+	tstatus = pci_conf_read(sc->as_pc, sc->as_tag,
+	    sc->as_capoff + AGP_STATUS);
+	mstatus = pci_conf_read(pa->pa_pc, pa->pa_tag,
 	    capoff + AGP_STATUS);
 
 	/* Set RQ to the min of mode, tstatus and mstatus */
@@ -478,12 +520,12 @@ agp_generic_enable(struct agp_softc *sc, u_int32_t mode)
 	rate = (AGP_MODE_GET_RATE(tstatus)
 		& AGP_MODE_GET_RATE(mstatus)
 		& AGP_MODE_GET_RATE(mode));
-	if (rate & AGP_MODE_RATE_4x)
-		rate = AGP_MODE_RATE_4x;
-	else if (rate & AGP_MODE_RATE_2x)
-		rate = AGP_MODE_RATE_2x;
+	if (rate & AGP_MODE_V2_RATE_4x)
+		rate = AGP_MODE_V2_RATE_4x;
+	else if (rate & AGP_MODE_V2_RATE_2x)
+		rate = AGP_MODE_V2_RATE_2x;
 	else
-		rate = AGP_MODE_RATE_1x;
+		rate = AGP_MODE_V2_RATE_1x;
 
 	/* Construct the new mode word and tell the hardware */
 	command = AGP_MODE_SET_RQ(0, rq);
@@ -493,7 +535,74 @@ agp_generic_enable(struct agp_softc *sc, u_int32_t mode)
 	command = AGP_MODE_SET_AGP(command, 1);
 	pci_conf_write(sc->as_pc, sc->as_tag,
 	    sc->as_capoff + AGP_COMMAND, command);
-	pci_conf_write(pa.pa_pc, pa.pa_tag, capoff + AGP_COMMAND, command);
+	pci_conf_write(pa->pa_pc, pa->pa_tag, capoff + AGP_COMMAND, command);
+
+	return 0;
+}
+
+static int
+agp_generic_enable_v3(struct agp_softc *sc, const struct pci_attach_args *pa,
+    int capoff, u_int32_t mode)
+{
+	pcireg_t tstatus, mstatus;
+	pcireg_t command;
+	int rq, sba, fw, rate, arqsz, cal;
+
+	tstatus = pci_conf_read(sc->as_pc, sc->as_tag,
+	    sc->as_capoff + AGP_STATUS);
+	mstatus = pci_conf_read(pa->pa_pc, pa->pa_tag,
+	    capoff + AGP_STATUS);
+
+	/* Set RQ to the min of mode, tstatus and mstatus */
+	rq = AGP_MODE_GET_RQ(mode);
+	if (AGP_MODE_GET_RQ(tstatus) < rq)
+		rq = AGP_MODE_GET_RQ(tstatus);
+	if (AGP_MODE_GET_RQ(mstatus) < rq)
+		rq = AGP_MODE_GET_RQ(mstatus);
+
+	/*
+	 * ARQSZ - Set the value to the maximum one.
+	 * Don't allow the mode register to override values.
+	 */
+	arqsz = AGP_MODE_GET_ARQSZ(mode);
+	if (AGP_MODE_GET_ARQSZ(tstatus) > arqsz)
+		arqsz = AGP_MODE_GET_ARQSZ(tstatus);
+	if (AGP_MODE_GET_ARQSZ(mstatus) > arqsz)
+		arqsz = AGP_MODE_GET_ARQSZ(mstatus);
+
+	/* Calibration cycle - don't allow override by mode register */
+	cal = AGP_MODE_GET_CAL(tstatus);
+	if (AGP_MODE_GET_CAL(mstatus) < cal)
+		cal = AGP_MODE_GET_CAL(mstatus);
+
+	/* SBA must be supported for AGP v3. */
+	sba = 1;
+
+	/* Set FW if all three support it. */
+	fw = (AGP_MODE_GET_FW(tstatus)
+	       & AGP_MODE_GET_FW(mstatus)
+	       & AGP_MODE_GET_FW(mode));
+
+	/* Figure out the max rate */
+	rate = (AGP_MODE_GET_RATE(tstatus)
+		& AGP_MODE_GET_RATE(mstatus)
+		& AGP_MODE_GET_RATE(mode));
+	if (rate & AGP_MODE_V3_RATE_8x)
+		rate = AGP_MODE_V3_RATE_8x;
+	else
+		rate = AGP_MODE_V3_RATE_4x;
+
+	/* Construct the new mode word and tell the hardware */
+	command = AGP_MODE_SET_RQ(0, rq);
+	command = AGP_MODE_SET_ARQSZ(command, arqsz);
+	command = AGP_MODE_SET_CAL(command, cal);
+	command = AGP_MODE_SET_SBA(command, sba);
+	command = AGP_MODE_SET_FW(command, fw);
+	command = AGP_MODE_SET_RATE(command, rate);
+	command = AGP_MODE_SET_AGP(command, 1);
+	pci_conf_write(sc->as_pc, sc->as_tag,
+	    sc->as_capoff + AGP_COMMAND, command);
+	pci_conf_write(pa->pa_pc, pa->pa_tag, capoff + AGP_COMMAND, command);
 
 	return 0;
 }
@@ -928,6 +1037,41 @@ agpioctl(dev_t dev, u_long cmd, void *data, int fflag, struct lwp *l)
 	case AGPIOC_SETUP:
 		return agp_setup_user(sc, (agp_setup *)data);
 
+#ifdef __x86_64__
+{
+	/*
+	 * Handle paddr_t change from 32 bit for non PAE kernels
+	 * to 64 bit.
+	 */
+#define AGPIOC_OALLOCATE  _IOWR(AGPIOC_BASE, 6, agp_oallocate)
+
+	typedef struct _agp_oallocate {
+		int key;		/* tag of allocation            */
+		size_t pg_count;	/* number of pages              */
+		uint32_t type;		/* 0 == normal, other devspec   */
+		u_long physical;	/* device specific (some devices
+					 * need a phys address of the
+					 * actual page behind the gatt
+					 * table)                        */
+	} agp_oallocate;
+
+	case AGPIOC_OALLOCATE: {
+		int ret;
+		agp_allocate aga;
+		agp_oallocate *oaga = data;
+
+		aga.type = oaga->type;
+		aga.pg_count = oaga->pg_count;
+
+		if ((ret = agp_allocate_user(sc, &aga)) == 0) {
+			oaga->key = aga.key;
+			oaga->physical = (u_long)aga.physical;
+		}
+
+		return ret;
+	}
+}
+#endif
 	case AGPIOC_ALLOCATE:
 		return agp_allocate_user(sc, (agp_allocate *)data);
 
@@ -1119,7 +1263,7 @@ agp_free_dmamem(bus_dma_tag_t tag, size_t size, bus_dmamap_t map,
 }
 
 static bool
-agp_resume(device_t dv PMF_FN_ARGS)
+agp_resume(device_t dv, const pmf_qual_t *qual)
 {
 	agp_flush_cache();
 

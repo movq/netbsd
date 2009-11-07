@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.30 2009/03/12 17:16:58 abs Exp $
+#	$NetBSD: Makefile.inc,v 1.32 2012/01/15 17:36:55 joerg Exp $
 #
 #	etc.sparc64/Makefile.inc -- sparc64-specific etc Makefile targets
 #
@@ -8,7 +8,7 @@ MK32BITLIBS?=no
 # If you change the list of distributed kernels, don't forget
 # to update the release documentation in distrib/notes/common/contents
 
-KERNEL_SETS=		GENERIC GENERIC.MP
+KERNEL_SETS=		GENERIC GENERIC.UP
 
 BUILD_KERNELS+=		INSTALL
 
@@ -79,4 +79,4 @@ ISOBOOTFILE?=	${ISOBOOTFILEDIR}/boot.fs
 iso-image-md-post:
 	SUNLABEL=${TOOL_SUNLABEL:Q} \
 	    ${HOST_SH} ${NETBSDSRCDIR}/distrib/common/sunbootcd.sh \
-	    ${CDROM.image} - - - - ${ISOBOOTFILE}
+	    ${CDROM_IMAGE} - - - - ${ISOBOOTFILE}

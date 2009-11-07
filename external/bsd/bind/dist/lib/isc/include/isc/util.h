@@ -1,7 +1,7 @@
-/*	$NetBSD: util.h,v 1.2 2009/04/12 03:46:08 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.6.4.1 2012/06/05 21:15:28 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2010-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: util.h,v 1.30 2007/06/19 23:47:18 tbox Exp */
+/* Id */
 
 #ifndef ISC_UTIL_H
 #define ISC_UTIL_H 1
@@ -48,7 +48,12 @@
  * }
  * \endcode
  */
-#define UNUSED(x)      (void)(x)
+#define UNUSED(x)      (void)&(x)
+
+/*%
+ * The opposite: silent warnings about stored values which are never read.
+ */
+#define POST(x)        (void)(x)
 
 #define ISC_MAX(a, b)  ((a) > (b) ? (a) : (b))
 #define ISC_MIN(a, b)  ((a) < (b) ? (a) : (b))
@@ -231,5 +236,15 @@
  * Time
  */
 #define TIME_NOW(tp) 	RUNTIME_CHECK(isc_time_now((tp)) == ISC_R_SUCCESS)
+
+/*%
+ * Prevent Linux spurious warnings
+ */
+#if defined(__linux__) && defined(__GNUC__) && (__GNUC__ > 3)
+#define isc_util_fwrite(a, b, c, d)	\
+	__builtin_expect(fwrite((a), (b), (c), (d)), (c))
+#else
+#define isc_util_fwrite(a, b, c, d)	fwrite((a), (b), (c), (d))
+#endif
 
 #endif /* ISC_UTIL_H */

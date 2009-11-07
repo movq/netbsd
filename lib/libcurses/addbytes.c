@@ -1,4 +1,4 @@
-/*	$NetBSD: addbytes.c,v 1.35 2009/07/22 16:57:14 roy Exp $	*/
+/*	$NetBSD: addbytes.c,v 1.39 2011/07/01 01:19:33 joerg Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -34,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)addbytes.c	8.4 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: addbytes.c,v 1.35 2009/07/22 16:57:14 roy Exp $");
+__RCSID("$NetBSD: addbytes.c,v 1.39 2011/07/01 01:19:33 joerg Exp $");
 #endif
 #endif				/* not lint */
 
 #include <stdlib.h>
+#include <string.h>
 #include "curses.h"
 #include "curses_private.h"
 #ifdef DEBUG
@@ -129,7 +130,7 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 	lp = win->alines[y];
 
 #ifdef HAVE_WCHAR
-	(void)mbrtowc(NULL, NULL, (size_t)0, &st);
+	(void)memset(&st, 0, sizeof(st));
 #endif
 	while (count > 0) {
 #ifndef HAVE_WCHAR
@@ -142,7 +143,7 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 		count--;
 #else
 		/*
-		 * For wide character support only, try and convert the
+		 * For wide-character support only, try and convert the
 		 * given string into a wide character - we do this because
 		 * this is how ncurses behaves (not that I think this is
 		 * actually the correct thing to do but if we don't do it
@@ -156,7 +157,7 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 			/* not a valid conversion just eat a char */
 			wc = *bytes;
 			n = 1;
-			(void)mbrtowc(NULL, NULL, (size_t)0, &st);
+			(void)memset(&st, 0, sizeof(st));
 		} else if (wc == 0) {
 			break;
 		}
@@ -438,6 +439,8 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 
 	/* check for enough space before the end of line */
 	cw = wcwidth(wch->vals[0]);
+	if (cw < 0)
+		cw = 1;
 	if (cw > win->maxx - *x) {
 #ifdef DEBUG
 		__CTRACE(__CTRACE_INPUT,

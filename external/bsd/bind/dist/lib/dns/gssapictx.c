@@ -1,7 +1,7 @@
-/*	$NetBSD: gssapictx.c,v 1.1.1.2 2009/10/25 00:02:29 christos Exp $	*/
+/*	$NetBSD: gssapictx.c,v 1.3.4.1 2012/06/05 21:15:01 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,20 +17,23 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: gssapictx.c,v 1.14 2009/09/02 23:48:02 tbox Exp */
+/* Id: gssapictx.c,v 1.29 2011/08/29 06:33:25 marka Exp  */
 
 #include <config.h>
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <isc/buffer.h>
 #include <isc/dir.h>
 #include <isc/entropy.h>
+#include <isc/file.h>
 #include <isc/lex.h>
 #include <isc/mem.h>
 #include <isc/once.h>
 #include <isc/print.h>
+#include <isc/platform.h>
 #include <isc/random.h>
 #include <isc/string.h>
 #include <isc/time.h>
@@ -68,6 +71,7 @@
  * we include SPNEGO's OID.
  */
 #if defined(GSSAPI)
+#include ISC_PLATFORM_KRB5HEADER
 
 static unsigned char krb5_mech_oid_bytes[] = {
 	0x2a, 0x86, 0x48, 0x86, 0xf7, 0x12, 0x01, 0x02, 0x02
@@ -97,20 +101,20 @@ static gss_OID_set_desc mech_oid_set = {
 	do { \
 		(gb).length = (r).length; \
 		(gb).value = (r).base; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define GBUFFER_TO_REGION(gb, r) \
 	do { \
 		(r).length = (gb).length; \
 		(r).base = (gb).value; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 
 #define RETERR(x) do { \
 	result = (x); \
 	if (result != ISC_R_SUCCESS) \
 		goto out; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #ifdef GSSAPI
 static inline void
@@ -132,7 +136,8 @@ name_to_gbuffer(dns_name_t *name, isc_buffer_t *buffer,
 		namep = &tname;
 	}
 
-	result = dns_name_totext(namep, ISC_FALSE, buffer);
+	result = dns_name_toprincipal(namep, buffer);
+	RUNTIME_CHECK(result == ISC_R_SUCCESS);
 	isc_buffer_putuint8(buffer, 0);
 	isc_buffer_usedregion(buffer, &r);
 	REGION_TO_GBUFFER(r, *gbuffer);
@@ -177,7 +182,7 @@ log_cred(const gss_cred_id_t cred) {
 	}
 
 	if (gret == GSS_S_COMPLETE) {
-		if (gbuffer.length != 0) {
+		if (gbuffer.length != 0U) {
 			gret = gss_release_buffer(&minor, &gbuffer);
 			if (gret != GSS_S_COMPLETE)
 				gss_log(3, "failed gss_release_buffer: %s",
@@ -190,6 +195,57 @@ log_cred(const gss_cred_id_t cred) {
 	if (gret != GSS_S_COMPLETE)
 		gss_log(3, "failed gss_release_name: %s",
 			gss_error_tostring(gret, minor, buf, sizeof(buf)));
+}
+#endif
+
+#ifdef GSSAPI
+/*
+ * check for the most common configuration errors.
+ *
+ * The errors checked for are:
+ *   - tkey-gssapi-credential doesn't start with DNS/
+ *   - the default realm in /etc/krb5.conf and the
+ *     tkey-gssapi-credential bind config option don't match
+ *
+ * Note that if tkey-gssapi-keytab is set then these configure checks
+ * are not performed, and runtime errors from gssapi are used instead
+ */
+static void
+check_config(const char *gss_name) {
+	const char *p;
+	krb5_context krb5_ctx;
+	char *krb5_realm = NULL;
+
+	if (strncasecmp(gss_name, "DNS/", 4) != 0) {
+		gss_log(ISC_LOG_ERROR, "tkey-gssapi-credential (%s) "
+			"should start with 'DNS/'", gss_name);
+		return;
+	}
+
+	if (krb5_init_context(&krb5_ctx) != 0) {
+		gss_log(ISC_LOG_ERROR, "Unable to initialise krb5 context");
+		return;
+	}
+	if (krb5_get_default_realm(krb5_ctx, &krb5_realm) != 0) {
+		gss_log(ISC_LOG_ERROR, "Unable to get krb5 default realm");
+		krb5_free_context(krb5_ctx);
+		return;
+	}
+	p = strchr(gss_name, '/');
+	if (p == NULL) {
+		gss_log(ISC_LOG_ERROR, "badly formatted "
+			"tkey-gssapi-credentials (%s)", gss_name);
+		krb5_free_context(krb5_ctx);
+		return;
+	}
+	if (strcasecmp(p + 1, krb5_realm) != 0) {
+		gss_log(ISC_LOG_ERROR, "default realm from krb5.conf (%s) "
+			"does not match tkey-gssapi-credential (%s)",
+			krb5_realm, gss_name);
+		krb5_free_context(krb5_ctx);
+		return;
+	}
+	krb5_free_context(krb5_ctx);
 }
 #endif
 
@@ -215,7 +271,7 @@ dst_gssapi_acquirecred(dns_name_t *name, isc_boolean_t initiate,
 	 * here when we're in the acceptor role, which would let us
 	 * default the hostname and use a compiled in default service
 	 * name of "DNS", giving one less thing to configure in
-	 * named.conf.  Unfortunately, this creates a circular
+	 * named.conf.	Unfortunately, this creates a circular
 	 * dependency due to DNS-based realm lookup in at least one
 	 * GSSAPI implementation (Heimdal).  Oh well.
 	 */
@@ -225,6 +281,8 @@ dst_gssapi_acquirecred(dns_name_t *name, isc_boolean_t initiate,
 		gret = gss_import_name(&minor, &gnamebuf,
 				       GSS_C_NO_OID, &gname);
 		if (gret != GSS_S_COMPLETE) {
+			check_config((char *)array);
+
 			gss_log(3, "failed gss_import_name: %s",
 				gss_error_tostring(gret, minor, buf,
 						   sizeof(buf)));
@@ -254,19 +312,22 @@ dst_gssapi_acquirecred(dns_name_t *name, isc_boolean_t initiate,
 	if (gret != GSS_S_COMPLETE) {
 		gss_log(3, "failed to acquire %s credentials for %s: %s",
 			initiate ? "initiate" : "accept",
-			(char *)gnamebuf.value,
+			(gname != NULL) ? (char *)gnamebuf.value : "?",
 			gss_error_tostring(gret, minor, buf, sizeof(buf)));
+		check_config((char *)array);
 		return (ISC_R_FAILURE);
 	}
 
 	gss_log(4, "acquired %s credentials for %s",
 		initiate ? "initiate" : "accept",
-		(char *)gnamebuf.value);
+		(gname != NULL) ? (char *)gnamebuf.value : "?");
 
 	log_cred(*cred);
 
 	return (ISC_R_SUCCESS);
 #else
+	REQUIRE(cred != NULL && *cred == NULL);
+
 	UNUSED(name);
 	UNUSED(initiate);
 	UNUSED(cred);
@@ -285,12 +346,17 @@ dst_gssapi_identitymatchesrealmkrb5(dns_name_t *signer, dns_name_t *name,
 	char rbuf[DNS_NAME_FORMATSIZE];
 	char *sname;
 	char *rname;
+	isc_buffer_t buffer;
+	isc_result_t result;
 
 	/*
 	 * It is far, far easier to write the names we are looking at into
 	 * a string, and do string operations on them.
 	 */
-	dns_name_format(signer, sbuf, sizeof(sbuf));
+	isc_buffer_init(&buffer, sbuf, sizeof(sbuf));
+	result = dns_name_toprincipal(signer, &buffer);
+	RUNTIME_CHECK(result == ISC_R_SUCCESS);
+	isc_buffer_putuint8(&buffer, 0);
 	if (name != NULL)
 		dns_name_format(name, nbuf, sizeof(nbuf));
 	dns_name_format(realm, rbuf, sizeof(rbuf));
@@ -300,14 +366,14 @@ dst_gssapi_identitymatchesrealmkrb5(dns_name_t *signer, dns_name_t *name,
 	 * does not exist, we don't have something we like, so we fail our
 	 * compare.
 	 */
-	rname = strstr(sbuf, "\\@");
+	rname = strchr(sbuf, '@');
 	if (rname == NULL)
 		return (isc_boolean_false);
 	*rname = '\0';
-	rname += 2;
+	rname++;
 
 	/*
-	 * Find the host portion of the signer's name.  We do this by
+	 * Find the host portion of the signer's name.	We do this by
 	 * searching for the first / character.  We then check to make
 	 * certain the instance name is "host"
 	 *
@@ -354,12 +420,17 @@ dst_gssapi_identitymatchesrealmms(dns_name_t *signer, dns_name_t *name,
 	char *sname;
 	char *nname;
 	char *rname;
+	isc_buffer_t buffer;
+	isc_result_t result;
 
 	/*
 	 * It is far, far easier to write the names we are looking at into
 	 * a string, and do string operations on them.
 	 */
-	dns_name_format(signer, sbuf, sizeof(sbuf));
+	isc_buffer_init(&buffer, sbuf, sizeof(sbuf));
+	result = dns_name_toprincipal(signer, &buffer);
+	RUNTIME_CHECK(result == ISC_R_SUCCESS);
+	isc_buffer_putuint8(&buffer, 0);
 	if (name != NULL)
 		dns_name_format(name, nbuf, sizeof(nbuf));
 	dns_name_format(realm, rbuf, sizeof(rbuf));
@@ -369,21 +440,21 @@ dst_gssapi_identitymatchesrealmms(dns_name_t *signer, dns_name_t *name,
 	 * does not exist, we don't have something we like, so we fail our
 	 * compare.
 	 */
-	rname = strstr(sbuf, "\\@");
+	rname = strchr(sbuf, '@');
 	if (rname == NULL)
 		return (isc_boolean_false);
-	sname = strstr(sbuf, "\\$");
+	sname = strchr(sbuf, '$');
 	if (sname == NULL)
 		return (isc_boolean_false);
 
 	/*
 	 * Verify that the $ and @ follow one another.
 	 */
-	if (rname - sname != 2)
+	if (rname - sname != 1)
 		return (isc_boolean_false);
 
 	/*
-	 * Find the host portion of the signer's name.  Zero out the $ so
+	 * Find the host portion of the signer's name.	Zero out the $ so
 	 * it terminates the signer's name, and skip past the @ for
 	 * the realm.
 	 *
@@ -391,14 +462,13 @@ dst_gssapi_identitymatchesrealmms(dns_name_t *signer, dns_name_t *name,
 	 *    machinename$@EXAMPLE.COM
 	 * format.
 	 */
-	*rname = '\0';
-	rname += 2;
+	rname++;
 	*sname = '\0';
 	sname = sbuf;
 
 	/*
 	 * Find the first . in the target name, and make it the end of
-	 * the string.   The rest of the name has to match the realm.
+	 * the string.	 The rest of the name has to match the realm.
 	 */
 	if (name != NULL) {
 		nname = strchr(nbuf, '.');
@@ -454,9 +524,34 @@ dst_gssapi_releasecred(gss_cred_id_t *cred) {
 #endif
 }
 
+#ifdef GSSAPI
+/*
+ * Format a gssapi error message info into a char ** on the given memory
+ * context. This is used to return gssapi error messages back up the
+ * call chain for reporting to the user.
+ */
+static void
+gss_err_message(isc_mem_t *mctx, isc_uint32_t major, isc_uint32_t minor,
+		char **err_message)
+{
+	char buf[1024];
+	char *estr;
+
+	if (err_message == NULL || mctx == NULL) {
+		/* the caller doesn't want any error messages */
+		return;
+	}
+
+	estr = gss_error_tostring(major, minor, buf, sizeof(buf));
+	if (estr)
+		(*err_message) = isc_mem_strdup(mctx, estr);
+}
+#endif
+
 isc_result_t
 dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
-		   isc_buffer_t *outtoken, gss_ctx_id_t *gssctx)
+		   isc_buffer_t *outtoken, gss_ctx_id_t *gssctx,
+		   isc_mem_t *mctx, char **err_message)
 {
 #ifdef GSSAPI
 	isc_region_t r;
@@ -467,10 +562,10 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 	isc_result_t result;
 	gss_buffer_desc gnamebuf;
 	unsigned char array[DNS_NAME_MAXTEXT + 1];
-	char buf[1024];
 
 	/* Client must pass us a valid gss_ctx_id_t here */
 	REQUIRE(gssctx != NULL);
+	REQUIRE(mctx != NULL);
 
 	isc_buffer_init(&namebuf, array, sizeof(array));
 	name_to_gbuffer(name, &namebuf, &gnamebuf);
@@ -478,6 +573,7 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 	/* Get the name as a GSS name */
 	gret = gss_import_name(&minor, &gnamebuf, GSS_C_NO_OID, &gname);
 	if (gret != GSS_S_COMPLETE) {
+		gss_err_message(mctx, gret, minor, err_message);
 		result = ISC_R_FAILURE;
 		goto out;
 	}
@@ -490,8 +586,11 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 		gintokenp = NULL;
 	}
 
-	flags = GSS_C_REPLAY_FLAG | GSS_C_MUTUAL_FLAG | GSS_C_DELEG_FLAG |
-		GSS_C_SEQUENCE_FLAG | GSS_C_INTEG_FLAG;
+	/*
+	 * Note that we don't set GSS_C_SEQUENCE_FLAG as Windows DNS
+	 * servers don't like it.
+	 */
+	flags = GSS_C_REPLAY_FLAG | GSS_C_MUTUAL_FLAG | GSS_C_INTEG_FLAG;
 
 	gret = gss_init_sec_context(&minor, GSS_C_NO_CREDENTIAL, gssctx,
 				    gname, GSS_SPNEGO_MECHANISM, flags,
@@ -499,9 +598,9 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 				    NULL, &gouttoken, &ret_flags, NULL);
 
 	if (gret != GSS_S_COMPLETE && gret != GSS_S_CONTINUE_NEEDED) {
-		gss_log(3, "Failure initiating security context");
-		gss_log(3, "%s", gss_error_tostring(gret, minor,
-						    buf, sizeof(buf)));
+		gss_err_message(mctx, gret, minor, err_message);
+		gss_log(3, "Failure initiating security context: %s",
+			*err_message);
 		result = ISC_R_FAILURE;
 		goto out;
 	}
@@ -514,7 +613,7 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 	/*
 	 * RFC 2744 states the a valid output token has a non-zero length.
 	 */
-	if (gouttoken.length != 0) {
+	if (gouttoken.length != 0U) {
 		GBUFFER_TO_REGION(gouttoken, r);
 		RETERR(isc_buffer_copyregion(outtoken, &r));
 		(void)gss_release_buffer(&minor, &gouttoken);
@@ -533,6 +632,8 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 	UNUSED(intoken);
 	UNUSED(outtoken);
 	UNUSED(gssctx);
+	UNUSED(mctx);
+	UNUSED(err_message);
 
 	return (ISC_R_NOTIMPLEMENTED);
 #endif
@@ -540,6 +641,7 @@ dst_gssapi_initctx(dns_name_t *name, isc_buffer_t *intoken,
 
 isc_result_t
 dst_gssapi_acceptctx(gss_cred_id_t cred,
+		     const char *gssapi_keytab,
 		     isc_region_t *intoken, isc_buffer_t **outtoken,
 		     gss_ctx_id_t *ctxout, dns_name_t *principal,
 		     isc_mem_t *mctx)
@@ -557,14 +659,41 @@ dst_gssapi_acceptctx(gss_cred_id_t cred,
 
 	REQUIRE(outtoken != NULL && *outtoken == NULL);
 
-	log_cred(cred);
-
 	REGION_TO_GBUFFER(*intoken, gintoken);
 
 	if (*ctxout == NULL)
 		context = GSS_C_NO_CONTEXT;
 	else
 		context = *ctxout;
+
+	if (gssapi_keytab != NULL) {
+#ifdef ISC_PLATFORM_GSSAPI_KRB5_HEADER
+		gret = gsskrb5_register_acceptor_identity(gssapi_keytab);
+		if (gret != GSS_S_COMPLETE) {
+			gss_log(3, "failed "
+				"gsskrb5_register_acceptor_identity(%s): %s",
+				gssapi_keytab,
+				gss_error_tostring(gret, 0, buf, sizeof(buf)));
+			return (DNS_R_INVALIDTKEY);
+		}
+#else
+		/*
+		 * Minimize memory leakage by only setting KRB5_KTNAME
+		 * if it needs to change.
+		 */
+		const char *old = getenv("KRB5_KTNAME");
+		if (old == NULL || strcmp(old, gssapi_keytab) != 0) {
+			char *kt = malloc(strlen(gssapi_keytab) + 13);
+			if (kt == NULL)
+				return (ISC_R_NOMEMORY);
+			sprintf(kt, "KRB5_KTNAME=%s", gssapi_keytab);
+			if (putenv(kt) != 0)
+				return (ISC_R_NOMEMORY);
+		}
+#endif
+	}
+
+	log_cred(cred);
 
 	gret = gss_accept_sec_context(&minor, &context, cred, &gintoken,
 				      GSS_C_NO_CHANNEL_BINDINGS, &gname,
@@ -598,7 +727,7 @@ dst_gssapi_acceptctx(gss_cred_id_t cred,
 		return (result);
 	}
 
-	if (gouttoken.length > 0) {
+	if (gouttoken.length > 0U) {
 		RETERR(isc_buffer_allocate(mctx, outtoken, gouttoken.length));
 		GBUFFER_TO_REGION(gouttoken, r);
 		RETERR(isc_buffer_copyregion(*outtoken, &r));
@@ -620,7 +749,7 @@ dst_gssapi_acceptctx(gss_cred_id_t cred,
 		 * case, since principal names really should not
 		 * contain null characters.
 		 */
-		if (gnamebuf.length > 0 &&
+		if (gnamebuf.length > 0U &&
 		    ((char *)gnamebuf.value)[gnamebuf.length - 1] == '\0')
 			gnamebuf.length--;
 
@@ -634,7 +763,7 @@ dst_gssapi_acceptctx(gss_cred_id_t cred,
 		RETERR(dns_name_fromtext(principal, &namebuf, dns_rootname,
 					 0, NULL));
 
-		if (gnamebuf.length != 0) {
+		if (gnamebuf.length != 0U) {
 			gret = gss_release_buffer(&minor, &gnamebuf);
 			if (gret != GSS_S_COMPLETE)
 				gss_log(3, "failed gss_release_buffer: %s",
@@ -657,6 +786,7 @@ dst_gssapi_acceptctx(gss_cred_id_t cred,
 	return (result);
 #else
 	UNUSED(cred);
+	UNUSED(gssapi_keytab);
 	UNUSED(intoken);
 	UNUSED(outtoken);
 	UNUSED(ctxout);
@@ -714,9 +844,9 @@ gss_error_tostring(isc_uint32_t major, isc_uint32_t minor,
 	snprintf(buf, buflen, "GSSAPI error: Major = %s, Minor = %s.",
 		(char *)msg_major.value, (char *)msg_minor.value);
 
-	if (msg_major.length != 0)
+	if (msg_major.length != 0U)
 		(void)gss_release_buffer(&minor_stat, &msg_major);
-	if (msg_minor.length != 0)
+	if (msg_minor.length != 0U)
 		(void)gss_release_buffer(&minor_stat, &msg_minor);
 	return(buf);
 #else

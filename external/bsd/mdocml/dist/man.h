@@ -1,6 +1,6 @@
-/*	$Vendor-Id: man.h,v 1.23 2009/10/30 05:58:37 kristaps Exp $ */
+/*	$Vendor-Id: man.h,v 1.60 2012/01/03 15:16:24 kristaps Exp $ */
 /*
- * Copyright (c) 2009 Kristaps Dzonsons <kristaps@kth.se>
+ * Copyright (c) 2009, 2010, 2011 Kristaps Dzonsons <kristaps@bsd.lv>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,41 +17,43 @@
 #ifndef MAN_H
 #define MAN_H
 
-#include <time.h>
-
-#define	MAN_br	 	 0
-#define	MAN_TH		 1
-#define	MAN_SH		 2
-#define	MAN_SS		 3
-#define	MAN_TP		 4
-#define	MAN_LP		 5
-#define	MAN_PP		 6
-#define	MAN_P		 7
-#define	MAN_IP		 8
-#define	MAN_HP		 9
-#define	MAN_SM		 10
-#define	MAN_SB		 11
-#define	MAN_BI		 12
-#define	MAN_IB		 13
-#define	MAN_BR		 14
-#define	MAN_RB		 15
-#define	MAN_R		 16
-#define	MAN_B		 17
-#define	MAN_I		 18
-#define	MAN_IR		 19
-#define	MAN_RI		 20
-#define	MAN_na		 21
-#define	MAN_i		 22
-#define	MAN_sp		 23
-#define	MAN_nf		 24
-#define	MAN_fi		 25
-#define	MAN_r		 26
-#define	MAN_RE		 27
-#define	MAN_RS		 28
-#define	MAN_DT		 29
-#define	MAN_UC		 30
-#define	MAN_PD		 31
-#define	MAN_MAX	 	 32
+enum	mant {
+	MAN_br = 0,
+	MAN_TH,
+	MAN_SH,
+	MAN_SS,
+	MAN_TP,
+	MAN_LP,
+	MAN_PP,
+	MAN_P,
+	MAN_IP,
+	MAN_HP,
+	MAN_SM,
+	MAN_SB,
+	MAN_BI,
+	MAN_IB,
+	MAN_BR,
+	MAN_RB,
+	MAN_R,
+	MAN_B,
+	MAN_I,
+	MAN_IR,
+	MAN_RI,
+	MAN_na,
+	MAN_sp,
+	MAN_nf,
+	MAN_fi,
+	MAN_RE,
+	MAN_RS,
+	MAN_DT,
+	MAN_UC,
+	MAN_PD,
+	MAN_AT,
+	MAN_in,
+	MAN_ft,
+	MAN_OP,
+	MAN_MAX
+};
 
 enum	man_type {
 	MAN_TEXT,
@@ -59,58 +61,52 @@ enum	man_type {
 	MAN_ROOT,
 	MAN_BLOCK,
 	MAN_HEAD,
-	MAN_BODY
+	MAN_BODY,
+	MAN_TAIL,
+	MAN_TBL,
+	MAN_EQN
 };
 
 struct	man_meta {
-	int		 msec;
-	time_t		 date;
-	char		*vol;
-	char		*title;
-	char		*source;
+	char		*msec; /* `TH' section (1, 3p, etc.) */
+	char		*date; /* `TH' normalised date */
+	char		*vol; /* `TH' volume */
+	char		*title; /* `TH' title (e.g., FOO) */
+	char		*source; /* `TH' source (e.g., GNU) */
 };
 
 struct	man_node {
-	struct man_node	*parent;
-	struct man_node	*child;
-	struct man_node	*next;
-	struct man_node	*prev;
-	int		 nchild;
+	struct man_node	*parent; /* parent AST node */
+	struct man_node	*child; /* first child AST node */
+	struct man_node	*next; /* sibling AST node */
+	struct man_node	*prev; /* prior sibling AST node */
+	int		 nchild; /* number children */
 	int		 line;
 	int		 pos;
-	int		 tok;
+	enum mant	 tok; /* tok or MAN__MAX if none */
 	int		 flags;
-#define	MAN_VALID	(1 << 0)
-#define	MAN_ACTED	(1 << 1)
-	enum man_type	 type;
-	char		*string;
-	struct man_node	*head;
-	struct man_node	*body;
+#define	MAN_VALID	(1 << 0) /* has been validated */
+#define	MAN_EOS		(1 << 2) /* at sentence boundary */
+#define	MAN_LINE	(1 << 3) /* first macro/text on line */
+	enum man_type	 type; /* AST node type */
+	char		*string; /* TEXT node argument */
+	struct man_node	*head; /* BLOCK node HEAD ptr */
+	struct man_node *tail; /* BLOCK node TAIL ptr */
+	struct man_node	*body; /* BLOCK node BODY ptr */
+	const struct tbl_span *span; /* TBL */
+	const struct eqn *eqn; /* EQN */
 };
 
-#define	MAN_IGN_MACRO	 (1 << 0)
-#define	MAN_IGN_CHARS	 (1 << 1)
-#define	MAN_IGN_ESCAPE	 (1 << 2)
-
+/* Names of macros.  Index is enum mant. */
 extern	const char *const *man_macronames;
-
-struct	man_cb {
-	int	(*man_warn)(void *, int, int, const char *);
-	int	(*man_err)(void *, int, int, const char *);
-};
 
 __BEGIN_DECLS
 
 struct	man;
 
-void	 	  man_free(struct man *);
-struct	man	 *man_alloc(void *, int, const struct man_cb *);
-void		  man_reset(struct man *);
-int	 	  man_parseln(struct man *, int, char *buf);
-int		  man_endparse(struct man *);
-
 const struct man_node *man_node(const struct man *);
 const struct man_meta *man_meta(const struct man *);
+const struct mparse   *man_mparse(const struct man *);
 
 __END_DECLS
 

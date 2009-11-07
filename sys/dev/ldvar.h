@@ -1,4 +1,4 @@
-/*	$NetBSD: ldvar.h,v 1.16 2009/05/07 08:03:23 cegger Exp $	*/
+/*	$NetBSD: ldvar.h,v 1.20.2.1 2012/07/16 22:04:45 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,19 +34,19 @@
 
 #include <sys/mutex.h>
 #include <sys/device.h>	/* for device_t */
+#include <sys/rnd.h>
 
 struct ld_softc {
 	device_t sc_dv;
 	struct	disk sc_dk;
 	struct	bufq_state *sc_bufq;
 	kmutex_t sc_mutex;
-#if NRND > 0
-	rndsource_element_t	sc_rnd_source;
-#endif
+	krndsource_t	sc_rnd_source;
 	int	sc_queuecnt;		/* current h/w queue depth */
 	int	sc_ncylinders;		/* # cylinders */
 	int	sc_nheads;		/* # heads */
 	int	sc_nsectors;		/* # sectors per track */
+	uint64_t	sc_disksize512;
 
 	/*
 	 * The following are filled by hardware specific attachment code.

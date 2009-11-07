@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.8 2008/04/28 20:23:28 martin Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.19 2011/07/05 19:30:50 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -81,15 +81,15 @@
 
 /* Make sure this is signed; we need pointers to be sign-extended. */
 #if defined(__mips_n32)
-typedef	long long       __greg_t;
+typedef	long long	__greg_t;
 #else   
-typedef	long            __greg_t;
+typedef	long		__greg_t;
 #endif /* __mips_n32 */
 
 typedef	__greg_t	__gregset_t[_NGREG];
 
 /*
- * For the O32 ABI, there are 16 doubles, one at each even FP reg
+ * For the O32/O64 ABI, there are 16 doubles, one at each even FP reg
  * number.  The FP registers themselves are 32-bits.
  *
  * For 64-bit ABIs (include N32), each FP register is a 64-bit double.
@@ -99,52 +99,131 @@ typedef	__greg_t	__freg_t;
 /*
  * Floating point register state
  */
-#if defined(__mips_n32) || defined(_LP64)
-typedef struct {
+struct __fpregset_nabi {
 	union {
 		double	__fp64_dregs[32];
 		__freg_t __fp_regs[32];
 	} __fp_r;
-	unsigned int	__fp_csr;
-	unsigned int	__fp_pad;
-} __fpregset_t;
-#else /* !(__mips_n32 || _LP64) */
-typedef struct {
+	__greg_t	__fp_csr;
+};
+struct __fpregset_oabi {
 	union {
 		double	__fp_dregs[16];
 		float	__fp_fregs[32];
-		__freg_t __fp_regs[32];
+		__int32_t __fp_regs[32];
 	} __fp_r;
 	unsigned int	__fp_csr;
 	unsigned int	__fp_pad;
-} __fpregset_t;
-#endif /* !(__mips_n32 || _LP64) */
+};
+
+#if __mips_n32 || __mips_n64
+typedef struct __fpregset_nabi __fpregset_t;
+#else
+typedef struct __fpregset_oabi __fpregset_t;
+#endif
 
 typedef struct {
 	__gregset_t	__gregs;
 	__fpregset_t	__fpregs;
+	__greg_t	_mc_tlsbase;
+#if !__mips_n32
+	__greg_t	__mc_unused;
+#endif
 } mcontext_t;
+
+#if defined(_KERNEL) && !defined(__mips_o32)
+typedef	__int32_t	__greg32_t;
+typedef __greg32_t	__gregset32_t[_NGREG];
+
+typedef struct {
+	__gregset32_t		__gregs;
+	struct __fpregset_oabi	__fpregs;
+	__greg32_t		_mc_tlsbase;
+	__greg32_t		__mc_unused;
+} mcontext_o32_t;
+
+typedef struct {
+	__gregset_t		__gregs;
+	struct __fpregset_nabi	__fpregs;
+	__greg_t		_mc_tlsbase;
+} mcontext32_t;
+
+#endif /* _KERNEL && _LP64 */
 
 #endif /* !__ASSEMBLER__ */
 
-#define _UC_MACHINE_PAD	16	/* Padding appended to ucontext_t */
-
-/*
- * Offsets relative to ucontext_t; intended to be used by assembly stubs.
- */
-#if !defined(_MIPS_BSD_API) || _MIPS_BSD_API == _MIPS_BSD_API_LP32
-#define _OFFSETOF_UC_GREGS	40
-#else
-#define _OFFSETOF_UC_GREGS	56
-#endif
+#define _UC_MACHINE_PAD		14	/* Padding appended to ucontext_t */
 
 #define	_UC_SETSTACK	0x00010000
 #define	_UC_CLRSTACK	0x00020000
+#define	_UC_TLSBASE	0x00040000
 
 #define _UC_MACHINE_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_SP])
 #define _UC_MACHINE_PC(uc)	((uc)->uc_mcontext.__gregs[_REG_EPC])
 #define _UC_MACHINE_INTRV(uc)	((uc)->uc_mcontext.__gregs[_REG_V0])
 
 #define	_UC_MACHINE_SET_PC(uc, pc)	_UC_MACHINE_PC(uc) = (pc)
+
+#define _UC_MACHINE32_SP(uc)	_UC_MACHINE_SP(uc)
+#define _UC_MACHINE32_PC(uc)	_UC_MACHINE_PC(uc)
+#define _UC_MACHINE32_INTRV(uc)	_UC_MACHINE_INTRV(uc)
+#define _UC_MACHINE32_PAD	14	/* Padding appended to ucontext32_t */
+
+#define	_UC_MACHINE32_SET_PC(uc, pc)	_UC_MACHINE_PC((uc), (pc))
+
+#define	__UCONTEXT_SIZE_O32	(40 + 296 +  56)	/* 392 */
+#define	__UCONTEXT_SIZE_N32	(40 + 568 +  56)	/* 664 */
+#define	__UCONTEXT_SIZE_N64	(56 + 576 + 112)	/* 774 */
+
+#ifdef __mips_o32
+#define	__UCONTEXT_SIZE		__UCONTEXT_SIZE_O32
+#elif __mips_n32
+#define	__UCONTEXT_SIZE		__UCONTEXT_SIZE_N32
+#elif __mips_n64
+#define	__UCONTEXT_SIZE		__UCONTEXT_SIZE_N64
+#define	__UCONTEXT32_SIZE	__UCONTEXT_SIZE_N32
+#else
+#error O64 is not supported
+#endif
+
+#if defined(_LIBC_SOURCE) || defined(_RTLD_SOURCE) || defined(__LIBPTHREAD_SOURCE__)
+#define	TLS_TP_OFFSET	0x7000
+#define	TLS_DTV_OFFSET	0x8000
+
+#include <sys/tls.h>
+
+__CTASSERT(TLS_TP_OFFSET + sizeof(struct tls_tcb) < 0x8000);
+__CTASSERT(TLS_TP_OFFSET % sizeof(struct tls_tcb) == 0);
+
+static __inline struct tls_tcb *
+__lwp_gettcb_fast(void)
+{
+	struct tls_tcb *__tcb;
+
+	/*
+	 * Only emit a rdhwr $3, $29 so the kernel can quickly emulate it.
+	 */
+	__asm __volatile(".set push; .set mips32r2; "
+		"rdhwr $3,$29; .set pop;"
+#ifdef _LP64
+		"daddiu %[__tcb],$3,%1"
+#else
+		"addiu %[__tcb],$3,%1"
+#endif
+	    : [__tcb]"=r"(__tcb)
+	    : [__offset]"n"(-(TLS_TP_OFFSET + sizeof(*__tcb)))
+	    : "v1");
+	return __tcb;
+}
+
+void _lwp_setprivate(void *);
+
+static inline void
+__lwp_settcb(struct tls_tcb *__tcb)
+{
+	__tcb += TLS_TP_OFFSET / sizeof(*__tcb) + 1;
+	_lwp_setprivate(__tcb);
+}
+#endif
 
 #endif	/* _MIPS_MCONTEXT_H_ */

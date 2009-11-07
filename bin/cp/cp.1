@@ -1,4 +1,4 @@
-.\"	$NetBSD: cp.1,v 1.30 2007/10/26 16:31:16 hira Exp $
+.\"	$NetBSD: cp.1,v 1.41 2011/08/03 15:44:15 dholland Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)cp.1	8.3 (Berkeley) 4/18/94
 .\"
-.Dd August 15, 2005
+.Dd August 3, 2011
 .Dt CP 1
 .Os
 .Sh NAME
@@ -45,7 +45,7 @@
 .Op Fl H | Fl L | Fl P
 .Oc
 .Op Fl f | i
-.Op Fl Npv
+.Op Fl alNpv
 .Ar source_file target_file
 .Nm cp
 .Oo
@@ -53,7 +53,7 @@
 .Op Fl H | Fl L | Fl P
 .Oc
 .Op Fl f | i
-.Op Fl Npv
+.Op Fl alNpv
 .Ar source_file ... target_directory
 .Sh DESCRIPTION
 In the first synopsis form, the
@@ -74,6 +74,10 @@ detects an attempt to copy a file to itself, the copy will fail.
 .Pp
 The following options are available:
 .Bl -tag -width flag
+.It Fl a
+Archive mode.
+Same as
+.Fl RpP .
 .It Fl f
 For each existing destination pathname, attempt to overwrite it.
 If permissions do not allow copy to succeed, remove it and create a new
@@ -100,17 +104,21 @@ the file copy is attempted.
 If the
 .Fl R
 option is specified, all symbolic links are followed.
+.It Fl l
+Create hard links to regular files in a hierarchy instead of copying.
 .It Fl N
 When used with
 .Fl p ,
 don't copy file flags.
 .It Fl P
 No symbolic links are followed.
+This is the default.
 .It Fl p
 Causes
 .Nm
 to preserve in the copy as many of the modification time, access time,
-file flags, file mode, user ID, and group ID as allowed by permissions.
+file flags, file mode, user ID, group ID, and extended attributes,
+as allowed by permissions.
 .Pp
 If the user ID and group ID cannot be preserved, no error message
 is displayed and the exit value is not altered.
@@ -125,6 +133,12 @@ If the source file has both its set user ID and set group ID bits on,
 and either the user ID or group ID cannot be preserved, neither
 the set user ID or set group ID bits are preserved in the copy's
 permissions.
+.Pp
+Extended attributes from all accessible namespaces are copied;
+others are ignored.
+If an error occurs during this copy, a message is displayed and
+.Nm
+skips the other extended attributes for that file.
 .It Fl R
 If
 .Ar source_file
@@ -132,7 +146,7 @@ designates a directory,
 .Nm
 copies the directory and the entire subtree connected at that point.
 This option also causes symbolic links to be copied, rather than
-indirected through, and for
+followed, and for
 .Nm
 to create special files rather than copying them as normal files.
 Created directories have the same mode as the corresponding source
@@ -215,6 +229,16 @@ The
 utility is expected to be
 .St -p1003.2
 compatible.
+.Pp
+The
+.Fl a
+and
+.Fl l
+flags are non-standard extensions.
+They are intended to be compatible with the same options which
+other implementations, namely GNU coreutils and
+.Fx ,
+of this utility have.
 .Pp
 The
 .Fl v

@@ -1,4 +1,4 @@
-/*	$NetBSD: gscpcib.c,v 1.14 2009/08/18 19:51:45 dyoung Exp $	*/
+/*	$NetBSD: gscpcib.c,v 1.18 2011/11/13 09:17:56 mbalmer Exp $	*/
 /*	$OpenBSD: gscpcib.c,v 1.3 2004/10/05 19:02:33 grange Exp $	*/
 /*
  * Copyright (c) 2004 Alexander Yurchenko <grange@openbsd.org>
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.14 2009/08/18 19:51:45 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.18 2011/11/13 09:17:56 mbalmer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -31,7 +31,7 @@ __KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.14 2009/08/18 19:51:45 dyoung Exp $");
 #include <sys/gpio.h>
 #include <sys/kernel.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -41,6 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: gscpcib.c,v 1.14 2009/08/18 19:51:45 dyoung Exp $");
 
 #include <i386/pci/gscpcibreg.h>
 #include <arch/x86/pci/pcibvar.h>
+
+#include "gpio.h"
 
 struct gscpcib_softc {
 	struct pcib_softc sc_pcib;
@@ -82,16 +84,10 @@ gscpcib_childdetached(device_t self, device_t child)
 		pcibchilddet(self, child);
 }
 
-/* XXX share this with sys/arch/i386/pci/elan520.c */
-static bool
-ifattr_match(const char *snull, const char *t)
-{
-	return (snull == NULL) || strcmp(snull, t) == 0;
-}
-
 int
 gscpcib_rescan(device_t self, const char *ifattr, const int *loc)
 {
+#if NGPIO > 0
 	struct gscpcib_softc *sc = device_private(self);
 
 	/* Attach GPIO framework */
@@ -107,6 +103,8 @@ gscpcib_rescan(device_t self, const char *ifattr, const int *loc)
 		    &gba, gpiobus_print, NULL);
 		return 0;
 	}
+#endif
+
 	return pcibrescan(self, ifattr, loc);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: genfb.c,v 1.28 2009/08/24 11:03:44 jmcneill Exp $ */
+/*	$NetBSD: genfb.c,v 1.47 2012/02/07 18:48:19 phx Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfb.c,v 1.28 2009/08/24 11:03:44 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfb.c,v 1.47 2012/02/07 18:48:19 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +49,12 @@ __KERNEL_RCSID(0, "$NetBSD: genfb.c,v 1.28 2009/08/24 11:03:44 jmcneill Exp $");
 
 #include <dev/wsfb/genfbvar.h>
 
+#ifdef GENFB_DISABLE_TEXT
+#include <sys/reboot.h>
+#define DISABLESPLASH (boothowto & (RB_SINGLE | RB_USERCONF | RB_ASKNAME | \
+		AB_VERBOSE | AB_DEBUG) )
+#endif
+
 #include "opt_genfb.h"
 #include "opt_wsfb.h"
 
@@ -58,6 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: genfb.c,v 1.28 2009/08/24 11:03:44 jmcneill Exp $");
 #define GPRINTF aprint_verbose
 #endif
 
+#define GENFB_BRIGHTNESS_STEP 15
+
 static int	genfb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t	genfb_mmap(void *, void *, off_t, int);
 static void	genfb_init_screen(void *, struct vcons_screen *, int, long *);
@@ -66,22 +74,15 @@ static int	genfb_putcmap(struct genfb_softc *, struct wsdisplay_cmap *);
 static int 	genfb_getcmap(struct genfb_softc *, struct wsdisplay_cmap *);
 static int 	genfb_putpalreg(struct genfb_softc *, uint8_t, uint8_t,
 			    uint8_t, uint8_t);
+static void	genfb_init_palette(struct genfb_softc *);
+
+static void	genfb_brightness_up(device_t);
+static void	genfb_brightness_down(device_t);
 
 extern const u_char rasops_cmap[768];
 
 static int genfb_cnattach_called = 0;
 static int genfb_enabled = 1;
-
-struct wsdisplay_accessops genfb_accessops = {
-	genfb_ioctl,
-	genfb_mmap,
-	NULL,	/* alloc_screen */
-	NULL,	/* free_screen */
-	NULL,	/* show_screen */
-	NULL, 	/* load_font */
-	NULL,	/* pollc */
-	NULL	/* scroll */
-};
 
 static struct genfb_softc *genfb_softc = NULL;
 
@@ -89,13 +90,16 @@ void
 genfb_init(struct genfb_softc *sc)
 {
 	prop_dictionary_t dict;
-	uint64_t cmap_cb, pmf_cb;
+	uint64_t cmap_cb, pmf_cb, mode_cb, bl_cb, br_cb, fbaddr;
 	uint32_t fboffset;
+	bool console;
 
-	dict = device_properties(&sc->sc_dev);
+	dict = device_properties(sc->sc_dev);
 #ifdef GENFB_DEBUG
 	printf(prop_dictionary_externalize(dict));
 #endif
+	prop_dictionary_get_bool(dict, "is_console", &console);
+
 	if (!prop_dictionary_get_uint32(dict, "width", &sc->sc_width)) {
 		GPRINTF("no width property\n");
 		return;
@@ -117,6 +121,11 @@ genfb_init(struct genfb_softc *sc)
 
 	sc->sc_fboffset = fboffset;
 
+	sc->sc_fbaddr = NULL;
+	if (prop_dictionary_get_uint64(dict, "virtual_address", &fbaddr)) {
+		sc->sc_fbaddr = (void *)(uintptr_t)fbaddr;
+	}
+
 	if (!prop_dictionary_get_uint32(dict, "linebytes", &sc->sc_stride))
 		sc->sc_stride = (sc->sc_width * sc->sc_depth) >> 3;
 
@@ -135,11 +144,48 @@ genfb_init(struct genfb_softc *sc)
 		if (cmap_cb != 0)
 			sc->sc_cmcb = (void *)(vaddr_t)cmap_cb;
 	}
+
 	/* optional pmf callback */
 	sc->sc_pmfcb = NULL;
 	if (prop_dictionary_get_uint64(dict, "pmf_callback", &pmf_cb)) {
 		if (pmf_cb != 0)
 			sc->sc_pmfcb = (void *)(vaddr_t)pmf_cb;
+	}
+
+	/* optional mode callback */
+	sc->sc_modecb = NULL;
+	if (prop_dictionary_get_uint64(dict, "mode_callback", &mode_cb)) {
+		if (mode_cb != 0)
+			sc->sc_modecb = (void *)(vaddr_t)mode_cb;
+	}
+
+	/* optional backlight control callback */
+	sc->sc_backlight = NULL;
+	if (prop_dictionary_get_uint64(dict, "backlight_callback", &bl_cb)) {
+		if (bl_cb != 0) {
+			sc->sc_backlight = (void *)(vaddr_t)bl_cb;
+			aprint_naive_dev(sc->sc_dev,
+			    "enabling backlight control\n");
+		}
+	}
+
+	/* optional brightness control callback */
+	sc->sc_brightness = NULL;
+	if (prop_dictionary_get_uint64(dict, "brightness_callback", &br_cb)) {
+		if (br_cb != 0) {
+			sc->sc_brightness = (void *)(vaddr_t)br_cb;
+			aprint_naive_dev(sc->sc_dev,
+			    "enabling brightness control\n");
+			if (console &&
+			    sc->sc_brightness->gpc_upd_parameter != NULL) {
+				pmf_event_register(sc->sc_dev,
+				    PMFE_DISPLAY_BRIGHTNESS_UP,
+				    genfb_brightness_up, TRUE);
+				pmf_event_register(sc->sc_dev,
+				    PMFE_DISPLAY_BRIGHTNESS_DOWN,
+				    genfb_brightness_down, TRUE);
+			}
+		}
 	}
 }
 
@@ -151,10 +197,13 @@ genfb_attach(struct genfb_softc *sc, struct genfb_ops *ops)
 	struct rasops_info *ri;
 	uint16_t crow;
 	long defattr;
-	int i, j;
 	bool console;
+#ifdef SPLASHSCREEN
+	int i, j;
+	int error = ENXIO;
+#endif
 
-	dict = device_properties(&sc->sc_dev);
+	dict = device_properties(sc->sc_dev);
 	prop_dictionary_get_bool(dict, "is_console", &console);
 
 	if (prop_dictionary_get_uint16(dict, "cursor-row", &crow) == false)
@@ -163,13 +212,7 @@ genfb_attach(struct genfb_softc *sc, struct genfb_ops *ops)
 	    == false)
 		sc->sc_want_clear = true;
 
-	/* do not attach when we're not console */
-	if (!console) {
-		aprint_normal_dev(&sc->sc_dev, "no console, unable to continue\n");
-		return -1;
-	}
-
-	aprint_verbose_dev(&sc->sc_dev, "framebuffer at %p, size %dx%d, depth %d, "
+	aprint_verbose_dev(sc->sc_dev, "framebuffer at %p, size %dx%d, depth %d, "
 	    "stride %d\n",
 	    sc->sc_fboffset ? (void *)(intptr_t)sc->sc_fboffset : sc->sc_fbaddr,
 	    sc->sc_width, sc->sc_height, sc->sc_depth, sc->sc_stride);
@@ -186,13 +229,20 @@ genfb_attach(struct genfb_softc *sc, struct genfb_ops *ops)
 	sc->sc_screenlist = (struct wsscreen_list){1, sc->sc_screens};
 	memcpy(&sc->sc_ops, ops, sizeof(struct genfb_ops));
 	sc->sc_mode = WSDISPLAYIO_MODE_EMUL;
+	if (sc->sc_modecb != NULL)
+		sc->sc_modecb->gmc_setmode(sc, sc->sc_mode);
 
+	sc->sc_accessops.ioctl = genfb_ioctl;
+	sc->sc_accessops.mmap = genfb_mmap;
+
+#ifdef GENFB_SHADOWFB
 	sc->sc_shadowfb = kmem_alloc(sc->sc_fbsize, KM_SLEEP);
 	if (sc->sc_want_clear == false && sc->sc_shadowfb != NULL)
 		memcpy(sc->sc_shadowfb, sc->sc_fbaddr, sc->sc_fbsize);
+#endif
 
 	vcons_init(&sc->vd, sc, &sc->sc_defaultscreen_descr,
-	    &genfb_accessops);
+	    &sc->sc_accessops);
 	sc->vd.init_screen = genfb_init_screen;
 
 	/* Do not print anything between this point and the screen
@@ -204,39 +254,86 @@ genfb_attach(struct genfb_softc *sc, struct genfb_ops *ops)
 	    &defattr);
 	sc->sc_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
 
+#ifdef SPLASHSCREEN
+/*
+ * If system isn't going to go multiuser, or user has requested to see
+ * boot text, don't render splash screen immediately
+ */
+	if (DISABLESPLASH)
+#endif
+		vcons_redraw_screen(&sc->sc_console_screen);
+
 	sc->sc_defaultscreen_descr.textops = &ri->ri_ops;
 	sc->sc_defaultscreen_descr.capabilities = ri->ri_caps;
 	sc->sc_defaultscreen_descr.nrows = ri->ri_rows;
 	sc->sc_defaultscreen_descr.ncols = ri->ri_cols;
-	wsdisplay_cnattach(&sc->sc_defaultscreen_descr, ri, 0, crow,
-	    defattr);
+
+	if (crow >= ri->ri_rows) {
+		crow = 0;
+		sc->sc_want_clear = 1;
+	}
+
+	if (console)
+		wsdisplay_cnattach(&sc->sc_defaultscreen_descr, ri, 0, crow,
+		    defattr);
 
 	/* Clear the whole screen to bring it to a known state. */
 	if (sc->sc_want_clear)
 		(*ri->ri_ops.eraserows)(ri, 0, ri->ri_rows, defattr);
 
+#ifdef SPLASHSCREEN
 	j = 0;
 	for (i = 0; i < min(1 << sc->sc_depth, 256); i++) {
-
-		sc->sc_cmap_red[i] = rasops_cmap[j];
-		sc->sc_cmap_green[i] = rasops_cmap[j + 1];
-		sc->sc_cmap_blue[i] = rasops_cmap[j + 2];
-		genfb_putpalreg(sc, i, rasops_cmap[j], rasops_cmap[j + 1],
-		    rasops_cmap[j + 2]);
+		if (i >= SPLASH_CMAP_OFFSET &&
+		    i < SPLASH_CMAP_OFFSET + SPLASH_CMAP_SIZE) {
+			splash_get_cmap(i,
+			    &sc->sc_cmap_red[i],
+			    &sc->sc_cmap_green[i],
+			    &sc->sc_cmap_blue[i]);
+		} else {
+			sc->sc_cmap_red[i] = rasops_cmap[j];
+			sc->sc_cmap_green[i] = rasops_cmap[j + 1];
+			sc->sc_cmap_blue[i] = rasops_cmap[j + 2];
+		}
 		j += 3;
 	}
+	genfb_restore_palette(sc);
 
+	sc->sc_splash.si_depth = sc->sc_depth;
+	sc->sc_splash.si_bits = sc->sc_console_screen.scr_ri.ri_bits;
+	sc->sc_splash.si_hwbits = sc->sc_fbaddr;
+	sc->sc_splash.si_width = sc->sc_width;
+	sc->sc_splash.si_height = sc->sc_height;
+	sc->sc_splash.si_stride = sc->sc_stride;
+	sc->sc_splash.si_fillrect = NULL;
+	if (!DISABLESPLASH) {
+		error = splash_render(&sc->sc_splash,
+		    SPLASH_F_CENTER|SPLASH_F_FILL);
+		if (error) {
+			SCREEN_ENABLE_DRAWING(&sc->sc_console_screen);
+			genfb_init_palette(sc);
+			vcons_replay_msgbuf(&sc->sc_console_screen);
+		}
+	}
+#else
+	genfb_init_palette(sc);
 	vcons_replay_msgbuf(&sc->sc_console_screen);
+#endif
 
 	if (genfb_softc == NULL)
 		genfb_softc = sc;
 
 	aa.console = console;
 	aa.scrdata = &sc->sc_screenlist;
-	aa.accessops = &genfb_accessops;
+	aa.accessops = &sc->sc_accessops;
 	aa.accesscookie = &sc->vd;
 
-	config_found(&sc->sc_dev, &aa, wsemuldisplaydevprint);
+#ifdef GENFB_DISABLE_TEXT
+	if (!DISABLESPLASH && error == 0)
+		SCREEN_DISABLE_DRAWING(&sc->sc_console_screen);
+#endif
+
+	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);
 
 	return 0;
 }
@@ -249,7 +346,8 @@ genfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct genfb_softc *sc = vd->cookie;
 	struct wsdisplay_fbinfo *wdf;
 	struct vcons_screen *ms = vd->active;
-	int new_mode, error;
+	struct wsdisplay_param *param;
+	int new_mode, error, val;
 
 	switch (cmd) {
 		case WSDISPLAYIO_GINFO:
@@ -287,12 +385,77 @@ genfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 
 			if (new_mode != sc->sc_mode) {
 				sc->sc_mode = new_mode;
+				if (sc->sc_modecb != NULL)
+					sc->sc_modecb->gmc_setmode(sc,
+					    sc->sc_mode);
 				if (new_mode == WSDISPLAYIO_MODE_EMUL) {
 					genfb_restore_palette(sc);
 					vcons_redraw_screen(ms);
 				}
 			}
 			return 0;
+		case WSDISPLAYIO_SSPLASH:
+#if defined(SPLASHSCREEN)
+			if(*(int *)data == 1) {
+				SCREEN_DISABLE_DRAWING(&sc->sc_console_screen);
+				splash_render(&sc->sc_splash,
+						SPLASH_F_CENTER|SPLASH_F_FILL);
+			} else {
+				SCREEN_ENABLE_DRAWING(&sc->sc_console_screen);
+				genfb_init_palette(sc);
+			}
+			vcons_redraw_screen(ms);
+			return 0;
+#else
+			return ENODEV;
+#endif
+		case WSDISPLAYIO_GETPARAM:
+			param = (struct wsdisplay_param *)data;
+			switch (param->param) {
+			case WSDISPLAYIO_PARAM_BRIGHTNESS:
+				if (sc->sc_brightness == NULL)
+					return EPASSTHROUGH;
+				param->min = 0;
+				param->max = 255;
+				return sc->sc_brightness->gpc_get_parameter(
+				    sc->sc_brightness->gpc_cookie,
+				    &param->curval);
+			case WSDISPLAYIO_PARAM_BACKLIGHT:
+				if (sc->sc_backlight == NULL)
+					return EPASSTHROUGH;
+				param->min = 0;
+				param->max = 1;
+				return sc->sc_backlight->gpc_get_parameter(
+				    sc->sc_backlight->gpc_cookie,
+				    &param->curval);
+			}
+			return EPASSTHROUGH;
+
+		case WSDISPLAYIO_SETPARAM:
+			param = (struct wsdisplay_param *)data;
+			switch (param->param) {
+			case WSDISPLAYIO_PARAM_BRIGHTNESS:
+				if (sc->sc_brightness == NULL)
+					return EPASSTHROUGH;
+				val = param->curval;
+				if (val < 0) val = 0;
+				if (val > 255) val = 255;
+				return sc->sc_brightness->gpc_set_parameter(
+				    sc->sc_brightness->gpc_cookie, val);
+			case WSDISPLAYIO_PARAM_BACKLIGHT:
+				if (sc->sc_backlight == NULL)
+					return EPASSTHROUGH;
+				val = param->curval;
+				if (val < 0) val = 0;
+				if (val > 1) val = 1;
+				return sc->sc_backlight->gpc_set_parameter(
+				    sc->sc_backlight->gpc_cookie, val);
+			}
+			return EPASSTHROUGH;
+		case WSDISPLAYIO_GET_EDID: {
+			struct wsdisplayio_edid_info *d = data;
+			return wsdisplayio_get_edid(sc->sc_dev, d);
+		}
 		default:
 			if (sc->sc_ops.genfb_ioctl)
 				return sc->sc_ops.genfb_ioctl(sc, vs, cmd,
@@ -328,18 +491,30 @@ genfb_init_screen(void *cookie, struct vcons_screen *scr,
 	if (sc->sc_want_clear)
 		ri->ri_flg |= RI_FULLCLEAR;
 
+#ifdef GENFB_SHADOWFB
 	if (sc->sc_shadowfb != NULL) {
 
 		ri->ri_hwbits = (char *)sc->sc_fbaddr;
 		ri->ri_bits = (char *)sc->sc_shadowfb;
 	} else
+#endif
+	{
 		ri->ri_bits = (char *)sc->sc_fbaddr;
+		scr->scr_flags |= VCONS_DONT_READ;
+	}
 
 	if (existing && sc->sc_want_clear) {
 		ri->ri_flg |= RI_CLEAR;
 	}
 
-	rasops_init(ri, sc->sc_height / 8, sc->sc_width / 8);
+	if (ri->ri_depth == 32)
+		ri->ri_flg |= RI_ENABLE_ALPHA;
+
+	if (ri->ri_depth == 8 && sc->sc_cmcb != NULL)
+		ri->ri_flg |= RI_ENABLE_ALPHA | RI_8BIT_IS_RGB;
+
+
+	rasops_init(ri, 0, 0);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
 
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
@@ -347,6 +522,11 @@ genfb_init_screen(void *cookie, struct vcons_screen *scr,
 
 	/* TODO: actually center output */
 	ri->ri_hw = scr;
+
+#ifdef GENFB_DISABLE_TEXT
+	if (scr == &sc->sc_console_screen && !DISABLESPLASH)
+		SCREEN_DISABLE_DRAWING(&sc->sc_console_screen);
+#endif
 }
 
 static int
@@ -426,6 +606,47 @@ genfb_restore_palette(struct genfb_softc *sc)
 	}
 }
 
+static void
+genfb_init_palette(struct genfb_softc *sc)
+{
+	int i, j, tmp;
+
+	if (sc->sc_depth == 8) {
+		/* generate an r3g3b2 colour map */
+		for (i = 0; i < 256; i++) {
+			tmp = i & 0xe0;
+			/*
+			 * replicate bits so 0xe0 maps to a red value of 0xff
+			 * in order to make white look actually white
+			 */
+			tmp |= (tmp >> 3) | (tmp >> 6);
+			sc->sc_cmap_red[i] = tmp;
+
+			tmp = (i & 0x1c) << 3;
+			tmp |= (tmp >> 3) | (tmp >> 6);
+			sc->sc_cmap_green[i] = tmp;
+
+			tmp = (i & 0x03) << 6;
+			tmp |= tmp >> 2;
+			tmp |= tmp >> 4;
+			sc->sc_cmap_blue[i] = tmp;
+
+			genfb_putpalreg(sc, i, sc->sc_cmap_red[i],
+				       sc->sc_cmap_green[i],
+				       sc->sc_cmap_blue[i]);
+		}
+	} else {
+		/* steal rasops' ANSI cmap */
+		j = 0;
+		for (i = 0; i < 256; i++) {
+			sc->sc_cmap_red[i] = rasops_cmap[j];
+			sc->sc_cmap_green[i] = rasops_cmap[j + 1];
+			sc->sc_cmap_blue[i] = rasops_cmap[j + 2];
+			j += 3;
+		}
+	}
+}
+
 static int
 genfb_putpalreg(struct genfb_softc *sc, uint8_t idx, uint8_t r, uint8_t g,
     uint8_t b)
@@ -471,4 +692,50 @@ genfb_borrow(bus_addr_t addr, bus_space_handle_t *hdlp)
 	if (sc && sc->sc_ops.genfb_borrow)
 		return sc->sc_ops.genfb_borrow(sc, addr, hdlp);
 	return 0;
+}
+
+static void
+genfb_brightness_up(device_t dev)
+{
+	struct genfb_softc *sc = device_private(dev);
+
+	KASSERT(sc->sc_brightness != NULL &&
+		sc->sc_brightness->gpc_upd_parameter != NULL);
+
+	(void)sc->sc_brightness->gpc_upd_parameter(
+	    sc->sc_brightness->gpc_cookie, GENFB_BRIGHTNESS_STEP);
+}
+
+static void
+genfb_brightness_down(device_t dev)
+{
+	struct genfb_softc *sc = device_private(dev);
+
+	KASSERT(sc->sc_brightness != NULL &&
+		sc->sc_brightness->gpc_upd_parameter != NULL);
+
+	(void)sc->sc_brightness->gpc_upd_parameter(
+	    sc->sc_brightness->gpc_cookie, - GENFB_BRIGHTNESS_STEP);
+}
+
+void
+genfb_enable_polling(device_t dev)
+{
+	struct genfb_softc *sc = device_private(dev);
+
+	if (sc->sc_console_screen.scr_vd) {
+		SCREEN_ENABLE_DRAWING(&sc->sc_console_screen);
+		vcons_hard_switch(&sc->sc_console_screen);
+		vcons_enable_polling(&sc->vd);
+	}
+}
+
+void
+genfb_disable_polling(device_t dev)
+{
+	struct genfb_softc *sc = device_private(dev);
+
+	if (sc->sc_console_screen.scr_vd) {
+		vcons_disable_polling(&sc->vd);
+	}
 }

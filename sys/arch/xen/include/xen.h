@@ -1,4 +1,4 @@
-/*	$NetBSD: xen.h,v 1.32 2009/07/29 12:02:06 cegger Exp $	*/
+/*	$NetBSD: xen.h,v 1.35 2011/09/20 00:12:24 jym Exp $	*/
 
 /*
  *
@@ -27,7 +27,10 @@
 
 #ifndef _XEN_H
 #define _XEN_H
+
+#ifdef _KERNEL_OPT
 #include "opt_xen.h"
+#endif
 
 
 #ifndef _LOCORE
@@ -69,9 +72,14 @@ void	xenevt_notify(void);
 
 void	idle_block(void);
 
+/* xen_machdep.c */
+void	sysctl_xen_suspend_setup(void);
+
 #if defined(XENDEBUG) || 1 /* XXX */
+#include <sys/stdarg.h>
+
 void printk(const char *, ...);
-void vprintk(const char *, _BSD_VA_LIST_);
+void vprintk(const char *, va_list);
 #endif
 
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.5 2003/07/07 12:30:24 dsl Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.7.6.1 2012/05/17 18:57:13 sborrill Exp $	*/
 /* Based on english version: */
 /*	NetBSD: msg.md.en,v 1.2 2002/03/15 05:26:37 gmcgarry Exp */
 
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -44,18 +40,14 @@
 
 message md_hello
 {Jesli masz mniej niz 4 MB ram, sysinst nie bedzie pracowal prawidlowo
+}
 
+message md_may_remove_boot_medium
+{
 }
 
 message dobootblks
 {Instalowanie bootblokow na %s....
-}
-
-message newdisk
-{Wyglada na to, ze twoj dysk %s, nie ma znaku X68K. sysinst wpisuje taki
-znak.
-Pamietaj, ze jesli chcesz uzywac czesci dysku %s z Human68k, powinienes
-tu przerwac i zformatowac dysk za pomoca format.x z Human68k.
 }
 
 message ordering

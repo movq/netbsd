@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.c,v 1.2 2008/04/28 20:23:33 martin Exp $	*/
+/*	$NetBSD: eisa_machdep.c,v 1.4 2011/07/01 20:52:02 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.2 2008/04/28 20:23:33 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.4 2011/07/01 20:52:02 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -76,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.2 2008/04/28 20:23:33 martin Exp 
 #include <sys/extent.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 #include <machine/intr.h>
 
@@ -106,7 +106,7 @@ struct powerpc_bus_dma_tag eisa_bus_dma_tag = {
 };
 
 void
-eisa_attach_hook(struct device *parent, struct device *self,
+eisa_attach_hook(device_t parent, device_t self,
     struct eisabus_attach_args *eba)
 {
 	/* Nothing to do. */

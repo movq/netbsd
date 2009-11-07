@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.39 2009/01/12 17:24:21 tsutsui Exp $
+# $NetBSD: INSTALL,v 1.48 2011/12/18 05:49:27 dholland Exp $
 #
 # INSTALL machine description file
 #
@@ -14,7 +14,6 @@ makeoptions 	COPTS="-Os"
 options 	NVNODE=50
 options 	NBUF=16
 options 	BUFPAGES=16
-options 	NMBCLUSTERS=64
 options 	NFS_V2_ONLY
 options 	NFS_DEFAULT_NIOTHREADS=1
 options 	USERCONF		# userconf(4) support
@@ -81,9 +80,10 @@ file-system	MFS		# Memory-based filesystem
 #file-system	PTYFS		# /dev/pts/N support
 
 # Filesystem options
-#options 	QUOTA		# User and group quotas in FFS
-#options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	NFSSERVER	# Network filesystem server
 #options 	NFS_BOOT_BOOTP	# use bootp for NFS boot
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -95,7 +95,7 @@ options 	INET		# Internet protocols
 #options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
-#options 	GATEWAY		# IP forwarding + larger mb_map
+#options 	GATEWAY		# IP forwarding
 #options 	MROUTING	# Multicast routing
 #options 	PIM		# Protocol Independent Multicast
 #options 	PFIL_HOOKS	# packet filter hooks
@@ -121,12 +121,22 @@ options 	INET		# Internet protocols
 # (Warning: this compiles in a large string table)
 #options 	DIOVERBOSE	# recognize "unknown" DIO devices
 
+# workstation console options
+options 	WSEMUL_VT100		# VT100 / VT220 emulation
+#options 	WSDISPLAY_COMPAT_RAWKBD
+options 	WS_KERNEL_FG=WSCOL_GREEN
+#options 	WS_KERNEL_BG=WSCOL_BLACK
+
+#options 	FONT_GALLANT12x22
+options 	FONT_VT220ISO8x16
+
 config		netbsd root on ? type ?
 
 mainbus0	at root		# root "bus"
 
 intio0		at mainbus0	# internal i/o space
 dio0		at mainbus0	# DIO/DIO-II bus
+#sgc0		at mainbus0	# SGC bus
 
 # Real-time clock (not optional)
 rtc*		at intio?
@@ -135,45 +145,48 @@ rtc*		at intio?
 dma* 		at intio?
 
 # Human Interface Loop
-hil*		at intio?
-#options 	UK_KEYBOARD	# include United Kingdom HIL keymap
-#options 	SE_KEYBOARD	# include Swedish HIL keymap
+hil0		at intio?		# HIL controller
+hilkbd*		at hil?			# keyboards
+wskbd*		at hilkbd? mux 1
 
 # Frodo utility chip found on 4xx's
 frodo*		at intio?
 
 # 8250-like serial ports found on Frodo ASIC
 #dnkbd0		at frodo? offset 0x0	# Domain keyboard flavor
+#wskbd*		at dnkbd? mux 1
 com*		at frodo? offset ?	# tty flavor
 
 # Davinci framebuffer
 dvbox*		at intio?
 dvbox*		at dio? scode ?
+wsdisplay*	at dvbox?
 
 # Gatorbox framebuffer
 gbox*		at intio?
 gbox*		at dio? scode ?
+wsdisplay*	at gbox?
 
 # Hyperion framebuffer
 hyper*		at dio? scode ?
+wsdisplay*	at hyper?
 
 # Renaissance framebuffer
 rbox*		at intio?
 rbox*		at dio? scode ?
+wsdisplay*	at rbox?
 
 # Topcat/catseye framebuffers
 topcat*		at intio?
 topcat*		at dio? scode ?
+wsdisplay*	at topcat?
 
-# Framebuffer abstraction
-grf*		at dvbox?
-grf*		at gbox?
-grf*		at hyper?
-grf*		at rbox?
-grf*		at topcat?
+# TurboVRX framebuffer
+tvrx*		at dio? scode ?
+wsdisplay*	at tvrx?
 
-# Internal Terminal Emulator
-ite*		at grf?
+gendiofb*	at dio? scode ?
+wsdisplay*	at gendiofb?
 
 com*		at dio0 scode 9		# DCA serial interfaces
 com*		at dio? scode ?
@@ -223,7 +236,7 @@ pseudo-device	bpfilter		# Berkeley packet filter
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	loop			# loopback network interface
 #pseudo-device	ipfilter 		# IP Filter package
 #pseudo-device	gre			# generic L3 over IP tunnel
@@ -232,4 +245,3 @@ pseudo-device	loop			# loopback network interface
 #pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 #pseudo-device	vlan			# IEEE 802.1q encapsulation
 #pseudo-device	bridge			# simple inter-network bridging
-pseudo-device	rnd			# /dev/random and in-kernel generator

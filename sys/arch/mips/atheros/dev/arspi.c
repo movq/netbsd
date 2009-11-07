@@ -1,4 +1,4 @@
-/* $NetBSD: arspi.c,v 1.5 2007/02/28 04:21:53 thorpej Exp $ */
+/* $NetBSD: arspi.c,v 1.9 2011/07/10 06:24:19 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,24 +42,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arspi.c,v 1.5 2007/02/28 04:21:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arspi.c,v 1.9 2011/07/10 06:24:19 matt Exp $");
 
 #include "locators.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/errno.h>
+#include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/queue.h>
-
-#include <machine/bus.h>
-#include <machine/cpu.h>
+#include <sys/systm.h>
 
 #include <mips/atheros/include/ar5315reg.h>
-#include <mips/atheros/include/ar531xvar.h>
 #include <mips/atheros/include/arbusvar.h>
 
 #include <mips/atheros/dev/arspireg.h>
@@ -211,7 +208,7 @@ arspi_interrupts(struct device *self)
 	struct arspi_softc *sc = device_private(self);
 	int	s;
 
-	s = splserial();
+	s = splbio();
 	sc->sc_interrupts = true;
 	splx(s);
 #endif
@@ -270,7 +267,7 @@ arspi_transfer(void *cookie, struct spi_transfer *st)
 		return rv;
 	}
 
-	s = splserial();
+	s = splbio();
 	spi_transq_enqueue(&sc->sc_transq, st);
 	if (sc->sc_transfer == NULL) {
 		arspi_sched(sc);

@@ -1,7 +1,7 @@
-/*	$NetBSD: dst.h,v 1.1.1.2 2009/10/25 00:02:39 christos Exp $	*/
+/*	$NetBSD: dst.h,v 1.3.4.1 2012/06/05 21:15:50 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dst.h,v 1.22 2009/10/12 20:48:12 each Exp */
+/* Id: dst.h,v 1.34 2011/10/20 21:20:02 marka Exp  */
 
 #ifndef DST_DST_H
 #define DST_DST_H 1
@@ -58,6 +58,9 @@ typedef struct dst_context 	dst_context_t;
 #define DST_ALG_RSASHA1		5
 #define DST_ALG_NSEC3DSA	6
 #define DST_ALG_NSEC3RSASHA1	7
+#define DST_ALG_RSASHA256	8
+#define DST_ALG_RSASHA512	10
+#define DST_ALG_ECCGOST		12
 #define DST_ALG_HMACMD5		157
 #define DST_ALG_GSSAPI		160
 #define DST_ALG_HMACSHA1	161	/* XXXMPA */
@@ -99,6 +102,28 @@ typedef struct dst_context 	dst_context_t;
 #define DST_NUM_MAXTTL		2
 #define DST_NUM_ROLLPERIOD	3
 #define DST_MAX_NUMERIC		3
+
+/*
+ * Current format version number of the private key parser.
+ *
+ * When parsing a key file with the same major number but a higher minor
+ * number, the key parser will ignore any fields it does not recognize.
+ * Thus, DST_MINOR_VERSION should be incremented whenever new
+ * fields are added to the private key file (such as new metadata).
+ *
+ * When rewriting these keys, those fields will be dropped, and the
+ * format version set back to the current one..
+ *
+ * When a key is seen with a higher major number, the key parser will
+ * reject it as invalid.  Thus, DST_MAJOR_VERSION should be incremented
+ * and DST_MINOR_VERSION set to zero whenever there is a format change
+ * which is not backward compatible to previous versions of the dst_key
+ * parser, such as change in the syntax of an existing field, the removal
+ * of a currently mandatory field, or a new field added which would
+ * alter the functioning of the key if it were absent.
+ */
+#define DST_MAJOR_VERSION	1
+#define DST_MINOR_VERSION	3
 
 /***
  *** Functions
@@ -448,7 +473,7 @@ dst_key_getgssctx(const dst_key_t *key);
 
 isc_result_t
 dst_key_fromgssapi(dns_name_t *name, gss_ctx_id_t gssctx, isc_mem_t *mctx,
-		   dst_key_t **keyp);
+		   dst_key_t **keyp, isc_region_t *intoken);
 /*%<
  * Converts a GSSAPI opaque context id into a DST key.
  *
@@ -479,6 +504,14 @@ dst_key_generate(dns_name_t *name, unsigned int alg,
 		 unsigned int flags, unsigned int protocol,
 		 dns_rdataclass_t rdclass,
 		 isc_mem_t *mctx, dst_key_t **keyp);
+
+isc_result_t
+dst_key_generate2(dns_name_t *name, unsigned int alg,
+		  unsigned int bits, unsigned int param,
+		  unsigned int flags, unsigned int protocol,
+		  dns_rdataclass_t rdclass,
+		  isc_mem_t *mctx, dst_key_t **keyp,
+		  void (*callback)(int));
 /*%<
  * Generate a DST key (or keypair) with the supplied parameters.  The
  * interpretation of the "param" field depends on the algorithm:
@@ -562,6 +595,16 @@ dst_key_paramcompare(const dst_key_t *key1, const dst_key_t *key2);
  */
 
 void
+dst_key_attach(dst_key_t *source, dst_key_t **target);
+/*
+ * Attach to a existing key increasing the reference count.
+ *
+ * Requires:
+ *\li 'source' to be a valid key.
+ *\li 'target' to be non-NULL and '*target' to be NULL.
+ */
+
+void
 dst_key_free(dst_key_t **keyp);
 /*%<
  * Decrement the key's reference counter and, when it reaches zero,
@@ -599,6 +642,9 @@ dst_key_flags(const dst_key_t *key);
 
 dns_keytag_t
 dst_key_id(const dst_key_t *key);
+
+dns_keytag_t
+dst_key_rid(const dst_key_t *key);
 
 dns_rdataclass_t
 dst_key_class(const dst_key_t *key);
@@ -665,9 +711,11 @@ dst_key_secretsize(const dst_key_t *key, unsigned int *n);
 
 isc_uint16_t
 dst_region_computeid(const isc_region_t *source, unsigned int alg);
+isc_uint16_t
+dst_region_computerid(const isc_region_t *source, unsigned int alg);
 /*%<
- * Computes the key id of the key stored in the provided region with the
- * given algorithm.
+ * Computes the (revoked) key id of the key stored in the provided
+ * region with the given algorithm.
  *
  * Requires:
  *\li	"source" contains a valid, non-NULL region.
@@ -689,6 +737,26 @@ void
 dst_key_setbits(dst_key_t *key, isc_uint16_t bits);
 /*%<
  * Set the number of digest bits required (0 == MAX).
+ *
+ * Requires:
+ *	"key" is a valid key.
+ */
+
+void
+dst_key_setttl(dst_key_t *key, dns_ttl_t ttl);
+/*%<
+ * Set the default TTL to use when converting the key
+ * to a KEY or DNSKEY RR.
+ *
+ * Requires:
+ *	"key" is a valid key.
+ */
+
+dns_ttl_t
+dst_key_getttl(const dst_key_t *key);
+/*%<
+ * Get the default TTL to use when converting the key
+ * to a KEY or DNSKEY RR.
  *
  * Requires:
  *	"key" is a valid key.
@@ -791,11 +859,48 @@ dst_key_setprivateformat(dst_key_t *key, int major, int minor);
 #define DST_KEY_FORMATSIZE (DNS_NAME_FORMATSIZE + DNS_SECALG_FORMATSIZE + 7)
 
 void
-dst_key_format(dst_key_t *key, char *cp, unsigned int size);
+dst_key_format(const dst_key_t *key, char *cp, unsigned int size);
 /*%<
  * Write the uniquely identifying information about the key (name,
  * algorithm, key ID) into a string 'cp' of size 'size'.
  */
+
+
+isc_buffer_t *
+dst_key_tkeytoken(const dst_key_t *key);
+/*%<
+ * Return the token from the TKEY request, if any.  If this key was
+ * not negotiated via TKEY, return NULL.
+ *
+ * Requires:
+ *	"key" is a valid key.
+ */
+
+
+isc_result_t
+dst_key_dump(dst_key_t *key, isc_mem_t *mctx, char **buffer, int *length);
+/*%<
+ * Allocate 'buffer' and dump the key into it in base64 format. The buffer
+ * is not NUL terminated. The length of the buffer is returned in *length.
+ *
+ * 'buffer' needs to be freed using isc_mem_put(mctx, buffer, length);
+ *
+ * Requires:
+ *	'buffer' to be non NULL and *buffer to be NULL.
+ *	'length' to be non NULL and *length to be zero.
+ *
+ * Returns:
+ *	ISC_R_SUCCESS
+ *	ISC_R_NOMEMORY
+ *	ISC_R_NOTIMPLEMENTED
+ *	others.
+ */
+
+isc_result_t
+dst_key_restore(dns_name_t *name, unsigned int alg, unsigned int flags,
+		unsigned int protocol, dns_rdataclass_t rdclass,
+		isc_mem_t *mctx, const char *keystr, dst_key_t **keyp);
+
 
 ISC_LANG_ENDDECLS
 

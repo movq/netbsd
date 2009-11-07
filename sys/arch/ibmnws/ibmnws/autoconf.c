@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.10 2008/11/03 15:13:16 rjs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.11.8.1 2012/08/08 15:51:06 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -81,9 +81,9 @@ cpu_rootconf(void)
 	findroot();
 
 	aprint_normal("boot device: %s\n",
-	    booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 u_long	bootdev = 0;		/* should be dev_t, but not until 32 bits */

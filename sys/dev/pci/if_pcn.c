@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pcn.c,v 1.48 2009/09/06 13:39:56 tsutsui Exp $	*/
+/*	$NetBSD: if_pcn.c,v 1.54 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -65,10 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.48 2009/09/06 13:39:56 tsutsui Exp $");
-
-#include "bpfilter.h"
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.54 2012/02/02 19:43:05 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,20 +79,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.48 2009/09/06 13:39:56 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
-
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -317,9 +308,7 @@ struct pcn_softc {
 	uint32_t sc_csr5;		/* prototype CSR5 register */
 	uint32_t sc_mode;		/* prototype MODE register */
 
-#if NRND > 0
-	rndsource_element_t rnd_source;	/* random source */
-#endif
+	krndsource_t rnd_source;	/* random source */
 };
 
 /* sc_flags */
@@ -823,10 +812,8 @@ pcn_attach(device_t parent, device_t self, void *aux)
 	/* Attach the interface. */
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 
 #ifdef PCN_EVENT_COUNTERS
 	/* Attach event counters. */
@@ -1138,11 +1125,8 @@ pcn_start(struct ifnet *ifp)
 		sc->sc_txsfree--;
 		sc->sc_txsnext = PCN_NEXTTXS(sc->sc_txsnext);
 
-#if NBPFILTER > 0
 		/* Pass the packet to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txsfree == 0 || sc->sc_txfree == 0) {
@@ -1245,10 +1229,7 @@ pcn_intr(void *arg)
 		if ((csr0 & LE_C0_INTR) == 0)
 			break;
 
-#if NRND > 0
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, csr0);
-#endif
+		rnd_add_uint32(&sc->rnd_source, csr0);
 
 		/* ACK the bits and re-enable interrupts. */
 		pcn_csr_write(sc, LE_CSR0, csr0 &
@@ -1564,11 +1545,8 @@ pcn_rxintr(struct pcn_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 		/* Pass this up to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -2042,12 +2020,12 @@ pcn_79c970_mediainit(struct pcn_softc *sc)
 
 #define	ADD(str, m, d)							\
 do {									\
-	printf("%s%s", sep, str);					\
+	aprint_normal("%s%s", sep, str);					\
 	ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|(m), (d), NULL);	\
 	sep = ", ";							\
 } while (/*CONSTCOND*/0)
 
-	printf("%s: ", device_xname(sc->sc_dev));
+	aprint_normal("%s: ", device_xname(sc->sc_dev));
 	ADD("10base5", IFM_10_5, PORTSEL_AUI);
 	if (sc->sc_variant->pcv_chipid == PARTID_Am79c970A)
 		ADD("10base5-FDX", IFM_10_5|IFM_FDX, PORTSEL_AUI);
@@ -2057,7 +2035,7 @@ do {									\
 	ADD("auto", IFM_AUTO, 0);
 	if (sc->sc_variant->pcv_chipid == PARTID_Am79c970A)
 		ADD("auto-FDX", IFM_AUTO|IFM_FDX, 0);
-	printf("\n");
+	aprint_normal("\n");
 
 	ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
 }

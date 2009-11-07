@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_ioctl.c,v 1.54 2009/04/18 14:58:05 tsutsui Exp $	*/
+/*	$NetBSD: ieee80211_ioctl.c,v 1.57 2011/12/31 20:41:58 christos Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_ioctl.c,v 1.35 2005/08/30 14:27:47 avatar Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.54 2009/04/18 14:58:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.57 2011/12/31 20:41:58 christos Exp $");
 #endif
 
 /*
@@ -932,9 +932,8 @@ ieee80211_ioctl_getchanlist(struct ieee80211com *ic, struct ieee80211req *ireq)
 {
 	size_t len = ireq->i_len;
 
-	if (sizeof(ic->ic_chan_active) < len) {
+	if (len > sizeof(ic->ic_chan_active))
 		len = sizeof(ic->ic_chan_active);
-	}
 	return copyout(&ic->ic_chan_active, ireq->i_data, len);
 }
 
@@ -942,7 +941,8 @@ static int
 ieee80211_ioctl_getchaninfo(struct ieee80211com *ic, struct ieee80211req *ireq)
 {
 	struct ieee80211req_chaninfo *chans;
-	int i, space, error;
+	uint32_t i, space;
+	int error;
 
 	/*
 	 * Since channel 0 is not available for DS, channel 1
@@ -962,7 +962,7 @@ ieee80211_ioctl_getchaninfo(struct ieee80211com *ic, struct ieee80211req *ireq)
 			chans->ic_chans[chans->ic_nchans].ic_flags = c->ic_flags;
 			chans->ic_nchans++;
 		}
-	space = __offsetof(struct ieee80211req_chaninfo,
+	space = offsetof(struct ieee80211req_chaninfo,
 	    ic_chans[chans->ic_nchans]);
 	if (space > ireq->i_len)
 		space = ireq->i_len;
@@ -1004,7 +1004,7 @@ ieee80211_ioctl_getstastats(struct ieee80211com *ic, struct ieee80211req *ireq)
 {
 	struct ieee80211_node *ni;
 	u_int8_t macaddr[IEEE80211_ADDR_LEN];
-	const int off = __offsetof(struct ieee80211req_sta_stats, is_stats);
+	const size_t off = offsetof(struct ieee80211req_sta_stats, is_stats);
 	int error;
 
 	if (ireq->i_len < off)
@@ -1075,7 +1075,8 @@ ieee80211_ioctl_getscanresults(struct ieee80211com *ic, struct ieee80211req *ire
 	struct ieee80211req_scan_result *sr = &u.res;
 	struct ieee80211_node_table *nt;
 	struct ieee80211_node *ni;
-	int error, space;
+	int error;
+	uint32_t space;
 	u_int8_t *p, *cp;
 
 	p = ireq->i_data;
@@ -2615,7 +2616,7 @@ ieee80211_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 		if ((error = kauth_authorize_network(curlwp->l_cred,
 		    KAUTH_NETWORK_INTERFACE,
 		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
-		    NULL) != 0))
+		    NULL)) != 0)
 			break;
 		error = ieee80211_ioctl_set80211(ic, cmd,
 				(struct ieee80211req *) data);

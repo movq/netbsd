@@ -86,6 +86,21 @@
                                        * be used for all exponents.
                                        */
 
+/* If this flag is set the DH method is FIPS compliant and can be used
+ * in FIPS mode. This is set in the validated module method. If an
+ * application sets this flag in its own methods it is its reposibility
+ * to ensure the result is compliant.
+ */
+
+#define DH_FLAG_FIPS_METHOD			0x0400
+
+/* If this flag is set the operations normally disabled in FIPS mode are
+ * permitted it is then the applications responsibility to ensure that the
+ * usage is compliant.
+ */
+
+#define DH_FLAG_NON_FIPS_ALLOW			0x0400
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -157,13 +172,14 @@ struct dh_st
    this for backward compatibility: */
 #define DH_CHECK_P_NOT_STRONG_PRIME	DH_CHECK_P_NOT_SAFE_PRIME
 
-#define DHparams_dup(x) ASN1_dup_of_const(DH,i2d_DHparams,d2i_DHparams,x)
 #define d2i_DHparams_fp(fp,x) (DH *)ASN1_d2i_fp((char *(*)())DH_new, \
 		(char *(*)())d2i_DHparams,(fp),(unsigned char **)(x))
 #define i2d_DHparams_fp(fp,x) ASN1_i2d_fp(i2d_DHparams,(fp), \
 		(unsigned char *)(x))
 #define d2i_DHparams_bio(bp,x) ASN1_d2i_bio_of(DH,DH_new,d2i_DHparams,bp,x)
 #define i2d_DHparams_bio(bp,x) ASN1_i2d_bio_of_const(DH,i2d_DHparams,bp,x)
+
+DH *DHparams_dup(DH *);
 
 const DH_METHOD *DH_OpenSSL(void);
 
@@ -229,6 +245,9 @@ void ERR_load_DH_strings(void);
 #define DH_F_COMPUTE_KEY				 102
 #define DH_F_DHPARAMS_PRINT_FP				 101
 #define DH_F_DH_BUILTIN_GENPARAMS			 106
+#define DH_F_DH_COMPUTE_KEY				 114
+#define DH_F_DH_GENERATE_KEY				 115
+#define DH_F_DH_GENERATE_PARAMETERS_EX			 116
 #define DH_F_DH_NEW_METHOD				 105
 #define DH_F_DH_PARAM_DECODE				 107
 #define DH_F_DH_PRIV_DECODE				 110
@@ -248,7 +267,9 @@ void ERR_load_DH_strings(void);
 #define DH_R_DECODE_ERROR				 104
 #define DH_R_INVALID_PUBKEY				 102
 #define DH_R_KEYS_NOT_SET				 108
+#define DH_R_KEY_SIZE_TOO_SMALL				 110
 #define DH_R_MODULUS_TOO_LARGE				 103
+#define DH_R_NON_FIPS_METHOD				 111
 #define DH_R_NO_PARAMETERS_SET				 107
 #define DH_R_NO_PRIVATE_VALUE				 100
 #define DH_R_PARAMETER_ENCODING_ERROR			 105

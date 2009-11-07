@@ -1,4 +1,4 @@
-/* $NetBSD: if_ti.c,v 1.86 2009/09/27 12:52:59 tsutsui Exp $ */
+/* $NetBSD: if_ti.c,v 1.90 2010/11/13 13:52:07 uebayasi Exp $ */
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -81,9 +81,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.86 2009/09/27 12:52:59 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.90 2010/11/13 13:52:07 uebayasi Exp $");
 
-#include "bpfilter.h"
 #include "opt_inet.h"
 
 #include <sys/param.h>
@@ -97,17 +96,13 @@ __KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.86 2009/09/27 12:52:59 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/reboot.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_ether.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -1673,11 +1668,11 @@ ti_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	if (ti_chipinit(sc)) {
 		aprint_error_dev(self, "chip initialization failed\n");
@@ -1975,16 +1970,13 @@ ti_rxeof(struct ti_softc *sc)
 		ifp->if_ipackets++;
 		m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
 		/*
 	 	 * Handle BPF listeners. Let the BPF user see the packet, but
 	 	 * don't pass it up to the ether_input() layer unless it's
 	 	 * a broadcast packet, multicast packet, matches our ethernet
 	 	 * address or the interface is in promiscuous mode.
 	 	 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		eh = mtod(m, struct ether_header *);
 		switch (ntohs(eh->ether_type)) {
@@ -2452,10 +2444,7 @@ ti_start(struct ifnet *ifp)
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m_head);
-#endif
+		bpf_mtap(ifp, m_head);
 	}
 
 	/* Transmit */

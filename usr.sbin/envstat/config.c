@@ -1,4 +1,4 @@
-/* 	$NetBSD: config.c,v 1.8 2008/08/22 11:27:50 pgoyette Exp $	*/
+/* 	$NetBSD: config.c,v 1.12 2011/08/31 13:32:36 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: config.c,v 1.8 2008/08/22 11:27:50 pgoyette Exp $");
+__RCSID("$NetBSD: config.c,v 1.12 2011/08/31 13:32:36 joerg Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -62,7 +62,7 @@ enum {
 };
 
 static prop_dictionary_t cfdict, sensordict, refreshdict;
-static void config_errmsg(int, const char *, const char *);
+__dead static void config_errmsg(int, const char *, const char *);
 
 static void
 config_errmsg(int lvl, const char *key, const char *key2)
@@ -97,6 +97,7 @@ config_errmsg(int lvl, const char *key, const char *key2)
 void
 config_dict_add_prop(const char *key, char *value)
 {
+
 	if (!key || !value)
 		return;
 
@@ -502,6 +503,62 @@ config_devblock_check_sensorprops(prop_dictionary_t ksdict,
 	}
 
 	/*
+	 * high-capacity property set?
+	 */
+	obj = prop_dictionary_get(csdict, "high-capacity");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "want-percentage");
+		obj3 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (prop_bool_true(obj2) && prop_bool_true(obj3)) {
+			strval = prop_string_cstring(obj);
+			val = strtod(strval, &endptr);
+			if ((*endptr != '\0') || (val < 0 || val > 100))
+				config_errmsg(VALUE_ERR,
+					      "high-capacity",
+					      sensor);
+			/*
+			 * Convert the value to a valid percentage.
+			 */
+			obj = prop_dictionary_get(ksdict, "max-value");
+			val = (val / 100) * prop_number_integer_value(obj);
+
+			if (!prop_dictionary_set_uint32(csdict,
+						       "high-capacity",
+						       val))
+				err(EXIT_FAILURE, "dict_set highcap");
+		} else
+			config_errmsg(PROP_ERR, "high-capacity", sensor);
+	}
+
+	/*
+	 * maximum-capacity property set?
+	 */
+	obj = prop_dictionary_get(csdict, "maximum-capacity");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "want-percentage");
+		obj3 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (prop_bool_true(obj2) && prop_bool_true(obj3)) {
+			strval = prop_string_cstring(obj);
+			val = strtod(strval, &endptr);
+			if ((*endptr != '\0') || (val < 0 || val > 100))
+				config_errmsg(VALUE_ERR,
+					      "maximum-capacity",
+					      sensor);
+			/*
+			 * Convert the value to a valid percentage.
+			 */
+			obj = prop_dictionary_get(ksdict, "max-value");
+			val = (val / 100) * prop_number_integer_value(obj);
+
+			if (!prop_dictionary_set_uint32(csdict,
+						       "maximum-capacity",
+						       val))
+				err(EXIT_FAILURE, "dict_set maxcap");
+		} else
+			config_errmsg(PROP_ERR, "maximum-capacity", sensor);
+	}
+
+	/*
 	 * critical-max property set?
 	 */
 	obj = prop_dictionary_get(csdict, "critical-max");
@@ -566,7 +623,7 @@ config_devblock_check_sensorprops(prop_dictionary_t ksdict,
 }
 
 /*
- * Conversions for critical-max and critical-min properties.
+ * Conversions for {critical,warning}-{max,min} properties.
  */
 prop_number_t
 convert_val_to_pnumber(prop_dictionary_t kdict, const char *prop,
@@ -582,17 +639,15 @@ convert_val_to_pnumber(prop_dictionary_t kdict, const char *prop,
 	val = max = min = 0;
 
 	/*
-	 * critical-max and critical-min are not allowed in
-	 * battery sensors.
+	 * Not allowed in battery sensors.
 	 */
-	obj = prop_dictionary_get(kdict, "want-percentage");
-	if (prop_bool_true(obj))
+	obj = prop_dictionary_get(kdict, "type");
+	if (prop_string_equals_cstring(obj, "Battery capacity"))
 		config_errmsg(PROP_ERR, prop, sensor);
 
 	/*
 	 * Make the conversion for sensor's type.
 	 */
-	obj = prop_dictionary_get(kdict, "type");
 	if (prop_string_equals_cstring(obj, "Temperature")) {
 		tmp = strchr(value, 'C');
 		if (tmp)
@@ -626,7 +681,8 @@ convert_val_to_pnumber(prop_dictionary_t kdict, const char *prop,
 		num = prop_number_create_unsigned_integer(val);
 		free(strval);
 
-	} else if (prop_string_equals_cstring(obj, "Fan")) {
+	} else if (prop_string_equals_cstring(obj, "Fan") ||
+		   prop_string_equals_cstring(obj, "Integer")) {
 		/* no conversion */
 		val = strtod(value, &endptr);
 		if (*endptr != '\0')

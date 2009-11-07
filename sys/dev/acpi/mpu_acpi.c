@@ -1,4 +1,4 @@
-/* $NetBSD: mpu_acpi.c,v 1.9 2009/02/17 12:46:01 jmcneill Exp $ */
+/* $NetBSD: mpu_acpi.c,v 1.13 2011/12/09 08:56:54 mrg Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,32 +30,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpu_acpi.c,v 1.9 2009/02/17 12:46:01 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpu_acpi.c,v 1.13 2011/12/09 08:56:54 mrg Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/proc.h>
+#include <sys/systm.h>
 
-#include <sys/bus.h>
-
-#include <dev/isa/isavar.h>
-#include <dev/isa/isadmavar.h>
-
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/ic/mpuvar.h>
+
+#include <dev/isa/isadmavar.h>
 
 static int	mpu_acpi_match(device_t, cfdata_t, void *);
 static void	mpu_acpi_attach(device_t, device_t, void *);
 
 struct mpu_acpi_softc {
 	struct mpu_softc sc_mpu;
+	kmutex_t sc_lock;
 };
 
 CFATTACH_DECL_NEW(mpu_acpi, sizeof(struct mpu_acpi_softc), mpu_acpi_match,
@@ -127,6 +119,8 @@ mpu_acpi_attach(device_t parent, device_t self, void *aux)
 
 	sc->model = "Roland MPU-401 MIDI UART";
 	sc->sc_dev = self;
+	sc->lock = &asc->sc_lock;
+	mutex_init(&asc->sc_lock, MUTEX_DEFAULT, IPL_AUDIO);
 	mpu_attach(sc);
 
 	sc->arg = isa_intr_establish(aa->aa_ic, irq->ar_irq,

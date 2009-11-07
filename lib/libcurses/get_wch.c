@@ -1,4 +1,4 @@
-/*   $NetBSD: get_wch.c,v 1.8 2009/11/04 21:51:11 dsl Exp $ */
+/*   $NetBSD: get_wch.c,v 1.9.8.1 2012/08/09 06:46:37 jdc Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: get_wch.c,v 1.8 2009/11/04 21:51:11 dsl Exp $");
+__RCSID("$NetBSD: get_wch.c,v 1.9.8.1 2012/08/09 06:46:37 jdc Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -67,7 +67,7 @@ void
 __init_get_wch(SCREEN *screen)
 {
 	wstate = INKEY_NORM;
-	memset( &screen->cbuf, 0, MAX_CBUF_SIZE * sizeof( int ));
+	memset( &screen->cbuf, 0, sizeof(screen->cbuf));
 	screen->cbuf_head = screen->cbuf_tail = screen->cbuf_cur = 0;
 }
 #endif /* HAVE_WCHAR */
@@ -187,7 +187,7 @@ inkey(wchar_t *wc, int to, int delay)
 #endif /* DEBUG */
 			}
 		} else if (wstate == INKEY_WCASSEMBLING) {
-			/* assembling a wide char sequence */
+			/* assembling a wide-char sequence */
 			if (delay) {
 				if (__timeout(to ? (ESCDELAY / 100) : delay)
 						== ERR)
@@ -322,7 +322,7 @@ inkey(wchar_t *wc, int to, int delay)
 				|| ((current->key[mapping]->type
 					== KEYMAP_LEAF)
 				&& (current->key[mapping]->enable == FALSE))) {
-			/* wide character specific code */
+			/* wide-character specific code */
 #ifdef DEBUG
 			__CTRACE(__CTRACE_INPUT,
 			    "inkey: Checking for wide char\n");

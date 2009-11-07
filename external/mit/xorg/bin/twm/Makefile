@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2008/10/25 22:27:34 apb Exp $
+#	$NetBSD: Makefile,v 1.5 2011/08/11 23:15:35 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -16,7 +16,7 @@ X11EXTRAMANDEFS+=	-e 's,TWMDIR,${TWMCONFIGDIR},g'
 TWMDIR=			${X11SRCDIR.${PROG}}
 
 CPPFLAGS+=		-I. -I${TWMDIR}/src
-CPPFLAGS+=		-DHAS_MKSTEMP -DXORG_RELEASE=${XORG_RELEASE} \
+CPPFLAGS+=		-DHAVE_MKSTEMP -DXORG_RELEASE=${XORG_RELEASE} \
 			-DXVENDORNAME=${XVENDORNAME}
 
 CPPFLAGS.parse.c=	-DSYSTEM_INIT_FILE=\"${TWMCONFIGDIR}/system.twmrc\"
@@ -43,6 +43,8 @@ LDADD+=	-lXmu -lXt -lSM -lICE -lXext -lX11
 DPADD+=	${LIBXMU} ${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11}
 
 .PATH:	${TWMDIR}/src ${TWMDIR}/man
+
+CWARNFLAGS.clang+=	-Wno-pointer-sign
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

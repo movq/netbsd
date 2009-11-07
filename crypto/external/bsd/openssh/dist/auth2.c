@@ -1,5 +1,5 @@
-/*	$NetBSD: auth2.c,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: auth2.c,v 1.120 2008/11/04 08:22:12 djm Exp $ */
+/*	$NetBSD: auth2.c,v 1.5 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: auth2.c,v 1.123 2011/03/10 02:52:57 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -25,15 +25,15 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth2.c,v 1.2 2009/06/07 22:38:46 christos Exp $");
+__RCSID("$NetBSD: auth2.c,v 1.5 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 
 #include <fcntl.h>
 #include <pwd.h>
-#include <string.h>
 #include <stdarg.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "atomicio.h"
@@ -193,7 +193,7 @@ input_service_request(int type, u_int32_t seq, void *ctxt)
 	Authctxt *authctxt = ctxt;
 	u_int len;
 	int acceptit = 0;
-	char *service = packet_get_string(&len);
+	char *service = packet_get_cstring(&len);
 	packet_check_eom();
 
 	if (authctxt == NULL)
@@ -232,9 +232,9 @@ input_userauth_request(int type, u_int32_t seq, void *ctxt)
 	if (authctxt == NULL)
 		fatal("input_userauth_request: no authctxt");
 
-	user = packet_get_string(NULL);
-	service = packet_get_string(NULL);
-	method = packet_get_string(NULL);
+	user = packet_get_cstring(NULL);
+	service = packet_get_cstring(NULL);
+	method = packet_get_cstring(NULL);
 	debug("userauth-request for user %s service %s method %s", user, service, method);
 	if (!log_flag) {
 		logit("SSH: Server;Ltype: Authname;Remote: %s-%d;Name: %s", 
@@ -287,6 +287,7 @@ input_userauth_request(int type, u_int32_t seq, void *ctxt)
 #endif
 
 	authctxt->postponed = 0;
+	authctxt->server_caused_failure = 0;
 
 	/* try to authenticate user */
 	m = authmethod_lookup(method);
@@ -302,7 +303,7 @@ input_userauth_request(int type, u_int32_t seq, void *ctxt)
 }
 
 void
-userauth_finish(Authctxt *authctxt, int authenticated, char *method)
+userauth_finish(Authctxt *authctxt, int authenticated, const char *method)
 {
 	char *methods;
 
@@ -351,7 +352,8 @@ userauth_finish(Authctxt *authctxt, int authenticated, char *method)
 		authctxt->success = 1;
 	} else {
 		/* Allow initial try of "none" auth without failure penalty */
-		if (authctxt->attempt > 1 || strcmp(method, "none") != 0)
+		if (!authctxt->server_caused_failure &&
+		    (authctxt->attempt > 1 || strcmp(method, "none") != 0))
 			authctxt->failures++;
 		if (authctxt->failures >= options.max_authtries) {
 			packet_disconnect(AUTH_FAIL_MSG, authctxt->user);

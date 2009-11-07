@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.23 2007/02/21 21:01:10 hubertf Exp $	*/
+/*	$NetBSD: main.c,v 1.25 2011/08/31 16:24:59 plunky Exp $	*/
 
 /*
  * The mrouted program is covered by the license in the accompanying file
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("@(#) $NetBSD: main.c,v 1.23 2007/02/21 21:01:10 hubertf Exp $");
+__RCSID("@(#) $NetBSD: main.c,v 1.25 2011/08/31 16:24:59 plunky Exp $");
 #endif
 
 #include <ctype.h>
@@ -65,7 +65,7 @@ static int nhandlers = 0;
  * Forward declarations.
  */
 static void fasttimer(int);
-static void done(int);
+__dead static void done(int);
 static void dump(int);
 static void fdump(int);
 static void cdump(int);
@@ -335,7 +335,7 @@ usage:	fprintf(stderr,
 #endif
 	    accept_igmp(recvlen);
 #ifdef SYSV
-	    (void)sigprocmask(SIG_SETMASK, &oblock, (sigset_t *)NULL);
+	    (void)sigprocmask(SIG_SETMASK, &oblock, NULL);
 #else
 	    (void)sigsetmask(omask);
 #endif
@@ -591,7 +591,7 @@ restart(int i)
     init_installvifs();
 
 #ifdef SYSV
-    (void)sigprocmask(SIG_SETMASK, &oblock, (sigset_t *)NULL);
+    (void)sigprocmask(SIG_SETMASK, &oblock, NULL);
 #else
     (void)sigsetmask(omask);
 #endif

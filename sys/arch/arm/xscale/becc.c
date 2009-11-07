@@ -1,4 +1,4 @@
-/*	$NetBSD: becc.c,v 1.12 2005/12/24 20:06:52 perry Exp $	*/
+/*	$NetBSD: becc.c,v 1.14 2011/07/01 20:32:51 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -41,14 +41,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: becc.c,v 1.12 2005/12/24 20:06:52 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: becc.c,v 1.14 2011/07/01 20:32:51 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #define	_ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/i80200reg.h>
 #include <arm/xscale/beccreg.h>
@@ -208,7 +208,7 @@ becc_attach(struct becc_softc *sc)
 	pba.pba_bridgetag = NULL;
 	pba.pba_intrswiz = 0;
 	pba.pba_intrtag = 0;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	(void) config_found_ia(&sc->sc_dev, "pcibus", &pba, pcibusprint);
 }

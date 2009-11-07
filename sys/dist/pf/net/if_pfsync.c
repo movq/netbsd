@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pfsync.c,v 1.3 2009/09/14 10:36:49 degroote Exp $	*/
+/*	$NetBSD: if_pfsync.c,v 1.8 2011/12/19 16:10:07 drochner Exp $	*/
 /*	$OpenBSD: if_pfsync.c,v 1.83 2007/06/26 14:44:12 mcbride Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pfsync.c,v 1.3 2009/09/14 10:36:49 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pfsync.c,v 1.8 2011/12/19 16:10:07 drochner Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -90,7 +90,6 @@ percpu_t	*pfsyncstat_percpu;
 #define	PFSYNC_STATINC(x) _NET_STATINC(pfsyncstat_percpu, x)
 #endif /* __NetBSD__ */
 
-#include "bpfilter.h"
 #include "pfsync.h"
 
 #define PFSYNC_MINMTU	\
@@ -192,9 +191,7 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
 
-#if NBPFILTER > 0
-	bpfattach(&pfsyncif->sc_if, DLT_PFSYNC, PFSYNC_HDRLEN);
-#endif
+	bpf_attach(&pfsyncif->sc_if, DLT_PFSYNC, PFSYNC_HDRLEN);
 
 	return (0);
 }
@@ -202,9 +199,7 @@ pfsync_clone_create(struct if_clone *ifc, int unit)
 int
 pfsync_clone_destroy(struct ifnet *ifp)
 {
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	free(pfsyncif, M_DEVBUF);
 	pfsyncif = NULL;
@@ -366,7 +361,7 @@ pfsync_input(struct mbuf *m, ...)
 	struct pfsync_state_clr *cp;
 	struct pfsync_state_upd_req *rup;
 	struct pfsync_state_bus *bus;
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	struct pfsync_tdb *pt;
 #endif
 	struct in_addr src;
@@ -854,7 +849,7 @@ pfsync_input(struct mbuf *m, ...)
 			break;
 		}
 		break;
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 	case PFSYNC_ACT_TDB_UPD:
 		if ((mp = m_pulldown(m, iplen + sizeof(*ph),
 		    count * sizeof(*pt), &offp)) == NULL) {
@@ -1544,9 +1539,7 @@ pfsync_bulkfail(void *v)
 int
 pfsync_sendout(struct pfsync_softc *sc)
 {
-#if NBPFILTER > 0
 	struct ifnet *ifp = &sc->sc_if;
-#endif
 	struct mbuf *m;
 
 	callout_stop(&sc->sc_tmo);
@@ -1557,10 +1550,7 @@ pfsync_sendout(struct pfsync_softc *sc)
 	sc->sc_mbuf = NULL;
 	sc->sc_statep.s = NULL;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	if (sc->sc_mbuf_net) {
 		m_freem(m);
@@ -1575,9 +1565,7 @@ pfsync_sendout(struct pfsync_softc *sc)
 int
 pfsync_tdb_sendout(struct pfsync_softc *sc)
 {
-#if NBPFILTER > 0
 	struct ifnet *ifp = &sc->sc_if;
-#endif
 	struct mbuf *m;
 
 	callout_stop(&sc->sc_tdb_tmo);
@@ -1588,10 +1576,7 @@ pfsync_tdb_sendout(struct pfsync_softc *sc)
 	sc->sc_mbuf_tdb = NULL;
 	sc->sc_statep_tdb.t = NULL;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	return pfsync_sendout_mbuf(sc, m);
 }
@@ -1614,7 +1599,7 @@ pfsync_sendout_mbuf(struct pfsync_softc *sc, struct mbuf *m)
 		ip->ip_hl = sizeof(*ip) >> 2;
 		ip->ip_tos = IPTOS_LOWDELAY;
 		ip->ip_len = htons(m->m_pkthdr.len);
-		ip->ip_id = htons(ip_randomid(0));
+		ip->ip_id = htons(ip_randomid(ip_ids, 0));
 		ip->ip_off = htons(IP_DF);
 		ip->ip_ttl = PFSYNC_DFLTTL;
 		ip->ip_p = IPPROTO_PFSYNC;
@@ -1639,7 +1624,7 @@ pfsync_sendout_mbuf(struct pfsync_softc *sc, struct mbuf *m)
 	return (0);
 }
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 /* Update an in-kernel tdb. Silently fail if no tdb is found. */
 void
 pfsync_update_net_tdb(struct pfsync_tdb *pt)

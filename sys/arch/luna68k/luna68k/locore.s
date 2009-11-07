@@ -1,6 +1,7 @@
-/* $NetBSD: locore.s,v 1.29 2009/01/11 06:02:18 tsutsui Exp $ */
+/* $NetBSD: locore.s,v 1.47.2.2 2012/07/31 08:22:06 martin Exp $ */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,53 +37,15 @@
  *
  *	@(#)locore.s	8.6 (Berkeley) 5/27/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: locore.s 1.66 92/12/22$
- *
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
- */
 
 #include "opt_compat_netbsd.h"
+#include "opt_compat_sunos.h"
 #include "opt_ddb.h"
 #include "opt_fpsp.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
-#include "opt_compat_sunos.h"
 #include "opt_fpu_emulate.h"
+#include "opt_m68k_arch.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -173,18 +136,11 @@ ASENTRY_NOPROFILE(start)
 	RELOC(hwplanemask,%a0)
 	movl	%d5,%a0@		| save hwplanemask
 
-	movl	#0x41000000,%a0		| argument of 'x' command on boot
-	movl	%a0@(212),%a0		| (char *)base[53]
-	RELOC(bootarg,%a1)
-	movl	#63,%d0
-1:	movb	%a0@+,%a1@+		| copy to bootarg
-	dbra	%d0,1b			| upto 63 characters
-
 	movl	#CACHE_OFF,%d0
 	movc	%d0,%cacr		| clear and disable on-chip cache(s)
 
 /* determine our CPU/MMU combo - check for all regardless of kernel config */
-	movl	#0x200,%d0		| data freeze bit
+	movl	#DC_FREEZE,%d0		| data freeze bit
 	movc	%d0,%cacr		|   only exists on 68030
 	movc	%cacr,%d0		| read it back
 	tstl	%d0			| zero?
@@ -204,6 +160,23 @@ Lstart0:
 	movl	%d1,%a0@
 	RELOC(fputype,%a0)
 	movl	%d2,%a0@
+
+	/*
+	 * save argument of 'x' command on boot per machine type
+	 * XXX: assume CPU_68040 is LUNA-II
+	 */
+	movl	#0x41000000,%a0
+	cmpl	#CPU_68040,%d0		| 68040?
+	jne	1f			| no, assume 68030 LUNA
+	movl	%a0@(8),%a0		| arg at (char *)base[2] on LUNA-II
+	jra	Lstart1
+1:
+	movl	%a0@(212),%a0		| arg at (char *)base[53] on LUNA
+Lstart1:
+	RELOC(bootarg,%a1)
+	movl	#63,%d0
+1:	movb	%a0@+,%a1@+		| copy to bootarg
+	dbra	%d0,1b			| upto 63 characters
 
 	/*
 	 * Now that we know what CPU we have, initialize the address error
@@ -234,8 +207,8 @@ Lstart0:
 Lstart2:
 /* initialize source/destination control registers for movs */
 	moveq	#FC_USERD,%d0		| user space
-	movc	%d0,%sfc			|   as source
-	movc	%d0,%dfc			|   and destination of transfers
+	movc	%d0,%sfc		|   as source
+	movc	%d0,%dfc		|   and destination of transfers
 /* initialize memory sizes (for pmap_bootstrap) */
 	RELOC(memavail,%a0)
 	movl	%a0@,%d1
@@ -245,6 +218,7 @@ Lstart2:
 	movl	%d1,%a0@		| save as maxmem
 	RELOC(physmem,%a0)
 	movl	%d1,%a0@		| and physmem
+
 /* configure kernel and lwp0 VA space so we can get going */
 #if NKSYMS || defined(DDB) || defined(LKM)
 	RELOC(esym,%a0)			| end of static kernel test/data/syms
@@ -267,9 +241,8 @@ Lstart3:
  * Enable the MMU.
  * Since the kernel is mapped logical == physical, we just turn it on.
  */
-	RELOC(Sysseg,%a0)		| system segment table addr
-	movl	%a0@,%d1		| read value (a KVA)
-	addl	%a5,%d1			| convert to PA (%a5 == 0, indeed)
+	RELOC(Sysseg_pa,%a0)		| system segment table addr
+	movl	%a0@,%d1		| read value (a PA)
 #if defined(M68040)
 	RELOC(mmutype,%a0)
 	cmpl	#MMU_68040,%a0@		| 68040?
@@ -281,15 +254,15 @@ Lmotommu0:
 	.long	0x4e7b0004		| movc %d0,%itt0
 	.long	0x4e7b0006		| movc %d0,%dtt0
 	RELOC(proto040tt1,%a0)
-	movl	%a0@,%d0		| tt1 range 8000.0000-feff.ffff
+	movl	%a0@,%d0		| tt1 range 8000.0000-ffff.ffff
 	.long	0x4e7b0005		| movc %d0,%itt1
 	.long	0x4e7b0007		| movc %d0,%dtt1
 	.word	0xf4d8			| cinva bc
-	pflusha				| flush entire ATC
+	.word	0xf518			| pflusha
 	RELOC(proto040tc,%a0)
 	movl	%a0@,%d0
 	.long	0x4e7b0003		| movc %d0,%tc
-	movl	#0x80008000,%d0
+	movl	#CACHE40_ON,%d0
 	movc	%d0,%cacr		| turn on both caches
 	jmp	Lenab1
 Lmotommu1:
@@ -303,26 +276,25 @@ Lmotommu1:
 	.long	0xf0100800		| pmove %a0@,mmutt0
 	RELOC(protott1,%a0)		| tt1 range 8000.0000-ffff.ffff
 	.long	0xf0100c00		| pmove %a0@,mmutt1
+	pflusha
 	RELOC(prototc,%a0)		| %tc: SRP,CRP,4KB page,A=10bit,B=10bit
 	pmove	%a0@,%tc
 /*
  * Should be running mapped from this point on
  */
 Lenab1:
-/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-	jbsr	_C_LABEL(uvm_setpagesize) | select software page size
-
-/* set kernel stack, user SP, lwp0, and initial pcb */
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
+/* call final pmap setup */
+	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+/* set kernel stack, user SP */
+	movl	_C_LABEL(lwp0uarea),%a1	| get lwp0 uarea
 	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 
+/* detect FPU type */
+	jbsr	_C_LABEL(fpu_probe)
+	movl	%d0,_C_LABEL(fputype)
 	tstl	_C_LABEL(fputype)	| Have an FPU?
 	jeq	Lenab2			| No, skip.
 	clrl	%a1@(PCB_FPCTX)		| ensure null FP context
@@ -330,8 +302,8 @@ Lenab1:
 	jbsr	_C_LABEL(m68881_restore) | restore it (does not kill %a1)
 	addql	#4,%sp
 Lenab2:
-	pflusha				| flush entire ATC 
-	cmpl	#MMU_68040,_C_LABEL(mmutype)	| 68040?
+	jbsr	_C_LABEL(_TBIA)		| invalidate TLB
+	cmpl	#MMU_68040,_C_LABEL(mmutype) | 68040?
 	jeq	Lenab3			| yes, cache already on
 	tstl	_C_LABEL(mmutype)
 	jpl	Lenab3			| 68851 implies no d-cache
@@ -346,7 +318,7 @@ Lenab3:
 
 /*
  * Create a fake exception frame that returns to user mode,
- * and save its address in p->p_md.md_regs for cpu_fork().
+ * and save its address in p->p_md.md_regs for cpu_lwp_fork().
  * The new frames for process 1 and 2 will be adjusted by
  * cpu_set_kpc() to arrange for a call to a kernel function
  * before the new process does its rte out to user mode.
@@ -355,9 +327,10 @@ Lenab3:
 	clrl	%sp@-			| PC - filled in by "execve"
 	movw	#PSL_USER,%sp@-		| in user mode
 	clrl	%sp@-			| stack adjust count and padding
-	lea	%sp@(-64),%sp		| construct space for %D0-%D7/%A0-%A7
+	lea	%sp@(-64),%sp		| construct space for D0-D7/A0-A7
 	lea	_C_LABEL(lwp0),%a0	| save pointer to frame
 	movl	%sp,%a0@(L_MD_REGS)	|   in lwp0.l_md.md_regs
+
 	jra	_C_LABEL(main)		| main()
 	PANIC("main() returned")
 	/* NOTREACHED */
@@ -391,7 +364,7 @@ ENTRY_NOPROFILE(buserr60)
 	movl	%a0,%sp@(FR_SP)		|   in the savearea
 	movel	%sp@(FR_HW+12),%d0	| FSLW
 	btst	#2,%d0			| branch prediction error?
-	jeq	Lnobpe			
+	jeq	Lnobpe
 	movc	%cacr,%d2
 	orl	#IC60_CABC,%d2		| clear all branch cache entries
 	movc	%d2,%cacr
@@ -591,29 +564,29 @@ Lfp_unsupp:
  * after the trap call.
  */
 ENTRY_NOPROFILE(fpfault)
-	clrl	%sp@-		| stack adjust count
-	moveml	#0xFFFF,%sp@-	| save user registers
-	movl	%usp,%a0	| and save
-	movl	%a0,%sp@(FR_SP)	|   the user stack pointer
-	clrl	%sp@-		| no VA arg
-	movl	_C_LABEL(curpcb),%a0 | current pcb
-	lea	%a0@(PCB_FPCTX),%a0 | address of FP savearea
-	fsave	%a0@		| save state
+	clrl	%sp@-			| stack adjust count
+	moveml	#0xFFFF,%sp@-		| save user registers
+	movl	%usp,%a0		| and save
+	movl	%a0,%sp@(FR_SP)		|   the user stack pointer
+	clrl	%sp@-			| no VA arg
+	movl	_C_LABEL(curpcb),%a0	| current pcb
+	lea	%a0@(PCB_FPCTX),%a0	| address of FP savearea
+	fsave	%a0@			| save state
 #if defined(M68040) || defined(M68060)
 	/* always null state frame on 68040, 68060 */
 	cmpl	#FPU_68040,_C_LABEL(fputype)
 	jge	Lfptnull
 #endif
-	tstb	%a0@		| null state frame?
-	jeq	Lfptnull	| yes, safe
-	clrw	%d0		| no, need to tweak BIU
-	movb	%a0@(1),%d0	| get frame size
-	bset	#3,%a0@(0,%d0:w) | set exc_pend bit of BIU
+	tstb	%a0@			| null state frame?
+	jeq	Lfptnull		| yes, safe
+	clrw	%d0			| no, need to tweak BIU
+	movb	%a0@(1),%d0		| get frame size
+	bset	#3,%a0@(0,%d0:w)	| set exc_pend bit of BIU
 Lfptnull:
-	fmovem	%fpsr,%sp@-	| push fpsr as code argument
-	frestore %a0@		| restore state
-	movl	#T_FPERR,%sp@-	| push type arg
-	jra	_ASM_LABEL(faultstkadj) | call trap and deal with stack cleanup
+	fmovem	%fpsr,%sp@-		| push %fpsr as code argument
+	frestore %a0@			| restore state
+	movl	#T_FPERR,%sp@-		| push type arg
+	jra	_ASM_LABEL(faultstkadj)	| call trap and deal with stack cleanup
 
 /*
  * Other exceptions only cause four and six word stack frame and require
@@ -659,7 +632,7 @@ Ltrap1:
  */
 ENTRY_NOPROFILE(trap12)
 	movl	_C_LABEL(curlwp),%a0
-	movl	%a0@(L_PROC),%sp@-	| push curproc pointer
+	movl	%a0@(L_PROC),%sp@-	| push current proc pointer
 	movl	%d1,%sp@-		| push length
 	movl	%a1,%sp@-		| push addr
 	movl	%d0,%sp@-		| push command
@@ -718,7 +691,7 @@ Lkbrkpt: | Kernel-mode breakpoint or trace trap. (%d0=trap_type)
 	| Copy frame to the temporary stack
 	movl	%sp,%a0			| %a0=src
 	lea	_ASM_LABEL(tmpstk)-96,%a1 | %a1=dst
-	movl	%a1,%sp			| sp=new frame
+	movl	%a1,%sp			| %sp=new frame
 	moveq	#FR_SIZE,%d1
 Lbrkpt1:
 	movl	%a0@+,%a1@+
@@ -762,13 +735,13 @@ Lbrkpt3:
 	| so push the hardware frame at the current sp
 	| before restoring registers and returning.
 
-	movl	%sp@(FR_SP),%a0		| modified sp
+	movl	%sp@(FR_SP),%a0		| modified %sp
 	lea	%sp@(FR_SIZE),%a1	| end of our frame
 	movl	%a1@-,%a0@-		| copy 2 longs with
 	movl	%a1@-,%a0@-		| ... predecrement
-	movl	%a0,%sp@(FR_SP)		| sp = h/w frame
-	moveml	%sp@+,#0x7FFF		| restore all but sp
-	movl	%sp@,%sp		| ... and sp
+	movl	%a0,%sp@(FR_SP)		| %sp = h/w frame
+	moveml	%sp@+,#0x7FFF		| restore all but %sp
+	movl	%sp@,%sp		| ... and %sp
 	rte				| all done
 
 /* Use common m68k sigreturn */
@@ -791,12 +764,11 @@ Lbrkpt3:
  * _intrhand_vectored is the entry point for vectored interrupts.
  */
 
-#define INTERRUPT_SAVEREG	moveml	#0xC0C0,%sp@-
-#define INTERRUPT_RESTOREREG	moveml	%sp@+,#0x0303
-
 ENTRY_NOPROFILE(spurintr)		/* Level 0 */
 	addql	#1,_C_LABEL(intrcnt)+0
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	INTERRUPT_SAVEREG
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 ENTRY_NOPROFILE(intrhand_autovec)	/* Levels 1 through 6 */
@@ -960,7 +932,7 @@ Ldorte:
 /*
  * Use common m68k process/lwp switch and context save subroutines.
  */
-#define FPCOPROC	/* XXX: Temp. Reqd. */
+#define FPCOPROC	/* XXX: Temp. reqd. */
 #include <m68k/m68k/switch_subr.s>
 
 
@@ -992,7 +964,6 @@ Lsldone:
 	rts
 #endif
 
-
 ENTRY(ecacheon)
 	rts
 
@@ -1000,44 +971,27 @@ ENTRY(ecacheoff)
 	rts
 
 /*
- * Get callers current SP value.
- * Note that simply taking the address of a local variable in a C function
- * doesn't work because callee saved registers may be outside the stack frame
- * defined by %A6 (e.g. GCC generated code).
- */
-ENTRY(getsp)
-	movl	%sp,%d0			| get current SP
-	addql	#4,%d0			| compensate for return address
-	rts
-
-ENTRY_NOPROFILE(getsfc)
-	movc	%sfc,%d0
-	rts
-
-ENTRY_NOPROFILE(getdfc)
-	movc	%dfc,%d0
-	rts
-
-/*
  * Load a new user segment table pointer.
  */
 ENTRY(loadustp)
 	movl	%sp@(4),%d0		| new USTP
-	moveq	#PGSHIFT, %d1
+	moveq	#PGSHIFT,%d1
 	lsll	%d1,%d0			| convert to addr
 #if defined(M68040)
-	cmpl    #MMU_68040,_C_LABEL(mmutype) | 68040?
-	jne     LmotommuC               | no, skip
-	.long   0x4e7b0806              | movc %d0,%urp
+	cmpl	#MMU_68040,_C_LABEL(mmutype) | 68040?
+	jne	LmotommuC		| no, skip
+	.word	0xf518			| yes, pflusha
+	.long	0x4e7b0806		| movc %d0,%urp
 	rts
 LmotommuC:
 #endif
+	pflusha				| flush entire TLB
 	lea	_C_LABEL(protocrp),%a0	| %crp prototype
 	movl	%d0,%a0@(4)		| stash USTP
 	pmove	%a0@,%crp		| load root pointer
-	movl	#DC_CLEAR,%d0
-	movc	%d0,%cacr		| invalidate on-chip d-cache
-	rts				|   since pmove flushes ATC
+	movl	#CACHE_CLR,%d0
+	movc	%d0,%cacr		| invalidate cache(s)
+	rts
 
 ENTRY(ploadw)
 #if defined(M68040)
@@ -1077,43 +1031,30 @@ ENTRY(getsr)
 	rts
 
 /*
- * _delay(unsigned N)
+ * _delay(u_int N)
  *
  * Delay for at least (N/256) microseconds.
  * This routine depends on the variable:  delay_divisor
  * which should be set based on the CPU clock rate.
  */
-GLOBAL(_delay)
+ENTRY_NOPROFILE(_delay)
 	| %d0 = arg = (usecs << 8)
 	movl	%sp@(4),%d0
 	| %d1 = delay_divisor
 	movl	_C_LABEL(delay_divisor),%d1
+	jra	L_delay			/* Jump into the loop! */
+
+	/*
+	 * Align the branch target of the loop to a half-line (8-byte)
+	 * boundary to minimize cache effects.  This guarantees both
+	 * that there will be no prefetch stalls due to cache line burst
+	 * operations and that the loop will run from a single cache
+	 * half-line.
+	 */
+	.align	8
 L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
-	rts
-
-/*
- * Save and restore 68881 state.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS) | save FP general registers
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR) | save FP control registers
-Lm68881sdone:
-	rts
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7 | restore FP general registers
-Lm68881rdone:
-	frestore %a0@			| restore state
 	rts
 
 /*
@@ -1131,7 +1072,9 @@ GLOBAL(doadump)
  * and return to monitor.
  */
 ENTRY_NOPROFILE(doboot)
-        movw	#PSL_HIGHIPL,%sr	| no interrupts
+	movw	#PSL_HIGHIPL,%sr	| no interrupts
+	movl	_C_LABEL(boothowto),%d7	| load howto
+	movl	%sp@(4),%d2		| arg
 #if defined(M68040)
 	cmpl	#MMU_68040,_C_LABEL(mmutype) | 68040?
 	jeq	Lnocache5		| yes, skip
@@ -1154,18 +1097,9 @@ Lnocache5:
 	.long	0x4e7b0807		| movc %d0,%srp
 #endif /* M68040 */
 Lbootcommon:
-	movl	_C_LABEL(boothowto),%d0	| load howto
-	movl	%sp@(4),%d2		| arg
 	lea	_ASM_LABEL(tmpstk),%sp	| physical SP in case of NMI
 	movl	#0,%d3
 	movc	%d3,%vbr		| monitor %vbr
-#if 0
-	andl	#0,%d0			| mask off
-	tstl	%d0			| 
-	bne	Lsboot			| sboot?
-	tstl	%d2
-	beq	Ldoreset
-#endif
 
 	movl	#0x41000000,%a0		| base = (int **)0x4100.0000
 	movl	%a0@,%d0		| *((int *)base[0])
@@ -1197,14 +1131,12 @@ GLOBAL(proto040tc)
 	.long	0x8000		| %tc (4KB page)
 GLOBAL(proto040tt0)		| tt0 0x4000.0000-0x7fff.ffff
 	.long	0x403fa040	| kernel only, cache inhebit, serialized
-GLOBAL(proto040tt1)		| tt1 0x8000.0000-0xfeff.ffff
-	.long	0x807ea040	| kernel only, cache inhebit, serialized
+GLOBAL(proto040tt1)		| tt1 0x8000.0000-0xffff.ffff
+	.long	0x807fa040	| kernel only, cache inhebit, serialized
 nullrp:
 	.long	0x7fff0001	| do-nothing MMU root pointer
 
 GLOBAL(memavail)
-	.long	0
-GLOBAL(proc0paddr)
 	.long	0
 GLOBAL(bootdev)
 	.long	0

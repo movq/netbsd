@@ -6,20 +6,18 @@
 #include <sys/cdefs.h>
 #include <sys/queue.h>
 #include <sys/mutex.h>
-#ifdef _KERNEL
 #include <sys/device.h>
-#else
-typedef struct device *device_t;
-#endif
 
 #define CTLFLAG_RW			CTLFLAG_READWRITE
 
 #define mtx				kmutex
 #define mtx_init(mtx, desc, type, opts)	mutex_init(mtx, MUTEX_DEFAULT, IPL_NONE)
-/*
-#define mtx_lock(mtx)		ndis_mtx_ipl = splnet() mutex_enter(mtx)
-#define mtx_unlock(mtx)         splx(ndis_mtx_ipl)	mutex_exit(mtx)
-*/
+
+#define mtx_lock(mtx)			mutex_enter(mtx)
+#define mtx_unlock(mtx)			mutex_exit(mtx)
+
+#define	mtx_lock_spin(mtx)		mutex_spin_enter(mtx);
+#define	mtx_unlock_spin(mtx)		mutex_spin_exit(mtx);
 
 void mtx_lock(struct mtx *mutex);
 void mtx_unlock(struct mtx *mutex);
@@ -43,7 +41,7 @@ TAILQ_HEAD(sysctl_ctx_list, sysctl_ctx_entry);
 #define BUS_SPACE_MAXADDR	0xFFFFFFFF
 #endif
 #define BUS_SPACE_MAXSIZE_32BIT 0xFFFFFFFF
-#define I386_BUS_SPACE_MEM	1
+#define I386_BUS_SPACE_MEM	x86_bus_space_mem
 
 #define device_get_softc	(struct ndis_softc *)
 #define ticks			hardclock_ticks
@@ -57,7 +55,7 @@ TAILQ_HEAD(sysctl_ctx_list, sysctl_ctx_entry);
 #ifndef PAGE_SIZE
 #define PAGE_SIZE		4096
 #endif
-#define I386_BUS_SPACE_IO	0
+#define I386_BUS_SPACE_IO	x86_bus_space_io
 
 #define device_get_nameunit(dev)	device_xname(dev)
 

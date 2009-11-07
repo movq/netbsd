@@ -1,4 +1,4 @@
-/*	$NetBSD: ucycom.c,v 1.29 2009/08/06 07:07:30 skrll Exp $	*/
+/*	$NetBSD: ucycom.c,v 1.33 2011/04/24 16:27:01 rmind Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.29 2009/08/06 07:07:30 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.33 2011/04/24 16:27:01 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.29 2009/08/06 07:07:30 skrll Exp $");
 #include <sys/file.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
+#include <sys/lwp.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -64,8 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.29 2009/08/06 07:07:30 skrll Exp $");
 #include "ioconf.h"
 
 #ifdef UCYCOM_DEBUG
-#define DPRINTF(x)	if (ucycomdebug) logprintf x
-#define DPRINTFN(n, x)	if (ucycomdebug > (n)) logprintf x
+#define DPRINTF(x)	if (ucycomdebug) printf x
+#define DPRINTFN(n, x)	if (ucycomdebug > (n)) printf x
 int	ucycomdebug = 20;
 #else
 #define DPRINTF(x)
@@ -173,7 +174,12 @@ Static const struct usb_devno ucycom_devs[] = {
 };
 #define ucycom_lookup(v, p) usb_lookup(ucycom_devs, v, p)
 
-USB_DECLARE_DRIVER(ucycom);
+int             ucycom_match(device_t, cfdata_t, void *);
+void            ucycom_attach(device_t, device_t, void *);
+int             ucycom_detach(device_t, int);
+int             ucycom_activate(device_t, enum devact);
+extern struct cfdriver ucycom_cd;
+CFATTACH_DECL_NEW(ucycom, sizeof(struct ucycom_softc), ucycom_match, ucycom_attach, ucycom_detach, ucycom_activate);
 
 int
 ucycom_match(device_t parent, cfdata_t match, void *aux)
@@ -206,7 +212,7 @@ ucycom_attach(device_t parent, device_t self, void *aux)
 	sc->sc_msr = sc->sc_mcr = 0;
 
 	/* set up tty */
-	sc->sc_tty = ttymalloc();
+	sc->sc_tty = tty_alloc();
 	sc->sc_tty->t_sc = sc;
 	sc->sc_tty->t_oproc = ucycomstart;
 	sc->sc_tty->t_param = ucycomparam;
@@ -239,7 +245,7 @@ ucycom_detach(device_t self, int flags)
 		mutex_spin_exit(&tty_lock);
 	}
 	/* Wait for processes to go away. */
-	usb_detach_wait(USBDEV(sc->sc_hdev.sc_dev));
+	usb_detach_wait(sc->sc_hdev.sc_dev);
 	splx(s);
 
 	/* locate the major number */
@@ -257,7 +263,7 @@ ucycom_detach(device_t self, int flags)
 	if (tp != NULL) {
 		DPRINTF(("ucycom_detach: tty_detach %p\n", tp));
 		tty_detach(tp);
-		ttyfree(tp);
+		tty_free(tp);
 		sc->sc_tty = NULL;
 	}
 
@@ -265,21 +271,19 @@ ucycom_detach(device_t self, int flags)
 }
 
 int
-ucycom_activate(device_ptr_t self, enum devact act)
+ucycom_activate(device_t self, enum devact act)
 {
 	struct ucycom_softc *sc = device_private(self);
 
 	DPRINTFN(5,("ucycom_activate: %d\n", act));
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (0);
 }
 
 #if 0

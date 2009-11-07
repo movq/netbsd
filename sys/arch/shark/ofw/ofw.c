@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw.c,v 1.50 2009/08/11 17:04:19 matt Exp $	*/
+/*	$NetBSD: ofw.c,v 1.57 2011/11/23 23:07:30 jmcneill Exp $	*/
 
 /*
  * Copyright 1997
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.50 2009/08/11 17:04:19 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.57 2011/11/23 23:07:30 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,12 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.50 2009/08/11 17:04:19 matt Exp $");
 #include <sys/reboot.h>
 #include <sys/mbuf.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <dev/cons.h>
 
 #define	_ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/frame.h>
 #include <machine/bootconfig.h>
 #include <machine/cpu.h>
@@ -78,6 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.50 2009/08/11 17:04:19 matt Exp $");
 
 #include "isadma.h"
 #include "igsfb_ofbus.h"
+#include "chipsfb_ofbus.h"
 #include "vga_ofbus.h"
 
 #define IO_VIRT_BASE (OFW_VIRT_BASE + OFW_VIRT_SIZE)
@@ -145,7 +146,7 @@ static vaddr_t  virt_freeptr;
 
 int ofw_callbacks = 0;		/* debugging counter */
 
-#if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
+#if (NIGSFB_OFBUS > 0) || (NCHIPSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
 int console_ihandle = 0;
 static void reset_screen(void);
 #endif
@@ -331,8 +332,8 @@ ofw_boot(int howto, char *bootstr)
 	printf("ipl_bio=%08x ipl_net=%08x ipl_tty=%08x ipl_vm=%08x\n",
 	    irqmasks[IPL_BIO], irqmasks[IPL_NET], irqmasks[IPL_TTY],
 	    irqmasks[IPL_VM]);
-	printf("ipl_audio=%08x ipl_clock=%08x ipl_none=%08x\n",
-	    irqmasks[IPL_AUDIO], irqmasks[IPL_CLOCK], irqmasks[IPL_NONE]);
+	printf("ipl_clock=%08x ipl_none=%08x\n",
+	    irqmasks[IPL_CLOCK], irqmasks[IPL_NONE]);
 
 	dump_spl_masks();
 #endif
@@ -404,7 +405,7 @@ ofw_boot(int howto, char *bootstr)
 		*ap++ = 0;
 		if (ap[-2] == '-')
 			*ap1 = 0;
-#if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
+#if (NIGSFB_OFBUS > 0) || (NCHIPSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
 		reset_screen();
 #endif
 		OF_boot(str);
@@ -413,7 +414,7 @@ ofw_boot(int howto, char *bootstr)
 
 ofw_exit:
 	printf("Calling OF_exit...\n");
-#if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
+#if (NIGSFB_OFBUS > 0) || (NCHIPSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
 	reset_screen();
 #endif
 	OF_exit();
@@ -746,7 +747,7 @@ ofw_configisadma(paddr_t *pdma)
  *  and poking them into the new page tables.  We then notify OFW
  *  that we are assuming control of memory-management by installing
  *  our callback-handler, and switch to the NetBSD-managed page
- *  tables with the setttb() call.
+ *  tables with the cpu_setttb() call.
  *  
  *  This scheme may cause some amount of memory to be wasted within
  *  OFW as dead page tables, but it shouldn't be more than about 
@@ -780,7 +781,7 @@ ofw_configmem(void)
 
 	/* Switch to the proc0 pagetables. */
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -788,14 +789,7 @@ ofw_configmem(void)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	{
-		extern struct user *proc0paddr;
-		proc0paddr = (struct user *)kernelstack.pv_va;
-		lwp0.l_addr = proc0paddr;
-	}
-
-	/* Aaaaaaaah, running in the proc0 address space! */
-	/* I feel good... */
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 	/* Set-up the various globals which describe physical memory for pmap. */
 	{
@@ -1953,7 +1947,7 @@ ofw_initallocator(void)
     
 }
 
-#if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
+#if (NIGSFB_OFBUS > 0) || (NCHIPSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
 static void
 reset_screen(void)
 {

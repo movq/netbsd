@@ -1,4 +1,4 @@
-/*	$NetBSD: t_dlinfo.c,v 1.1 2009/09/24 21:33:45 pooka Exp $	*/
+/*	$NetBSD: t_dlinfo.c,v 1.4 2011/03/25 14:47:31 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -84,9 +84,37 @@ ATF_TC_BODY(rtld_dlinfo_linkmap_dlopen, tc)
 	dlclose(handle);
 }
 
+ATF_TC(rtld_dlinfo_linkmap_dlopen_iter);
+ATF_TC_HEAD(rtld_dlinfo_linkmap_dlopen_iter, tc)
+{
+	atf_tc_set_md_var(tc, "descr", "dlopen'd dso's show up in the list");
+}
+ATF_TC_BODY(rtld_dlinfo_linkmap_dlopen_iter, tc)
+{
+	struct link_map *map;
+	void *handle;
+
+	handle = dlopen("libutil.so", RTLD_LAZY);
+	ATF_CHECK(handle);
+
+	RZ(dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &map));
+
+	for (; map->l_next; map = map->l_next)
+		continue;
+	for (; map; map = map->l_prev)
+		if (strstr(map->l_name, "libutil.so") != NULL)
+			break;
+	
+	ATF_REQUIRE_MSG(map, "dlopen()d object not found from linkmap");
+	ATF_REQUIRE_MSG(dlopen(map->l_name, RTLD_LAZY) != NULL,
+	    "could not dlopen() name in linkmap");
+}
+
 ATF_TP_ADD_TCS(tp)
 {
 	ATF_TP_ADD_TC(tp, rtld_dlinfo_linkmap_self);
 	ATF_TP_ADD_TC(tp, rtld_dlinfo_linkmap_inval);
 	ATF_TP_ADD_TC(tp, rtld_dlinfo_linkmap_dlopen);
+	ATF_TP_ADD_TC(tp, rtld_dlinfo_linkmap_dlopen_iter);
+	return 0;
 }

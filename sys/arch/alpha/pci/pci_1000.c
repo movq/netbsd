@@ -1,4 +1,4 @@
-/* $NetBSD: pci_1000.c,v 1.21 2009/03/14 21:04:02 dsl Exp $ */
+/* $NetBSD: pci_1000.c,v 1.24 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -36,17 +36,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -60,7 +60,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_1000.c,v 1.21 2009/03/14 21:04:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_1000.c,v 1.24 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -70,8 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_1000.c,v 1.21 2009/03/14 21:04:02 dsl Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -88,7 +86,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_1000.c,v 1.21 2009/03/14 21:04:02 dsl Exp $");
 static bus_space_tag_t another_mystery_icu_iot;
 static bus_space_handle_t another_mystery_icu_ioh;
 
-int	dec_1000_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+int	dec_1000_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
 const char *dec_1000_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *dec_1000_intr_evcnt(void *, pci_intr_handle_t);
 void	*dec_1000_intr_establish(void *, pci_intr_handle_t,
@@ -117,12 +115,12 @@ pci_1000_pickintr(void *core, bus_space_tag_t iot, bus_space_tag_t memt, pci_chi
 	pc_tag = pc;
 	if (bus_space_map(iot, 0x536, 2, 0, &another_mystery_icu_ioh))
 		panic("pci_1000_pickintr");
-        pc->pc_intr_v = core;
-        pc->pc_intr_map = dec_1000_intr_map;
-        pc->pc_intr_string = dec_1000_intr_string;
+	pc->pc_intr_v = core;
+	pc->pc_intr_map = dec_1000_intr_map;
+	pc->pc_intr_string = dec_1000_intr_string;
 	pc->pc_intr_evcnt = dec_1000_intr_evcnt;
-        pc->pc_intr_establish = dec_1000_intr_establish;
-        pc->pc_intr_disestablish = dec_1000_intr_disestablish;
+	pc->pc_intr_establish = dec_1000_intr_establish;
+	pc->pc_intr_disestablish = dec_1000_intr_disestablish;
 
 	pc->pc_pciide_compat_intr_establish = NULL;
 
@@ -145,8 +143,8 @@ pci_1000_pickintr(void *core, bus_space_tag_t iot, bus_space_tag_t memt, pci_chi
 #endif
 }
 
-int     
-dec_1000_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+int
+dec_1000_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
@@ -181,13 +179,13 @@ const char *
 dec_1000_intr_string(void *ccv, pci_intr_handle_t ih)
 {
 	static const char irqmsg_fmt[] = "dec_1000 irq %ld";
-        static char irqstr[sizeof irqmsg_fmt];
+	static char irqstr[sizeof irqmsg_fmt];
 
-        if (ih >= PCI_NIRQ)
-                panic("dec_1000_intr_string: bogus dec_1000 IRQ 0x%lx", ih);
+	if (ih >= PCI_NIRQ)
+	        panic("dec_1000_intr_string: bogus dec_1000 IRQ 0x%lx", ih);
 
-        snprintf(irqstr, sizeof irqstr, irqmsg_fmt, ih);
-        return (irqstr);
+	snprintf(irqstr, sizeof irqstr, irqmsg_fmt, ih);
+	return (irqstr);
 }
 
 const struct evcnt *
@@ -201,16 +199,17 @@ dec_1000_intr_evcnt(void *ccv, pci_intr_handle_t ih)
 }
 
 void *
-dec_1000_intr_establish(ccv, ih, level, func, arg)
-        void *ccv, *arg;
-        pci_intr_handle_t ih;
-        int level;
-        int (*func)(void *);
-{           
+dec_1000_intr_establish(
+	void *ccv,
+	pci_intr_handle_t ih,
+	int level,
+	int (*func)(void *),
+	void *arg)
+{
 	void *cookie;
 
-        if (ih >= PCI_NIRQ)
-                panic("dec_1000_intr_establish: IRQ too high, 0x%lx", ih);
+	if (ih >= PCI_NIRQ)
+	        panic("dec_1000_intr_establish: IRQ too high, 0x%lx", ih);
 
 	cookie = alpha_shared_intr_establish(dec_1000_pci_intr, ih, IST_LEVEL,
 	    level, func, arg, "dec_1000 irq");
@@ -224,7 +223,7 @@ dec_1000_intr_establish(ccv, ih, level, func, arg)
 	return (cookie);
 }
 
-void    
+void
 dec_1000_intr_disestablish(void *ccv, void *cookie)
 {
 	struct alpha_shared_intrhand *ih = cookie;
@@ -290,7 +289,7 @@ dec_1000_disable_intr(int irq)
  * Initialize mystery ICU
  */
 static void
-pci_1000_imi()
+pci_1000_imi(void)
 {
 	IW(0);					/* XXX ?? */
 }

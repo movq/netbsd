@@ -1,21 +1,21 @@
-/*	$NetBSD: ofw_rascons.c,v 1.3 2009/03/18 10:22:34 cegger Exp $	*/
+/*	$NetBSD: ofw_rascons.c,v 1.8 2012/02/01 09:54:03 matt Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -28,32 +28,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_rascons.c,v 1.3 2009/03/18 10:22:34 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_rascons.c,v 1.8 2012/02/01 09:54:03 matt Exp $");
+
+#include "wsdisplay.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/systm.h>
-#include <powerpc/oea/bat.h>
 
 #include <dev/ofw/openfirm.h>
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/rasops/rasops.h>
-#include <dev/wsfont/wsfont.h>
 #include <dev/wscons/wsdisplay_vconsvar.h>
+#include <dev/wsfont/wsfont.h>
 
+#include <powerpc/oea/bat.h>
 #include <powerpc/oea/ofw_rasconsvar.h>
-#include "wsdisplay.h"
 
 /* we need a wsdisplay to do anything halfway useful */
 #if NWSDISPLAY > 0
@@ -95,12 +95,12 @@ rascons_cnattach(void)
 
 	/* move (rom monitor) cursor to the lowest line - 1 */
 	OF_interpret("#lines 2 - to line#", 0, 0);
-	
+
 	wsfont_init();
 	if (copy_rom_font() == 0) {
 		romfont_loaded = 1;
 	}
-	
+
 	/* set up rasops */
 	rascons_init_rasops(console_node, ri);
 
@@ -117,7 +117,7 @@ rascons_cnattach(void)
 		crow = 0;
 	}
 #endif
-	
+
 	rascons_stdscreen.nrows = ri->ri_rows;
 	rascons_stdscreen.ncols = ri->ri_cols;
 	rascons_stdscreen.textops = &ri->ri_ops;
@@ -126,7 +126,7 @@ rascons_cnattach(void)
 	ri->ri_ops.allocattr(ri, 0, 0, 0, &defattr);
 	wsdisplay_preattach(&rascons_stdscreen, ri, 0, max(0,
 	    min(crow, ri->ri_rows - 1)), defattr);
-	
+
 #if notyet
 	rascons_init_cmap(NULL);
 #endif
@@ -154,7 +154,7 @@ copy_rom_font(void)
 	 * virtual address space.
 	 */
 	OF_call_method("translate", mmu, 1, 3, romfont, &romfont, &m, &e);
- 
+
 	/* Get character size */
 	OF_interpret("char-width", 0, 1, &char_width);
 	OF_interpret("char-height", 0, 1, &char_height);
@@ -199,17 +199,27 @@ rascons_init_rasops(int node, struct rasops_info *ri)
 	if (rascons_enable_cache) {
 		vaddr_t va;
 		/*
-		 * Let's try to find an empty BAT to use 
+		 * Let's try to find an empty 256M BAT to use
 		 */
 		for (va = SEGMENT_LENGTH; va < (USER_SR << ADDR_SR_SHFT);
 		     va += SEGMENT_LENGTH) {
-			if (battable[va >> ADDR_SR_SHFT].batu == 0) {
-				battable[va >> ADDR_SR_SHFT].batl =
-				    BATL(fbaddr & 0xf0000000,
-					 BAT_G | BAT_W | BAT_M, BAT_PP_RW);
-				battable[va >> ADDR_SR_SHFT].batu =
-				    BATL(va, BAT_BL_256M, BAT_Vs);
-				fbaddr &= 0x0fffffff;
+			const u_int i = BAT_VA2IDX(va);
+			const u_int n = BAT_VA2IDX(SEGMENT_LENGTH);
+			u_int j;
+			for (j = 0; j < n; j++) {
+				if (battable[i+j].batu != 0) {
+					break;
+				}
+			}
+			if (j == n) {
+				register_t batl = BATL(fbaddr & 0xf0000000,
+				    BAT_G | BAT_W | BAT_M, BAT_PP_RW);
+				register_t batu = BATL(va, BAT_BL_256M, BAT_Vs);
+				for (j = 0; j < n; j++) {
+					battable[i+j].batl = batl;
+					battable[i+j].batu = batu;
+				}
+				fbaddr &= SEGMENT_MASK;
 				fbaddr |= va;
 				break;
 			}
@@ -223,15 +233,15 @@ rascons_init_rasops(int node, struct rasops_info *ri)
 	ri->ri_depth = depth;
 	ri->ri_stride = linebytes;
 	ri->ri_bits = (char *)fbaddr;
-	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
+	ri->ri_flg = RI_CENTER | RI_FULLCLEAR | RI_NO_AUTO;
 
 	/* mimic firmware output if we can find the ROM font */
 	if (romfont_loaded) {
 		int cols, rows;
 
-		/* 
-		 * XXX this assumes we're the console which may or may not 
-		 * be the case 
+		/*
+		 * XXX this assumes we're the console which may or may not
+		 * be the case
 		 */
 		OF_interpret("#lines", 0, 1, &rows);
 		OF_interpret("#columns", 0, 1, &cols);
@@ -240,7 +250,7 @@ rascons_init_rasops(int node, struct rasops_info *ri)
 		rasops_init(ri, rows, cols);
 
 		ri->ri_xorigin = (width - cols * ri->ri_font->fontwidth) >> 1;
-		ri->ri_yorigin = (height - rows * ri->ri_font->fontheight) 
+		ri->ri_yorigin = (height - rows * ri->ri_font->fontheight)
 		    >> 1;
 		ri->ri_bits = (char *)fbaddr + ri->ri_xorigin +
 			      ri->ri_stride * ri->ri_yorigin;

@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile,v 1.8 2009/10/05 22:44:26 haad Exp $
+#	$NetBSD: Makefile,v 1.16.6.1 2012/08/13 23:18:23 riz Exp $
 
-SUBDIR+= lib .WAIT
-
-SUBDIR+= apache2 bsd intel-fw-eula intel-fw-public gpl2 gpl3 ibm-public intel-public cddl
+SUBDIR+= apache2 atheros bsd intel-fw-eula intel-fw-public gpl2 gpl3 historical
+SUBDIR+= ibm-public public-domain cddl mit realtek
 
 .include <bsd.subdir.mk>

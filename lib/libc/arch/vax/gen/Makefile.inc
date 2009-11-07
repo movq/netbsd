@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.15 2009/06/03 01:02:28 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.17 2010/07/06 05:59:52 mrg Exp $
 
 SRCS+=	byte_swap_2.S byte_swap_4.S bswap64.S \
 	fabs.S frexp.c \
@@ -16,11 +16,7 @@ SRCS+=	byte_swap_2.S byte_swap_4.S bswap64.S \
 # ABI compatibility for libc.so.12
 SRCS+=	isinf.c isnan.c
 
-.if ${OBJECT_FMT} != "ELF"
-SRCS+=	setjmp.S sigsetjmp.S
-.endif
-
-SRCS.vax.gen=	Lint_bswap16.c Lint_bswap32.c Lint_bswap64.c
-LSRCS+=		${SRCS.vax.gen}
-DPSRCS+=	${SRCS.vax.gen}
-CLEANFILES+=	${SRCS.vax.gen}
+LSRCS.vax.gen=	Lint_bswap16.c Lint_bswap32.c Lint_bswap64.c
+LSRCS+=		${LSRCS.vax.gen}
+DPSRCS+=	${LSRCS.vax.gen}
+CLEANFILES+=	${LSRCS.vax.gen}

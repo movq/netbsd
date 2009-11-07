@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.97 2009/03/18 10:22:26 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.104 2011/08/07 15:22:19 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,50 +32,35 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.97 2009/03/18 10:22:26 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.104 2011/08/07 15:22:19 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 
+#define _POWERPC_BUS_DMA_PRIVATE
+
 #include <sys/param.h>
-#include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/exec.h>
-#include <sys/extent.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
 #include <sys/mount.h>
-#include <sys/msgbuf.h>
-#include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/syscallargs.h>
-#include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/ksyms.h>
+#include <sys/vnode.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
-
-#include <machine/bootinfo.h>
+#include <machine/bebox.h>
 #include <machine/autoconf.h>
-#define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
+#include <machine/bootinfo.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
 
-#include <powerpc/oea/bat.h>
 #include <powerpc/pic/picvar.h> 
+#include <powerpc/psl.h>
 
 #include <dev/cons.h>
-
-#include "ksyms.h"
 
 #include "vga.h"
 #if (NVGA > 0)
@@ -104,13 +89,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.97 2009/03/18 10:22:26 cegger Exp $");
  * Global variables used here and there
  */
 char bootinfo[BOOTINFO_MAXSIZE];
-paddr_t bebox_mb_reg;		/* BeBox MotherBoard register */
-#define	OFMEMREGIONS	32
-struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
+#define	MEMREGIONS	2
+struct mem_region physmemr[MEMREGIONS], availmemr[MEMREGIONS];
 char bootpath[256];
-paddr_t avail_end;			/* XXX temporary */
 struct pic_ops *isa_pic;
-int isa_pcmciamask = 0x8b28;		/* XXXX */
 extern int primary_pic;
 void initppc(u_long, u_long, u_int, void *);
 static void disable_device(const char *);
@@ -141,7 +123,6 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 		availmemr[0].start = (endkernel + PGOFSET) & ~PGOFSET;
 		availmemr[0].size = meminfo->memsize - availmemr[0].start;
 	}
-	avail_end = physmemr[0].start + physmemr[0].size;    /* XXX temporary */
 
 	/*
 	 * Get CPU clock
@@ -158,11 +139,6 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 		ns_per_tick = 1000000000 / ticks_per_sec;
 	}
 
-
-	/*
-	 * boothowto
-	 */
-	/*	boothowto = args; */
 	prep_initppc(startkernel, endkernel, args);
 }
 
@@ -172,12 +148,6 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 void
 cpu_startup(void)
 {
-	/*
-	 * BeBox Mother Board's Register Mapping
-	 */
-	bebox_mb_reg = (vaddr_t) mapiodev(BEBOX_INTR_REG, PAGE_SIZE);
-	if (!bebox_mb_reg)
-		panic("cpu_startup: no room for interrupt register");
 
 	/*
 	 * Do common VM initialization
@@ -200,17 +170,6 @@ cpu_startup(void)
 	 * Now that we have VM, malloc's are OK in bus_space.
 	 */
 	bus_space_mallocok();
-
-	/*
-	 * Now allow hardware interrupts.
-	 */
-	{
-		int msr;
-
-		splraise(-1);
-		__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
-		    : "=r"(msr) : "K"(PSL_EE));
-	}
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_tag.c,v 1.6 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: ex_tag.c,v 1.10 2011/08/17 12:56:55 christos Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -204,7 +204,7 @@ ex_tag_next(SCR *sp, EXCMD *cmdp)
 	if (tqp->current->msg) {
 	    INT2CHAR(sp, tqp->current->msg, tqp->current->mlen + 1,
 		     np, nlen);
-	    msgq(sp, M_INFO, np);
+	    msgq(sp, M_INFO, "%s", np);
 	}
 	return (0);
 }
@@ -244,7 +244,7 @@ ex_tag_prev(SCR *sp, EXCMD *cmdp)
 	if (tqp->current->msg) {
 	    INT2CHAR(sp, tqp->current->msg, tqp->current->mlen + 1,
 		     np, nlen);
-	    msgq(sp, M_INFO, np);
+	    msgq(sp, M_INFO, "%s", np);
 	}
 	return (0);
 }
@@ -820,7 +820,7 @@ tagq_push(SCR *sp, TAGQ *tqp, int new_screen, int force)
 	if (tqp->current->msg) {
 	    INT2CHAR(sp, tqp->current->msg, tqp->current->mlen + 1,
 		     np, nlen);
-	    msgq(sp, M_INFO, np);
+	    msgq(sp, M_INFO, "%s", np);
 	}
 
 	/*
@@ -899,7 +899,7 @@ ex_tagf_alloc(SCR *sp, const char *str)
 
 	/* Create new queue. */
 	for (p = t = str;; ++p) {
-		if (*p == '\0' || isblank(*p)) {
+		if (*p == '\0' || isblank((unsigned char)*p)) {
 			if ((len = p - t) > 1) {
 				MALLOC_RET(sp, tfp, TAGF *, sizeof(TAGF));
 				MALLOC(sp, tfp->name, char *, len + 1);
@@ -962,7 +962,7 @@ ctag_search(SCR *sp, CHAR_T *search, size_t slen, char *tag)
 	 * used a line number, not a search string.  I got complaints, so
 	 * people are still using the format.  POSIX 1003.2 permits it.
 	 */
-	if (ISDIGIT(search[0])) {
+	if (ISDIGIT((UCHAR_T)search[0])) {
 		INT2CHAR(sp, search, slen+1, np, nlen);
 		m.lno = atoi(np);
 		if (!db_exist(sp, m.lno)) {

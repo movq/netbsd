@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_vnops.c,v 1.138 2009/07/03 21:17:41 elad Exp $	*/
+/*	$NetBSD: kernfs_vnops.c,v 1.144 2011/12/12 19:11:22 njoly Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.138 2009/07/03 21:17:41 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.144 2011/12/12 19:11:22 njoly Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -458,7 +458,6 @@ kernfs_xread(struct kernfs_node *kfs, int off, char **bufp, size_t len, size_t *
 		memcpy(*bufp, cp, xlen);
 		(*bufp)[xlen] = '\n';
 		(*bufp)[xlen+1] = '\0';
-		len = strlen(*bufp);
 		break;
 	}
 
@@ -594,7 +593,7 @@ kernfs_lookup(void *v)
 
 	if (cnp->cn_namelen == 1 && *pname == '.') {
 		*vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		return (0);
 	}
 
@@ -832,7 +831,7 @@ kernfs_getattr(void *v)
 	char strbuf[KSTRING], *bf;
 	size_t nread, total;
 
-	VATTR_NULL(vap);
+	vattr_null(vap);
 	vap->va_type = ap->a_vp->v_type;
 	vap->va_uid = 0;
 	vap->va_gid = 0;
@@ -942,7 +941,7 @@ kernfs_default_xread(void *v)
 	int error;
 
 	if (ap->a_vp->v_type == VDIR)
-		return (EOPNOTSUPP);
+		return EISDIR;
 
 	off = (int)uio->uio_offset;
 	/* Don't allow negative offsets */
@@ -1169,6 +1168,13 @@ kernfs_readdir(void *v)
 				if (*dp == NODEV ||
 				    !vfinddev(*dp, kt->kt_vtype, &fvp))
 					continue;
+				vrele(fvp);
+			}
+			if (kt->kt_tag == KFSmsgbuf) {
+				if (!msgbufenabled
+				    || msgbufp->msg_magic != MSG_MAGIC) {
+					continue;
+				}
 			}
 			d.d_namlen = kt->kt_namlen;
 			if ((error = kernfs_setdirentfileno(&d, i, kfs,
@@ -1245,6 +1251,7 @@ kernfs_readdir(void *v)
 				if (*dp == NODEV ||
 				    !vfinddev(*dp, kt->kt_vtype, &fvp))
 					continue;
+				vrele(fvp);
 			}
 			d.d_namlen = kt->kt_namlen;
 			if ((error = kernfs_setdirentfileno(&d, i, kfs,
@@ -1457,7 +1464,7 @@ kernfs_inactive(void *v)
 	default:
 		break;
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (0);
 }
 

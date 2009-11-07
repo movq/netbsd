@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_condvar.c,v 1.27 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: kern_condvar.c,v 1.30 2011/07/27 14:35:33 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_condvar.c,v 1.27 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_condvar.c,v 1.30 2011/07/27 14:35:33 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -44,8 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_condvar.c,v 1.27 2009/10/21 21:12:06 rmind Exp 
 #include <sys/sleepq.h>
 #include <sys/lockdebug.h>
 #include <sys/cpu.h>
-
-#include <uvm/uvm_extern.h>
 
 /*
  * Accessors for the private contents of the kcondvar_t data type.
@@ -224,7 +222,7 @@ cv_wait(kcondvar_t *cv, kmutex_t *mtx)
  *
  *	Wait on a condition variable until a awoken or a signal is received. 
  *	Will also return early if the process is exiting.  Returns zero if
- *	awoken normallly, ERESTART if a signal was received and the system
+ *	awoken normally, ERESTART if a signal was received and the system
  *	call is restartable, or EINTR otherwise.
  */
 int
@@ -265,7 +263,7 @@ cv_timedwait(kcondvar_t *cv, kmutex_t *mtx, int timo)
  *
  *	Wait on a condition variable until a timeout expires, awoken or a
  *	signal is received.  Will also return early if the process is
- *	exiting.  Returns zero if awoken normallly, EWOULDBLOCK if the
+ *	exiting.  Returns zero if awoken normally, EWOULDBLOCK if the
  *	timeout expires, ERESTART if a signal was received and the system
  *	call is restartable, or EINTR otherwise.
  */
@@ -362,21 +360,6 @@ cv_wakeup_all(kcondvar_t *cv)
 	mutex_spin_exit(mp);
 
 	KASSERT(cv_is_valid(cv));
-}
-
-/*
- * cv_wakeup:
- *
- *	Wake all LWPs waiting on a condition variable.  For cases
- *	where the address may be waited on by mtsleep()/tsleep().
- *	Not a documented call.
- */
-void
-cv_wakeup(kcondvar_t *cv)
-{
-
-	cv_wakeup_all(cv);
-	wakeup(cv);
 }
 
 /*

@@ -1,4 +1,4 @@
-#	$NetBSD: files.amd64,v 1.68 2009/06/16 21:05:33 bouyer Exp $
+#	$NetBSD: files.amd64,v 1.74 2011/11/06 19:45:04 christos Exp $
 #
 # new style config file for amd64 architecture
 #
@@ -34,17 +34,15 @@ file	arch/amd64/amd64/busfunc.S
 file	arch/amd64/amd64/cpu_in_cksum.S		(inet | inet6) & cpu_in_cksum
 file	arch/amd64/amd64/cpufunc.S
 file	arch/amd64/amd64/db_disasm.c		ddb
-file	arch/amd64/amd64/db_interface.c	ddb
+file	arch/amd64/amd64/db_interface.c		ddb
+file	arch/amd64/amd64/db_machdep.c		ddb
 file	arch/amd64/amd64/db_memrw.c		ddb | kgdb
-file	arch/amd64/amd64/db_trace.c		ddb
 file	arch/amd64/amd64/kobj_machdep.c		modular
 file	arch/amd64/amd64/kgdb_machdep.c		kgdb
 file	kern/subr_disk_mbr.c			disk
 file	arch/amd64/amd64/gdt.c
 file	arch/amd64/amd64/machdep.c
-file	arch/amd64/amd64/mem.c
 file	arch/amd64/amd64/process_machdep.c
-file	arch/amd64/amd64/procfs_machdep.c	procfs
 file	arch/amd64/amd64/trap.c
 file	arch/amd64/amd64/fpu.c
 file	arch/amd64/amd64/lock_stubs.S
@@ -153,6 +151,12 @@ include "compat/linux32/files.linux32"
 include "compat/linux32/arch/amd64/files.linux32_amd64"
 file	arch/amd64/amd64/linux32_sigcode.S		compat_linux32
 file	arch/amd64/amd64/linux32_syscall.c		compat_linux32
+
+# SVR4 compatibility (COMPAT_SVR4)
+include "compat/svr4/files.svr4"
+
+# SVR4 compatibility (COMPAT_SVR4_32)
+include "compat/svr4_32/files.svr4_32"
 
 # OSS audio driver compatibility
 include	"compat/ossaudio/files.ossaudio"

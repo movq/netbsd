@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile.inc,v 1.25 2006/06/27 18:19:57 drochner Exp $
+#	$NetBSD: Makefile.inc,v 1.27 2011/03/26 19:51:41 christos Exp $
 
 # objects built from assembler sources (need lint stubs)
 SRCS+=	alloca.S byte_swap_2.S byte_swap_4.S fabs.S \
 	flt_rounds.S fpgetmask.S fpgetround.S fpgetsticky.S \
-	fpsetmask.S fpsetround.S fpsetsticky.S 
+	fpsetmask.S fpsetround.S fpsetsticky.S fpgetprec.S \
+	fpsetprec.S
 
 SRCS+=	setjmp.S _setjmp.S sigsetjmp.S
 
@@ -26,13 +27,13 @@ SRCS+=	fpclassifyl.c isfinitel.c isinfl.c isnanl.c signbitl.c
 # "internal" objects (don't provide part of the user-visible API)
 SRCS+=	divsi3.S fixdfsi.S fixunsdfsi.S udivsi3.S
 
-SRCS.i386.gen=\
+LSRCS.i386.gen=\
 	Lint__setjmp.c Lint_alloca.c Lint_bswap16.c Lint_bswap32.c \
 	Lint_fabs.c \
 	Lint___setjmp14.c Lint___sigsetjmp14.c Lint_flt_rounds.c \
 	Lint_fpgetmask.c Lint_fpgetround.c Lint_fpgetsticky.c \
 	Lint_fpsetmask.c Lint_fpsetround.c Lint_fpsetsticky.c \
 	Lint_resumecontext.c Lint_swapcontext.c Lint__setjmp.c
-LSRCS+=		${SRCS.i386.gen}
-DPSRCS+=	${SRCS.i386.gen}
-CLEANFILES+=	${SRCS.i386.gen}
+LSRCS+=		${LSRCS.i386.gen}
+DPSRCS+=	${LSRCS.i386.gen}
+CLEANFILES+=	${LSRCS.i386.gen}

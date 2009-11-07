@@ -1,4 +1,4 @@
-/*	$NetBSD: puffsdump.h,v 1.12 2009/04/06 20:47:17 pooka Exp $	*/
+/*	$NetBSD: puffsdump.h,v 1.15 2010/07/11 12:29:08 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -30,14 +30,17 @@
 #ifndef _PUFFSDUMP_H_
 #define _PUFFSDUMP_H_
 
+/*
+ * Note for callers outside of libpuffs: these are to be used only
+ * for debug builds.  Interfaces are not guaranteed to remain stable.
+ */
+
 #include <fs/puffs/puffs_msgif.h>
 
 void puffsdump_req(struct puffs_req *);
 void puffsdump_rv(struct puffs_req *);
 void puffsdump_cookie(puffs_cookie_t, const char *);
 void puffsdump_cn(struct puffs_kcn *);
-void puffsdump_creds(struct puffs_cred *);
-void puffsdump_int(int, const char *);
 
 void puffsdump_readwrite(struct puffs_req *);
 void puffsdump_readwrite_rv(struct puffs_req *);
@@ -45,8 +48,21 @@ void puffsdump_readdir(struct puffs_req *);
 void puffsdump_readdir_rv(struct puffs_req *);
 void puffsdump_lookup(struct puffs_req *);
 void puffsdump_lookup_rv(struct puffs_req *);
+void puffsdump_create(struct puffs_req *);
 void puffsdump_create_rv(struct puffs_req *);
 void puffsdump_open(struct puffs_req *);
+
+void puffsdump_attr(struct puffs_req *);
 void puffsdump_targ(struct puffs_req *);
+
+extern const char *puffsdump_vfsop_revmap[];
+extern const char *puffsdump_vnop_revmap[];
+extern const char *puffsdump_errnot_revmap[];
+extern const char *puffsdump_flush_revmap[];
+
+extern size_t puffsdump_vfsop_count;
+extern size_t puffsdump_vnop_count;
+extern size_t puffsdump_errnot_count;
+extern size_t puffsdump_flush_count;
 
 #endif /* _PUFFSDUMP_H_ */

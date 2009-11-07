@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.17 2008/11/12 12:36:28 ad Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.20 2011/11/19 22:51:25 tls Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.17 2008/11/12 12:36:28 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.20 2011/11/19 22:51:25 tls Exp $");
 #endif
 
 /*
@@ -44,9 +44,9 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.17 2008/11/12 12:36:28 ad Exp
 #include <sys/sysctl.h>
 #include <sys/once.h>
 
-#include <machine/stdarg.h>
-
 #include <sys/socket.h>
+
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -490,15 +490,11 @@ err:
 int
 ieee80211_node_dectestref(struct ieee80211_node *ni)
 {
-	int rc, s;
-	s = splnet();
-	if (--ni->ni_refcnt == 0) {
-		rc = 1;
-		ni->ni_refcnt = 1;
+	if (atomic_dec_uint_nv(&ni->ni_refcnt) == 0) {
+		atomic_inc_uint(&ni->ni_refcnt);
+		return 1;
 	} else
-		rc = 0;
-	splx(s);
-	return rc;
+		return 0;
 }
 
 void
@@ -646,14 +642,7 @@ ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
 void
 get_random_bytes(void *p, size_t n)
 {
-	u_int8_t *dp = p;
-
-	while (n > 0) {
-		u_int32_t v = arc4random();
-		size_t nb = n > sizeof(u_int32_t) ? sizeof(u_int32_t) : n;
-		(void)memcpy(dp, &v, nb);
-		dp += sizeof(u_int32_t), n -= nb;
-	}
+	cprng_fast(p, n);
 }
 
 void

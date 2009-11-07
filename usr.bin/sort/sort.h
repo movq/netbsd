@@ -1,4 +1,4 @@
-/*	$NetBSD: sort.h,v 1.30 2009/09/28 20:30:01 dsl Exp $	*/
+/*	$NetBSD: sort.h,v 1.34 2011/09/16 15:39:29 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -78,13 +78,14 @@
 
 /* values for masks, weights, and other flags. */
 /* R and F get used to index weight_tables[] */
-#define R 1		/* Field is reversed */
-#define F 2		/* weight lower and upper case the same */
-#define I 4		/* mask out non-printable characters */
-#define D 8		/* sort alphanumeric characters only */
-#define N 16		/* Field is a number */
-#define BI 32		/* ignore blanks in icol */
-#define BT 64		/* ignore blanks in tcol */
+#define	R	0x01	/* Field is reversed */
+#define	F	0x02	/* weight lower and upper case the same */
+#define	I	0x04	/* mask out non-printable characters */
+#define	D	0x08	/* sort alphanumeric characters only */
+#define	N	0x10	/* Field is a number */
+#define	BI	0x20	/* ignore blanks in icol */
+#define	BT	0x40	/* ignore blanks in tcol */
+#define	L	0x80	/* Sort by field length */
 
 /* masks for delimiters: blanks, fields, and termination. */
 #define BLANK 1		/* ' ', '\t'; '\n' if -R is invoked */
@@ -174,10 +175,11 @@ extern int ncols;
 #define DEBUG(ch) (debug_flags & (1 << ((ch) & 31)))
 extern unsigned int debug_flags;
 
+RECHEADER *allocrec(RECHEADER *, size_t);
 void	 append(RECHEADER **, int, FILE *, void (*)(const RECHEADER *, FILE *));
 void	 concat(FILE *, FILE *);
 length_t enterkey(RECHEADER *, const u_char *, u_char *, size_t, struct field *);
-void	 fixit(int *, char **);
+void	 fixit(int *, char **, const char *);
 void	 fldreset(struct field *);
 FILE	*ftmp(void);
 void	 fmerge(struct filelist *, int, FILE *, struct field *);
@@ -189,7 +191,7 @@ int	 makekey(FILE *, RECHEADER *, u_char *, struct field *);
 int	 makeline(FILE *, RECHEADER *, u_char *, struct field *);
 void	 makeline_copydown(RECHEADER *);
 int	 optval(int, int);
-void	 order(struct filelist *, struct field *);
+__dead void	 order(struct filelist *, struct field *);
 void	 putline(const RECHEADER *, FILE *);
 void	 putrec(const RECHEADER *, FILE *);
 void	 putkeydump(const RECHEADER *, FILE *);

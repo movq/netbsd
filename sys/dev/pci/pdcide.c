@@ -1,4 +1,4 @@
-/*	$NetBSD: pdcide.c,v 1.27 2009/10/19 18:41:16 bouyer Exp $	*/
+/*	$NetBSD: pdcide.c,v 1.29 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdcide.c,v 1.27 2009/10/19 18:41:16 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdcide.c,v 1.29 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -36,7 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: pdcide.c,v 1.27 2009/10/19 18:41:16 bouyer Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_pdc202xx_reg.h>
 
-static void pdc202xx_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void pdc202xx_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void pdc202xx_setup_channel(struct ata_channel *);
 static void pdc20268_setup_channel(struct ata_channel *);
 static int  pdc202xx_pci_intr(void *);
@@ -176,12 +177,11 @@ pdcide_attach(device_t parent, device_t self, void *aux)
 	(sc)->sc_pp->ide_product == PCI_PRODUCT_PROMISE_PDC20277)
 
 static void
-pdc202xx_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+pdc202xx_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface, st, mode;
-	bus_size_t cmdsize, ctlsize;
 
 	if (!PDC_IS_268(sc)) {
 		st = pci_conf_read(sc->sc_pc, sc->sc_tag, PDC2xx_STATE);
@@ -313,7 +313,7 @@ pdc202xx_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 		}
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		pciide_mapchan(pa, cp, interface,
 		    PDC_IS_265(sc) ? pdc20265_pci_intr : pdc202xx_pci_intr);
 		/* clear interrupt, in case there is one pending */
 		bus_space_write_1(sc->sc_dma_iot, cp->dma_iohs[IDEDMA_CTL], 0,

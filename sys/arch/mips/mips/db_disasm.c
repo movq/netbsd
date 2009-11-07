@@ -1,4 +1,4 @@
-/*	$NetBSD: db_disasm.c,v 1.20 2009/08/06 04:34:50 msaitoh Exp $	*/
+/*	$NetBSD: db_disasm.c,v 1.24 2011/08/18 21:04:23 matt Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -35,16 +35,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.20 2009/08/06 04:34:50 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.24 2011/08/18 21:04:23 matt Exp $");
 
-#include <sys/types.h>
-#include <sys/systm.h>
 #include <sys/param.h>
+#include <sys/cpu.h>
+#include <sys/systm.h>
 
-#include <machine/reg.h>
-#include <machine/cpu.h>
+#include <mips/reg.h>
 #include <mips/mips_opcode.h>
-/*#include <machine/param.h>*/
+
 #include <machine/db_machdep.h>
 
 #include <ddb/db_interface.h>
@@ -53,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_disasm.c,v 1.20 2009/08/06 04:34:50 msaitoh Exp $
 #include <ddb/db_sym.h>
 
 static const char * const op_name[64] = {
-/* 0 */ "spec", "bcond","j",	"jal",	"beq",	"bne",	"blez", "bgtz",
+/* 0 */ "spec", "regimm","j",	"jal",	"beq",	"bne",	"blez", "bgtz",
 /* 8 */ "addi", "addiu","slti", "sltiu","andi", "ori",	"xori", "lui",
 /*16 */ "cop0", "cop1", "cop2", "cop3", "beql", "bnel", "blezl","bgtzl",
 /*24 */ "daddi","daddiu","ldl", "ldr",	"op34", "op35", "op36", "op37",
@@ -78,11 +77,11 @@ static const char * const spec2_name[4] = {		/* QED RM4650, R5000, etc. */
 /* 0 */ "mad", "madu", "mul", "spec3"
 };
 
-static const char * const bcond_name[32] = {
+static const char * const regimm_name[32] = {
 /* 0 */ "bltz", "bgez", "bltzl", "bgezl", "?", "?", "?", "?",
 /* 8 */ "tgei", "tgeiu", "tlti", "tltiu", "teqi", "?", "tnei", "?",
 /*16 */ "bltzal", "bgezal", "bltzall", "bgezall", "?", "?", "?", "?",
-/*24 */ "?", "?", "?", "?", "?", "?", "?", "?",
+/*24 */ "?", "?", "?", "?", "bposge32", "?", "?", "?",
 };
 
 static const char * const cop1_name[64] = {
@@ -134,11 +133,11 @@ static const char * const c0_opname[64] = {
 
 static const char * const c0_reg[32] = {
 	"index",    "random",   "tlblo0",  "tlblo1",
-	"context",  "pagemask", "wired",   "cp0r7",
+	"context",  "pagemask", "wired",   "hwrena",
 	"badvaddr", "count",    "tlbhi",   "compare",
 	"status",   "cause",    "epc",     "prid",
 	"config",   "lladdr",   "watchlo", "watchhi",
-	"xcontext", "cp0r21",   "cp0r22",  "debug",
+	"xcontext", "cp0r21",   "osscratch",  "debug",
 	"depc",     "perfcnt",  "ecc",     "cacheerr",
 	"taglo",    "taghi",    "errepc",  "desave"
 };
@@ -164,7 +163,7 @@ db_disasm(db_addr_t loc, bool altfmt)
 	 * loses the current debugging context.  KSEG2 not checked.
 	 */
 	if (loc < MIPS_KSEG0_START) {
-		instr = fuword((void *)loc);
+		instr = ufetch_uint32((void *)loc);
 		if (instr == 0xffffffff) {
 			/* "sd ra, -1(ra)" is unlikely */
 			db_printf("invalid address.\n");
@@ -297,8 +296,8 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
 			
 		break;
 
-	case OP_BCOND:
-		db_printf("%s\t%s,", bcond_name[i.IType.rt],
+	case OP_REGIMM:
+		db_printf("%s\t%s,", regimm_name[i.IType.rt],
 		    reg_name[i.IType.rs]);
 		goto pr_displ;
 
@@ -429,6 +428,70 @@ db_disasm_insn(int insn, db_addr_t loc, bool altfmt)
 		}
 		break;
 
+	case OP_COP2:
+		switch (i.RType.rs) {
+		case OP_BCx:
+		case OP_BCy:
+			db_printf("bc2%c\t",
+			    "ft"[i.RType.rt & COPz_BC_TF_MASK]);
+			goto pr_displ;
+
+		case OP_MT:
+			db_printf("mtc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_MF:
+			db_printf("mfc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_CT:
+			db_printf("ctc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_CF:
+			db_printf("cfc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_DMT:
+			db_printf("dmtc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_DMF:
+			db_printf("dmfc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_MTH:
+			db_printf("mthc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		case OP_MFH:
+			db_printf("mfhc2\t%s,f%d",
+			    reg_name[i.RType.rt],
+			    i.RType.rd);
+			break;
+
+		default:
+			db_printf("%s\t%s,%s,%d", op_name[i.IType.op],
+			    reg_name[i.IType.rt],
+			    reg_name[i.IType.rs],
+			    (short)i.IType.imm);
+		}
+		break;
+
 	case OP_J:
 	case OP_JAL:
 		db_printf("%s\t", op_name[i.JType.op]);
@@ -533,8 +596,8 @@ print_addr(db_addr_t loc)
 			db_printf("%s", symname);
 		else
 			db_printf("<%s+%lx>", symname, diff);
-		db_printf("\t[addr:0x%08lx]", loc);
+		db_printf("\t[addr:%#"PRIxVADDR"]", loc);
 	} else {
-		db_printf("0x%08lx", loc);
+		db_printf("%#"PRIxVADDR, loc);
 	}
 }

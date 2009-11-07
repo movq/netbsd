@@ -1,4 +1,4 @@
-/*	$NetBSD: exception.c,v 1.53 2008/12/19 15:20:10 njoly Exp $	*/
+/*	$NetBSD: exception.c,v 1.61 2011/01/28 21:06:08 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exception.c,v 1.53 2008/12/19 15:20:10 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exception.c,v 1.61 2011/01/28 21:06:08 uwe Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -87,7 +87,6 @@ __KERNEL_RCSID(0, "$NetBSD: exception.c,v 1.53 2008/12/19 15:20:10 njoly Exp $")
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
 
@@ -102,6 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: exception.c,v 1.53 2008/12/19 15:20:10 njoly Exp $")
 
 #include <sh3/cpu.h>
 #include <sh3/mmu.h>
+#include <sh3/pcb.h>
 #include <sh3/exception.h>
 #include <sh3/userret.h>
 
@@ -140,13 +140,14 @@ general_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 {
 	int expevt = tf->tf_expevt;
 	bool usermode = !KERNELMODE(tf->tf_ssr);
+	struct pcb *pcb;
 	ksiginfo_t ksi;
 	uint32_t trapcode;
 #ifdef DDB
 	uint32_t code;
 #endif
 
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	/*
 	 * Read trap code from TRA before enabling interrupts,
@@ -184,6 +185,7 @@ general_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 		break;
 
 	case EXPEVT_BREAK | EXP_USER:
+		l->l_md.md_flags &= ~MDP_SSTEP;
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGTRAP;
 		ksi.ksi_code = TRAP_TRACE;
@@ -192,8 +194,10 @@ general_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 
 	case EXPEVT_ADDR_ERR_LD: /* FALLTHROUGH */
 	case EXPEVT_ADDR_ERR_ST:
-		KDASSERT(l->l_md.md_pcb->pcb_onfault != NULL);
-		tf->tf_spc = (int)l->l_md.md_pcb->pcb_onfault;
+		pcb = lwp_getpcb(l);
+		KDASSERT(pcb->pcb_onfault != NULL);
+		tf->tf_spc = (int)pcb->pcb_onfault;
+		tf->tf_r0 = EFAULT;
 		if (tf->tf_spc == 0)
 			goto do_panic;
 		break;
@@ -254,7 +258,7 @@ general_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 		printf("fatal %s", exp_type[expevt >> 5]);
 	else
 		printf("EXPEVT 0x%03x", expevt);
-	printf(" in %s mode\n", expevt & EXP_USER ? "user" : "kernel");
+	printf(" in %s mode\n", usermode ? "user" : "kernel");
 	printf(" spc %x ssr %x \n", tf->tf_spc, tf->tf_ssr);
 
 	panic("general_exception");
@@ -272,11 +276,16 @@ void
 tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 {
 	struct vm_map *map;
+	struct pcb *pcb;
 	pmap_t pmap;
+	void *onfault;
 	ksiginfo_t ksi;
 	bool usermode;
 	int err, track, ftype;
 	const char *panic_msg;
+
+	pcb = lwp_getpcb(l);
+	onfault = pcb->pcb_onfault;
 
 #define TLB_ASSERT(assert, msg)				\
 		do {					\
@@ -323,9 +332,10 @@ tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 			ksi.ksi_addr = (void *)va;
 			goto user_fault;
 		} else {
-			TLB_ASSERT(l && l->l_md.md_pcb->pcb_onfault != NULL,
+			TLB_ASSERT(l && onfault != NULL,
 			    "no copyin/out fault handler (load protection)");
-			tf->tf_spc = (int)l->l_md.md_pcb->pcb_onfault;
+			tf->tf_spc = (int)onfault;
+			tf->tf_r0 = EFAULT;
 		}
 		return;
 
@@ -348,11 +358,11 @@ tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 			map = kernel_map;
 			pmap = pmap_kernel();
 		} else {
-			TLB_ASSERT(l != NULL &&
-			    l->l_md.md_pcb->pcb_onfault != NULL,
+			TLB_ASSERT(l != NULL && onfault != NULL,
 			    "invalid user-space access from kernel mode");
 			if (va == 0) {
-				tf->tf_spc = (int)l->l_md.md_pcb->pcb_onfault;
+				tf->tf_spc = (int)onfault;
+				tf->tf_r0 = EFAULT;
 				return;
 			}
 			map = &l->l_proc->p_vmspace->vm_map;
@@ -368,15 +378,17 @@ tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 	}
 
 	/* Page not found. call fault handler */
-	if (!usermode && pmap != pmap_kernel() &&
-	    l->l_md.md_pcb->pcb_faultbail) {
-		TLB_ASSERT(l->l_md.md_pcb->pcb_onfault != NULL,
+	if (!usermode && pmap != pmap_kernel() && pcb->pcb_faultbail) {
+		TLB_ASSERT(onfault != NULL,
 		    "no copyin/out fault handler (interrupt context)");
-		tf->tf_spc = (int)l->l_md.md_pcb->pcb_onfault;
+		tf->tf_spc = (int)onfault;
+		tf->tf_r0 = EFAULT;
 		return;
 	}
 
+	pcb->pcb_onfault = NULL;
 	err = uvm_fault(map, va, ftype);
+	pcb->pcb_onfault = onfault;
 
 	/* User stack extension */
 	if (map != kernel_map &&
@@ -413,9 +425,10 @@ tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 		}
 		goto user_fault;
 	} else {
-		TLB_ASSERT(l->l_md.md_pcb->pcb_onfault,
+		TLB_ASSERT(onfault,
 		    "no copyin/out fault handler (page not found)");
-		tf->tf_spc = (int)l->l_md.md_pcb->pcb_onfault;
+		tf->tf_spc = (int)onfault;
+		tf->tf_r0 = err;
 	}
 	return;
 
@@ -430,7 +443,7 @@ tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 	panic("tlb_exception: %s\n"
 	      "expevt=%x va=%08x ssr=%08x spc=%08x lwp=%p onfault=%p",
 	      panic_msg, tf->tf_expevt, va, tf->tf_ssr, tf->tf_spc,
-	      l, l ? l->l_md.md_pcb->pcb_onfault : NULL);
+	      l, pcb->pcb_onfault);
 #undef	TLB_ASSERT
 }
 
@@ -454,7 +467,7 @@ ast(struct lwp *l, struct trapframe *tf)
 	KDASSERT(l->l_md.md_regs == tf);
 
 	while (l->l_md.md_astpending) {
-		uvmexp.softs++;
+		//curcpu()->ci_data.cpu_nast++;
 		l->l_md.md_astpending = 0;
 
 		if (l->l_pflag & LP_OWEUPC) {

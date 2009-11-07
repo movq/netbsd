@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.apply.c,v 1.10 2009/06/07 18:30:39 dholland Exp $	*/
+/*	$NetBSD: hack.apply.c,v 1.13 2011/08/07 06:03:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.apply.c,v 1.10 2009/06/07 18:30:39 dholland Exp $");
+__RCSID("$NetBSD: hack.apply.c,v 1.13 2011/08/07 06:03:45 dholland Exp $");
 #endif				/* not lint */
 
 #include	"hack.h"
@@ -108,7 +108,7 @@ doapply(void)
 			use_magic_whistle(obj);
 			break;
 		}
-		/* fall into next case */
+		/* FALLTHROUGH */
 	case WHISTLE:
 		use_whistle(obj);
 		break;
@@ -255,7 +255,7 @@ use_ice_box(struct obj *obj)
 	else {
 		pline("Do you want to take something out of the ice-box? [yn] ");
 		if (readchar() == 'y')
-			if (askchain(fcobj, (char *) 0, 0, out_ice_box, ck_ice_box, 0))
+			if (askchain(fcobj, NULL, 0, out_ice_box, ck_ice_box, 0))
 				return;
 		pline("That was all. Do you wish to put something in? [yn] ");
 		if (readchar() != 'y')
@@ -383,7 +383,7 @@ dig(void)
 			digtxt = "Now what exactly was it that you were digging in?";
 		mnewsym(dpx, dpy);
 		prl(dpx, dpy);
-		pline(digtxt);	/* after mnewsym & prl */
+		pline("%s", digtxt);	/* after mnewsym & prl */
 		return (0);
 	} else {
 		if (IS_WALL(levl[dpx][dpy].typ)) {
@@ -490,7 +490,7 @@ use_pick_axe(struct obj *obj)
 			 && !sobj_at(ENORMOUS_ROCK, rx, ry)) {
 			/* ACCESSIBLE or POOL */
 			pline("You swing your %s through thin air.",
-			      aobjnam(obj, (char *) 0));
+			      aobjnam(obj, NULL));
 		} else {
 			if (dig_pos.x != rx || dig_pos.y != ry
 			    || dig_level != dlevel || dig_down) {

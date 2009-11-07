@@ -1,4 +1,4 @@
-/*	$NetBSD: zx.c,v 1.33 2009/09/19 11:55:09 tsutsui Exp $	*/
+/*	$NetBSD: zx.c,v 1.39 2012/01/11 16:08:57 macallan Exp $	*/
 
 /*
  *  Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zx.c,v 1.33 2009/09/19 11:55:09 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zx.c,v 1.39 2012/01/11 16:08:57 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,11 +57,14 @@ __KERNEL_RCSID(0, "$NetBSD: zx.c,v 1.33 2009/09/19 11:55:09 tsutsui Exp $");
 #include <sys/conf.h>
 #include <sys/syslog.h>
 #include <sys/buf.h>
+#ifdef DEBUG
+/* for log(9) in zxioctl() */
+#include <sys/lwp.h>
+#include <sys/proc.h>
+#endif
 
 #include <sys/bus.h>
 #include <machine/autoconf.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/sun/fbio.h>
 #include <dev/sun/fbvar.h>
@@ -325,7 +328,8 @@ zx_attach(device_t parent, device_t self, void *args)
 		zx_defaultscreen.ncols = ri->ri_cols;
 		zx_fillrect(sc, 0, 0, width, height,
 		     ri->ri_devcmap[defattr >> 16], ZX_STD_ROP);
-		wsdisplay_cnattach(&zx_defaultscreen, ri, 0, 0, defattr);	
+		wsdisplay_cnattach(&zx_defaultscreen, ri, 0, 0, defattr);
+		vcons_replay_msgbuf(&zx_console_screen);
 	} else {
 		/* 
 		 * we're not the console so we just clear the screen and don't 
@@ -849,7 +853,8 @@ zx_fillrect(struct zx_softc *sc, int x, int y, int w, int h, uint32_t bg,
 
 	bus_space_write_4(sc->sc_bt, sc->sc_bhzdss0, zd_rop, rop);
 	bus_space_write_4(sc->sc_bt, sc->sc_bhzdss0, zd_fg, bg);
-	bus_space_write_4(sc->sc_bt, sc->sc_bhzc, zc_extent, w | (h << 11));
+	bus_space_write_4(sc->sc_bt, sc->sc_bhzc, zc_extent,
+	    (w - 1) | ((h - 1) << 11));
 	bus_space_write_4(sc->sc_bt, sc->sc_bhzc, zc_fill,
 	    x | (y << 11) | 0x80000000);
 }
@@ -859,6 +864,9 @@ zx_copyrect(struct zx_softc *sc, int sx, int sy, int dx, int dy, int w,
 	    int h)
 {
 	uint32_t dir;
+
+	w -= 1;
+	h -= 1;
 
 	if (sy < dy || sx < dx) {
 		dir = 0x80000000;
@@ -988,9 +996,9 @@ static void
 zx_putchar(void *cookie, int row, int col, u_int uc, long attr)
 {
 	struct rasops_info *ri = cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, uc);
 	struct vcons_screen *scr = ri->ri_hw;
 	struct zx_softc *sc = scr->scr_cookie;
-	struct wsdisplay_font *font;
 	volatile uint32_t *dp;
 	uint8_t *fb;
 	int fs, i, ul;
@@ -1002,14 +1010,12 @@ zx_putchar(void *cookie, int row, int col, u_int uc, long attr)
 	if (uc == ' ') {
 		int x, y;
 
-		x = ri->ri_xorigin + ri->ri_font->fontwidth * col;
-		y = ri->ri_yorigin + ri->ri_font->fontheight * row;
-		zx_fillrect(sc, x, y, ri->ri_font->fontwidth,
-			    ri->ri_font->fontheight, bg, ZX_STD_ROP);
+		x = ri->ri_xorigin + font->fontwidth * col;
+		y = ri->ri_yorigin + font->fontheight * row;
+		zx_fillrect(sc, x, y, font->fontwidth,
+			    font->fontheight, bg, ZX_STD_ROP);
 		return;
 	}
-
-	font = ri->ri_font;
 
 	dp = (volatile uint32_t *)sc->sc_pixels +
 	    ((row * font->fontheight + ri->ri_yorigin) << 11) +
@@ -1084,6 +1090,7 @@ zx_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 					sc->sc_mode = new_mode;
 					if(new_mode == WSDISPLAYIO_MODE_EMUL)
 					{
+						zx_reset(sc);
 						vcons_redraw_screen(ms);
 					}
 				}
@@ -1172,7 +1179,7 @@ zx_init_screen(void *cookie, struct vcons_screen *scr,
 
 	ri->ri_bits = (void *)sc->sc_pixels;
 	
-	rasops_init(ri, sc->sc_height/8, sc->sc_width/8);
+	rasops_init(ri, 0, 0);
 	ri->ri_caps = WSSCREEN_WSCOLORS | WSSCREEN_REVERSE;
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
 		    sc->sc_width / ri->ri_font->fontwidth);

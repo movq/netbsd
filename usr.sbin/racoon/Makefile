@@ -1,6 +1,7 @@
-# $NetBSD: Makefile,v 1.22 2009/04/22 15:23:07 lukem Exp $
+# $NetBSD: Makefile,v 1.24 2012/01/04 15:55:36 drochner Exp $
 
 WARNS?=	0	# XXX third-party program, many issues
+NOCLANGERROR=	# defined
 
 .include <bsd.own.mk>
 
@@ -29,7 +30,6 @@ CPPFLAGS+= -I${NETBSDSRCDIR}/lib/libipsec -I.
 CPPFLAGS+= -DIPSEC_DEBUG -DHAVE_CONFIG_H
 CPPFLAGS+= -DADMINPORTDIR=\"/var/run\"
 CPPFLAGS+= -DSYSCONFDIR=\"/etc/racoon\"
-CPPFLAGS+= -DSADB_X_EALG_AESCBC=SADB_X_EALG_AES
 
 LDADD+= -ll -ly -lipsec -lutil
 DPADD+= ${LIBL} ${LIBY} ${LIBCRYPTO} ${LIBUTIL}

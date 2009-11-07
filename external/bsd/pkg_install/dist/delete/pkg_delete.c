@@ -34,7 +34,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: pkg_delete.c,v 1.1.1.5 2009/08/06 16:55:25 joerg Exp $");
+__RCSID("$NetBSD: pkg_delete.c,v 1.1.1.7.8.1 2012/02/20 21:41:30 sborrill Exp $");
 
 #if HAVE_ERR_H
 #include <err.h>
@@ -307,7 +307,7 @@ struct find_leaves_data {
  * Packages that are marked as not for deletion are not considered as
  * leaves.  For all other packages it is checked if at least one package
  * that depended on them is to be removed AND no depending package remains.
- * If that is the case, the package is appened to the sorted list.
+ * If that is the case, the package is appended to the sorted list.
  * As this package can't have depending packages left, the topological order
  * remains consistent.
  */
@@ -338,7 +338,7 @@ find_new_leaves_iter(const char *pkg, void *cookie)
 	if (process_required_by(pkg, NULL, data->pkgs, 3) == 1) {
 		lpp = alloc_lpkg(pkg);
 		TAILQ_INSERT_TAIL(data->pkgs, lpp, lp_link);
-		data->progress = 0;
+		data->progress = 1;
 	}
 
 	return 0;
@@ -483,7 +483,7 @@ run_deinstall_script(const char *pkg, int do_postdeinstall)
 		return 0;
 	}
 
-	pkgdir = xasprintf("%s/%s", _pkgdb_getPKGDB_DIR(), pkg);
+	pkgdir = pkgdb_pkg_dir(pkg);
 	if (chmod(fname, 0555))
 		warn("chmod of `%s' failed", fname);
 	rv = fcexec(pkgdir, fname, pkg, target, NULL);
@@ -679,10 +679,11 @@ remove_pkg(const char *pkg)
 		add_plist_top(&plist, PLIST_NAME, pkg);
 	}
 
-	setenv(PKG_PREFIX_VNAME, p->name, 1);
-	fname = xasprintf("%s/%s", _pkgdb_getPKGDB_DIR(), pkg);
+	setenv(PKG_REFCOUNT_DBDIR_VNAME, config_pkg_refcount_dbdir, 1);
+	fname = pkgdb_pkg_dir(pkg);
 	setenv(PKG_METADATA_DIR_VNAME, fname, 1);
 	free(fname);
+	setenv(PKG_PREFIX_VNAME, p->name, 1);
 
 	if (!no_deinstall && !unregister_only) {
 		if (run_deinstall_script(pkg, 0) && !Force)
@@ -749,7 +750,7 @@ remove_pkg(const char *pkg)
 	 * Kill the pkgdb subdirectory. The files have been removed, so
 	 * this is way beyond the point of no return.
 	 */
-	pkgdir = xasprintf("%s/%s", _pkgdb_getPKGDB_DIR(), pkg);
+	pkgdir = pkgdb_pkg_dir(pkg);
 	(void) remove_files(pkgdir, "+*");
 	rv = 1;
 	if (isemptydir(pkgdir)&& rmdir(pkgdir) == 0)
@@ -793,7 +794,7 @@ main(int argc, char *argv[])
 			++Force;
 			break;
 		case 'K':
-			pkgdb = optarg;
+			pkgdb_set_dir(optarg, 3);
 			break;
 		case 'k':
 			keep_preserve = 1;
@@ -831,19 +832,16 @@ main(int argc, char *argv[])
 		}
 	}
 
+	pkg_install_config();
+
+	pkgdb = xstrdup(pkgdb_get_dir());
+
 	if (destdir != NULL) {
 		char *pkgdbdir;
 
-		if (pkgdb == NULL)
-			pkgdb = _pkgdb_getPKGDB_DIR();
-
 		pkgdbdir = xasprintf("%s/%s", destdir, pkgdb);
-		_pkgdb_setPKGDB_DIR(pkgdbdir);
+		pkgdb_set_dir(pkgdbdir, 4);
 		free(pkgdbdir);
-	} else if (pkgdb != NULL) {
-		_pkgdb_setPKGDB_DIR(pkgdb);
-	} else {
-		pkgdb = _pkgdb_getPKGDB_DIR();
 	}
 
 	argc -= optind;

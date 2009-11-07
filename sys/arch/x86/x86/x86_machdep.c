@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_machdep.c,v 1.35 2009/10/06 21:07:05 elad Exp $	*/
+/*	$NetBSD: x86_machdep.c,v 1.57 2011/11/28 07:56:54 tls Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007 YAMAMOTO Takashi,
@@ -31,9 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_machdep.c,v 1.35 2009/10/06 21:07:05 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_machdep.c,v 1.57 2011/11/28 07:56:54 tls Exp $");
 
 #include "opt_modular.h"
+#include "opt_physmem.h"
+#include "opt_splash.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -48,21 +50,32 @@ __KERNEL_RCSID(0, "$NetBSD: x86_machdep.c,v 1.35 2009/10/06 21:07:05 elad Exp $"
 #include <sys/module.h>
 #include <sys/sysctl.h>
 #include <sys/extent.h>
+#include <sys/rnd.h>
 
 #include <x86/cpuvar.h>
 #include <x86/cputypes.h>
 #include <x86/machdep.h>
+#include <x86/nmi.h>
 #include <x86/pio.h>
 
+#include <dev/splash/splash.h>
 #include <dev/isa/isareg.h>
 #include <dev/ic/i8042reg.h>
+#include <dev/mm.h>
 
 #include <machine/bootinfo.h>
 #include <machine/vmparam.h>
 
 #include <uvm/uvm_extern.h>
 
-int check_pa_acc(paddr_t, vm_prot_t);
+#include "acpica.h"
+#if NACPICA > 0
+#include <dev/acpi/acpivar.h>
+#endif
+
+void (*x86_cpu_idle)(void);
+static bool x86_cpu_idle_ipi;
+static char x86_cpu_idle_text[16];
 
 /* --------------------------------------------------------------------- */
 
@@ -103,10 +116,10 @@ lookup_bootinfo(int type)
 }
 
 /*
- * check_pa_acc: check if given pa is accessible.
+ * mm_md_physacc: check if given pa is accessible.
  */
 int
-check_pa_acc(paddr_t pa, vm_prot_t prot)
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
 {
 	extern phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 	extern int mem_cluster_cnt;
@@ -120,7 +133,6 @@ check_pa_acc(paddr_t pa, vm_prot_t prot)
 			return 0;
 		}
 	}
-
 	return kauth_authorize_machdep(kauth_cred_get(),
 	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL);
 }
@@ -144,15 +156,36 @@ module_init_md(void)
 	bi = (struct bi_modulelist_entry *)((uint8_t *)biml + sizeof(*biml));
 	bimax = bi + biml->num;
 	for (; bi < bimax; bi++) {
-		if (bi->type != BI_MODULE_ELF) {
+		switch (bi->type) {
+		case BI_MODULE_ELF:
+			aprint_debug("Prep module path=%s len=%d pa=%x\n", 
+			    bi->path, bi->len, bi->base);
+			KASSERT(trunc_page(bi->base) == bi->base);
+			module_prime(bi->path,
+			    (void *)((uintptr_t)bi->base + KERNBASE),
+			    bi->len);
+			break;
+		case BI_MODULE_IMAGE:
+#ifdef SPLASHSCREEN
+			aprint_debug("Splash image path=%s len=%d pa=%x\n", 
+			    bi->path, bi->len, bi->base);
+			KASSERT(trunc_page(bi->base) == bi->base);
+			splash_setimage(
+			    (void *)((uintptr_t)bi->base + KERNBASE), bi->len);
+#endif
+			break;
+		case BI_MODULE_RND:
+			aprint_debug("Random seed data path=%s len=%d pa=%x\n",
+				     bi->path, bi->len, bi->base);
+			KASSERT(trunc_page(bi->base) == bi->base);
+			rnd_seed(
+			    (void *)((uintptr_t)bi->base + KERNBASE),
+			     bi->len);
+			break;
+		default:
 			aprint_debug("Skipping non-ELF module\n");
-			continue;
+			break;
 		}
-		aprint_debug("Prep module path=%s len=%d pa=%x\n", bi->path,
-		    bi->len, bi->base);
-		KASSERT(trunc_page(bi->base) == bi->base);
-		(void)module_prime((void *)((uintptr_t)bi->base + KERNBASE),
-		    bi->len);
 	}
 }
 #endif	/* MODULAR */
@@ -181,10 +214,9 @@ cpu_need_resched(struct cpu_info *ci, int flags)
 	if (l == ci->ci_data.cpu_idlelwp) {
 		if (ci == cur)
 			return;
-#ifndef XEN /* XXX review when Xen gets MP support */
-		if (x86_cpu_idle == x86_cpu_idle_halt)
-			x86_send_ipi(ci, 0);
-#endif
+		if (x86_cpu_idle_ipi != false) {
+			cpu_kick(ci);
+		}
 		return;
 	}
 
@@ -196,15 +228,16 @@ cpu_need_resched(struct cpu_info *ci, int flags)
 		} else {
 			x86_send_ipi(ci, X86_IPI_KPREEMPT);
 		}
+		return;
 #endif
-	} else {
-		aston(l, X86_AST_PREEMPT);
-		if (ci == cur) {
-			return;
-		}
-		if ((flags & RESCHED_IMMED) != 0) {
-			x86_send_ipi(ci, 0);
-		}
+	}
+
+	aston(l, X86_AST_PREEMPT);
+	if (ci == cur) {
+		return;
+	}
+	if ((flags & RESCHED_IMMED) != 0) {
+		cpu_kick(ci);
 	}
 }
 
@@ -215,7 +248,7 @@ cpu_signotify(struct lwp *l)
 	KASSERT(kpreempt_disabled());
 	aston(l, X86_AST_GENERIC);
 	if (l->l_cpu != curcpu())
-		x86_send_ipi(l->l_cpu, 0);
+		cpu_kick(l->l_cpu);
 }
 
 void
@@ -249,6 +282,7 @@ bool
 cpu_kpreempt_enter(uintptr_t where, int s)
 {
 	struct cpu_info *ci;
+	struct pcb *pcb;
 	lwp_t *l;
 
 	KASSERT(kpreempt_disabled());
@@ -267,7 +301,8 @@ cpu_kpreempt_enter(uintptr_t where, int s)
 	}
 
 	/* Must save cr2 or it could be clobbered. */
-	((struct pcb *)l->l_addr)->pcb_cr2 = rcr2();
+	pcb = lwp_getpcb(l);
+	pcb->pcb_cr2 = rcr2();
 
 	return true;
 }
@@ -280,6 +315,7 @@ void
 cpu_kpreempt_exit(uintptr_t where)
 {
 	extern char x86_copyfunc_start, x86_copyfunc_end;
+	struct pcb *pcb;
 
 	KASSERT(kpreempt_disabled());
 
@@ -294,7 +330,8 @@ cpu_kpreempt_exit(uintptr_t where)
 	}
 
 	/* Restore cr2 only after the pmap, as pmap_load can block. */
-	lcr2(((struct pcb *)curlwp->l_addr)->pcb_cr2);
+	pcb = lwp_getpcb(curlwp);
+	lcr2(pcb->pcb_cr2);
 }
 
 /*
@@ -308,9 +345,6 @@ cpu_kpreempt_disabled(void)
 	return curcpu()->ci_ilevel > IPL_NONE;
 }
 #endif	/* __HAVE_PREEMPTION */
-
-void (*x86_cpu_idle)(void);
-static char x86_cpu_idle_text[16];
 
 SYSCTL_SETUP(sysctl_machdep_cpu_idle, "sysctl machdep cpu_idle")
 {
@@ -330,21 +364,36 @@ SYSCTL_SETUP(sysctl_machdep_cpu_idle, "sysctl machdep cpu_idle")
 void
 x86_cpu_idle_init(void)
 {
+
 #ifndef XEN
-	if ((curcpu()->ci_feature2_flags & CPUID2_MONITOR) == 0 ||
-	    cpu_vendor == CPUVENDOR_AMD) {
-		strlcpy(x86_cpu_idle_text, "halt", sizeof(x86_cpu_idle_text));
-		x86_cpu_idle = x86_cpu_idle_halt;
-	} else {
-		strlcpy(x86_cpu_idle_text, "mwait", sizeof(x86_cpu_idle_text));
-		x86_cpu_idle = x86_cpu_idle_mwait;
-	}
+	if ((cpu_feature[1] & CPUID2_MONITOR) == 0 ||
+	    cpu_vendor == CPUVENDOR_AMD)
+		x86_cpu_idle_set(x86_cpu_idle_halt, "halt", true);
+	else
+		x86_cpu_idle_set(x86_cpu_idle_mwait, "mwait", false);
 #else
-	strlcpy(x86_cpu_idle_text, "xen", sizeof(x86_cpu_idle_text));
-	x86_cpu_idle = x86_cpu_idle_xen;
+	x86_cpu_idle_set(x86_cpu_idle_xen, "xen", true);
 #endif
 }
 
+void
+x86_cpu_idle_get(void (**func)(void), char *text, size_t len)
+{
+
+	*func = x86_cpu_idle;
+
+	(void)strlcpy(text, x86_cpu_idle_text, len);
+}
+
+void
+x86_cpu_idle_set(void (*func)(void), const char *text, bool ipi)
+{
+
+	x86_cpu_idle = func;
+	x86_cpu_idle_ipi = ipi;
+
+	(void)strlcpy(x86_cpu_idle_text, text, sizeof(x86_cpu_idle_text));
+}
 
 #ifndef XEN
 
@@ -363,9 +412,13 @@ add_mem_cluster(phys_ram_seg_t *seg_clusters, int seg_cluster_cnt,
 	int i;
 
 #ifdef i386
-#define TOPLIMIT	0x100000000ULL
+#ifdef PAE
+#define TOPLIMIT	0x1000000000ULL	/* 64GB */
 #else
-#define TOPLIMIT	0x100000000000ULL
+#define TOPLIMIT	0x100000000ULL	/* 4GB */
+#endif
+#else
+#define TOPLIMIT	0x100000000000ULL /* 16TB */
 #endif
 
 	if (seg_end > TOPLIMIT) {
@@ -524,7 +577,7 @@ initx86_parse_memmap(struct btinfo_memmap *bim, struct extent *iomem_ex)
 		 *   Avoid Compatibility Holes.
 		 * XXX  Holes within memory space that allow access
 		 * XXX to be directed to the PC-compatible frame buffer
-		 * XXX (0xa0000-0xbffff),to adapter ROM space
+		 * XXX (0xa0000-0xbffff), to adapter ROM space
 		 * XXX (0xc0000-0xdffff), and to system BIOS space
 		 * XXX (0xe0000-0xfffff).
 		 * XXX  Some laptop(for example,Toshiba Satellite2550X)
@@ -628,6 +681,9 @@ initx86_load_memmap(paddr_t first_avail)
 	uint64_t seg_start, seg_end;
 	uint64_t seg_start1, seg_end1;
 	int first16q, x;
+#ifdef VM_FREELIST_FIRST4G
+	int first4gq;
+#endif
 
 	/*
 	 * If we have 16M of RAM or less, just put it all on
@@ -636,10 +692,27 @@ initx86_load_memmap(paddr_t first_avail)
 	 * all of the ISA DMA'able memory won't be eaten up
 	 * first-off).
 	 */
-	if (avail_end <= (16 * 1024 * 1024))
+#define ADDR_16M (16 * 1024 * 1024)
+
+	if (avail_end <= ADDR_16M)
 		first16q = VM_FREELIST_DEFAULT;
 	else
 		first16q = VM_FREELIST_FIRST16;
+
+#ifdef VM_FREELIST_FIRST4G
+	/*
+	 * If we have 4G of RAM or less, just put it all on
+	 * the default free list.  Otherwise, put the first
+	 * 4G of RAM on a lower priority free list (so that
+	 * all of the 32bit PCI DMA'able memory won't be eaten up
+	 * first-off).
+	 */
+#define ADDR_4G (4ULL * 1024 * 1024 * 1024)
+	if (avail_end <= ADDR_4G)
+		first4gq = VM_FREELIST_DEFAULT;
+	else
+		first4gq = VM_FREELIST_FIRST4G;
+#endif /* defined(VM_FREELIST_FIRST4G) */
 
 	/* Make sure the end of the space used by the kernel is rounded. */
 	first_avail = round_page(first_avail);
@@ -692,18 +765,19 @@ initx86_load_memmap(paddr_t first_avail)
 
 		/* First hunk */
 		if (seg_start != seg_end) {
-			if (seg_start < (16 * 1024 * 1024) &&
+			if (seg_start < ADDR_16M &&
 			    first16q != VM_FREELIST_DEFAULT) {
 				uint64_t tmp;
 
-				if (seg_end > (16 * 1024 * 1024))
-					tmp = (16 * 1024 * 1024);
+				if (seg_end > ADDR_16M)
+					tmp = ADDR_16M;
 				else
 					tmp = seg_end;
 
 				if (tmp != seg_start) {
 #ifdef DEBUG_MEMLOAD
-					printf("loading 0x%"PRIx64"-0x%"PRIx64
+					printf("loading first16q 0x%"PRIx64
+					    "-0x%"PRIx64
 					    " (0x%"PRIx64"-0x%"PRIx64")\n",
 					    seg_start, tmp,
 					    (uint64_t)atop(seg_start),
@@ -716,9 +790,36 @@ initx86_load_memmap(paddr_t first_avail)
 				seg_start = tmp;
 			}
 
+#ifdef VM_FREELIST_FIRST4G
+			if (seg_start < ADDR_4G &&
+			    first4gq != VM_FREELIST_DEFAULT) {
+				uint64_t tmp;
+
+				if (seg_end > ADDR_4G)
+					tmp = ADDR_4G;
+				else
+					tmp = seg_end;
+
+				if (tmp != seg_start) {
+#ifdef DEBUG_MEMLOAD
+					printf("loading first4gq 0x%"PRIx64
+					    "-0x%"PRIx64
+					    " (0x%"PRIx64"-0x%"PRIx64")\n",
+					    seg_start, tmp,
+					    (uint64_t)atop(seg_start),
+					    (uint64_t)atop(tmp));
+#endif
+					uvm_page_physload(atop(seg_start),
+					    atop(tmp), atop(seg_start),
+					    atop(tmp), first4gq);
+				}
+				seg_start = tmp;
+			}
+#endif /* defined(VM_FREELIST_FIRST4G) */
+
 			if (seg_start != seg_end) {
 #ifdef DEBUG_MEMLOAD
-				printf("loading 0x%"PRIx64"-0x%"PRIx64
+				printf("loading default 0x%"PRIx64"-0x%"PRIx64
 				    " (0x%"PRIx64"-0x%"PRIx64")\n",
 				    seg_start, seg_end,
 				    (uint64_t)atop(seg_start),
@@ -732,18 +833,19 @@ initx86_load_memmap(paddr_t first_avail)
 
 		/* Second hunk */
 		if (seg_start1 != seg_end1) {
-			if (seg_start1 < (16 * 1024 * 1024) &&
+			if (seg_start1 < ADDR_16M &&
 			    first16q != VM_FREELIST_DEFAULT) {
 				uint64_t tmp;
 
-				if (seg_end1 > (16 * 1024 * 1024))
-					tmp = (16 * 1024 * 1024);
+				if (seg_end1 > ADDR_16M)
+					tmp = ADDR_16M;
 				else
 					tmp = seg_end1;
 
 				if (tmp != seg_start1) {
 #ifdef DEBUG_MEMLOAD
-					printf("loading 0x%"PRIx64"-0x%"PRIx64
+					printf("loading first16q 0x%"PRIx64
+					    "-0x%"PRIx64
 					    " (0x%"PRIx64"-0x%"PRIx64")\n",
 					    seg_start1, tmp,
 					    (uint64_t)atop(seg_start1),
@@ -756,9 +858,36 @@ initx86_load_memmap(paddr_t first_avail)
 				seg_start1 = tmp;
 			}
 
+#ifdef VM_FREELIST_FIRST4G
+			if (seg_start1 < ADDR_4G &&
+			    first4gq != VM_FREELIST_DEFAULT) {
+				uint64_t tmp;
+
+				if (seg_end1 > ADDR_4G)
+					tmp = ADDR_4G;
+				else
+					tmp = seg_end1;
+
+				if (tmp != seg_start1) {
+#ifdef DEBUG_MEMLOAD
+					printf("loading first4gq 0x%"PRIx64
+					    "-0x%"PRIx64
+					    " (0x%"PRIx64"-0x%"PRIx64")\n",
+					    seg_start1, tmp,
+					    (uint64_t)atop(seg_start1),
+					    (uint64_t)atop(tmp));
+#endif
+					uvm_page_physload(atop(seg_start1),
+					    atop(tmp), atop(seg_start1),
+					    atop(tmp), first4gq);
+				}
+				seg_start1 = tmp;
+			}
+#endif /* defined(VM_FREELIST_FIRST4G) */
+
 			if (seg_start1 != seg_end1) {
 #ifdef DEBUG_MEMLOAD
-				printf("loading 0x%"PRIx64"-0x%"PRIx64
+				printf("loading default 0x%"PRIx64"-0x%"PRIx64
 				    " (0x%"PRIx64"-0x%"PRIx64")\n",
 				    seg_start1, seg_end1,
 				    (uint64_t)atop(seg_start1),
@@ -779,6 +908,19 @@ void
 x86_reset(void)
 {
 	uint8_t b;
+
+#if NACPICA > 0
+	/*
+	 * If ACPI is active, try to reset using the reset register
+	 * defined in the FADT.
+	 */
+	if (acpi_active) {
+		if (acpi_reset() == 0) {
+			delay(500000); /* wait 0.5 sec to see if that did it */
+		}
+	}
+#endif
+
 	/*
 	 * The keyboard controller has 4 random output pins, one of which is
 	 * connected to the RESET pin on the CPU in many PCs.  We tell the
@@ -849,4 +991,19 @@ machdep_init(void)
 
 	x86_listener = kauth_listen_scope(KAUTH_SCOPE_MACHDEP,
 	    x86_listener_cb, NULL);
+}
+
+/*
+ * x86_startup: x86 common startup routine
+ *
+ * called by cpu_startup.
+ */
+
+void
+x86_startup(void)
+{
+
+#if !defined(XEN)
+	nmi_init();
+#endif /* !defined(XEN) */
 }

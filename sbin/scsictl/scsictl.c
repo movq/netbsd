@@ -1,4 +1,4 @@
-/*	$NetBSD: scsictl.c,v 1.31 2008/04/28 20:23:09 martin Exp $	*/
+/*	$NetBSD: scsictl.c,v 1.33 2011/08/29 14:35:04 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: scsictl.c,v 1.31 2008/04/28 20:23:09 martin Exp $");
+__RCSID("$NetBSD: scsictl.c,v 1.33 2011/08/29 14:35:04 joerg Exp $");
 #endif
 
 
@@ -66,7 +66,7 @@ struct command {
 	void (*cmd_func)(int, char *[]);
 };
 
-void	usage(void);
+__dead static void	usage(void);
 
 int	fd;				/* file descriptor for device */
 const	char *dvname;			/* device name */
@@ -188,7 +188,7 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-void
+static void
 usage(void)
 {
 	int i;
@@ -510,7 +510,7 @@ device_format(int argc, char *argv[])
 	    (mode_page.format_page.bytes_s[1]);
 
 	if (j != DEV_BSIZE)
-		printf("current disk sector size: %hd\n", j);
+		printf("current disk sector size: %d\n", j);
 
 	memset(&cmd, 0, sizeof(cmd));
 

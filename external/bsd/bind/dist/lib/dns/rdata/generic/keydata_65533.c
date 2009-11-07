@@ -1,7 +1,7 @@
-/*	$NetBSD: keydata_65533.c,v 1.1.1.1 2009/10/25 00:02:40 christos Exp $	*/
+/*	$NetBSD: keydata_65533.c,v 1.3.4.1 2012/06/05 21:15:11 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: keydata_65533.c,v 1.2 2009/06/30 02:52:32 each Exp */
+/* Id */
 
 #ifndef GENERIC_KEYDATA_65533_C
 #define GENERIC_KEYDATA_65533_C 1
@@ -91,6 +91,8 @@ totext_keydata(ARGS_TOTEXT) {
 	unsigned int flags;
 	unsigned char algorithm;
 	unsigned long when;
+	char algbuf[DNS_NAME_FORMATSIZE];
+	const char *keyinfo;
 
 	REQUIRE(rdata->type == 65533);
 	REQUIRE(rdata->length != 0);
@@ -121,6 +123,13 @@ totext_keydata(ARGS_TOTEXT) {
 	sprintf(buf, "%u", flags);
 	RETERR(str_totext(buf, target));
 	RETERR(str_totext(" ", target));
+	if ((flags & DNS_KEYFLAG_KSK) != 0) {
+		if (flags & DNS_KEYFLAG_REVOKE)
+			keyinfo = "revoked KSK";
+		else
+			keyinfo = "KSK";
+	} else
+		keyinfo = "ZSK";
 
 	/* protocol */
 	sprintf(buf, "%u", sr.base[0]);
@@ -142,10 +151,13 @@ totext_keydata(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" (", target));
 	RETERR(str_totext(tctx->linebreak, target));
-	RETERR(isc_base64_totext(&sr, tctx->width - 2,
-				 tctx->linebreak, target));
+	if (tctx->width == 0)   /* No splitting */
+		RETERR(isc_base64_totext(&sr, 60, "", target));
+	else
+		RETERR(isc_base64_totext(&sr, tctx->width - 2,
+					 tctx->linebreak, target));
 
-	if ((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0)
+	if ((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0)
 		RETERR(str_totext(tctx->linebreak, target));
 	else if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" ", target));
@@ -153,10 +165,16 @@ totext_keydata(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(")", target));
 
-	if ((tctx->flags & DNS_STYLEFLAG_COMMENT) != 0) {
+	if ((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0) {
 		isc_region_t tmpr;
 
-		RETERR(str_totext(" ; key id = ", target));
+		RETERR(str_totext(" ; ", target));
+		RETERR(str_totext(keyinfo, target));
+		dns_secalg_format((dns_secalg_t) algorithm, algbuf,
+				  sizeof(algbuf));
+		RETERR(str_totext("; alg = ", target));
+		RETERR(str_totext(algbuf, target));
+		RETERR(str_totext("; key id = ", target));
 		dns_rdata_toregion(rdata, &tmpr);
 		/* Skip over refresh, addhd, and removehd */
 		isc_region_consume(&tmpr, 12);
@@ -369,6 +387,11 @@ checknames_keydata(ARGS_CHECKNAMES) {
 	UNUSED(bad);
 
 	return (ISC_TRUE);
+}
+
+static inline int
+casecompare_keydata(ARGS_COMPARE) {
+	return (compare_keydata(rdata1, rdata2));
 }
 
 #endif /* GENERIC_KEYDATA_65533_C */

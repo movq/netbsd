@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.194 2009/11/07 07:27:48 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.204 2011/12/12 19:03:12 mrg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.194 2009/11/07 07:27:48 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.204 2011/12/12 19:03:12 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -99,7 +99,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.194 2009/11/07 07:27:48 cegger Exp $")
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
 #include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
@@ -107,6 +106,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.194 2009/11/07 07:27:48 cegger Exp $")
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
@@ -116,12 +116,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.194 2009/11/07 07:27:48 cegger Exp $")
 #include <sys/sysctl.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/cpu.h>
 #include <machine/dvma.h>
 #include <machine/idprom.h>
 #include <machine/kcore.h>
+#include <machine/mon.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 
@@ -140,10 +143,13 @@ extern char kernel_text[];
 /* Defined by the linker */
 extern char etext[];
 
+/* kernel_arch specific values required by module(9) */
+const vaddr_t kernbase = KERNBASE3;
+const vaddr_t kern_end = KERN_END3;
+
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	physmem;
@@ -228,7 +234,7 @@ cpu_startup(void)
 	 * Its mapping was prepared in pmap_bootstrap().
 	 * Also, offset some to avoid PROM scribbles.
 	 */
-	v = (char *)KERNBASE;
+	v = (char *)KERNBASE3;
 	msgbufaddr = v + MSGBUFOFF;
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
@@ -258,13 +264,6 @@ cpu_startup(void)
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
 
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
-
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
 
@@ -285,41 +284,6 @@ cpu_startup(void)
 	 * Set up CPU-specific registers, cache, etc.
 	 */
 	initcpu();
-}
-
-/*
- * Set registers on exec.
- */
-void 
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
-
-	tf->tf_sr = PSL_USERSET;
-	tf->tf_pc = pack->ep_entry & ~1;
-	tf->tf_regs[D0] = 0;
-	tf->tf_regs[D1] = 0;
-	tf->tf_regs[D2] = 0;
-	tf->tf_regs[D3] = 0;
-	tf->tf_regs[D4] = 0;
-	tf->tf_regs[D5] = 0;
-	tf->tf_regs[D6] = 0;
-	tf->tf_regs[D7] = 0;
-	tf->tf_regs[A0] = 0;
-	tf->tf_regs[A1] = 0;
-	tf->tf_regs[A2] = (int)l->l_proc->p_psstr;
-	tf->tf_regs[A3] = 0;
-	tf->tf_regs[A4] = 0;
-	tf->tf_regs[A5] = 0;
-	tf->tf_regs[A6] = 0;
-	tf->tf_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-
-	l->l_md.md_flags = 0;
 }
 
 /*
@@ -519,23 +483,13 @@ long	dumplo = 0; 		/* blocks */
 void 
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int devblks;	/* size of dump device in blocks */
 	int dumpblks;	/* size of dump image in blocks */
-	int (*getsize)(dev_t);
 
 	if (dumpdev == NODEV)
 		return;
 
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	getsize = bdev->d_psize;
-	if (getsize == NULL)
-		return;
-	devblks = (*getsize)(dumpdev);
+	devblks = bdev_size(dumpdev);
 	if (devblks <= ctod(1))
 		return;
 	devblks &= ~(ctod(1)-1);
@@ -604,7 +558,7 @@ dumpsys(void)
 	}
 	savectx(&dumppcb);
 
-	psize = (*(dsw->d_psize))(dumpdev);
+	psize = bdev_size(dumpdev);
 	if (psize == -1) {
 		printf("dump area unavailable\n");
 		return;
@@ -633,7 +587,7 @@ dumpsys(void)
 	/* Fill in cpu_kcore_hdr_t part. */
 	strncpy(chdr_p->name, kernel_arch, sizeof(chdr_p->name));
 	chdr_p->page_size = PAGE_SIZE;
-	chdr_p->kernbase = KERNBASE;
+	chdr_p->kernbase = KERNBASE3;
 
 	/* Fill in the sun3_kcore_hdr part (MMU state). */
 	pmap_kcore_hdr(sh);
@@ -677,7 +631,7 @@ dumpsys(void)
 	do {
 		if ((todo & 0xf) == 0)
 			printf_nolog("\r%4d", todo);
-		vaddr = (char*)(paddr + KERNBASE);
+		vaddr = (char*)(paddr + KERNBASE3);
 		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 		if (error)
 			goto fail;
@@ -739,3 +693,57 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	return ENOEXEC;
 }
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	/* Allow access only in "managed" RAM. */
+	if (pa < avail_start || pa >= avail_end)
+		return EFAULT;
+	return 0;
+}
+
+bool
+mm_md_direct_mapped_phys(paddr_t paddr, vaddr_t *vaddr)
+{
+
+	if (paddr >= avail_start) 
+		return false;
+	*vaddr = KERNBASE3 + paddr;
+	return true;
+}
+
+/*
+ * Allow access to the PROM mapping similiar to uvm_kernacc().
+ */
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+
+	if ((vaddr_t)ptr < SUN3_PROM_BASE || (vaddr_t)ptr > SUN3_MONEND) {
+		*handled = false;
+		return 0;
+	}
+
+	*handled = true;
+	/* Read in the PROM itself is OK. */
+	if ((prot & VM_PROT_WRITE) == 0)
+		return 0;
+
+	/* PROM data page is OK for read/write. */
+	if ((vaddr_t)ptr >= SUN3_MONSHORTPAGE &&
+	    (vaddr_t)ptr < SUN3_MONSHORTPAGE + PAGE_SIZE)
+		return 0;
+	return EFAULT;
+}
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

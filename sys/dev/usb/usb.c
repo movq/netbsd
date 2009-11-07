@@ -1,4 +1,4 @@
-/*	$NetBSD: usb.c,v 1.118 2009/06/16 19:42:44 dyoung Exp $	*/
+/*	$NetBSD: usb.c,v 1.127 2011/12/23 00:51:48 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998, 2002, 2008 The NetBSD Foundation, Inc.
@@ -37,12 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.118 2009/06/16 19:42:44 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.127 2011/12/23 00:51:48 jakllsch Exp $");
 
 #include "opt_compat_netbsd.h"
-
-#include "ohci.h"
-#include "uhci.h"
+#include "opt_usb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,10 +56,12 @@ __KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.118 2009/06/16 19:42:44 dyoung Exp $");
 #include <sys/vnode.h>
 #include <sys/signalvar.h>
 #include <sys/intr.h>
+#include <sys/module.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
+#include <dev/usb/usb_verbose.h>
 
 #define USB_DEV_MINOR 255
 
@@ -71,15 +71,9 @@ __KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.118 2009/06/16 19:42:44 dyoung Exp $");
 #include <dev/usb/usb_quirks.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 int	usbdebug = 0;
-#if defined(UHCI_DEBUG) && NUHCI > 0
-extern int	uhcidebug;
-#endif
-#if defined(OHCI_DEBUG) && NOHCI > 0
-extern int	ohcidebug;
-#endif
 /*
  * 0  - do usual exploration
  * 1  - do not use timeout exploration
@@ -93,7 +87,7 @@ int	usb_noexplore = 0;
 
 struct usb_softc {
 #if 0
-	USBBASEDEVICE	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 #endif
 	usbd_bus_handle sc_bus;		/* USB controller */
 	struct usbd_port sc_port;	/* dummy port for root hub */
@@ -138,7 +132,7 @@ Static SIMPLEQ_HEAD(, usb_event_q) usb_events =
 	SIMPLEQ_HEAD_INITIALIZER(usb_events);
 Static int usb_nevents = 0;
 Static struct selinfo usb_selevent;
-Static usb_proc_ptr usb_async_proc;  /* process that wants USB SIGIO */
+Static proc_t *usb_async_proc;  /* process that wants USB SIGIO */
 Static void *usb_async_sih;
 Static int usb_dev_open = 0;
 Static struct usb_event *usb_alloc_event(void);
@@ -192,7 +186,7 @@ usb_attach(device_t parent, device_t self, void *aux)
 	default:
 		aprint_error(", not supported\n");
 		sc->sc_dying = 1;
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 	aprint_normal("\n");
 
@@ -242,7 +236,7 @@ usb_doattach(device_t self)
 		aprint_error("%s: can't register softintr\n",
 			     device_xname(self));
 		sc->sc_dying = 1;
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 #endif
 
@@ -254,7 +248,7 @@ usb_doattach(device_t self)
 			sc->sc_dying = 1;
 			aprint_error("%s: root device is not a hub\n",
 				     device_xname(self));
-			USB_ATTACH_ERROR_RETURN;
+			return;
 		}
 		sc->sc_bus->root_hub = dev;
 #if 1
@@ -281,7 +275,7 @@ usb_doattach(device_t self)
 	usb_async_sih = softint_establish(SOFTINT_CLOCK | SOFTINT_MPSAFE,
 	   usb_async_intr, NULL);
 
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 }
 
 static const char *taskq_names[] = USB_TASKQ_NAMES;
@@ -293,7 +287,7 @@ usb_create_event_thread(device_t self)
 	struct usb_taskq *taskq;
 	int i;
 
-	if (usb_kthread_create1(PRI_NONE, 0, NULL, usb_event_thread, sc,
+	if (kthread_create(PRI_NONE, 0, NULL, usb_event_thread, sc,
 			&sc->sc_event_thread, "%s", device_xname(self))) {
 		printf("%s: unable to create event thread for\n",
 		       device_xname(self));
@@ -308,8 +302,8 @@ usb_create_event_thread(device_t self)
 		TAILQ_INIT(&taskq->tasks);
 		taskq->taskcreated = 1;
 		taskq->name = taskq_names[i];
-		if (usb_kthread_create1(PRI_NONE, 0, NULL, usb_task_thread,
-		    taskq, &taskq->task_thread_lwp, taskq->name)) {
+		if (kthread_create(PRI_NONE, 0, NULL, usb_task_thread,
+		    taskq, &taskq->task_thread_lwp, "%s", taskq->name)) {
 			printf("unable to create task thread: %s\n", taskq->name);
 			panic("usb_create_event_thread task");
 		}
@@ -602,12 +596,6 @@ usbioctl(dev_t devt, u_long cmd, void *data, int flag, struct lwp *l)
 		if (!(flag & FWRITE))
 			return (EBADF);
 		usbdebug  = ((*(int *)data) & 0x000000ff);
-#if defined(UHCI_DEBUG) && NUHCI > 0
-		uhcidebug = ((*(int *)data) & 0x0000ff00) >> 8;
-#endif
-#if defined(OHCI_DEBUG) && NOHCI > 0
-		ohcidebug = ((*(int *)data) & 0x00ff0000) >> 16;
-#endif
 		break;
 #endif /* USB_DEBUG */
 	case USB_REQUEST:
@@ -860,7 +848,7 @@ usbd_add_drv_event(int type, usbd_device_handle udev, device_t dev)
 	struct usb_event *ue = usb_alloc_event();
 
 	ue->u.ue_driver.ue_cookie = udev->cookie;
-	strncpy(ue->u.ue_driver.ue_devname, USBDEVPTRNAME(dev),
+	strncpy(ue->u.ue_driver.ue_devname, device_xname(dev),
 	    sizeof ue->u.ue_driver.ue_devname);
 	usb_add_event(type, ue);
 }
@@ -937,25 +925,14 @@ int
 usb_activate(device_t self, enum devact act)
 {
 	struct usb_softc *sc = device_private(self);
-	usbd_device_handle dev = sc->sc_port.device;
-	int i, rv = 0;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		if (dev != NULL && dev->cdesc != NULL && dev->subdevlen > 0) {
-			for (i = 0; i < dev->subdevlen; i++) {
-				if (!dev->subdevs[i])
-					continue;
-				rv |= config_deactivate(dev->subdevs[i]);
-			}
-		}
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (rv);
 }
 
 void
@@ -978,20 +955,23 @@ usb_detach(device_t self, int flags)
 {
 	struct usb_softc *sc = device_private(self);
 	struct usb_event *ue;
+	int rc;
 
 	DPRINTF(("usb_detach: start\n"));
 
+	/* Make all devices disconnect. */
+	if (sc->sc_port.device != NULL &&
+	    (rc = usb_disconnect_port(&sc->sc_port, self, flags)) != 0)
+		return rc;
+
 	pmf_device_deregister(self);
 	/* Kill off event thread. */
+	sc->sc_dying = 1;
 	while (sc->sc_event_thread != NULL) {
 		wakeup(&sc->sc_bus->needs_explore);
 		tsleep(sc, PWAIT, "usbdet", hz * 60);
 	}
 	DPRINTF(("usb_detach: event thread dead\n"));
-
-	/* Make all devices disconnect. */
-	if (sc->sc_port.device != NULL)
-		usb_disconnect_port(&sc->sc_port, self);
 
 #ifdef USB_USE_SOFTINTR
 	if (sc->sc_bus->soft != NULL) {

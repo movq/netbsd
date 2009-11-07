@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_input.c,v 1.68 2009/09/02 22:03:08 joerg Exp $	*/
+/*	$NetBSD: ieee80211_input.c,v 1.72 2011/12/31 20:41:58 christos Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,13 +36,12 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_input.c,v 1.81 2005/08/10 16:22:29 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.68 2009/09/02 22:03:08 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.72 2011/12/31 20:41:58 christos Exp $");
 #endif
 
 #include "opt_inet.h"
 
 #ifdef __NetBSD__
-#include "bpfilter.h"
 #endif /* __NetBSD__ */
 
 #include <sys/param.h>
@@ -68,9 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.68 2009/09/02 22:03:08 joerg E
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h> 
@@ -80,7 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.68 2009/09/02 22:03:08 joerg E
 const struct timeval ieee80211_merge_print_intvl = {.tv_sec = 1, .tv_usec = 0};
 
 #ifdef IEEE80211_DEBUG
-#include <machine/stdarg.h>
 
 /*
  * Decide if a received management frame should be
@@ -455,11 +451,8 @@ ieee80211_input(struct ieee80211com *ic, struct mbuf *m,
 			goto out;
 		}
 
-#if NBPFILTER > 0
 		/* copy to listener after decrypt */
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 
 		/*
 		 * Finally, strip the 802.11 header.
@@ -572,10 +565,7 @@ ieee80211_input(struct ieee80211com *ic, struct mbuf *m,
 			wh = mtod(m, struct ieee80211_frame *);
 			wh->i_fc[1] &= ~IEEE80211_FC1_WEP;
 		}
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 		(*ic->ic_recv_mgmt)(ic, m, ni, subtype, rssi, rstamp);
 		m_freem(m);
 		return type;
@@ -603,10 +593,7 @@ err:
 	ifp->if_ierrors++;
 out:
 	if (m != NULL) {
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 		m_freem(m);
 	}
 	return type;
@@ -766,14 +753,11 @@ ieee80211_deliver_data(struct ieee80211com *ic,
 		}
 	}
 	if (m != NULL) {
-#if NBPFILTER > 0
 		/*
 		 * XXX If we forward packet into transmitter of the AP,
 		 * we don't need to duplicate for DLT_EN10MB.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		if (ni->ni_vlan != 0) {
 			/* attach vlan tag */
@@ -785,10 +769,7 @@ ieee80211_deliver_data(struct ieee80211com *ic,
 	return;
   out:
 	if (m != NULL) {
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 		m_freem(m);
 	}
 }
@@ -1751,12 +1732,12 @@ ieee80211_parse_wmeparams(struct ieee80211com *ic, u_int8_t *frm,
 		    wh, "WME", "too short, len %u", len);
 		return -1;
 	}
-	qosinfo = frm[__offsetof(struct ieee80211_wme_param, param_qosInfo)];
+	qosinfo = frm[offsetof(struct ieee80211_wme_param, param_qosInfo)];
 	qosinfo &= WME_QOSINFO_COUNT;
 	/* XXX do proper check for wraparound */
 	if (qosinfo == wme->wme_wmeChanParams.cap_info)
 		return 0;
-	frm += __offsetof(struct ieee80211_wme_param, params_acParams);
+	frm += offsetof(struct ieee80211_wme_param, params_acParams);
 	for (i = 0; i < WME_NUM_AC; i++) {
 		struct wmeParams *wmep =
 			&wme->wme_wmeChanParams.cap_wmeParams[i];

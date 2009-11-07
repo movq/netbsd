@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.17 2009/08/11 17:04:18 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.24 2011/02/20 07:55:20 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2004, 2005 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2009/08/11 17:04:18 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.24 2011/02/20 07:55:20 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -35,7 +35,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.17 2009/08/11 17:04:18 matt Exp $");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/mount.h>
@@ -74,7 +73,6 @@ vsize_t kseg2iobufsize;		/* to reserve PTEs for KSEG2 I/O space */
 struct cpu_info cpu_info_store;
 
 /* maps for VM objects */
-struct vm_map *mb_map;
 struct vm_map *phys_map;
 
 /* referenced by mips_machdep.c:cpu_dump() */
@@ -90,7 +88,6 @@ void
 mach_init(int argc, char *argv[], struct bootinfo *bi)
 {
 	extern char kernel_text[], edata[], end[];
-	extern struct user *proc0paddr;
 	void *v;
 	int i;
 
@@ -118,8 +115,8 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	sbd_init();
 
 	__asm volatile("move %0, $29" : "=r"(v));
-	printf("kernel_text=%p edata=%p end=%p sp=%p\n", kernel_text, edata,
-	    end, v);
+	printf("kernel_text=%p edata=%p end=%p sp=%p\n",
+	    kernel_text, edata, end, v);
 
 	option(argc, argv, bi);
 
@@ -136,7 +133,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	 */
 	cn_tab = NULL;
 
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
 	memcpy((void *)0x80000200, ews4800mips_nmi_vec, 32); /* NMI */
 	mips_dcache_wbinv_all();
@@ -146,7 +143,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	curcpu()->ci_cycles_per_hz = (curcpu()->ci_cpu_freq + hz / 2) / hz;
 	curcpu()->ci_divisor_delay =
 	    ((curcpu()->ci_cpu_freq + 500000) / 1000000);
-	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
 		curcpu()->ci_cycles_per_hz /= 2;
 		curcpu()->ci_divisor_delay /= 2;
 	}
@@ -169,11 +166,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 
 	pmap_bootstrap();
 
-	v = (void *)uvm_pageboot_alloc(USPACE);	/* proc0 USPACE */
-	lwp0.l_addr = proc0paddr = (struct user *) v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 }
 
 void
@@ -261,8 +254,7 @@ cpu_reboot(int howto, char *bootstr)
 	static int waittime = -1;
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;

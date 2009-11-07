@@ -1,4 +1,4 @@
-/*	$NetBSD: igmp.c,v 1.51 2009/09/16 15:23:04 pooka Exp $	*/
+/*	$NetBSD: igmp.c,v 1.53 2012/01/09 14:31:21 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.51 2009/09/16 15:23:04 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.53 2012/01/09 14:31:21 liamjfoy Exp $");
 
 #include "opt_mrouting.h"
 
@@ -63,8 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.51 2009/09/16 15:23:04 pooka Exp $");
 #include <netinet/ip_var.h>
 #include <netinet/igmp.h>
 #include <netinet/igmp_var.h>
-
-#include <machine/stdarg.h>
 
 #define IP_MULTICASTOPTS	0
 
@@ -193,7 +191,7 @@ igmp_input(struct mbuf *m, ...)
 	}
 	if (((m->m_flags & M_EXT) && (ip->ip_src.s_addr & IN_CLASSA_NET) == 0)
 	    || m->m_len < minlen) {
-		if ((m = m_pullup(m, minlen)) == 0) {
+		if ((m = m_pullup(m, minlen)) == NULL) {
 			IGMP_STATINC(IGMP_STAT_RCV_TOOSHORT);
 			return;
 		}

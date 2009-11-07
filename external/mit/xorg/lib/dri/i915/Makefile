@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.3 2009/06/11 01:47:08 mrg Exp $
+# $NetBSD: Makefile,v 1.11 2011/08/11 23:15:36 joerg Exp $
 
 MODULE=	i915
 
@@ -9,10 +9,8 @@ CPPFLAGS+=	-I${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/i965 \
 DRI_EXTRA_PATHS=	${X11SRCDIR.MesaLib}/src/mesa/drivers/dri/intel
 SRCS=	\
 	i830_context.c \
-	i830_metaops.c \
 	i830_state.c \
 	i830_texblend.c \
-	i830_tex.c \
 	i830_texstate.c \
 	i830_vtbl.c \
 	intel_render.c \
@@ -20,8 +18,8 @@ SRCS=	\
 	intel_buffer_objects.c \
 	intel_batchbuffer.c \
 	intel_clear.c \
+	intel_extensions.c \
 	intel_mipmap_tree.c \
-	i915_tex_layout.c \
 	intel_tex_layout.c \
 	intel_tex_image.c \
 	intel_tex_subimage.c \
@@ -36,14 +34,12 @@ SRCS=	\
 	intel_pixel_read.c \
 	intel_buffers.c \
 	intel_blit.c \
-	intel_swapbuffers.c \
-	i915_tex.c \
+	i915_tex_layout.c \
 	i915_texstate.c \
 	i915_context.c \
 	i915_debug.c \
 	i915_debug_fp.c \
 	i915_fragprog.c \
-	i915_metaops.c \
 	i915_program.c \
 	i915_state.c \
 	i915_vtbl.c \
@@ -52,8 +48,17 @@ SRCS=	\
 	intel_screen.c \
 	intel_span.c \
 	intel_state.c \
+	intel_syncobj.c \
 	intel_tris.c \
-	intel_fbo.c \
-	intel_depthstencil.c
+	intel_fbo.c
+
+CPPFLAGS+=	 -DI915 -DDRM_VBLANK_FLIP=DRM_VBLANK_FLIP
+
+LIBDPLIBS+=	drm_intel	${.CURDIR}/../../libdrm_intel
+
+COPTS.intel_context.c+=	-Wno-error	# XXX
+COPTS.intel_tex.c+=	-Wno-error	# XXX
+CWARNFLAGS.clang+=	-Wno-tautological-compare -Wno-format \
+			-Wno-constant-logical-operand
 
 .include "${.CURDIR}/../dri.mk"

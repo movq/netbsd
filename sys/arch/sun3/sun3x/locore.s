@@ -1,6 +1,7 @@
-/*	$NetBSD: locore.s,v 1.57 2007/10/17 19:57:47 garbled Exp $	*/
+/*	$NetBSD: locore.s,v 1.64 2011/12/22 15:33:30 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -17,44 +18,6 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah $Hdr: locore.s 1.66 92/12/22$
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
- */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -112,7 +75,7 @@ ASGLOBAL(start)
 | boot loader has loaded us into low memory but all the symbols in this
 | code have been linked high.
 	movw	#PSL_HIGHIPL,%sr	| no interrupts
-	movl	#KERNBASE,%a5		| for vtop conversion
+	movl	#KERNBASE3X,%a5		| for vtop conversion
 	lea	_C_LABEL(mon_crp),%a0	| where to store the CRP
 	subl	%a5,%a0
 	| Note: borrowing mon_crp for tt0 setup...
@@ -166,9 +129,10 @@ L_high_code:
 	movc	%d0,%dfc
 
 | Setup process zero user/kernel stacks.
-	movl	_C_LABEL(proc0paddr),%a1| get lwp0 pcb addr
+	lea	_C_LABEL(lwp0),%a0	| get lwp0
+	movl	%a0@(L_PCB),%a1		| XXXuvm_lwp_getuarea
 	lea	%a1@(USPACE-4),%sp	| set SSP to last word
-	movl	#USRSTACK-4,%a2
+	movl	#USRSTACK3X-4,%a2
 	movl	%a2,%usp		| init user SP
 
 | Note curpcb was already set in _bootstrap().
@@ -178,7 +142,7 @@ L_high_code:
 | is finished, to avoid spurrious interrupts.
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -187,8 +151,7 @@ L_high_code:
 	movw	#PSL_USER,%sp@-		| tf_sr for user mode
 	clrl	%sp@-			| tf_stackadj
 	lea	%sp@(-64),%sp		| tf_regs[16]
-	lea	_C_LABEL(lwp0),%a0	| proc0.p_md.md_regs = 
-	movl	%a1,%a0@(L_MD_REGS)	|   trapframe
+	movl	%a1,%a0@(L_MD_REGS)	| lwp0.l_md.md_regs = trapframe
 	jbsr	_C_LABEL(main)		| main(&trapframe)
 	PANIC("main() returned")
 
@@ -663,16 +626,6 @@ GLOBAL(getsp)
 	movl	%d0,%a0
 	rts
 
-ENTRY(getsfc)
-	movc	%sfc,%d0
-	movl	%d0,%a0
-	rts
-
-ENTRY(getdfc)
-	movc	%dfc,%d0
-	movl	%d0,%a0
-	rts
-
 ENTRY(getvbr)
 	movc	%vbr,%d0
 	movl	%d0,%a0
@@ -742,29 +695,6 @@ Lsplr:
 	rts
 
 /*
- * Save and restore 68881 state.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general regs
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR)	| save FP control regs
-Lm68881sdone:
-	rts
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi	| restore FP control regs
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general regs
-Lm68881rdone:
-	frestore %a0@			| restore state
-	rts
-
-/*
  * _delay(unsigned N)
  * Delay for at least (N/256) microseconds.
  * This routine depends on the variable:  delay_divisor
@@ -800,7 +730,7 @@ L_delay:
 | Not using _C_LABEL() here because these symbols are never
 | referenced by any C code, and if the leading underscore
 | ever goes away, these lines turn into syntax errors...
-	.set	_KERNBASE,KERNBASE
+	.set	_KERNBASE3X,KERNBASE3X
 	.set	_MONSTART,SUN3X_MONSTART
 	.set	_PROM_BASE,SUN3X_PROM_BASE
 	.set	_MONEND,SUN3X_MONEND

@@ -1,4 +1,4 @@
-/*	$NetBSD: load_http.c,v 1.4 2009/08/19 08:35:31 darrenr Exp $	*/
+/*	$NetBSD: load_http.c,v 1.7 2012/02/15 17:55:06 riz Exp $	*/
 
 /*
  * Copyright (C) 2006 by Darren Reed.

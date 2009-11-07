@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/include/ldap_log.h,v 1.40.2.5 2008/02/11 23:26:40 kurt Exp $ */
+/*	$NetBSD: ldap_log.h,v 1.1.1.3 2010/12/12 15:21:23 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/include/ldap_log.h,v 1.40.2.8 2010/04/13 20:22:48 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  * 
- * Copyright 1998-2008 The OpenLDAP Foundation.
+ * Copyright 1998-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -123,7 +125,7 @@ LDAP_BEGIN_DECL
 #define LDAP_DEBUG_SYNC		0x4000
 
 #define LDAP_DEBUG_NONE		0x8000
-#define LDAP_DEBUG_ANY		-1
+#define LDAP_DEBUG_ANY		(-1)
 
 /* debugging stuff */
 #ifdef LDAP_DEBUG

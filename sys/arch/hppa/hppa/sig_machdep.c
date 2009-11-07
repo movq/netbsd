@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.22 2008/11/21 01:57:33 he Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.25 2011/02/08 20:20:15 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -64,47 +65,9 @@
  *	from: Utah Hdr: machdep.c 1.74 92/12/20
  *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah Hdr: machdep.c 1.74 92/12/20
- *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.22 2008/11/21 01:57:33 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.25 2011/02/08 20:20:15 rmind Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -112,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.22 2008/11/21 01:57:33 he Exp $");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 
@@ -120,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.22 2008/11/21 01:57:33 he Exp $");
 #include <sys/syscallargs.h>
 
 #include <machine/cpu.h>
+#include <machine/pcb.h>
 #include <machine/reg.h>
 #include <machine/frame.h>
 
@@ -157,6 +120,7 @@ sendsig_siginfo(const struct ksiginfo *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct sigacts *ps = p->p_sigacts;
 	struct sigframe_siginfo *fp, frame;
 	struct trapframe *tf;
@@ -209,7 +173,7 @@ sendsig_siginfo(const struct ksiginfo *ksi, const sigset_t *mask)
 	tf->tf_r3 = (__greg_t)&fp->sf_uc;
 
 	fp++;
-	tf->tf_iisq_head = tf->tf_iisq_tail = l->l_addr->u_pcb.pcb_space;
+	tf->tf_iisq_head = tf->tf_iisq_tail = pcb->pcb_space;
 	tf->tf_iioq_head =
 		(__greg_t)ps->sa_sigdesc[sig].sd_tramp | HPPA_PC_PRIV_USER;
 	tf->tf_iioq_tail = tf->tf_iioq_head + 4;

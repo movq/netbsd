@@ -1,4 +1,4 @@
-# $NetBSD: t_vnode_leak.sh,v 1.3 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_vnode_leak.sh,v 1.6 2010/11/07 17:51:18 jmmv Exp $
 #
 # Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -25,7 +25,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-atf_test_case main
+atf_test_case main cleanup
 main_head() {
 	atf_set "descr" "Verifies that vnodes are not leaked and that" \
 	                "their reclaim operation works as expected: i.e.," \

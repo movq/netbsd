@@ -1,4 +1,4 @@
-/*	$NetBSD: r128fbreg.h,v 1.1 2007/11/07 19:09:09 macallan Exp $	*/
+/*	$NetBSD: r128fbreg.h,v 1.5 2012/01/06 13:59:50 macallan Exp $	*/
 
 /*
  * Copyright 1999, 2000 ATI Technologies Inc., Markham, Ontario,
@@ -55,9 +55,35 @@
 #ifndef R128FB_REG_H
 #define R128FB_REG_H
 
-#define R128_PALETTE_DATA                 0x00b4
-#define R128_PALETTE_INDEX                0x00b0
+/* RAMDAC */
+#define R128_PALETTE_DATA		0x00b4
+#define R128_PALETTE_INDEX		0x00b0
 
+/* flat panel registers */
+#define R128_FP_PANEL_CNTL		0x0288
+	#define FPCNT_DIGON		  0x00000001	/* FP dig. voltage */
+	#define FPCNT_BACKLIGHT_ON	  0x00000002
+	#define FPCNT_BL_MODULATION_ON	  0x00000004
+	#define FPCNT_BL_CLK_SEL	  0x00000008	/* 1 - divide by 3 */
+	#define FPCNT_MONID_EN		  0x00000010	/* use MONID pins for
+							   backlight control */
+	#define FPCNT_FPENABLE_POL	  0x00000020	/* 1 - active low */
+	#define FPCNT_LEVEL_MASK	  0x0000ff00
+	#define FPCNT_LEVEL_SHIFT	  8
+
+#define R128_LVDS_GEN_CNTL                0x02d0
+#       define R128_LVDS_ON               (1   <<  0)
+#       define R128_LVDS_DISPLAY_DIS      (1   <<  1)
+#       define R128_LVDS_EN               (1   <<  7)
+#       define R128_LVDS_DIGON            (1   << 18)
+#       define R128_LVDS_BLON             (1   << 19)
+#       define R128_LVDS_SEL_CRTC2        (1   << 23)
+#       define R128_HSYNC_DELAY_SHIFT     28
+#       define R128_HSYNC_DELAY_MASK      (0xf << 28)
+#	define R128_LEVEL_MASK	          0x0000ff00
+#	define R128_LEVEL_SHIFT	          8
+
+/* drawing engine */
 #define R128_PC_NGUI_CTLSTAT              0x0184
 #       define R128_PC_FLUSH_GUI          (3 << 0)
 #       define R128_PC_RI_GUI             (1 << 2)
@@ -115,6 +141,7 @@
 #       define R128_DP_SRC_SOURCE_MASK        (7    << 24)
 #       define R128_DP_SRC_SOURCE_MEMORY      (2    << 24)
 #       define R128_DP_SRC_SOURCE_HOST_DATA   (3    << 24)
+#       define R128_DP_SRC_SOURCE_HOST_ALIGN  (4    << 24)
 #       define R128_GMC_3D_FCN_EN             (1    << 27)
 #       define R128_GMC_CLR_CMP_CNTL_DIS      (1    << 28)
 #       define R128_GMC_AUX_CLIP_DIS          (1    << 29)
@@ -177,7 +204,15 @@
 #define R128_DP_DATATYPE                  0x16c4
 #       define R128_HOST_BIG_ENDIAN_EN    (1 << 29)
 
+#define R128_DP_MIX                       0x16c8
+#	define R128_MIX_SRC_VRAM		  (2 << 8)
+#	define R128_MIX_SRC_HOSTDATA		  (3 << 8)
+#	define R128_MIX_SRC_HOST_BYTEALIGN	  (4 << 8)
+#	define R128_MIX_SRC_ROP3_MASK		  (0xff << 16)
+
 #define R128_DP_WRITE_MASK                0x16cc
+#define R128_DP_SRC_BKGD_CLR              0x15dc
+#define R128_DP_SRC_FRGD_CLR              0x15d8
 
 #define R128_DP_CNTL_XDIR_YDIR_YMAJOR     0x16d0
 #       define R128_DST_Y_MAJOR             (1 <<  2)
@@ -190,11 +225,193 @@
 #       define R128_DEFAULT_SC_RIGHT_MAX  (0x1fff <<  0)
 #       define R128_DEFAULT_SC_BOTTOM_MAX (0x1fff << 16)
 
-#define R128_SC_TOP_LEFT                  0x16ec
+/* scissor registers */
+#define R128_SC_BOTTOM                    0x164c
 #define R128_SC_BOTTOM_RIGHT              0x16f0
+#define R128_SC_BOTTOM_RIGHT_C            0x1c8c
+#define R128_SC_LEFT                      0x1640
+#define R128_SC_RIGHT                     0x1644
+#define R128_SC_TOP                       0x1648
+#define R128_SC_TOP_LEFT                  0x16ec
+#define R128_SC_TOP_LEFT_C                0x1c88
 
 #define R128_GUI_STAT                     0x1740
 #       define R128_GUI_FIFOCNT_MASK      0x0fff
 #       define R128_GUI_ACTIVE            (1 << 31)
+
+#define R128_HOST_DATA0                   0x17c0
+#define R128_HOST_DATA1                   0x17c4
+#define R128_HOST_DATA2                   0x17c8
+#define R128_HOST_DATA3                   0x17cc
+#define R128_HOST_DATA4                   0x17d0
+#define R128_HOST_DATA5                   0x17d4
+#define R128_HOST_DATA6                   0x17d8
+#define R128_HOST_DATA7                   0x17dc
+
+/* Information the firmware is supposed to leave for us */
+#define R128_BIOS_5_SCRATCH               0x0024
+#       define R128_BIOS_DISPLAY_FP       (1 << 0)
+#       define R128_BIOS_DISPLAY_CRT      (2 << 0)
+#       define R128_BIOS_DISPLAY_FP_CRT   (3 << 0)
+
+/* Clock stuff */
+#define R128_CLOCK_CNTL_INDEX             0x0008
+#       define R128_PLL_WR_EN             (1 << 7)
+#       define R128_PLL_DIV_SEL           (3 << 8)
+#       define R128_PLL2_DIV_SEL_MASK     ~(3 << 8)
+#define R128_CLOCK_CNTL_DATA              0x000c
+
+#define R128_CLK_PIN_CNTL                 0x0001 /* PLL */
+#define R128_PPLL_CNTL                    0x0002 /* PLL */
+#       define R128_PPLL_RESET                (1 <<  0)
+#       define R128_PPLL_SLEEP                (1 <<  1)
+#       define R128_PPLL_ATOMIC_UPDATE_EN     (1 << 16)
+#       define R128_PPLL_VGA_ATOMIC_UPDATE_EN (1 << 17)
+#define R128_PPLL_REF_DIV                 0x0003 /* PLL */
+#       define R128_PPLL_REF_DIV_MASK     0x03ff
+#       define R128_PPLL_ATOMIC_UPDATE_R  (1 << 15) /* same as _W */
+#       define R128_PPLL_ATOMIC_UPDATE_W  (1 << 15) /* same as _R */
+#define R128_PPLL_DIV_0                   0x0004 /* PLL */
+#define R128_PPLL_DIV_1                   0x0005 /* PLL */
+#define R128_PPLL_DIV_2                   0x0006 /* PLL */
+#define R128_PPLL_DIV_3                   0x0007 /* PLL */
+#       define R128_PPLL_FB3_DIV_MASK     0x07ff
+#       define R128_PPLL_POST3_DIV_MASK   0x00070000
+#define R128_VCLK_ECP_CNTL                0x0008 /* PLL */
+#       define R128_VCLK_SRC_SEL_MASK     0x03
+#       define R128_VCLK_SRC_SEL_CPUCLK   0x00
+#       define R128_VCLK_SRC_SEL_PPLLCLK  0x03
+#       define R128_ECP_DIV_MASK          (3 << 8)
+#define R128_HTOTAL_CNTL                  0x0009 /* PLL */
+#define R128_X_MPLL_REF_FB_DIV            0x000a /* PLL */
+#define R128_XPLL_CNTL                    0x000b /* PLL */
+#define R128_XDLL_CNTL                    0x000c /* PLL */
+#define R128_XCLK_CNTL                    0x000d /* PLL */
+#define R128_FCP_CNTL                     0x0012 /* PLL */
+
+#define R128_P2PLL_CNTL                    0x002a /* P2PLL */
+#       define R128_P2PLL_RESET               (1 <<  0)
+#       define R128_P2PLL_SLEEP               (1 <<  1)
+#       define R128_P2PLL_ATOMIC_UPDATE_EN    (1 << 16)
+#       define R128_P2PLL_VGA_ATOMIC_UPDATE_EN (1 << 17)
+#       define R128_P2PLL_ATOMIC_UPDATE_VSYNC  (1 << 18)
+#define R128_P2PLL_REF_DIV                 0x002B /* PLL */
+#       define R128_P2PLL_REF_DIV_MASK     0x03ff
+#       define R128_P2PLL_ATOMIC_UPDATE_R  (1 << 15) /* same as _W */
+#       define R128_P2PLL_ATOMIC_UPDATE_W  (1 << 15) /* same as _R */
+#define R128_P2PLL_DIV_0                   0x002c
+#       define R128_P2PLL_FB0_DIV_MASK     0x07ff
+#       define R128_P2PLL_POST0_DIV_MASK   0x00070000
+#define R128_V2CLK_VCLKTV_CNTL            0x002d /* PLL */
+#       define R128_V2CLK_SRC_SEL_MASK    0x03
+#       define R128_V2CLK_SRC_SEL_CPUCLK  0x00
+#       define R128_V2CLK_SRC_SEL_P2PLLCLK 0x03
+#define R128_HTOTAL2_CNTL                 0x002e /* PLL */
+
+/* CTRCs */
+#define R128_CRTC_GEN_CNTL                0x0050
+#       define R128_CRTC_DBL_SCAN_EN      (1 <<  0)
+#       define R128_CRTC_INTERLACE_EN     (1 <<  1)
+#       define R128_CRTC_CSYNC_EN         (1 <<  4)
+#	define R128_CRTC_PIX_WIDTH	  (7 <<  8)
+#	define R128_CRTC_COLOR_8BIT	  (2 <<  8)
+#	define R128_CRTC_COLOR_15BIT	  (3 <<  8)
+#	define R128_CRTC_COLOR_16BIT	  (4 <<  8)
+#	define R128_CRTC_COLOR_24BIT	  (5 <<  8)
+#	define R128_CRTC_COLOR_32BIT	  (6 <<  8)
+#       define R128_CRTC_CUR_EN           (1 << 16)
+#       define R128_CRTC_CUR_MODE_MASK    (7 << 17)
+#       define R128_CRTC_ICON_EN          (1 << 20)
+#       define R128_CRTC_EXT_DISP_EN      (1 << 24)
+#       define R128_CRTC_EN               (1 << 25)
+#       define R128_CRTC_DISP_REQ_EN_B    (1 << 26)
+#define R128_CRTC_EXT_CNTL                0x0054
+#       define R128_CRTC_VGA_XOVERSCAN    (1 <<  0)
+#       define R128_VGA_ATI_LINEAR        (1 <<  3)
+#       define R128_XCRT_CNT_EN           (1 <<  6)
+#       define R128_CRTC_HSYNC_DIS        (1 <<  8)
+#       define R128_CRTC_VSYNC_DIS        (1 <<  9)
+#       define R128_CRTC_DISPLAY_DIS      (1 << 10)
+#       define R128_CRTC_CRT_ON           (1 << 15)
+#       define R128_FP_OUT_EN             (1 << 22)
+#       define R128_FP_ACTIVE             (1 << 23)
+#define R128_CRTC_EXT_CNTL_DPMS_BYTE      0x0055
+#       define R128_CRTC_HSYNC_DIS_BYTE   (1 <<  0)
+#       define R128_CRTC_VSYNC_DIS_BYTE   (1 <<  1)
+#       define R128_CRTC_DISPLAY_DIS_BYTE (1 <<  2)
+#define R128_CRTC_STATUS                  0x005c
+#       define R128_CRTC_VBLANK_SAVE      (1 <<  1)
+
+#define R128_CRTC_H_TOTAL_DISP            0x0200
+#       define R128_CRTC_H_TOTAL          (0x01ff << 0)
+#       define R128_CRTC_H_TOTAL_SHIFT    0
+#       define R128_CRTC_H_DISP           (0x00ff << 16)
+#       define R128_CRTC_H_DISP_SHIFT     16
+#define R128_CRTC_H_SYNC_STRT_WID         0x0204
+#       define R128_CRTC_H_SYNC_STRT_PIX        (0x07  <<  0)
+#       define R128_CRTC_H_SYNC_STRT_CHAR       (0x1ff <<  3)
+#       define R128_CRTC_H_SYNC_STRT_CHAR_SHIFT 3
+#       define R128_CRTC_H_SYNC_WID             (0x3f  << 16)
+#       define R128_CRTC_H_SYNC_WID_SHIFT       16
+#       define R128_CRTC_H_SYNC_POL             (1     << 23)
+#define R128_CRTC_V_TOTAL_DISP            0x0208
+#       define R128_CRTC_V_TOTAL          (0x07ff << 0)
+#       define R128_CRTC_V_TOTAL_SHIFT    0
+#       define R128_CRTC_V_DISP           (0x07ff << 16)
+#       define R128_CRTC_V_DISP_SHIFT     16
+#define R128_CRTC_V_SYNC_STRT_WID         0x020c
+#       define R128_CRTC_V_SYNC_STRT       (0x7ff <<  0)
+#       define R128_CRTC_V_SYNC_STRT_SHIFT 0
+#       define R128_CRTC_V_SYNC_WID        (0x1f  << 16)
+#       define R128_CRTC_V_SYNC_WID_SHIFT  16
+#       define R128_CRTC_V_SYNC_POL        (1     << 23)
+#define R128_CRTC_VLINE_CRNT_VLINE        0x0210
+#       define R128_CRTC_CRNT_VLINE_MASK  (0x7ff << 16)
+#define R128_CRTC_CRNT_FRAME              0x0214
+#define R128_CRTC_GUI_TRIG_VLINE          0x0218
+#define R128_CRTC_DEBUG                   0x021c
+#define R128_CRTC_OFFSET                  0x0224
+#define R128_CRTC_OFFSET_CNTL             0x0228
+#define R128_CRTC_PITCH                   0x022c
+
+#define R128_CRTC2_H_TOTAL_DISP           0x0300
+#       define R128_CRTC2_H_TOTAL          (0x01ff << 0)
+#       define R128_CRTC2_H_TOTAL_SHIFT    0
+#       define R128_CRTC2_H_DISP           (0x00ff << 16)
+#       define R128_CRTC2_H_DISP_SHIFT     16
+#define R128_CRTC2_H_SYNC_STRT_WID        0x0304
+#       define R128_CRTC2_H_SYNC_STRT_PIX        (0x07  <<  0)
+#       define R128_CRTC2_H_SYNC_STRT_CHAR       (0x1ff <<  3)
+#       define R128_CRTC2_H_SYNC_STRT_CHAR_SHIFT 3
+#       define R128_CRTC2_H_SYNC_WID             (0x3f  << 16)
+#       define R128_CRTC2_H_SYNC_WID_SHIFT       16
+#       define R128_CRTC2_H_SYNC_POL             (1     << 23)
+#define R128_CRTC2_V_TOTAL_DISP           0x0308
+#       define R128_CRTC2_V_TOTAL          (0x07ff << 0)
+#       define R128_CRTC2_V_TOTAL_SHIFT    0
+#       define R128_CRTC2_V_DISP           (0x07ff << 16)
+#       define R128_CRTC2_V_DISP_SHIFT     16
+#define R128_CRTC2_V_SYNC_STRT_WID        0x030c
+#       define R128_CRTC2_V_SYNC_STRT       (0x7ff <<  0)
+#       define R128_CRTC2_V_SYNC_STRT_SHIFT 0
+#       define R128_CRTC2_V_SYNC_WID        (0x1f  << 16)
+#       define R128_CRTC2_V_SYNC_WID_SHIFT  16
+#       define R128_CRTC2_V_SYNC_POL        (1     << 23)
+#define R128_CRTC2_VLINE_CRNT_VLINE       0x0310
+#define R128_CRTC2_CRNT_FRAME             0x0314
+#define R128_CRTC2_GUI_TRIG_VLINE         0x0318
+#define R128_CRTC2_DEBUG                  0x031c
+#define R128_CRTC2_OFFSET                 0x0324
+#define R128_CRTC2_OFFSET_CNTL            0x0328
+#	define R128_CRTC2_TILE_EN         (1 << 15)
+#define R128_CRTC2_PITCH                  0x032c
+#define R128_CRTC2_GEN_CNTL               0x03f8
+#       define R128_CRTC2_DBL_SCAN_EN      (1 <<  0)
+#       define R128_CRTC2_CUR_EN           (1 << 16)
+#       define R128_CRTC2_ICON_EN          (1 << 20)
+#       define R128_CRTC2_DISP_DIS         (1 << 23)
+#       define R128_CRTC2_EN               (1 << 25)
+#       define R128_CRTC2_DISP_REQ_EN_B    (1 << 26)
+#define R128_CRTC2_STATUS                 0x03fc
 
 #endif /* R128FB_REG_H */

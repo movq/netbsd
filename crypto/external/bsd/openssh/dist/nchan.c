@@ -1,5 +1,5 @@
-/*	$NetBSD: nchan.c,v 1.2 2009/06/07 22:38:47 christos Exp $	*/
-/* $OpenBSD: nchan.c,v 1.62 2008/11/07 18:50:18 stevesk Exp $ */
+/*	$NetBSD: nchan.c,v 1.4 2011/07/25 03:03:10 christos Exp $	*/
+/* $OpenBSD: nchan.c,v 1.63 2010/01/26 01:28:35 djm Exp $ */
 /*
  * Copyright (c) 1999, 2000, 2001, 2002 Markus Friedl.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: nchan.c,v 1.2 2009/06/07 22:38:47 christos Exp $");
+__RCSID("$NetBSD: nchan.c,v 1.4 2011/07/25 03:03:10 christos Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
@@ -85,8 +85,8 @@ static void	chan_send_eow2(Channel *);
 static void	chan_shutdown_write(Channel *);
 static void	chan_shutdown_read(Channel *);
 
-static char *ostates[] = { "open", "drain", "wait_ieof", "closed" };
-static char *istates[] = { "open", "drain", "wait_oclose", "closed" };
+static const char *ostates[] = { "open", "drain", "wait_ieof", "closed" };
+static const char *istates[] = { "open", "drain", "wait_oclose", "closed" };
 
 static void
 chan_set_istate(Channel *c, u_int next)
@@ -162,7 +162,7 @@ chan_ibuf_empty(Channel *c)
 	switch (c->istate) {
 	case CHAN_INPUT_WAIT_DRAIN:
 		if (compat20) {
-			if (!(c->flags & CHAN_CLOSE_SENT))
+			if (!(c->flags & (CHAN_CLOSE_SENT|CHAN_LOCAL)))
 				chan_send_eof2(c);
 			chan_set_istate(c, CHAN_INPUT_CLOSED);
 		} else {
@@ -279,9 +279,12 @@ static void
 chan_rcvd_close2(Channel *c)
 {
 	debug2("channel %d: rcvd close", c->self);
-	if (c->flags & CHAN_CLOSE_RCVD)
-		error("channel %d: protocol error: close rcvd twice", c->self);
-	c->flags |= CHAN_CLOSE_RCVD;
+	if (!(c->flags & CHAN_LOCAL)) {
+		if (c->flags & CHAN_CLOSE_RCVD)
+			error("channel %d: protocol error: close rcvd twice",
+			    c->self);
+		c->flags |= CHAN_CLOSE_RCVD;
+	}
 	if (c->type == SSH_CHANNEL_LARVAL) {
 		/* tear down larval channels immediately */
 		chan_set_ostate(c, CHAN_OUTPUT_CLOSED);
@@ -303,11 +306,13 @@ chan_rcvd_close2(Channel *c)
 		chan_set_istate(c, CHAN_INPUT_CLOSED);
 		break;
 	case CHAN_INPUT_WAIT_DRAIN:
-		chan_send_eof2(c);
+		if (!(c->flags & CHAN_LOCAL))
+			chan_send_eof2(c);
 		chan_set_istate(c, CHAN_INPUT_CLOSED);
 		break;
 	}
 }
+
 void
 chan_rcvd_eow(Channel *c)
 {
@@ -455,6 +460,10 @@ chan_is_dead(Channel *c, int do_send)
 		    c->self, c->efd, buffer_len(&c->extended));
 		return 0;
 	}
+	if (c->flags & CHAN_LOCAL) {
+		debug2("channel %d: is dead (local)", c->self);
+		return 1;
+	}		
 	if (!(c->flags & CHAN_CLOSE_SENT)) {
 		if (do_send) {
 			chan_send_close2(c);

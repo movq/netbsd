@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr.c,v 1.3 2005/02/08 07:01:53 martti Exp $	*/
+/*	$NetBSD: inet_addr.c,v 1.5 2012/02/15 17:55:06 riz Exp $	*/
 
 /*
  * ++Copyright++ 1983, 1990, 1993

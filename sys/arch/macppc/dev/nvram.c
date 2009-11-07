@@ -1,4 +1,4 @@
-/*	$NetBSD: nvram.c,v 1.15 2009/03/14 21:04:11 dsl Exp $	*/
+/*	$NetBSD: nvram.c,v 1.17 2011/06/30 00:52:57 matt Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.15 2009/03/14 21:04:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.17 2011/06/30 00:52:57 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.15 2009/03/14 21:04:11 dsl Exp $");
 
 #define NVRAM_SIZE 0x2000
 
-static void nvram_attach(struct device *, struct device *, void *);
-static int nvram_match(struct device *, struct cfdata *, void *);
+static void nvram_attach(device_t, device_t, void *);
+static int nvram_match(device_t, cfdata_t, void *);
 
 struct nvram_softc {
 	struct device sc_dev;
@@ -77,7 +77,7 @@ const struct cdevsw nvram_cdevsw = {
 };
 
 int
-nvram_match(struct device *parent, struct cfdata *cf, void *aux)
+nvram_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -91,9 +91,9 @@ nvram_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-nvram_attach(struct device *parent, struct device *self, void *aux)
+nvram_attach(device_t parent, device_t self, void *aux)
 {
-	struct nvram_softc *sc = (struct nvram_softc *)self;
+	struct nvram_softc *sc = device_private(self);
 	struct confargs *ca = aux;
 	int *reg = ca->ca_reg;
 
@@ -103,13 +103,13 @@ nvram_attach(struct device *parent, struct device *self, void *aux)
 
 	case 8:						/* untested */
 		sc->nv_type = NVRAM_IOMEM;
-		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[0], reg[1]);
+		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[0], reg[1], false);
 		break;
 
 	case 16:
 		sc->nv_type = NVRAM_PORT;
-		sc->nv_port = mapiodev(ca->ca_baseaddr + reg[0], reg[1]);
-		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[2], reg[3]);
+		sc->nv_port = mapiodev(ca->ca_baseaddr + reg[0], reg[1], false);
+		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[2], reg[3], false);
 		break;
 
 	case 0:

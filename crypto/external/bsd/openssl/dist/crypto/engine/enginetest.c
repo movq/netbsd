@@ -56,6 +56,7 @@
  *
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <openssl/e_os2.h>
@@ -258,8 +259,8 @@ cleanup_loop:
 		}
 	for(loop = 0; loop < 512; loop++)
 		{
-		OPENSSL_free((void *)ENGINE_get_id(block[loop]));
-		OPENSSL_free((void *)ENGINE_get_name(block[loop]));
+		OPENSSL_free((void *)(intptr_t)ENGINE_get_id(block[loop]));
+		OPENSSL_free((void *)(intptr_t)ENGINE_get_name(block[loop]));
 		}
 	printf("\nTests completed happily\n");
 	to_return = 0;

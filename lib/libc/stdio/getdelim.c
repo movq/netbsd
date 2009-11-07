@@ -1,4 +1,4 @@
-/* $NetBSD: getdelim.c,v 1.7 2009/10/25 20:44:13 christos Exp $ */
+/* $NetBSD: getdelim.c,v 1.13 2011/07/22 23:12:30 joerg Exp $ */
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: getdelim.c,v 1.7 2009/10/25 20:44:13 christos Exp $");
+__RCSID("$NetBSD: getdelim.c,v 1.13 2011/07/22 23:12:30 joerg Exp $");
 
 #include "namespace.h"
 
@@ -44,14 +44,15 @@ __RCSID("$NetBSD: getdelim.c,v 1.7 2009/10/25 20:44:13 christos Exp $");
 #include "reentrant.h"
 #include "local.h"
 
+#ifdef __weak_alias
+__weak_alias(getdelim, _getdelim)
+#endif
+
 /* Minimum buffer size we create.
  * This should allow config files to fit into our power of 2 buffer growth
  * without the need for a realloc. */
 #define MINBUF	128
 
-/* This private function allows strings of upto SIZE_MAX - 2
- * and returns 0 on EOF, both of which are disallowed by POSIX.
- * Maybe this should be named fgetdelim and proposed to the OpenGroup....*/
 ssize_t
 __getdelim(char **__restrict buf, size_t *__restrict buflen,
     int sep, FILE *__restrict fp)
@@ -64,21 +65,21 @@ __getdelim(char **__restrict buf, size_t *__restrict buflen,
 
 	if (buf == NULL || buflen == NULL) {
 		errno = EINVAL;
-		return -1;
+		goto error;
 	}
 
 	/* If buf is NULL, we have to assume a size of zero */
 	if (*buf == NULL)
 		*buflen = 0;
 
-	FLOCKFILE(fp);
 	_SET_ORIENTATION(fp, -1);
 	off = 0;
-	for (;;) {
+	do {
 		/* If the input buffer is empty, refill it */
 		if (fp->_r <= 0 && __srefill(fp)) {
 			if (__sferror(fp))
 				goto error;
+			/* No error, so EOF. */
 			break;
 		}
 
@@ -89,12 +90,13 @@ __getdelim(char **__restrict buf, size_t *__restrict buflen,
 		else
 			len = (p - fp->_p) + 1;
 
-		newlen = off + len + 1;
+		newlen = off + len;
 		/* Ensure we can handle it */
-		if (newlen < off || newlen > SIZE_MAX - 2) {
+		if (newlen < off || newlen > SSIZE_MAX) {
 			errno = EOVERFLOW;
 			goto error;
 		}
+		newlen++; /* reserve space for the NULL terminator */
 		if (newlen > *buflen) {
 			if (newlen < MINBUF)
 				newlen = MINBUF;
@@ -124,16 +126,18 @@ __getdelim(char **__restrict buf, size_t *__restrict buflen,
 		fp->_r -= (int)len;
 		fp->_p += (int)len;
 		off += len;
-		if (p != NULL)
-			break;
-	}
-	FUNLOCKFILE(fp);
+	} while (p == NULL);
+
+	/* POSIX demands we return -1 on EOF. */
+	if (off == 0) 
+		return -1;
+
 	if (*buf != NULL)
 		*(*buf + off) = '\0';
 	return off;
 
 error:
-	FUNLOCKFILE(fp);
+	fp->_flags |= __SERR;
 	return -1;
 }
 
@@ -141,16 +145,10 @@ ssize_t
 getdelim(char **__restrict buf, size_t *__restrict buflen,
     int sep, FILE *__restrict fp)
 {
-	ssize_t len;
+	ssize_t n;
 
-	len = __getdelim(buf, buflen, sep, fp);
-	if (len == 0) {
-		/* POSIX requires that we return -1 on EOF */
-		return -1;
-	} else if (len < -1) {
-		/* POSIX requires no string larger than SSIZE_MAX */
-		errno = EOVERFLOW;
-		return -1;
-	}
-	return len;
+	FLOCKFILE(fp);
+	n = __getdelim(buf, buflen, sep, fp);
+	FUNLOCKFILE(fp);
+	return n;
 }

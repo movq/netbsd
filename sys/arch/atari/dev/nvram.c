@@ -1,4 +1,4 @@
-/*	$NetBSD: nvram.c,v 1.17 2009/10/20 19:10:11 snj Exp $	*/
+/*	$NetBSD: nvram.c,v 1.19 2011/06/05 06:33:43 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.17 2009/10/20 19:10:11 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.19 2011/06/05 06:33:43 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -47,6 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.17 2009/10/20 19:10:11 snj Exp $");
 #include <atari/dev/clockreg.h>
 #include <atari/dev/nvramvar.h>
 
+#include "ioconf.h"
+
 #include "nvr.h"
 
 #define	MC_NVRAM_CSUM	(MC_NVRAM_START + MC_NVRAM_SIZE - 2)
@@ -59,28 +61,26 @@ static u_char	nvram_csum(void);
 /*
  * Auto config stuff....
  */
-static void	nvr_attach(struct device *, struct device *, void *);
-static int	nvr_match(struct device *, struct cfdata *, void *);
+static void	nvr_attach(device_t, device_t, void *);
+static int	nvr_match(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(nvr, sizeof(struct nvr_softc),
+CFATTACH_DECL_NEW(nvr, sizeof(struct nvr_softc),
     nvr_match, nvr_attach, NULL, NULL);
-
-extern struct cfdriver nvr_cd;
 
 /*ARGSUSED*/
 static	int
-nvr_match(struct device *pdp, struct cfdata *cfp, void *auxp)
+nvr_match(device_t parent, cfdata_t cf, void *aux)
 {
-	if (!strcmp((char *)auxp, "nvr"))
+	if (!strcmp((char *)aux, "nvr"))
 		return (1);
 	return (0);
 }
 
 /*ARGSUSED*/
 static void
-nvr_attach(device_t pdp, device_t dp, void *auxp)
+nvr_attach(device_t parent, device_t self, void *aux)
 {
-	struct nvr_softc	*nvr_soft;
+	struct nvr_softc	*sc;
 	int			nreg;
 	
 	/*
@@ -92,8 +92,9 @@ nvr_attach(device_t pdp, device_t dp, void *auxp)
 			mc146818_write(RTC, nreg, 0);
 		nvram_set_csum(nvram_csum());
 	}
-	nvr_soft = device_lookup_private(&nvr_cd, 0);
-	nvr_soft->nvr_flags = NVR_CONFIGURED;
+	sc = device_private(self);
+	sc->sc_dev = self;
+	sc->sc_flags = NVR_CONFIGURED;
 	printf("\n");
 }
 /*
@@ -108,10 +109,10 @@ int
 nvr_get_byte(int byteno)
 {
 #if NNVR > 0
-	struct nvr_softc	*nvr_soft;
+	struct nvr_softc	*sc;
 
-	nvr_soft = device_lookup_private(&nvr_cd, 0);
-	if (!(nvr_soft->nvr_flags & NVR_CONFIGURED))
+	sc = device_lookup_private(&nvr_cd, 0);
+	if (!(sc->sc_flags & NVR_CONFIGURED))
 		return(NVR_INVALID);
 	return (mc146818_read(RTC, byteno + MC_NVRAM_START) & 0xff);
 #else
@@ -129,10 +130,10 @@ nvram_uio(struct uio *uio)
 	int			nleft;
 	u_char			buf[MC_NVRAM_CSUM - MC_NVRAM_START + 1];
 	u_char			*p;
-	struct nvr_softc	*nvr_soft;
+	struct nvr_softc	*sc;
 
-	nvr_soft = device_lookup_private(&nvr_cd,0);
-	if (!(nvr_soft->nvr_flags & NVR_CONFIGURED))
+	sc = device_lookup_private(&nvr_cd,0);
+	if (!(sc->sc_flags & NVR_CONFIGURED))
 		return ENXIO;
 
 #ifdef NV_DEBUG

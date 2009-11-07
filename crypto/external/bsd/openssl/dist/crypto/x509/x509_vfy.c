@@ -153,7 +153,6 @@ static int x509_subject_cmp(X509 **a, X509 **b)
 int X509_verify_cert(X509_STORE_CTX *ctx)
 	{
 	X509 *x,*xtmp,*chain_ss=NULL;
-	X509_NAME *xn;
 	int bad_chain = 0;
 	X509_VERIFY_PARAM *param = ctx->param;
 	int depth,i,ok=0;
@@ -205,7 +204,6 @@ int X509_verify_cert(X509_STORE_CTX *ctx)
 		                         */
 
 		/* If we are self signed, we break */
-		xn=X509_get_issuer_name(x);
 		if (ctx->check_issued(ctx, x,x)) break;
 
 		/* If we were passed a cert chain, use it first */
@@ -242,7 +240,6 @@ int X509_verify_cert(X509_STORE_CTX *ctx)
 
 	i=sk_X509_num(ctx->chain);
 	x=sk_X509_value(ctx->chain,i-1);
-	xn = X509_get_subject_name(x);
 	if (ctx->check_issued(ctx, x, x))
 		{
 		/* we have a self signed certificate */
@@ -291,7 +288,6 @@ int X509_verify_cert(X509_STORE_CTX *ctx)
 		if (depth < num) break;
 
 		/* If we are self signed, we break */
-		xn=X509_get_issuer_name(x);
 		if (ctx->check_issued(ctx,x,x)) break;
 
 		ok = ctx->get_issuer(&xtmp, ctx, x);
@@ -310,7 +306,6 @@ int X509_verify_cert(X509_STORE_CTX *ctx)
 		}
 
 	/* we now have our chain, lets check it... */
-	xn=X509_get_issuer_name(x);
 
 	/* Is last certificate looked up self signed? */
 	if (!ctx->check_issued(ctx,x,x))
@@ -679,7 +674,12 @@ static int check_revocation(X509_STORE_CTX *ctx)
 	if (ctx->param->flags & X509_V_FLAG_CRL_CHECK_ALL)
 		last = sk_X509_num(ctx->chain) - 1;
 	else
+		{
+		/* If checking CRL paths this isn't the EE certificate */
+		if (ctx->parent)
+			return 1;
 		last = 0;
+		}
 	for(i = 0; i <= last; i++)
 		{
 		ctx->error_depth = i;
@@ -698,6 +698,7 @@ static int check_cert(X509_STORE_CTX *ctx)
 	x = sk_X509_value(ctx->chain, cnum);
 	ctx->current_cert = x;
 	ctx->current_issuer = NULL;
+	ctx->current_crl_score = 0;
 	ctx->current_reasons = 0;
 	while (ctx->current_reasons != CRLDP_ALL_REASONS)
 		{
@@ -1387,7 +1388,7 @@ static int check_crl(X509_STORE_CTX *ctx, X509_CRL *crl)
 
 			if (!(ctx->current_crl_score & CRL_SCORE_SAME_PATH))
 				{
-				if (!check_crl_path(ctx, ctx->current_issuer))
+				if (check_crl_path(ctx, ctx->current_issuer) <= 0)
 					{
 					ctx->error = X509_V_ERR_CRL_PATH_VALIDATION_ERROR;
 					ok = ctx->verify_cb(0, ctx);
@@ -1722,10 +1723,11 @@ int X509_cmp_time(const ASN1_TIME *ctm, time_t *cmp_time)
 			offset= -offset;
 		}
 	atm.type=ctm->type;
+	atm.flags = 0;
 	atm.length=sizeof(buff2);
 	atm.data=(unsigned char *)buff2;
 
-	if (X509_time_adj(&atm,-offset*60, cmp_time) == NULL)
+	if (X509_time_adj(&atm, offset*60, cmp_time) == NULL)
 		return 0;
 
 	if (ctm->type == V_ASN1_UTCTIME)
@@ -1759,16 +1761,18 @@ ASN1_TIME *X509_time_adj_ex(ASN1_TIME *s,
 				int offset_day, long offset_sec, time_t *in_tm)
 	{
 	time_t t;
-	int type = -1;
 
 	if (in_tm) t = *in_tm;
 	else time(&t);
 
-	if (s) type = s->type;
-	if (type == V_ASN1_UTCTIME)
-		return ASN1_UTCTIME_adj(s,t, offset_day, offset_sec);
-	if (type == V_ASN1_GENERALIZEDTIME)
-		return ASN1_GENERALIZEDTIME_adj(s, t, offset_day, offset_sec);
+	if (s && !(s->flags & ASN1_STRING_FLAG_MSTRING))
+		{
+		if (s->type == V_ASN1_UTCTIME)
+			return ASN1_UTCTIME_adj(s,t, offset_day, offset_sec);
+		if (s->type == V_ASN1_GENERALIZEDTIME)
+			return ASN1_GENERALIZEDTIME_adj(s, t, offset_day,
+								offset_sec);
+		}
 	return ASN1_TIME_adj(s, t, offset_day, offset_sec);
 	}
 
@@ -1870,6 +1874,21 @@ STACK_OF(X509) *X509_STORE_CTX_get1_chain(X509_STORE_CTX *ctx)
 		CRYPTO_add(&x->references, 1, CRYPTO_LOCK_X509);
 		}
 	return chain;
+	}
+
+X509 *X509_STORE_CTX_get0_current_issuer(X509_STORE_CTX *ctx)
+	{
+	return ctx->current_issuer;
+	}
+
+X509_CRL *X509_STORE_CTX_get0_current_crl(X509_STORE_CTX *ctx)
+	{
+	return ctx->current_crl;
+	}
+
+X509_STORE_CTX *X509_STORE_CTX_get0_parent_ctx(X509_STORE_CTX *ctx)
+	{
+	return ctx->parent;
 	}
 
 void X509_STORE_CTX_set_cert(X509_STORE_CTX *ctx, X509 *x)
@@ -1992,6 +2011,9 @@ int X509_STORE_CTX_init(X509_STORE_CTX *ctx, X509_STORE *store, X509 *x509,
 	ctx->error_depth=0;
 	ctx->current_cert=NULL;
 	ctx->current_issuer=NULL;
+	ctx->current_crl=NULL;
+	ctx->current_crl_score=0;
+	ctx->current_reasons=0;
 	ctx->tree = NULL;
 	ctx->parent = NULL;
 
@@ -2011,7 +2033,7 @@ int X509_STORE_CTX_init(X509_STORE_CTX *ctx, X509_STORE *store, X509 *x509,
 	if (store)
 		ret = X509_VERIFY_PARAM_inherit(ctx->param, store->param);
 	else
-		ctx->param->flags |= X509_VP_FLAG_DEFAULT|X509_VP_FLAG_ONCE;
+		ctx->param->inh_flags |= X509_VP_FLAG_DEFAULT|X509_VP_FLAG_ONCE;
 
 	if (store)
 		{

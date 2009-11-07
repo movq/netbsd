@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.19 2009/04/22 15:23:03 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.21 2011/08/09 13:06:10 joerg Exp $
 
 WARNS?=	1	# XXX -Wcast-qual -Wshadow
+CWARNFLAGS.clang+=	-Wno-format -Wno-tautological-compare \
+			-Wno-self-assign -Wno-array-bounds
 
 .include <bsd.own.mk>
 

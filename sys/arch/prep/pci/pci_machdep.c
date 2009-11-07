@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.32 2007/10/17 19:56:51 garbled Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.38 2011/10/13 19:51:17 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.32 2007/10/17 19:56:51 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.38 2011/10/13 19:51:17 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.32 2007/10/17 19:56:51 garbled Exp
 #include <uvm/uvm_extern.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/platform.h>
 #include <machine/pnp.h>
@@ -90,13 +90,17 @@ prep_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
+
+	pc->pc_msi_v = (void *)pc;
+	genppc_pci_chipset_msi_init(pc);
 
 	pc->pc_conf_interrupt = genppc_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
 	pc->pc_conf_hook = prep_pci_conf_hook;
 
-	pc->pc_addr = mapiodev(prep_pci_baseaddr, 4);
-	pc->pc_data = mapiodev(prep_pci_basedata, 4);
+	pc->pc_addr = mapiodev(prep_pci_baseaddr, 4, false);
+	pc->pc_data = mapiodev(prep_pci_basedata, 4, false);
 	pc->pc_bus = 0;
 	pc->pc_node = 0;
 	pc->pc_memt = 0;
@@ -121,7 +125,7 @@ prep_pci_get_chipset_tag(pci_chipset_tag_t pc)
 }
 
 int
-prep_pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+prep_pci_bus_maxdevs(void *v, int busno)
 {
 	struct genppc_pci_chipset_businfo *pbi;
 	prop_object_t busmax;
@@ -143,7 +147,7 @@ prep_pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 }
 
 int
-prep_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+prep_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	struct genppc_pci_chipset_businfo *pbi;
 	prop_dictionary_t dict, devsub;
@@ -258,9 +262,9 @@ extern pcireg_t prep_pci_direct_conf_read(void *, pcitag_t, int);
 extern pcireg_t genppc_pci_indirect_conf_read(void *, pcitag_t, int);
 
 int
-prep_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
-	pcireg_t id)
+prep_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
 {
+	pci_chipset_tag_t pc = v;
 	struct genppc_pci_chipset_businfo *pbi;
 	prop_number_t bmax, pbus;
 	pcitag_t tag;
@@ -298,12 +302,12 @@ prep_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
 		return PCI_CONF_DEFAULT;
 
 	if (prep_pci_config_mode) {
-		tag = genppc_pci_indirect_make_tag(pct, bus, dev, func);
-		class = genppc_pci_indirect_conf_read(pct, tag,
+		tag = genppc_pci_indirect_make_tag(pc, bus, dev, func);
+		class = genppc_pci_indirect_conf_read(pc, tag,
 		    PCI_CLASS_REG);
 	} else {
-		tag = prep_pci_direct_make_tag(pct, bus, dev, func);
-		class = prep_pci_direct_conf_read(pct, tag,
+		tag = prep_pci_direct_make_tag(pc, bus, dev, func);
+		class = prep_pci_direct_conf_read(pc, tag,
 		    PCI_CLASS_REG);
 	}
 

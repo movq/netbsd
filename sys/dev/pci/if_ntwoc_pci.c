@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ntwoc_pci.c,v 1.25 2009/05/12 08:23:00 cegger Exp $	*/
+/*	$NetBSD: if_ntwoc_pci.c,v 1.27 2011/07/26 20:51:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 Vixie Enterprises
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_pci.c,v 1.25 2009/05/12 08:23:00 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_pci.c,v 1.27 2011/07/26 20:51:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,8 +96,8 @@ static	void ntwoc_pci_config_interrupts(device_t);
 /*
  * Card specific config register location
  */
-#define PCI_CBMA_ASIC	0x10	/* Configuration Base Memory Address */
-#define PCI_CBMA_SCA	0x18
+#define PCI_CBMA_ASIC PCI_BAR(0)	/* Configuration Base Memory Address */
+#define PCI_CBMA_SCA PCI_BAR(2)
 
 struct ntwoc_pci_softc {
 	/* Generic device stuff */
@@ -240,11 +240,11 @@ ntwoc_pci_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Perform total black magic.  This is not only extremely

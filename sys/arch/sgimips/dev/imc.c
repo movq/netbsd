@@ -1,4 +1,4 @@
-/*	$NetBSD: imc.c,v 1.29 2008/08/23 17:25:54 tsutsui Exp $	*/
+/*	$NetBSD: imc.c,v 1.32 2011/07/01 18:53:46 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2001 Rafal K. Boni
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.29 2008/08/23 17:25:54 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.32 2011/07/01 18:53:46 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.29 2008/08/23 17:25:54 tsutsui Exp $");
 #include <machine/cpu.h>
 #include <machine/locore.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/machtype.h>
 #include <machine/sysconf.h>
 
@@ -61,7 +61,7 @@ static int	imc_match(struct device *, struct cfdata *, void *);
 static void	imc_attach(struct device *, struct device *, void *);
 static int	imc_print(void *, const char *);
 static void	imc_bus_reset(void);
-static void	imc_bus_error(uint32_t, uint32_t, uint32_t, uint32_t);
+static void	imc_bus_error(vaddr_t, uint32_t, uint32_t);
 static void	imc_watchdog_reset(void);
 static void	imc_watchdog_disable(void);
 static void	imc_watchdog_enable(void);
@@ -180,7 +180,7 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 	reg = bus_space_read_4(isc.iot, isc.ioh, IMC_GIO64ARB);
 	reg &= (IMC_GIO64ARB_GRX64 | IMC_GIO64ARB_GRXRT | IMC_GIO64ARB_GRXMST);
 
-	/* Rest of settings are machine/board dependant */
+	/* Rest of settings are machine/board dependent */
 	if (mach_type == MACH_SGI_IP20) {
 		reg |=   IMC_GIO64ARB_ONEGIO;
 	        reg |=  (IMC_GIO64ARB_EXP0RT	| IMC_GIO64ARB_EXP1RT);
@@ -263,7 +263,7 @@ imc_bus_reset(void)
 }
 
 static void
-imc_bus_error(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+imc_bus_error(vaddr_t pc, uint32_t status, uint32_t ipending)
 {
 
 	printf("bus error: cpu_stat %08x addr %08x, gio_stat %08x addr %08x\n",

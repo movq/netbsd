@@ -1,4 +1,4 @@
-/*	$NetBSD: bootmenu.c,v 1.8 2009/09/14 10:42:42 jmcneill Exp $	*/
+/*	$NetBSD: bootmenu.c,v 1.10 2011/08/18 13:20:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -101,7 +101,7 @@ parsebootconf(const char *conf)
 	int cmenu, cbanner, len;
 	int fd, err, off;
 	struct stat st;
-	char *key, *value, *v2;
+	char *next, *key, *value, *v2;
 
 	/* Clear bootconf structure */
 	memset((void *)&bootconf, 0, sizeof(bootconf));
@@ -157,13 +157,22 @@ parsebootconf(const char *conf)
 
 	cmenu = 0;
 	cbanner = 0;
-	for (c = bc; *c; c++) {
+	for (c = bc; *c; c = next) {
 		key = c;
+		/* find end of line */
+		for (; *c && *c != '\n'; c++)
+			/* zero terminate line on start of comment */
+			if (*c == '#')
+				*c = 0;
+		/* zero terminate line */
+		if (*(next = c))
+			*next++ = 0;
 		/* Look for = separator between key and value */
-		for (; *c && *c != '='; c++)
+		for (c = key; *c && *c != '='; c++)
 			continue;
+		/* Ignore lines with no key=value pair */
 		if (*c == '\0')
-			break; /* break if at end of data */
+			continue;
 
 		/* zero terminate key which points to keyword */
 		*c++ = 0;
@@ -232,6 +241,8 @@ parsebootconf(const char *conf)
 			}
 		} else if (!strncmp(key, "clear", 5)) {
 			bootconf.clear = !!atoi(value);
+		} else if (!strncmp(key, "userconf", 8)) {
+			userconf_add(value);
 		}
 	}
 	switch (bootconf.menuformat) {

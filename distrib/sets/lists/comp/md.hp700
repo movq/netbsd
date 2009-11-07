@@ -1,11 +1,11 @@
-# $NetBSD: md.hp700,v 1.5 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.hp700,v 1.8 2011/07/17 23:37:32 dyoung Exp $
 ./usr/include/hp700				comp-c-include
 ./usr/include/hp700/ansi.h			comp-c-include
 ./usr/include/hp700/aout_machdep.h		comp-c-include
 ./usr/include/hp700/asm.h			comp-c-include
 ./usr/include/hp700/autoconf.h			comp-c-include
 ./usr/include/hp700/bswap.h			comp-c-include
-./usr/include/hp700/bus.h			comp-c-include
+./usr/include/hp700/bus.h			comp-obsolete		obsolete
 ./usr/include/hp700/byte_swap.h			comp-c-include
 ./usr/include/hp700/cdefs.h			comp-c-include
 ./usr/include/hp700/cpu.h			comp-c-include
@@ -54,9 +54,10 @@
 ./usr/include/hp700/signal.h			comp-c-include
 ./usr/include/hp700/som.h			comp-c-include
 ./usr/include/hp700/spinlock.h			comp-obsolete		obsolete
-./usr/include/hp700/stdarg.h			comp-c-include
+./usr/include/hp700/stdarg.h			comp-obsolete		obsolete
 ./usr/include/hp700/trap.h			comp-c-include
 ./usr/include/hp700/types.h			comp-c-include
-./usr/include/hp700/varargs.h			comp-c-include
+./usr/include/hp700/varargs.h			comp-obsolete		obsolete
 ./usr/include/hp700/vmparam.h			comp-c-include
 ./usr/include/hp700/wchar_limits.h		comp-c-include
+./usr/libdata/debug/usr/mdec/mkboot.debug	comp-sysutil-debug      debug

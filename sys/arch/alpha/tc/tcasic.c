@@ -1,21 +1,21 @@
-/* $NetBSD: tcasic.c,v 1.42 2009/03/14 15:36:00 dsl Exp $ */
+/* $NetBSD: tcasic.c,v 1.44 2012/02/06 02:14:16 matt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.42 2009/03/14 15:36:00 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.44 2012/02/06 02:14:16 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,10 +46,10 @@ __KERNEL_RCSID(0, "$NetBSD: tcasic.c,v 1.42 2009/03/14 15:36:00 dsl Exp $");
 #include <alpha/tc/tc_conf.h>
 
 /* Definition of the driver for autoconfig. */
-int	tcasicmatch(struct device *, struct cfdata *, void *);
-void	tcasicattach(struct device *, struct device *, void *);
+int	tcasicmatch(device_t, cfdata_t, void *);
+void	tcasicattach(device_t, device_t, void *);
 
-CFATTACH_DECL(tcasic, sizeof (struct device),
+CFATTACH_DECL_NEW(tcasic, 0,
     tcasicmatch, tcasicattach, NULL, NULL);
 
 extern struct cfdriver tcasic_cd;
@@ -60,15 +60,15 @@ int	tcasicprint(void *, const char *);
 int	tcasicfound;
 
 int
-tcasicmatch(struct device *parent, struct cfdata *cfdata, void *aux)
+tcasicmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
-        /* Make sure that we're looking for a TurboChannel ASIC. */
-        if (strcmp(ma->ma_name, tcasic_cd.cd_name))
-                return (0);
+	/* Make sure that we're looking for a TurboChannel ASIC. */
+	if (strcmp(ma->ma_name, tcasic_cd.cd_name))
+	        return (0);
 
-        /* Make sure that the system supports a TurboChannel ASIC. */
+	/* Make sure that the system supports a TurboChannel ASIC. */
 	if ((cputype != ST_DEC_3000_500) && (cputype != ST_DEC_3000_300))
 		return (0);
 
@@ -79,7 +79,7 @@ tcasicmatch(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 void
-tcasicattach(struct device *parent, struct device *self, void *aux)
+tcasicattach(device_t parent, device_t self, void *aux)
 {
 	struct tcbus_attach_args tba;
 	void (*intr_setup)(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4231var.h,v 1.8 2008/04/28 20:23:49 martin Exp $	*/
+/*	$NetBSD: cs4231var.h,v 1.10 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -88,7 +88,8 @@ struct cs4231_softc {
 /*
  * Bus independent code shared by sbus and ebus attachments.
  */
-void	cs4231_common_attach(struct cs4231_softc *, bus_space_handle_t);
+void	cs4231_common_attach(struct cs4231_softc *, device_t,
+			     bus_space_handle_t);
 int	cs4231_transfer_init(struct cs4231_softc *, struct cs_transfer *,
 			     bus_addr_t *, bus_size_t *,
 			     void *, void *, int, void (*)(void *), void *);
@@ -107,7 +108,7 @@ int	cs4231_get_port(void *, mixer_ctrl_t *);
 int	cs4231_query_devinfo(void *, mixer_devinfo_t *);
 int	cs4231_get_props(void *);
 
-void	*cs4231_malloc(void *, int, size_t, struct malloc_type *, int);
-void	cs4231_free(void *, void *, struct malloc_type *);
+void	*cs4231_malloc(void *, int, size_t);
+void	cs4231_free(void *, void *, size_t);
 
 #endif /* _DEV_IC_CS4231VAR_H_ */

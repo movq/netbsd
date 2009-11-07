@@ -1,4 +1,4 @@
-/* $NetBSD: h_macros.h,v 1.2 2009/04/14 10:19:38 pooka Exp $ */
+/* $NetBSD: h_macros.h,v 1.7 2011/06/16 15:33:24 joerg Exp $ */
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -26,15 +26,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_H_MACROS_H_)
-#   error "h_macros.h can only be included once."
-#else
-#   define _H_MACROS_H_
-#endif
+#ifndef SRC_TESTS_H_MACROS_H_
+#define SRC_TESTS_H_MACROS_H_
 
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <atf-c.h>
@@ -46,6 +44,11 @@
 	ATF_CHECK_MSG((x) != (v), "%s: %s", #x, strerror(errno))
 
 #define RL(x) REQUIRE_LIBC(x, -1)
+#define RZ(x)								\
+do {									\
+	int RZ_rv = x;							\
+	ATF_REQUIRE_MSG(RZ_rv == 0, "%s: %s", #x, strerror(RZ_rv));	\
+} while (/*CONSTCOND*/0)
 
 static __inline void
 atf_tc_fail_errno(const char *fmt, ...)
@@ -61,5 +64,21 @@ atf_tc_fail_errno(const char *fmt, ...)
 	strlcat(buf, ": ", sizeof(buf));
 	strlcat(buf, strerror(sverrno), sizeof(buf));
 
-	atf_tc_fail(buf);
+	atf_tc_fail("%s", buf);
 }
+
+static __inline void
+tests_makegarbage(void *space, size_t len)
+{
+	uint16_t *sb = space;
+	uint16_t randval;
+
+	while (len >= sizeof(randval)) {
+		*sb++ = (random() & 0xffff);
+		len -= sizeof(*sb);
+	}
+	randval = (uint16_t)random();
+	memcpy(sb, &randval, len);
+}
+
+#endif

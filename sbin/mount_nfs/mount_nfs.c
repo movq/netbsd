@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_nfs.c,v 1.67 2009/04/03 07:26:07 pooka Exp $	*/
+/*	$NetBSD: mount_nfs.c,v 1.69 2011/08/29 14:35:02 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount_nfs.c	8.11 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: mount_nfs.c,v 1.67 2009/04/03 07:26:07 pooka Exp $");
+__RCSID("$NetBSD: mount_nfs.c,v 1.69 2011/08/29 14:35:02 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -172,7 +172,7 @@ static struct	iso_addr *iso_addr(const char *);
 #endif
 int	mount_nfs(int argc, char **argv);
 /* void	set_rpc_maxgrouplist(int); */
-static void	usage(void);
+__dead static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int
@@ -527,7 +527,7 @@ shownfsargs(const struct nfs_args *nfsargsp)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: mount_nfs %s\n%s\n%s\n%s\n%s\n",
+	(void)fprintf(stderr, "usage: %s %s\n%s\n%s\n%s\n%s\n", getprogname(),
 "[-23bCcdilPpqsTUX] [-a maxreadahead] [-D deadthresh]",
 "\t[-g maxgroups] [-I readdirsize] [-L leaseterm]",
 "\t[-o options] [-R retrycnt] [-r readsize] [-t timeout]",

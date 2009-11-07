@@ -1,4 +1,4 @@
-.\"	$NetBSD: reboot.8,v 1.26 2008/10/21 02:35:01 lukem Exp $
+.\"	$NetBSD: reboot.8,v 1.29 2011/02/16 19:32:26 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)reboot.8	8.1 (Berkeley) 6/9/93
 .\"
-.Dd October 21, 2008
+.Dd February 16, 2011
 .Dt REBOOT 8
 .Os
 .Sh NAME
@@ -39,11 +39,11 @@
 .Nd restarting, powering down and stopping the system
 .Sh SYNOPSIS
 .Nm halt
-.Op Fl dlnpq
+.Op Fl dlnpqvxz
 .Nm poweroff
-.Op Fl dlnq
+.Op Fl dlnqvxz
 .Nm
-.Op Fl dlnq
+.Op Fl dlnqvxz
 .Op Ar arg ...
 .Sh DESCRIPTION
 The
@@ -74,13 +74,34 @@ before halting or restarting.
 .It Fl n
 Do not flush the file system cache.
 This option should be used with extreme caution.
-It can be used if a disk or the processor is on fire.
+It can be used if a disk or a processor is on fire.
 .It Fl p
 Attempt to powerdown the system.
 If the powerdown fails, or the system does not support
 software powerdown, the system will halt.
 This option is only valid for
 .Nm halt .
+.It Fl v
+To enable verbose messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_VERBOSE
+to
+.Xr reboot 2 .
+.It Fl x
+To enable debugging messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_DEBUG
+to
+.Xr reboot 2 .
+.It Fl z
+To silence some shutdown messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_SILENT
+to
+.Xr reboot 2 .
 .It Fl q
 Do not give processes a chance to shut down before halting or restarting.
 This option should not normally be used.

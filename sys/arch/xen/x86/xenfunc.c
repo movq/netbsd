@@ -1,4 +1,4 @@
-/*	$NetBSD: xenfunc.c,v 1.9 2009/10/23 02:32:34 snj Exp $	*/
+/*	$NetBSD: xenfunc.c,v 1.13 2011/11/06 11:40:47 cherry Exp $	*/
 
 /*
  *
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenfunc.c,v 1.9 2009/10/23 02:32:34 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenfunc.c,v 1.13 2011/11/06 11:40:47 cherry Exp $");
 
 #include <sys/param.h>
 
@@ -55,14 +55,13 @@ invlpg(vaddr_t addr)
 {
 	int s = splvm();
 	xpq_queue_invlpg(addr);
-	xpq_flush_queue();
 	splx(s);
 }  
 
-#ifndef __x86_64__
 void
 lldt(u_short sel)
 {
+#ifndef __x86_64__
 	struct cpu_info *ci;
 
 	ci = curcpu();
@@ -76,25 +75,25 @@ lldt(u_short sel)
 		xen_set_ldt(ci->ci_gdt[IDXSELN(sel)].ld.ld_base,
 		    ci->ci_gdt[IDXSELN(sel)].ld.ld_entries);
 	ci->ci_curldt = sel;
-}
 #endif
+}
 
 void
 ltr(u_short sel)
 {
-	__PRINTK(("XXX ltr not supported\n"));
+	panic("XXX ltr not supported\n");
 }
 
 void
 lcr0(u_long val)
 {
-	__PRINTK(("XXX lcr0 not supported\n"));
+	panic("XXX lcr0 not supported\n");
 }
 
 u_long
 rcr0(void)
 {
-	__PRINTK(("XXX rcr0 not supported\n"));
+	/* XXX: handle X86_CR0_TS ? */
 	return 0;
 }
 
@@ -104,7 +103,6 @@ lcr3(vaddr_t val)
 {
 	int s = splvm();
 	xpq_queue_pt_switch(xpmap_ptom_masked(val));
-	xpq_flush_queue();
 	splx(s);
 }
 #endif
@@ -114,7 +112,6 @@ tlbflush(void)
 {
 	int s = splvm();
 	xpq_queue_tlb_flush();
-	xpq_flush_queue();
 	splx(s);
 }
 

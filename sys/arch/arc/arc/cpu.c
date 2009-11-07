@@ -1,9 +1,9 @@
-/*	$NetBSD: cpu.c,v 1.16 2008/07/05 08:46:25 tsutsui Exp $	*/
+/*	$NetBSD: cpu.c,v 1.19 2011/03/06 14:58:42 tsutsui Exp $	*/
 /*	$OpenBSD: cpu.c,v 1.8 1997/04/19 17:19:41 pefo Exp $ */
 
 /*
  * Copyright (c) 1997 Per Fogelstrom
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -34,12 +34,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.16 2008/07/05 08:46:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.19 2011/03/06 14:58:42 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
@@ -72,11 +71,12 @@ static void
 cpuattach(device_t parent, device_t self, void *aux)
 {
 
+	struct cpu_info * const ci = curcpu();
+
+	ci->ci_dev = self;
+	self->dv_private = ci;
+
 	aprint_normal(": ");
 
-#if 1
-	cpu_identify();
-#else /* XXX - before do this, fix pmax, newsmips */
-	cpu_identify(dev);
-#endif
+	cpu_identify(self);
 }

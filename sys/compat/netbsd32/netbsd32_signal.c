@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_signal.c,v 1.32 2009/01/11 02:45:49 christos Exp $	*/
+/*	$NetBSD: netbsd32_signal.c,v 1.36 2011/11/18 03:34:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_signal.c,v 1.32 2009/01/11 02:45:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_signal.c,v 1.36 2011/11/18 03:34:13 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -362,6 +361,8 @@ netbsd32_getcontext(struct lwp *l, const struct netbsd32_getcontext_args *uap, r
 	struct proc *p = l->l_proc;
 	ucontext32_t uc;
 
+	memset(&uc, 0, sizeof(uc));
+
 	mutex_enter(p->p_lock);
 	getucontext32(l, &uc);
 	mutex_exit(p->p_lock);
@@ -481,7 +482,8 @@ netbsd32_____sigtimedwait50(struct lwp *l, const struct netbsd32_____sigtimedwai
 	NETBSD32TOP_UAP(info, siginfo_t);
 	NETBSD32TOP_UAP(timeout, struct timespec);
 
-	return __sigtimedwait1(l, &ua, retval,
+	return sigtimedwait1(l, &ua, retval,
+	    copyin,
 	    netbsd32_sigtimedwait_put_info,
 	    netbsd32_sigtimedwait_fetch_timeout,
 	    netbsd32_sigtimedwait_put_timeout);

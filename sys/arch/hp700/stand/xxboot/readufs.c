@@ -1,10 +1,10 @@
-/*	$NetBSD: readufs.c,v 1.8 2009/03/18 10:22:28 cegger Exp $	*/
+/*	$NetBSD: readufs.c,v 1.10 2011/02/21 02:31:57 itohy Exp $	*/
 /*	from Id: readufs.c,v 1.9 2003/12/16 13:54:11 itohy Exp	*/
 
 /*
  * Read UFS (FFS / LFS)
  *
- * Written in 1999, 2002, 2003 by ITOH Yasufumi (itohy@NetBSD.org).
+ * Written in 1999, 2002, 2003 by ITOH Yasufumi.
  * Public domain.
  *
  * Intended to be used for boot programs (first stage).
@@ -21,7 +21,7 @@ static int ufs_read_indirect(daddr_t blk, int level, void **buf,
 
 #ifdef DEBUG_WITH_STDIO
 void ufs_list_dir(ino32_t dirino);
-int main((int argc, char *argv[]);
+int main(int argc, char *argv[]);
 #endif
 
 #ifdef DEBUG_WITH_STDIO

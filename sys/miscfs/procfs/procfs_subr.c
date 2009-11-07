@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_subr.c,v 1.95 2009/03/15 17:22:38 cegger Exp $	*/
+/*	$NetBSD: procfs_subr.c,v 1.100 2011/09/04 17:32:10 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.95 2009/03/15 17:22:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.100 2011/09/04 17:32:10 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -158,7 +158,8 @@ kmutex_t pfs_ihash_lock;
  * the vnode free list.
  */
 int
-procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid, pfstype pfs_type, int fd, struct proc *p)
+procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid,
+    pfstype pfs_type, int fd, struct proc *p)
 {
 	struct pfsnode *pfs;
 	struct vnode *vp;
@@ -169,7 +170,8 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid, pfstype pfs_type
 	if (*vpp != NULL)
 		return (0);
 
-	if ((error = getnewvnode(VT_PROCFS, mp, procfs_vnodeop_p, &vp)) != 0) {
+	error = getnewvnode(VT_PROCFS, mp, procfs_vnodeop_p, NULL, &vp);
+	if (error) {
 		*vpp = NULL;
 		return (error);
 	}
@@ -286,6 +288,7 @@ procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid, pfstype pfs_type
 	case PFSmounts:	/* /proc/mounts = -r--r--r-- */
 	case PFSloadavg:	/* /proc/loadavg = -r--r--r-- */
 	case PFSstatm:	/* /proc/N/statm = -r--r--r-- */
+	case PFSversion:	/* /proc/version = -r--r--r-- */
 		pfs->pfs_mode = S_IRUSR|S_IRGRP|S_IROTH;
 		vp->v_type = VREG;
 		break;
@@ -460,6 +463,10 @@ procfs_rw(void *v)
 		error = procfs_doemul(curl, p, pfs, uio);
 		break;
 
+	case PFSversion:
+		error = procfs_doversion(curl, p, pfs, uio);
+		break;
+
 #ifdef __HAVE_PROCFS_MACHDEP
 	PROCFS_MACHDEP_NODETYPE_CASES
 		error = procfs_machdep_rw(curl, l, pfs, uio);
@@ -599,9 +606,9 @@ loop:
 		    	if (flags == 0) {
 				mutex_exit(&pfs_ihash_lock);
 			} else {
-				mutex_enter(&vp->v_interlock);
+				mutex_enter(vp->v_interlock);
 				mutex_exit(&pfs_ihash_lock);
-				if (vget(vp, flags | LK_INTERLOCK))
+				if (vget(vp, flags))
 					goto loop;
 			}
 			return (vp);
@@ -620,7 +627,7 @@ procfs_hashins(struct pfsnode *pp)
 	struct pfs_hashhead *ppp;
 
 	/* lock the pfsnode, then put it on the appropriate hash list */
-	vlockmgr(&pp->pfs_vnode->v_lock, LK_EXCLUSIVE);
+	VOP_LOCK(PFSTOV(pp), LK_EXCLUSIVE);
 
 	mutex_enter(&pfs_ihash_lock);
 	ppp = &pfs_hashtbl[PFSPIDHASH(pp->pfs_pid)];
@@ -655,17 +662,17 @@ procfs_revoke_vnodes(struct proc *p, void *arg)
 	for (pfs = LIST_FIRST(ppp); pfs; pfs = pnext) {
 		vp = PFSTOV(pfs);
 		pnext = LIST_NEXT(pfs, pfs_hash);
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		if (vp->v_usecount > 0 && pfs->pfs_pid == p->p_pid &&
 		    vp->v_mount == mp) {
 		    	vp->v_usecount++;
-		    	mutex_exit(&vp->v_interlock);
+		    	mutex_exit(vp->v_interlock);
 			mutex_exit(&pfs_ihash_lock);
 			VOP_REVOKE(vp, REVOKEALL);
 			vrele(vp);
 			mutex_enter(&pfs_ihash_lock);
 		} else {
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 		}
 	}
 	mutex_exit(&pfs_ihash_lock);
@@ -681,7 +688,7 @@ procfs_proc_lock(int pid, struct proc **bunghole, int notfound)
 
 	if (pid == 0)
 		tp = &proc0;
-	else if ((tp = p_find(pid, PFIND_LOCKED)) == NULL)
+	else if ((tp = proc_find(pid)) == NULL)
 		error = notfound;
 	if (tp != NULL && !rw_tryenter(&tp->p_reflock, RW_READER))
 		error = EBUSY;

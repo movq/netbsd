@@ -1,8 +1,10 @@
+/*	$NetBSD: ldapexop.c,v 1.1.1.3 2010/12/12 15:18:11 adam Exp $	*/
+
 /* ldapexop.c -- a tool for performing well-known extended operations */
-/* $OpenLDAP: pkg/ldap/clients/tools/ldapexop.c,v 1.9.2.3 2008/02/11 23:26:38 kurt Exp $ */
+/* OpenLDAP: pkg/ldap/clients/tools/ldapexop.c,v 1.9.2.8 2010/04/15 22:16:50 quanah Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 2005-2008 The OpenLDAP Foundation.
+ * Copyright 2005-2010 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,13 +45,16 @@ usage( void )
 {
 	fprintf( stderr, _("Issue LDAP extended operations\n\n"));
 	fprintf( stderr, _("usage: %s [options] <oid|oid:data|oid::b64data>\n"), prog);
+	fprintf( stderr, _("       %s [options] whoami\n"), prog);
+	fprintf( stderr, _("       %s [options] cancel <id>\n"), prog);
+	fprintf( stderr, _("       %s [options] refresh <DN> [<ttl>]\n"), prog);
 	tool_common_usage();
 	exit( EXIT_FAILURE );
 }
 
 
 const char options[] = ""
-	"d:D:e:h:H:InO:o:p:QR:U:vVw:WxX:y:Y:Z";
+	"d:D:e:h:H:InNO:o:p:QR:U:vVw:WxX:y:Y:Z";
 
 int
 handle_private_option( int i )
@@ -84,16 +89,6 @@ main( int argc, char *argv[] )
 
 	if ( argc - optind < 1 ) {
 		usage();
-	}
-
-	if ( pw_file || want_bindpw ) {
-		if ( pw_file ) {
-			rc = lutil_get_filed_password( pw_file, &passwd );
-			if( rc ) return EXIT_FAILURE;
-		} else {
-			passwd.bv_val = getpassphrase( _("Enter LDAP Password: ") );
-			passwd.bv_len = passwd.bv_val ? strlen( passwd.bv_val ) : 0;
-		}
 	}
 
 	ld = tool_conn_setup( 0, 0 );
@@ -152,8 +147,6 @@ main( int argc, char *argv[] )
 		case 2:
 			dn.bv_val = argv[ 1 ];
 			dn.bv_len = strlen( dn.bv_val );
-
-		case 1:
 			break;
 
 		default:

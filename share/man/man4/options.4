@@ -1,4 +1,4 @@
-.\"	$NetBSD: options.4,v 1.380 2009/06/24 23:10:02 zafer Exp $
+.\"	$NetBSD: options.4,v 1.411.2.1 2012/02/23 18:29:52 riz Exp $
 .\"
 .\" Copyright (c) 1996
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -30,7 +30,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd April 10, 2009
+.Dd January 13, 2012
 .Dt OPTIONS 4
 .Os
 .Sh NAME
@@ -394,13 +394,6 @@ compatibility with
 applications built for the same architecture.
 This currently is limited to the pmax.
 The functionality of this option is unknown.
-.It Cd options COMPAT_DARWIN
-On those architectures that support it, this enables binary compatibility with
-.Tn Darwin
-applications built for the same architecture.
-This feature is highly experimental, it requires COMPAT_MACH and
-EXEC_MACHO and it is currently limited to i386 and powerpc ports of
-.Nx .
 .It Cd options COMPAT_FREEBSD
 On those architectures that support it, this enables binary
 compatibility with
@@ -411,17 +404,6 @@ At the moment this is limited to the i386 port.
 On those architectures that support it, this enables binary
 compatibility with iBCS2 or SVR3 applications built for the same architecture.
 This is currently limited to the i386 and vax ports.
-.It Cd options COMPAT_IRIX
-On those architectures that support it, this enables binary
-compatibility with IRIX o32 binaries built for the same architecture.
-This feature is experimental, and it is currently limited to
-the sgimips port.
-.It Cd options COMPAT_MACH
-On those architectures that support it, this enables the emulation of
-Mach kernel traps for binaries built for the same architecture.
-This feature is highly experimental and it is currently
-limited to the i386 and powerpc ports of
-.Nx .
 .It Cd options COMPAT_OSF1
 On those architectures that support it, this enables binary
 compatibility with
@@ -468,11 +450,6 @@ Currently only some system calls which use
 are adjusted and some binaries which use
 .Xr sysctl 3
 to retrieve network details would not work properly.
-.It Cd options EXEC_MACHO
-On those architectures that support it, this adds support for running
-Mach-O executables.
-This is currently limited to the i386 and powerpc ports of
-.Nx .
 .It Cd options EXEC_ELF_NOTELESS
 Run unidentified ELF binaries as
 .Nx
@@ -688,18 +665,18 @@ Includes code implementing the Berkeley Fast File System
 Most machines need this if they are not running diskless.
 .It Cd file-system EXT2FS
 Includes code implementing the Second Extended File System
-.Po Em EXT2FS Pc ,
+.Po Em ext2 Pc ,
 revision 0 and revision 1 with the
-.Em filetype
-and
+.Em filetype ,
 .Em sparse_super
+and
+.Em large_file
 options.
 This is the most commonly used file system on the Linux operating system,
 and is provided here for compatibility.
 Some of the specific features of
-.Em EXT2FS
+.Em ext2
 like the "behavior on errors" are not implemented.
-This file system can't be used with UID or GID greater than 65535.
 See
 .Xr mount_ext2fs 8
 for details.
@@ -818,18 +795,6 @@ system and all other access.
 See
 .Xr mount_overlay 8
 for details.
-.It Cd file-system PORTAL
-.Bq Em EXPERIMENTAL
-Includes the portal file system.
-This permits interesting tricks like opening
-.Tn TCP
-sockets by opening files in the file system.
-The portal file system is conventionally mounted on
-.Pa /p
-and is partially implemented by a special daemon.
-See
-.Xr mount_portal 8
-for details.
 .It Cd file-system PROCFS
 Includes code for a special file system (conventionally mounted on
 .Pa /proc )
@@ -845,10 +810,11 @@ for details.
 .It Cd file-system UDF
 .Bq Em EXPERIMENTAL
 Includes code for the UDF file system commonly found on CD and DVD
-media but also more and more on USB sticks.
-Useful primarily if you have a CD or a DVD drive, be it a read-only
-or a rewritable device.
-Currently only supports read-access.
+media but also on USB sticks.
+Currently supports read and write access upto UDF 2.01 and somewhat limited
+write support for UDF 2.50.
+It is marked experimental since there is no
+.Xr fsck_udf 8 .
 See
 .Xr mount_udf 8
 for details.
@@ -912,15 +878,12 @@ See
 .Xr mount_tmpfs 8
 for details.
 .It Cd file-system PUFFS
-.Bq Em EXPERIMENTAL
 Includes kernel support for the pass-to-userspace framework file system.
 It can be used to implement file system functionality in userspace.
 See
 .Xr puffs 3
-and
-.Xr puffs 4
 for more details.
-This option is required for sshfs:
+This enables for example sshfs:
 .Xr mount_psshfs 8 .
 .El
 .Ss File System Options
@@ -967,6 +930,21 @@ file systems, although
 .Xr rpc.rquotad 8
 permits them to be accessed over
 .Em NFS .
+.It Cd options QUOTA2
+Enables kernel support for the new file system quotas format.
+See
+.Xr tunefs 8 ,
+.Xr newfs 8 ,
+.Xr mount_mfs 8 ,
+.Xr edquota 8 ,
+and
+.Xr quota 1
+for details.
+Note that quota2 is only supported by
+.Dq ffs
+and
+.Dq mfs
+file systems at this time.
 .It Cd options FFS_EI
 Enable ``Endian-Independent'' FFS support.
 This allows a system to mount an FFS file system created for another
@@ -982,6 +960,8 @@ Disable the
 support in FFS file systems.
 Maybe useful for install media kernels, small memory systems and
 embedded systems which don't require the snapshot support.
+.It Cd options UFS_EXTATTR
+Enable extended attribute support for UFS1 filesystems.
 .It Cd options WAPBL
 Enable
 .Dq Write Ahead Physical Block Logging file system journaling .
@@ -1020,7 +1000,7 @@ required.
 .It Cd options EXT2FS_SYSTEM_FLAGS
 This option changes the behavior of the APPEND and IMMUTABLE flags
 for a file on an
-.Em EXT2FS
+.Em ext2
 file system.
 Without this option, the superuser or owner of the file can
 set and clear them.
@@ -1114,6 +1094,9 @@ Synonym of
 .El
 .Ss Miscellaneous Options
 .Bl -ohang
+.It Cd options CPU_UCODE
+Support cpu microcode loading via
+.Xr cpuctl 8 .
 .It Cd options MEMORY_DISK_DYNAMIC
 This option makes the
 .Xr md 4
@@ -1157,7 +1140,8 @@ Possible values include
 .Dv RB_SINGLE
 (boot in single-user mode).
 .It Cd options MODULAR
-Enables the framework for kernel modules.
+Enables the framework for kernel modules (see
+.Xr module 7 ) .
 .It Cd options VND_COMPRESSION
 Enables the
 .Xr vnd 4
@@ -1168,6 +1152,22 @@ See
 and
 .Xr vnconfig 8
 for more information.
+.It Cd options SPLDEBUG
+Help the kernel programmer find bugs related to the interrupt priority
+level.
+When
+.Fn spllower
+or
+.Fn splraise
+changes the current CPU's interrupt priority level to or from
+.Dv IPL_HIGH ,
+record a backtrace.
+Read
+.Xr return_address 9
+for caveats about collecting backtraces.
+This feature is experimental, and it is only available on i386.
+See
+.Pa sys/kern/subr_spldebug.c .
 .It Cd options TFTPROOT
 Download the root memory disk through TFTP at root mount time.
 This enables the use of a root
@@ -1217,6 +1217,7 @@ operation.
 will employ a user-level PLL when kernel support is unavailable,
 but the in-kernel version has lower latency and more precision, and
 so typically keeps much better time.
+.Pp
 The interface to the kernel
 .Em NTP
 support is provided by the
@@ -1234,17 +1235,20 @@ fractional clock ticks at NTP time-format precision.
 .It Cd options PPS_SYNC
 This option enables a kernel serial line discipline for receiving time
 phase signals from an external reference clock such as a radio clock.
-(The
+.Po
+The
 .Em NTP
 option (which see) must be on if the
 .Em PPS_SYNC
-option is used.)
+option is used
+.Pc .
 Some reference clocks generate a Pulse Per Second (PPS) signal in
 phase with their time source.
 The
 .Em PPS
 line discipline receives this signal on either the data leads
 or the DCD control lead of a serial port.
+.Pp
 .Em NTP
 uses the PPS signal to discipline the local clock oscillator to a high
 degree of precision (typically less than 50 microseconds in time and
@@ -1257,14 +1261,23 @@ This can be used to measure the system interrupt latency and thus calibrate
 to account for it.
 Using
 .Em PPS
-usually requires a
-gadget box
-to convert from TTL to RS-232 signal levels.
+usually requires a gadget box
+to convert from
+.Tn TTL
+to
+.Tn RS-232
+signal levels.
 The gadget box and PPS are described in more detail in the HTML documentation
 for
 .Xr ntpd 8
 in
 .Pa /usr/share/doc/html/ntp .
+.Pp
+.Nx
+currently supports this option in
+.Xr com 4
+and
+.Xr zsc 4 .
 .It Cd options SETUIDSCRIPTS
 Allows scripts with the setuid bit set to execute as the effective
 user rather than the real user, just like binary executables.
@@ -1473,14 +1486,6 @@ even if
 reports false.
 Useful for systems where the cycle counter doesn't run at a constant rate
 (e.g. Soekris boxes).
-.It Cd options XSERVER
-Compiles in kernel support for
-.Tn X11
-on architectures that still use (or can use) the legacy
-.Em pccons
-console drivers rather than
-.Xr wscons 4 .
-These include bebox, i386, shark.
 .It Cd options XSERVER_DDB
 A supplement to XSERVER that adds support for entering
 .Xr ddb 4
@@ -1493,18 +1498,6 @@ Support for
 Number of storage slots per file for
 .Xr fileassoc 9 .
 Default is 4.
-.It Cd options I2C_SCAN
-Scan each i2c bus to determine which addresses respond.
-.Pp
-.Em WARNING !
-Using this option can access some devices in such a
-manner as to leave them in an unstable or unuseable state, and
-can prevent those devices from being properly matched and/or
-attached.
-It can also lock up the entire i2c bus and even
-prevent a machine from completing the boot process.
-Don't use this option unless you know what you're doing and can
-accept all sorts of unforeseen consequences.
 .El
 .Ss Networking Options
 .Bl -ohang
@@ -1525,9 +1518,7 @@ is not invoked directly.
 has no impact on protocols other than
 .Tn IP ,
 such as
-.Tn CLNP
-or
-.Tn XNS ) .
+.Tn CLNP ) .
 .Em GATEWAY
 option also compiles IPv4 and IPv6 fast forwarding code into the kernel.
 .It Cd options ICMPPRINTFS
@@ -1659,9 +1650,19 @@ for details.
 .It Cd options IPSEC
 Includes support for the
 .Tn IPsec
-protocol.
+protocol, using the FAST_IPSEC implementation.
 See
-.Xr ipsec 4
+.Xr fast_ipsec 4
+for details.
+(This option is an alias for the
+.Cd FAST_IPSEC
+option described below.)
+.It Cd options KAME_IPSEC
+Includes support for the
+.Tn IPsec
+protocol, using the KAME implementation.
+See
+.Xr kame_ipsec 4
 for details.
 .It Cd options IPSEC_DEBUG
 Enables debugging code in
@@ -1674,9 +1675,20 @@ for details.
 Includes support for
 .Tn IPsec
 .Tn ESP
-protocol.
+protocol, using the KAME implementation.
 See
-.Xr ipsec 4
+.Xr kame_ipsec 4
+for details.
+.It Cd options FAST_IPSEC
+Includes support for the
+.Tn IPsec
+protocol, using the implementation derived from
+.Ox ,
+relaying on
+.Xr opencrypto 9
+to carry out cryptographic operations.
+See
+.Xr fast_ipsec 4
 for details.
 .It Cd options IPSEC_NAT_T
 Includes support for
@@ -1836,14 +1848,6 @@ may perform better with
 .Em MCLSHIFT
 set to 12 or 13, giving mbuf cluster sizes of 4096 and 8192 bytes,
 respectively.
-.It Cd options NS
-Include support for the
-.Tn Xerox
-.Tn XNS
-protocol stack.
-See
-.Xr ns 4
-for details.
 .It Cd options ISO,TPIP
 Include support for the ubiquitous
 .Tn OSI
@@ -1939,10 +1943,17 @@ This option assumes
 .It Cd options IPFILTER_LOG
 This option, in conjunction with
 .Em pseudo-device ipfilter ,
-enables logging of IP packets using ip-filter.
+enables logging of IP packets using IP-Filter.
+.It Cd options IPFILTER_LOOKUP
+This option enables the
+IP-Filter
+.Xr ippool 8
+functionality to be enabled.
+.It Cd options IPFILTER_COMPAT
+This option enables older IP-Filter binaries to work.
 .It Cd options IPFILTER_DEFAULT_BLOCK
-This option sets the default policy of ip-filter.
-If it is set, ip-filter will block packets by default.
+This option sets the default policy of IP-Filter.
+If it is set, IP-Filter will block packets by default.
 .It Cd options BRIDGE_IPF
 This option causes
 .Em bridge
@@ -2266,7 +2277,7 @@ Programs can be exempted using
 .Xr paxctl 8 .
 .Pp
 See
-.Xr security 8
+.Xr security 7
 for more details.
 .It Cd options PAX_SEGVGUARD=value
 Enables PaX Segvguard.
@@ -2285,7 +2296,7 @@ be done using
 .Xr paxctl 8 .
 .Pp
 See
-.Xr security 8
+.Xr security 7
 for more details.
 .It Cd options PAX_ASLR=value
 Enables PaX ASLR.
@@ -2304,8 +2315,13 @@ be done using
 .Xr paxctl 8 .
 .Pp
 See
-.Xr security 8
+.Xr security 7
 for more details.
+.It Cd options USER_VA0_DISABLE_DEFAULT=value
+Sets the initial value of the flag which controls whether user programs
+can map virtual address 0.
+The flag can be changed at runtime by
+.Xr sysctl 3 .
 .El
 .Ss amiga-specific Options
 .Bl -ohang
@@ -2396,33 +2412,6 @@ Include translation for French keyboards when using
 .Em pccons
 on a Shark.
 .El
-.Ss amd64-specific Options
-.Bl -ohang
-.It Cd options ENHANCED_SPEEDSTEP
-Include support for the
-.Tn Enhanced SpeedStep Technology
-present in newer
-.Tn CPU Ns s .
-.It Cd options EST_FREQ_USERWRITE
-Allow any user to change the frequency of an
-.Tn Enhanced SpeedStep Technology
-capable
-.Tn CPU .
-.It Cd options INTEL_ONDEMAND_CLOCKMOD
-This enables the On Demand Clock Modulation by software
-on Intel
-.Tn CPUs
-supporting the Thermal Monitor feature (TM).
-You can select the duty cycle with
-.Xr sysctl 8
-in the node
-.Em machdep.clockmod
-if supported.
-.It Cd options POWERNOW_K8
-Include support for AMD Athlon 64 PowerNow! and Cool`n'Quiet
-Technology, used to change the CPU voltage and frequency
-on the fly.
-.El
 .Ss atari-specific Options
 .Bl -ohang
 .It Cd options DISKLABEL_AHDI
@@ -2452,36 +2441,6 @@ and Hades.
 .El
 .Ss i386-specific Options
 .Bl -ohang
-.It Cd options ENHANCED_SPEEDSTEP
-Include support for the
-.Tn Enhanced SpeedStep Technology
-present in newer
-.Tn CPU Ns s .
-.It Cd options EST_FREQ_USERWRITE
-Allow any user to change the frequency of an
-.Tn Enhanced SpeedStep Technology
-capable
-.Tn CPU .
-.It Cd options INTEL_ONDEMAND_CLOCKMOD
-This enables the On Demand Clock Modulation by software
-on Intel
-.Tn CPUs
-supporting the Thermal Monitor feature (TM).
-You can select the duty cycle with
-.Xr sysctl 8
-in the node
-.Em machdep.clockmod
-if supported.
-.It Cd options POWERNOW_K7
-Include support for the AMD
-.Tn PowerNow! Technology
-present in AMD Athlon Mobile processors.
-.It Cd options VIA_PADLOCK
-Include support for the
-.Tn AES
-encryption instructions of the
-.Tn VIA PadLock Security engine ,
-which is attached as a provider to the opencrypto framework.
 .It Cd options CPURESET_DELAY=value
 Specifies the time (in millisecond) to wait before doing a hardware reset
 in the last phase of a reboot.
@@ -2496,6 +2455,20 @@ emulators and X servers to run BIOS code, e.g., for some VESA routines.
 .It Cd options USER_LDT
 Include i386-specific system calls for modifying the local descriptor table,
 used by Windows emulators.
+.It Cd options PAE
+Enable
+.Tn PAE (Physical Address Extension)
+mode.
+.Tn PAE
+permits up to 36 bits physical addressing (64GB of physical memory), and
+turns physical addresses to 64 bits entities in the memory management
+subsystem.
+Userland virtual address space remains at 32 bits (4GB).
+.Tn PAE
+mode is required to enable the
+.Tn NX/XD (No-eXecute/eXecute Disable)
+bit for pages, which allows marking certain ones as not being executable.
+Any attempt to execute code from such a page will raise an exception.
 .It Cd options REALBASEMEM=integer
 Overrides the base memory size passed in from the boot block.
 (Value given in kilobytes.)
@@ -2576,6 +2549,12 @@ a Multiboot-compliant boot manager such as GRUB.
 See
 .Xr multiboot 8
 for more information.
+.It Cd options SPLASHSCREEN
+Display a splash screen during boot.
+.It Cd options SPLASHSCREEN_PROGRESS
+Display a progress bar at the splash screen during boot.
+This option requires
+.Em SPLASHSCREEN .
 .El
 .Ss isa-specific Options
 Options specific to
@@ -2776,7 +2755,6 @@ bolded
 .Xr inet 4 ,
 .Xr iso 4 ,
 .Xr md 4 ,
-.Xr ns 4 ,
 .Xr pcibios 4 ,
 .Xr pcmcia 4 ,
 .Xr ppp 4 ,

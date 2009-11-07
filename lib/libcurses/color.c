@@ -1,4 +1,4 @@
-/*	$NetBSD: color.c,v 1.34 2009/07/22 16:57:14 roy Exp $	*/
+/*	$NetBSD: color.c,v 1.38 2011/10/03 12:32:15 roy Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: color.c,v 1.34 2009/07/22 16:57:14 roy Exp $");
+__RCSID("$NetBSD: color.c,v 1.38 2011/10/03 12:32:15 roy Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -60,9 +60,10 @@ __change_pair(short);
 bool
 has_colors(void)
 {
-	if (__tc_Co > 0 && __tc_pa > 0 && ((__tc_AF != NULL &&
-	    __tc_AB != NULL) || __tc_Ip != NULL || __tc_Ic != NULL ||
-	    (__tc_Sb != NULL && __tc_Sf != NULL)))
+	if (max_colors > 0 && max_pairs > 0 &&
+	    ((set_a_foreground != NULL && set_a_background != NULL) ||
+		initialize_pair != NULL || initialize_color != NULL ||
+		(set_background != NULL && set_foreground != NULL)))
 		return(TRUE);
 	else
 		return(FALSE);
@@ -75,7 +76,7 @@ has_colors(void)
 bool
 can_change_color(void)
 {
-	if (__tc_cc)
+	if (can_change)
 		return(TRUE);
 	else
 		return(FALSE);
@@ -98,16 +99,16 @@ start_color(void)
 		return(ERR);
 
 	/* Max colours and colour pairs */
-	if (__tc_Co == -1)
+	if (max_colors == -1)
 		COLORS = 0;
 	else {
-		COLORS = __tc_Co > MAX_COLORS ? MAX_COLORS : __tc_Co;
-		if (__tc_pa == -1) {
+		COLORS = max_colors > MAX_COLORS ? MAX_COLORS : max_colors;
+		if (max_pairs == -1) {
 			COLOR_PAIRS = 0;
 			COLORS = 0;
 		} else {
-			COLOR_PAIRS = (__tc_pa > MAX_PAIRS - 1 ?
-			    MAX_PAIRS - 1 : __tc_pa);
+			COLOR_PAIRS = (max_pairs > MAX_PAIRS - 1 ?
+			    MAX_PAIRS - 1 : max_pairs);
 			 /* Use the last colour pair for curses default. */
 			__default_color = COLOR_PAIR(MAX_PAIRS - 1);
 		}
@@ -119,21 +120,21 @@ start_color(void)
 	_cursesi_screen->COLOR_PAIRS = COLOR_PAIRS;
 
 	/* Reset terminal colour and colour pairs. */
-	if (__tc_oc != NULL)
-		tputs(__tc_oc, 0, __cputchar);
-	if (__tc_op != NULL) {
-		tputs(__tc_op, 0, __cputchar);
+	if (orig_colors != NULL)
+		tputs(orig_colors, 0, __cputchar);
+	if (orig_pair != NULL) {
+		tputs(orig_pair, 0, __cputchar);
 		curscr->wattr &= _cursesi_screen->mask_op;
 	}
 
 	/* Type of colour manipulation - ANSI/TEK/HP/other */
-	if (__tc_AF != NULL && __tc_AB != NULL)
+	if (set_a_foreground != NULL && set_a_background != NULL)
 		_cursesi_screen->color_type = COLOR_ANSI;
-	else if (__tc_Ip != NULL)
+	else if (initialize_pair != NULL)
 		_cursesi_screen->color_type = COLOR_HP;
-	else if (__tc_Ic != NULL)
+	else if (initialize_color != NULL)
 		_cursesi_screen->color_type = COLOR_TEK;
-	else if (__tc_Sb != NULL && __tc_Sf != NULL)
+	else if (set_foreground != NULL && set_background != NULL)
 		_cursesi_screen->color_type = COLOR_OTHER;
 	else
 		return(ERR);		/* Unsupported colour method */
@@ -162,8 +163,8 @@ start_color(void)
 	 * Store these in an attr_t for wattrset()/wattron().
 	 */
 	_cursesi_screen->nca = __NORMAL;
-	if (__tc_NC != -1) {
-		temp_nc = (attr_t) t_getnum(_cursesi_screen->cursesi_genbuf, "NC");
+	if (no_color_video != -1) {
+		temp_nc = (attr_t) t_no_color_video(_cursesi_screen->term);
 		if (temp_nc & 0x0001)
 			_cursesi_screen->nca |= __STANDOUT;
 		if (temp_nc & 0x0002)
@@ -273,6 +274,10 @@ init_pair(short pair, short fore, short back)
 
 	if (pair < 0 || pair >= COLOR_PAIRS)
 		return (ERR);
+
+	if (pair == 0) /* Ignore request for pair 0, it is default. */
+		return OK;
+
 	if (fore >= COLORS)
 		return (ERR);
 	if (back >= COLORS)
@@ -423,7 +428,7 @@ use_default_colors()
 #ifdef DEBUG
 	__CTRACE(__CTRACE_COLOR, "use_default_colors\n");
 #endif
-	
+
 	return(assume_default_colors(-1, -1));
 }
 
@@ -437,7 +442,9 @@ assume_default_colors(short fore, short back)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_COLOR, "assume_default_colors: %d, %d\n",
 	    fore, back);
+	__CTRACE(__CTRACE_COLOR, "assume_default_colors: default_colour = %d, pair_number = %d\n", __default_color, PAIR_NUMBER(__default_color));
 #endif
+
 	/* Swap red/blue and yellow/cyan */
 	if (_cursesi_screen->color_type == COLOR_OTHER) {
 		switch (fore) {
@@ -529,12 +536,12 @@ __set_color( /*ARGSUSED*/ WINDOW *win, attr_t attr)
 		    _cursesi_screen->colour_pairs[pair].back < 0)
 			__unset_color(curscr);
 		if (_cursesi_screen->colour_pairs[pair].fore >= 0)
-			tputs(__parse_cap(_cursesi_screen->tc_AF,
-			    _cursesi_screen->colour_pairs[pair].fore),
+			tputs(tiparm(t_set_a_foreground(_cursesi_screen->term),
+			    (int)_cursesi_screen->colour_pairs[pair].fore),
 			    0, __cputchar);
 		if (_cursesi_screen->colour_pairs[pair].back >= 0)
-			tputs(__parse_cap(_cursesi_screen->tc_AB,
-			    _cursesi_screen->colour_pairs[pair].back),
+			tputs(tiparm(t_set_a_background(_cursesi_screen->term),
+			    (int)_cursesi_screen->colour_pairs[pair].back),
 			    0, __cputchar);
 		break;
 	case COLOR_HP:
@@ -548,12 +555,12 @@ __set_color( /*ARGSUSED*/ WINDOW *win, attr_t attr)
 		    _cursesi_screen->colour_pairs[pair].back < 0)
 			__unset_color(curscr);
 		if (_cursesi_screen->colour_pairs[pair].fore >= 0)
-			tputs(__parse_cap(_cursesi_screen->tc_Sf,
-			    _cursesi_screen->colour_pairs[pair].fore),
+			tputs(tiparm(t_set_foreground(_cursesi_screen->term),
+			    (int)_cursesi_screen->colour_pairs[pair].fore),
 			    0, __cputchar);
 		if (_cursesi_screen->colour_pairs[pair].back >= 0)
-			tputs(__parse_cap(_cursesi_screen->tc_Sb,
-			    _cursesi_screen->colour_pairs[pair].back),
+			tputs(tiparm(t_set_background(_cursesi_screen->term),
+			    (int)_cursesi_screen->colour_pairs[pair].back),
 			    0, __cputchar);
 		break;
 	}
@@ -574,8 +581,8 @@ __unset_color(WINDOW *win)
 	switch (_cursesi_screen->color_type) {
 	/* Clear ANSI forground and background colours */
 	case COLOR_ANSI:
-		if (__tc_op != NULL) {
-			tputs(__tc_op, 0, __cputchar);
+		if (orig_pair != NULL) {
+			tputs(orig_pair, 0, __cputchar);
 			win->wattr &= __mask_op;
 		}
 		break;
@@ -586,8 +593,8 @@ __unset_color(WINDOW *win)
 		/* XXX: need to support Tek style */
 		break;
 	case COLOR_OTHER:
-		if (__tc_op != NULL) {
-			tputs(__tc_op, 0, __cputchar);
+		if (orig_pair != NULL) {
+			tputs(orig_pair, 0, __cputchar);
 			win->wattr &= __mask_op;
 		}
 		break;
@@ -601,7 +608,7 @@ __unset_color(WINDOW *win)
 void
 __restore_colors(void)
 {
-	if (__tc_cc != 0)
+	if (can_change != 0)
 		switch (_cursesi_screen->color_type) {
 		case COLOR_HP:
 			/* XXX: need to re-initialise HP style (Ip) */

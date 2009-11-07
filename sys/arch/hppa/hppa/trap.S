@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.S,v 1.30 2009/05/24 09:17:59 skrll Exp $	*/
+/*	$NetBSD: trap.S,v 1.62 2012/01/03 06:18:24 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -96,6 +96,7 @@
  */
 
 #include "opt_compat_osf1.h"
+#include "opt_multiprocessor.h"
 #include "opt_cputype.h"
 
 /* 
@@ -106,18 +107,14 @@
  */
 
 	.section .data
-	.align	64
-L$trap_tmp_save:
-	.block	TF_PHYS
-	.size	L$trap_tmp_save, .-L$trap_tmp_save
 
+	/* Normal stack alignment */
 	.align	64
 	.export emergency_stack_start, data
 emergency_stack_start:
-	.block	32768		/* XXX must be aligned to 64 */
+	.block	32768
 	.export emergency_stack_end, data
 emergency_stack_end:
-	.block	4
 
 	.text
 
@@ -125,16 +122,15 @@ emergency_stack_end:
  * Kernel Gateway Page (must be at known address)
  *	System Call Gate
  *
- * GATEway instructions have to be at a fixed known locations
- * because their addresses are hard coded in routines such as
- * those in the C library.
+ * GATEway instructions have to be at a fixed known locations because their
+ * addresses are hard coded in routines such as those in the C library.
  */
 
 	.align	NBPG
 	.export	gateway_page, entry
 gateway_page:
 	nop				/* @ 0.C0000000 (Nothing)  */
-	gate,n	bsd_syscall,%r0	/* @ 0.C0000004 (HPUX/BSD) */
+	gate,n	bsd_syscall,%r0		/* @ 0.C0000004 (HPUX/BSD) */
 #ifdef COMPAT_OSF1
 	bl,n	osf_syscall,%r0
 	bl,n	osf_syscall,%r0
@@ -169,8 +165,8 @@ osf_syscall:
 
 bsd_syscall:
 	/*
-	 * set up a space register and a protection id so that
-	 * we can access kernel memory
+	 * Set up a space register and a protection id so that we can access
+	 * kernel memory.
 	 */
 	mfctl	%eiem, %r1
 	mtctl	%r0, %eiem
@@ -205,31 +201,23 @@ syscall_entry:
 	 * %sr0, %r31:	return address
 	 * %sp:		user stack
 	 *
-	 * N.B. we are trying to rely on the fact that bottom of kernel
-	 *	stack contains a print of some past trapframe, so
-	 *	we do not save hard to get information, but do restore
-	 *	the whole context later on return anyway.
-	 * XXXXXX this is very bad. everything must be saved
-	 *
-	 * WHAT ARE WE RELYING ON?
-	 *
 	 */
 
 	/* t2 = curlwp PCB */
-	mfctl	CR_CURLWP, %t3 
-	ldw	L_ADDR(%sr1, %t3), %t2			/* XXX can use ,sl */
+	GET_CURLWP_SPACE(%sr1, %t3)
+	ldw	L_PCB(%sr1, %t3), %t2			/* XXX can use ,sl */
 
 	/*
-	 * NB: Even though t4 is a caller-saved register, we
-	 * save it anyways, as a convenience to __vfork14 and
-	 * any other syscalls that absolutely must have a 
-	 * register that is saved for it.
+	 * NB: Even though t4 is a caller-saved register, we save it anyways, as
+	 * a convenience to __vfork14 and any other syscalls that absolutely
+	 * must have a register that is saved for it.
 	 */
-	/* calculate kernel sp, load, create kernel stack frame */
-	ldo	NBPG+TRAPFRAME_SIZEOF(%t2), %t3	/* see cpu_lwp_fork */
 
-	stw	%t4, TF_R19 -TRAPFRAME_SIZEOF(%sr1, %t3)    /* t4 for vfork */
-	stw	%t1, TF_R22 -TRAPFRAME_SIZEOF(%sr1, %t3)    /* syscall # */
+	/* calculate kernel sp, load, create kernel stack frame */
+	ldo	NBPG+TRAPFRAME_SIZEOF(%t2), %t3		/* see cpu_lwp_fork */
+
+	stw	%t4, TF_R19-TRAPFRAME_SIZEOF(%sr1, %t3)	/* t4 for vfork */
+	stw	%t1, TF_R22-TRAPFRAME_SIZEOF(%sr1, %t3)	/* syscall # */
 	copy	%sp, %t4
 
 	/* gotta save the args, in case we gonna restart */
@@ -243,8 +231,8 @@ syscall_entry:
 	/*
 	 * Make space for the syscall arguments.
 	 *
-	 * Match the offset from %sp to the trapframe with the
-	 * offset in TLABEL(all) for the benefit of ddb.
+	 * Match the offset from %sp to the trapframe with the offset in
+	 * TLABEL(all) for the benefit of ddb.
 	 */
 	stwm	%r0, HPPA_FRAME_SIZE+HPPA_FRAME_MAXARGS(%sr1, %sp)
 
@@ -254,12 +242,11 @@ syscall_entry:
 
 	stw	%r0, HPPA_FRAME_CRP(%sr1, %sp)
 
-	ldil	L%kpsw, %t1
-	ldw	R%kpsw(%sr1, %t1), %t1
+	GET_CURCPU_SPACE(%sr1, %t1)
+	ldw	CI_PSW(%sr1, %t1), %t1
 	stw	%r1, TF_CR15-TRAPFRAME_SIZEOF(%sr1, %t3)	/* eiem ,bc */
 	stw	%t1, TF_CR22-TRAPFRAME_SIZEOF(%sr1, %t3)	/* ipsw */
  
-	/* XXX moved here to be protected from interrupts - why? */
 	mfsp	%sr3, %t1
 	stw	%t1, TF_SR3-TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%ret0, TF_CR8-TRAPFRAME_SIZEOF(%sr1, %t3)	/* pidr1 */
@@ -268,11 +255,11 @@ syscall_entry:
 	mtctl	%r1, %eiem
 
 	/*
-	 * Normally, we only have to save the caller-saved registers,
-	 * because the callee-saved registers will be naturally
-	 * saved and restored by our callee(s).  However, see the
-	 * longer comment in the trap handling code below for the
-	 * reasons why we need to save and restore all of them.
+	 * Normally, we only have to save the caller-saved registers, because
+	 * the callee-saved registers will be naturally saved and restored by
+	 * our callee(s).  However, see the longer comment in the trap handling
+	 * code below for the reasons why we need to save and restore all of
+	 * them.
 	 */
 	stw	%r2 , TF_R2 -TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%r3 , TF_R3 -TRAPFRAME_SIZEOF(%sr1, %t3)
@@ -303,15 +290,13 @@ syscall_entry:
 	stw	%r0, HPPA_FRAME_CRP(%sr1, %sp)
 
 	/*
-	 * Is this copying required... OpenBSD doesn't do it!
-	 *
 	 * Copy Arguments
-	 * unfortunately mmap() under bsd requires 7 words;
-	 * linux is confined to 5, and hpux to 6.
-	 * assuming the `long' syscall it gives us the maximum
-	 * 9 words, which very much overkill for an average of 3.
-	 * we keep it at 10, since bundling will keep it
-	 * at the same speed as 9 anyway.
+	 *
+	 * Unfortunately mmap() under bsd requires 7 words; linux is confined to
+	 * 5, and hpux to 6.  Assuming the `long' syscall it gives us the
+	 * maximum 9 words, which very much overkill for an average of 3.  We
+	 * keep it at 10, since bundling will keep it at the same speed as 9
+	 * anyway.
 	 */
 	/*
 	 * XXX fredette - possible security hole here.
@@ -381,6 +366,9 @@ syscall_entry:
 	stw	%arg3, TF_CR13-TRAPFRAME_SIZEOF(%sr1, %t3)
 #endif
 
+	mfctl	CR_TLS, %arg0
+	stw	%arg0, TF_CR27-TRAPFRAME_SIZEOF(%sr1, %t3)
+
 #if defined(DDB) || defined(KGDB)
 	/*
 	 * Save v2p translation table pointer
@@ -390,7 +378,9 @@ syscall_entry:
 	stw	%arg0, TF_CR23-TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%arg1, TF_CR25-TRAPFRAME_SIZEOF(%sr1, %t3)
 
+	mfctl	%cr24, %arg0
 	mfctl	%cr28, %arg1
+	stw	%arg0, TF_CR24-TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%arg1, TF_CR28-TRAPFRAME_SIZEOF(%sr1, %t3)
 #endif
 
@@ -415,7 +405,7 @@ syscall_entry:
 	CALL(syscall, %r1)
 
 	/* load curlwp's trapframe pointer */
-	mfctl	CR_CURLWP, %r1
+	GET_CURLWP(%r1)
 	ldw	L_MD(%r1), %t3
 
 	.exit
@@ -428,19 +418,17 @@ syscall_entry:
 	.entry
 syscall_return:
 	/* t3 == VA trapframe */
-	/* check for AST ? XXX */
 
-	/* splhigh(), just in case */
+	/* disable interrupts, just in case */
 	mtctl	%r0, %eiem
 
 	/*
-	 * 1a. Copy a `phys' part of the frame into temp store
-	 *	(see a note for trapall)
-	 *	hopefully no page fault would happen on or after the copy,
-	 *	and interrupts are disabled.
+	 * Copy the `phys' part of the frame into CPU local temporary store (see
+	 * a note for trapall).  Hopefully no page fault would happen on or after
+	 * the copy, and interrupts are disabled.
 	 */
-	ldil	L%L$trap_tmp_save, %t2
-	ldo	R%L$trap_tmp_save(%t2), %t2
+	GET_CURCPU(%t2)
+	ldo	CI_TRAPSAVE(%t2), %t2
 
 	ldw  0(%t3), %r1 ! ldw  4(%t3), %t1 ! stw %r1,  0(%t2) ! stw %t1,  4(%t2)
 	ldw  8(%t3), %r1 ! ldw 12(%t3), %t1 ! stw %r1,  8(%t2) ! stw %t1, 12(%t2)
@@ -458,9 +446,8 @@ syscall_return:
 	ldw	TF_R2(%t3), %r2
 	ldw	TF_R3(%t3), %r3
 	/*
-	 * See the comment in the trap handling code below
-	 * about why we need to save and restore all general
-	 * registers under these cases.
+	 * See the comment in the trap handling code below about why we need to
+	 * save and restore all general registers under these cases.
 	 */
 #if defined(DDB) || defined(KGDB) || defined(FPEMUL)
 	ldw	TF_R4(%t3), %r4
@@ -520,21 +507,25 @@ syscall_return:
 	mtctl	%t1, %pidr3
 	mtctl	%t2, %pidr4
 #endif
+	ldw	TF_CR27(%sr3, %t3), %t1
+	ldw	TF_CR30(%sr3, %t3), %t2
+	mtctl	%t1, CR_TLS
+	mtctl	%t2, CR_FPPADDR
+
 	ldw	TF_CR0(%sr3, %t3), %t1
 	mtctl	%t1, %rctr
-	ldw	TF_CR30(%sr3, %t3), %t1
-	mtctl	%t1, CR_UPADDR
+
+	GET_CURCPU_SPACE(%sr3, %t3)
 
 	/*
-	 * clear the system mask, this puts us back into physical mode.
-	 * reload trapframe pointer w/ correspondent PA value.
-	 * sp will be left in virtual until restored from trapframe,
-	 * since we don't use it anyway.
+	 * Clear the system mask, this puts us back into physical mode.  Reload
+	 * the trapframe pointer with the correspondent PA value.  %sp will be
+	 * left in virtual until restored from trapframe, since we don't use it
+	 * anyway.
 	 */
 	ssm	0, %r0
-	ldil	L%L$trap_tmp_save, %t3
-	ldo	R%L$trap_tmp_save(%t3), %t3
-	nop ! nop ! nop ! nop ! nop
+	ldo	CI_TRAPSAVE(%t3), %t3
+	nop ! nop ! nop ! nop ! nop ! nop
 	rsm	RESET_PSW, %r0
 
 	/* finally we can restore the space and offset queues and the ipsw */
@@ -649,7 +640,8 @@ LDILDO(tlbd_l)
 #endif
 
 #if defined(HP8000_CPU) || defined(HP8200_CPU) || \
-    defined(HP8500_CPU) || defined(HP8600_CPU)
+    defined(HP8500_CPU) || defined(HP8600_CPU) || \
+    defined(HP8700_CPU)
 LDILDO(itlb_u)
 LDILDO(itlbna_u)
 LDILDO(dtlb_u)
@@ -664,7 +656,6 @@ LDILDO(tlbd_u)
 #define	DTLBPRE \
 	mfctl	%ior, %r9		/* Offset */			! \
 	mfctl	%isr, %r8		/* Space  */
-	/* CR28XXX according to a popular belief cr28 should be read here */
 
 #define	HPMCPRE	\
 	nop
@@ -743,10 +734,9 @@ os_hpmc:
 	.size	ivaaddr, .-ivaaddr
 
 /*
- * This is the locore support for HPMC and TOC machine checks.
- * In the HPMC case, this is a continuation of the HPMC handler
- * that begins in the interrupt vector table.  In the TOC
- * case, this is the handler installed in page zero.
+ * This is the locore support for HPMC and TOC machine checks.  In the HPMC
+ * case, this is a continuation of the HPMC handler that begins in the interrupt
+ * vector table.  In the TOC case, this is the handler installed in page zero.
  *
  * Notable points about the CPU state for the OS_TOC handler:
  *
@@ -755,7 +745,7 @@ os_hpmc:
  * - CR22 (IPSW) is valid.
  * - All other control registers HVERSION dependent.
  * - The TLB is initialized and invalid.
- * 
+ *
  * Notable points about the CPU state for the OS_HPMC handler:
  *
  * - The PSW M bit is 1, all other PSW bits are 0.
@@ -764,13 +754,12 @@ os_hpmc:
  * - All other control registers HVERSION dependent.
  * - The TLB is unchanged.
  *
- * The TOC CPU state is actually trickier.  Whereas in the HPMC 
- * case, we can return to virtual mode right away, in the TOC 
- * case we can't return to virtual mode until the kernel mapping 
- * is reloaded into the BTLB.
- * 
- * Otherwise, we set up the kernel context, move onto the 
- * emergency stack, and call hppa_machine_check.
+ * The TOC CPU state is actually trickier.  Whereas in the HPMC case, we can
+ * return to virtual mode right away, in the TOC case we can't return to virtual
+ * mode until the kernel mapping is reloaded into the BTLB.
+ *
+ * Otherwise, we set up the kernel context, move onto the emergency stack, and
+ * call hppa_machine_check.
  */
 ENTRY_NOPROFILE(os_toc, 0)
 	/* This loads %arg0 and nullifies the next instruction. */
@@ -807,10 +796,10 @@ ALTENTRY(os_hpmc_cont)
 	mtctl	%r1, CR_VTOP
 
 	/* Disable interrupts for the long haul. */
-	ldil	L%kpsw, %t1
-	ldw	R%kpsw(%t1), %r1
+	GET_CURCPU(%t1)
+	ldw	CI_PSW(%t1), %r1
 	depi	0, PSW_I_POS, 1, %r1
-	stw	%r1, R%kpsw(%t1)
+	stw	%r1, CI_PSW(%t1)
 
 	/* Reload the global data pointer. */
 	ldil	L%$global$, %dp
@@ -856,8 +845,8 @@ ALTENTRY(os_hpmc_cont)
 L$check_do_rfi:
 
 	/* Load IPSW. */
-	ldil	L%kpsw, %r1
-	ldw	R%kpsw(%r1), %r1
+	GET_CURCPU(%r1)
+	ldw	CI_PSW(%r1), %r1
 	mtctl	%r1, %ipsw
 
 	/* Get the address of hppa_machine_check. */
@@ -886,178 +875,157 @@ ALTENTRY(os_toc_end)
 EXIT(TLABEL(hpmc))
 
 /*
- * This handles all assist emulation traps.  We break
- * these down into three categories: emulate special
- * function unit, emulate non-FPU coprocessor, and
- * emulate FPU coprocessor, and dispatch accordingly.
+ * This handles all assist emulation traps.  We break these down into three
+ * categories and dispatch accordingly. The categories are:
+ *
+ *  - emulate special function unit,
+ *  - emulate non-FPU coprocessor, and
+ *  - emulate FPU coprocessor.
+ *
  */
 	.export TLABEL(emu), entry
 LEAF_ENTRY_NOPROFILE(TLABEL(emu))
 
 	/*
-	 * Save %arg0 and load it with the instruction
-	 * that caused the emulation trap.
+	 * Save %arg0 and load it with the instruction that caused the emulation
+	 * trap.
 	 */
 	mtctl	%arg0, %tr2
 	mfctl	%iir, %arg0
 	
 	/*
-	 * If the opcode field in the instruction is 4,
-	 * indicating a special function unit SPOP
-	 * instruction, branch to emulate an sfu.
-	 * If the opcode field is 0xe, then it's an FPU instruction.
+	 * If the opcode field in the instruction is 4, indicating a special
+	 * function unit SPOP instruction, branch to emulate an sfu.  If the
+	 * opcode field is 0xe, then it's an FPU instruction.
 	 */
 	extru	%arg0, 5, 6, %r1
 	comib,=,n 4, %r1, L$emulate_sfu
 	comib,=,n 0xe, %r1, hppa_fpu_nop0
 
 	/*
-	 * If the uid field in the instruction is not
-	 * zero or one, indicating a coprocessor other
-	 * than an FPU, branch to emulate a non-FPU
+	 * If the uid field in the instruction is not zero or one, indicating a
+	 * coprocessor other than an FPU, branch to emulate a non-FPU
 	 * coprocessor.
 	 */
 	extru	%arg0, 25, 3, %r1
 	comib,<<,n 1, %r1, L$emulate_coproc
 
 	/*
-	 * If we're still here, this is a FPU 
-	 * coprocessor instruction.  That we trapped
-	 * to emulate it means one of three things.
+	 * If we're still here, this is a FPU coprocessor instruction.  That we
+	 * trapped to emulate it means one of three things.
 	 *
-	 * If we do not have a hardware FPU, we need
-	 * to emulate this instruction.
+	 * If we do not have a hardware FPU, we need to emulate this instr-
+	 * uction.
 	 *
-	 * If we do have a hardware FPU but it is
-	 * disabled, we trapped because the current
-	 * process' state is not loaded into the
-	 * FPU.  We load that state in, possibly
-	 * swapping out another process' state first.
+	 * If we do have a hardware FPU but it is disabled, we trapped because
+	 * the current process' state is not loaded into the FPU.  We load that
+	 * state in, possibly swapping out another process' state first.
 	 *
-	 * If we do have a hardware FPU and it is
-	 * enabled, we trapped because of an
-	 * instruction that isn't supported by this
-	 * FPU, and so we need to emulate it.
+	 * If we do have a hardware FPU and it is enabled, we trapped because of
+	 * an instruction that isn't supported by this FPU, and so we need to
+	 * emulate it.
 	 */
 
 	/*
-	 * As an optimization, hppa_fpu_bootstrap
-	 * replaces this branch instruction with a
-	 * nop if there is a hardware FPU.
+	 * As an optimization, hppa_fpu_bootstrap replaces this branch inst-
+	 * ruction with a nop if there is a hardware FPU.
 	 *
-	 * Otherwise, this is the branch to emulate
-	 * an FPU coprocessor.
+	 * Otherwise, this is the branch to emulate an FPU coprocessor.
 	 */
 ALTENTRY(hppa_fpu_nop0)
 	b,n	L$emulate_fpu
 
 	/*
-	 * We have a hardware FPU.  If it is enabled,
-	 * branch to emulate the instruction.
+	 * We have a hardware FPU.  If it is enabled,  branch to emulate the
+	 * instruction.
 	 */
 	mfctl	%ccr, %arg0
 	extru,= %arg0, 25, 2, %r1
 	b,n	L$emulate_fpu
 
 	/*
-	 * The hardware FPU is disabled, so we need to swap 
-	 * in the FPU state of the process whose uspace
-	 * physical address in CR_UPADDR.  We may also need 
-	 * to swap out the FPU state of any process whose 
-	 * uspace physical address is in the fpu_cur_uspace 
-	 * variable.
+	 * The hardware FPU is disabled, so we need to swap in the FPU state of
+	 * the LWP whose uspace physical address in CR_UPADDR.  We may also
+	 * need to swap out the FPU state of any LWP whose uspace physical
+	 * address is in curcpu()->ci_fpu_state.
 	 */
 	
 	/*
-	 * So far, the CTRAP() macro has saved %r1 in
-	 * %tr7, and the dispatching above has saved
-	 * %arg0 in tr2.  Save the other registers that 
-	 * we want to use.  hppa_fpu_swap deliberately 
-	 * uses only these registers and %r1 and %arg0.
+	 * So far, the CTRAP() macro has saved %r1 in %tr7, and the dispatching
+	 * above has saved %arg0 in tr2.  Save the other registers that we want
+	 * to use.  hppa_fpu_swap deliberately uses only these registers and %r1
+	 * and %arg0.
 	 */
-	mtctl	%arg1, %tr3
+	mtctl	%arg1, %tr4
 	mtctl	%rp, %tr5
 
-	/*
-	 * Call hppa_fpu_swap.
-	 */
-	ldil	L%fpu_cur_uspace, %arg0
-	ldw	R%fpu_cur_uspace(%arg0), %arg0
-	mfctl	CR_UPADDR, %arg1
+	/* Call hppa_fpu_swap. */
+	GET_CURCPU(%arg0)
+	ldw	CI_FPU_STATE(%arg0), %arg0
+	mfctl	CR_FPPADDR, %arg1
 	blr	0, %rp
 	b	hppa_fpu_swap
 	nop
 	
 	/* Restore registers and rfi. */
 	mfctl	%tr5, %rp
-	mfctl	%tr3, %arg1
+	mfctl	%tr4, %arg1
 	mfctl	%tr2, %arg0
 	mfctl	%tr7, %r1
 	rfi
 	nop
 
 	/*
-	 * We branch here to emulate a special function
-	 * unit instruction.  On entry, %r1 is saved in %tr7
-	 * (courtesy of CTRAP), and %arg0 is saved in %tr2
-	 * (courtesy of the sfu/coprocessor dispatcher).
+	 * We branch here to emulate a special function unit instruction.  On
+	 * entry, %r1 is saved in %tr7 (courtesy of CTRAP), and %arg0 is saved
+	 * in %tr2 (courtesy of the sfu/coprocessor dispatcher).
 	 */
 L$emulate_sfu:
 	/*
-	 * Currently we just restore %arg0 and
-	 * trap with an illegal instruction.
+	 * Currently we just restore %arg0 and trap with an illegal instruction.
 	 */
 	mfctl	%tr2, %arg0
 	b	TLABEL(all)
 	ldi	T_ILLEGAL, %r1
 
 	/*
-	 * We branch here to emulate a non-FPU coprocessor
-	 * instruction.  On entry, %r1 is saved in %tr7
-	 * (courtesy of CTRAP), and %t1 is saved in %tr2
-	 * (courtesy of the sfu/coprocessor dispatcher).
+	 * We branch here to emulate a non-FPU coprocessor instruction.  On
+	 * entry, %r1 is saved in %tr7 (courtesy of CTRAP), and %t1 is saved in
+	 * %tr2 (courtesy of the sfu/coprocessor dispatcher).
 	 */
 L$emulate_coproc:
 	/*
-	 * Currently we just restore %arg0 and
-	 * trap with an illegal instruction.
+	 * Currently we just restore %arg0 and trap with an illegal instruction.
 	 */
 	mfctl	%tr2, %arg0
 	b	TLABEL(all)
 	ldi	T_ILLEGAL, %r1
 
 	/*
-	 * We branch here to emulate an FPU coprocessor
-	 * instruction.  On entry, %r1 is saved in %tr7
-	 * (courtesy of CTRAP), and %t1 is saved in %tr2
+	 * We branch here to emulate an FPU coprocessor instruction.  On entry,
+	 * %r1 is saved in %tr7 (courtesy of CTRAP), and %t1 is saved in %tr2
 	 * (courtesy of the sfu/coprocessor dispatcher).
 	 */
 L$emulate_fpu:
 	/*
-	 * We get back to C via the normal generic trap 
-	 * mechanism, as opposed to switching to a special 
-	 * stack, setting up a trapframe, etc., ourselves,
+	 * We get back to C via the normal generic trap mechanism, as opposed to
+	 * switching to a special stack, setting up a trapframe, etc. ourselves,
 	 * for three reasons.
 	 *
-	 * One, I want to turn interrupts back on, since
-	 * the emulation code might not be fast.  Two, 
-	 * because the instruction to emulate might be
-	 * a load or a store, I need to turn address
-	 * translation back on (i.e., return to virtual
-	 * mode.)  Third, doing both of those plus
-	 * setting up a trapframe is a pain, and the
-	 * generic trap handling already does it all.
+	 * One, I want to turn interrupts back on, since the emulation code
+	 * might not be fast.  Two, because the instruction to emulate might be
+	 * a load or a store, I need to turn address translation back on (i.e.,
+	 * return to virtual mode.)  Third, doing both of those plus setting up
+	 * a trapframe is a pain, and the generic trap handling already does it
+	 * all.
 	 *
-	 * To relieve trap() from having to check for
-	 * sfu and non-FPU instructions again, it assumes
-	 * that these kinds of instructions have already 
-	 * been translated into some other trap type (as 
-	 * they have, by the above L$emulate_sfu and 
-	 * L$emulate_coproc), and all T_EMULATION | T_USER 
-	 * traps are FPU instructions that need emulating.
+	 * To relieve trap() from having to check for sfu and non-FPU inst-
+	 * ructions again, it assumes that these kinds of instructions have
+	 * already been translated into some other trap type (as they have, by
+	 * the above L$emulate_sfu and L$emulate_coproc), and all
+	 * T_EMULATION | T_USER traps are FPU instructions that need emulating.
 	 *
-	 * So we just restore %arg0 and trap with
-	 * T_EMULATION.
+	 * So we just restore %arg0 and trap with T_EMULATION.
 	 */
 	mfctl	%tr2, %arg0
 	b	TLABEL(all)
@@ -1065,25 +1033,25 @@ L$emulate_fpu:
 EXIT(TLABEL(emu))
 
 /*
- * void hppa_fpu_swap(paddr_t out, paddr_t in);
- * or
- * void hppa_fpu_swap(struct pcb *out, NULL);
+ * void hppa_fpu_swapout(struct pcb *out);
+ * void hppa_fpu_swap(struct fpreg *out, struct fpreg *in);
  */
-LEAF_ENTRY_NOPROFILE(hppa_fpu_swap)
+LEAF_ENTRY_NOPROFILE(hppa_fpu_swapout)
+	ldw	PCB_FPREGS(%arg0), %arg0
+	copy	%r0, %arg1
+
+ALTENTRY(hppa_fpu_swap)
 
 	/*
-	 * Note that this function must work in 
-	 * physical mode as well as virtual mode,
-	 * because it can be called by a trap
-	 * handler.  This also further restricts 
-	 * the registers we can use.  We can only
-	 * use %arg0, %arg1, and %r1.
+	 * Note that this function must work in physical mode as well as virtual
+	 * mode, because it can be called by a trap handler.  This also further
+	 * restricts the registers we can use.  We can only use %arg0, %arg1,
+	 * and %r1.
 	 */
 
 	/*
-	 * Assuming that out and in aren't both NULL,
-	 * we will have to run coprocessor instructions,
-	 * so we'd better enable it.
+	 * Assuming that out and in aren't both NULL, we will have to run co-
+	 * processor instructions, so we'd better enable it.
 	 * 
 	 * Also, branch if there's no FPU state to swap out.
 	 */
@@ -1095,7 +1063,6 @@ LEAF_ENTRY_NOPROFILE(hppa_fpu_swap)
 	/*
 	 * Swap out the current FPU state.
 	 */
-	ldo	PCB_FPREGS(%arg0), %arg0
 	fstds,ma %fr0 , 8(%arg0)	/* fr0 must be saved first */
 	fstds,ma %fr1 , 8(%arg0)
 	fstds,ma %fr2 , 8(%arg0)
@@ -1145,26 +1112,23 @@ LEAF_ENTRY_NOPROFILE(hppa_fpu_swap)
 L$fpu_swap_in:
 
 	/*
-	 * Stash the incoming user structure in
-	 * fpu_cur_uspace.  Because this variable
-	 * holds a physical address, this means 
-	 * that hppa_fpu_swap can only be called 
-	 * with a non-zero user_in from physical 
-	 * mode (i.e., from the emulation assist
-	 * trap handler).  And that's exactly
-	 * what happens now.
+	 * Stash the incoming user structure in curcpu->ci_fpu_state.  Because
+	 * this variable holds a physical address, this means that hppa_fpu_swap
+	 * can only be called with a non-zero user_in from physical mode (i.e.,
+	 * from the emulation assist trap handler).  And that's exactly what
+	 * happens now.
 	 *
-	 * So stash fpu_cur_uspace, branching
-	 * past the swap-in code if it is zero.
+	 * So stash ci->ci_fpu_state, branching past the swap-in code if it is
+	 * zero.
 	 */
-	ldil	L%fpu_cur_uspace, %r1
+	GET_CURCPU(%r1)
 	comb,=	%r0, %arg1, L$fpu_no_swap_in
-	stw	%arg1, R%fpu_cur_uspace(%r1)
+	stw	%arg1, CI_FPU_STATE(%r1)
 
 	/*
 	 * Swap in the new FPU state.
 	 */
-	ldo	PCB_FPREGS+31*8(%arg1), %arg1
+	ldo	31*8(%arg1), %arg1
 	fldds,ma -8(%arg1), %fr31
 	fldds,ma -8(%arg1), %fr30
 	fldds,ma -8(%arg1), %fr29
@@ -1226,7 +1190,7 @@ L$fpu_no_swap_in:
 	depi	0, 25, 2, %r1
 	b	L$fpu_swap_done
 	mtctl	%r1, %ccr
-EXIT(hppa_fpu_swap)
+EXIT(hppa_fpu_swapout)
 
 	/* Construct the virtual address tag. */
 	/* NB: it is legal for off and t to be the same. */
@@ -1236,23 +1200,9 @@ EXIT(hppa_fpu_swap)
 	depi	1, 0, 1, t		/* and set the valid bit */
 
 #if 0
-	.section .bss
-	.export	dtlb_c, data
-	.export	tlbd_c, data
-	.export	itlb_c, data
-#if 0
 	BSS(dtlb_c, 8)
 	BSS(tlbd_c, 8)
 	BSS(itlb_c, 8)
-#else
-dtlb_c:
-	.block 8
-tlbd_c:
-	.block 8
-itlb_c:
-	.block 8
-#endif
-	.text
 
 	/* XXX this touches tr5, which it should not, perhaps */
 #define	TLB_STATS_PRE(t) \
@@ -1278,7 +1228,6 @@ itlb_c:
 #define	TLB_STATS_AFT(t)	/**/
 #endif
 
-#if defined(HP7000_CPU) || defined(HP7100_CPU) || defined(HP7200_CPU)
 #define	TLB_PULL(bits,lbl)						! \
 	/* space:pgaddr -- %r8:%r9 */					! \
 	mfctl	CR_VTOP, %r16						! \
@@ -1301,15 +1250,46 @@ itlb_c:
 	addi	2, %r25, %r25						! \
 	extru	%r17, 24, 25, %r17
 
-	.align	32
 /*
- * This is a handler for interruption 20, "TLB dirty bit trap".  It
- * is used on the PA7000 (PCX), PA7000 (PCX-S), and PA7100 (PCX-T). XXXNH
+ * possible optimizations:
+ *	change pte to reduce number of shifts
+ *	reorder to reduce stalls
+ */
+#define	TLB_PULL_L(bits,lbl)						! \
+	/* space:pgaddr -- %r8:%r9 */					! \
+	mfctl	CR_VTOP, %r16						! \
+	ldwx,s	%r8(%r16), %r17		/* space -> page directory */	! \
+	extru	%r9, 9, 10, %r25					! \
+	combt,=,n %r0, %r17, lbl					! \
+	ldwx,s	%r25(%r17), %r24	/* page -> page table */	! \
+	extru	%r9, 19, 10, %r16					! \
+	combt,=,n %r0, %r24, lbl					! \
+	ldwx,s	%r16(%r24), %r17	/* va -> pa:prot */		! \
+	sh2addl	%r16, %r24, %r25					! \
+	combt,=,n %r0, %r17, lbl					! \
+	copy	%r17, %r16						! \
+	depi	(bits), 21+bits, 1+bits, %r17				! \
+	sub,=	%r16, %r17, %r0		/* do not store if unchanged */	! \
+	stws	%r17, 0(%r25)		/* store back w/ the bits */	! \
+	shd	%r17, %r0, 13, %r25					! \
+	dep	%r8, 30, 15, %r25	/* mix0r the pid from the sid */! \
+	dep	%r0, 31, 12, %r17	/* needed ? */			! \
+	addi	2, %r25, %r25						! \
+	extru	%r17, 24, 25, %r17	/* tlbbtop(%r17) */		! \
+	sync
+
+#if defined(HP7000_CPU) || defined(HP7100_CPU) || defined(HP7200_CPU)
+
+	.align	32
+
+/*
+ * This is a handler for interruption 20, "TLB dirty bit trap".  It is used on
+ * the PA7000 (PCX), PA7000 (PCX-S), and PA7100 (PCX-T).
  * Only shadowed registers are available, and they are:
  *
  * %r1 = C trap number
- * %r8 = data address space identifier
- * %r9 = data address offset
+ * %r8 = data address space identifier.  Copied from %isr.
+ * %r9 = data address offset.  Copied from %ior.
  * %r16 = undefined
  * %r17 = undefined
  * %r24 = undefined
@@ -1331,15 +1311,13 @@ ALTENTRY(TLABEL(tlbd_x))
 EXIT(TLABEL(tlbd_s))
 
 /*
- * This is a handler for interruption 6, "Instruction TLB miss fault",
- * and interruption 16, "Non-access instruction TLB miss fault".  It
- * is used on the PA7000 (PCX), PA7000 (PCX-S), PA7100 (PCX-T) and
- * PA7200 (PCX-T')
+ * This is a handler for interruption 6, "Instruction TLB miss fault". It is
+ * used on the PA7000 (PCX), PA7000 (PCX-S), PA7100 (PCX-T) and PA7200 (PCX-T')
  * Only shadowed registers are available, and they are:
  *
  * %r1 = C trap number
- * %r8 = instruction address space identifier
- * %r9 = instruction address offset
+ * %r8 = instruction address space identifier. Copied from %pcsq.
+ * %r9 = instruction address offset. Copied from %pcoq.
  * %r16 = undefined
  * %r17 = undefined
  * %r24 = undefined
@@ -1363,15 +1341,13 @@ ALTENTRY(TLABEL(itlb_x))
 EXIT(TLABEL(itlb_s))
 
 /*
- * This is a handler for interruption 15, "Data TLB miss fault",
- * and interruption 17, "Non-access data TLB miss fault".  It is
- * used on the PA7000 (PCX), PA7000 (PCX-S), PA7100 (PCX-T) and
- * PA7200 (PCX-T')
+ * This is a handler for interruption 15, "Data TLB miss fault".  It is used on
+ * the PA7000 (PCX), PA7000 (PCX-S), PA7100 (PCX-T) and PA7200 (PCX-T').
  * Only shadowed registers are available, and they are:
  *
  * %r1 = C trap number
- * %r8 = data address space identifier
- * %r9 = data address offset
+ * %r8 = data address space identifier.  Copied from %isr.
+ * %r9 = data address offset.  Copied from %ior.
  * %r16 = undefined
  * %r17 = undefined
  * %r24 = undefined
@@ -1392,6 +1368,22 @@ ALTENTRY(TLABEL(dtlb_x))
 	nop
 EXIT(TLABEL(dtlb_s))
 
+/*
+ * This is a handler for interruption 16, "Non-access instruction TLB miss
+ * fault", and interrupt 17, "Non-access data TLB miss fault / Non-access data
+ * page fault".  It is used on the PA7000 (PCX), PA7000 (PCX-S), PA7100 (PCX-T)
+ * and PA7200 (PCX-T').
+ *
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = instruction address space identifier.  Copied from %isr.
+ * %r9 = instruction address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(dtlbna_s))
 ALTENTRY(TLABEL(itlbna_s))
 ALTENTRY(TLABEL(dtlbna_t))
@@ -1442,64 +1434,22 @@ EXIT(TLABEL(dtlbna_s))
 #define	IDTLBAF(r)	.word	0x04001440 | ((r) << 16)
 #define	IDTLBPF(r)	.word	0x04001400 | ((r) << 16)
 
-/*
- * possible optimizations:
- *	change pte to reduce number of shifts
- *	reorder to reduce stalls
- */
-#define	TLB_PULL_L(bits,lbl)						! \
-	/* space:pgaddr -- %r8:%r9 */					! \
-	mfctl	CR_VTOP, %r16						! \
-	ldwx,s	%r8(%r16), %r17		/* space -> page directory */	! \
-	extru	%r9, 9, 10, %r25					! \
-	combt,=,n %r0, %r17, lbl					! \
-	ldwx,s	%r25(%r17), %r24	/* page -> page table */	! \
-	extru	%r9, 19, 10, %r16					! \
-	combt,=,n %r0, %r24, lbl					! \
-	ldwx,s	%r16(%r24), %r17	/* va -> pa:prot */		! \
-	sh2addl	%r16, %r24, %r25					! \
-	combt,=,n %r0, %r17, lbl					! \
-	copy	%r17, %r16						! \
-	depi	(bits), 21+bits, 1+bits, %r17				! \
-	sub,=	%r16, %r17, %r0		/* do not store if unchanged */	! \
-	stws	%r17, 0(%r25)		/* store back w/ the bits */	! \
-	shd	%r17, %r0, 13, %r25					! \
-	dep	%r8, 30, 15, %r25	/* mix0r the pid from the sid */! \
-	dep	%r0, 31, 12, %r17	/* needed ? */			! \
-	addi	2, %r25, %r25						! \
-	extru	%r17, 24, 25, %r17	/* tlbbtop(%r17) */		! \
-	sync
-
-/*
- * This is a handler for interruption 20, "TLB dirty bit trap".  It
- * is used on the PA7100LC (PCX-L), PA7300LC (PCX-L2), PA8000 (PCX-U),
- * PA8200 (PCX-W), PA8500 (PCX-W), and PA8600 (PCX-W+).  Only shadowed 
- * registers are available, and they are:
- *
- * %r1 = C trap number
- * %r8 = data address space identifier
- * %r9 = data address offset
- * %r16 = undefined
- * %r17 = undefined
- * %r24 = undefined
- * %r25 = undefined
- */
-
-/*
- * This is a handler for interruption 20, "TLB dirty bit trap".  It
- * is used on the PA7100LC (PCX-L), PA7300LC (PCX-L2). Only shadowed
- * registers are available, and they are:
- *
- * %r1 = C trap number
- * %r8 = data address space identifier
- * %r9 = data address offset
- * %r16 = undefined
- * %r17 = undefined
- * %r24 = undefined
- * %r25 = undefined
- */
-
 	.align	32
+
+/*
+ * This is a handler for interruption 20, "TLB dirty bit trap".  It is used on
+ * the PA7100LC (PCX-L), PA7300LC (PCX-L2).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = data address space identifier.  Copied from %ior.
+ * %r9 = data address offset.  Copied from %isr.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
+
 LEAF_ENTRY_NOPROFILE(TLABEL(tlbd_l))
 	TLB_STATS_PRE(tlbd)
 	TLB_PULL_L(1, TLABEL(all))
@@ -1519,14 +1469,13 @@ LEAF_ENTRY_NOPROFILE(TLABEL(tlbd_l))
 EXIT(TLABEL(tlbd_l))
 
 /*
- * This is a handler for interruption 6, "Instruction TLB miss fault",
- * and interruption 16, "Non-access instruction TLB miss fault".  It
- * is used on the PA7100LC (PCX-L), PA7300LC (PCX-L2).  Only shadowed
- * registers are available, and they are:
+ * This is a handler for interruption 6, "Instruction TLB miss fault".  It is
+ * used on the PA7100LC (PCX-L), PA7300LC (PCX-L2).
+ * Only shadowed registers are available, and they are:
  *
  * %r1 = C trap number
- * %r8 = instruction address space identifier
- * %r9 = instruction address offset
+ * %r8 = instruction address space identifier.  Copied from %pcsq.
+ * %r9 = instruction address offset.  Copied from %pcoq.
  * %r16 = undefined
  * %r17 = undefined
  * %r24 = undefined
@@ -1550,6 +1499,20 @@ LEAF_ENTRY_NOPROFILE(TLABEL(itlb_l))
 	nop
 EXIT(TLABEL(itlb_l))
 
+/*
+ * This is a handler for interruption 16, "Non-access instruction TLB miss
+ * fault", and interrupt 17, "Non-access data TLB miss fault / Non-access data
+ * page fault".  It is used on the PA7100LC (PCX-L), PA7300LC (PCX-L2).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = instruction address space identifier.  Copied from %isr.
+ * %r9 = instruction address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(dtlbna_l))
 ALTENTRY(TLABEL(itlbna_l))
 	TLB_STATS_PRE(dtlb)
@@ -1579,6 +1542,19 @@ L$dtlbna_l_fake:
 	nop
 EXIT(TLABEL(dtlbna_l))
 
+/*
+ * This is a handler for interruption 15, "Data TLB miss fault".  It is used on
+ * the PA7100LC (PCX-L), PA7300LC (PCX-L2).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = instruction address space identifier.  Copied from %isr.
+ * %r9 = instruction address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(dtlb_l))
 	TLB_STATS_PRE(dtlb)
 	TLB_PULL_L(0, TLABEL(all))
@@ -1631,7 +1607,10 @@ L$dtlb_done_l:
 EXIT(TLABEL(dtlb_l))
 #endif /* defined(HP7100LC_CPU) || defined(HP7300LC_CPU) */
 
-#if defined(HP8000_CPU) || defined(HP8200_CPU) || defined(HP8500_CPU)
+#if defined(HP8000_CPU) || defined(HP8200_CPU) || \
+    defined(HP8500_CPU) || defined(HP8600_CPU) || \
+    defined(HP8700_CPU)
+
 	.level	2.0w
 
 	/* xlate 32bit->64bit pte */
@@ -1651,6 +1630,19 @@ EXIT(TLABEL(dtlb_l))
 	depdi	0, 44, 30, %r25			! \
 	depd	%r16, 14, 15, %r25
 
+/*
+ * This is a handler for interruption 20, "TLB dirty bit trap".  It is used by
+ * the PA8000 (PCX-U), PA8200 (PCX-W), PA8500 (PCX-W), and PA8600 (PCX-W+).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = data address space identifier.  Copied from %isr.
+ * %r9 = data address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(tlbd_u))
 	TLB_STATS_PRE(tlbd)
 	TLB_PULL_L(1, TLABEL(all))
@@ -1661,6 +1653,19 @@ LEAF_ENTRY_NOPROFILE(TLABEL(tlbd_u))
 	nop
 EXIT(TLABEL(tlbd_u))
 
+/*
+ * This is a handler for interruption 6, "Instruction TLB miss fault".  It is
+ * the PA8000 (PCX-U), PA8200 (PCX-W), PA8500 (PCX-W), and PA8600 (PCX-W+).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = data address space identifier.  Copied from %isr.
+ * %r9 = data address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(itlb_u))
 	TLB_STATS_PRE(itlb)
 	TLB_PULL_L(0, TLABEL(all))
@@ -1673,6 +1678,22 @@ LEAF_ENTRY_NOPROFILE(TLABEL(itlb_u))
 	nop
 EXIT(TLABEL(itlb_u))
 
+
+/*
+ * This is a handler for interruption 16, "Non-access instruction TLB miss
+ * fault", and interrupt 17, "Non-access data TLB miss fault / Non-access data
+ * page fault".  It is the PA8000 (PCX-U), PA8200 (PCX-W), PA8500 (PCX-W),
+ * and PA8600 (PCX-W+).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = instruction address space identifier.  Copied from %isr.
+ * %r9 = instruction address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(dtlbna_u))
 ALTENTRY(TLABEL(itlbna_u))
 	TLB_STATS_PRE(dtlb)
@@ -1701,6 +1722,19 @@ L$dtlbna_u_fake:
 	nop
 EXIT(TLABEL(dtlbna_u))
 
+/*
+ * This is a handler for interruption 15, "Data TLB miss fault".  It is the
+ * PA8000 (PCX-U), PA8200 (PCX-W), PA8500 (PCX-W), and PA8600 (PCX-W+).
+ * Only shadowed registers are available, and they are:
+ *
+ * %r1 = C trap number
+ * %r8 = instruction address space identifier.  Copied from %isr.
+ * %r9 = instruction address offset.  Copied from %ior.
+ * %r16 = undefined
+ * %r17 = undefined
+ * %r24 = undefined
+ * %r25 = undefined
+ */
 LEAF_ENTRY_NOPROFILE(TLABEL(dtlb_u))
 	TLB_STATS_PRE(dtlb)
 	TLB_PULL_L(0, TLABEL(all))
@@ -1714,7 +1748,7 @@ EXIT(TLABEL(dtlb_u))
 	.level	1.1
 #endif /* HP8000_CPU */
 
-#if defined(HP7000_CPU) || defined(HP7100_CPU)
+#if defined(HP7000_CPU)
 /*
  * int desidhash_s(void)
  * int desidhash_x(void)
@@ -1738,7 +1772,7 @@ ALTENTRY(desidhash_x)
 	bv	0(%rp)
 	extru	%t1, 4, 5, %ret0	/* return chip revision */
 EXIT(desidhash_s)
-#endif /* defined(HP7000_CPU) || defined(HP7100_CPU) */
+#endif /* defined(HP7000_CPU) */
 
 #if defined(HP7100_CPU) || defined(HP7200_CPU)
 /*
@@ -1847,38 +1881,10 @@ EXIT(desidhash_l)
 
 #endif /* defined(HP7100LC_CPU) || defined(HP7300LC_CPU) */
 
-/*
- * This is a handler for interruption 17, "Non-access data TLB miss 
- * fault".  It is used on the PA7100LC (PCX-L), PA7300LC (PCX-L2), 
- * PA8000 (PCX-U), PA8200 (PCX-W), PA8500 (PCX-W), and PA8600 (PCX-W+).
- * Only shadowed registers are available, and they are:
- *
- * %r1 = C trap number
- * %r8 = data address space identifier
- * %r9 = data address offset
- * %r16 = undefined
- * %r17 = undefined
- * %r24 = undefined
- * %r25 = undefined
- */
+#if defined(HP8000_CPU) || defined(HP8200_CPU) || \
+    defined(HP8500_CPU) || defined(HP8600_CPU) || \
+    defined(HP8700_CPU)
 
-
-/*
- * This is a handler for interruption 15, "Data TLB miss fault".
- * It is used on the PA7100LC (PCX-L), PA7300LC (PCX-L2),
- * PA8000 (PCX-U), PA8200 (PCX-W), PA8500 (PCX-W), and PA8600 (PCX-W+).
- * Only shadowed registers are available, and they are:
- *
- * %r1 = C trap number
- * %r8 = data address space identifier
- * %r9 = data address offset
- * %r16 = undefined
- * %r17 = undefined
- * %r24 = undefined
- * %r25 = undefined
- */
-
-#if defined(HP8000_CPU) || defined(HP8200_CPU) || defined(HP8500_CPU)
 	.level	2.0w
 LEAF_ENTRY_NOPROFILE(desidhash_u)
 	MFCPU_U(2,28)
@@ -1900,7 +1906,7 @@ LEAF_ENTRY_NOPROFILE(pbtlb_u)
 	nop
 EXIT(pbtlb_u)
 	.level	1.1
-#endif /* HP8000_CPU */
+#endif /* HP8000_CPU || HP8200_CPU || HP8500_CPU || HP8600_CPU || HP8700_CPU */
 
 	.align	64
 	.export	TLABEL(all), entry
@@ -1916,17 +1922,16 @@ ENTRY_NOPROFILE(TLABEL(all),0)
 	 *  - tr7:	old r1
 	 */
 
-	/* do not overwrite %tr4(%cr28) it contains the contents of r24 */
 	mtctl	%t3, %tr2
 
-	ldil	L%L$trap_tmp_save, %t3
-	ldo	R%L$trap_tmp_save(%t3), %t3
-	stw	%t1, TF_R22(%t3)	/* use ,bc */
-	stw	%t2, TF_R21(%t3)
+	GET_CURCPU(%t3)
+
+	stw	%t1, CI_TRAPSAVE + TF_R22(%t3)	/* use ,bc */
+	stw	%t2, CI_TRAPSAVE + TF_R21(%t3)
 
 	mfctl	%tr2, %t1
-	stw	%sp, TF_R30(%t3)	/* sp */
-	stw	%t1, TF_R20(%t3)	/* t3 */
+	stw	%sp, CI_TRAPSAVE + TF_R30(%t3)	/* sp */
+	stw	%t1, CI_TRAPSAVE + TF_R20(%t3)	/* t3 */
 
 	/*
 	 * Now, save away other volatile state that prevents us from turning
@@ -1936,25 +1941,22 @@ ENTRY_NOPROFILE(TLABEL(all),0)
 
 	mfctl	%eiem, %t1
 	mfctl	%ipsw, %t2
-	stw	%t1, TF_CR15(%t3)	/* use ,bc */
-	stw	%t2, TF_CR22(%t3)
+	stw	%t1, CI_TRAPSAVE + TF_CR15(%t3)	/* use ,bc */
+	stw	%t2, CI_TRAPSAVE + TF_CR22(%t3)
 
 	mfsp	%sr3, %t1
 	mfctl	%pidr1, %t2
-	stw	%t1, TF_SR3(%t3)
-	stw	%t2, TF_CR8(%t3)
+	stw	%t1, CI_TRAPSAVE + TF_SR3(%t3)
+	stw	%t2, CI_TRAPSAVE + TF_CR8(%t3)
 
-	/*
-	 * Setup kernel context
-	 */
-
+	/* Setup kernel context */
 	ldi	HPPA_PID_KERNEL,%t1
 	mtctl	%t1, %pidr1
 	mtsp	%r0, %sr3
 
 	/* this will enable interrupts after `cold' */
-	ldil	L%kpsw, %t1
-	ldw	R%kpsw(%t1), %t2
+	GET_CURCPU(%t1)
+	ldw	CI_PSW(%t1), %t2
 	mtctl	%r0, %eiem
 	mtctl	%t2, %ipsw
 
@@ -1962,8 +1964,8 @@ ENTRY_NOPROFILE(TLABEL(all),0)
 	mfctl	%pcsq, %t1
 	mtctl	%r0, %pcsq
 	mfctl	%pcsq, %t2
-	stw	%t1, TF_IISQH(%t3)	/* use ,bc */
-	stw	%t2, TF_IISQT(%t3)
+	stw	%t1, CI_TRAPSAVE + TF_IISQH(%t3)	/* use ,bc */
+	stw	%t2, CI_TRAPSAVE + TF_IISQT(%t3)
 	mtctl	%r0, %pcsq
 
 	/*
@@ -1979,22 +1981,17 @@ ENTRY_NOPROFILE(TLABEL(all),0)
 	 * the user's stack, and we must move to the kernel stack.
 	 */
 	mfctl	%pcoq, %t1
-	ldil	L%SYSCALLGATE, %t2
-	/* Start aligning the assumed kernel sp. */
-	ldo	HPPA_FRAME_SIZE-1(%sp), %sp
-	/* This dep leaves t2 with SYSCALLGATE | (pcoqh & PAGE_MASK). */
-	dep	%t1, 31, PGSHIFT, %t2
-	/* Nullify if pcoqh & HPPA_PC_PRIV_MASK != 0. */
-	dep,<>	%t1, 31, 2, %r0
-	/* Branch if (pcoqh & ~PAGE_MASK) != SYSCALLGATE */
-	comb,<> %t1, %t2, L$trap_from_kernel
-	/* Finish aligning the assumed kernel sp. */
-	dep	%r0, 31, 6, %sp
+	ldil	L%SYSCALLGATE, %t2		/* t2 = SYSCALLGATE */
+	ldo	HPPA_FRAME_SIZE-1(%sp), %sp	/* Assumed stack align step 1 */
+	dep	%t1, 31, PGSHIFT, %t2		/* t2 |= (pcoqh & PAGE_MASK) */
+	dep,<>	%t1, 31, 2, %r0			/* Nullify if user mode (!0) */
+	comb,<>	%t1, %t2, L$trap_from_kernel	/* if %t1 != %t2 => kernel */
+	dep	%r0, 31, 6, %sp			/* Assumed stack align step 2 */
 
-	mfctl	CR_UPADDR, %t2
+	GET_CURLWP(%t2)
 	depi	1, T_USER_POS, 1, %r1
 	depi	1, TFF_LAST_POS, 1, %r1
-	ldw	U_PCB+PCB_UVA(%t2), %sp
+	ldw	L_PCB(%t2), %sp
 #ifdef DIAGNOSTIC
 	b	L$trap_have_stack
 #endif
@@ -2007,7 +2004,7 @@ L$trap_from_kernel:
 	 * of TLB or protection fault on the kernel stack.
 	 */
 	mtctl	%t1, %tr2
-	ldw	TF_R30(%t3), %t1
+	ldw	CI_TRAPSAVE + TF_R30(%t3), %t1
 	mfctl	%ior, %t2
 	dep	%r0, 31, PGSHIFT, %t1
 	dep	%r0, 31, PGSHIFT, %t2
@@ -2036,28 +2033,27 @@ L$trap_have_stack:
 	ldil	L%trapnowvirt, %t2
 	ldo	R%trapnowvirt(%t2), %t2
 	mtctl	%t2, %pcoq
-	stw	%t1, TF_IIOQH(%t3)
+	stw	%t1, CI_TRAPSAVE + TF_IIOQH(%t3)
 	ldo	4(%t2), %t2
 	mfctl	%pcoq, %t1
-	stw	%t1, TF_IIOQT(%t3)
+	stw	%t1, CI_TRAPSAVE + TF_IIOQT(%t3)
 	mtctl	%t2, %pcoq
 
 	/* save the interruption space and offset registers */
 	mfctl	%isr, %t1
 	mfctl	%ior, %t2
-	stw	%t1, TF_CR20(%t3)	/* use ,bc */
-	stw	%t2, TF_CR21(%t3)
+	stw	%t1, CI_TRAPSAVE + TF_CR20(%t3)	/* use ,bc */
+	stw	%t2, CI_TRAPSAVE + TF_CR21(%t3)
 
 	/* save the interruption instruction register */
 	mfctl	%iir, %t2
-	stw	%t2, TF_CR19(%t3)
+	stw	%t2, CI_TRAPSAVE + TF_CR19(%t3)
 
 	/* save the trap type and flags */
-	stw	%r1, TF_FLAGS(%t3)
+	stw	%r1, CI_TRAPSAVE + TF_FLAGS(%t3)
 
-	/* XXX not in use... yet */
-	/* XXX save %ccr here w/ rctr */
-	mfctl	%rctr, %t1		/* gotta get it before R is up */
+	/* gotta get it before R is up */
+	mfctl	%rctr, %t1
 
 	copy	%sp, %t3
 	ldo	HPPA_FRAME_SIZE+TRAPFRAME_SIZEOF(%sp), %sp
@@ -2073,8 +2069,8 @@ L$trap_have_stack:
 	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop
 trapnowvirt:
 	/*
-	 * t3 contains the virtual address of the trapframe
-	 * sp is loaded w/ the right VA (we did not need it being physical)
+	 * %t3 contains the virtual address of the trapframe
+	 * %sp is loaded w/ the right VA (we did not need it being physical)
 	 */
 
 	mfctl	%ccr, %t2
@@ -2136,8 +2132,9 @@ trapnowvirt:
 	/*
 	 * Copy partially saved state from the store into the frame
 	 */
-	ldil	L%L$trap_tmp_save, %t2
-	ldo	R%L$trap_tmp_save(%t2), %t2
+	GET_CURCPU(%t2)
+	ldo	CI_TRAPSAVE(%t2), %t2
+
 	/* use ,bc each line */
 	ldw  0(%t2), %r1 ! ldw  4(%t2), %t1 ! stw %r1,  0(%t3) ! stw %t1,  4(%t3)
 	ldw  8(%t2), %r1 ! ldw 12(%t2), %t1 ! stw %r1,  8(%t3) ! stw %t1, 12(%t3)
@@ -2202,11 +2199,16 @@ trapnowvirt:
 	stw	%t1, TF_CR23(%t3)
 	stw	%t2, TF_CR25(%t3)
 
+	mfctl	%cr24, %t1
 	mfctl	%cr28, %t2
+	stw	%t1, TF_CR24(%t3)
 	stw	%t2, TF_CR28(%t3)
+
 #endif
-	mfctl	CR_UPADDR, %t1
-	stw	%t1, TF_CR30(%t3)
+	mfctl	CR_TLS, %t1
+	mfctl	CR_FPPADDR, %t2
+	stw	%t1, TF_CR27(%t3)
+	stw	%t2, TF_CR30(%t3)
 
 	/*
 	 * load the global pointer for the kernel
@@ -2237,7 +2239,8 @@ trapnowvirt:
 	bb,>=,n	%arg0, TFF_LAST_POS, L$trap_return
 	nop
 
-	mfctl	CR_CURLWP, %t2
+	/* load curlwp's trapframe pointer */
+	GET_CURLWP(%t2)
 	ldw	L_MD(%t2), %t3
 
 L$trap_return:
@@ -2246,14 +2249,9 @@ L$trap_return:
 	bv,n	%r0(%t1)
 	nop
 
-#if 0
-	.export	T$trap$all$end, entry
-T$trap$all$end:
-#endif
 EXIT(TLABEL(all))
 
 	.align	32
-	.export	TLABEL(ibrk), entry
 ENTRY_NOPROFILE(TLABEL(ibrk),0)
 	/* If called by a user process then always pass it to trap() */
 	mfctl	%pcoq, %r8

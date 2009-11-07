@@ -1,4 +1,4 @@
-/* $NetBSD: bioctl.c,v 1.12 2009/01/18 00:27:59 lukem Exp $ */
+/* $NetBSD: bioctl.c,v 1.15 2011/08/29 14:34:58 joerg Exp $ */
 /* $OpenBSD: bioctl.c,v 1.52 2007/03/20 15:26:06 jmc Exp $ */
 
 /*
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: bioctl.c,v 1.12 2009/01/18 00:27:59 lukem Exp $");
+__RCSID("$NetBSD: bioctl.c,v 1.15 2011/08/29 14:34:58 joerg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -76,7 +76,7 @@ struct locator {
 	int lun;
 };
 
-static void 	usage(void);
+__dead static void 	usage(void);
 static void	bio_alarm(int, int, char **);
 static void	bio_show_common(int, int, char **);
 static int	bio_show_volumes(struct biotmp *);
@@ -320,9 +320,9 @@ bio_show_volumes(struct biotmp *bt)
 	}
 
 	if (rtypestr)
-		snprintf(rtype, sizeof(rtype), rtypestr);
+		strlcpy(rtype, rtypestr, sizeof(rtype));
 	if (stripestr)
-		snprintf(stripe, sizeof(stripe), stripestr);
+		strlcpy(stripe, stripestr, sizeof(stripe));
 	else
 		snprintf(stripe, sizeof(stripe), "%uK", bv.bv_stripe_size);
 
@@ -601,7 +601,7 @@ bio_setstate_passthru(int fd, int argc, char **argv)
 	char			*endptr;
 	bool			rem = false;
 
-	if (argc > 3)
+	if (argc < 2 || argc > 3)
 		usage();
 
 	memset(&bs, 0, sizeof(bs));
@@ -640,7 +640,7 @@ bio_setstate_consistency(int fd, int argc, char **argv)
 	struct bioc_setstate	bs;
 	char			*endptr;
 
-	if (argc > 2)
+	if (argc != 2)
 		usage();
 
 	memset(&bs, 0, sizeof(bs));

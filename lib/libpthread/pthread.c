@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.c,v 1.113 2009/10/03 23:49:50 christos Exp $	*/
+/*	$NetBSD: pthread.c,v 1.125.4.1 2012/05/07 03:12:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread.c,v 1.113 2009/10/03 23:49:50 christos Exp $");
+__RCSID("$NetBSD: pthread.c,v 1.125.4.1 2012/05/07 03:12:33 riz Exp $");
 
 #define	__EXPOSE_STACK	1
 
@@ -38,6 +38,7 @@ __RCSID("$NetBSD: pthread.c,v 1.113 2009/10/03 23:49:50 christos Exp $");
 #include <sys/mman.h>
 #include <sys/sysctl.h>
 #include <sys/lwpctl.h>
+#include <sys/tls.h>
 
 #include <err.h>
 #include <errno.h>
@@ -82,7 +83,6 @@ pthread_queue_t pthread__allqueue;
 
 static pthread_attr_t pthread_default_attr;
 static lwpctl_t pthread__dummy_lwpctl = { .lc_curcpu = LWPCTL_CPU_NONE };
-static pthread_t pthread__first;
 
 enum {
 	DIAGASSERT_ABORT =	1<<0,
@@ -95,6 +95,7 @@ static int pthread__diagassert;
 int pthread__concurrency;
 int pthread__nspins;
 int pthread__unpark_max = PTHREAD__UNPARK_MAX;
+int pthread__dbg;	/* set by libpthread_dbg if active */
 
 /* 
  * We have to initialize the pthread_stack* variables here because
@@ -108,6 +109,8 @@ int	pthread__stacksize_lg = _STACKSIZE_LG;
 size_t	pthread__stacksize = 1 << _STACKSIZE_LG;
 vaddr_t	pthread__stackmask = (1 << _STACKSIZE_LG) - 1;
 vaddr_t pthread__threadmask = (vaddr_t)~((1 << _STACKSIZE_LG) - 1);
+vaddr_t	pthread__mainbase = 0;
+vaddr_t	pthread__mainstruct = 0;
 #undef	_STACKSIZE_LG
 
 int _sys___sigprocmask14(int, const sigset_t *, sigset_t *);
@@ -227,7 +230,6 @@ pthread__init(void)
 	}
 
 	/* Tell libc that we're here and it should role-play accordingly. */
-	pthread__first = first;
 	pthread_atfork(NULL, NULL, pthread__fork_callback);
 	__isthreaded = 1;
 }
@@ -235,11 +237,13 @@ pthread__init(void)
 static void
 pthread__fork_callback(void)
 {
+	struct __pthread_st *self = pthread__self();
 
 	/* lwpctl state is not copied across fork. */
-	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &pthread__first->pt_lwpctl)) {
+	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &self->pt_lwpctl)) {
 		err(1, "_lwp_ctl");
 	}
+	self->pt_lid = _lwp_self();
 }
 
 static void
@@ -321,6 +325,7 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	struct pthread_attr_private *p;
 	char * volatile name;
 	unsigned long flag;
+	void *private_area;
 	int ret;
 
 	/*
@@ -364,6 +369,12 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 		if (newthread)
 			PTQ_REMOVE(&pthread__deadqueue, newthread, pt_deadq);
 		pthread_mutex_unlock(&pthread__deadqueue_lock);
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		if (newthread && newthread->pt_tls) {
+			_rtld_tls_free(newthread->pt_tls);
+			newthread->pt_tls = NULL;
+		}
+#endif
 	}
 
 	/*
@@ -385,6 +396,9 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 #endif
 		newthread->pt_uc.uc_stack = newthread->pt_stack;
 		newthread->pt_uc.uc_link = NULL;
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		newthread->pt_tls = NULL;
+#endif
 
 		/* Add to list of all threads. */
 		pthread_rwlock_wrlock(&pthread__alltree_lock);
@@ -402,8 +416,15 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	pthread__scrubthread(newthread, name, nattr.pta_flags);
 	newthread->pt_func = startfunc;
 	newthread->pt_arg = arg;
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	private_area = newthread->pt_tls = _rtld_tls_allocate();
+	newthread->pt_tls->tcb_pthread = newthread;
+#else
+	private_area = newthread;
+#endif
+
 	_lwp_makecontext(&newthread->pt_uc, pthread__create_tramp,
-	    newthread, newthread, newthread->pt_stack.ss_sp,
+	    newthread, private_area, newthread->pt_stack.ss_sp,
 	    newthread->pt_stack.ss_size);
 
 	flag = LWP_DETACHED;
@@ -412,11 +433,9 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 		flag |= LWP_SUSPENDED;
 	ret = _lwp_create(&newthread->pt_uc, flag, &newthread->pt_lid);
 	if (ret != 0) {
-		free(name);
-		newthread->pt_state = PT_STATE_DEAD;
-		pthread_mutex_lock(&pthread__deadqueue_lock);
-		PTQ_INSERT_HEAD(&pthread__deadqueue, newthread, pt_deadq);
-		pthread_mutex_unlock(&pthread__deadqueue_lock);
+		pthread_mutex_lock(&newthread->pt_lock);
+		/* Will unlock and free name. */
+		pthread__reap(newthread);
 		return ret;
 	}
 
@@ -436,7 +455,7 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 }
 
 
-static void
+__dead static void
 pthread__create_tramp(void *cookie)
 {
 	pthread_t self;
@@ -1220,6 +1239,14 @@ pthread__initmain(pthread_t *newt)
 	pthread__threadmask = ~pthread__stackmask;
 
 	base = (void *)(pthread__sp() & pthread__threadmask);
+	if ((pthread__sp() - (uintptr_t)base) < 4 * pagesize) {
+		pthread__mainbase = (vaddr_t)base;
+		base = STACK_GROW(base, pthread__stacksize);
+		pthread__mainstruct = (vaddr_t)base;
+		if (mprotect(base, pthread__stacksize,
+		    PROT_READ|PROT_WRITE) == -1)
+			err(1, "mprotect stack");
+	}
 	size = pthread__stacksize;
 
 	error = pthread__stackid_setup(base, size, &t);
@@ -1229,9 +1256,16 @@ pthread__initmain(pthread_t *newt)
 	}
 
 	*newt = t;
-
-	/* Set up identity register. */
-	(void)_lwp_setprivate(t);
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+#  ifdef __HAVE___LWP_GETTCB_FAST
+	t->pt_tls = __lwp_gettcb_fast();
+#  else
+	t->pt_tls = _lwp_getprivate();
+#  endif
+	t->pt_tls->tcb_pthread = t;
+#else
+	_lwp_setprivate(t);
+#endif
 }
 
 static int
@@ -1257,7 +1291,6 @@ pthread__stackid_setup(void *base, size_t size, pthread_t *tp)
 #else
 	t->pt_stack.ss_sp = (char *)(void *)base + 2 * pagesize;
 #endif
-
 	/* Protect the next-to-bottom stack page as a red zone. */
 	ret = mprotect(redaddr, pagesize, PROT_NONE);
 	if (ret == -1) {
@@ -1286,10 +1319,18 @@ RB_GENERATE_STATIC(__pthread__alltree, __pthread_st, pt_alltree, pthread__cmp)
 char *
 pthread__getenv(const char *name)
 {
-	extern char *__findenv(const char *, int *);
-	int off;
+	extern char **environ;
+	size_t l_name, offset;
 
-	return __findenv(name, &off);
+	l_name = strlen(name);
+	for (offset = 0; environ[offset] != NULL; offset++) {
+		if (strncmp(name, environ[offset], l_name) == 0 &&
+		    environ[offset][l_name] == '=') {
+			return environ[offset] + l_name + 1;
+		}
+	}
+
+	return NULL;
 }
 
 pthread_mutex_t *

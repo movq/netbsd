@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.98 2009/10/07 18:12:11 christos Exp $	*/
+/*	$NetBSD: eval.c,v 1.103 2011/11/14 18:24:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.9 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.98 2009/10/07 18:12:11 christos Exp $");
+__RCSID("$NetBSD: eval.c,v 1.103 2011/11/14 18:24:45 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,6 +45,7 @@ __RCSID("$NetBSD: eval.c,v 1.98 2009/10/07 18:12:11 christos Exp $");
 #include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/fcntl.h>
 #include <sys/times.h>
@@ -91,6 +92,7 @@ int evalskip;			/* set if we are skipping commands */
 STATIC int skipcount;		/* number of levels to skip */
 MKINIT int loopnest;		/* current loop nesting level */
 int funcnest;			/* depth of function calls */
+STATIC int builtin_flags;	/* evalcommand flags for builtins */
 
 
 const char *commandname;
@@ -180,7 +182,7 @@ evalcmd(int argc, char **argv)
                         STPUTC('\0', concat);
                         p = grabstackstr(concat);
                 }
-                evalstring(p, EV_TESTED);
+                evalstring(p, builtin_flags & EV_TESTED);
         }
         return exitstatus;
 }
@@ -297,7 +299,7 @@ evaltree(union node *n, int flags)
 		do_etest = !(flags & EV_TESTED);
 		break;
 	case NCMD:
-		evalcommand(n, flags, (struct backcmd *)NULL);
+		evalcommand(n, flags, NULL);
 		do_etest = !(flags & EV_TESTED);
 		break;
 	default:
@@ -519,14 +521,14 @@ evalpipe(union node *n)
 			INTON;
 			if (prevfd > 0) {
 				close(0);
-				copyfd(prevfd, 0);
+				copyfd(prevfd, 0, 1);
 				close(prevfd);
 			}
 			if (pip[1] >= 0) {
 				close(pip[0]);
 				if (pip[1] != 1) {
 					close(1);
-					copyfd(pip[1], 1);
+					copyfd(pip[1], 1, 1);
 					close(pip[1]);
 				}
 			}
@@ -590,7 +592,7 @@ evalbackcmd(union node *n, struct backcmd *result)
 			close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1);
+				copyfd(pip[1], 1, 1);
 				close(pip[1]);
 			}
 			eflag = 0;
@@ -904,7 +906,7 @@ normal_fork:
 			close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1);
+				copyfd(pip[1], 1, 1);
 				close(pip[1]);
 			}
 		}
@@ -1009,6 +1011,7 @@ normal_fork:
 			/* and getopt */
 			optreset = 1;
 			optind = 1;
+			builtin_flags = flags;
 			exitstatus = cmdentry.u.bltin(argc, argv);
 		} else {
 			e = exception;

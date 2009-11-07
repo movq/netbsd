@@ -1,4 +1,4 @@
-/*	$NetBSD: ibus_3max.c,v 1.13 2009/03/14 21:04:14 dsl Exp $	*/
+/*	$NetBSD: ibus_3max.c,v 1.15 2011/07/09 17:32:29 matt Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,13 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibus_3max.c,v 1.13 2009/03/14 21:04:14 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibus_3max.c,v 1.15 2011/07/09 17:32:29 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/systm.h>
 
 #include <dev/tc/tcvar.h>
+
 #include <pmax/ibus/ibusvar.h>
 #include <pmax/pmax/kn02.h>
 
@@ -45,18 +46,14 @@ static struct ibus_attach_args kn02sys_devs[] = {
 	{ "dc",  	SYS_DEV_SCC0,	KV(KN02_SYS_DZ),	0 },
 };
 
-static int	kn02sys_match(struct device *, struct cfdata *, void *);
-static void	kn02sys_attach(struct device *, struct device *, void *);
+static int	kn02sys_match(device_t, cfdata_t, void *);
+static void	kn02sys_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(kn02sys, sizeof(struct ibus_softc),
+CFATTACH_DECL_NEW(kn02sys, 0,
     kn02sys_match, kn02sys_attach, NULL, NULL);
 
 static int
-kn02sys_match(parent, cfdata, aux)
-        struct device *parent;
-        struct cfdata *cfdata;
-        void *aux;
-
+kn02sys_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -64,13 +61,13 @@ kn02sys_match(parent, cfdata, aux)
 }
 
 static void
-kn02sys_attach(struct device *parent, struct device *self, void *aux)
+kn02sys_attach(device_t parent, device_t self, void *aux)
 {
 	struct ibus_dev_attach_args ida;
 
 	ida.ida_busname = "ibus";
 	ida.ida_devs = kn02sys_devs;
-	ida.ida_ndevs = sizeof(kn02sys_devs)/sizeof(kn02sys_devs[0]);
+	ida.ida_ndevs = __arraycount(kn02sys_devs);
 
 	ibusattach(parent, self, &ida);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: iha.c,v 1.40 2008/05/14 13:29:28 tsutsui Exp $ */
+/*	$NetBSD: iha.c,v 1.42 2011/05/24 16:38:25 joerg Exp $ */
 
 /*-
  * Copyright (c) 2001, 2002 Izumi Tsutsui
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iha.c,v 1.40 2008/05/14 13:29:28 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iha.c,v 1.42 2011/05/24 16:38:25 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,8 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: iha.c,v 1.40 2008/05/14 13:29:28 tsutsui Exp $");
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -2171,7 +2169,7 @@ iha_resel(struct iha_softc *sc)
 	uint8_t tag, target, lun, msg, abortmsg;
 
 	if (sc->sc_actscb != NULL) {
-		if ((sc->sc_actscb->status == STATUS_SELECT))
+		if (sc->sc_actscb->status == STATUS_SELECT)
 			iha_push_pend_scb(sc, sc->sc_actscb);
 		sc->sc_actscb = NULL;
 	}

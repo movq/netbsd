@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lock.c,v 1.149 2009/07/17 22:17:37 dyoung Exp $	*/
+/*	$NetBSD: kern_lock.c,v 1.152 2011/11/27 03:24:00 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.149 2009/07/17 22:17:37 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.152 2011/11/27 03:24:00 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lock.c,v 1.149 2009/07/17 22:17:37 dyoung Exp $
 #include <sys/atomic.h>
 #include <sys/lwp.h>
 
-#include <machine/stdarg.h>
 #include <machine/lock.h>
 
 #include <dev/lockstat.h>
@@ -149,8 +148,7 @@ _kernel_lock_dump(volatile void *junk)
 }
 
 /*
- * Acquire 'nlocks' holds on the kernel lock.  If 'l' is non-null, the
- * acquisition is from process context.
+ * Acquire 'nlocks' holds on the kernel lock.
  */
 void
 _kernel_lock(int nlocks)
@@ -257,7 +255,7 @@ _kernel_lock(int nlocks)
 
 /*
  * Release 'nlocks' holds on the kernel lock.  If 'nlocks' is zero, release
- * all holds.  If 'l' is non-null, the release is from process context.
+ * all holds.
  */
 void
 _kernel_unlock(int nlocks, int *countp)
@@ -306,4 +304,10 @@ _kernel_unlock(int nlocks, int *countp)
 
 	if (countp != NULL)
 		*countp = olocks;
+}
+
+bool
+_kernel_locked_p(void)
+{
+	return __SIMPLELOCK_LOCKED_P(kernel_lock);
 }

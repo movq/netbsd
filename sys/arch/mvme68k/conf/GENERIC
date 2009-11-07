@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.78 2009/01/24 05:06:06 mrg Exp $
+# $NetBSD: GENERIC,v 1.83 2011/12/18 05:49:30 dholland Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/mvme68k/conf/std.mvme68k"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.78 $"
+#ident 		"GENERIC-$Revision: 1.83 $"
 
 # Boards this kernel supports
 options 	MVME147
@@ -64,12 +64,12 @@ file-system 	CD9660
 #file-system	MSDOSFS
 #file-system	UNION
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 options 	NFSSERVER
-#options 	FFS_EI		# FFS Endian Independant support
-options 	WAPBL		# File system journaling support - Experimental
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 
@@ -150,14 +150,13 @@ pseudo-device	pty			# pseudo-terminals
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	vnd 
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
 
 # random number generator pseudo-device
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 
 # Veriexec

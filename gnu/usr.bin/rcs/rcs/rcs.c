@@ -1,4 +1,4 @@
-/*	$NetBSD: rcs.c,v 1.5 2006/03/26 22:35:07 christos Exp $	*/
+/*	$NetBSD: rcs.c,v 1.7 2012/01/06 15:16:03 joerg Exp $	*/
 
 /* Change RCS file attributes.  */
 
@@ -31,6 +31,12 @@ Report problems and direct all questions to:
 
 /*
  * $Log: rcs.c,v $
+ * Revision 1.7  2012/01/06 15:16:03  joerg
+ * Don't use dangling elses.
+ *
+ * Revision 1.6  2011/05/15 14:33:12  christos
+ * register c -> int c
+ *
  * Revision 1.5  2006/03/26 22:35:07  christos
  * Coverity CID 927: Check for NULL before de-referencing.
  *
@@ -736,8 +742,8 @@ getaccessor(opt, command)
 
 
 {
-        register c;
-	register char *sp;
+        int c;
+	char *sp;
 
 	sp = opt;
 	while ((c = *++sp) == ' ' || c == '\n' || c == '\t' || c == ',')
@@ -796,7 +802,7 @@ char    *sp;
 {
 	char const *temp;
         struct  Status  *pt;
-        register        c;
+        int c;
 
 	while ((c = *++sp) ==' ' || c == '\t' || c == '\n')
 	    continue;
@@ -1400,7 +1406,7 @@ dolocks()
 	for (lockpt = rmvlocklst;  lockpt;  lockpt = lockpt->nextrev)
 	    if (expandsym(lockpt->revno, &numrev)) {
 		target = genrevs(numrev.string, (char *)0, (char *)0, (char *)0, &gendeltas);
-                if ( target )
+                if ( target ) {
 		   if (!(countnumflds(numrev.string)&1) && cmpnum(target->num,numrev.string))
 			rcserror("can't unlock nonexisting revision %s",
 				lockpt->revno
@@ -1408,19 +1414,21 @@ dolocks()
                    else
 			changed |= breaklock(target);
                         /* breaklock does its own diagnose */
+                }
             }
 
         /*  add new locks which stored in newlocklst  */
 	for (lockpt = newlocklst;  lockpt;  lockpt = lockpt->nextrev)
 	    changed |= setlock(lockpt->revno);
 
-	if (lockhead) /*  lock default branch or head  */
+	if (lockhead) { /*  lock default branch or head  */
 	    if (Dbranch)
 		changed |= setlock(Dbranch);
 	    else if (Head)
 		changed |= setlock(Head->num);
 	    else
 		rcswarn("can't lock an empty tree");
+	}
 	return changed;
 }
 
@@ -1439,7 +1447,7 @@ setlock(rev)
 	if (expandsym(rev, &numrev)) {
 	    target = genrevs(numrev.string, (char*)0, (char*)0,
 			     (char*)0, &gendeltas);
-            if ( target )
+            if ( target ) {
 	       if (!(countnumflds(numrev.string)&1) && cmpnum(target->num,numrev.string))
 		    rcserror("can't lock nonexisting revision %s",
 			numrev.string
@@ -1453,6 +1461,7 @@ setlock(rev)
 			return r;
 		    }
 	       }
+	    }
 	}
 	return 0;
 }
@@ -1495,7 +1504,7 @@ rcs_setstate(rev,status)
 	if (expandsym(rev, &numrev)) {
 	    target = genrevs(numrev.string, (char*)0, (char*)0,
 			     (char*)0, &gendeltas);
-            if ( target )
+            if ( target ) {
 	       if (!(countnumflds(numrev.string)&1) && cmpnum(target->num,numrev.string))
 		    rcserror("can't set state of nonexisting revision %s",
 			numrev.string
@@ -1504,6 +1513,7 @@ rcs_setstate(rev,status)
                     target->state = status;
 		    return true;
 	       }
+	    }
 	}
 	return false;
 }

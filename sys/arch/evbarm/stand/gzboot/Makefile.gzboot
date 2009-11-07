@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.gzboot,v 1.15 2009/01/12 07:45:24 tsutsui Exp $
+#	$NetBSD: Makefile.gzboot,v 1.17.10.1 2012/08/13 20:24:10 riz Exp $
 
 NOMAN=  # defined
 
@@ -49,6 +49,7 @@ CPPFLAGS+= -DMAXIMAGESIZE=${MAXIMAGESIZE}
 CPPFLAGS+= -DLOADADDR=${LOADADDR}
 
 COPTS+=	-ffreestanding
+COPTS+=	-fno-stack-protector
 CWARNFLAGS+= -Werror
 CWARNFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
 
@@ -85,7 +86,7 @@ SA_AS=		library
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
@@ -96,8 +97,8 @@ LIBLIST=${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBSA}
 
 .PHONY: vers.c
 vers.c: ${VERSIONFILE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.ALLSRC} '${PLATFORM}' \
-	    ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.ALLSRC} '${PLATFORM}' ${NEWVERSWHAT}
 
 ${PROG}: ${PROGSYM}
 	${OBJCOPY} -O binary ${PROGSYM} ${.TARGET}

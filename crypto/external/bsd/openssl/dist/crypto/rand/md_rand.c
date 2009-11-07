@@ -109,6 +109,8 @@
  *
  */
 
+#define OPENSSL_FIPSEVP
+
 #ifdef MD_RAND_DEBUG
 # ifndef NDEBUG
 #   define NDEBUG
@@ -139,7 +141,6 @@ static unsigned char state[STATE_SIZE+MD_DIGEST_LENGTH];
 static unsigned char md[MD_DIGEST_LENGTH];
 static long md_count[2]={0,0};
 static double entropy=0;
-static int initialized=0;
 
 static unsigned int crypto_lock_rand = 0; /* may be set only when a thread
                                            * holds CRYPTO_LOCK_RAND
@@ -157,13 +158,14 @@ const char RAND_version[]="RAND" OPENSSL_VERSION_PTEXT;
 static void ssleay_rand_cleanup(void);
 static void ssleay_rand_seed(const void *buf, int num);
 static void ssleay_rand_add(const void *buf, int num, double add_entropy);
-static int ssleay_rand_bytes(unsigned char *buf, int num);
+static int ssleay_rand_bytes(unsigned char *buf, int num, int pseudo);
+static int ssleay_rand_nopseudo_bytes(unsigned char *buf, int num);
 static int ssleay_rand_pseudo_bytes(unsigned char *buf, int num);
 static int ssleay_rand_status(void);
 
 RAND_METHOD rand_ssleay_meth={
 	ssleay_rand_seed,
-	ssleay_rand_bytes,
+	ssleay_rand_nopseudo_bytes,
 	ssleay_rand_cleanup,
 	ssleay_rand_add,
 	ssleay_rand_pseudo_bytes,
@@ -184,7 +186,6 @@ static void ssleay_rand_cleanup(void)
 	md_count[0]=0;
 	md_count[1]=0;
 	entropy=0;
-	initialized=0;
 	}
 
 static void ssleay_rand_add(const void *buf, int num, double add)
@@ -328,7 +329,7 @@ static void ssleay_rand_seed(const void *buf, int num)
 	ssleay_rand_add(buf, num, (double)num);
 	}
 
-static int ssleay_rand_bytes(unsigned char *buf, int num)
+static int ssleay_rand_bytes(unsigned char *buf, int num, int pseudo)
 	{
 	static volatile int stirred_pool = 0;
 	int i,j,k,st_num,st_idx;
@@ -386,18 +387,16 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 	CRYPTO_w_unlock(CRYPTO_LOCK_RAND2);
 	crypto_lock_rand = 1;
 
-	if (!initialized)
-		{
-		RAND_poll();
-		initialized = 1;
-		}
-	
 	if (!stirred_pool)
 		do_stir_pool = 1;
 	
 	ok = (entropy >= ENTROPY_NEEDED);
 	if (!ok)
 		{
+
+		RAND_poll();
+		ok = (entropy >= ENTROPY_NEEDED);
+
 		/* If the PRNG state is not yet unpredictable, then seeing
 		 * the PRNG output may help attackers to determine the new
 		 * state; thus we have to decrease the entropy estimate.
@@ -476,11 +475,14 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 		MD_Update(&m,(unsigned char *)&(md_c[0]),sizeof(md_c));
 
 #ifndef PURIFY /* purify complains */
-		/* DO NOT REMOVE THE FOLLOWING CALL TO MD_Update()! */
+		/* The following line uses the supplied buffer as a small
+		 * source of entropy: since this buffer is often uninitialised
+		 * it may cause programs such as purify or valgrind to
+		 * complain. So for those builds it is not used: the removal
+		 * of such a small source of entropy has negligible impact on
+		 * security.
+		 */
 		MD_Update(&m,buf,j);
-		/* We know that line may cause programs such as
-		   purify and valgrind to complain about use of
-		   uninitialized data.  */
 #endif
 
 		k=(st_idx+MD_DIGEST_LENGTH/2)-st_num;
@@ -514,7 +516,9 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 	EVP_MD_CTX_cleanup(&m);
 	if (ok)
 		return(1);
-	else
+	else if (pseudo)
+		return 0;
+	else 
 		{
 		RANDerr(RAND_F_SSLEAY_RAND_BYTES,RAND_R_PRNG_NOT_SEEDED);
 		ERR_add_error_data(1, "You need to read the OpenSSL FAQ, "
@@ -523,22 +527,16 @@ static int ssleay_rand_bytes(unsigned char *buf, int num)
 		}
 	}
 
+static int ssleay_rand_nopseudo_bytes(unsigned char *buf, int num)
+	{
+	return ssleay_rand_bytes(buf, num, 0);
+	}
+
 /* pseudo-random bytes that are guaranteed to be unique but not
    unpredictable */
 static int ssleay_rand_pseudo_bytes(unsigned char *buf, int num) 
 	{
-	int ret;
-	unsigned long err;
-
-	ret = RAND_bytes(buf, num);
-	if (ret == 0)
-		{
-		err = ERR_peek_error();
-		if (ERR_GET_LIB(err) == ERR_LIB_RAND &&
-		    ERR_GET_REASON(err) == RAND_R_PRNG_NOT_SEEDED)
-			ERR_clear_error();
-		}
-	return (ret);
+	return ssleay_rand_bytes(buf, num, 1);
 	}
 
 static int ssleay_rand_status(void)
@@ -569,11 +567,10 @@ static int ssleay_rand_status(void)
 		CRYPTO_w_unlock(CRYPTO_LOCK_RAND2);
 		crypto_lock_rand = 1;
 		}
-	
-	if (!initialized)
+
+	if (entropy < ENTROPY_NEEDED)
 		{
 		RAND_poll();
-		initialized = 1;
 		}
 
 	ret = entropy >= ENTROPY_NEEDED;

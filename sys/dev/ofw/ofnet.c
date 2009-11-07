@@ -1,4 +1,4 @@
-/*	$NetBSD: ofnet.c,v 1.48 2009/05/12 14:39:22 cegger Exp $	*/
+/*	$NetBSD: ofnet.c,v 1.52 2011/07/26 08:59:38 mrg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,11 +32,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.48 2009/05/12 14:39:22 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.52 2011/07/26 08:59:38 mrg Exp $");
 
 #include "ofnet.h"
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,10 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.48 2009/05/12 14:39:22 cegger Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <dev/ofw/openfirm.h>
 
@@ -77,7 +74,7 @@ static int ipkdbprobe (cfdata_t, void *);
 #endif
 
 struct ofnet_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	int sc_phandle;
 	int sc_ihandle;
 	struct ethercom sc_ethercom;
@@ -87,7 +84,7 @@ struct ofnet_softc {
 static int ofnet_match (device_t, cfdata_t, void *);
 static void ofnet_attach (device_t, device_t, void *);
 
-CFATTACH_DECL(ofnet, sizeof(struct ofnet_softc),
+CFATTACH_DECL_NEW(ofnet, sizeof(struct ofnet_softc),
     ofnet_match, ofnet_attach, NULL, NULL);
 
 static void ofnet_read (struct ofnet_softc *);
@@ -133,10 +130,12 @@ ofnet_attach(device_t parent, device_t self, void *aux)
 	int l;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 
+	of->sc_dev = self;
+
 	of->sc_phandle = oba->oba_phandle;
 #if NIPKDB_OFN > 0
 	if (kifp &&
-	    kifp->unit - 1 == device_unit(&of->sc_dev) &&
+	    kifp->unit - 1 == device_unit(of->sc_dev) &&
 	    OF_instance_to_package(kifp->port) == oba->oba_phandle)  {
 		ipkdb_of = of;
 		of->sc_ihandle = kifp->port;
@@ -154,7 +153,7 @@ ofnet_attach(device_t parent, device_t self, void *aux)
 
 	callout_init(&of->sc_callout, 0);
 
-	strlcpy(ifp->if_xname, device_xname(&of->sc_dev), IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(of->sc_dev), IFNAMSIZ);
 	ifp->if_softc = of;
 	ifp->if_start = ofnet_start;
 	ifp->if_ioctl = ofnet_ioctl;
@@ -262,10 +261,7 @@ ofnet_read(struct ofnet_softc *of)
 		if (head == 0)
 			continue;
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		ifp->if_ipackets++;
 		(*ifp->if_input)(ifp, head);
 	}
@@ -327,10 +323,7 @@ ofnet_start(struct ifnet *ifp)
 			panic("ofnet_start: no header mbuf");
 		len = m0->m_pkthdr.len;
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		if (len > ETHERMTU + sizeof(struct ether_header)) {
 			/* packet too large, toss it */
@@ -417,7 +410,7 @@ ofnet_watchdog(struct ifnet *ifp)
 {
 	struct ofnet_softc *of = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", device_xname(&of->sc_dev));
+	log(LOG_ERR, "%s: device timeout\n", device_xname(of->sc_dev));
 	ifp->if_oerrors++;
 	ofnet_stop(of);
 	ofnet_init(of);
@@ -427,8 +420,6 @@ ofnet_watchdog(struct ifnet *ifp)
 static void
 ipkdbofstart(struct ipkdb_if *kip)
 {
-	int unit = kip->unit - 1;
-
 	if (ipkdb_of)
 		ipkdbattach(kip, &ipkdb_of->sc_ethercom);
 }

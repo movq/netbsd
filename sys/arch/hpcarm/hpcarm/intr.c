@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.16 2008/11/19 06:41:01 matt Exp $	*/
+/*	$NetBSD: intr.c,v 1.18 2010/12/20 00:25:33 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,17 +36,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.16 2008/11/19 06:41:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.18 2010/12/20 00:25:33 matt Exp $");
 
 #include "opt_irqstats.h"
+#include "opt_cputypes.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/syslog.h>
 #include <sys/malloc.h>
 #include <sys/atomic.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/intr.h>
 #include <machine/cpu.h>
@@ -63,8 +62,6 @@ extern u_int sintrcnt[];
 #define INC_SINTRCNT(x)
 #endif	/* IRQSTATS */
 
-#define	COUNT	uvmexp.softs;
-
 /* Prototypes */
 
 #include "com.h"
@@ -72,10 +69,12 @@ extern u_int sintrcnt[];
 extern void comsoft(void);
 #endif	/* NCOM > 0 */
 
+#if defined(CPU_SA1100) || defined(CPU_SA1110)
 #include "sacom.h"
 #if NSACOM > 0
 extern void sacomsoft(void);
 #endif	/* NSACOM > 0 */
+#endif
 
 /* Eventually these will become macros */
 

@@ -1,4 +1,4 @@
-.\" $NetBSD: kauth.9,v 1.88 2009/08/10 22:36:37 wiz Exp $
+.\" $NetBSD: kauth.9,v 1.96 2012/01/17 10:47:27 cegger Exp $
 .\"
 .\" Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd August 10, 2009
+.Dd January 16, 2012
 .Dt KAUTH 9
 .Os
 .Sh NAME
@@ -77,11 +77,21 @@ the requested operation, and possibly other information as well.
 .Pp
 Every listener examines the passed information and returns its decision
 regarding the requested operation.
-It can either allow, deny, or defer the operation -- in which case, the
-decision is left to the other listeners.
+It can either return:
 .Pp
-For an operation to be allowed, all listeners must not return any deny
-or defer decisions.
+.Bl -tag -width KAUTH_RESULT_ALLOW -compact
+.It Dv KAUTH_RESULT_ALLOW
+The listener allows the operation.
+.It Dv KAUTH_RESULT_DENY
+The listener denies the operation.
+.It Dv KAUTH_RESULT_DEFER
+The listener defers the decision to other listeners.
+.El
+.Pp
+For an operation to be allowed, at least one listener has to return
+.Dv KAUTH_RESULT_ALLOW
+while no other listener returned
+.Dv KAUTH_RESULT_DENY .
 .Pp
 Scopes manage listeners that operate in the same aspect of the system.
 .Ss Kernel Programming Interface
@@ -104,12 +114,15 @@ It is declared as
 .Ft int Fn kauth_authorize_action "kauth_scope_t scope" "kauth_cred_t cred" \
 "kauth_action_t op" "void *arg0" "void *arg1" "void *arg2" "void *arg3"
 .Pp
-An authorization request can return one of two possible values.
-Zero indicates success -- the operation is allowed;
-.Er EPERM
-(see
-.Xr errno 2 )
-indicates failure -- the operation is denied.
+An authorization request can return one of two possible values:
+.Bl -tag -width ".It Dv 0 Po zero Pc" -compact
+.It Dv 0 Po zero Pc
+indicates success; operation is allowed.
+.It Dv EPERM
+indicates failure; operation is denied.
+See
+.Xr errno 2 .
+.El
 .Pp
 Each scope has its own authorization wrapper, to make it easy to call from various
 places by eliminating the need to specify the scope and/or cast values.
@@ -142,17 +155,6 @@ Checks whether the credentials belong to the super-user.
 Using this request is strongly discouraged and should only be done as a
 temporary place-holder, as it is breaking the separation between the
 interface for authorization requests from the back-end implementation.
-.It Dv KAUTH_GENERIC_CANSEE
-Checks whether an object with one set of credentials can access
-information about another object, possibly with a different set of
-credentials.
-.Pp
-.Ar arg0
-contains the credentials of the object looked at.
-.Pp
-This request should be issued only in cases where generic credentials
-check is required; otherwise it is recommended to use the object-specific
-routines.
 .El
 .Ss System Scope
 The system scope,
@@ -453,7 +455,7 @@ information about another process, possibly with a different set of
 credentials.
 .Pp
 .Ar arg1
-indicates the class of information being viewed, and can either of
+indicates the class of information being viewed, and can be either of
 .Dv KAUTH_REQ_PROCESS_CANSEE_ARGS ,
 .Dv KAUTH_REQ_PROCESS_CANSEE_ENTRY ,
 .Dv KAUTH_REQ_PROCESS_CANSEE_ENV ,
@@ -463,9 +465,9 @@ or
 Checks whether viewing the scheduler affinity is allowed.
 .It Dv KAUTH_PROCESS_SCHEDULER_SETAFFINITY
 Checks whether setting the scheduler affinity is allowed.
-.It Dv KAUTH_PROCESS_SCHEDULER_GETPARAMS
+.It Dv KAUTH_PROCESS_SCHEDULER_GETPARAM
 Checks whether viewing the scheduler policy and parameters is allowed.
-.It Dv KAUTH_PROCESS_SCHEDULER_SETPARAMS
+.It Dv KAUTH_PROCESS_SCHEDULER_SETPARAM
 Checks whether modifying the scheduler policy and parameters is allowed.
 .It Dv KAUTH_PROCESS_SIGNAL
 Checks whether an object with one set of credentials can post signals
@@ -688,7 +690,7 @@ interface to the system is allowed.
 Checks whether status of forwarding of source-routed packets can be modified
 or not.
 .It Dv KAUTH_NETWORK_NFS
-Check is an NFS related operation is allowed.
+Check if an NFS related operation is allowed.
 .Pp
 .Ar req
 can be any of the following:
@@ -768,6 +770,12 @@ platforms.
 Below is a list of available actions, along with which platforms are affected
 by each.
 .Bl -tag -width compact
+.It Dv KAUTH_MACHDEP_CPU_UCODE_APPLY
+Request to apply a CPU microcode to a CPU.
+This is related to the
+.Em CPU_UCODE
+kernel config
+.Xr options 4 .
 .It Dv KAUTH_MACHDEP_CACHEFLUSH
 Request to flush the whole CPU cache.
 Affects
@@ -1496,7 +1504,7 @@ object
 .Pp
 .Nm
 provides no means for synchronization within listeners.
-It is the the programmer's responsibility to make sure data used by the
+It is the programmer's responsibility to make sure data used by the
 listener is properly locked during its use, as it can be accessed
 simultaneously from the same listener called multiple times.
 It is also the programmer's responsibility to do garbage collection after

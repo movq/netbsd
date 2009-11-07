@@ -1,4 +1,4 @@
-/*	$NetBSD: shell_cmd.c,v 1.5 2000/10/04 16:24:49 sommerfeld Exp $	*/
+/*	$NetBSD: shell_cmd.c,v 1.5.58.2 2012/04/23 23:40:41 riz Exp $	*/
 
  /*
   * shell_cmd() takes a shell command after %<character> substitutions. The
@@ -15,7 +15,7 @@
 #if 0
 static char sccsid[] = "@(#) shell_cmd.c 1.5 94/12/28 17:42:44";
 #else
-__RCSID("$NetBSD: shell_cmd.c,v 1.5 2000/10/04 16:24:49 sommerfeld Exp $");
+__RCSID("$NetBSD: shell_cmd.c,v 1.5.58.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif
 

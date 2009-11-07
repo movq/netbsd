@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.4 2005/12/11 12:19:44 christos Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.6 2011/08/30 12:39:59 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1994 Masaru Oki
@@ -33,6 +33,7 @@
 #ifndef _MACHINE_DISKLABEL_H_
 #define _MACHINE_DISKLABEL_H_
 
+#define LABELUSESMBR	0			/* no MBR partitionning */
 #define	LABELSECTOR	0			/* sector containing label */
 #define	LABELOFFSET	64			/* offset of label in sector */
 #define	MAXPARTITIONS	8			/* number of partitions */
@@ -58,6 +59,7 @@ struct dos_partition {
 #endif /* HAVE_NBTOOL_CONFIG_H */
 struct cpu_disklabel {
 	struct dos_partition dosparts[NDOSPART];
+#define __HAVE_DISKLABEL_DKBAD
 	struct dkbad bad;
 };
 

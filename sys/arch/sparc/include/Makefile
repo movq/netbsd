@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.29 2007/02/09 21:55:12 ad Exp $
+#	$NetBSD: Makefile,v 1.31 2011/07/17 20:54:47 joerg Exp $
 
 INCSDIR= /usr/include/sparc
 
@@ -7,7 +7,7 @@ INCS=	ansi.h aout_machdep.h apmvar.h asm.h autoconf.h \
 	cdefs.h cgtworeg.h cpu.h cpuconf.h \
 	disklabel.h \
 	eeprom.h elf_machdep.h endian.h endian_machdep.h \
-	float.h frame.h fsr.h \
+	fenv.h float.h frame.h fsr.h \
 	idprom.h ieee.h ieeefp.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	kbd.h kbio.h kcore.h \
@@ -16,9 +16,9 @@ INCS=	ansi.h aout_machdep.h apmvar.h asm.h autoconf.h \
 	oldmon.h openpromio.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \
 	reg.h reloc.h rwlock.h \
-	setjmp.h signal.h stdarg.h \
+	setjmp.h signal.h \
 	tctrl.h trap.h types.h \
-	varargs.h vmparam.h vuid_event.h \
+	vmparam.h vuid_event.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

@@ -466,7 +466,8 @@ version, the libmilter library will log an error message like this:
 number.  See, however, the <a href="#limitations">limitations</a>
 section below for features that aren't supported by Postfix. </p>
 
-<p> If the Postfix milter_protocol setting specifies a too high
+<p> With Postfix 2.7 and earlier, if the Postfix milter_protocol
+setting specifies a too high
 version, the libmilter library simply hangs up without logging a
 warning, and you see a Postfix warning message like one of the
 following: </p>
@@ -480,7 +481,9 @@ warning: milter inet:<i>host</i>:<i>port</i>: can't read SMFIC_DATA reply packet
 </blockquote>
 
 <p> The remedy is to lower the Postfix milter_protocol version
-number. </p>
+number. Postfix 2.8 and later will automatically turn off protocol
+features that the application's libmilter library does not expect.
+</p>
 
 <h3><a name="timeouts">Milter protocol timeouts</a></h3>
 
@@ -556,7 +559,8 @@ login method </td> </tr>
 address </td> </tr>
 
 <tr> <td> {client_connections} </td> <td> CONNECT </td> <td>
-Connection concurrency for this client </td> </tr>
+Connection concurrency for this client (zero if the client is
+excluded from all smtpd_client_* limits). </td> </tr>
 
 <tr> <td> {client_name} </td> <td> Always </td> <td> Client hostname
 <br> When address &rarr; name lookup or name &rarr; address
@@ -718,7 +722,7 @@ version 1.0.0 no longer includes the queue ID in the message header.
 </p>
 
 <p> To fix the ugly message header, you will need to add code that
-looks up the Postfix queue ID at some later point im time. The
+looks up the Postfix queue ID at some later point in time. The
 example below adds the lookup after the end-of-message.  </p>
 
 <ul>

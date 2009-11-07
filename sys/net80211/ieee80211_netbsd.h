@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.h,v 1.15 2008/06/15 16:42:19 christos Exp $ */
+/* $NetBSD: ieee80211_netbsd.h,v 1.17 2011/12/31 20:41:58 christos Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -153,27 +153,6 @@ typedef kmutex_t acl_lock_t;
 #define	ACL_UNLOCK(_as)			IEEE80211_UNLOCK_IMPL(_as, as_lock)
 #define	ACL_LOCK_ASSERT(_as)		IEEE80211_LOCK_ASSERT_IMPL(_as, as_lock)
 
-/*
- * Node reference counting definitions.
- *
- * ieee80211_node_initref	initialize the reference count to 1
- * ieee80211_node_incref	add a reference
- * ieee80211_node_decref	remove a reference
- * ieee80211_node_dectestref	remove a reference and return 1 if this
- *				is the last reference, otherwise 0
- * ieee80211_node_refcnt	reference count for printing (only)
- */
-
-#define ieee80211_node_initref(_ni) \
-	do { ((_ni)->ni_refcnt = 1); } while (0)
-#define ieee80211_node_incref(_ni) \
-	do { (_ni)->ni_refcnt++; } while (0)
-#define	ieee80211_node_decref(_ni) \
-	do { (_ni)->ni_refcnt--; } while (0)
-struct ieee80211_node;
-int ieee80211_node_dectestref(struct ieee80211_node *ni);
-#define	ieee80211_node_refcnt(_ni)	(_ni)->ni_refcnt
-
 struct ifqueue;
 void	ieee80211_drain_ifq(struct ifqueue *);
 
@@ -251,7 +230,6 @@ struct ieee80211_michael_event {
 #define	RTM_IEEE80211_REJOIN	108	/* station re-associate (ap mode) */
 
 #ifdef _KERNEL
-#define	__offsetof	offsetof
 #define	ticks	hardclock_ticks
 #define	ovbcopy(__src, __dst, __n)	((void)memmove(__dst, __src, __n))
 

@@ -1,4 +1,4 @@
-/* $NetBSD: syscall.c,v 1.34 2008/10/21 12:16:58 ad Exp $ */
+/* $NetBSD: syscall.c,v 1.39 2012/02/11 23:16:15 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -65,17 +65,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -89,7 +89,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.34 2008/10/21 12:16:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.39 2012/02/11 23:16:15 martin Exp $");
 
 #include "opt_sa.h"
 
@@ -98,21 +98,18 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.34 2008/10/21 12:16:58 ad Exp $");
 #include <sys/proc.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 #include <sys/ktrace.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/alpha.h>
 #include <machine/userret.h>
 
-void	syscall_plain(struct lwp *, u_int64_t, struct trapframe *);
-void	syscall_fancy(struct lwp *, u_int64_t, struct trapframe *);
+void	syscall_plain(struct lwp *, uint64_t, struct trapframe *);
+void	syscall_fancy(struct lwp *, uint64_t, struct trapframe *);
 
 void
 syscall_intern(struct proc *p)
@@ -138,25 +135,25 @@ syscall_intern(struct proc *p)
  * a3, and v0 from the frame before returning to the user process.
  */
 void
-syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
+syscall_plain(struct lwp *l, uint64_t code, struct trapframe *framep)
 {
 	const struct sysent *callp;
 	int error;
-	u_int64_t rval[2];
-	u_int64_t *args, copyargs[10];				/* XXX */
+	uint64_t rval[2];
+	uint64_t *args, copyargs[10];				/* XXX */
 	u_int hidden, nargs;
 	struct proc *p = l->l_proc;
 
 	LWP_CACHE_CREDS(l, p);
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	l->l_md.md_tf = framep;
 
 	callp = p->p_emul->e_sysent;
 
 #ifdef KERN_SA
 	if (__predict_false((l->l_savp)
-            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+	    && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
 		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
 #endif
 
@@ -182,7 +179,7 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	switch (nargs) {
 	default:
 		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
-		    (nargs - 6) * sizeof(u_int64_t));
+		    (nargs - 6) * sizeof(uint64_t));
 		if (error)
 			goto bad;
 	case 6:	
@@ -232,25 +229,25 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 }
 
 void
-syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
+syscall_fancy(struct lwp *l, uint64_t code, struct trapframe *framep)
 {
 	const struct sysent *callp;
 	int error;
-	u_int64_t rval[2];
-	u_int64_t *args, copyargs[10];
+	uint64_t rval[2];
+	uint64_t *args, copyargs[10];
 	u_int hidden, nargs;
 	struct proc *p = l->l_proc;
 
 	LWP_CACHE_CREDS(l, p);
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	l->l_md.md_tf = framep;
 
 	callp = p->p_emul->e_sysent;
 
 #ifdef KERN_SA
 	if (__predict_false((l->l_savp)
-            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+	    && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
 		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
 #endif
 
@@ -276,7 +273,7 @@ syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	switch (nargs) {
 	default:
 		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
-		    (nargs - 6) * sizeof(u_int64_t));
+		    (nargs - 6) * sizeof(uint64_t));
 		if (error) {
 			args = copyargs;
 			goto bad;
@@ -339,9 +336,19 @@ child_return(void *arg)
 	struct lwp *l = arg;
 
 	/*
-	 * Return values in the frame set by cpu_fork().
+	 * Return values in the frame set by cpu_lwp_fork().
 	 */
 
 	userret(l);
 	ktrsysret(SYS_fork, 0, 0);
+}
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l);
 }

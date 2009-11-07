@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_sysctl.c,v 1.30 2009/01/11 02:45:49 christos Exp $	*/
+/*	$NetBSD: netbsd32_sysctl.c,v 1.33 2012/01/20 14:08:07 joerg Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.30 2009/01/11 02:45:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.33 2012/01/20 14:08:07 joerg Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.30 2009/01/11 02:45:49 christo
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -142,14 +141,19 @@ netbsd32_sysctl_init(void)
 		       NULL, 0, NULL, 0,
 		       CTL_HW, CTL_EOL);
 	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
+		       CTLTYPE_INT, "alignbytes", NULL,
+		       NULL, ALIGNBYTES32, NULL, 0,
+		       CTL_HW, HW_ALIGNBYTES, CTL_EOL);
+	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "machine", NULL,
-		       NULL, 0, &machine32, 0,
+		       NULL, 0, __UNCONST(&machine32), 0,
 		       CTL_HW, HW_MACHINE, CTL_EOL);
 	sysctl_createv(&netbsd32_clog, 0, &_root, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "machine_arch", NULL,
-		       NULL, 0, &machine_arch32, 0,
+		       NULL, 0, __UNCONST(&machine_arch32), 0,
 		       CTL_HW, HW_MACHINE_ARCH, CTL_EOL);
 }
 

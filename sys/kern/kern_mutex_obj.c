@@ -1,11 +1,11 @@
-/*	$NetBSD: kern_mutex_obj.c,v 1.1 2009/11/04 13:29:45 pooka Exp $	*/
+/*	$NetBSD: kern_mutex_obj.c,v 1.5 2011/09/27 01:02:38 jym Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe and Andrew Doran.
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_mutex_obj.c,v 1.1 2009/11/04 13:29:45 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_mutex_obj.c,v 1.5 2011/09/27 01:02:38 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -47,7 +47,7 @@ struct kmutexobj {
 
 static int	mutex_obj_ctor(void *, void *, int);
 
-static pool_cache_t	mutex_obj_cache;
+static pool_cache_t	mutex_obj_cache		__read_mostly;
 
 /*
  * mutex_obj_init:
@@ -106,8 +106,12 @@ mutex_obj_hold(kmutex_t *lock)
 {
 	struct kmutexobj *mo = (struct kmutexobj *)lock;
 
-	KASSERT(mo->mo_magic == MUTEX_OBJ_MAGIC);
-	KASSERT(mo->mo_refcnt > 0);
+	KASSERTMSG(mo->mo_magic == MUTEX_OBJ_MAGIC,
+	    "%s: lock %p: mo->mo_magic (%#x) != MUTEX_OBJ_MAGIC (%#x)",
+	     __func__, mo, mo->mo_magic, MUTEX_OBJ_MAGIC);
+	KASSERTMSG(mo->mo_refcnt > 0,
+	    "%s: lock %p: mo->mo_refcnt (%#x) == 0",
+	     __func__, mo, mo->mo_refcnt);
 
 	atomic_inc_uint(&mo->mo_refcnt);
 }
@@ -123,8 +127,12 @@ mutex_obj_free(kmutex_t *lock)
 {
 	struct kmutexobj *mo = (struct kmutexobj *)lock;
 
-	KASSERT(mo->mo_magic == MUTEX_OBJ_MAGIC);
-	KASSERT(mo->mo_refcnt > 0);
+	KASSERTMSG(mo->mo_magic == MUTEX_OBJ_MAGIC,
+	    "%s: lock %p: mo->mo_magic (%#x) != MUTEX_OBJ_MAGIC (%#x)",
+	     __func__, mo, mo->mo_magic, MUTEX_OBJ_MAGIC);
+	KASSERTMSG(mo->mo_refcnt > 0,
+	    "%s: lock %p: mo->mo_refcnt (%#x) == 0",
+	     __func__, mo, mo->mo_refcnt);
 
 	if (atomic_dec_uint_nv(&mo->mo_refcnt) > 0) {
 		return false;

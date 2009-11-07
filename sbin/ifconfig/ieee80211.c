@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211.c,v 1.23 2009/01/18 00:24:29 lukem Exp $	*/
+/*	$NetBSD: ieee80211.c,v 1.25 2010/12/13 17:35:08 pooka Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ieee80211.c,v 1.23 2009/01/18 00:24:29 lukem Exp $");
+__RCSID("$NetBSD: ieee80211.c,v 1.25 2010/12/13 17:35:08 pooka Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -62,6 +62,7 @@ __RCSID("$NetBSD: ieee80211.c,v 1.23 2009/01/18 00:24:29 lukem Exp $");
 #include "parse.h"
 #include "env.h"
 #include "util.h"
+#include "prog_ops.h"
 
 static void ieee80211_statistics(prop_dictionary_t);
 static void ieee80211_status(prop_dictionary_t, prop_dictionary_t);
@@ -184,11 +185,11 @@ struct pinteger parse_powersavesleep =
     0, INT_MAX, 10, setifpowersavesleep, "powersavesleep",
     &command_root.pb_parser);
 
-struct pstr parse_nwkey = PSTR_INITIALIZER(&parse_nwkey, "nwkey", setifnwkey,
-    "nwkey", &command_root.pb_parser);
+struct pstr parse_nwkey = PSTR_INITIALIZER1(&parse_nwkey, "nwkey", setifnwkey,
+    "nwkey", false, &command_root.pb_parser);
 
-struct pstr parse_bssid = PSTR_INITIALIZER(&parse_bssid, "bssid", setifbssid,
-    "bssid", &command_root.pb_parser);
+struct pstr parse_bssid = PSTR_INITIALIZER1(&parse_bssid, "bssid", setifbssid,
+    "bssid", false, &command_root.pb_parser);
 
 static int
 set80211(prop_dictionary_t env, uint16_t type, int16_t val, int16_t len,
@@ -375,7 +376,7 @@ setifnwkey(prop_dictionary_t env, prop_dictionary_t oenv)
 			val += 2;
 			for (i = 0; i < IEEE80211_WEP_NKID; i++) {
 				val = get_string(val, ",", keybuf[i],
-				    &nwkey.i_key[i].i_keylen);
+				    &nwkey.i_key[i].i_keylen, true);
 				if (val == NULL) {
 					errno = EINVAL;
 					return -1;
@@ -386,7 +387,7 @@ setifnwkey(prop_dictionary_t env, prop_dictionary_t oenv)
 			}
 		} else {
 			val = get_string(val, NULL, keybuf[0],
-			    &nwkey.i_key[0].i_keylen);
+			    &nwkey.i_key[0].i_keylen, true);
 			if (val == NULL) {
 				errno = EINVAL;
 				return -1;
@@ -725,7 +726,7 @@ scan_and_wait(prop_dictionary_t env)
 {
 	int sroute;
 
-	sroute = socket(PF_ROUTE, SOCK_RAW, 0);
+	sroute = prog_socket(PF_ROUTE, SOCK_RAW, 0);
 	if (sroute < 0) {
 		perror("socket(PF_ROUTE,SOCK_RAW)");
 		return;
@@ -737,7 +738,7 @@ scan_and_wait(prop_dictionary_t env)
 		struct rt_msghdr *rtm;
 
 		do {
-			if (read(sroute, buf, sizeof(buf)) < 0) {
+			if (prog_read(sroute, buf, sizeof(buf)) < 0) {
 				perror("read(PF_ROUTE)");
 				break;
 			}
@@ -748,7 +749,7 @@ scan_and_wait(prop_dictionary_t env)
 		} while (rtm->rtm_type != RTM_IEEE80211 ||
 		    ifan->ifan_what != RTM_IEEE80211_SCAN);
 	}
-	close(sroute);
+	prog_close(sroute);
 }
 
 static void

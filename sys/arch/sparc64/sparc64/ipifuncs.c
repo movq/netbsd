@@ -1,4 +1,4 @@
-/*	$NetBSD: ipifuncs.c,v 1.24 2009/05/16 19:15:34 nakayama Exp $ */
+/*	$NetBSD: ipifuncs.c,v 1.44 2012/02/12 16:34:10 matt Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -27,14 +27,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.24 2009/05/16 19:15:34 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.44 2012/02/12 16:34:10 matt Exp $");
 
 #include "opt_ddb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-#include <sys/simplelock.h>
+#include <sys/xcall.h>
 
 #include <machine/db_machdep.h>
 
@@ -43,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.24 2009/05/16 19:15:34 nakayama Exp $
 #include <machine/ctlreg.h>
 #include <machine/pmap.h>
 #include <machine/sparc64.h>
+
+#include <sparc64/sparc64/cache.h>
 
 #if defined(DDB) || defined(KGDB)
 #ifdef DDB
@@ -53,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.24 2009/05/16 19:15:34 nakayama Exp $
 
 /* CPU sets containing halted, paused and resumed cpus */
 static volatile sparc64_cpuset_t cpus_halted;
+static volatile sparc64_cpuset_t cpus_spinning;
 static volatile sparc64_cpuset_t cpus_paused;
 static volatile sparc64_cpuset_t cpus_resumed;
 
@@ -62,26 +65,39 @@ static void	sparc64_ipi_error(const char *, sparc64_cpuset_t, sparc64_cpuset_t);
 
  
 /*
- * These are the "function" entry points in locore.s to handle IPI's.
+ * These are the "function" entry points in locore.s/mp_subr.s to handle IPI's.
  */
-void	sparc64_ipi_halt(void *);
-void	sparc64_ipi_pause(void *);
-void	sparc64_ipi_flush_pte(void *);
-void	sparc64_ipi_flush_ctx(void *);
-void	sparc64_ipi_flush_all(void *);
+void	sparc64_ipi_halt(void *, void *);
+void	sparc64_ipi_pause(void *, void *);
+void	sparc64_ipi_flush_pte_us(void *, void *);
+void	sparc64_ipi_flush_pte_usiii(void *, void *);
+void	sparc64_ipi_dcache_flush_page_us(void *, void *);
+void	sparc64_ipi_dcache_flush_page_usiii(void *, void *);
+void	sparc64_ipi_blast_dcache(void *, void *);
+void	sparc64_ipi_ccall(void *, void *);
 
 /*
  * Process cpu stop-self event.
  */
-int
-sparc64_ipi_halt_thiscpu(void *arg)
+void
+sparc64_ipi_halt_thiscpu(void *arg, void *arg2)
 {
+	extern void prom_printf(const char *fmt, ...);
 
 	printf("cpu%d: shutting down\n", cpu_number());
-	CPUSET_ADD(cpus_halted, cpu_number());
-	prom_stopself();
-
-	return(1);
+	if (prom_has_stop_other() || !prom_has_stopself()) {
+		/*
+		 * just loop here, the final cpu will stop us later
+		 */
+		CPUSET_ADD(cpus_spinning, cpu_number());
+		CPUSET_ADD(cpus_halted, cpu_number());
+		spl0();
+		while (1)
+			/* nothing */;
+	} else {
+		CPUSET_ADD(cpus_halted, cpu_number());
+		prom_stopself();
+	}
 }
 
 void
@@ -95,9 +111,9 @@ sparc64_do_pause(void)
 	CPUSET_ADD(cpus_paused, cpu_number());
 
 	do {
-		membar_sync();
+		membar_Sync();
 	} while(CPUSET_HAS(cpus_paused, cpu_number()));
-	membar_sync();
+	membar_Sync();
 	CPUSET_ADD(cpus_resumed, cpu_number());
 
 #if defined(DDB)
@@ -111,7 +127,7 @@ sparc64_do_pause(void)
 /*
  * Pause cpu.  This is called from locore.s after setting up a trapframe.
  */
-int
+void
 sparc64_ipi_pause_thiscpu(void *arg)
 {
 	int s;
@@ -134,18 +150,18 @@ sparc64_ipi_pause_thiscpu(void *arg)
 #endif
 
 	intr_restore(s);
-	return (1);
 }
 
 /*
  * Initialize IPI machinery.
  */
 void
-sparc64_ipi_init()
+sparc64_ipi_init(void)
 {
 
 	/* Clear all cpu sets. */
 	CPUSET_CLEAR(cpus_halted);
+	CPUSET_CLEAR(cpus_spinning);
 	CPUSET_CLEAR(cpus_paused);
 	CPUSET_CLEAR(cpus_resumed);
 }
@@ -188,11 +204,19 @@ sparc64_broadcast_ipi(ipifunc_t func, uint64_t arg1, uint64_t arg2)
 void
 sparc64_send_ipi(int upaid, ipifunc_t func, uint64_t arg1, uint64_t arg2)
 {
-	int i, ik;
+	int i, ik, shift = 0;
 	uint64_t intr_func;
 
 	KASSERT(upaid != curcpu()->ci_cpuid);
-	if (ldxa(0, ASR_IDSR) & IDSR_BUSY)
+
+	/*
+	 * UltraSPARC-IIIi CPUs select the BUSY/NACK pair based on the
+	 * lower two bits of the ITID.
+	 */
+	if (CPU_IS_USIIIi())
+		shift = (upaid & 0x3) * 2;
+
+	if (ldxa(0, ASR_IDSR) & (IDSR_BUSY << shift))
 		panic("recursive IPI?");
 
 	intr_func = (uint64_t)(u_long)func;
@@ -205,13 +229,15 @@ sparc64_send_ipi(int upaid, ipifunc_t func, uint64_t arg1, uint64_t arg2)
 		stxa(IDDR_1H, ASI_INTERRUPT_DISPATCH, arg1);
 		stxa(IDDR_2H, ASI_INTERRUPT_DISPATCH, arg2);
 		stxa(IDCR(upaid), ASI_INTERRUPT_DISPATCH, 0);
-		membar_sync();
+		membar_Sync();
 		/* Workaround for SpitFire erratum #54, from FreeBSD */
-		(void)ldxa(P_DCR_0, ASI_INTERRUPT_RECEIVE_DATA);
-		membar_sync();
+		if (CPU_IS_SPITFIRE()) {
+			(void)ldxa(P_DCR_0, ASI_INTERRUPT_RECEIVE_DATA);
+			membar_Sync();
+		}
 
 		for (ik = 0; ik < 1000000; ik++) {
-			if (ldxa(0, ASR_IDSR) & IDSR_BUSY)
+			if (ldxa(0, ASR_IDSR) & (IDSR_BUSY << shift))
 				continue;
 			else
 				break;
@@ -221,7 +247,7 @@ sparc64_send_ipi(int upaid, ipifunc_t func, uint64_t arg1, uint64_t arg2)
 		if (ik == 1000000)
 			break;
 
-		if ((ldxa(0, ASR_IDSR) & IDSR_NACK) == 0)
+		if ((ldxa(0, ASR_IDSR) & (IDSR_NACK << shift)) == 0)
 			return;
 		/*
 		 * Wait for a while with enabling interrupts to avoid
@@ -245,7 +271,7 @@ sparc64_ipi_wait(sparc64_cpuset_t volatile *cpus_watchset, sparc64_cpuset_t cpus
 	uint64_t limit = gettick() + cpu_frequency(curcpu());
 
 	while (gettick() < limit) {
-		membar_sync();
+		membar_Sync();
 		if (CPUSET_EQUAL(*cpus_watchset, cpus_mask))
 			return 0;
 	}
@@ -259,6 +285,7 @@ void
 mp_halt_cpus(void)
 {
 	sparc64_cpuset_t cpumask, cpuset;
+	struct cpu_info *ci;
 
 	CPUSET_ASSIGN(cpuset, cpus_active);
 	CPUSET_DEL(cpuset, cpu_number());
@@ -268,9 +295,28 @@ mp_halt_cpus(void)
 	if (CPUSET_EMPTY(cpuset))
 		return;
 
+	CPUSET_CLEAR(cpus_spinning);
 	sparc64_multicast_ipi(cpuset, sparc64_ipi_halt, 0, 0);
 	if (sparc64_ipi_wait(&cpus_halted, cpumask))
 		sparc64_ipi_error("halt", cpumask, cpus_halted);
+
+	/*
+	 * Depending on available firmware methods, other cpus will
+	 * either shut down themselfs, or spin and wait for us to
+	 * stop them.
+	 */
+	if (CPUSET_EMPTY(cpus_spinning)) {
+		/* give other cpus a few cycles to actually power down */
+		delay(10000);
+		return;
+	}
+	/* there are cpus spinning - shut them down if we can */
+	if (prom_has_stop_other()) {
+		for (ci = cpus; ci != NULL; ci = ci->ci_next) {
+			if (!CPUSET_HAS(cpus_spinning, ci->ci_index)) continue;
+			prom_stop_other(ci->ci_cpuid);
+		}
+	}
 }
 
 /*
@@ -299,7 +345,7 @@ void
 mp_resume_cpu(int cno)
 {
 	CPUSET_DEL(cpus_paused, cno);
-	membar_sync();
+	membar_Sync();
 }
 
 /*
@@ -312,7 +358,7 @@ mp_resume_cpus(void)
 
 	CPUSET_CLEAR(cpus_resumed);
 	CPUSET_ASSIGN(cpuset, cpus_paused);
-	membar_sync();
+	membar_Sync();
 	CPUSET_CLEAR(cpus_paused);
 
 	/* CPUs awake on cpus_paused clear */
@@ -331,12 +377,18 @@ mp_cpu_is_paused(sparc64_cpuset_t cpunum)
  * Flush pte on all active processors.
  */
 void
-smp_tlb_flush_pte(vaddr_t va, pmap_t pm)
+smp_tlb_flush_pte(vaddr_t va, struct pmap * pm)
 {
 	sparc64_cpuset_t cpuset;
 	struct cpu_info *ci;
 	int ctx;
 	bool kpm = (pm == pmap_kernel());
+	ipifunc_t func;
+
+	if (CPU_IS_USIII_UP())
+		func = sparc64_ipi_flush_pte_usiii;
+	else
+		func = sparc64_ipi_flush_pte_us;
 
 	/* Flush our own TLB */
 	ctx = pm->pm_ctx[cpu_number()];
@@ -357,59 +409,45 @@ smp_tlb_flush_pte(vaddr_t va, pmap_t pm)
 			KASSERT(ctx >= 0);
 			if (!kpm && ctx == 0)
 				continue;
-			sparc64_send_ipi(ci->ci_cpuid, sparc64_ipi_flush_pte,
-					 va, ctx);
+			sparc64_send_ipi(ci->ci_cpuid, func, va, ctx);
 		}
 	}
 }
 
 /*
- * Flush context on all active processors.
+ * Make sure this page is flushed from all/some CPUs.
  */
 void
-smp_tlb_flush_ctx(pmap_t pm)
+smp_dcache_flush_page_cpuset(paddr_t pa, sparc64_cpuset_t activecpus)
 {
-	sparc64_cpuset_t cpuset;
-	struct cpu_info *ci;
-	int ctx;
-	bool kpm = (pm == pmap_kernel());
+	ipifunc_t func;
 
-	/* Flush our own TLB */
-	ctx = pm->pm_ctx[cpu_number()];
-	KASSERT(ctx >= 0);
-	if (kpm || ctx > 0)
-		sp_tlb_flush_ctx(ctx);
+	if (CPU_IS_USIII_UP())
+		func = sparc64_ipi_dcache_flush_page_usiii;
+	else
+		func = sparc64_ipi_dcache_flush_page_us;
 
-	CPUSET_ASSIGN(cpuset, cpus_active);
-	CPUSET_DEL(cpuset, cpu_number());
-	if (CPUSET_EMPTY(cpuset))
-		return;
+	sparc64_multicast_ipi(activecpus, func, pa, dcache_line_size);
+	sp_dcache_flush_page(pa);
+}
 
-	/* Flush others */
-	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
-		if (CPUSET_HAS(cpuset, ci->ci_index)) {
-			CPUSET_DEL(cpuset, ci->ci_index);
-			ctx = pm->pm_ctx[ci->ci_index];
-			KASSERT(ctx >= 0);
-			if (!kpm && ctx == 0)
-				continue;
-			sparc64_send_ipi(ci->ci_cpuid, sparc64_ipi_flush_ctx,
-					 ctx, 0);
-		}
-	}
+void
+smp_dcache_flush_page_allcpu(paddr_t pa)
+{
+
+	smp_dcache_flush_page_cpuset(pa, cpus_active);
 }
 
 /*
- * Flush whole TLB on all active processors.
+ * Flush the D$ on all CPUs.
  */
 void
-smp_tlb_flush_all(void)
+smp_blast_dcache(void)
 {
-	/* Flush our own TLB */
-	sp_tlb_flush_all();
 
-	/* Flush others */
-	sparc64_broadcast_ipi(sparc64_ipi_flush_all, 0, 0);
+	sparc64_multicast_ipi(cpus_active, sparc64_ipi_blast_dcache,
+			      dcache_size, dcache_line_size);
+	sp_blast_dcache(dcache_size, dcache_line_size);
 }
 
 /*
@@ -432,4 +470,30 @@ sparc64_ipi_error(const char *s, sparc64_cpuset_t cpus_succeeded,
 	}
 
 	printf("\n");
+}
+
+/*
+ * MD support for xcall(9) interface.
+ */
+
+void
+sparc64_generic_xcall(struct cpu_info *target, ipi_c_call_func_t func,
+	void *arg)
+{
+	/* if target == NULL broadcast to everything but curcpu */
+	if (target)
+		sparc64_send_ipi(target->ci_cpuid, sparc64_ipi_ccall,
+		    (uint64_t)(uintptr_t)func, (uint64_t)(uintptr_t)arg);
+	else {
+		
+		sparc64_multicast_ipi(cpus_active, sparc64_ipi_ccall,
+		    (uint64_t)(uintptr_t)func, (uint64_t)(uintptr_t)arg);
+	}
+}
+
+void
+xc_send_ipi(struct cpu_info *target)
+{
+
+	sparc64_generic_xcall(target, (ipi_c_call_func_t)xc_ipi_handler, NULL);
 }

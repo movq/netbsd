@@ -3,9 +3,18 @@
 /* Generated from: NetBSD: mknative.common,v 1.9 2007/02/05 18:26:01 apb Exp  */
 
 /* Generated automatically. */
-static const char configuration_arguments[] = "/usr/src/tools/gcc/../../gnu/dist/gcc4/configure --enable-long-long --disable-multilib --enable-threads --disable-symvers --build=x86_64-unknown-netbsd4.99.72 --host=powerpc--netbsd --target=powerpc--netbsd --enable-__cxa_atexit";
+#ifdef _SOFT_FLOAT
+static const char configuration_arguments[] = "/usr/src/tools/gcc/../../gnu/dist/gcc4/configure --target=powerpc--netbsd --enable-long-long --enable-threads --enable-__cxa_atexit --disable-multilib --disable-symvers --build=x86_64-unknown-netbsd5.0. --host=powerpc--netbsd --with-float=soft";
+static const char thread_model[] = "posix";
+
+static const struct {
+  const char *name, *value;
+} configure_default_options[] = { { "float", "soft" } };
+#else
+static const char configuration_arguments[] = "/usr/src/tools/gcc/../../gnu/dist/gcc4/configure --target=powerpc--netbsd --enable-long-long --enable-threads --enable-__cxa_atexit --disable-multilib --disable-symvers --build=x86_64-unknown-netbsd5.0. --host=powerpc--netbsd";
 static const char thread_model[] = "posix";
 
 static const struct {
   const char *name, *value;
 } configure_default_options[] = { { NULL, NULL} };
+#endif

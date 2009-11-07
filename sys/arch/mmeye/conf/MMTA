@@ -1,4 +1,4 @@
-#	$NetBSD: MMTA,v 1.40 2009/03/06 20:31:50 joerg Exp $
+#	$NetBSD: MMTA,v 1.46 2011/11/22 21:25:26 tls Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -20,6 +20,10 @@ options		SH3
 options 	SH7708R			# 100MHz
 options 	PCLOCK=33330000		# 33.33MHz
 options 	INITTODR_ALWAYS_USE_RTC
+
+options 	IOM_RAM_SIZE=0x01000000	# 16MB
+options 	IOM_RAM_BEGIN=0x0c000000
+makeoptions	DEFTEXTADDR="0x8c010000"
 
 options 	INSECURE	# disable kernel security levels
 
@@ -67,14 +71,14 @@ file-system 	NFS		# Network File System client
 file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 options 	NFSSERVER	# Network File System server
 #options 	FIFO		# FIFOs; RECOMMENDED
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -117,12 +121,12 @@ shb* at mainbus?
 
 rtc*	at shb?
 
-com0	at mainbus?
-com1	at mainbus?
+com0	at mainbus? addr1 0xa4000000 irq1 11
+com1	at mainbus? addr1 0xa4000008 irq1 12
 
 # SH PCMCIA controllers
-mmeyepcmcia0	at mainbus?
-mmeyepcmcia1	at mainbus?
+mmeyepcmcia0 at mainbus? addr1 0xb000000a addr2 0xb8000000 irq1 3 irq2 10
+mmeyepcmcia1 at mainbus? addr1 0xb000000c addr2 0xb9000000 irq1 4 irq2 9
 
 # PCMCIA bus support
 pcmcia*	at mmeyepcmcia? controller ? socket ?
@@ -199,8 +203,8 @@ cinclude "arch/mmeye/conf/GENERIC.local"
 
 # disk/mass storage pseudo-devices
 pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device (ramdisk)
+#pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 
 # network pseudo-devices
@@ -217,5 +221,4 @@ pseudo-device	pty			# pseudo-terminals
 pseudo-device	clockctl		# user control of clock subsystem
 
 # rnd is EXPERIMENTAL at this point.
-#pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)

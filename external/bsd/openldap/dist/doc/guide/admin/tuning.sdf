@@ -1,5 +1,5 @@
-# $OpenLDAP: pkg/openldap-guide/admin/tuning.sdf,v 1.9.2.7 2008/04/14 18:22:18 quanah Exp $
-# Copyright 1999-2008 The OpenLDAP Foundation, All Rights Reserved.
+# OpenLDAP: pkg/openldap-guide/admin/tuning.sdf,v 1.9.2.9 2010/04/13 20:22:35 kurt Exp
+# Copyright 1999-2010 The OpenLDAP Foundation, All Rights Reserved.
 # COPYING RESTRICTIONS APPLY, see COPYRIGHT.
 
 H1: Tuning

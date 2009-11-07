@@ -61,11 +61,12 @@
 #include <openssl/conf.h>
 #include <openssl/err.h>
 
-main()
+int
+main(void)
 	{
 	LHASH_OF(CONF_VALUE) *conf;
 	long eline;
-	char *s,*s2;
+	char *s;
 
 #ifdef USE_WIN32
 	CONF_set_default_method(CONF_WIN32);

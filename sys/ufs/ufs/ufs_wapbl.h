@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_wapbl.h,v 1.5 2008/10/08 22:58:56 pooka Exp $	*/
+/*	$NetBSD: ufs_wapbl.h,v 1.7 2011/09/19 11:18:01 gdt Exp $	*/
 
 /*-
  * Copyright (c) 2003,2006,2008 The NetBSD Foundation, Inc.
@@ -90,8 +90,6 @@
 #error Undefine WAPBL_DEBUG_INODES or update the code.  Have a nice day.
 #endif
 
-int	wapbl_ufs_rename(void *v);
-
 #ifdef WAPBL_DEBUG_INODES
 void	ufs_wapbl_verify_inodes(struct mount *, const char *);
 #endif
@@ -135,11 +133,11 @@ ufs_wapbl_end2(struct mount *mp, struct vnode *vp1, struct vnode *vp2)
 }
 
 #define	UFS_WAPBL_BEGIN(mp)						\
-	ufs_wapbl_begin2(mp, 0, 0, __FUNCTION__, __LINE__)
+	ufs_wapbl_begin2(mp, NULL, NULL, __FUNCTION__, __LINE__)
 #define	UFS_WAPBL_BEGIN1(mp, v1)					\
-	ufs_wapbl_begin2(mp, v1, 0, __FUNCTION__, __LINE__)
-#define	UFS_WAPBL_END(mp)	ufs_wapbl_end2(mp, 0, 0)
-#define	UFS_WAPBL_END1(mp, v1)	ufs_wapbl_end2(mp, v1, 0)
+	ufs_wapbl_begin2(mp, v1, NULL, __FUNCTION__, __LINE__)
+#define	UFS_WAPBL_END(mp)	ufs_wapbl_end2(mp, NULL, NULL)
+#define	UFS_WAPBL_END1(mp, v1)	ufs_wapbl_end2(mp, v1, NULL)
 
 #define	UFS_WAPBL_UPDATE(vp, access, modify, flags)			\
 	if ((vp)->v_mount->mnt_wapbl) {					\

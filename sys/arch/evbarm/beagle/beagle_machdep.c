@@ -1,4 +1,4 @@
-/*	$NetBSD: beagle_machdep.c,v 1.4 2009/08/11 17:04:15 matt Exp $ */
+/*	$NetBSD: beagle_machdep.c,v 1.13 2011/07/01 20:38:16 dyoung Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.4 2009/08/11 17:04:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.13 2011/07/01 20:38:16 dyoung Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
@@ -134,7 +134,7 @@ __KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.4 2009/08/11 17:04:15 matt Exp 
 #include "opt_md.h"
 #include "opt_com.h"
 #include "opt_omap.h"
-#include "md.h"
+#include "prcm.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -161,7 +161,7 @@ __KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.4 2009/08/11 17:04:15 matt Exp 
 #endif
 
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/armreg.h>
@@ -172,6 +172,7 @@ __KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.4 2009/08/11 17:04:15 matt Exp 
 #include <arm/omap/omap_com.h>
 #include <arm/omap/omap_var.h>
 #include <arm/omap/omap_wdtvar.h>
+#include <arm/omap/omap2_prcm.h>
 
 #include <evbarm/beagle/beagle.h>
 
@@ -179,7 +180,7 @@ __KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.4 2009/08/11 17:04:15 matt Exp 
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
+ * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
 
@@ -234,8 +235,6 @@ extern char _end[];
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-extern struct user *proc0paddr;
 
 /*
  * Macros to translate between physical and virtual for a subset of the
@@ -300,6 +299,9 @@ cpu_reboot(int howto, char *bootstr)
 #if NOMAPWDT32K > 0
 		omapwdt32k_reboot();
 #endif
+#if NPRCM > 0
+		prcm_cold_reset();
+#endif
 		cpu_reset();
 		/*NOTREACHED*/
 	}
@@ -341,6 +343,9 @@ cpu_reboot(int howto, char *bootstr)
 	printf("rebooting...\n");
 #if NOMAPWDT32K > 0
 	omapwdt32k_reboot();
+#endif
+#if NPRCM > 0
+	prcm_cold_reset();
 #endif
 	cpu_reset();
 	/*NOTREACHED*/
@@ -533,8 +538,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init.
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -630,7 +634,7 @@ initarm(void *arg)
 	return(kernelstack.pv_va + USPACE_SVC_STACK_TOP);
 }
 
-void arm11_pmc_ccnt_init(void);
+void cortexa8_pmc_ccnt_init(void);
 
 static void
 init_clocks(void)
@@ -648,7 +652,7 @@ init_clocks(void)
 	}
 	beagle_putchar('G');
 #endif
-	arm11_pmc_ccnt_init();
+	cortexa8_pmc_ccnt_init();
 }
 
 #ifndef CONSADDR
@@ -976,7 +980,7 @@ printf("\t%#lx:%#lx\n", kernel_pt_table[pt_index].pv_va, kernel_pt_table[pt_inde
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(l1_pa);
+	cpu_setttb(l1_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

@@ -1,4 +1,4 @@
-/* $NetBSD: pxa2x0_lcd.c,v 1.27 2009/01/29 12:28:15 nonaka Exp $ */
+/* $NetBSD: pxa2x0_lcd.c,v 1.33 2012/01/11 21:15:46 macallan Exp $ */
 
 /*
  * Copyright (c) 2002  Genetec Corporation.  All rights reserved.
@@ -38,7 +38,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_lcd.c,v 1.27 2009/01/29 12:28:15 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_lcd.c,v 1.33 2012/01/11 21:15:46 macallan Exp $");
+
+#include "opt_pxa2x0_lcd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_lcd.c,v 1.27 2009/01/29 12:28:15 nonaka Exp $
 #include <dev/rasops/rasops.h>
 #include <dev/wsfont/wsfont.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <arm/cpufunc.h>
 
@@ -78,13 +80,21 @@ struct {
 	const struct lcd_panel_geometry *geom;
 } pxa2x0_lcd_console;
 
+#ifdef PXA2X0_LCD_WRITETHROUGH
+int pxa2x0_lcd_writethrough = 1;	/* patchable */
+#else
+int pxa2x0_lcd_writethrough = 0;
+#endif
+
 int		lcdintr(void *);
 
 static void	pxa2x0_lcd_initialize(struct pxa2x0_lcd_softc *, 
 		    const struct lcd_panel_geometry *);
+#if NWSDISPLAY > 0
 static void	pxa2x0_lcd_setup_rasops(struct pxa2x0_lcd_softc *,
 		    struct rasops_info *, struct pxa2x0_wsscreen_descr *,
 		    const struct lcd_panel_geometry *);
+#endif
 
 void
 pxa2x0_lcd_geometry(struct pxa2x0_lcd_softc *sc,
@@ -247,8 +257,12 @@ pxa2x0_lcd_attach_sub(struct pxa2x0_lcd_softc *sc,
 		return;
 	}
 
+	/* Must disable LCD Controller here, if already enabled. */
+	bus_space_write_4(iot, ioh, LCDC_LCCR0, 0);
+
 	pxa2x0_lcd_initialize(sc, geom);
 
+#if NWSDISPLAY > 0
 	if (pxa2x0_lcd_console.is_console) {
 		struct pxa2x0_wsscreen_descr *descr = pxa2x0_lcd_console.descr;
 		struct pxa2x0_lcd_screen *scr;
@@ -278,6 +292,7 @@ pxa2x0_lcd_attach_sub(struct pxa2x0_lcd_softc *sc,
 
 		aprint_normal_dev(sc->dev, "console\n");
 	}
+#endif
 }
 
 int
@@ -326,6 +341,9 @@ pxa2x0_lcd_start_dma(struct pxa2x0_lcd_softc *sc,
 	iot = sc->iot;
 	ioh = sc->ioh;
 
+	bus_dmamap_sync(sc->dma_tag, scr->dma, 0, scr->buf_size,
+	    BUS_DMASYNC_PREWRITE);
+
 	save = disable_interrupts(I32_bit);
 
 	switch (scr->depth) {
@@ -368,7 +386,6 @@ pxa2x0_lcd_start_dma(struct pxa2x0_lcd_softc *sc,
 	restore_interrupts(save);
 }
 
-#if NWSDISPLAY > 0
 /*
  * Disable screen refresh.
  */
@@ -391,7 +408,6 @@ pxa2x0_lcd_stop_dma(struct pxa2x0_lcd_softc *sc)
 	    ~LCCR0_DIS &
 	    bus_space_read_4(sc->iot, sc->ioh, LCDC_LCCR0));
 }
-#endif
 
 #define _rgb(r,g,b)	(((r)<<11) | ((g)<<5) | b)
 #define rgb(r,g,b)	_rgb((r)>>1,g,(b)>>1)
@@ -531,9 +547,30 @@ pxa2x0_lcd_new_screen(struct pxa2x0_lcd_softc *sc, int depth,
 	}
 
 	error = bus_dmamem_map(dma_tag, scr->segs, scr->nsegs, size,
-	    (void **)&scr->buf_va, busdma_flag | BUS_DMA_COHERENT);
+	    (void **)&scr->buf_va,
+	    busdma_flag | (pxa2x0_lcd_writethrough ? 0 : BUS_DMA_COHERENT));
 	if (error)
 		goto bad;
+
+	/* XXX: should we have BUS_DMA_WRITETHROUGH in MI bus_dma(9) API? */
+	if (pxa2x0_lcd_writethrough) {
+		pt_entry_t *ptep;
+		vaddr_t va, eva;
+
+		va = (vaddr_t)scr->buf_va;
+		eva = va + size;
+		while (va < eva) {
+			/* taken from arm/arm32/bus_dma.c:_bus_dmamem_map() */
+			cpu_dcache_wbinv_range(va, PAGE_SIZE);
+			cpu_drain_writebuf();
+			ptep = vtopte(va);
+			*ptep &= ~L2_S_CACHE_MASK;
+			*ptep |= L2_C;
+			PTE_SYNC(ptep);
+			tlb_flush();
+			va += PAGE_SIZE;
+		}
+	}
 
 	memset(scr->buf_va, 0, scr->buf_size);
 
@@ -604,6 +641,7 @@ pxa2x0_lcd_new_screen(struct pxa2x0_lcd_softc *sc, int depth,
 	return error;
 }
 
+#if NWSDISPLAY > 0
 /*
  * Initialize rasops for a screen, as well as struct wsscreen_descr if this
  * is the first screen creation.
@@ -645,6 +683,7 @@ pxa2x0_lcd_setup_rasops(struct pxa2x0_lcd_softc *sc, struct rasops_info *rinfo,
 	descr->c.capabilities = rinfo->ri_caps;
 	descr->c.textops = &rinfo->ri_ops;
 }
+#endif
 
 /*
  * Power management
@@ -706,7 +745,8 @@ pxa2x0_lcd_setup_wsscreen(struct pxa2x0_wsscreen_descr *descr,
 	if (fontname) {
 		wsfont_init();
 		cookie = wsfont_find(fontname, 0, 0, 0, 
-		    WSDISPLAY_FONTORDER_L2R, WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSDISPLAY_FONTORDER_L2R,
+		    WSFONT_FIND_BITMAP);
 		if (cookie < 0 ||
 		    wsfont_lock(cookie, &rinfo.ri_font))
 			return -1;
@@ -892,7 +932,8 @@ pxa2x0_lcd_mmap(void *v, void *vs, off_t offset, int prot)
 		return -1;
 
 	return bus_dmamem_mmap(sc->dma_tag, scr->segs, scr->nsegs,
-	    offset, prot, BUS_DMA_WAITOK|BUS_DMA_COHERENT);
+	    offset, prot,
+	    BUS_DMA_WAITOK | (pxa2x0_lcd_writethrough ? 0 : BUS_DMA_COHERENT));
 }
 
 

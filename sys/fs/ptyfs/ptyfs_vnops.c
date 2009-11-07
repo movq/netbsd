@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vnops.c,v 1.32 2009/07/03 21:17:40 elad Exp $	*/
+/*	$NetBSD: ptyfs_vnops.c,v 1.38 2011/12/12 19:11:21 njoly Exp $	*/
 
 /*
  * Copyright (c) 1993, 1995
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.32 2009/07/03 21:17:40 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.38 2011/12/12 19:11:21 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -305,7 +305,7 @@ ptyfs_getattr(void *v)
 	PTYFS_ITIMES(ptyfs, NULL, NULL, NULL);
 
 	/* start by zeroing out the attributes */
-	VATTR_NULL(vap);
+	vattr_null(vap);
 
 	/* next do all the common fields */
 	vap->va_type = ap->a_vp->v_type;
@@ -426,8 +426,11 @@ ptyfs_setattr(void *v)
 		if (vap->va_atime.tv_sec != VNOVAL)
 			if (!(vp->v_mount->mnt_flag & MNT_NOATIME))
 				ptyfs->ptyfs_flag |= PTYFS_ACCESS;
-		if (vap->va_mtime.tv_sec != VNOVAL)
+		if (vap->va_mtime.tv_sec != VNOVAL) {
 			ptyfs->ptyfs_flag |= PTYFS_CHANGE | PTYFS_MODIFY;
+			if (vp->v_mount->mnt_flag & MNT_RELATIME)
+				ptyfs->ptyfs_flag |= PTYFS_ACCESS;
+		}
 		if (vap->va_birthtime.tv_sec != VNOVAL)
 			ptyfs->ptyfs_birthtime = vap->va_birthtime;
 		ptyfs->ptyfs_flag |= PTYFS_CHANGE;
@@ -583,7 +586,7 @@ ptyfs_lookup(void *v)
 
 	if (cnp->cn_namelen == 1 && *pname == '.') {
 		*vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		return 0;
 	}
 
@@ -733,7 +736,6 @@ ptyfs_open(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct ptyfsnode *ptyfs = VTOPTYFS(vp);
 
-	ptyfs->ptyfs_flag |= PTYFS_CHANGE|PTYFS_ACCESS;
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
 	case PTYFSptc:
@@ -756,10 +758,10 @@ ptyfs_close(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct ptyfsnode *ptyfs = VTOPTYFS(vp);
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	if (vp->v_usecount > 1)
 		PTYFS_ITIMES(ptyfs, NULL, NULL, NULL);
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
@@ -786,6 +788,9 @@ ptyfs_read(void *v)
 	struct ptyfsnode *ptyfs = VTOPTYFS(vp);
 	int error;
 
+	if (vp->v_type == VDIR)
+		return EISDIR;
+
 	ptyfs->ptyfs_flag |= PTYFS_ACCESS;
 	/* hardclock() resolution is good enough for ptyfs */
 	getnanotime(&ts);
@@ -794,7 +799,7 @@ ptyfs_read(void *v)
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
 	case PTYFSptc:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_read(vp->v_rdev, ap->a_uio, ap->a_ioflag);
 		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
 		return error;
@@ -824,7 +829,7 @@ ptyfs_write(void *v)
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
 	case PTYFSptc:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_write(vp->v_rdev, ap->a_uio, ap->a_ioflag);
 		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
 		return error;

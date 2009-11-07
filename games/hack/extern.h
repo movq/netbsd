@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.12 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: extern.h,v 1.18 2011/08/27 23:42:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #include <stdio.h>
 
 /* alloc.c */
-long *alloc(unsigned);
+void *alloc(size_t);
 
 /* hack.apply.c */
 int doapply(void);
@@ -137,7 +137,7 @@ void done1(int);
 void done_in_by(struct monst *);
 void done(const char *);
 void clearlocks(void);
-void hangup(int) __attribute__((__noreturn__));
+void hang_up(int) __dead;
 char *eos(char *);
 void charcat(char *, int);
 void prscore(int, char **);
@@ -202,14 +202,13 @@ void bwrite(int, const void *, size_t);
 void saveobjchn(int, struct obj *);
 void savemonchn(int, struct monst *);
 void getlev(int, int, xchar);
-void mread(int, char *, unsigned);
+void mread(int, void *, size_t);
 void mklev(void);
 
 /* hack.main.c */
 void glo(int);
 void askname(void);
-void impossible(const char *, ...)
-    __attribute__((__format__(__printf__, 1, 2)));
+void impossible(const char *, ...) __printflike(1, 2);
 void stop_occupation(void);
 
 /* hack.makemon.c */
@@ -249,7 +248,7 @@ void mkswamp(void);
 /* hack.mon.c */
 void movemon(void);
 void justswld(struct monst *, const char *);
-void youswld(struct monst *, int, int, const char *);
+void youswld(struct monst *, int, unsigned int, const char *);
 int dochug(struct monst *);
 int m_move(struct monst *, int);
 int mfndpos(struct monst *, coord[9 ], int[9 ], int);
@@ -312,13 +311,12 @@ int dodip(void);
 
 /* hack.pri.c */
 void swallowed(void);
-void panic(const char *, ...)
-    __attribute__((__format__(__printf__, 1, 2)));
+void panic(const char *, ...) __printflike(1, 2);
 void atl(int, int, int);
 void on_scr(int, int);
 void tmp_at(schar, schar);
 void Tmp_at(schar, schar);
-void setclipped(void) __attribute__((__noreturn__));
+void setclipped(void) __dead;
 void at(xchar, xchar, int);
 void prme(void);
 int doredraw(void);
@@ -400,16 +398,16 @@ void relobj(struct monst *, int);
 
 /* hack.termcap.c */
 void startup(void);
-void start_screen(void);
-void end_screen(void);
+void startscreen(void);
+void endscreen(void);
 void curs(int, int);
 void cl_end(void);
-void clear_screen(void);
+void clearscreen(void);
 void home(void);
 void standoutbeg(void);
 void standoutend(void);
 void backsp(void);
-void bell(void);
+void sound_bell(void);
 void delay_output(void);
 void cl_eos(void);
 
@@ -423,10 +421,8 @@ void addtopl(const char *);
 void more(void);
 void cmore(const char *);
 void clrlin(void);
-void pline(const char *, ...)
-    __attribute__((__format__(__printf__, 1, 2)));
-void vpline(const char *, va_list)
-    __attribute__((__format__(__printf__, 1, 0)));
+void pline(const char *, ...) __printflike(1, 2);
+void vpline(const char *, va_list) __printflike(1, 0);
 void putsym(int);
 void putstr(const char *);
 
@@ -453,15 +449,14 @@ void drown(void);
 void gettty(void);
 void settty(const char *);
 void setftty(void);
-void error(const char *, ...)
-    __attribute__((__format__(__printf__, 1, 2),__noreturn__));
+void error(const char *, ...) __printflike(1, 2) __dead;
 void getlin(char *);
 void getret(void);
 void cgetret(const char *);
 void xwaitforspace(const char *);
 char *parse(void);
 char readchar(void);
-void end_of_input(void) __attribute__((__noreturn__));
+void end_of_input(void) __dead;
 
 /* hack.u_init.c */
 void u_init(void);

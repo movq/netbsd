@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.24 2009/09/16 16:34:49 dyoung Exp $ */
+/*	$NetBSD: apm.c,v 1.27 2011/07/17 20:54:50 joerg Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.24 2009/09/16 16:34:49 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.27 2011/07/17 20:54:50 joerg Exp $");
 
 #include "opt_apm.h"
 
@@ -51,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.24 2009/09/16 16:34:49 dyoung Exp $");
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/user.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>
@@ -61,8 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.24 2009/09/16 16:34:49 dyoung Exp $");
 #include <sys/conf.h>
 
 #include <dev/apm/apmvar.h>
-
-#include <machine/stdarg.h>
 
 #ifdef APMDEBUG
 #define DPRINTF(f, x)		do { if (apmdebug & (f)) printf x; } while (0)
@@ -318,6 +315,8 @@ apm_suspend(struct apm_softc *sc)
 
 	if (error)
 		apm_resume(sc, 0, 0);
+	else
+		apm_resume(sc, APM_SYS_STANDBY_RESUME, 0);
 }
 
 static void
@@ -342,12 +341,13 @@ apm_standby(struct apm_softc *sc)
 	    APM_SYS_STANDBY);
 	if (error)
 		apm_resume(sc, 0, 0);
+	else
+		apm_resume(sc, APM_SYS_STANDBY_RESUME, 0);
 }
 
 static void
 apm_resume(struct apm_softc *sc, u_int event_type, u_int event_info)
 {
-
 	if (sc->sc_power_state == PWR_RESUME) {
 #ifdef APMDEBUG
 		aprint_debug_dev(sc->sc_dev, "apm_resume: already running?\n");
@@ -421,7 +421,7 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 
 	case APM_STANDBY_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: system standby request\n"));
-		if (apm_standbys || apm_suspends) {
+		if (apm_op_inprog) {
 			DPRINTF(APMDEBUG_EVENTS | APMDEBUG_ANOM,
 			    ("damn fool BIOS did not wait for answer\n"));
 			/* just give up the fight */
@@ -453,7 +453,7 @@ apm_event_handle(struct apm_softc *sc, u_int event_code, u_int event_info)
 
 	case APM_SUSPEND_REQ:
 		DPRINTF(APMDEBUG_EVENTS, ("apmev: system suspend request\n"));
-		if (apm_standbys || apm_suspends) {
+		if (apm_op_inprog) {
 			DPRINTF(APMDEBUG_EVENTS | APMDEBUG_ANOM,
 			    ("damn fool BIOS did not wait for answer\n"));
 			/* just give up the fight */

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.45 2009/02/14 08:02:04 lukem Exp $	*/
+/*	$NetBSD: print.c,v 1.50 2011/03/15 22:53:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.5 (Berkeley) 7/28/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.45 2009/02/14 08:02:04 lukem Exp $");
+__RCSID("$NetBSD: print.c,v 1.50 2011/03/15 22:53:41 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -107,15 +107,16 @@ printlong(DISPLAY *dp)
 		if (f_size) {
 			if (f_humanize) {
 				if ((humanize_number(szbuf, sizeof(szbuf),
-					sp->st_blocks * S_BLKSIZE,
-			    "", HN_AUTOSCALE,
-			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
-				err(1, "humanize_number");
-			(void)printf("%*s ", dp->s_block, szbuf);
+				    sp->st_blocks * S_BLKSIZE,
+				    "", HN_AUTOSCALE,
+				    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+					err(1, "humanize_number");
+				(void)printf("%*s ", dp->s_block, szbuf);
 			} else {
-			(void)printf("%*llu ", dp->s_block,
-					(long long)howmany(sp->st_blocks,
-							   	blocksize));
+				(void)printf(f_commas ? "%'*llu " : "%*llu ",
+				    dp->s_block,
+				    (unsigned long long)howmany(sp->st_blocks,
+				    blocksize));
 			}
 		}
 		(void)strmode(sp->st_mode, buf);
@@ -139,8 +140,9 @@ printlong(DISPLAY *dp)
 					err(1, "humanize_number");
 				(void)printf("%*s ", dp->s_size, szbuf);
 			} else {
-				(void)printf("%*llu ", dp->s_size,
-				    (long long)sp->st_size);
+				(void)printf(f_commas ? "%'*llu " : "%*llu ", 
+				    dp->s_size, (unsigned long long)
+				    sp->st_size);
 			}
 		if (f_accesstime)
 			printtime(sp->st_atime);
@@ -334,8 +336,9 @@ printaname(FTSENT *p, int inodefield, int sizefield)
 				err(1, "humanize_number");
 			chcnt += printf("%*s ", sizefield, szbuf);
 		} else {
-			chcnt += printf("%*llu ", sizefield,
-			    (long long)howmany(sp->st_blocks, blocksize));
+			chcnt += printf(f_commas ? "%'*llu " : "%*llu ",
+			    sizefield, (unsigned long long)
+			    howmany(sp->st_blocks, blocksize));
 		}
 	}
 	if (f_octal || f_octal_escape)
@@ -353,9 +356,12 @@ static void
 printtime(time_t ftime)
 {
 	int i;
-	char *longstring;
+	const char *longstring;
 
-	longstring = ctime(&ftime);
+	if ((longstring = ctime(&ftime)) == NULL) {
+			   /* 012345678901234567890123 */
+		longstring = "????????????????????????";
+	}
 	for (i = 4; i < 11; ++i)
 		(void)putchar(longstring[i]);
 
@@ -377,7 +383,8 @@ printtime(time_t ftime)
 /*
  * Display total used disk space in the form "total: %u\n".
  * Note: POSIX (IEEE Std 1003.1-2001) says this should be always in 512 blocks,
- * but we humanise it with -h and use 1024 with -k.
+ * but we humanise it with -h, or separate it with commas with -M, and use 1024
+ * with -k.
  */
 static void
 printtotal(DISPLAY *dp)
@@ -392,8 +399,9 @@ printtotal(DISPLAY *dp)
 				err(1, "humanize_number");
 			(void)printf("total %s\n", szbuf);
 		} else {
-			(void)printf("total %llu\n",
-			    (long long)(howmany(dp->btotal, blocksize)));
+			(void)printf(f_commas ? "total %'llu\n" :
+			    "total %llu\n", (unsigned long long)
+			    howmany(dp->btotal, blocksize));
 		}
 	}
 }
@@ -449,3 +457,4 @@ printlink(FTSENT *p)
 	else
 		(void)printf("%s", path);
 }
+

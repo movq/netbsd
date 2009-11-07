@@ -1,12 +1,12 @@
-/*	$NetBSD: printhostmap.c,v 1.1.1.3 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: printhostmap.c,v 1.2 2012/02/15 17:55:07 riz Exp $	*/
 
 /*
  * Copyright (C) 2002-2005 by Darren Reed.
- * 
- * See the IPFILTER.LICENCE file for details on licencing.  
- *   
- * Id: printhostmap.c,v 1.3.2.3 2006/09/30 21:42:07 darrenr Exp 
- */     
+ *
+ * See the IPFILTER.LICENCE file for details on licencing.
+ *
+ * Id: printhostmap.c,v 1.3.2.4 2009/12/27 06:58:07 darrenr Exp
+ */
 
 #include "ipf.h"
 

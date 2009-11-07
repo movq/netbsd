@@ -1,4 +1,4 @@
-/*	$NetBSD: test-milter.c,v 1.1.1.1 2009/06/23 10:08:50 tron Exp $	*/
+/*	$NetBSD: test-milter.c,v 1.1.1.3 2011/03/02 19:32:22 tron Exp $	*/
 
 /*++
 /* NAME
@@ -41,7 +41,7 @@
 /*	Insert header at specified position.
 /* .IP "\fB-l\fR"
 /*	Header values include leading space. Specify this option
-/*	before \fB-i\fR or \fB-r\fR.
+/*	before \fB-i\fR or \fB-h\fR.
 /* .IP "\fB-m connect|helo|mail|rcpt|data|eoh|eom\fR"
 /*	The protocol stage that receives the list of macros specified
 /*	with \fB-M\fR.  The default protocol stage is \fBconnect\fR.
@@ -211,7 +211,7 @@ static int test_reply(SMFICTX *ctx, int code)
 	printf("test_reply %s\n", reply_code);
 	return (reply_code[0] == '4' ? SMFIS_TEMPFAIL : SMFIS_REJECT);
     } else {
-	printf("test_reply %d\n", code);
+	printf("test_reply %d\n\n", code);
 	return (code);
     }
 }
@@ -344,8 +344,6 @@ static sfsistat test_eom(SMFICTX *ctx)
 #ifdef SMFIR_CHGFROM
     if (chg_from != 0 && smfi_chgfrom(ctx, chg_from, "whatever") == MI_FAILURE)
 	fprintf(stderr, "smfi_chgfrom failed\n");
-    else
-	printf("smfi_chgfrom OK\n");
 #endif
 #ifdef SMFIR_INSHEADER
     if (ins_hdr && smfi_insheader(ctx, ins_idx, ins_hdr, ins_val) == MI_FAILURE)
@@ -401,10 +399,22 @@ static sfsistat test_unknown(SMFICTX *ctx, const char *what)
 
 #endif
 
+#if SMFI_VERSION > 5
+
 static sfsistat test_negotiate(SMFICTX *, unsigned long, unsigned long,
 			               unsigned long, unsigned long,
 			               unsigned long *, unsigned long *,
 			               unsigned long *, unsigned long *);
+
+#endif
+
+#ifndef SMFIF_CHGFROM
+#define SMFIF_CHGFROM 0
+#endif
+#ifndef SMFIP_HDR_LEADSPC
+#define SMFIP_HDR_LEADSPC 0
+#define misc_mask 0
+#endif
 
 static struct smfiDesc smfilter =
 {

@@ -1,7 +1,7 @@
-/*	$NetBSD: shpcic.c,v 1.13 2009/08/02 00:06:44 nonaka Exp $	*/
+/*	$NetBSD: shpcic.c,v 1.17 2012/01/27 18:53:01 para Exp $	*/
 
-/*
- * Copyright (c) 2005 NONAKA Kimihiro
+/*-
+ * Copyright (C) 2005 NONAKA Kimihiro <nonaka@netbsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shpcic.c,v 1.13 2009/08/02 00:06:44 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shpcic.c,v 1.17 2012/01/27 18:53:01 para Exp $");
 
 #include "opt_pci.h"
 
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: shpcic.c,v 1.13 2009/08/02 00:06:44 nonaka Exp $");
 #include <sh3/exception.h>
 #include <sh3/pcicreg.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/pci_machdep.h>
 
@@ -228,10 +228,10 @@ shpcic_attach(device_t parent, device_t self, void *aux)
 #ifdef PCI_NETBSD_CONFIGURE
 	ioext  = extent_create("pciio",
 	    SH4_PCIC_IO, SH4_PCIC_IO + SH4_PCIC_IO_SIZE - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem",
 	    SH4_PCIC_MEM, SH4_PCIC_MEM + SH4_PCIC_MEM_SIZE - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	pci_configure_bus(NULL, ioext, memext, NULL, 0, sh_cache_line_size);
 
@@ -248,7 +248,7 @@ shpcic_attach(device_t parent, device_t self, void *aux)
 	pba.pba_pc = NULL;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	config_found(self, &pba, NULL);
 }
 

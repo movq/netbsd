@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_doi.c,v 1.43 2009/05/19 09:34:52 tteras Exp $	*/
+/*	$NetBSD: ipsec_doi.c,v 1.47 2012/01/01 15:29:28 tteras Exp $	*/
 
 /* Id: ipsec_doi.c,v 1.55 2006/08/17 09:20:41 vanhu Exp */
 
@@ -370,12 +370,16 @@ get_ph1approvalx(rmconf, ctx)
 	case PROP_CHECK_OBEY:
 		sa->lifetime = pctx->sa->lifetime;
 		sa->lifebyte = pctx->sa->lifebyte;
+		sa->encklen = pctx->sa->encklen;
 		break;
 	case PROP_CHECK_CLAIM:
+	case PROP_CHECK_STRICT:
 		if (pctx->sa->lifetime < sa->lifetime)
 			sa->lifetime = pctx->sa->lifetime;
 		if (pctx->sa->lifebyte < sa->lifebyte)
 			sa->lifebyte = pctx->sa->lifebyte;
+		if (pctx->sa->encklen > sa->encklen)
+			sa->encklen = pctx->sa->encklen;
 		break;
 	default:
 		break;
@@ -3764,7 +3768,8 @@ err:
 /* it's only called by cfparse.y. */
 int
 set_identifier(vpp, type, value)
-	vchar_t **vpp, *value;
+	vchar_t **vpp;
+	const vchar_t * const value;
 	int type;
 {
 	return set_identifier_qual(vpp, type, value, IDQUAL_UNSPEC);
@@ -3772,7 +3777,8 @@ set_identifier(vpp, type, value)
 
 int
 set_identifier_qual(vpp, type, value, qual)
-	vchar_t **vpp, *value;
+	vchar_t **vpp;
+	const vchar_t * const value;
 	int type;
 	int qual;
 {
@@ -3830,6 +3836,7 @@ set_identifier_qual(vpp, type, value, qual)
 				memcpy(new->v + tlen, b, len);
 				tlen += len;
 			}
+			fclose(fp);
 			break;
 		}
 
@@ -4161,8 +4168,13 @@ ipsecdoi_id2sockaddr(buf, saddr, prefixlen, ul_proto)
 	u_int8_t *prefixlen;
 	u_int16_t *ul_proto;
 {
-	struct ipsecdoi_id_b *id_b = (struct ipsecdoi_id_b *)buf->v;
+	struct ipsecdoi_id_b *id_b = NULL;
 	u_int plen = 0;
+
+	if (buf == NULL)
+		return ISAKMP_INTERNAL_ERROR;
+
+	id_b = (struct ipsecdoi_id_b *)buf->v;
 
 	/*
 	 * When a ID payload of subnet type with a IP address of full bit

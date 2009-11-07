@@ -1,4 +1,4 @@
-/*	$NetBSD: viaenv.c,v 1.29 2008/04/30 14:07:14 ad Exp $	*/
+/*	$NetBSD: viaenv.c,v 1.31 2011/06/20 17:29:06 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2000 Johan Danielsson
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viaenv.c,v 1.29 2008/04/30 14:07:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viaenv.c,v 1.31 2011/06/20 17:29:06 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -295,6 +295,8 @@ viaenv_attach(device_t parent, device_t self, void *aux)
 		break;
 	}
 
+	sc->sc_iot = pa->pa_iot;
+
 	iobase = pci_conf_read(pa->pa_pc, pa->pa_tag, VIAENV_HWMON_CONF);
 	DPRINTF(("%s: iobase 0x%x\n", device_xname(self), iobase));
 	control = pci_conf_read(pa->pa_pc, pa->pa_tag, VIAENV_HWMON_CTL);
@@ -306,7 +308,6 @@ viaenv_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Map Hardware Monitor I/O space */
-	sc->sc_iot = pa->pa_iot;
 	if (bus_space_map(sc->sc_iot, iobase & 0xff80,
 	    VIAENV_PMSIZE, 0, &sc->sc_ioh)) {
 		aprint_error_dev(self, "failed to map I/O space\n");
@@ -341,6 +342,9 @@ viaenv_attach(device_t parent, device_t self, void *aux)
 	COPYDESCR(sc->sc_sensor[9].desc, "VSENS4");	/* VSENS4 (12V) */
 
 #undef COPYDESCR
+
+	for (i = 0; i < 10; i++)
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
 
 	sc->sc_sme = sysmon_envsys_create();
 

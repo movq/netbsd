@@ -1,7 +1,6 @@
-/*	$NetBSD: if_en.c,v 1.27 2009/09/18 12:23:16 tsutsui Exp $	*/
+/*	$NetBSD: if_en.c,v 1.29 2011/07/18 00:58:52 mrg Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *	Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.27 2009/09/18 12:23:16 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.29 2011/07/18 00:58:52 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,17 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.27 2009/09/18 12:23:16 tsutsui Exp $");
 
 
 /*
- * local structures
- */
-struct en_sbus_softc {
-	/* bus independent stuff */
-	struct en_softc	sc_en;		/* includes "device" structure */
-
-	/* sbus glue */
-};
-
-
-/*
  * prototypes
  */
 static	int en_sbus_match(device_t, cfdata_t, void *);
@@ -85,7 +67,7 @@ static	void en_sbus_attach(device_t, device_t, void *);
  * SBus autoconfig attachments
  */
 
-CFATTACH_DECL(en_sbus, sizeof(struct en_sbus_softc),
+CFATTACH_DECL_NEW(en_sbus, sizeof(struct en_softc),
     en_sbus_match, en_sbus_attach, NULL, NULL);
 
 /***********************************************************************/
@@ -118,8 +100,9 @@ static void
 en_sbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
-	struct en_sbus_softc *ssc = device_private(self);
-	struct en_softc *sc = &ssc->sc_en;
+	struct en_softc *sc = device_private(self);
+
+	sc->sc_dev = self;
 
 	printf("\n");
 

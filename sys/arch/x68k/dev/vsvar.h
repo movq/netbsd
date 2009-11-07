@@ -1,4 +1,4 @@
-/*	$NetBSD: vsvar.h,v 1.9 2008/06/25 08:14:59 isaki Exp $	*/
+/*	$NetBSD: vsvar.h,v 1.11 2011/11/23 23:07:30 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -78,6 +76,8 @@ struct vs_dma {
 
 struct vs_softc {
 	device_t sc_dev;
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;

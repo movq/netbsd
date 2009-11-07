@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/usr.sbin/ndiscvt/inf-token.l,v 1.3 2004/01/11 21:10:35 mdodd Exp $");
 #endif
 #ifdef __NetBSD__
-__RCSID("$NetBSD: inf-token.l,v 1.8 2009/10/29 14:49:03 christos Exp $");
+__RCSID("$NetBSD: inf-token.l,v 1.10 2011/11/25 13:18:22 joerg Exp $");
 #endif
 
 #include <regex.h>
@@ -58,7 +58,7 @@ static size_t opt_unicode_input(char *buf, size_t max_size);
 	result = opt_unicode_input(buf, max_size)
 
 int yylex(void);
-void ndiscvt_error(const char *);
+__dead void ndiscvt_error(const char *);
 int ndiscvt_wrap(void);
 
 static void
@@ -71,7 +71,7 @@ update_lineno(const char *cp)
 
 %}
 
-%option nounput
+%option nounput noinput
 
 %%
 

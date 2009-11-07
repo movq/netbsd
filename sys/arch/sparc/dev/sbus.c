@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.73 2009/09/17 16:28:12 tsutsui Exp $ */
+/*	$NetBSD: sbus.c,v 1.76 2012/01/30 04:25:14 mrg Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.73 2009/09/17 16:28:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.76 2012/01/30 04:25:14 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.73 2009/09/17 16:28:12 tsutsui Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sparc/dev/sbusreg.h>
 #include <dev/sbus/sbusvar.h>
 #include <dev/sbus/xboxvar.h>
@@ -444,7 +444,7 @@ sbus_setup_attach_args(struct sbus_softc *sc,
 	error = prom_getprop(node, "name", 1, &n, &sa->sa_name);
 	if (error != 0)
 		return (error);
-	sa->sa_name[n] = '\0';
+	KASSERT(sa->sa_name[n-1] == '\0');
 
 	sa->sa_bustag = bustag;
 	sa->sa_dmatag = dmatag;
@@ -590,7 +590,7 @@ sbus_intr_establish(bus_space_tag_t t, int pri, int level,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, level, ih, fastvec);
+	intr_establish(pil, level, ih, fastvec, false);
 	return (ih);
 }
 

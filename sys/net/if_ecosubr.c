@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ecosubr.c,v 1.32 2009/03/18 16:00:22 cegger Exp $	*/
+/*	$NetBSD: if_ecosubr.c,v 1.36 2011/11/20 12:15:38 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris
@@ -58,9 +58,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.32 2009/03/18 16:00:22 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.36 2011/11/20 12:15:38 kiyohara Exp $");
 
-#include "bpfilter.h"
 #include "opt_inet.h"
 #include "opt_pfil_hooks.h"
 
@@ -79,9 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.32 2009/03/18 16:00:22 cegger Exp $
 #include <net/netisr.h>
 #include <net/route.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <net/ethertypes.h>
@@ -89,6 +86,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ecosubr.c,v 1.32 2009/03/18 16:00:22 cegger Exp $
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #endif
+#include <netinet/if_inarp.h>
 
 struct eco_retryparms {
 	int	erp_delay;
@@ -135,9 +133,7 @@ eco_ifattach(struct ifnet *ifp, const uint8_t *lla)
 
 	LIST_INIT(&ec->ec_retries);
 
-#if NBPFILTER > 0
-	bpfattach(ifp, ifp->if_dlt, ECO_HDR_LEN);
-#endif
+	bpf_attach(ifp, ifp->if_dlt, ECO_HDR_LEN);
 }
 
 #define senderr(e) do {							\
@@ -265,7 +261,8 @@ eco_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 			    ECO_ADDR_LEN);
 		else {
 			tha = ar_tha(ah);
-			KASSERT(tha != NULL);
+			if (tha == NULL)
+				return 0;
 			memcpy(ehdr.eco_dhost, tha, ECO_ADDR_LEN);
 		}
 

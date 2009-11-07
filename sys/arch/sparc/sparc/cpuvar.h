@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.79 2009/05/31 20:09:44 mrg Exp $ */
+/*	$NetBSD: cpuvar.h,v 1.90 2011/08/15 02:19:44 mrg Exp $ */
 
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -127,6 +127,13 @@ struct xpmsg {
 struct cpu_info {
 	struct cpu_data ci_data;	/* MI per-cpu data */
 
+	/*
+	 * Primary Inter-processor message area.  Keep this aligned
+	 * to a cache line boundary if possible, as the structure
+	 * itself is one (normal 32 byte) cache-line.
+	 */
+	struct xpmsg	msg __aligned(32);
+
 	/* Scheduler flags */
 	int	ci_want_ast;
 	int	ci_want_resched;
@@ -141,9 +148,6 @@ struct cpu_info {
 	 * in the curcpu() macro.
 	 */
 	struct cpu_info * volatile ci_self;
-
-	/* Primary Inter-processor message area */
-	struct xpmsg	msg;
 
 	int		ci_cpuid;	/* CPU index (see cpus[] array) */
 
@@ -261,7 +265,7 @@ struct cpu_info {
 	int		mid;		/* Module ID for MP systems */
 	int		mbus;		/* 1 if CPU is on MBus */
 	int		mxcc;		/* 1 if a MBus-level MXCC is present */
-	const char	*cpu_name;	/* CPU model */
+	const char	*cpu_longname;	/* CPU model */
 	int		cpu_impl;	/* CPU implementation code */
 	int		cpu_vers;	/* CPU version code */
 	int		mmu_impl;	/* MMU implementation code */
@@ -331,6 +335,13 @@ struct cpu_info {
 	 * in this region that aren't part of the cpu_info to uvm.
 	 */
 	vaddr_t	ci_free_sva1, ci_free_eva1, ci_free_sva2, ci_free_eva2;
+
+	struct evcnt ci_savefpstate;
+	struct evcnt ci_savefpstate_null;
+	struct evcnt ci_xpmsg_mutex_fail;
+	struct evcnt ci_xpmsg_mutex_fail_call;
+	struct evcnt ci_intrcnt[16];
+	struct evcnt ci_sintrcnt[16];
 };
 
 /*
@@ -408,7 +419,6 @@ struct cpu_info {
 #define CPUFLG_HATCHED		0x1000	/* CPU is alive */
 #define CPUFLG_PAUSED		0x2000	/* CPU is paused */
 #define CPUFLG_GOTMSG		0x4000	/* CPU got an lev13 IPI */
-#define CPUFLG_READY		0x8000	/* CPU available for IPI */
 
 
 #define CPU_INFO_ITERATOR		int
@@ -421,14 +431,9 @@ struct cpu_info {
 #if defined(MULTIPROCESSOR) || defined(MODULAR) || defined(_MODULE)
 #define	CPU_INFO_FOREACH(cii, cp)	cii = 0; (cp = cpus[cii]) && cp->eintstack && cii < sparc_ncpus; cii++
 #else
-#define CPU_INFO_FOREACH(cii, cp)	(void)cii, cp = curcpu(); cp != NULL; cp = NULL
+#define CPU_INFO_FOREACH(cii, cp)	cii = 0, cp = curcpu(); cp != NULL; cp = NULL
 #endif
 
-/*
- * Useful macros.
- */
-#define CPU_NOTREADY(cpi)	((cpi) == NULL || cpuinfo.mid == (cpi)->mid || \
-				    ((cpi)->flags & CPUFLG_READY) == 0)
 
 /*
  * Related function prototypes
@@ -444,6 +449,8 @@ void cpu_init_system(void);
 typedef void (*xcall_func_t)(int, int, int);
 typedef void (*xcall_trap_t)(int, int, int);
 void xcall(xcall_func_t, xcall_trap_t, int, int, int, u_int);
+/* from intr.c */
+void xcallintr(void *);
 /* Shorthand */
 #define XCALL0(f,cpuset)		\
 	xcall((xcall_func_t)f, NULL, 0, 0, 0, cpuset)
@@ -483,5 +490,12 @@ extern u_int cpu_ready_mask;		/* the set of CPUs marked as READY */
 
 #define cpuinfo	(*(struct cpu_info *)CPUINFO_VA)
 
+#if defined(DDB) || defined(MULTIPROCESSOR)
+/*
+ * These are called by ddb mach functions.
+ */
+void cpu_debug_dump(void);
+void cpu_xcall_dump(void);
+#endif
 
 #endif	/* _sparc_cpuvar_h */

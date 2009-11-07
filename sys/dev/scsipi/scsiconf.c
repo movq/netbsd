@@ -1,4 +1,4 @@
-/*	$NetBSD: scsiconf.c,v 1.254 2009/10/21 21:12:05 rmind Exp $	*/
+/*	$NetBSD: scsiconf.c,v 1.262.10.3 2012/05/22 18:46:09 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.254 2009/10/21 21:12:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.262.10.3 2012/05/22 18:46:09 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,12 +56,13 @@ __KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.254 2009/10/21 21:12:05 rmind Exp $")
 #include <sys/proc.h>
 #include <sys/kthread.h>
 #include <sys/malloc.h>
+#include <sys/mutex.h>
+#include <sys/once.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/fcntl.h>
 #include <sys/scsiio.h>
 #include <sys/queue.h>
-#include <sys/simplelock.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -81,21 +82,21 @@ struct scsi_initq {
 	TAILQ_ENTRY(scsi_initq) scsi_initq;
 };
 
-static TAILQ_HEAD(, scsi_initq) scsi_initq_head =
-    TAILQ_HEAD_INITIALIZER(scsi_initq_head);
-static struct simplelock scsibus_interlock = SIMPLELOCK_INITIALIZER;
+static ONCE_DECL(scsi_conf_ctrl);
+static TAILQ_HEAD(, scsi_initq)	scsi_initq_head;
+static kmutex_t			scsibus_qlock;
+static kcondvar_t		scsibus_qcv;
 
 static int	scsi_probe_device(struct scsibus_softc *, int, int);
 
 static int	scsibusmatch(device_t, cfdata_t, void *);
 static void	scsibusattach(device_t, device_t, void *);
-static int	scsibusactivate(device_t, enum devact);
 static int	scsibusdetach(device_t, int flags);
 static int	scsibusrescan(device_t, const char *, const int *);
 static void	scsidevdetached(device_t, device_t);
 
 CFATTACH_DECL3_NEW(scsibus, sizeof(struct scsibus_softc),
-    scsibusmatch, scsibusattach, scsibusdetach, scsibusactivate,
+    scsibusmatch, scsibusattach, scsibusdetach, NULL,
     scsibusrescan, scsidevdetached, DVF_DETACH_SHUTDOWN);
 
 extern struct cfdriver scsibus_cd;
@@ -113,12 +114,46 @@ static int	scsibusprint(void *, const char *);
 static void	scsibus_config(struct scsipi_channel *, void *);
 
 const struct scsipi_bustype scsi_bustype = {
-	SCSIPI_BUSTYPE_SCSI,
+	SCSIPI_BUSTYPE_BUSTYPE(SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_PSCSI),
 	scsi_scsipi_cmd,
 	scsipi_interpret_sense,
 	scsi_print_addr,
 	scsi_kill_pending,
 };
+
+const struct scsipi_bustype scsi_fc_bustype = {
+	SCSIPI_BUSTYPE_BUSTYPE(SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_FC),
+	scsi_scsipi_cmd,
+	scsipi_interpret_sense,
+	scsi_print_addr,
+	scsi_kill_pending,
+};
+
+const struct scsipi_bustype scsi_sas_bustype = {
+	SCSIPI_BUSTYPE_BUSTYPE(SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_SAS),
+	scsi_scsipi_cmd,
+	scsipi_interpret_sense,
+	scsi_print_addr,
+	scsi_kill_pending,
+};
+
+const struct scsipi_bustype scsi_usb_bustype = {
+	SCSIPI_BUSTYPE_BUSTYPE(SCSIPI_BUSTYPE_SCSI, SCSIPI_BUSTYPE_SCSI_USB),
+	scsi_scsipi_cmd,
+	scsipi_interpret_sense,
+	scsi_print_addr,
+	scsi_kill_pending,
+};
+
+static int
+scsibus_init(void)
+{
+
+	TAILQ_INIT(&scsi_initq_head);
+	mutex_init(&scsibus_qlock, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&scsibus_qcv, "scsinitq");
+	return 0;
+}
 
 int
 scsiprint(void *aux, const char *pnp)
@@ -142,7 +177,8 @@ scsibusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct scsipi_channel *chan = aux;
 
-	if (chan->chan_bustype->bustype_type != SCSIPI_BUSTYPE_SCSI)
+	if (SCSIPI_BUSTYPE_TYPE(chan->chan_bustype->bustype_type) !=
+	    SCSIPI_BUSTYPE_SCSI)
 		return 0;
 
 	if (cf->cf_loc[SCSICF_CHANNEL] != chan->chan_channel &&
@@ -175,6 +211,8 @@ scsibusattach(device_t parent, device_t self, void *aux)
 
 	if (scsipi_adapter_addref(chan->chan_adapter))
 		return;
+
+	RUN_ONCE(&scsi_conf_ctrl, scsibus_init);
 
 	/* Initialize the channel structure first */
 	chan->chan_init_cb = scsibus_config;
@@ -210,65 +248,27 @@ scsibus_config(struct scsipi_channel *chan, void *arg)
 	}
 
 	/* Make sure the devices probe in scsibus order to avoid jitter. */
-	simple_lock(&scsibus_interlock);
+	mutex_enter(&scsibus_qlock);
 	for (;;) {
 		scsi_initq = TAILQ_FIRST(&scsi_initq_head);
 		if (scsi_initq->sc_channel == chan)
 			break;
-		ltsleep(&scsi_initq_head, PRIBIO, "scsi_initq", 0,
-		    &scsibus_interlock);
+		cv_wait(&scsibus_qcv, &scsibus_qlock);
 	}
-
-	simple_unlock(&scsibus_interlock);
+	mutex_exit(&scsibus_qlock);
 
 	scsi_probe_bus(sc, -1, -1);
 
-	simple_lock(&scsibus_interlock);
+	mutex_enter(&scsibus_qlock);
 	TAILQ_REMOVE(&scsi_initq_head, scsi_initq, scsi_initq);
-	simple_unlock(&scsibus_interlock);
+	cv_broadcast(&scsibus_qcv);
+	mutex_exit(&scsibus_qlock);
 
 	free(scsi_initq, M_DEVBUF);
-	wakeup(&scsi_initq_head);
 
 	scsipi_adapter_delref(chan->chan_adapter);
 
 	config_pending_decr();
-}
-
-static int
-scsibusactivate(device_t self, enum devact act)
-{
-	struct scsibus_softc *sc = device_private(self);
-	struct scsipi_channel *chan = sc->sc_channel;
-	struct scsipi_periph *periph;
-	int target, lun, error = 0, s;
-
-	s = splbio();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		for (target = 0; target < chan->chan_ntargets;
-		     target++) {
-			if (target == chan->chan_id)
-				continue;
-			for (lun = 0; lun < chan->chan_nluns; lun++) {
-				periph = scsipi_lookup_periph(chan,
-				    target, lun);
-				if (periph == NULL)
-					continue;
-				error = config_deactivate(periph->periph_dev);
-				if (error)
-					goto out;
-			}
-		}
-		break;
-	}
- out:
-	splx(s);
-	return (error);
 }
 
 static int
@@ -281,11 +281,27 @@ scsibusdetach(device_t self, int flags)
 	struct scsipi_xfer *xs;
 	int error;
 
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
+
+	/*
+	 * Detach all of the periphs.
+	 */
+	if ((error = scsipi_target_detach(chan, -1, -1, flags)) != 0) {
+		/* XXXSMP scsipi */
+		KERNEL_UNLOCK_ONE(curlwp);
+
+		return error;
+	}
+
 	pmf_device_deregister(self);
 
 	/*
 	 * Process outstanding commands (which will never complete as the
 	 * controller is gone).
+	 *
+	 * XXX Surely this is redundant?  If we get this far, the
+	 * XXX peripherals have all been detached.
 	 */
 	for (ctarget = 0; ctarget < chan->chan_ntargets; ctarget++) {
 		if (ctarget == chan->chan_id)
@@ -303,16 +319,14 @@ scsibusdetach(device_t self, int flags)
 	}
 
 	/*
-	 * Detach all of the periphs.
-	 */
-	error = scsipi_target_detach(chan, -1, -1, flags);
-
-	/*
 	 * Now shut down the channel.
-	 * XXX only if no errors ?
 	 */
 	scsipi_channel_shutdown(chan);
-	return (error);
+
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
+
+	return 0;
 }
 
 /*
@@ -325,6 +339,9 @@ scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
 	struct scsipi_channel *chan = sc->sc_channel;
 	int maxtarget, mintarget, maxlun, minlun;
 	int error;
+
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
 	if (target == -1) {
 		maxtarget = chan->chan_ntargets - 1;
@@ -353,7 +370,7 @@ scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
 		    0, curproc);
 
 	if ((error = scsipi_adapter_addref(chan->chan_adapter)) != 0)
-		return (error);
+		goto ret;
 	for (target = mintarget; target <= maxtarget; target++) {
 		if (target == chan->chan_id)
 			continue;
@@ -374,7 +391,9 @@ scsi_probe_bus(struct scsibus_softc *sc, int target, int lun)
 		scsipi_set_xfer_mode(chan, target, 1);
 	}
 	scsipi_adapter_delref(chan->chan_adapter);
-	return (0);
+ret:
+	KERNEL_UNLOCK_ONE(curlwp);
+	return (error);
 }
 
 static int
@@ -390,21 +409,27 @@ scsibusrescan(device_t sc, const char *ifattr,
 }
 
 static void
-scsidevdetached(device_t sc, device_t dev)
+scsidevdetached(device_t self, device_t child)
 {
-	struct scsibus_softc *ssc = device_private(sc);
-	struct scsipi_channel *chan = ssc->sc_channel;
+	struct scsibus_softc *sc = device_private(self);
+	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
 	int target, lun;
 
-	target = device_locator(dev, SCSIBUSCF_TARGET);
-	lun = device_locator(dev, SCSIBUSCF_LUN);
+	target = device_locator(child, SCSIBUSCF_TARGET);
+	lun = device_locator(child, SCSIBUSCF_LUN);
+
+	/* XXXSMP scsipi */
+	KERNEL_LOCK(1, curlwp);
 
 	periph = scsipi_lookup_periph(chan, target, lun);
-	KASSERT(periph->periph_dev == dev);
+	KASSERT(periph->periph_dev == child);
 
 	scsipi_remove_periph(chan, periph);
 	free(periph, M_DEVBUF);
+
+	/* XXXSMP scsipi */
+	KERNEL_UNLOCK_ONE(curlwp);
 }
 
 /*
@@ -641,9 +666,11 @@ static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
 	 "FUJITSU ", "M2624S-512      ", ""},     PQUIRK_CAP_SYNC},
 	{{T_DIRECT, T_FIXED,
 	 "SEAGATE ", "SX336704LC"   , ""}, PQUIRK_CAP_SYNC | PQUIRK_CAP_WIDE16},
+	{{T_DIRECT, T_FIXED,
+	 "SEAGATE ", "SX173404LC",       ""},     PQUIRK_CAP_SYNC | PQUIRK_CAP_WIDE16},
 
 	{{T_DIRECT, T_REMOV,
-	 "IOMEGA", "ZIP 100",		 "J.03"}, PQUIRK_NOLUNS},
+	 "IOMEGA", "ZIP 100",		 "J.03"}, PQUIRK_NOLUNS|PQUIRK_NOSYNC},
 	{{T_DIRECT, T_REMOV,
 	 "INSITE", "I325VM",             ""},     PQUIRK_NOLUNS},
 

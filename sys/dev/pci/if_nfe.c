@@ -1,4 +1,4 @@
-/*	$NetBSD: if_nfe.c,v 1.46 2009/09/05 14:09:55 tsutsui Exp $	*/
+/*	$NetBSD: if_nfe.c,v 1.55 2012/01/30 19:41:20 drochner Exp $	*/
 /*	$OpenBSD: if_nfe.c,v 1.77 2008/02/05 16:52:50 brad Exp $	*/
 
 /*-
@@ -21,10 +21,9 @@
 /* Driver for NVIDIA nForce MCP Fast Ethernet and Gigabit Ethernet */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.46 2009/09/05 14:09:55 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.55 2012/01/30 19:41:20 drochner Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 #include "vlan.h"
 
 #include <sys/param.h>
@@ -60,9 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.46 2009/09/05 14:09:55 tsutsui Exp $");
 #include <net/if_types.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -78,6 +75,7 @@ static int nfe_ifflags_cb(struct ethercom *);
 
 int	nfe_match(device_t, cfdata_t, void *);
 void	nfe_attach(device_t, device_t, void *);
+int	nfe_detach(device_t, int);
 void	nfe_power(int, void *);
 void	nfe_miibus_statchg(device_t);
 int	nfe_miibus_readreg(device_t, int, int);
@@ -112,10 +110,10 @@ void	nfe_get_macaddr(struct nfe_softc *, uint8_t *);
 void	nfe_set_macaddr(struct nfe_softc *, const uint8_t *);
 void	nfe_tick(void *);
 void	nfe_poweron(device_t);
-bool	nfe_resume(device_t PMF_FN_PROTO);
+bool	nfe_resume(device_t, const pmf_qual_t *);
 
-CFATTACH_DECL_NEW(nfe, sizeof(struct nfe_softc), nfe_match, nfe_attach,
-    NULL, NULL);
+CFATTACH_DECL_NEW(nfe, sizeof(struct nfe_softc),
+    nfe_match, nfe_attach, nfe_detach, NULL);
 
 /* #define NFE_NO_JUMBO */
 
@@ -221,21 +219,19 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	const char *intrstr;
 	struct ifnet *ifp;
-	bus_size_t memsize;
-	pcireg_t memtype;
-	char devinfo[256];
+	pcireg_t memtype, csr;
 	int mii_flags = 0;
 
 	sc->sc_dev = self;
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
+	sc->sc_pc = pa->pa_pc;
+	pci_aprint_devinfo(pa, NULL);
 
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, NFE_PCI_BA);
 	switch (memtype) {
 	case PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT:
 	case PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_64BIT:
 		if (pci_mapreg_map(pa, NFE_PCI_BA, memtype, 0, &sc->sc_memt,
-		    &sc->sc_memh, NULL, &memsize) == 0)
+		    &sc->sc_memh, NULL, &sc->sc_mems) == 0)
 			break;
 		/* FALLTHROUGH */
 	default:
@@ -253,13 +249,17 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "could not establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		goto fail;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	sc->sc_dmat = pa->pa_dmat;
+
+	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
+	csr |= PCI_COMMAND_MASTER_ENABLE;
+	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, csr);
 
 	sc->sc_flags = 0;
 
@@ -394,8 +394,7 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	ifmedia_init(&sc->sc_mii.mii_media, 0, ether_mediachange,
 	    ether_mediastatus);
 
-	mii_attach(self, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
-	    MII_OFFSET_ANY, mii_flags);
+	mii_attach(self, &sc->sc_mii, 0xffffffff, MII_PHY_ANY, 0, mii_flags);
 
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		aprint_error_dev(self, "no PHY found!\n");
@@ -424,8 +423,56 @@ fail:
 		pci_intr_disestablish(pc, sc->sc_ih);
 		sc->sc_ih = NULL;
 	}
-	if (memsize)
-		bus_space_unmap(sc->sc_memt, sc->sc_memh, memsize);
+	if (sc->sc_mems != 0) {
+		bus_space_unmap(sc->sc_memt, sc->sc_memh, sc->sc_mems);
+		sc->sc_mems = 0;
+	}
+}
+
+int
+nfe_detach(device_t self, int flags)
+{
+	struct nfe_softc *sc = device_private(self);
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	int s;
+
+	s = splnet();
+
+	nfe_stop(ifp, 1);
+
+	pmf_device_deregister(self);
+	callout_destroy(&sc->sc_tick_ch);
+	ether_ifdetach(ifp);
+	if_detach(ifp);
+	mii_detach(&sc->sc_mii, MII_PHY_ANY, MII_OFFSET_ANY);
+
+	nfe_free_rx_ring(sc, &sc->rxq);
+	mutex_destroy(&sc->rxq.mtx);
+	nfe_free_tx_ring(sc, &sc->txq);
+
+	if (sc->sc_ih != NULL) {
+		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
+		sc->sc_ih = NULL;
+	}
+
+	if ((sc->sc_flags & NFE_CORRECT_MACADDR) != 0) {
+		nfe_set_macaddr(sc, sc->sc_enaddr);
+	} else {
+		NFE_WRITE(sc, NFE_MACADDR_LO,
+		    sc->sc_enaddr[0] <<  8 | sc->sc_enaddr[1]);
+		NFE_WRITE(sc, NFE_MACADDR_HI,
+		    sc->sc_enaddr[2] << 24 | sc->sc_enaddr[3] << 16 |
+		    sc->sc_enaddr[4] <<  8 | sc->sc_enaddr[5]);
+	}
+
+	if (sc->sc_mems != 0) {
+		bus_space_unmap(sc->sc_memt, sc->sc_memh, sc->sc_mems);
+		sc->sc_mems = 0;
+	}
+
+	splx(s);
+
+	return 0;
 }
 
 void
@@ -893,10 +940,7 @@ mbufcopied:
 				    device_xname(sc->sc_dev)));
 			}
 		}
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		ifp->if_ipackets++;
 		(*ifp->if_input)(ifp, m);
 
@@ -1157,10 +1201,7 @@ nfe_start(struct ifnet *ifp)
 		/* packet put in h/w queue, remove from s/w queue */
 		IFQ_DEQUEUE(&ifp->if_snd, m0);
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf != NULL)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->txq.queued != old) {
@@ -1545,6 +1586,8 @@ nfe_free_rx_ring(struct nfe_softc *sc, struct nfe_rx_ring *ring)
 		if (data->m != NULL)
 			m_freem(data->m);
 	}
+
+	nfe_jpool_free(sc);
 }
 
 struct nfe_jbuf *
@@ -1672,10 +1715,12 @@ nfe_jpool_free(struct nfe_softc *sc)
 		    ring->jmap->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 		bus_dmamap_unload(sc->sc_dmat, ring->jmap);
 		bus_dmamap_destroy(sc->sc_dmat, ring->jmap);
+		ring->jmap = NULL;
 	}
 	if (ring->jpool != NULL) {
 		bus_dmamem_unmap(sc->sc_dmat, ring->jpool, NFE_JPOOL_SIZE);
 		bus_dmamem_free(sc->sc_dmat, &ring->jseg, 1);
+		ring->jpool = NULL;
 	}
 }
 
@@ -1947,7 +1992,7 @@ nfe_poweron(device_t self)
 }
 
 bool
-nfe_resume(device_t dv PMF_FN_ARGS)
+nfe_resume(device_t dv, const pmf_qual_t *qual)
 {
 	nfe_poweron(dv);
 

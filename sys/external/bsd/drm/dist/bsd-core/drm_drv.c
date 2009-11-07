@@ -112,6 +112,7 @@ static drm_ioctl_desc_t		  drm_ioctls[256] = {
 
 	DRM_IOCTL_DEF(DRM_IOCTL_CONTROL, drm_control, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 
+#ifndef DRM_NO_AGP
 	DRM_IOCTL_DEF(DRM_IOCTL_AGP_ACQUIRE, drm_agp_acquire_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_AGP_RELEASE, drm_agp_release_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_AGP_ENABLE, drm_agp_enable_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
@@ -120,6 +121,7 @@ static drm_ioctl_desc_t		  drm_ioctls[256] = {
 	DRM_IOCTL_DEF(DRM_IOCTL_AGP_FREE, drm_agp_free_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_AGP_BIND, drm_agp_bind_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_AGP_UNBIND, drm_agp_unbind_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
+#endif
 
 	DRM_IOCTL_DEF(DRM_IOCTL_SG_ALLOC, drm_sg_alloc_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_SG_FREE, drm_sg_free, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
@@ -401,7 +403,7 @@ drm_attach(device_t kdev, struct pci_attach_args *pa, drm_pci_id_list_t *idlist)
 
 	memcpy(&dev->pa, pa, sizeof(dev->pa));
 
-	dev->irq = pa->pa_intrline;
+	dev->irq = pa->pa_intrpin;
 	dev->pci_domain = parent_unit;
 	dev->pci_bus = pa->pa_bus;
 	dev->pci_slot = pa->pa_device;
@@ -432,21 +434,6 @@ drm_detach(device_t self, int flags)
 	free(dev->driver, DRM_MEM_DRIVER);
 
 	return 0;
-}
-
-int
-drm_activate(device_t self, devact_t act)
-{
-	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-		break;
-
-	case DVACT_DEACTIVATE:
-		/* FIXME */
-		break;
-	}
-	return (0);
 }
 
 #endif
@@ -546,6 +533,7 @@ static int drm_lastclose(struct drm_device *dev)
 	drm_drawable_free_all(dev);
 	DRM_LOCK();
 
+#ifndef DRM_NO_AGP
 	/* Clear AGP information */
 	if (dev->agp) {
 		drm_agp_mem_t *entry;
@@ -569,6 +557,7 @@ static int drm_lastclose(struct drm_device *dev)
 		dev->agp->acquired = 0;
 		dev->agp->enabled  = 0;
 	}
+#endif
 	if (dev->sg != NULL) {
 		drm_sg_cleanup(dev->sg);
 		dev->sg = NULL;
@@ -626,6 +615,7 @@ static int drm_load(struct drm_device *dev)
 			goto error;
 	}
 
+#ifndef DRM_NO_AGP
 	if (drm_core_has_AGP(dev)) {
 		if (drm_device_is_agp(dev))
 			dev->agp = drm_agp_init(dev);
@@ -642,6 +632,7 @@ static int drm_load(struct drm_device *dev)
 				dev->agp->mtrr = 1;
 		}
 	}
+#endif
 
 	retcode = drm_ctxbitmap_init(dev);
 	if (retcode != 0) {
@@ -674,9 +665,7 @@ static int drm_load(struct drm_device *dev)
 	return 0;
 
 error:
-#if defined(__FreeBSD__)
 	drm_sysctl_cleanup(dev);
-#endif
 	DRM_LOCK();
 	drm_lastclose(dev);
 	DRM_UNLOCK();
@@ -700,8 +689,8 @@ static void drm_unload(struct drm_device *dev)
 
 	DRM_DEBUG("\n");
 
-#if defined(__FreeBSD__)
 	drm_sysctl_cleanup(dev);
+#if defined(__FreeBSD__)
 	destroy_dev(dev->devnode);
 #endif
 
@@ -1133,7 +1122,7 @@ drm_linux_ioctl(DRM_STRUCTPROC *p, struct linux_ioctl_args* args)
 #if defined(__NetBSD__)
 /* Module support */
 
-MODULE(MODULE_CLASS_MISC, drm, NULL);
+MODULE(MODULE_CLASS_MISC, drm, "pci");
 
 static int
 drm_modcmd(modcmd_t cmd, void *arg)

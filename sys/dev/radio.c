@@ -1,4 +1,4 @@
-/* $NetBSD: radio.c,v 1.22 2008/07/09 13:12:54 joerg Exp $ */
+/* $NetBSD: radio.c,v 1.25 2011/02/23 16:20:30 dyoung Exp $ */
 /* $OpenBSD: radio.c,v 1.2 2001/12/05 10:27:06 mickey Exp $ */
 /* $RuOBSD: radio.c,v 1.7 2001/12/04 06:03:05 tm Exp $ */
 
@@ -30,7 +30,7 @@
 /* This is the /dev/radio driver from OpenBSD */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radio.c,v 1.22 2008/07/09 13:12:54 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radio.c,v 1.25 2011/02/23 16:20:30 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,17 +48,15 @@ struct radio_softc {
 	void		*hw_hdl;	/* hardware driver handle */
 	device_t 	sc_dev;		/* hardware device struct */
 	const struct radio_hw_if *hw_if; /* hardware interface */
-	char		sc_dying;	/* device detached */
 };
 
 static int	radioprobe(device_t, cfdata_t, void *);
 static void	radioattach(device_t, device_t, void *);
 static int	radioprint(void *, const char *);
 static int	radiodetach(device_t, int);
-static int	radioactivate(device_t, enum devact);
 
 CFATTACH_DECL_NEW(radio, sizeof(struct radio_softc),
-    radioprobe, radioattach, radiodetach, radioactivate);
+    radioprobe, radioattach, radiodetach, NULL);
 
 static dev_type_open(radioopen);
 static dev_type_close(radioclose);
@@ -80,7 +78,7 @@ radioprobe(device_t parent, cfdata_t match, void *aux)
 static void
 radioattach(device_t parent, device_t self, void *aux)
 {
-	struct radio_softc *sc = (void *)self;
+	struct radio_softc *sc = device_private(self);
 	struct radio_attach_args *sa = aux;
 	const struct radio_hw_if *hwp = sa->hwif;
 	void  *hdlp = sa->hdl;
@@ -89,7 +87,7 @@ radioattach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 	sc->hw_if = hwp;
 	sc->hw_hdl = hdlp;
-	sc->sc_dev = parent;
+	sc->sc_dev = self;
 }
 
 static int
@@ -183,7 +181,6 @@ radioprint(void *aux, const char *pnp)
 static int
 radiodetach(device_t self, int flags)
 {
-	/*struct radio_softc *sc = (struct radio_softc *)self;*/
 	int maj, mn;
 
 	/* locate the major number */
@@ -193,21 +190,5 @@ radiodetach(device_t self, int flags)
 	mn = device_unit(self);
 	vdevgone(maj, mn, mn, VCHR);
 
-	return (0);
-}
-
-static int
-radioactivate(device_t self, enum devact act)
-{
-	struct radio_softc *sc = device_private(self);
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
-	case DVACT_DEACTIVATE:
-		sc->sc_dying = 1;
-		break;
-	}
 	return (0);
 }

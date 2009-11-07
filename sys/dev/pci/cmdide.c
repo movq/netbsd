@@ -1,4 +1,4 @@
-/*	$NetBSD: cmdide.c,v 1.29 2009/10/19 18:41:14 bouyer Exp $	*/
+/*	$NetBSD: cmdide.c,v 1.32 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmdide.c,v 1.29 2009/10/19 18:41:14 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmdide.c,v 1.32 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,19 +42,21 @@ static int  cmdide_match(device_t, cfdata_t, void *);
 static void cmdide_attach(device_t, device_t, void *);
 
 CFATTACH_DECL_NEW(cmdide, sizeof(struct pciide_softc),
-    cmdide_match, cmdide_attach, NULL, NULL);
+    cmdide_match, cmdide_attach, pciide_detach, NULL);
 
-static void cmd_chip_map(struct pciide_softc*, struct pci_attach_args*);
-static void cmd0643_9_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void cmd_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void cmd0643_9_chip_map(struct pciide_softc*,
+			       const struct pci_attach_args*);
 static void cmd0643_9_setup_channel(struct ata_channel*);
-static void cmd_channel_map(struct pci_attach_args *, struct pciide_softc *,
-			    int);
+static void cmd_channel_map(const struct pci_attach_args *,
+			    struct pciide_softc *, int);
 static int  cmd_pci_intr(void *);
 static void cmd646_9_irqack(struct ata_channel *);
-static void cmd680_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void cmd680_chip_map(struct pciide_softc*,
+			    const struct pci_attach_args*);
 static void cmd680_setup_channel(struct ata_channel*);
-static void cmd680_channel_map(struct pci_attach_args *, struct pciide_softc *,
-			       int);
+static void cmd680_channel_map(const struct pci_attach_args *,
+			       struct pciide_softc *, int);
 
 static const struct pciide_product_desc pciide_cmd_products[] =  {
 	{ PCI_PRODUCT_CMDTECH_640,
@@ -120,11 +122,10 @@ cmdide_attach(device_t parent, device_t self, void *aux)
 }
 
 static void
-cmd_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
+cmd_channel_map(const struct pci_attach_args *pa, struct pciide_softc *sc,
     int channel)
 {
 	struct pciide_channel *cp = &sc->pciide_channels[channel];
-	bus_size_t cmdsize, ctlsize;
 	u_int8_t ctrl = pciide_pci_read(sc->sc_pc, sc->sc_tag, CMD_CTRL);
 	int interface, one_channel;
 
@@ -194,7 +195,7 @@ cmd_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
 		return;
 	}
 
-	pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize, cmd_pci_intr);
+	pciide_mapchan(pa, cp, interface, cmd_pci_intr);
 }
 
 static int
@@ -231,7 +232,7 @@ cmd_pci_intr(void *arg)
 }
 
 static void
-cmd_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cmd_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	int channel;
 
@@ -267,7 +268,7 @@ cmd_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 }
 
 static void
-cmd0643_9_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cmd0643_9_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	int channel;
 	pcireg_t rev = PCI_REVISION(pa->pa_class);
@@ -457,7 +458,7 @@ cmd646_9_irqack(struct ata_channel *chp)
 }
 
 static void
-cmd680_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cmd680_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	int channel;
 
@@ -495,11 +496,10 @@ cmd680_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 }
 
 static void
-cmd680_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
+cmd680_channel_map(const struct pci_attach_args *pa, struct pciide_softc *sc,
     int channel)
 {
 	struct pciide_channel *cp = &sc->pciide_channels[channel];
-	bus_size_t cmdsize, ctlsize;
 	int interface, i, reg;
 	static const u_int8_t init_val[] =
 	    {             0x8a, 0x32, 0x8a, 0x32, 0x8a, 0x32,
@@ -541,7 +541,7 @@ cmd680_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
 	    (interface & PCIIDE_INTERFACE_PCI(channel)) ?
 	    "native-PCI" : "compatibility");
 
-	pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize, pciide_pci_intr);
+	pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 }
 
 static void

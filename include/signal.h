@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.51 2009/01/11 03:04:12 christos Exp $	*/
+/*	$NetBSD: signal.h,v 1.54 2010/08/27 08:40:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -87,7 +87,12 @@ int	sigprocmask(int, const sigset_t * __restrict, sigset_t * __restrict)
     __RENAME(__sigprocmask14);
 int	sigsuspend(const sigset_t *) __RENAME(__sigsuspend14);
 
-#if (defined(__GNUC__) && defined(__STDC__)) || defined(_SIGINLINE)
+#if defined(__c99inline) || defined(__SIGSETOPS_BODY)
+
+#if defined(__SIGSETOPS_BODY)
+#undef	__c99inline
+#define	__c99inline
+#endif
 
 /* note: this appears in both errno.h and signal.h */
 #ifndef __errno
@@ -100,11 +105,7 @@ int *__errno(void);
 #define ___errno (*__errno())
 #endif
 
-#ifndef _SIGINLINE
-#define _SIGINLINE extern __inline
-#endif
-
-_SIGINLINE int
+__c99inline int
 sigaddset(sigset_t *set, int signo)
 {
 	if (signo <= 0 || signo >= _NSIG) {
@@ -115,7 +116,7 @@ sigaddset(sigset_t *set, int signo)
 	return (0);
 }
 
-_SIGINLINE int
+__c99inline int
 sigdelset(sigset_t *set, int signo)
 {
 	if (signo <= 0 || signo >= _NSIG) {
@@ -126,7 +127,7 @@ sigdelset(sigset_t *set, int signo)
 	return (0);
 }
 
-_SIGINLINE int
+__c99inline int
 sigismember(const sigset_t *set, int signo)
 {
 	if (signo <= 0 || signo >= _NSIG) {
@@ -136,20 +137,20 @@ sigismember(const sigset_t *set, int signo)
 	return (__sigismember(set, signo));
 }
 
-_SIGINLINE int
+__c99inline int
 sigemptyset(sigset_t *set)
 {
 	__sigemptyset(set);
 	return (0);
 }
 
-_SIGINLINE int
+__c99inline int
 sigfillset(sigset_t *set)
 {
 	__sigfillset(set);
 	return (0);
 }
-#endif /* (__GNUC__ && __STDC__) || _LIBC */
+#endif /* __c99inline */
 #endif /* !__LIBC12_SOURCE__ */
 
 /*
@@ -179,6 +180,7 @@ void	(*sigset (int, void (*)(int)))(int);
     defined(_NETBSD_SOURCE)
 int	sigwait	(const sigset_t * __restrict, int * __restrict);
 int	sigwaitinfo(const sigset_t * __restrict, siginfo_t * __restrict);
+void	psiginfo(const siginfo_t *, const char *);
 
 #ifndef __LIBC12_SOURCE__
 struct timespec;
@@ -196,7 +198,7 @@ int	__sigtimedwait(const sigset_t * __restrict,
 #ifndef __PSIGNAL_DECLARED
 #define __PSIGNAL_DECLARED
 /* also in unistd.h */
-void	psignal(unsigned int, const char *);
+void	psignal(int, const char *);
 #endif /* __PSIGNAL_DECLARED */
 int	sigblock(int);
 int	sigsetmask(int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: arcmsr.c,v 1.22 2008/09/23 22:22:41 christos Exp $ */
+/*	$NetBSD: arcmsr.c,v 1.30 2011/06/20 22:03:16 pgoyette Exp $ */
 /*	$OpenBSD: arc.c,v 1.68 2007/10/27 03:28:27 dlg Exp $ */
 
 /*
@@ -21,7 +21,7 @@
 #include "bio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcmsr.c,v 1.22 2008/09/23 22:22:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcmsr.c,v 1.30 2011/06/20 22:03:16 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -50,8 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: arcmsr.c,v 1.22 2008/09/23 22:22:41 christos Exp $")
 #include <dev/sysmon/sysmonvar.h>
 
 #include <sys/bus.h>
-
-#include <uvm/uvm_extern.h>	/* for PAGE_SIZE */
 
 #include <dev/pci/arcmsrvar.h>
 
@@ -237,6 +235,9 @@ arc_detach(device_t self, int flags)
 
 	if (arc_msg0(sc, ARC_REG_INB_MSG0_FLUSH_CACHE) != 0)
 		aprint_error_dev(self, "timeout waiting to flush cache\n");
+
+	if (sc->sc_sme != NULL)
+		sysmon_envsys_unregister(sc->sc_sme);
 
 	return 0;
 }
@@ -1734,8 +1735,8 @@ arc_create_sensors(void *arg)
 		kthread_exit(0);
 
 	sc->sc_sme = sysmon_envsys_create();
-	slen = sizeof(envsys_data_t) * sc->sc_nsensors;
-	sc->sc_sensors = kmem_zalloc(slen, KM_SLEEP);
+	slen = sizeof(arc_edata_t) * sc->sc_nsensors;
+	sc->sc_arc_sensors = kmem_zalloc(slen, KM_SLEEP);
 
 	/* Attach sensors for volumes and disks */
 	for (i = 0; i < bi.bi_novol; i++) {
@@ -1744,46 +1745,54 @@ arc_create_sensors(void *arg)
 		if (arc_bio_vol(sc, &bv) != 0)
 			goto bad;
 
-		sc->sc_sensors[count].units = ENVSYS_DRIVE;
-		sc->sc_sensors[count].monitor = true;
-		sc->sc_sensors[count].flags = ENVSYS_FMONSTCHANGED;
+		sc->sc_arc_sensors[count].arc_sensor.units = ENVSYS_DRIVE;
+		sc->sc_arc_sensors[count].arc_sensor.state = ENVSYS_SINVALID;
+		sc->sc_arc_sensors[count].arc_sensor.value_cur =
+		    ENVSYS_DRIVE_EMPTY;
+		sc->sc_arc_sensors[count].arc_sensor.flags =
+		    ENVSYS_FMONSTCHANGED;
 
 		/* Skip passthrough volumes */		
 		if (bv.bv_level == BIOC_SVOL_PASSTHRU)
 			continue;
 
 		if (bv.bv_level == BIOC_SVOL_RAID10)
-			snprintf(sc->sc_sensors[count].desc,
-			    sizeof(sc->sc_sensors[count].desc),
+			snprintf(sc->sc_arc_sensors[count].arc_sensor.desc,
+			    sizeof(sc->sc_arc_sensors[count].arc_sensor.desc),
 			    "RAID 1+0 volume%d (%s)", i, bv.bv_dev);
 		else
-			snprintf(sc->sc_sensors[count].desc,
-			    sizeof(sc->sc_sensors[count].desc),
+			snprintf(sc->sc_arc_sensors[count].arc_sensor.desc,
+			    sizeof(sc->sc_arc_sensors[count].arc_sensor.desc),
 			    "RAID %d volume%d (%s)", bv.bv_level, i,
 			    bv.bv_dev);
 
-		sc->sc_sensors[count].value_max = i;
+		sc->sc_arc_sensors[count].arc_volid = i;
 
 		if (sysmon_envsys_sensor_attach(sc->sc_sme,
-		    &sc->sc_sensors[count]))
+		    &sc->sc_arc_sensors[count].arc_sensor))
 			goto bad;
 
 		count++;
 
 		/* Attach disk sensors for this volume */
 		for (j = 0; j < bv.bv_nodisk; j++) {
-			sc->sc_sensors[count].units = ENVSYS_DRIVE;
-			sc->sc_sensors[count].monitor = true;
-			sc->sc_sensors[count].flags = ENVSYS_FMONSTCHANGED;
+			sc->sc_arc_sensors[count].arc_sensor.state =
+			    ENVSYS_SINVALID;
+			sc->sc_arc_sensors[count].arc_sensor.units =
+			    ENVSYS_DRIVE;
+			sc->sc_arc_sensors[count].arc_sensor.value_cur =
+			    ENVSYS_DRIVE_EMPTY;
+			sc->sc_arc_sensors[count].arc_sensor.flags =
+			    ENVSYS_FMONSTCHANGED;
 
-			snprintf(sc->sc_sensors[count].desc,
-			    sizeof(sc->sc_sensors[count].desc),
+			snprintf(sc->sc_arc_sensors[count].arc_sensor.desc,
+			    sizeof(sc->sc_arc_sensors[count].arc_sensor.desc),
 			    "disk%d volume%d (%s)", j, i, bv.bv_dev);
-			sc->sc_sensors[count].value_max = i;
-			sc->sc_sensors[count].value_avg = j + 10;
+			sc->sc_arc_sensors[count].arc_volid = i;
+			sc->sc_arc_sensors[count].arc_diskid = j + 10;
 
 			if (sysmon_envsys_sensor_attach(sc->sc_sme,
-			    &sc->sc_sensors[count]))
+			    &sc->sc_arc_sensors[count].arc_sensor))
 				goto bad;
 
 			count++;
@@ -1806,8 +1815,12 @@ arc_create_sensors(void *arg)
 	kthread_exit(0);
 
 bad:
-	kmem_free(sc->sc_sensors, slen);
 	sysmon_envsys_destroy(sc->sc_sme);
+	kmem_free(sc->sc_arc_sensors, slen);
+
+	sc->sc_sme = NULL;
+	sc->sc_arc_sensors = NULL;
+
 	kthread_exit(0);
 }
 
@@ -1817,13 +1830,14 @@ arc_refresh_sensors(struct sysmon_envsys *sme, envsys_data_t *edata)
 	struct arc_softc	*sc = sme->sme_cookie;
 	struct bioc_vol		bv;
 	struct bioc_disk	bd;
+	arc_edata_t		*arcdata = (arc_edata_t *)edata;
 
 	/* sanity check */
 	if (edata->units != ENVSYS_DRIVE)
 		return;
 
 	memset(&bv, 0, sizeof(bv));
-	bv.bv_volid = edata->value_max;
+	bv.bv_volid = arcdata->arc_volid;
 
 	if (arc_bio_vol(sc, &bv)) {
 		edata->value_cur = ENVSYS_DRIVE_EMPTY;
@@ -1832,10 +1846,10 @@ arc_refresh_sensors(struct sysmon_envsys *sme, envsys_data_t *edata)
 	}
 
 	/* Current sensor is handling a disk volume member */
-	if (edata->value_avg) {
+	if (arcdata->arc_diskid) {
 		memset(&bd, 0, sizeof(bd));
-		bd.bd_volid = edata->value_max;
-		bd.bd_diskid = edata->value_avg - 10;
+		bd.bd_volid = arcdata->arc_volid;
+		bd.bd_diskid = arcdata->arc_diskid - 10;
 
 		if (arc_bio_disk_volume(sc, &bd)) {
 			edata->value_cur = ENVSYS_DRIVE_OFFLINE;

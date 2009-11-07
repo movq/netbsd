@@ -1,4 +1,4 @@
-.\"     $NetBSD: driver.9,v 1.22 2009/05/18 08:58:54 wiz Exp $
+.\"     $NetBSD: driver.9,v 1.27 2011/07/23 16:04:35 jym Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 14, 2007
+.Dd July 23, 2011
 .Dt DRIVER 9
 .Os
 .Sh NAME
@@ -38,13 +38,13 @@
 .In sys/device.h
 .In sys/errno.h
 .Ft static int
-.Fn foo_match "struct device *parent" "struct cfdata *match" "void *aux"
+.Fn foo_match "device_t parent" "cfdata_t match" "void *aux"
 .Ft static void
-.Fn foo_attach "struct device *parent" "struct device *self" "void *aux"
+.Fn foo_attach "device_t parent" "device_t self" "void *aux"
 .Ft static int
-.Fn foo_detach "struct device *self" "int flags"
+.Fn foo_detach "device_t self" "int flags"
 .Ft static int
-.Fn foo_activate "struct device *self" "enum devact act"
+.Fn foo_activate "device_t self" "enum devact act"
 .Sh DESCRIPTION
 This page briefly describes the basic
 .Nx
@@ -98,7 +98,7 @@ is defined with:
 .Pp
 .Bd -literal
 struct foo_softc {
-	struct device sc_dev;		/* generic device info */
+	device_t sc_dev;		/* generic device info */
 	/* device-specific state */
 };
 .Ed
@@ -106,7 +106,7 @@ struct foo_softc {
 The autoconfiguration framework mandates that the first member of the
 .Em softc
 structure must be the driver-independent
-.Em struct device .
+.Em device_t .
 Probably its most useful aspect to the driver is that it contains the
 device-instance name
 .Em dv_xname .
@@ -134,7 +134,7 @@ const struct cdevsw foo_cdevsw {
 	int (*d_poll)(dev_t, int, struct lwp *);
 	paddr_t (*d_mmap)(dev_t, off_t, int);
 	int (*d_kqfilter)(dev_t, struct knote *);
-	int d_type;
+	int d_flag;
 };
 .Ed
 .Pp
@@ -163,7 +163,7 @@ const struct bdevsw foo_bdevsw {
 	int (*d_ioctl)(dev_t, u_long, void *, int, struct lwp *);
 	int (*d_dump)(dev_t, daddr_t, void *, size_t);
 	int (*d_psize)(dev_t);
-	int d_type;
+	int d_flag;
 };
 .Ed
 .Pp
@@ -370,5 +370,4 @@ language see
 .Xr config 1 ,
 .Xr autoconf 9 ,
 .Xr config 9 ,
-.Xr powerhook_establish 9 ,
-.Xr shutdownhook_establish 9
+.Xr pmf 9

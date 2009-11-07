@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.43 2009/03/18 16:00:14 cegger Exp $ */
+/* $NetBSD: machdep.c,v 1.50 2011/07/09 16:59:40 matt Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -58,53 +58,55 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.43 2009/03/18 16:00:14 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.50 2011/07/09 16:59:40 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
 #include "opt_modular.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/proc.h>
 #include <sys/buf.h>
-#include <sys/reboot.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
+#include <sys/exec.h>
 #include <sys/file.h>
+#include <sys/intr.h>
+#include <sys/kcore.h>
+#include <sys/kernel.h>
+#include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
-#include <sys/msgbuf.h>
-#include <sys/device.h>
-#include <sys/user.h>
-#include <sys/exec.h>
 #include <sys/mount.h>
+#include <sys/msgbuf.h>
+#include <sys/proc.h>
+#include <sys/reboot.h>
 #include <sys/syscallargs.h>
-#include <sys/kcore.h>
-#include <sys/ksyms.h>
+#include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
-#include <machine/reg.h>
-#include <machine/psl.h>
-#include <machine/pte.h>
-#include <machine/autoconf.h>
-#include <machine/intr.h>
-#include <machine/swarm.h>
 #include <mips/locore.h>
+#include <mips/psl.h>
+#include <mips/pte.h>
+#include <mips/reg.h>
 
 #include <mips/cfe/cfe_api.h>
 
+#include <sbmips/autoconf.h>
+#include <sbmips/swarm.h>
+
 #if 0 /* XXXCGD */
-#include <machine/nvram.h>
+#include <sbmips/nvram.h>
 #endif /* XXXCGD */
-#include <machine/leds.h>
+#include <sbmips/leds.h>
+
+#include <mips/sibyte/dev/sbbuswatchvar.h>
 
 #include "ksyms.h"
 
 #if NKSYMS || defined(DDB) || defined(MODULAR)
-#include <machine/db_machdep.h>
+#include <mips/db_machdep.h>
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
@@ -126,7 +128,6 @@ void	*ksym_start, *ksym_end;
 struct cpu_info cpu_info_store;
 
 /* Maps for VM objects. */
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	physmem;		/* Total physical memory */
@@ -143,14 +144,7 @@ int mem_cluster_cnt;
 void	configure(void);
 void	mach_init(long, long, long, long);
 
-/*
- * safepri is a safe priority for sleep to set for a spin-wait during
- * autoconfiguration or after a panic.  Used as an argument to splx().
- */
-int	safepri = MIPS_INT_MASK | MIPS_SR_INT_IE;
-
 extern void *esym;
-extern struct user *proc0paddr;
 
 /*
  * Do all the stuff that locore normally does before calling main().
@@ -158,10 +152,8 @@ extern struct user *proc0paddr;
 void
 mach_init(long fwhandle, long magic, long bootdata, long reserved)
 {
-	void *kernend, *p0;
-	u_long first, last;
+	void *kernend;
 	extern char edata[], end[];
-	int i;
 	uint32_t config;
 
 	/* XXX this code must run on the target CPU */
@@ -195,8 +187,8 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	kernend = (void *)mips_round_page(end);
 #if NKSYMS || defined(DDB) || defined(MODULAR)
 	if (magic == BOOTINFO_MAGIC) {
-		ksym_start = (void *)bootinfo.ssym;
-		ksym_end   = (void *)bootinfo.esym;
+		ksym_start = (void *)(intptr_t)bootinfo.ssym;
+		ksym_end   = (void *)(intptr_t)bootinfo.esym;
 		kernend = (void *)mips_round_page((vaddr_t)ksym_end);
 	}
 #endif
@@ -210,7 +202,15 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	 * Initialize locore-function vector.
 	 * Clear out the I and D caches.
 	 */
-	mips_vector_init();
+#ifdef MULTIPROCESSOR
+	mips_vector_init(NULL, true);
+#else
+	mips_vector_init(NULL, false);
+#endif
+
+	mips_locoresw.lsw_bus_error = sibyte_bus_watch_check;
+
+	sb1250_ipl_map_init();
 
 #ifdef DEBUG
 	printf("fwhandle=%08X magic=%08X bootdata=%08X reserved=%08X\n",
@@ -270,7 +270,7 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	}
 
 
-	for (i = 0; i < sizeof(bootinfo.boot_flags); i++) {
+	for (u_int i = 0; i < sizeof(bootinfo.boot_flags); i++) {
 		switch (bootinfo.boot_flags[i]) {
 		case '\0':
 			break;
@@ -297,36 +297,21 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 
 	/*
 	 * Load the rest of the available pages into the VM system.
-	 * The first chunk is tricky because we have to avoid the
-	 * kernel, but the rest are easy.
 	 */
-	first = round_page(MIPS_KSEG0_TO_PHYS(kernend));
-	last = mem_clusters[0].start + mem_clusters[0].size;
-	uvm_page_physload(atop(first), atop(last), atop(first), atop(last),
-		VM_FREELIST_DEFAULT);
-
-	for (i = 1; i < mem_cluster_cnt; i++) {
-		first = round_page(mem_clusters[i].start);
-		last = mem_clusters[i].start + mem_clusters[i].size;
-		uvm_page_physload(atop(first), atop(last), atop(first),
-		    atop(last), VM_FREELIST_DEFAULT);
-	}
+	mips_page_physload(MIPS_KSEG0_START, (vaddr_t) kernend,
+	    mem_clusters, mem_cluster_cnt, NULL, 0);
 
 	/*
 	 * Initialize error message buffer (at end of core).
 	 */
 	mips_init_msgbuf();
 
-	/*
-	 * Allocate space for proc0's USPACE
-	 */
-	p0 = (void *)pmap_steal_memory(USPACE, NULL, NULL);
-	lwp0.l_addr = proc0paddr = (struct user *)p0;
-	lwp0.l_md.md_regs = (struct frame *)((char *)p0 + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
-
 	pmap_bootstrap();
+
+	/*
+	 * Allocate uarea for lwp0 and set it.
+	 */
+	mips_init_lwp0_uarea();
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
@@ -341,6 +326,10 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 		Debugger();
 #endif
 	}
+
+#ifdef MULTIPROCESSOR
+	mips_fixup_exceptions(mips_fixup_zero_relative);
+#endif
 }
 
 /*
@@ -349,32 +338,10 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 void
 cpu_startup(void)
 {
-	vaddr_t minaddr, maxaddr;
-	char pbuf[9];
-
 	/*
-	 * Good {morning,afternoon,evening,night}.
+	 * Just do the common stuff.
 	 */
-	printf("%s%s", copyright, version);
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-	minaddr = 0;
-	/*
-	 * Allocate a submap for physio.
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr, VM_PHYS_SIZE,
-	    0, false, NULL);
-
-
-	/*
-	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use KSEG to
-	 * map those pages.)
-	 */
-
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
+	cpu_startup_common();
 }
 
 int	waittime = -1;
@@ -384,8 +351,7 @@ cpu_reboot(int howto, char *bootstr)
 {
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -470,6 +436,8 @@ sbmips_cca_for_pa(paddr_t pa)
 {
 	int rv;
 
+	rv = 2;			/* Uncached. */
+
 	/* Check each DRAM region. */
 	if ((pa >= 0x0000000000   && pa <= 0x000fffffff) ||	/* DRAM 0 */
 	    (pa >= 0x0080000000   && pa <= 0x008fffffff) ||	/* DRAM 1 */
@@ -480,10 +448,7 @@ sbmips_cca_for_pa(paddr_t pa)
 #endif
 	   0) {
 		rv = 5;		/* Cacheable coherent. */
-		goto done;
 	}
 
-	rv = 2;			/* Uncached. */
-done:
 	return (rv);
 }

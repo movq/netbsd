@@ -1,4 +1,4 @@
-/* $NetBSD: padvol.c,v 1.4 2009/09/07 18:23:06 jmcneill Exp $ */
+/* $NetBSD: padvol.c,v 1.6 2011/11/23 23:07:33 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: padvol.c,v 1.4 2009/09/07 18:23:06 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: padvol.c,v 1.6 2011/11/23 23:07:33 jmcneill Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -35,6 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: padvol.c,v 1.4 2009/09/07 18:23:06 jmcneill Exp $");
 #include <sys/condvar.h>
 #include <sys/kmem.h>
 #include <sys/device.h>
+#include <sys/endian.h>
 
 #include <dev/audiovar.h>
 #include <dev/auconv.h>
@@ -56,7 +57,8 @@ pad_filter_dtor(stream_filter_t *this)
 
 static stream_filter_t *
 pad_filter_factory(struct audio_softc *sc,
-    int (*fetch_to)(stream_fetcher_t *, audio_stream_t *, int))
+    int (*fetch_to)(struct audio_softc *, stream_fetcher_t *,
+    audio_stream_t *, int))
 {
 	pad_filter_t *this;
 
@@ -83,14 +85,14 @@ PAD_DEFINE_FILTER(pad_vol_slinear16_le)
 	this = &pf->base;
 	max_used = (max_used + 1) & ~1;
 
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(asc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
 	FILTER_LOOP_PROLOGUE(this->src, 2, dst, 2, m) {
-		j = (s[1] << 8 | s[0]);
+		j = le16dec(s);
 		wp = (int16_t *)d;
-		*wp = ((j * sc->sc_swvol) / 255);
+		le16enc(wp, (j * sc->sc_swvol) / 255);
 	} FILTER_LOOP_EPILOGUE(this->src, dst);
 
 	return 0;
@@ -109,14 +111,14 @@ PAD_DEFINE_FILTER(pad_vol_slinear16_be)
 	this = &pf->base;
 	max_used = (max_used + 1) & ~1;
 
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(asc, this->prev, this->src, max_used)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
 	FILTER_LOOP_PROLOGUE(this->src, 2, dst, 2, m) {
-		j = (s[0] << 8 | s[1]);
+		j = be16dec(s);
 		wp = (int16_t *)d;
-		*wp = ((j * sc->sc_swvol) / 255);
+		be16enc(wp, (j * sc->sc_swvol) / 255);
 	} FILTER_LOOP_EPILOGUE(this->src, dst);
 
 	return 0;

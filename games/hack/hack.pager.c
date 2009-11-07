@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.pager.c,v 1.13 2009/08/12 07:28:41 dholland Exp $	*/
+/*	$NetBSD: hack.pager.c,v 1.21 2011/09/01 07:18:50 plunky Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.pager.c,v 1.13 2009/08/12 07:28:41 dholland Exp $");
+__RCSID("$NetBSD: hack.pager.c,v 1.21 2011/09/01 07:18:50 plunky Exp $");
 #endif				/* not lint */
 
 /* This file contains the command routine dowhatis() and a pager. */
@@ -73,6 +73,7 @@ __RCSID("$NetBSD: hack.pager.c,v 1.13 2009/08/12 07:28:41 dholland Exp $");
  */
 
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -114,7 +115,7 @@ dowhatis(void)
 						buf[0] = q;
 						(void) strncpy(buf + 1, "       ", 7);
 					}
-					pline(buf);
+					pline("%s", buf);
 					if (ep[-1] == ';') {
 						pline("More info? ");
 						if (readchar() == 'y') {
@@ -149,7 +150,7 @@ page_more(FILE *fp, int strip)
 	sig_t           prevsig = signal(SIGINT, intruph);
 
 	set_pager(0);
-	bufr = (char *) alloc((unsigned) CO);
+	bufr = alloc(CO);
 	bufr[CO - 1] = 0;
 	while (fgets(bufr, CO - 1, fp) && (!strip || *bufr == '\t') && !got_intrup) {
 		ep = strchr(bufr, '\n');
@@ -288,8 +289,7 @@ cornline(int mode, const char *text)
 		len = strlen(text);
 		if (len > maxlen)
 			maxlen = len;
-		tl = (struct line *)
-			alloc((unsigned) (len + sizeof(struct line) + 1));
+		tl = alloc(len + sizeof(*tl) + 1);
 		tl->next_line = 0;
 		tl->line_text = (char *) (tl + 1);
 		(void) strcpy(tl->line_text, text);
@@ -302,7 +302,7 @@ cornline(int mode, const char *text)
 	}
 	/* --- now we really do it --- */
 	if (mode == 2 && linect == 1)	/* topline only */
-		pline(texthead->line_text);
+		pline("%s", texthead->line_text);
 	else if (mode == 2) {
 		int             curline, lth;
 
@@ -348,7 +348,7 @@ cornline(int mode, const char *text)
 cleanup:
 	while ((tl = texthead) != NULL) {
 		texthead = tl->next_line;
-		free((char *) tl);
+		free(tl);
 	}
 }
 
@@ -359,7 +359,7 @@ dohelp(void)
 
 	pline("Long or short help? ");
 	while (((c = readchar()) != 'l') && (c != 's') && !strchr(quitchars, c))
-		bell();
+		sound_bell();
 	if (!strchr(quitchars, c))
 		(void) page_file((c == 'l') ? HELP : SHELP, FALSE);
 	return (0);
@@ -392,7 +392,7 @@ page_file(const char *fnam, boolean silent)
 				if (!silent)
 					printf("Cannot open %s as stdin.\n", fnam);
 			} else {
-				execl(catmore, "page", (char *) 0);
+				execl(catmore, "page", (char *)NULL);
 				if (!silent)
 					printf("Cannot exec %s.\n", catmore);
 			}
@@ -428,34 +428,15 @@ dosh(void)
 	char           *str;
 	if (child(0)) {
 		if ((str = getenv("SHELL")) != NULL)
-			execl(str, str, (char *) 0);
+			execl(str, str, (char *)NULL);
 		else
-			execl("/bin/sh", "sh", (char *) 0);
+			execl("/bin/sh", "sh", (char *)NULL);
 		pline("sh: cannot execute.");
 		exit(1);
 	}
 	return (0);
 }
 #endif	/* SHELL */
-
-#ifdef NOWAITINCLUDE
-union wait {			/* used only for the cast  (union wait *) 0  */
-	int             w_status;
-	struct {
-		unsigned short  w_Termsig:7;
-		unsigned short  w_Coredump:1;
-		unsigned short  w_Retcode:8;
-	}               w_T;
-};
-
-#else
-
-#ifdef BSD
-#include	<sys/wait.h>
-#else
-#include	<wait.h>
-#endif	/* BSD */
-#endif	/* NOWAITINCLUDE */
 
 static int
 child(int wt)
@@ -465,7 +446,7 @@ child(int wt)
 
 	f = fork();
 	if (f == 0) {		/* child */
-		settty((char *) 0);	/* also calls end_screen() */
+		settty(NULL);	/* also calls end_screen() */
 		(void) setuid(getuid());
 		(void) setgid(getgid());
 #ifdef CHDIR

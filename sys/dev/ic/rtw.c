@@ -1,4 +1,4 @@
-/* $NetBSD: rtw.c,v 1.110 2009/10/19 23:19:39 rmind Exp $ */
+/* $NetBSD: rtw.c,v 1.119 2011/07/04 16:06:17 joerg Exp $ */
 /*-
  * Copyright (c) 2004, 2005, 2006, 2007 David Young.  All rights
  * reserved.
@@ -32,9 +32,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.110 2009/10/19 23:19:39 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.119 2011/07/04 16:06:17 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -46,12 +45,11 @@ __KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.110 2009/10/19 23:19:39 rmind Exp $");
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/sockio.h>
 
 #include <machine/endian.h>
 #include <sys/bus.h>
 #include <sys/intr.h>	/* splnet */
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -61,9 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.110 2009/10/19 23:19:39 rmind Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <dev/ic/rtwreg.h>
 #include <dev/ic/rtwvar.h>
@@ -644,7 +640,7 @@ rtw_wep_setkeys(struct rtw_softc *sc, struct ieee80211_key *wk, int txkey)
 	regs = &sc->sc_regs;
 	rk = &sc->sc_keys;
 
-	(void)memset(rk, 0, sizeof(rk));
+	(void)memset(rk, 0, sizeof(*rk));
 
 	/* Temporarily use software crypto for all keys. */
 	for (i = 0; i < IEEE80211_WEP_NKID; i++) {
@@ -849,7 +845,7 @@ rtw_srom_parse(struct rtw_srom *sr, uint32_t *flags, uint8_t *cs_threshold,
 		rtw_srom_defaults(sr, flags, cs_threshold, rfchipid, rcr);
 		return 0;
 	} else {
-		aprint_verbose_dev(dev, "SROM version %d.%d",
+		aprint_verbose_dev(dev, "SROM version %d.%d\n",
 		    srom_version >> 8, srom_version & 0xff);
 	}
 
@@ -1625,7 +1621,6 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 		}
 #endif /* RTW_DEBUG */
 
-#if NBPFILTER > 0
 		if (sc->sc_radiobpf != NULL) {
 			struct rtw_rx_radiotap_header *rr = &sc->sc_rxtap;
 
@@ -1649,10 +1644,9 @@ rtw_intr_rx(struct rtw_softc *sc, uint16_t isr)
 				    htole16(UINT8_MAX - sq);
 			}
 
-			bpf_mtap2(sc->sc_radiobpf, rr,
-			    sizeof(sc->sc_rxtapu), m);
+			bpf_mtap2(sc->sc_radiobpf,
+			    rr, sizeof(sc->sc_rxtapu), m);
 		}
-#endif /* NBPFILTER > 0 */
 
 		if ((hstat & RTW_RXSTAT_RES) != 0) {
 			m_freem(m);
@@ -2100,19 +2094,19 @@ rtw_suspend_ticks(struct rtw_softc *sc)
 static inline void
 rtw_resume_ticks(struct rtw_softc *sc)
 {
-	uint32_t tsftrl0, tsftrl1, next_tick;
+	uint32_t tsftrl0, tsftrl1, next_tint;
 
 	tsftrl0 = RTW_READ(&sc->sc_regs, RTW_TSFTRL);
 
 	tsftrl1 = RTW_READ(&sc->sc_regs, RTW_TSFTRL);
-	next_tick = tsftrl1 + 1000000;
-	RTW_WRITE(&sc->sc_regs, RTW_TINT, next_tick);
+	next_tint = tsftrl1 + 1000000;
+	RTW_WRITE(&sc->sc_regs, RTW_TINT, next_tint);
 
 	sc->sc_do_tick = 1;
 
 	RTW_DPRINTF(RTW_DEBUG_TIMEOUT,
 	    ("%s: resume ticks delta %#08x now %#08x next %#08x\n",
-	    device_xname(sc->sc_dev), tsftrl1 - tsftrl0, tsftrl1, next_tick));
+	    device_xname(sc->sc_dev), tsftrl1 - tsftrl0, tsftrl1, next_tint));
 }
 
 static void
@@ -2493,7 +2487,7 @@ rtw_tune(struct rtw_softc *sc)
 }
 
 bool
-rtw_suspend(device_t self PMF_FN_ARGS)
+rtw_suspend(device_t self, const pmf_qual_t *qual)
 {
 	int rc;
 	struct rtw_softc *sc = device_private(self);
@@ -2515,7 +2509,7 @@ rtw_suspend(device_t self PMF_FN_ARGS)
 }
 
 bool
-rtw_resume(device_t self PMF_FN_ARGS)
+rtw_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct rtw_softc *sc = device_private(self);
 
@@ -3125,10 +3119,7 @@ rtw_dequeue(struct ifnet *ifp, struct rtw_txsoft_blk **tsbp,
 	}
 	DPRINTF(sc, RTW_DEBUG_XMIT, ("%s: dequeue data frame\n", __func__));
 	ifp->if_opackets++;
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 	eh = mtod(m0, struct ether_header *);
 	*nip = ieee80211_find_txnode(&sc->sc_ic, eh->ether_dhost);
 	if (*nip == NULL) {
@@ -3393,19 +3384,16 @@ rtw_start(struct ifnet *ifp)
 
 		KASSERT(ts->ts_first < tdb->tdb_ndesc);
 
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf != NULL)
-			bpf_mtap((void *)ic->ic_rawbpf, m0);
+		bpf_mtap3(ic->ic_rawbpf, m0);
 
 		if (sc->sc_radiobpf != NULL) {
 			struct rtw_tx_radiotap_header *rt = &sc->sc_txtap;
 
 			rt->rt_rate = rate;
 
-			bpf_mtap2(sc->sc_radiobpf, (void *)rt,
-			    sizeof(sc->sc_txtapu), m0);
+			bpf_mtap2(sc->sc_radiobpf, rt, sizeof(sc->sc_txtapu),
+			    m0);
 		}
-#endif /* NBPFILTER > 0 */
 
 		for (i = 0, lastdesc = desc = ts->ts_first;
 		     i < dmamap->dm_nsegs;
@@ -4181,10 +4169,8 @@ rtw_attach(struct rtw_softc *sc)
 
 	rtw_init_radiotap(sc);
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
 	    sizeof(struct ieee80211_frame) + 64, &sc->sc_radiobpf);
-#endif
 
 	NEXT_ATTACH_STATE(sc, FINISHED);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.3 2009/03/14 15:36:06 dsl Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.8 2011/06/22 18:06:32 matt Exp $	*/
 
 /*
  * Copyright (c) 2003
@@ -30,16 +30,17 @@
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-
 #include <sys/extent.h>
+#include <sys/bus.h>
+
 
 #include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/cardbus/rbus.h>
+
+#include <uvm/uvm_extern.h>
 
 #include "opt_pci.h"
 
@@ -78,27 +79,17 @@ md_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size, bus_a
 rbus_tag_t
 rbus_pccbb_parent_mem(struct pci_attach_args *pa)
 {
-	bus_addr_t start;
-	bus_size_t size;
-	pci_chipset_tag_t pc = pa->pa_pc;
-	struct extent *ex = pc->memext;
-
-	start = ex->ex_start;
-	size = ex->ex_end - start;
-
-	return rbus_new_root_share(pa->pa_memt, ex, start, size, 0);
+	bus_space_tag_t bst = pa->pa_memt;
+	
+	return rbus_new_root_share(bst, bst->pbs_extent, bst->pbs_base,
+	    bst->pbs_limit - bst->pbs_base, 0);
 }
 
 rbus_tag_t
 rbus_pccbb_parent_io(struct pci_attach_args *pa)
 {
-	bus_addr_t start;
-	bus_size_t size;
-	pci_chipset_tag_t pc = pa->pa_pc;
-	struct extent *ex = pc->ioext;
-
-	start = ex->ex_start;
-	size = ex->ex_end - start;
-
-	return rbus_new_root_share(pa->pa_iot, ex, start, size, 0);
+	bus_space_tag_t bst = pa->pa_iot;
+	
+	return rbus_new_root_share(bst, bst->pbs_extent, bst->pbs_base,
+	    bst->pbs_limit - bst->pbs_base, 0);
 }

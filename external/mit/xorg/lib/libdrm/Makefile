@@ -1,22 +1,23 @@
-#	$NetBSD: Makefile,v 1.5 2009/10/08 19:06:50 snj Exp $
+#	$NetBSD: Makefile,v 1.8 2011/08/11 23:15:39 joerg Exp $
 
 .include <bsd.own.mk>
 
 LIB=	drm
-.PATH:	${X11SRCDIR.${LIB}}/libdrm
+.PATH:	${X11SRCDIR.${LIB}}
 
 SRCS=	xf86drm.c xf86drmHash.c xf86drmRandom.c xf86drmSL.c
 
 INCS=	xf86drm.h xf86drmMode.h
 INCSDIR=${X11INCDIR}
-.PATH:	${X11SRCDIR.${LIB}}/libdrm/intel
 
-CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/drm
+CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
 
-SUBDIR=	drm
+SUBDIR=	drm kms
 
 PKGCONFIG=	libdrm
 PKGDIST=	${LIB}
+
+CWARNFLAGS.clang+=	-Wno-conversion -Wno-tautological-compare
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

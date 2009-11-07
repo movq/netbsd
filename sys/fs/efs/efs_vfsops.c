@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vfsops.c,v 1.19 2009/04/25 18:53:44 elad Exp $	*/
+/*	$NetBSD: efs_vfsops.c,v 1.22 2011/06/12 03:35:52 rmind Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.19 2009/04/25 18:53:44 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.22 2011/06/12 03:35:52 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -176,7 +176,8 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
 	struct efs_args *args = data;
-	struct nameidata devndp;
+	struct pathbuf *pb;
+	struct nameidata devnd;
 	struct efs_mount *emp; 
 	struct vnode *devvp;
 	int err, mode;
@@ -197,11 +198,19 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return (EOPNOTSUPP);	/* XXX read-only */
 
 	/* look up our device's vnode. it is returned locked */
-	NDINIT(&devndp, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE, args->fspec);
-	if ((err = namei(&devndp)))
+	err = pathbuf_copyin(args->fspec, &pb);
+	if (err) {
+		return err;
+	}
+	NDINIT(&devnd, LOOKUP, FOLLOW | LOCKLEAF, pb);
+	if ((err = namei(&devnd))) {
+		pathbuf_destroy(pb);
 		return (err);
+	}
 
-	devvp = devndp.ni_vp;
+	devvp = devnd.ni_vp;
+	pathbuf_destroy(pb);
+
 	if (devvp->v_type != VBLK) {
 		vput(devvp);
 		return (ENOTBLK);
@@ -232,7 +241,7 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return (err);
 	}
 
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 
 	return (0);
 }
@@ -352,7 +361,7 @@ efs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		if (*vpp != NULL)
 			return (0);
 
-		err = getnewvnode(VT_EFS, mp, efs_vnodeop_p, &vp);
+		err = getnewvnode(VT_EFS, mp, efs_vnodeop_p, NULL, &vp);
 		if (err)
 			return (err);
 		

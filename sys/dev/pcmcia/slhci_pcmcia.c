@@ -1,4 +1,4 @@
-/* $NetBSD: slhci_pcmcia.c,v 1.6 2009/05/12 14:42:19 cegger Exp $ */
+/* $NetBSD: slhci_pcmcia.c,v 1.9 2011/11/27 14:36:20 rmind Exp $ */
 /*
  * Not (c) 2007 Matthew Orgass
  * This file is public domain, meaning anyone can make any use of part or all 
@@ -11,7 +11,7 @@
 /* Glue for RATOC USB HOST CF+ Card (SL811HS chip) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: slhci_pcmcia.c,v 1.6 2009/05/12 14:42:19 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: slhci_pcmcia.c,v 1.9 2011/11/27 14:36:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -26,7 +26,6 @@ __KERNEL_RCSID(0, "$NetBSD: slhci_pcmcia.c,v 1.6 2009/05/12 14:42:19 cegger Exp 
 #include <dev/pcmcia/pcmciadevs.h>
 
 #include <dev/usb/usb.h>
-#include <dev/usb/usb_port.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdivar.h>
 
@@ -90,6 +89,7 @@ slhci_pcmcia_attach(device_t parent, device_t self, void *aux)
 	struct pcmcia_function *pf = pa->pf;
 
 	psc->sc_slhci.sc_dev = self;
+	psc->sc_slhci.sc_bus.hci_private = &psc->sc_slhci;
 
 	psc->sc_pf = pf;
 	psc->sc_flags = 0;
@@ -140,7 +140,7 @@ slhci_pcmcia_enable(struct slhci_pcmcia_softc *psc, int enable)
 		 */
 		slhci_preinit(sc, NULL, pioh->iot, pioh->ioh, 100, 2);
 
-		psc->sc_ih = pcmcia_intr_establish(pf, IPL_HARDUSB, 
+		psc->sc_ih = pcmcia_intr_establish(pf, IPL_USB,
 		    slhci_intr, sc);
 
 		if (psc->sc_ih == NULL) {

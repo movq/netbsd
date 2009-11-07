@@ -1,11 +1,11 @@
-# $NetBSD: md.zaurus,v 1.5 2008/08/22 13:42:19 lukem Exp $
+# $NetBSD: md.zaurus,v 1.9 2011/07/19 15:12:26 dyoung Exp $
 ./usr/include/zaurus				comp-c-include
 ./usr/include/zaurus/ansi.h			comp-c-include
 ./usr/include/zaurus/aout_machdep.h		comp-c-include
 ./usr/include/zaurus/apmvar.h			comp-c-include
 ./usr/include/zaurus/asm.h			comp-c-include
 ./usr/include/zaurus/bswap.h			comp-c-include
-./usr/include/zaurus/bus.h			comp-c-include
+./usr/include/zaurus/bus.h			comp-obsolete		obsolete
 ./usr/include/zaurus/cdefs.h			comp-c-include
 ./usr/include/zaurus/cpu.h			comp-c-include
 ./usr/include/zaurus/disklabel.h		comp-c-include
@@ -40,11 +40,11 @@
 ./usr/include/zaurus/rwlock.h			comp-c-include
 ./usr/include/zaurus/setjmp.h			comp-c-include
 ./usr/include/zaurus/signal.h			comp-c-include
-./usr/include/zaurus/stdarg.h			comp-c-include
+./usr/include/zaurus/stdarg.h			comp-obsolete		obsolete
 ./usr/include/zaurus/sysarch.h			comp-c-include
 ./usr/include/zaurus/trap.h			comp-c-include
 ./usr/include/zaurus/types.h			comp-c-include
-./usr/include/zaurus/varargs.h			comp-c-include
+./usr/include/zaurus/varargs.h			comp-obsolete		obsolete
 ./usr/include/zaurus/vmparam.h			comp-c-include
 ./usr/include/zaurus/wchar_limits.h		comp-c-include
 ./usr/libdata/debug/usr/sbin/apm.debug		comp-sysutil-debug	debug

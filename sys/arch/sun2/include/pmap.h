@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.21 2008/12/09 20:45:45 pooka Exp $	*/
+/*	$NetBSD: pmap.h,v 1.24 2011/06/03 17:03:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -29,22 +29,18 @@
 #ifndef	_MACHINE_PMAP_H
 #define	_MACHINE_PMAP_H
 
-#include <sys/simplelock.h>
-
+#ifdef _KERNEL
 /*
  * Physical map structures exported to the VM code.
- * XXX - Does user-level code really see this struct?
  */
 
 struct pmap {
 	unsigned char   	*pm_segmap; 	/* soft copy of segmap */
 	int             	pm_ctxnum;	/* MMU context number */
-	struct simplelock	pm_lock;    	/* lock on pmap */
-	int             	pm_refcount;	/* reference count */
+	u_int             	pm_refcount;	/* reference count */
 	int             	pm_version;
 };
 
-#ifdef _KERNEL
 /*
  * We give the pmap code a chance to resolve faults by
  * reloading translations that it was forced to unload.
@@ -100,8 +96,17 @@ pmap_remove_all(struct pmap *pmap)
 #define	PMAP_NC		0x00	/* tells pmap_enter to set PG_NC */
 #define	PMAP_SPEC	0x0C	/* mask to get all above. */
 
+void pmap_procwr(struct proc *, vaddr_t, size_t);
+
 #endif	/* _KERNEL */
 
-void pmap_procwr(struct proc *, vaddr_t, size_t);
+/* MMU specific segment value */
+#define	SEGSHIFT	15	        /* LOG2(NBSG) */
+#define	NBSG		(1 << SEGSHIFT)	/* bytes/segment */
+#define	SEGOFSET	(NBSG - 1)	/* byte offset into segment */
+
+#define	sun2_round_seg(x)	((((vaddr_t)(x)) + SEGOFSET) & ~SEGOFSET)
+#define	sun2_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
+#define	sun2_seg_offset(x)	((vaddr_t)(x) & SEGOFSET)
 
 #endif	/* _MACHINE_PMAP_H */

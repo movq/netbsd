@@ -1,6 +1,6 @@
-.\"	$NetBSD: pthread_attr.3,v 1.11 2009/10/05 23:37:01 rmind Exp $
+.\"	$NetBSD: pthread_attr.3,v 1.21 2010/07/09 08:51:28 jruoho Exp $
 .\"
-.\" Copyright (c) 2002 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2002, 2010 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -53,28 +53,12 @@
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_attr.3,v 1.11 2002/09/16 19:29:28 mini Exp $
 .\"
-.Dd October 6, 2009
+.Dd July 9, 2010
 .Dt PTHREAD_ATTR 3
 .Os
 .Sh NAME
 .Nm pthread_attr_init ,
-.Nm pthread_attr_destroy ,
-.Nm pthread_attr_setstacksize ,
-.Nm pthread_attr_getstacksize ,
-.Nm pthread_attr_setguardsize ,
-.Nm pthread_attr_getguardsize ,
-.Nm pthread_attr_setstackaddr ,
-.Nm pthread_attr_getstackaddr ,
-.Nm pthread_attr_setdetachstate ,
-.Nm pthread_attr_getdetachstate ,
-.Nm pthread_attr_setinheritsched ,
-.Nm pthread_attr_getinheritsched ,
-.Nm pthread_attr_setschedparam ,
-.Nm pthread_attr_getschedparam
-.Nm pthread_attr_setschedpolicy ,
-.Nm pthread_attr_getschedpolicy ,
-.Nm pthread_attr_setscope ,
-.Nm pthread_attr_getscope
+.Nm pthread_attr_destroy
 .Nd thread attribute operations
 .Sh LIBRARY
 .Lb libpthread
@@ -84,183 +68,88 @@
 .Fn pthread_attr_init "pthread_attr_t *attr"
 .Ft int
 .Fn pthread_attr_destroy "pthread_attr_t *attr"
-.Ft int
-.Fn pthread_attr_setstacksize "pthread_attr_t *attr" "size_t stacksize"
-.Ft int
-.Fn pthread_attr_getstacksize "const pthread_attr_t * restrict attr" "size_t * restrict stacksize"
-.Ft int
-.Fn pthread_attr_setguardsize "pthread_attr_t *attr" "size_t guardsize"
-.Ft int
-.Fn pthread_attr_getguardsize "const pthread_attr_t * restrict attr" "size_t * restrict guardsize"
-.Ft int
-.Fn pthread_attr_setstackaddr "pthread_attr_t *attr" "void *stackaddr"
-.Ft int
-.Fn pthread_attr_getstackaddr "const pthread_attr_t * restrict attr" "void ** restrict stackaddr"
-.Ft int
-.Fn pthread_attr_setdetachstate "pthread_attr_t *attr" "int detachstate"
-.Ft int
-.Fn pthread_attr_getdetachstate "const pthread_attr_t *attr" "int *detachstate"
-.Ft int
-.Fn pthread_attr_setinheritsched "pthread_attr_t *attr" "int inheritsched"
-.Ft int
-.Fn pthread_attr_getinheritsched "const pthread_attr_t * restrict attr" "int * restrict inheritsched"
-.Ft int
-.Fn pthread_attr_setschedparam "pthread_attr_t * restrict attr" "const struct sched_param * restrict param"
-.Ft int
-.Fn pthread_attr_getschedparam "const pthread_attr_t * restrict attr" "struct sched_param * restrict param"
-.Ft int
-.Fn pthread_attr_setschedpolicy "pthread_attr_t *attr" "int policy"
-.Ft int
-.Fn pthread_attr_getschedpolicy "const pthread_attr_t * restrict attr" "int * restrict policy"
-.Ft int
-.Fn pthread_attr_setscope "pthread_attr_t *attr" "int contentionscope"
-.Ft int
-.Fn pthread_attr_getscope "const pthread_attr_t * restrict attr" "int * restrict contentionscope"
 .Sh DESCRIPTION
 Thread attributes are used to specify parameters to
 .Fn pthread_create .
 One attribute object can be used in multiple calls to
 .Fn pthread_create ,
-with or without modifications between calls.
+with or without modifications between the calls.
+The
+.Vt pthread_attr_t
+type is an opaque representation of the thread attributes;
+any access to the object other than via the described
+.Fn pthread_attr_*
+functions may result in undefined behavior.
 .Pp
 The
 .Fn pthread_attr_init
 function initializes
 .Fa attr
-with all the default thread attributes.
+with the default thread attributes used in the implementation.
+Depending on the implementation, undefined behavior may follow
+if an uninitialized thread attribute object is used with some of
+the thread attribute functions.
+It is therefore a good practice to always use
+.Fn pthread_attr_init ,
+even if this might be unnecessary.
+Undefined behavior may also follow if an already initialized
+.Fa attr
+is used with
+.Fn pthread_attr_init .
 .Pp
-The
-.Fn pthread_attr_destroy
-function destroys
-.Fa attr .
+When the attribute object is no longer needed,
+it should be destroyed by using
+.Fn pthread_attr_destroy .
+The function has no effect on threads that
+were created by using a given attribute object.
+A destroyed
+.Fa attr
+can be reinitialized using
+.Fn pthread_attr_init ,
+but all other actions with the destroyed object are unspecified.
 .Pp
-The
-.Fn pthread_attr_set*
-functions set the attribute that corresponds to each function name.
+The following standard thread attribute functions are available:
+.Bl -column -offset indent "pthread_attr_getinheritsched " "XXX"
+.It Sy Function Ta Sy Description
+.It Xr pthread_attr_getdetachstate 3 Ta thread detach state
+.It Xr pthread_attr_getguardsize 3 Ta thread guard size
+.It Xr pthread_attr_getinheritsched 3 Ta inherit scheduler attribute
+.It Xr pthread_attr_getschedparam 3 Ta thread scheduling parameter
+.It Xr pthread_attr_getschedpolicy 3 Ta thread scheduling policy
+.It Xr pthread_attr_getscope 3 Ta thread contention scope
+.It Xr pthread_attr_getstack 3 Ta thread stack
+.It Xr pthread_attr_getstacksize 3 Ta thread stack size
+.It Xr pthread_attr_getstackaddr 3 Ta thread stack address
+.El
 .Pp
-The
+Each listed
 .Fn pthread_attr_get*
-functions copy the value of the attribute that corresponds to each function name
-to the location pointed to by the second function parameter.
-.Pp
-The attribute parameters for the
-.Fn pthread_attr_setdetachstate
-and
-.Fn pthread_attr_getdetachstate
-are mutually exclusive and must be one of:
-.Bl -tag -width xxxxxxxx
-.It Dv PTHREAD_CREATE_JOINABLE
-The threads must explicitly be waited for using the
-.Fn pthread_join
-function once they exit for their status to be received and their resources
-to be freed.
-This is the default.
-.It Dv PTHREAD_CREATE_DETACHED
-The thread's resources will automatically be freed once the thread exits,
-and the thread will not be joined.
+function contains a
+.Fn pthread_attr_set*
+counterpart.
+In addition, the following
+.Nx
+specific extensions are available:
+.Bl -column -offset indent "pthread_attr_getinheritsched " "XXX"
+.It Sy Function Ta Sy Description
+.It Xr pthread_attr_get_np 3 Ta attributes of a running thread
+.It Xr pthread_attr_getname_np 3 Ta descriptive name of an attribute
 .El
 .Sh RETURN VALUES
 If successful, these functions return 0.
 Otherwise, an error number is returned to indicate the error.
 .Sh ERRORS
+No errors are defined for
 .Fn pthread_attr_init
-should fail if:
-.Bl -tag -width Er
-.It Bq Er ENOMEM
-Out of memory.
-.El
-.Pp
-.Fn pthread_attr_destroy
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-The value specified by
-.Fa attr
-is invalid.
-.El
-.Pp
-.Fn pthread_attr_setstacksize
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-.Fa stacksize
-is less than
-.Dv PTHREAD_STACK_MIN .
-.El
-.Pp
-.Fn pthread_attr_setdetachstate
-should fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-The value specified by
-.Fa detachstate
-is invalid.
-.El
-.Pp
-Fn pthread_attr_setinheritsched
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-Invalid value for
-.Fa attr .
-.El
-.Pp
-.Fn pthread_attr_setschedparam
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-The value specified by
-.Fa attr
-is invalid.
-.It Bq Er ENOTSUP
-The value specified by
-.Fa param
-is invalid.
-.El
-.Pp
-.Fn pthread_attr_setschedpolicy
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-Invalid value for
-.Fa attr .
-.It Bq Er ENOTSUP
-Invalid or unsupported value for
-.Fa policy .
-.El
-.Pp
-.Fn pthread_attr_setscope
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EINVAL
-Invalid value for
-.Fa attr .
-.It Bq Er ENOTSUP
-Invalid or unsupported value for
-.Fa contentionscope .
-.El
+and
+.Fn pthread_attr_destroy .
 .Sh SEE ALSO
 .Xr pthread_create 3 ,
 .Xr pthread_join 3
 .Sh STANDARDS
-.Fn pthread_attr_init ,
-.Fn pthread_attr_destroy ,
-.Fn pthread_attr_setstacksize ,
-.Fn pthread_attr_getstacksize ,
-.Fn pthread_attr_setstackaddr ,
-.Fn pthread_attr_getstackaddr ,
-.Fn pthread_attr_setdetachstate ,
-.Fn pthread_attr_getdetachstate ,
-.Fn pthread_attr_setinheritsched ,
-.Fn pthread_attr_getinheritsched ,
-.Fn pthread_attr_setschedparam ,
-.Fn pthread_attr_setschedparam ,
+Both
+.Fn pthread_attr_init
 and
-.Fn pthread_attr_getschedparam
-.Fn pthread_attr_setschedpolicy ,
-.Fn pthread_attr_getschedpolicy ,
-.Fn pthread_attr_setscope ,
-and
-.Fn pthread_attr_getscope
+.Fn pthread_attr_destroy
 conform to
-.St -p1003.1-96 .
+.St -p1003.1-2001 .

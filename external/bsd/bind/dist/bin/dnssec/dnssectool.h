@@ -1,7 +1,7 @@
-/*	$NetBSD: dnssectool.h,v 1.1.1.2 2009/10/25 00:01:32 christos Exp $	*/
+/*	$NetBSD: dnssectool.h,v 1.2.6.1 2012/06/05 21:15:17 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004, 2007-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2007-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: dnssectool.h,v 1.27 2009/10/12 20:48:11 each Exp */
+/* Id: dnssectool.h,v 1.33 2011/10/20 23:46:51 tbox Exp  */
 
 #ifndef DNSSECTOOL_H
 #define DNSSECTOOL_H 1
@@ -69,5 +69,18 @@ strtotime(const char *str, isc_int64_t now, isc_int64_t base);
 
 dns_rdataclass_t
 strtoclass(const char *str);
+
+isc_result_t
+try_dir(const char *dirname);
+
+void
+check_keyversion(dst_key_t *key, char *keystr);
+
+void
+set_keyversion(dst_key_t *key);
+
+isc_boolean_t
+key_collision(dst_key_t *key, dns_name_t *name, const char *dir,
+	      isc_mem_t *mctx, isc_boolean_t *exact);
 
 #endif /* DNSSEC_DNSSECTOOL_H */

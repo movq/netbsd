@@ -1,4 +1,4 @@
-.\"	$NetBSD: setkey.8,v 1.21 2009/10/14 18:34:14 joerg Exp $
+.\"	$NetBSD: setkey.8,v 1.32 2012/01/26 21:54:26 wiz Exp $
 .\"
 .\" Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd March 19, 2004
+.Dd January 26, 2012
 .Dt SETKEY 8
 .Os
 .\"
@@ -195,6 +195,15 @@ Add an SPD entry based on a PF tag.
 .Ar tag
 must be a string surrounded by double quotes.
 .\"
+.It Li spdupdate Oo Fl 46n Oc Ar src_range Ar dst_range Ar upperspec \
+Ar label Ar policy Li ;
+Updates an SPD entry.
+.\"
+.It Li spdupdate tagged Ar tag Ar policy Li ;
+Update an SPD entry based on a PF tag.
+.Ar tag
+must be a string surrounded by double quotes.
+.\"
 .It Li spddelete Oo Fl 46n Oc Ar src_range Ar dst_range Ar upperspec \
 Fl P Ar direction Li ;
 Delete an SPD entry.
@@ -322,17 +331,20 @@ Specify hard/soft life time duration of the SA measured in seconds.
 .It Fl bs Ar bytes
 Specify hard/soft life time duration of the SA measured in bytes transported.
 .\"
+.It Fl esp_frag Ar bytes
+Specify esp fragment size for NAT-T (only valid for NAT-T SAs).
+.\"
 .It Fl ctx Ar doi Ar algorithm Ar context-name
-Specify an access control label. The access control label is interpreted 
-by the LSM (e.g., SELinux). Ultimately, it enables MAC on network 
-communications. 
+Specify an access control label.
+The access control label is interpreted by the LSM (e.g., SELinux).
+Ultimately, it enables MAC on network communications.
 .Bl -tag -width Fl -compact
 .It Ar doi
 The domain of interpretation, which is used by the
-IKE daemon to identify the domain in which negotiation takes place. 
+IKE daemon to identify the domain in which negotiation takes place.
 .It Ar algorithm
 Indicates the LSM for which the label is generated (e.g., SELinux).
-.It Ar context-name 
+.It Ar context-name
 The string representation of the label that is interpreted by the LSM.
 .El
 .El
@@ -421,24 +433,30 @@ as
 or
 .Li icmp6 ,
 .Li ip4 ,
+.Li gre ,
 or
 .Li any .
 .Li any
 stands for
 .Dq any protocol .
 You can also use the protocol number.
-You can specify a type and/or a code of ICMPv6 when the
-upper-layer protocol is ICMPv6.
-The specification can be placed after
-.Li icmp6 .
-A type is separated from a code by single comma.
-A code must always be specified.
+Additional specification can be placed after the protocol name for
+some protocols.
+You can specify a type and/or a code of ICMP or ICMPv6.
+The type is separated from a code by single comma and the code must
+always be specified.
+GRE key can be specified in dotted-quad format or as plain number.
 When a zero is specified, the kernel deals with it as a wildcard.
 Note that the kernel can not distinguish a wildcard from an ICPMv6
 type of zero.
+.Pp
 For example, the following means that the policy doesn't require IPsec
 for any inbound Neighbor Solicitation.
 .Dl spdadd ::/0 ::/0 icmp6 135,0 -P in none ;
+.Pp
+A second example of requiring transport mode encryption of specific
+GRE tunnel:
+.Dl spdadd 0.0.0.0 0.0.0.0 gre 1234 ipsec esp/transport//require ;
 .Pp
 .Em Note :
 .Ar upperspec
@@ -447,17 +465,19 @@ as it requires extra reassembly at the forwarding node
 .Pq not implemented at this moment .
 There are many protocols in
 .Pa /etc/protocols ,
-but all protocols except of TCP, UDP, and ICMP may not be suitable
+but all protocols except of TCP, UDP, GRE, and ICMP may not be suitable
 to use with IPsec.
 You have to consider carefully what to use.
 .\"
 .Pp
 .It Ar label
-.Ar label 
-is the access control label for the policy. This label is interpreted
-by the LSM (e.g., SELinux). Ultimately, it enables MAC on network
-communications. When a policy contains an access control label, SAs
-negotiated with this policy will contain the label. It's format:
+.Ar label
+is the access control label for the policy.
+This label is interpreted by the LSM (e.g., SELinux).
+Ultimately, it enables MAC on network communications.
+When a policy contains an access control label, SAs
+negotiated with this policy will contain the label.
+Its format:
 .Bl -tag -width Fl -compact
 .\"
 .It Fl ctx Ar doi Ar algorithm Ar context-name
@@ -625,7 +645,7 @@ When using ESP over UDP, you can specify port numbers in the endpoint
 addresses to get the correct matching.
 Here is an example:
 .Bd -literal -offset
-spdadd 10.0.11.0/24[any] 10.0.11.33/32[any] any -P out ipsec
+spdadd 10.0.11.0/24[any] 10.0.11.33/32[any] any \-P out ipsec
     esp/tunnel/192.168.0.1[4500]-192.168.1.2[30000]/require ;
 
 .Ed
@@ -672,12 +692,11 @@ keyed-md5	128		ah: 96bit ICV (no document)
 keyed-sha1	160		ah: 96bit ICV (no document)
 		160		ah-old: 128bit ICV (no document)
 null		0 to 2048	for debugging
-hmac-sha256	256		ah: 96bit ICV
-				(draft-ietf-ipsec-ciph-sha-256-00)
+hmac-sha256	256		ah: 128bit ICV (RFC4868)
 		256		ah-old: 128bit ICV (no document)
-hmac-sha384	384		ah: 96bit ICV (no document)
+hmac-sha384	384		ah: 192bit ICV (RFC4868)
 		384		ah-old: 128bit ICV (no document)
-hmac-sha512	512		ah: 96bit ICV (no document)
+hmac-sha512	512		ah: 256bit ICV (RFC4868)
 		512		ah-old: 128bit ICV (no document)
 hmac-ripemd160	160		ah: 96bit ICV (RFC2857)
 				ah-old: 128bit ICV (no document)
@@ -705,13 +724,21 @@ des-deriv	64		ipsec-ciph-des-derived-01
 3des-deriv	192		no document
 rijndael-cbc	128/192/256	rfc3602
 twofish-cbc	0 to 256	draft-ietf-ipsec-ciph-aes-cbc-01
-aes-ctr		160/224/288	draft-ietf-ipsec-ciph-aes-ctr-03
+aes-ctr		160/224/288	rfc3686
 camellia-cbc	128/192/256	rfc4312
+aes-gcm-16	160/224/288	rfc4106
+aes-gmac	160/224/288	rfc4543
 .Ed
 .Pp
-Note that the first 128 bits of a key for
-.Li aes-ctr
+Note that the first 128/192/256 bits of a key for
+.Li aes-ctr ,
+.Li aes-gcm-16
+or
+.Li aes-gmac
 will be used as AES key, and the remaining 32 bits will be used as nonce.
+Also note that
+.Li aes-gmac
+does not encrypt the payload, it only provides authentication.
 .Pp
 These compression algorithms can be used as
 .Ar calgo
@@ -761,14 +788,14 @@ The command exits with 0 on success, and non-zero on errors.
 .Sh EXAMPLES
 .Bd -literal -offset
 add 3ffe:501:4819::1 3ffe:501:481d::1 esp 123457
-	-E des-cbc 0x3ffe05014819ffff ;
+	\-E des-cbc 0x3ffe05014819ffff ;
 
-add -6 myhost.example.com yourhost.example.com ah 123456
-	-A hmac-sha1 "AH SA configuration!" ;
+add \-6 myhost.example.com yourhost.example.com ah 123456
+	\-A hmac-sha1 "AH SA configuration!" ;
 
 add 10.0.11.41 10.0.11.33 esp 0x10001
-	-E des-cbc 0x3ffe05014819ffff
-	-A hmac-md5 "authentication!!" ;
+	\-E des-cbc 0x3ffe05014819ffff
+	\-A hmac-md5 "authentication!!" ;
 
 get 3ffe:501:4819::1 3ffe:501:481d::1 ah 123456 ;
 
@@ -777,17 +804,17 @@ flush ;
 dump esp ;
 
 spdadd 10.0.11.41/32[21] 10.0.11.33/32[any] any
-	-P out ipsec esp/tunnel/192.168.0.1-192.168.1.2/require ;
+	\-P out ipsec esp/tunnel/192.168.0.1-192.168.1.2/require ;
 
-add 10.1.10.34 10.1.10.36 tcp 0x1000 -A tcp-md5 "TCP-MD5 BGP secret" ;
+add 10.1.10.34 10.1.10.36 tcp 0x1000 \-A tcp-md5 "TCP-MD5 BGP secret" ;
 
 add 10.0.11.41 10.0.11.33 esp 0x10001
-	-ctx 1 1 "system_u:system_r:unconfined_t:SystemLow-SystemHigh"
-	-E des-cbc 0x3ffe05014819ffff;
+	\-ctx 1 1 "system_u:system_r:unconfined_t:SystemLow-SystemHigh"
+	\-E des-cbc 0x3ffe05014819ffff;
 
 spdadd 10.0.11.41 10.0.11.33 any
-	-ctx 1 1 "system_u:system_r:unconfined_t:SystemLow-SystemHigh"
-	-P out ipsec esp/transport//require ;
+	\-ctx 1 1 "system_u:system_r:unconfined_t:SystemLow-SystemHigh"
+	\-P out ipsec esp/transport//require ;
 .Ed
 .\"
 .Sh SEE ALSO
@@ -796,7 +823,7 @@ spdadd 10.0.11.41 10.0.11.33 any
 .Xr sysctl 8
 .Rs
 .%T "Changed manual key configuration for IPsec"
-.%O "http://www.kame.net/newsletter/19991007/"
+.%U "http://www.kame.net/newsletter/19991007/"
 .%D "October 1999"
 .Re
 .\"

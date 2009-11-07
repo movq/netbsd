@@ -1,8 +1,7 @@
-# $NetBSD: Makefile,v 1.1 2009/02/20 21:42:59 jmmv Exp $
+# $NetBSD: Makefile,v 1.4 2012/02/15 17:55:24 riz Exp $
 
 TESTSDIR=	${TESTSBASE}/ipf
-
-NOATFFILE=	yes
+ATFFILE=	no
 
 FILESDIR=	${TESTSDIR}/expected
 FILES=		bpf-f1

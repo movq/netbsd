@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_extern.h,v 1.160 2009/10/21 21:12:07 rmind Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.181.2.1 2012/04/12 17:05:37 riz Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -142,12 +135,12 @@ typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
 #define UVM_FLAG_OVERLAY 0x020000 /* establish overlay */
 #define UVM_FLAG_NOMERGE 0x040000 /* don't merge map entries */
 #define UVM_FLAG_COPYONW 0x080000 /* set copy_on_write flag */
-#define UVM_FLAG_AMAPPAD 0x100000 /* for bss: pad amap to reduce malloc() */
+#define UVM_FLAG_AMAPPAD 0x100000 /* for bss: pad amap to reduce allocations */
 #define UVM_FLAG_TRYLOCK 0x200000 /* fail if we can not lock map */
 #define UVM_FLAG_NOWAIT  0x400000 /* not allowed to sleep */
-#define UVM_FLAG_QUANTUM 0x800000 /* entry can never be split later */
-#define UVM_FLAG_WAITVA  0x1000000 /* wait for va */
+#define UVM_FLAG_WAITVA  0x800000 /* wait for va */
 #define UVM_FLAG_VAONLY  0x2000000 /* unmap: no pages are mapped */
+#define UVM_FLAG_COLORMATCH 0x4000000 /* match color given in off */
 
 /* macros to extract info */
 #define UVM_PROTECTION(X)	((X) & UVM_PROT_MASK)
@@ -174,6 +167,7 @@ typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
 #define UVM_KMF_TRYLOCK	UVM_FLAG_TRYLOCK	/* try locking only */
 #define UVM_KMF_NOWAIT	UVM_FLAG_NOWAIT		/* not allowed to sleep */
 #define UVM_KMF_WAITVA	UVM_FLAG_WAITVA		/* sleep for va */
+#define UVM_KMF_COLORMATCH UVM_FLAG_COLORMATCH	/* start at color in align */
 
 /*
  * the following defines the strategies for uvm_pagealloc_strat()
@@ -314,12 +308,12 @@ struct uvmexp {
 	int nswget;	/* number of times fault calls uvm_swap_get() */
 
 	/* stat counters.  XXX: should be 64-bit counters */
-	int faults;		/* page fault count */
-	int traps;		/* trap count */
-	int intrs;		/* interrupt count */
-	int swtch;		/* context switch count */
-	int softs;		/* software interrupt count */
-	int syscalls;		/* system calls */
+	int _unused_faults;	/* page fault count */
+	int _unused_traps;	/* trap count */
+	int _unused_intrs;	/* interrupt count */
+	int _unused_swtch;	/* context switch count */
+	int _unused_softs;	/* software interrupt count */
+	int _unused_syscalls;	/* system calls */
 	int pageins;		/* pagein operation count */
 				/* pageouts are in pdpageouts below */
 	int _unused1;
@@ -466,6 +460,8 @@ struct uvmexp_sysctl {
 #ifdef _KERNEL
 /* we need this before including uvm_page.h on some platforms */
 extern struct uvmexp uvmexp;
+/* MD code needs this without including <uvm/uvm.h> */
+extern bool vm_page_zero_enable;
 #endif
 
 /*
@@ -474,9 +470,11 @@ extern struct uvmexp uvmexp;
 #include <sys/vmmeter.h>
 #include <sys/queue.h>
 #include <sys/lock.h>
+#ifdef _KERNEL
+#include <sys/vmem.h>
+#endif
 #include <uvm/uvm_param.h>
 #include <uvm/uvm_prot.h>
-#include <uvm/uvm_page.h>
 #include <uvm/uvm_pmap.h>
 #include <uvm/uvm_map.h>
 #include <uvm/uvm_pager.h>
@@ -534,24 +532,9 @@ struct uvm_coredump_state {
 #define	UVM_COREDUMP_STACK	0x01	/* region is user stack */
 
 /*
- * Structure containig uvm reclaim hooks, uvm_reclaim_list is guarded by
- * uvm_reclaim_lock.
- */
-struct uvm_reclaim_hook {
-	void (*uvm_reclaim_hook)(void);
-	SLIST_ENTRY(uvm_reclaim_hook) uvm_reclaim_next;
-};
-
-void	uvm_reclaim_init(void);
-void	uvm_reclaim_hook_add(struct uvm_reclaim_hook *);
-void	uvm_reclaim_hook_del(struct uvm_reclaim_hook *);
-
-/*
  * the various kernel maps, owned by MD code
  */
 extern struct vm_map *kernel_map;
-extern struct vm_map *kmem_map;
-extern struct vm_map *mb_map;
 extern struct vm_map *phys_map;
 
 /*
@@ -560,12 +543,9 @@ extern struct vm_map *phys_map;
 
 #define vm_resident_count(vm) (pmap_resident_count((vm)->vm_map.pmap))
 
-#include <sys/mallocvar.h>
-MALLOC_DECLARE(M_VMMAP);
-MALLOC_DECLARE(M_VMPMAP);
 
 /* vm_machdep.c */
-void		vmapbuf(struct buf *, vsize_t);
+int		vmapbuf(struct buf *, vsize_t);
 void		vunmapbuf(struct buf *, vsize_t);
 
 /* uvm_aobj.c */
@@ -580,6 +560,8 @@ void *			ubc_alloc(struct uvm_object *, voff_t, vsize_t *, int,
 void			ubc_release(void *, int);
 int			ubc_uiomove(struct uvm_object *, struct uio *, vsize_t,
 			    int, int);
+void			ubc_zerorange(struct uvm_object *, off_t, size_t, int);
+void			ubc_purge(struct uvm_object *);
 
 /* uvm_emap.c */
 void			uvm_emap_sysinit(void);
@@ -625,10 +607,14 @@ int			uvm_coredump_walkmap(struct proc *,
 void			uvm_proc_exit(struct proc *);
 void			uvm_lwp_exit(struct lwp *);
 void			uvm_init_limits(struct proc *);
-bool			uvm_kernacc(void *, size_t, int);
+bool			uvm_kernacc(void *, size_t, vm_prot_t);
 __dead void		uvm_scheduler(void);
 vaddr_t			uvm_uarea_alloc(void);
 void			uvm_uarea_free(vaddr_t);
+vaddr_t			uvm_uarea_system_alloc(void);
+void			uvm_uarea_system_free(vaddr_t);
+vaddr_t			uvm_lwp_getuarea(lwp_t *);
+void			uvm_lwp_setuarea(lwp_t *, vaddr_t);
 int			uvm_vslock(struct vmspace *, void *, size_t, vm_prot_t);
 void			uvm_vsunlock(struct vmspace *, void *, size_t);
 void			uvm_cpu_attach(struct cpu_info *);
@@ -648,13 +634,13 @@ void			uvm_km_free(struct vm_map *, vaddr_t, vsize_t,
 
 struct vm_map		*uvm_km_suballoc(struct vm_map *, vaddr_t *,
 			    vaddr_t *, vsize_t, int, bool,
-			    struct vm_map_kernel *);
-vaddr_t			uvm_km_alloc_poolpage(struct vm_map *, bool);
-void			uvm_km_free_poolpage(struct vm_map *, vaddr_t);
-vaddr_t			uvm_km_alloc_poolpage_cache(struct vm_map *, bool);
-void			uvm_km_free_poolpage_cache(struct vm_map *, vaddr_t);
-void			uvm_km_vacache_init(struct vm_map *,
-			    const char *, size_t);
+			    struct vm_map *);
+#ifdef _KERNEL
+int			uvm_km_kmem_alloc(vmem_t *, vmem_size_t, vm_flag_t,
+			    vmem_addr_t *);
+void			uvm_km_kmem_free(vmem_t *, vmem_addr_t, vmem_size_t);
+bool			uvm_km_va_starved_p(void);
+#endif
 
 /* uvm_map.c */
 int			uvm_map(struct vm_map *, vaddr_t *, vsize_t,
@@ -671,6 +657,7 @@ struct vmspace		*uvmspace_alloc(vaddr_t, vaddr_t);
 void			uvmspace_init(struct vmspace *, struct pmap *,
 			    vaddr_t, vaddr_t);
 void			uvmspace_exec(struct lwp *, vaddr_t, vaddr_t);
+void			uvmspace_spawn(struct lwp *, vaddr_t, vaddr_t);
 struct vmspace		*uvmspace_fork(struct vmspace *);
 void			uvmspace_addref(struct vmspace *);
 void			uvmspace_free(struct vmspace *);
@@ -680,7 +667,6 @@ void			uvmspace_unshare(struct lwp *);
 void			uvm_whatis(uintptr_t, void (*)(const char *, ...));
 
 /* uvm_meter.c */
-void			uvm_meter(void);
 int			uvm_sysctl(int *, u_int, void *, size_t *,
 			    void *, size_t, struct proc *);
 int			uvm_pctparam_check(struct uvm_pctparam *, int);
@@ -703,10 +689,13 @@ int			uvm_mremap(struct vm_map *, vaddr_t, vsize_t,
 			    struct proc *, int);
 
 /* uvm_object.c */
-int			uobj_wirepages(struct uvm_object *uobj, off_t start,
-			    off_t end);
-void			uobj_unwirepages(struct uvm_object *uobj, off_t start,
-			    off_t end);
+void			uvm_obj_init(struct uvm_object *,
+			    const struct uvm_pagerops *, bool, u_int);
+void			uvm_obj_setlock(struct uvm_object *, kmutex_t *);
+void			uvm_obj_destroy(struct uvm_object *, bool);
+int			uvm_obj_wirepages(struct uvm_object *, off_t, off_t,
+			    struct pglist *);
+void			uvm_obj_unwirepages(struct uvm_object *, off_t, off_t);
 
 /* uvm_page.c */
 struct vm_page		*uvm_pagealloc_strat(struct uvm_object *,
@@ -756,7 +745,6 @@ void			uvm_vnp_setsize(struct vnode *, voff_t);
 void			uvm_vnp_setwritesize(struct vnode *, voff_t);
 int			uvn_findpages(struct uvm_object *, voff_t,
 			    int *, struct vm_page **, int);
-void			uvm_vnp_zerorange(struct vnode *, off_t, size_t);
 bool			uvn_text_p(struct uvm_object *);
 bool			uvn_clean_p(struct uvm_object *);
 bool			uvn_needs_writefault_p(struct uvm_object *);

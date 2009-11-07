@@ -1,4 +1,4 @@
-/*	$NetBSD: ebus.c,v 1.31 2009/09/20 16:18:21 tsutsui Exp $ */
+/*	$NetBSD: ebus.c,v 1.34 2012/01/30 04:25:14 mrg Exp $ */
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.31 2009/09/20 16:18:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.34 2012/01/30 04:25:14 mrg Exp $");
 
 #if defined(DEBUG) && !defined(EBUS_DEBUG)
 #define EBUS_DEBUG
@@ -60,7 +60,7 @@ int ebus_debug = 0;
 #include <sys/kernel.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/pci/pcivar.h>
@@ -82,7 +82,7 @@ static void ebus_blink(void *);
 #endif
 
 struct ebus_softc {
-	struct device			sc_dev;
+	device_t			sc_dev;
 	device_t			sc_parent;	/* PCI bus */
 
 	int				sc_node;	/* PROM node */
@@ -100,7 +100,7 @@ struct ebus_softc {
 static int	ebus_match(device_t, cfdata_t, void *);
 static void	ebus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ebus, sizeof(struct ebus_softc),
+CFATTACH_DECL_NEW(ebus, sizeof(struct ebus_softc),
     ebus_match, ebus_attach, NULL, NULL);
 
 static int	ebus_setup_attach_args(struct ebus_softc *, bus_space_tag_t,
@@ -212,7 +212,7 @@ ebus_init_wiring_table(struct ebus_softc *sc)
 
 	if (wiring_map != NULL) {
 		printf("%s: global ebus wiring map already initalized\n",
-		    device_xname(&sc->sc_dev));
+		    device_xname(sc->sc_dev));
 		return (0);
 	}
 
@@ -249,6 +249,8 @@ ebus_attach(device_t parent, device_t self, void *aux)
 	pcireg_t base14;
 	int node, error;
 	char devinfo[256];
+
+	sc->sc_dev = self;
 
 #ifdef BLINK
 	callout_init(&ebus_blink_ch, 0);
@@ -330,7 +332,7 @@ ebus_setup_attach_args(struct ebus_softc *sc,
 	err = prom_getprop(node, "name", 1, &n, &ea->ea_name);
 	if (err != 0)
 		return (err);
-	ea->ea_name[n] = '\0';
+	KASSERT(ea->ea_name[n-1] == '\0');
 
 	ea->ea_node = node;
 	ea->ea_bustag = bustag;

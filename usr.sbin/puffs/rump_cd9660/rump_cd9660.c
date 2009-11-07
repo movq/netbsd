@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_cd9660.c,v 1.5 2009/10/07 20:59:09 pooka Exp $	*/
+/*	$NetBSD: rump_cd9660.c,v 1.8 2010/05/30 04:32:09 dholland Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -26,6 +26,7 @@
  */
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/mount.h>
 
 #include <isofs/cd9660/cd9660_mount.h>
@@ -43,17 +44,19 @@ int
 main(int argc, char *argv[])
 {
 	struct iso_args args;
-	char canon_dev[UKFS_PARTITION_MAXPATHLEN], canon_dir[MAXPATHLEN];
-	int mntflags, part;
+	char canon_dev[UKFS_DEVICE_MAXPATHLEN], canon_dir[MAXPATHLEN];
+	struct ukfs_part *part;
+	int mntflags;
 	int rv;
 
 	setprogname(argv[0]);
 
-	UKFS_PARTITION_ARGVPROBE(part);
+	UKFS_DEVICE_ARGVPROBE(&part);
 	mount_cd9660_parseargs(argc, argv, &args, &mntflags,
 	    canon_dev, canon_dir);
 	rv = p2k_run_diskfs(MOUNT_CD9660, canon_dev, part, canon_dir, mntflags,
 	    &args, sizeof(args), 0);
+	ukfs_part_release(part);
 	if (rv)
 		err(1, "mount");
 

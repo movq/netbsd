@@ -4,7 +4,7 @@
  *	Read two a.out/ELF format executables with different load addresses
  *	and generate Human68k .x format executable.
  *
- *	written by Yasha (ITOH Yasufumi)
+ *	written by ITOH Yasufumi
  *	public domain
  *
  * usage:
@@ -21,7 +21,7 @@
  *	% cc -N -static -Wl,-Ttext,10203040 -o aout2 *.o
  *	% aout2hux -o foo.x aout1 0 aout2 10203040
  *
- *	$NetBSD: aout2hux.c,v 1.10 2009/03/18 16:00:16 cegger Exp $
+ *	$NetBSD: aout2hux.c,v 1.13 2011/02/21 02:31:58 itohy Exp $
  */
 
 #include <sys/types.h>
@@ -61,23 +61,22 @@ struct exec_info {
 	u_int32_t	entry_addr;	/* entry point address */
 };
 
-unsigned get_uint16 PROTO((be_uint16_t *be));
-u_int32_t get_uint32 PROTO((be_uint32_t *be));
-void put_uint16 PROTO((be_uint16_t *be, unsigned v));
-void put_uint32 PROTO((be_uint32_t *be, u_int32_t v));
-void *do_realloc PROTO((void *p, size_t s));
+unsigned get_uint16(be_uint16_t *be);
+u_int32_t get_uint32(be_uint32_t *be);
+void put_uint16(be_uint16_t *be, unsigned v);
+void put_uint32(be_uint32_t *be, u_int32_t v);
+void *do_realloc(void *p, size_t s);
 
 static int open_aout(const char *fn, struct aout_m68k *hdr,
 		struct exec_info *inf);
-static int open_elf PROTO((const char *fn, FILE *fp, struct elf_m68k_hdr *hdr,
-		struct exec_info *inf));
-FILE *open_exec PROTO((const char *fn, struct exec_info *inf));
-int check_2_exec_inf PROTO((struct exec_info *inf1, struct exec_info *inf2));
-int aout2hux PROTO((const char *fn1, const char *fn2,
-		u_int32_t loadadr1, u_int32_t loadadr2, const char *fnx));
-int gethex PROTO((u_int32_t *pval, const char *str));
-void usage PROTO((const char *name));
-int main PROTO((int argc, char *argv[]));
+static int open_elf(const char *fn, FILE *fp, struct elf_m68k_hdr *hdr,
+		struct exec_info *inf);
+FILE *open_exec(const char *fn, struct exec_info *inf);
+int check_2_exec_inf(struct exec_info *inf1, struct exec_info *inf2);
+int aout2hux(const char *fn1, const char *fn2,
+		u_int32_t loadadr1, u_int32_t loadadr2, const char *fnx);
+int gethex(u_int32_t *pval, const char *str);
+void usage(const char *name);
 
 #if !defined(bzero) && defined(__SVR4)
 # define bzero(d, n)	memset((d), 0, (n))
@@ -200,20 +199,20 @@ open_elf(const char *fn, FILE *fp, struct elf_m68k_hdr *hdr, struct exec_info *i
 
 	if ((i = get_uint16(&hdr->e_shentsize)) != SIZE_ELF68K_SHDR) {
 		fprintf(stderr, "%s: size shdr %d should be %d\n", fn, i,
-			SIZE_ELF68K_SHDR);
+			(int)SIZE_ELF68K_SHDR);
 		return 1;
 	}
 
 	if ((i = get_uint16(&hdr->e_phentsize)) != SIZE_ELF68K_PHDR) {
 		fprintf(stderr, "%s: size phdr %d should be %d\n", fn, i,
-			SIZE_ELF68K_PHDR);
+			(int)SIZE_ELF68K_PHDR);
 		return 1;
 	}
 
 	if ((nphdr = get_uint16(&hdr->e_phnum)) != 1 && nphdr != 2) {
 		fprintf(stderr,
-			"%s: has %d loadable segments (should be 1 or 2)\n",
-			fn, nphdr);
+			"%s: has %lu loadable segments (should be 1 or 2)\n",
+			fn, (unsigned long)nphdr);
 		return 1;
 	}
 
@@ -724,7 +723,7 @@ out:	/*
 }
 
 #ifndef NO_BIST
-void bist PROTO((void));
+void bist(void);
 
 /*
  * built-in self test

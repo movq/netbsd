@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.30 2009/01/18 07:11:45 lukem Exp $	*/
+/*	$NetBSD: tftp.c,v 1.32.4.1 2012/07/20 23:14:23 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tftp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: tftp.c,v 1.30 2009/01/18 07:11:45 lukem Exp $");
+__RCSID("$NetBSD: tftp.c,v 1.32.4.1 2012/07/20 23:14:23 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,9 +67,10 @@ __RCSID("$NetBSD: tftp.c,v 1.30 2009/01/18 07:11:45 lukem Exp $");
 #include "extern.h"
 #include "tftpsubs.h"
 
+extern jmp_buf	toplevel;
+
 char    ackbuf[PKTSIZE];
 int	timeout;
-jmp_buf	toplevel;
 jmp_buf	timeoutbuf;
 
 static void nak __P((int, struct sockaddr *));
@@ -77,7 +78,7 @@ static int makerequest __P((int, const char *, struct tftphdr *, const char *, o
 static void printstats __P((const char *, unsigned long));
 static void startclock __P((void));
 static void stopclock __P((void));
-static void timer __P((int));
+__dead static void timer __P((int));
 static void tpacket __P((const char *, struct tftphdr *, int));
 static int cmpport __P((struct sockaddr *, struct sockaddr *));
 
@@ -218,10 +219,7 @@ tftp_igmp_leave(int fd)
  * Send the requested file.
  */
 void
-sendfile(fd, name, mode)
-	int fd;
-	char *name;
-	char *mode;
+sendfile(int fd, const char *name, const char *mode)
 {
 	struct tftphdr *ap;	   /* data and ack packets */
 	struct tftphdr *dp;
@@ -370,10 +368,7 @@ abort:
  * Receive a file.
  */
 void
-recvfile(fd, name, mode)
-	int fd;
-	char *name;
-	char *mode;
+recvfile(int fd, const char *name, const char *mode)
 {
 	struct tftphdr *ap;
 	struct tftphdr *dp;
@@ -767,7 +762,7 @@ timer(sig)
 
 	timeout += rexmtval;
 	if (timeout >= maxtimeout) {
-		(void)printf("Transfer timed out.\n");
+		(void)printf("Transfer timed out.");
 		longjmp(toplevel, -1);
 	}
 	longjmp(timeoutbuf, 1);

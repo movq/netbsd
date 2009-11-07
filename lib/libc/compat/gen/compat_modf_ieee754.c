@@ -1,4 +1,4 @@
-/* $NetBSD: compat_modf_ieee754.c,v 1.2 2008/09/28 15:19:09 christos Exp $ */
+/* $NetBSD: compat_modf_ieee754.c,v 1.4 2010/04/23 19:04:54 drochner Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -27,13 +27,11 @@
  * rights to redistribute these changes.
  */
 
-#ifdef USE_LIBM
-#include "s_modf.c"
-#else
 #include <sys/types.h>
 #include <machine/ieee.h>
 #include <errno.h>
-#include <math.h>
+
+double modf(double, double *);
 
 /*
  * double modf(double val, double *iptr)
@@ -49,11 +47,13 @@ modf(double val, double *iptr)
 	u_int64_t frac;
 
 	/*
-	 * If input is Inf or NaN, return it and leave i alone.
+	 * If input is +/-Inf or NaN, return +/-0 or NaN.
 	 */
 	u.dblu_d = val;
-	if (u.dblu_dbl.dbl_exp == DBL_EXP_INFNAN)
-		return (u.dblu_d);
+	if (u.dblu_dbl.dbl_exp == DBL_EXP_INFNAN) {
+		*iptr = u.dblu_d;
+		return (0.0 / u.dblu_d);
+	}
 
 	/*
 	 * If input can't have a fractional part, return
@@ -101,4 +101,3 @@ modf(double val, double *iptr)
 	u.dblu_dbl.dbl_sign = v.dblu_dbl.dbl_sign;
 	return (u.dblu_d);
 }
-#endif

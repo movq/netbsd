@@ -1,5 +1,5 @@
 #
-#	$NetBSD: MILAN.in,v 1.22 2009/01/24 00:19:47 abs Exp $
+#	$NetBSD: MILAN.in,v 1.25.14.1 2012/06/12 17:47:53 riz Exp $
 #
 # Milan
 #
@@ -23,7 +23,7 @@ options 	WS_KERNEL_FG=WSCOL_WHITE
 options 	WS_KERNEL_BG=WSCOL_BLACK
 
 # compatibility to other console drivers
-#options 	WSDISPLAY_COMPAT_USL	# VT handling
+#options 	WSDISPLAY_COMPAT_USL	# wsconscfg VT handling
 #options 	WSDISPLAY_COMPAT_RAWKBD	# can get raw scancodes
 
 # see dev/pckbport/wskbdmap_mfii.c for implemented layouts
@@ -61,7 +61,7 @@ fdisa0 		at fdcisa0 drive 0
 # provided by the PCI_ISA bridge on the Milan. CDROM's are OK, but the data
 # on the disk is swapped :-( Now luckily, both the Milan and HDDRIVER
 # developers have thought up a solution, you can make a byteswapped disk
-# during the partioning with HDDRIVER and TOS supports booting from it!
+# during the partitioning with HDDRIVER and TOS supports booting from it!
 # Ok, now you have to choose:
 #   - If _none_ of your disks are marked byteswapped by HDDRIVER, choose
 #     the MILAN-ISAIDE version.

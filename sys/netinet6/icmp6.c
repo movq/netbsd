@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp6.c,v 1.155 2009/10/18 22:57:05 christos Exp $	*/
+/*	$NetBSD: icmp6.c,v 1.159 2011/12/31 20:41:59 christos Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.155 2009/10/18 22:57:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.159 2011/12/31 20:41:59 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -99,7 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.155 2009/10/18 22:57:05 christos Exp $")
 #include <netinet6/ip6protosw.h>
 #include <netinet6/scope6_var.h>
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netkey/key.h>
 #endif
@@ -478,7 +478,9 @@ icmp6_input(struct mbuf **mp, int *offp, int proto)
 	i = off + sizeof(*icmp6);
 	if ((m->m_len < i || M_READONLY(m)) && (m = m_pullup(m, i)) == 0) {
 		ICMP6_STATINC(ICMP6_STAT_TOOSHORT);
+#if 0 /* m is 0 here */
 		icmp6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_error);
+#endif
 		goto freeit;
 	}
 	ip6 = mtod(m, struct ip6_hdr *);
@@ -1160,9 +1162,6 @@ icmp6_mtudisc_update(struct ip6ctlparam *ip6cp, int validated)
  * - joins NI group address at in6_ifattach() time only, does not cope
  *   with hostname changes by sethostname(3)
  */
-#ifndef offsetof		/* XXX */
-#define	offsetof(type, member)	((size_t)(&((type *)0)->member))
-#endif
 static struct mbuf *
 ni6_input(struct mbuf *m, int off)
 {
@@ -2304,7 +2303,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		bcopy(&reddst6, &sdst.sin6_addr, sizeof(struct in6_addr));
 		bcopy(&src6, &ssrc.sin6_addr, sizeof(struct in6_addr));
 		rtredirect((struct sockaddr *)&sdst, (struct sockaddr *)&sgw,
-			   (struct sockaddr *)NULL, RTF_GATEWAY | RTF_HOST,
+			   NULL, RTF_GATEWAY | RTF_HOST,
 			   (struct sockaddr *)&ssrc,
 			   &newrt);
 
@@ -2320,7 +2319,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 
 		sockaddr_in6_init(&sdst, &reddst6, 0, 0, 0);
 		pfctlinput(PRC_REDIRECT_HOST, (struct sockaddr *)&sdst);
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		key_sa_routechange((struct sockaddr *)&sdst);
 #endif
 	}
@@ -2572,8 +2571,7 @@ noredhdropt:
 		= in6_cksum(m, IPPROTO_ICMPV6, sizeof(*ip6), ntohs(ip6->ip6_plen));
 
 	/* send the packet to outside... */
-	if (ip6_output(m, NULL, NULL, 0,
-		(struct ip6_moptions *)NULL, (struct socket *)NULL, NULL) != 0)
+	if (ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL) != 0)
 		icmp6_ifstat_inc(ifp, ifs6_out_error);
 
 	icmp6_ifstat_inc(ifp, ifs6_out_msg);
@@ -2689,8 +2687,7 @@ icmp6_mtudisc_clone(struct sockaddr *dst)
 		struct rtentry *nrt;
 
 		error = rtrequest((int) RTM_ADD, dst,
-		    (struct sockaddr *) rt->rt_gateway,
-		    (struct sockaddr *) 0,
+		    (struct sockaddr *) rt->rt_gateway, NULL,
 		    RTF_GATEWAY | RTF_HOST | RTF_DYNAMIC, &nrt);
 		if (error) {
 			rtfree(rt);

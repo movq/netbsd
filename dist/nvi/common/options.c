@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.6 2009/08/07 16:19:53 lukem Exp $ */
+/*	$NetBSD: options.c,v 1.10 2011/03/21 14:53:02 tnozaki Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -98,7 +98,7 @@ OPTLIST const optlist[] = {
 	{L("flash"),	NULL,		OPT_1BOOL,	0},
 #ifdef GTAGS
 /* O_GTAGSMODE	    FreeBSD/NetBSD */
-	{L("gtagsmode"),NULL,		OPT_1BOOL,	0},
+	{L("gtagsmode"),NULL,		OPT_0BOOL,	0},
 #endif
 /* O_HARDTABS	    4BSD */
 	{L("hardtabs"),	NULL,		OPT_NUM,	0},
@@ -475,8 +475,8 @@ opts_init(SCR *sp, int *oargs)
 	}
 	return (0);
 
-err:	msgq(sp, M_ERR,
-	    "031|Unable to set default %s option", optlist[optindx].name);
+err:	msgq_wstr(sp, M_ERR, optlist[optindx].name,
+	    "031|Unable to set default %s option");
 	return (1);
 }
 
@@ -639,7 +639,7 @@ opts_set(SCR *sp, ARGS **argv, const char *usage)
 				break;
 			}
 
-			if (!ISDIGIT(sep[0]))
+			if (!ISDIGIT((UCHAR_T)sep[0]))
 				goto badnum;
 			if ((nret =
 			    nget_uslong(sp, &value, sep, &endp, 10)) != NUM_OK) {
@@ -1036,7 +1036,7 @@ opts_save(SCR *sp, FILE *fp)
 			}
 			(void)putc('=', fp);
 			for (np = O_STR(sp, cnt); (nch = *np) != '\0'; ++np) {
-				if (isblank(nch) || nch == '\\')
+				if (isblank((unsigned char)nch) || nch == '\\')
 					(void)putc('\\', fp);
 				(void)putc(nch, fp);
 			}

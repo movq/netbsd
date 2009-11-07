@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile,v 1.3 2009/09/11 22:36:12 mrg Exp $
+#	$NetBSD: Makefile,v 1.6.4.1 2012/05/17 18:02:30 riz Exp $
 
 NOLINKLIB=	# defined
 NOLINT=		# defined
 NOMAN=		# defined
 NOPROFILE=	# defined
+NOCLANGERROR=	# defined
 
 .include <bsd.own.mk>
 
@@ -24,7 +25,7 @@ BFD_MACHINE_ARCH?=	${MACHINE_ARCH}
 
 DIST=		${NETBSDSRCDIR}/external/gpl3/binutils/dist
 
-SHLIB_MAJOR=	11
+SHLIB_MAJOR=	12
 SHLIB_MINOR=	0
 
 LIBDPLIBS+=	z	${.CURDIR}/../../../../../lib/libz
@@ -33,6 +34,10 @@ GCPPFLAGS=	${G_archdefs} ${G_DEFS} ${G_INCLUDES} ${G_TDEFAULTS}
 CPPFLAGS+=	-I${.CURDIR}/arch/${BFD_MACHINE_ARCH} -I${DIST}/include -I. \
 		-I${DIST}/bfd ${GCPPFLAGS:M-D*} ${GCPPFLAGS:M-I*:N-I.*} \
 		-DDEBUGDIR=\"${DEBUGDIR}\"
+
+.if (${MACHINE_ARCH} == "vax")
+CPPFLAGS.elf.c +=	-O0
+.endif
 
 GSRCS=		${G_libbfd_la_OBJECTS:libbfd.lo=lib_bfd.lo} \
 		${G_libbfd_la_DEPENDENCIES:M*.lo}
@@ -52,7 +57,7 @@ INFOFLAGS=	-I${DIST}/bfd/doc
 .include <bsd.info.mk>
 
 ${OBJS} ${SOBJS}: elf32-target.h elf64-target.h
-targets.o targets.so: targmatch.h Makefile
+targets.o targets.pico: targmatch.h Makefile
 .else
 .include <bsd.prog.mk> # do nothing
 .endif

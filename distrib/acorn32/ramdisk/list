@@ -1,6 +1,6 @@
-#	$NetBSD: list,v 1.21 2009/09/20 23:19:50 abs Exp $
+#	$NetBSD: list,v 1.28 2011/07/03 23:11:31 tron Exp $
 
-SRCDIRS	bin sbin usr.bin/less usr.bin usr.sbin gnu/usr.bin
+SRCDIRS	bin sbin external/bsd/less/bin usr.bin usr.sbin
 
 PROG	bin/cat
 PROG	bin/chmod
@@ -19,6 +19,7 @@ PROG	bin/sh
 PROG	bin/stty
 PROG	bin/sync
 
+PROG	sbin/chown	bin/chgrp
 PROG	sbin/disklabel
 PROG	sbin/fsck
 PROG	sbin/fsck_ffs
@@ -48,15 +49,15 @@ PROG	usr/bin/less	usr/bin/more
 PROG	usr/bin/sed
 PROG	usr/bin/tip
 
-PROG	usr/sbin/chown	usr/bin/chgrp
 PROG	usr/sbin/chroot
 
 # init invokes the shell as -sh
 ARGVLN	sh -sh
 
+SPECIAL	gzip	srcdir distrib/utils/x_gzip
 SPECIAL	ping	srcdir distrib/utils/x_ping
 
-LIBS	-lbz2 -ledit -lutil -lcurses -ltermcap -lrmt -lcrypt -ll -lm -lz -lprop
+LIBS	-ledit -lutil -lcurses -lterminfo -lrmt -lcrypt -ll -lm -lz -lprop
 
 # we need the boot blocks /usr/mdec
 #COPYDIR	${DESTDIR}/usr/mdec	usr/mdec
@@ -65,11 +66,8 @@ LIBS	-lbz2 -ledit -lutil -lcurses -ltermcap -lrmt -lcrypt -ll -lm -lz -lprop
 COPY	${NETBSDSRCDIR}/etc/group		etc/group
 COPY	${NETBSDSRCDIR}/etc/master.passwd	etc/master.passwd
 COPY	${NETBSDSRCDIR}/etc/netconfig		etc/netconfig
-COPY	${DISTRIBDIR}/common/protocols	etc/protocols
+COPY	${DISTRIBDIR}/common/protocols		etc/protocols
 COPY	${DISTRIBDIR}/common/services		etc/services
-
-# and the common installation tools
-COPY	${DISTRIBDIR}/common/termcap		usr/share/misc/termcap
 
 #COPY	${CURDIR}/inst.sh			usr/local/sbin/inst	555
 

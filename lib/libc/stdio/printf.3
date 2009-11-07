@@ -1,4 +1,4 @@
-.\"	$NetBSD: printf.3,v 1.49 2009/04/09 00:04:34 joerg Exp $
+.\"	$NetBSD: printf.3,v 1.58 2010/12/26 12:39:54 jnemeth Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,19 +33,22 @@
 .\"
 .\"     @(#)printf.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd December 16, 2008
+.Dd December 26, 2010
 .Dt PRINTF 3
 .Os
 .Sh NAME
 .Nm printf ,
 .Nm fprintf ,
+.Nm dprintf
 .Nm sprintf ,
 .Nm snprintf ,
 .Nm asprintf ,
 .Nm vprintf ,
 .Nm vfprintf ,
 .Nm vsprintf ,
+.Nm vdprintf ,
 .Nm vsnprintf ,
+.Nm vsnprintf_ss ,
 .Nm vasprintf
 .Nd formatted output conversion
 .Sh LIBRARY
@@ -56,6 +59,8 @@
 .Fn printf "const char * restrict format" ...
 .Ft int
 .Fn fprintf "FILE * restrict stream" "const char * restrict format" ...
+.Ft int
+.Fn dprintf "int fd" "const char * restrict format" ...
 .Ft int
 .Fn sprintf "char * restrict str" "const char * restrict format" ...
 .Ft int
@@ -70,7 +75,11 @@
 .Ft int
 .Fn vsprintf "char * restrict str" "const char * restrict format" "va_list ap"
 .Ft int
+.Fn vdprintf "int fd" "const char * restrict format" "va_list ap"
+.Ft int
 .Fn vsnprintf "char * restrict str" "size_t size" "const char * restrict format" "va_list ap"
+.Ft int
+.Fn vsnprintf_ss "char * restrict str" "size_t size" "const char * restrict format" "va_list ap"
 .Ft int
 .Fn vasprintf "char ** restrict ret" "const char * restrict format" "va_list ap"
 .Sh DESCRIPTION
@@ -92,11 +101,17 @@ and
 .Fn vfprintf
 write output to the given output
 .Fa stream ;
+.Fn dprintf
+and
+.Fn vdprintf
+write output to the give file descriptor
+.Fa fd ;
 .Fn sprintf ,
 .Fn snprintf ,
 .Fn vsprintf ,
+.Fn vsnprintf ,
 and
-.Fn vsnprintf
+.Fn vsnprintf_ss
 write to the character string
 .Fa str ;
 and
@@ -112,6 +127,10 @@ string that specifies how subsequent arguments
 (or arguments accessed via the variable-length argument facilities of
 .Xr stdarg 3 )
 are converted for output.
+.Pp
+.Fn vsnprintf_ss
+is a signal-safe standalone version that does not handle
+floating point formats.
 .Pp
 .Fn asprintf
 and
@@ -137,9 +156,10 @@ argument to
 on error.
 It is more portable to check for a return value of \-1 instead.
 .Pp
-.Fn snprintf
+.Fn snprintf ,
+.Fn vsnprintf ,
 and
-.Fn vsnprintf
+.Fn vsnprintf_ss
 will write at most
 .Fa size Ns \-1
 of the characters printed into the output string
@@ -383,6 +403,14 @@ conversion, it indicates that the argument is a pointer to a signed type
 equivalent in size to a
 .Vt size_t .
 .Pp
+Note:
+if the standard integer types described in
+.Xr stdint 3
+are used, it is recommended that the predefined format string specifier
+macros are used when possible.
+These are further described in
+.Xr inttypes 3 .
+.Pp
 The following length modifier is valid for the
 .Cm a ,
 .Cm A ,
@@ -477,7 +505,7 @@ The
 .Vt double
 argument is rounded and converted in the style
 .Sm off
-.Oo \- Oc Ar d Li \&. Ar ddd Li e \\*[Pm] Ar dd
+.Oo \- Oc Ar d Li \&. Ar ddd Li e \*[Pm] Ar dd
 .Sm on
 where there is one digit before the
 decimal-point character
@@ -559,7 +587,7 @@ The
 .Vt double
 argument is rounded and converted to hexadecimal notation in the style
 .Sm off
-.Oo \- Oc Li 0x Ar h Li \&. Ar hhhp Oo \\*[Pm] Oc Ar d ,
+.Oo \- Oc Li 0x Ar h Li \&. Ar hhhp Oo \*[Pm] Oc Ar d ,
 .Sm on
 where the number of digits after the hexadecimal-point character
 is equal to the precision specification.
@@ -706,9 +734,10 @@ field is expanded to contain the conversion result.
 These functions return
 the number of characters printed, or that would be printed if there
 was adequate space in case of
-.Fn snprintf
-and
+.Fn snprintf ,
 .Fn vsnprintf ,
+and
+.Fn vsnprintf_ss
 (not including the trailing
 .Ql \e0
 used to end output to strings).
@@ -761,7 +790,7 @@ system call, the
 family of functions may fail if:
 .Bl -tag -width Er
 .It Bq Er EILSEQ
-An invalid wide character code was encountered.
+An invalid wide-character code was encountered.
 .It Bq Er ENOMEM
 Insufficient storage space is available.
 .El
@@ -806,6 +835,18 @@ The functions
 and
 .Fn vasprintf
 are modeled on the ones that first appeared in the GNU C library.
+The function
+.Fn vsnprintf_ss
+is non-standard and appeared in
+.Nx 4.0 .
+The functions
+.Fn dprintf
+and
+.Fn vdprintf
+are parts of
+.St -p1003.1-2008
+and appeared in
+.Nx 6.0 .
 .Sh CAVEATS
 Because
 .Fn sprintf
@@ -864,7 +905,7 @@ The conversion formats
 .Cm \&%D ,
 .Cm \&%O ,
 and
-.Cm %U
+.Cm \&%U
 are not standard and are provided only for backward compatibility.
 The effect of padding the
 .Cm %p

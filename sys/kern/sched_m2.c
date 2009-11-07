@@ -1,4 +1,4 @@
-/*	$NetBSD: sched_m2.c,v 1.28 2009/07/06 12:37:17 joerg Exp $	*/
+/*	$NetBSD: sched_m2.c,v 1.30 2011/09/16 01:03:52 christos Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008 Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sched_m2.c,v 1.28 2009/07/06 12:37:17 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sched_m2.c,v 1.30 2011/09/16 01:03:52 christos Exp $");
 
 #include <sys/param.h>
 
@@ -81,8 +81,6 @@ static void	sched_precalcts(void);
 void
 sched_rqinit(void)
 {
-	struct cpu_info *ci = curcpu();
-
 	if (hz < 100) {
 		panic("sched_rqinit: value of HZ is too low\n");
 	}
@@ -93,8 +91,11 @@ sched_rqinit(void)
 	rt_ts = mstohz(100);			/* ~100 ms */
 	sched_precalcts();
 
+#ifdef notdef
+	/* Need to set the name etc. This does not belong here */
 	/* Attach the primary CPU here */
-	sched_cpuattach(ci);
+	sched_cpuattach(curcpu());
+#endif
 
 	sched_lwp_fork(NULL, &lwp0);
 	sched_newts(&lwp0);
@@ -209,7 +210,7 @@ sched_slept(struct lwp *l)
 
 	/*
 	 * If thread is in time-sharing queue and batch flag is not marked,
-	 * increase the the priority, and run with the lower time-quantum.
+	 * increase the priority, and run with the lower time-quantum.
 	 */
 	if (l->l_priority < PRI_HIGHEST_TS && (l->l_flag & LW_BATCH) == 0) {
 		struct proc *p = l->l_proc;

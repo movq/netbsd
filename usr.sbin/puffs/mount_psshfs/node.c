@@ -1,4 +1,4 @@
-/*	$NetBSD: node.c,v 1.59 2009/11/05 13:28:18 pooka Exp $	*/
+/*	$NetBSD: node.c,v 1.64 2012/01/20 22:07:58 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2006-2009  Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: node.c,v 1.59 2009/11/05 13:28:18 pooka Exp $");
+__RCSID("$NetBSD: node.c,v 1.64 2012/01/20 22:07:58 jakllsch Exp $");
 #endif /* !lint */
 
 #include <assert.h>
@@ -90,7 +90,17 @@ psshfs_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 		if (pd->entry)
 			pn = pd->entry;
 		else
-			pn = makenode(pu, pn_dir, pd, &pd->va);
+			pd->entry = pn = makenode(pu, pn_dir, pd, &pd->va);
+
+		/*
+		 * sure sure we have fresh attributes.  most likely we will
+		 * have them cached.  we might not if we go through:
+		 * create - reclaim - lookup (this).
+		 */
+		rv = getnodeattr(pu, pn, PCNPATH(pcn));
+		if (rv)
+			return rv;
+
 		psn = pn->pn_data;
 	}
 
@@ -110,7 +120,7 @@ psshfs_node_getattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_node *pn = opc;
 	int rv;
 
-	rv = getnodeattr(pu, pn);
+	rv = getnodeattr(pu, pn, NULL);
 	if (rv)
 		return rv;
 
@@ -123,9 +133,57 @@ int
 psshfs_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct vattr *va, const struct puffs_cred *pcr)
 {
-	PSSHFSAUTOVAR(pu);
+	struct puffs_cc *pcc = puffs_cc_getcc(pu);
+	struct psshfs_ctx *pctx = puffs_getspecific(pu);
+	uint32_t reqid;
+	struct puffs_framebuf *pb;
 	struct vattr kludgeva;
 	struct puffs_node *pn = opc;
+	struct psshfs_node *psn = pn->pn_data;
+	int rv;
+
+	/*
+	 * If we cached the remote attributes recently enough, and this
+	 * setattr operation would change nothing that sftp actually
+	 * records, then we can skip the sftp request.  So first check
+	 * whether we have the attributes cached, and then compare
+	 * every field that we might send to the sftp server.
+	 */
+
+	if (!psn->attrread || REFRESHTIMEOUT(pctx, time(NULL)-psn->attrread))
+		goto setattr;
+
+#define CHECK(FIELD, TYPE) do {						\
+	if ((va->FIELD != (TYPE)PUFFS_VNOVAL) &&			\
+	    (va->FIELD != pn->pn_va.FIELD))				\
+		goto setattr;						\
+} while (0)
+
+#define CHECKID(FIELD, TYPE, DOMANGLE, MINE, MANGLED) do {		\
+	if ((va->FIELD != (TYPE)PUFFS_VNOVAL) &&			\
+	    (pn->pn_va.FIELD !=						\
+		((pctx->DOMANGLE && (va->FIELD == pctx->MINE))		\
+		    ? pctx->MANGLED					\
+		    : va->FIELD)))					\
+		goto setattr;						\
+} while (0)
+
+	CHECK(va_size, uint64_t);
+	CHECKID(va_uid, uid_t, domangleuid, myuid, mangleuid);
+	CHECKID(va_gid, gid_t, domanglegid, mygid, manglegid);
+	CHECK(va_mode, mode_t);
+	CHECK(va_atime.tv_sec, time_t);
+	CHECK(va_mtime.tv_sec, time_t);
+
+	/* Nothing to change.  */
+	return 0;
+
+#undef CHECK
+#undef CHECKID
+
+ setattr:
+	reqid = NEXTREQ(pctx);
+	pb = psbuf_makeout();
 
 	psbuf_req_str(pb, SSH_FXP_SETSTAT, reqid, PNPATH(pn));
 
@@ -146,16 +204,19 @@ psshfs_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 		else
 			kludgeva.va_atime.tv_sec = va->va_mtime.tv_sec;
 	}
-			
-	psbuf_put_vattr(pb, &kludgeva);
+
+	psbuf_put_vattr(pb, &kludgeva, pctx);
 	GETRESPONSE(pb, pctx->sshfd);
 
 	rv = psbuf_expect_status(pb);
-	if (rv == 0)
+	if (rv == 0) {
 		puffs_setvattr(&pn->pn_va, &kludgeva);
+		psn->attrread = time(NULL);
+	}
 
  out:
-	PSSHFSRETURN(rv);
+	puffs_framebuf_destroy(pb);
+	return rv;
 }
 
 int
@@ -172,7 +233,7 @@ psshfs_node_create(struct puffs_usermount *pu, puffs_cookie_t opc,
 	/* Create node on server first */
 	psbuf_req_str(pb, SSH_FXP_OPEN, reqid, PCNPATH(pcn));
 	psbuf_put_4(pb, SSH_FXF_WRITE | SSH_FXF_CREAT | SSH_FXF_TRUNC);
-	psbuf_put_vattr(pb, va);
+	psbuf_put_vattr(pb, va, pctx);
 	GETRESPONSE(pb, pctx->sshfd);
 	rv = psbuf_expect_handle(pb, &fhand, &fhandlen);
 	if (rv)
@@ -246,7 +307,7 @@ psshfs_node_open(struct puffs_usermount *pu, puffs_cookie_t opc, int mode,
 		reqid = NEXTREQ(pctx);
 		psbuf_req_str(pb, SSH_FXP_OPEN, reqid, PNPATH(pn));
 		psbuf_put_4(pb, SSH_FXF_READ);
-		psbuf_put_vattr(pb, &va);
+		psbuf_put_vattr(pb, &va, pctx);
 
 		if (puffs_framev_enqueue_cb(pu, pctx->sshfd_data, pb,
 		    lazyopen_rresp, psn, 0) == -1) {
@@ -264,7 +325,7 @@ psshfs_node_open(struct puffs_usermount *pu, puffs_cookie_t opc, int mode,
 		reqid = NEXTREQ(pctx);
 		psbuf_req_str(pb2, SSH_FXP_OPEN, reqid, PNPATH(pn));
 		psbuf_put_4(pb2, SSH_FXF_WRITE);
-		psbuf_put_vattr(pb2, &va);
+		psbuf_put_vattr(pb2, &va, pctx);
 
 		if (puffs_framev_enqueue_cb(pu, pctx->sshfd_data, pb2,
 		    lazyopen_wresp, psn, 0) == -1) {
@@ -352,8 +413,9 @@ psshfs_node_readdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 
 	*ncookies = 0;
 	rv = sftp_readdir(pu, pctx, pn);
-	if (rv)
+	if (rv) {
 		goto out;
+	}
 
 	/* find next dirent */
 	for (i = *readoff;;i++) {
@@ -463,6 +525,7 @@ psshfs_node_read(struct puffs_usermount *pu, puffs_cookie_t opc, uint8_t *buf,
 		goto farout;
 	}
 
+again:
 	readlen = *resid;
 	psbuf_req_data(pb, SSH_FXP_READ, reqid, psn->fhand_r, psn->fhand_r_len);
 	psbuf_put_8(pb, offset);
@@ -484,8 +547,11 @@ psshfs_node_read(struct puffs_usermount *pu, puffs_cookie_t opc, uint8_t *buf,
 	GETRESPONSE(pb, pctx->sshfd_data);
 
 	rv = psbuf_do_data(pb, buf, &readlen);
-	if (rv == 0)
+	if (rv == 0) {
 		*resid -= readlen;
+		buf += readlen;
+		offset += readlen;
+	}
 
  out:
 	if (max_reads && --psn->readcount >= max_reads) {
@@ -495,6 +561,12 @@ psshfs_node_read(struct puffs_usermount *pu, puffs_cookie_t opc, uint8_t *buf,
 		assert(pwp != NULL);
 		puffs_cc_schedule(pwp->pw_cc);
 		TAILQ_REMOVE(&psn->pw, pwp, pw_entries);
+	}
+
+	if (rv == 0 && *resid > 0) {
+		reqid = NEXTREQ(pctx);
+		psbuf_recycleout(pb);
+		goto again;
 	}
 
  farout:
@@ -715,7 +787,7 @@ psshfs_node_mkdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_node *pn_new;
 
 	psbuf_req_str(pb, SSH_FXP_MKDIR, reqid, PCNPATH(pcn));
-	psbuf_put_vattr(pb, va);
+	psbuf_put_vattr(pb, va, pctx);
 	GETRESPONSE(pb, pctx->sshfd);
 
 	rv = psbuf_expect_status(pb);

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.20 2009/05/04 18:09:04 mhitch Exp $	*/
+/*	$NetBSD: main.c,v 1.26 2011/08/30 12:39:52 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -76,7 +76,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\
 static char sccsid[] = "@(#)disklabel.c	8.4 (Berkeley) 5/4/95";
 /* from static char sccsid[] = "@(#)disklabel.c	1.2 (Symmetric) 11/28/85"; */
 #else
-__RCSID("$NetBSD: main.c,v 1.20 2009/05/04 18:09:04 mhitch Exp $");
+__RCSID("$NetBSD: main.c,v 1.26 2011/08/30 12:39:52 bouyer Exp $");
 #endif
 #endif	/* not lint */
 
@@ -117,6 +117,7 @@ __RCSID("$NetBSD: main.c,v 1.20 2009/05/04 18:09:04 mhitch Exp $");
 #include "pathnames.h"
 #include "extern.h"
 #include "dkcksum.h"
+#include "bswap.h"
 
 /*
  * Disklabel: read and write disklabels.
@@ -172,7 +173,7 @@ static int		 editit(const char *);
 static char		*skip(char *);
 static char		*word(char *);
 static int		 getasciilabel(FILE *, struct disklabel *);
-static void		 usage(void);
+__dead static void	 usage(void);
 static int		 qsort_strcmp(const void *, const void *);
 static int		 getulong(const char *, char, char **,
     unsigned long *, unsigned long);
@@ -185,9 +186,11 @@ static int set_writable_fd = -1;
 #if HAVE_NBTOOL_CONFIG_H
 #define GETLABELOFFSET()	LABELOFFSET
 #define GETLABELSECTOR()	LABELSECTOR
+#define GETLABELUSESMBR()	LABELUSESMBR
 #else /* HAVE_NBTOOL_CONFIG_H */
 #define GETLABELOFFSET()	getlabeloffset()
 #define GETLABELSECTOR()	getlabelsector()
+#define GETLABELUSESMBR()	getlabelusesmbr()
 #endif
 
 /* Default location for label - only used if we don't find one to update */
@@ -271,9 +274,11 @@ main(int argc, char *argv[])
 		WRITE, INTERACT, DELETE
 	} op = UNSPEC, old_op;
 
-#ifdef USE_MBR
-	mflag = 1;
-#endif
+	mflag = GETLABELUSESMBR();
+	if (mflag < 0) {
+		warn("getlabelusesmbr() failed");
+		mflag = LABELUSESMBR;
+	}
 #if HAVE_NBTOOL_CONFIG_H
 	/* We must avoid doing any ioctl requests */
 	Fflag = rflag = 1;
@@ -535,7 +540,7 @@ write_label(int f)
 		}
 	}
 
-#ifdef __vax__
+#ifdef VAX_ALTLABELS
 	if (lab.d_type == DTYPE_SMD && lab.d_flags & D_BADSECT &&
 	    lab.d_secsize == 512) {
 		/* Write the label to the odd sectors of the last track! */
@@ -554,7 +559,7 @@ write_label(int f)
 				warn("alternate label %d write", i/2);
 		}
 	}
-#endif	/* __vax__ */
+#endif	/* VAX_ALTLABELS */
 
 	return 0;
 }
@@ -623,7 +628,7 @@ process_mbr(int f, int (*action)(int, u_int))
 		if (pread(f, &mbr, sizeof mbr, this_ext * (off_t)DEV_BSIZE)
 		    != sizeof(mbr)) {
 			if (verbose)
-				warn("Can't read master boot record %d",
+				warn("Can't read master boot record %u",
 				    this_ext);
 			break;
 		}
@@ -631,7 +636,7 @@ process_mbr(int f, int (*action)(int, u_int))
 		/* Check if table is valid. */
 		if (mbr.mbr_magic != htole16(MBR_MAGIC)) {
 			if (verbose)
-				warnx("Invalid signature in mbr record %d",
+				warnx("Invalid signature in mbr record %u",
 				    this_ext);
 			break;
 		}
@@ -688,12 +693,12 @@ process_mbr(int f, int (*action)(int, u_int))
 static int
 readlabel_mbr(int f, u_int sector)
 {
-	struct disklabel *lp;
+	struct disklabel *disk_lp;
 
-	lp = find_label(f, sector);
-	if (lp == NULL)
+	disk_lp = find_label(f, sector);
+	if (disk_lp == NULL)
 		return 1;
-	lab = *lp;
+	targettohlabel(&lab, disk_lp);
 	return 0;
 }
 
@@ -900,8 +905,9 @@ readlabel(int f)
 static struct disklabel *
 find_label(int f, u_int sector)
 {
-	struct disklabel *lp;
-	int i, offset;
+	struct disklabel *disk_lp, hlp;
+	int i;
+	u_int offset;
 	const char *is_deleted;
 
 	bootarea_len = pread(f, bootarea, sizeof bootarea,
@@ -913,35 +919,36 @@ find_label(int f, u_int sector)
 	}
 
 	if (verbose > 2)
-		warnx("read sector %u len %u looking for label",
+		warnx("read sector %u len %d looking for label",
 		    sector, bootarea_len);
 
 	/* Check expected offset first */
 	for (offset = LABEL_OFFSET, i = -4;; offset = i += 4) {
 		is_deleted = "";
-		lp = (void *)(bootarea + offset);
+		disk_lp = (void *)(bootarea + offset);
 		if (i == LABEL_OFFSET)
 			continue;
-		if ((char *)(lp + 1) > bootarea + bootarea_len)
+		if ((char *)(disk_lp + 1) > bootarea + bootarea_len)
 			break;
-		if (lp->d_magic2 != lp->d_magic)
+		if (disk_lp->d_magic2 != disk_lp->d_magic)
 			continue;
-		if (read_all && (lp->d_magic == DISKMAGIC_DELETED ||
-		    lp->d_magic == DISKMAGIC_DELETED_REV)) {
-			lp->d_magic ^= ~0u;
-			lp->d_magic2 ^= ~0u;
+		if (read_all && (disk_lp->d_magic == DISKMAGIC_DELETED ||
+		    disk_lp->d_magic == DISKMAGIC_DELETED_REV)) {
+			disk_lp->d_magic ^= ~0u;
+			disk_lp->d_magic2 ^= ~0u;
 			is_deleted = "deleted ";
 		}
-		if (lp->d_magic != DISKMAGIC) {
+		if (target32toh(disk_lp->d_magic) != DISKMAGIC) {
 			/* XXX: Do something about byte-swapped labels ? */
-			if (lp->d_magic == DISKMAGIC_REV &&
-			    lp->d_magic2 == DISKMAGIC_REV)
+			if (target32toh(disk_lp->d_magic) == DISKMAGIC_REV &&
+			    target32toh(disk_lp->d_magic2) == DISKMAGIC_REV)
 				warnx("ignoring %sbyteswapped label"
 				    " at offset %u from sector %u",
 				    is_deleted, offset, sector);
 			continue;
 		}
-		if (lp->d_npartitions > MAXPARTITIONS || dkcksum(lp) != 0) {
+		if (target16toh(disk_lp->d_npartitions) > MAXPARTITIONS ||
+		    dkcksum_target(disk_lp) != 0) {
 			if (verbose > 0)
 				warnx("corrupt label found at offset %u in "
 				    "sector %u", offset, sector);
@@ -951,19 +958,21 @@ find_label(int f, u_int sector)
 			warnx("%slabel found at offset %u from sector %u",
 			    is_deleted, offset, sector);
 		if (!read_all)
-			return lp;
+			return disk_lp;
 
 		/* To print all the labels we have to do it here */
 		/* XXX: maybe we should compare them? */
+		targettohlabel(&hlp, disk_lp);
 		printf("# %ssector %u offset %u bytes\n",
 		    is_deleted, sector, offset);
 		if (tflag)
-			makedisktab(stdout, lp);
+			makedisktab(stdout, &hlp);
 		else {
-			showinfo(stdout, lp, specname);
-			showpartitions(stdout, lp, Cflag);
+			showinfo(stdout, &hlp, specname);
+			showpartitions(stdout, &hlp, Cflag);
 		}
-		checklabel(lp);
+		checklabel(&hlp);
+		htotargetlabel(disk_lp, &hlp);
 		/* Remember we've found a label */
 		read_all = 2;
 	}
@@ -978,10 +987,10 @@ write_bootarea(int f, u_int sector)
 	if (bootarea_len <= 0)
 		errx(1, "attempting to write after failed read");
 
-#ifdef __alpha__
+#ifdef ALPHA_BOOTBLOCK_CKSUM
 	/*
 	 * The Alpha requires that the boot block be checksummed.
-	 * The NetBSD/alpha disklabel.h provides a macro to do it.
+	 * <sys/bootblock.h> provides a macro to do it.
 	 */
 	if (sector == 0) {
 		struct alpha_boot_block *bb;
@@ -990,15 +999,15 @@ write_bootarea(int f, u_int sector)
 		bb->bb_cksum = 0;
 		ALPHA_BOOT_BLOCK_CKSUM(bb, &bb->bb_cksum);
 	}
-#endif	/* __alpha__ */
+#endif	/* ALPHA_BOOTBLOCK_CKSUM */
 
 	wlen = pwrite(f, bootarea, bootarea_len, sector * (off_t)DEV_BSIZE);
 	if (wlen == bootarea_len)
 		return;
 	if (wlen == -1)
-		err(1, "disklabel write (sector %u) size %u failed",
+		err(1, "disklabel write (sector %u) size %d failed",
 		    sector, bootarea_len);
-	errx(1, "disklabel write (sector %u) size %u truncated to %d",
+	errx(1, "disklabel write (sector %u) size %d truncated to %d",
 		    sector, bootarea_len, wlen);
 }
 
@@ -1033,7 +1042,7 @@ update_label(int f, u_int label_sector, u_int label_offset)
 			    "to create label", label_sector);
 	}
 
-	*disk_lp = lab;
+	htotargetlabel(disk_lp, &lab);
 	write_bootarea(f, label_sector);
 	return 1;
 }
@@ -1069,7 +1078,7 @@ readlabel_direct(int f)
 	if (filecore_partition_offset != 0) {
 		disk_lp = find_label(f, filecore_partition_offset);
 		if (disk_lp != NULL) {
-			lab = *disk_lp;
+			targettohlabel(&lab, disk_lp);
 			return 0;
 		}
 	}
@@ -1079,7 +1088,7 @@ readlabel_direct(int f)
 
 	disk_lp = find_label(f, 0);
 	if (disk_lp != NULL) {
-		lab = *disk_lp;
+		targettohlabel(&lab, disk_lp);
 		return 0;
 	}
 
@@ -1102,40 +1111,40 @@ makedisktab(FILE *f, struct disklabel *lp)
 	if ((unsigned) lp->d_type < DKMAXTYPES)
 		(void) fprintf(f, "%s:", dktypenames[lp->d_type]);
 	else
-		(void) fprintf(f, "unknown%d:", lp->d_type);
+		(void) fprintf(f, "unknown%" PRIu16 ":", lp->d_type);
 
-	(void) fprintf(f, "se#%d:", lp->d_secsize);
-	(void) fprintf(f, "ns#%d:", lp->d_nsectors);
-	(void) fprintf(f, "nt#%d:", lp->d_ntracks);
-	(void) fprintf(f, "sc#%d:", lp->d_secpercyl);
-	(void) fprintf(f, "nc#%d:", lp->d_ncylinders);
+	(void) fprintf(f, "se#%" PRIu32 ":", lp->d_secsize);
+	(void) fprintf(f, "ns#%" PRIu32 ":", lp->d_nsectors);
+	(void) fprintf(f, "nt#%" PRIu32 ":", lp->d_ntracks);
+	(void) fprintf(f, "sc#%" PRIu32 ":", lp->d_secpercyl);
+	(void) fprintf(f, "nc#%" PRIu32 ":", lp->d_ncylinders);
 
 	if ((lp->d_secpercyl * lp->d_ncylinders) != lp->d_secperunit) {
-		(void) fprintf(f, "%ssu#%d:", did, lp->d_secperunit);
+		(void) fprintf(f, "%ssu#%" PRIu32 ":", did, lp->d_secperunit);
 		did = "";
 	}
 	if (lp->d_rpm != 3600) {
-		(void) fprintf(f, "%srm#%d:", did, lp->d_rpm);
+		(void) fprintf(f, "%srm#%" PRIu16 ":", did, lp->d_rpm);
 		did = "";
 	}
 	if (lp->d_interleave != 1) {
-		(void) fprintf(f, "%sil#%d:", did, lp->d_interleave);
+		(void) fprintf(f, "%sil#%" PRIu16 ":", did, lp->d_interleave);
 		did = "";
 	}
 	if (lp->d_trackskew != 0) {
-		(void) fprintf(f, "%ssk#%d:", did, lp->d_trackskew);
+		(void) fprintf(f, "%ssk#%" PRIu16 ":", did, lp->d_trackskew);
 		did = "";
 	}
 	if (lp->d_cylskew != 0) {
-		(void) fprintf(f, "%scs#%d:", did, lp->d_cylskew);
+		(void) fprintf(f, "%scs#%" PRIu16 ":", did, lp->d_cylskew);
 		did = "";
 	}
 	if (lp->d_headswitch != 0) {
-		(void) fprintf(f, "%shs#%d:", did, lp->d_headswitch);
+		(void) fprintf(f, "%shs#%" PRIu16 ":", did, lp->d_headswitch);
 		did = "";
 	}
 	if (lp->d_trkseek != 0) {
-		(void) fprintf(f, "%sts#%d:", did, lp->d_trkseek);
+		(void) fprintf(f, "%sts#%" PRIu32 ":", did, lp->d_trkseek);
 		did = "";
 	}
 #ifdef notyet
@@ -1146,21 +1155,22 @@ makedisktab(FILE *f, struct disklabel *lp)
 	if (i < 0)
 		i = 0;
 	for (j = 0; j <= i; j++)
-		(void) fprintf(f, "%d ", lp->d_drivedata[j]);
+		(void) fprintf(f, "%" PRIu32 " ", lp->d_drivedata[j]);
 #endif	/* notyet */
 	pp = lp->d_partitions;
 	for (i = 0; i < lp->d_npartitions; i++, pp++) {
 		if (pp->p_size) {
 			char c = 'a' + i;
 			(void) fprintf(f, "\\\n\t:");
-			(void) fprintf(f, "p%c#%d:", c, pp->p_size);
-			(void) fprintf(f, "o%c#%d:", c, pp->p_offset);
+			(void) fprintf(f, "p%c#%" PRIu32 ":", c, pp->p_size);
+			(void) fprintf(f, "o%c#%" PRIu32 ":", c, pp->p_offset);
 			if (pp->p_fstype != FS_UNUSED) {
 				if ((unsigned) pp->p_fstype < FSMAXTYPES)
 					(void) fprintf(f, "t%c=%s:", c,
 					    fstypenames[pp->p_fstype]);
 				else
-					(void) fprintf(f, "t%c=unknown%d:",
+					(void) fprintf(f,
+					    "t%c=unknown%" PRIu8 ":",
 					    c, pp->p_fstype);
 			}
 			switch (pp->p_fstype) {
@@ -1173,9 +1183,10 @@ makedisktab(FILE *f, struct disklabel *lp)
 			case FS_EX2FS:
 			case FS_ADOS:
 			case FS_APPLEUFS:
-				(void) fprintf(f, "b%c#%d:", c,
-				    pp->p_fsize * pp->p_frag);
-				(void) fprintf(f, "f%c#%d:", c, pp->p_fsize);
+				(void) fprintf(f, "b%c#%" PRIu64 ":", c,
+				    (uint64_t)pp->p_fsize * pp->p_frag);
+				(void) fprintf(f, "f%c#%" PRIu32 ":", c,
+				    pp->p_fsize);
 				break;
 			default:
 				break;
@@ -1705,39 +1716,40 @@ checklabel(struct disklabel *lp)
 
 	errors = 0;
 	if (lp->d_secsize == 0) {
-		warnx("sector size %d", lp->d_secsize);
+		warnx("sector size %" PRIu32, lp->d_secsize);
 		return (1);
 	}
 	if (lp->d_nsectors == 0) {
-		warnx("sectors/track %d", lp->d_nsectors);
+		warnx("sectors/track %" PRIu32, lp->d_nsectors);
 		return (1);
 	}
 	if (lp->d_ntracks == 0) {
-		warnx("tracks/cylinder %d", lp->d_ntracks);
+		warnx("tracks/cylinder %" PRIu32, lp->d_ntracks);
 		return (1);
 	}
 	if  (lp->d_ncylinders == 0) {
-		warnx("cylinders/unit %d", lp->d_ncylinders);
+		warnx("cylinders/unit %" PRIu32, lp->d_ncylinders);
 		errors++;
 	}
 	if (lp->d_rpm == 0)
-		warnx("warning, revolutions/minute %d", lp->d_rpm);
+		warnx("warning, revolutions/minute %" PRIu16, lp->d_rpm);
 	if (lp->d_secpercyl == 0)
 		lp->d_secpercyl = lp->d_nsectors * lp->d_ntracks;
 	if (lp->d_secperunit == 0)
 		lp->d_secperunit = lp->d_secpercyl * lp->d_ncylinders;
 	if (lp->d_bbsize == 0) {
-		warnx("boot block size %d", lp->d_bbsize);
+		warnx("boot block size %" PRIu32, lp->d_bbsize);
 		errors++;
 	} else if (lp->d_bbsize % lp->d_secsize)
 		warnx("warning, boot block size %% sector-size != 0");
 	if (lp->d_sbsize == 0) {
-		warnx("super block size %d", lp->d_sbsize);
+		warnx("super block size %" PRIu32, lp->d_sbsize);
 		errors++;
 	} else if (lp->d_sbsize % lp->d_secsize)
 		warnx("warning, super block size %% sector-size != 0");
 	if (lp->d_npartitions > MAXPARTITIONS)
-		warnx("warning, number of partitions (%d) > MAXPARTITIONS (%d)",
+		warnx("warning, number of partitions (%" PRIu16 ") > "
+		    "MAXPARTITIONS (%d)",
 		    lp->d_npartitions, MAXPARTITIONS);
 	else
 		for (i = MAXPARTITIONS - 1; i >= lp->d_npartitions; i--) {
@@ -1745,7 +1757,8 @@ checklabel(struct disklabel *lp)
 			pp = &lp->d_partitions[i];
 			if (pp->p_size || pp->p_offset) {
 				warnx("warning, partition %c increased "
-				    "number of partitions from %d to %d",
+				    "number of partitions from %" PRIu16
+				    " to %d",
 				    part, lp->d_npartitions, i + 1);
 				lp->d_npartitions = i + 1;
 				break;
@@ -1755,7 +1768,8 @@ checklabel(struct disklabel *lp)
 		part = 'a' + i;
 		pp = &lp->d_partitions[i];
 		if (pp->p_size == 0 && pp->p_offset != 0)
-			warnx("warning, partition %c: size 0, but offset %d",
+			warnx("warning, partition %c: size 0, but "
+			    "offset %" PRIu32,
 			    part, pp->p_offset);
 #ifdef STRICT_CYLINDER_ALIGNMENT
 		if (pp->p_offset % lp->d_secpercyl) {

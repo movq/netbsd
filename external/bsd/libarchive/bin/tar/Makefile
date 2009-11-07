@@ -1,14 +1,19 @@
-# $NetBSD: Makefile,v 1.1 2008/09/19 22:01:26 joerg Exp $
+# $NetBSD: Makefile,v 1.4 2011/09/09 12:43:14 christos Exp $
 
-PROG=	bsdtar
-SRCS=	bsdtar.c getdate.y matching.c read.c siginfo.c subst.c \
-	tree.c util.c write.c
+PROG=	tar
+SRCS=	bsdtar.c cmdline.c getdate.c read.c subst.c tree.c util.c write.c
 
 .include <bsd.init.mk>
 
 .PATH:		${LIBARCHIVEDIR}/tar
 
-DPADD=	${LIBARCHIVE} ${LIBBZ2} ${LIBZ}
-LDADD=	-larchive -lbz2 -lz
+CLEANFILES+=	tar.1
+
+tar.1: ${LIBARCHIVEDIR}/tar/bsdtar.1
+	${TOOL_CAT} ${LIBARCHIVEDIR}/tar/bsdtar.1 > $@
+
+SYMLINKS+=${BINDIR}/tar /usr/bin/tar
+
+COPTS.read.c += -Wno-format-nonliteral
 
 .include <bsd.prog.mk>

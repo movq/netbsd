@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_condattr.3,v 1.4 2008/05/04 19:43:05 martin Exp $
+.\" $NetBSD: pthread_condattr.3,v 1.7 2010/07/09 17:54:08 jruoho Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -50,12 +50,11 @@
 .\" EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_condattr.3,v 1.10 2002/09/16 19:29:28 mini Exp $
-.Dd January 30, 2003
+.Dd July 9, 2010
 .Dt PTHREAD_CONDATTR 3
 .Os
 .Sh NAME
-.Nm pthread_condattr_init ,
-.Nm pthread_condattr_destroy
+.Nm pthread_condattr_init
 .Nd condition attribute operations
 .Sh LIBRARY
 .Lb libpthread
@@ -66,28 +65,25 @@
 .Ft int
 .Fn pthread_condattr_destroy "pthread_condattr_t *attr"
 .Sh DESCRIPTION
-Condition attribute objects are used to specify parameters to
-.Fn pthread_cond_init .
+Condition attribute objects are used to specify parameters to the
+.Xr pthread_cond_init 3
+function.
 The
 .Fn pthread_condattr_init
-function initializes a condition attribute object with the default attributes.
-.Pp
-The
+function initializes a condition attribute object with the default attributes
+and the
 .Fn pthread_condattr_destroy
 function destroys a condition attribute object.
 .Sh RETURN VALUES
 If successful, these functions return 0.
 Otherwise, an error number is returned to indicate the error.
 .Sh ERRORS
-.Fn pthread_condattr_init
-shall fail if:
-.Bl -tag -width Er
-.It Bq Er ENOMEM
-Insufficient memory exists to initialize the condition attribute object.
-.El
+No errors are defined for
+.Fn pthread_condattr_init .
 .Pp
+The
 .Fn pthread_condattr_destroy
-may fail if:
+function may fail if:
 .Bl -tag -width Er
 .It Bq Er EINVAL
 The value specified by
@@ -97,8 +93,13 @@ is invalid.
 .Sh SEE ALSO
 .Xr pthread_cond_init 3
 .Sh STANDARDS
-.Fn pthread_condattr_init
-and
-.Fn pthread_condattr_destroy
-conform to
-.St -p1003.1-96 .
+Both functions conform to
+.St -p1003.1-2001 .
+.Sh CAVEATS
+The usefulness of the functions is questionable as the
+.Nx
+implementation does not support any non-default attributes.
+These functions do not conform to the
+.St -p1003.1-2008
+revision of the standard, which mandates two additional attributes,
+the clock attribute and the process-shared attribute.

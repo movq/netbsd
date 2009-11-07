@@ -1,4 +1,4 @@
-/* $NetBSD: compat_16_machdep.c,v 1.15 2008/11/21 19:48:56 he Exp $ */
+/* $NetBSD: compat_16_machdep.c,v 1.18 2012/02/06 02:14:10 matt Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -77,7 +77,6 @@
 #include <sys/systm.h>
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
-#include <sys/user.h>
 
 #if defined(COMPAT_13) || defined(COMPAT_OSF1)
 #include <compat/sys/signal.h>
@@ -87,7 +86,7 @@
 #include <machine/cpu.h>
 #include <machine/reg.h>
 
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.15 2008/11/21 19:48:56 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.18 2012/02/06 02:14:10 matt Exp $");
 
 
 #ifdef DEBUG
@@ -106,6 +105,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct sigacts *ps = p->p_sigacts;
 	int onstack, sig = ksi->ksi_signo, error;
 	struct sigframe_sigcontext *fp, frame;
@@ -132,10 +132,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_sc.sc_regs[R_SP] = alpha_pal_rdusp();
 
  	/* save the floating-point state, if necessary, then copy it. */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l, 1);
-	frame.sf_sc.sc_ownedfp = l->l_md.md_flags & MDP_FPUSED;
-	memcpy((struct fpreg *)frame.sf_sc.sc_fpregs, &l->l_addr->u_pcb.pcb_fp,
+	fpu_save();
+	frame.sf_sc.sc_ownedfp = fpu_used_p(l);
+	memcpy((struct fpreg *)frame.sf_sc.sc_fpregs, &pcb->pcb_fp,
 	    sizeof(struct fpreg));
 	frame.sf_sc.sc_fp_control = alpha_read_fp_c(l);
 	memset(frame.sf_sc.sc_reserved, 0, sizeof frame.sf_sc.sc_reserved);
@@ -216,7 +215,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* tf->tf_regs[FRAME_A1] = ksi->ksi_code; */
 	tf->tf_regs[FRAME_A1] = KSI_TRAPCODE(ksi);
-	tf->tf_regs[FRAME_A2] = (u_int64_t)&fp->sf_sc;
+	tf->tf_regs[FRAME_A2] = (uint64_t)&fp->sf_sc;
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
@@ -252,6 +251,7 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	} */
 	struct sigcontext *scp, ksc;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb;
 
 	/*
 	 * The trampoline code hands us the context.
@@ -263,7 +263,7 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	if (sigdebug & SDB_FOLLOW)
 	    printf("sigreturn: pid %d, scp %p\n", p->p_pid, scp);
 #endif
-	if (ALIGN(scp) != (u_int64_t)scp)
+	if (ALIGN(scp) != (uint64_t)scp)
 		return (EINVAL);
 
 	if (copyin((void *)scp, &ksc, sizeof(ksc)) != 0)
@@ -280,13 +280,13 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	regtoframe((struct reg *)ksc.sc_regs, l->l_md.md_tf);
 	alpha_pal_wrusp(ksc.sc_regs[R_SP]);
 
-	/* XXX ksc.sc_ownedfp ? */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l, 0);
-	memcpy(&l->l_addr->u_pcb.pcb_fp, (struct fpreg *)ksc.sc_fpregs,
+	pcb = lwp_getpcb(l);
+	fpu_discard();
+	memcpy(&pcb->pcb_fp, (struct fpreg *)ksc.sc_fpregs,
 	    sizeof(struct fpreg));
-	l->l_addr->u_pcb.pcb_fp.fpr_cr = ksc.sc_fpcr;
-	l->l_md.md_flags = ksc.sc_fp_control & MDP_FP_C;
+	pcb->pcb_fp.fpr_cr = ksc.sc_fpcr;
+	l->l_md.md_flags = (ksc.sc_fp_control & MDLWP_FP_C)
+	    | (ksc.sc_ownedfp ? MDLWP_FPUSED : 0);
 
 	mutex_enter(p->p_lock);
 	/* Restore signal stack. */

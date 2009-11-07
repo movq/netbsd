@@ -1,4 +1,4 @@
-/* $NetBSD: hdaudio_pci.c,v 1.2 2009/09/06 17:33:53 sborrill Exp $ */
+/* $NetBSD: hdaudio_pci.c,v 1.11 2012/02/01 16:56:34 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>
@@ -30,11 +30,11 @@
  */
 
 /*
- * Intel High Definition Audio (Revision 1.0) device driver.
+ * Intel High Definition Audio (Revision 1.0a) device driver.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hdaudio_pci.c,v 1.2 2009/09/06 17:33:53 sborrill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hdaudio_pci.c,v 1.11 2012/02/01 16:56:34 jakllsch Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -47,25 +47,29 @@ __KERNEL_RCSID(0, "$NetBSD: hdaudio_pci.c,v 1.2 2009/09/06 17:33:53 sborrill Exp
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
 
-#include <dev/pci/hdaudio/hdaudioreg.h>
-#include <dev/pci/hdaudio/hdaudiovar.h>
+#include "hdaudioreg.h"
+#include "hdaudiovar.h"
+#include "hdaudio_pci.h"
 
 struct hdaudio_pci_softc {
 	struct hdaudio_softc	sc_hdaudio;	/* must be first */
 	pcitag_t		sc_tag;
 	pci_chipset_tag_t	sc_pc;
 	void			*sc_ih;
+	pcireg_t		sc_id;
 };
 
 static int		hdaudio_pci_match(device_t, cfdata_t, void *);
 static void		hdaudio_pci_attach(device_t, device_t, void *);
 static int		hdaudio_pci_detach(device_t, int);
+static int		hdaudio_pci_rescan(device_t, const char *, const int *);
 static void		hdaudio_pci_childdet(device_t, device_t);
 
 static int		hdaudio_pci_intr(void *);
+static void		hdaudio_pci_reinit(struct hdaudio_pci_softc *);
 
 /* power management */
-static bool		hdaudio_pci_resume(device_t PMF_FN_PROTO);
+static bool		hdaudio_pci_resume(device_t, const pmf_qual_t *);
 
 CFATTACH_DECL2_NEW(
     hdaudio_pci,
@@ -74,7 +78,7 @@ CFATTACH_DECL2_NEW(
     hdaudio_pci_attach,
     hdaudio_pci_detach,
     NULL,
-    NULL,
+    hdaudio_pci_rescan,
     hdaudio_pci_childdet
 );
 
@@ -110,6 +114,7 @@ hdaudio_pci_attach(device_t parent, device_t self, void *opaque)
 
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_tag = pa->pa_tag;
+	sc->sc_id = pa->pa_id;
 
 	sc->sc_hdaudio.sc_subsystem = pci_conf_read(sc->sc_pc, sc->sc_tag,
 	    PCI_SUBSYS_ID_REG);
@@ -144,8 +149,8 @@ hdaudio_pci_attach(device_t parent, device_t self, void *opaque)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
@@ -153,18 +158,26 @@ hdaudio_pci_attach(device_t parent, device_t self, void *opaque)
 	if (!pmf_device_register(self, NULL, hdaudio_pci_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
+	hdaudio_pci_reinit(sc);
+
 	/* Attach bus-independent HD audio layer */
 	hdaudio_attach(self, &sc->sc_hdaudio);
+}
+
+static int
+hdaudio_pci_rescan(device_t self, const char *ifattr, const int *locs)
+{
+	struct hdaudio_pci_softc *sc = device_private(self);
+
+	return hdaudio_rescan(&sc->sc_hdaudio, ifattr, locs);
 }
 
 void
 hdaudio_pci_childdet(device_t self, device_t child)
 {
-#if notyet
 	struct hdaudio_pci_softc *sc = device_private(self);
 
 	hdaudio_childdet(&sc->sc_hdaudio, child);
-#endif
 }
 
 static int
@@ -204,10 +217,36 @@ hdaudio_pci_intr(void *opaque)
 	return hdaudio_intr(&sc->sc_hdaudio);
 }
 
+
+static void
+hdaudio_pci_reinit(struct hdaudio_pci_softc *sc)
+{
+	pcireg_t val;
+
+	/* stops playback static */
+	val = pci_conf_read(sc->sc_pc, sc->sc_tag, HDAUDIO_PCI_TCSEL);
+	val &= ~7;
+	val |= 0;
+	pci_conf_write(sc->sc_pc, sc->sc_tag, HDAUDIO_PCI_TCSEL, val);
+
+	switch (PCI_VENDOR(sc->sc_id)) {
+	case PCI_VENDOR_NVIDIA:
+		/* enable snooping */
+		val = pci_conf_read(sc->sc_pc, sc->sc_tag,
+		    HDAUDIO_NV_REG_SNOOP);
+		val &= ~HDAUDIO_NV_SNOOP_MASK;
+		val |= HDAUDIO_NV_SNOOP_ENABLE;
+		pci_conf_write(sc->sc_pc, sc->sc_tag,
+		    HDAUDIO_NV_REG_SNOOP, val);
+		break;
+	}
+}
+
 static bool
-hdaudio_pci_resume(device_t self PMF_FN_ARGS)
+hdaudio_pci_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct hdaudio_pci_softc *sc = device_private(self);
 
+	hdaudio_pci_reinit(sc);
 	return hdaudio_resume(&sc->sc_hdaudio);
 }

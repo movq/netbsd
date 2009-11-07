@@ -1,4 +1,4 @@
-/*	$NetBSD: iomod.h,v 1.7 2009/08/12 20:10:41 skrll Exp $	*/
+/*	$NetBSD: iomod.h,v 1.9 2011/01/13 21:15:16 skrll Exp $	*/
 
 /*	$OpenBSD: iomod.h,v 1.18 2007/10/20 16:41:45 miod Exp $	*/
 
@@ -123,6 +123,7 @@
 #define	FPA_IOMOD	((FPA_HIGH-FPA_LOW)/sizeof(struct iomod))
 #define	MAXMODBUS	((int)(FPA_IOMOD))	/* maximum modules/bus */
 
+#define	HPPA_FLEX_COUNT	0x4000		/* number of "flex" blocks */
 #define	HPPA_FLEX_MASK	0xFFFC0000	/* (see below) */
 #define	HPPA_FLEX_SIZE	(~HPPA_FLEX_MASK + 1)
 #define	HPPA_FLEX(a)	(((a) & HPPA_FLEX_MASK) >> 18)
@@ -355,6 +356,10 @@ struct iomod {
 
 	u_int	hvrs[512];	/* HVRSes (HVERSION-dependent Register Sets) */
 };
+
+#define IOMOD_IO_IO_LOW(mod)	(((struct iomod *)(mod))->io_io_low)
+#define IOMOD_IO_IO_HIGH(mod)	(((struct iomod *)(mod))->io_io_high)
+
 #endif	/* !_LOCORE */
 
 /* primarily for a "reboot" and "_rtt" routines */

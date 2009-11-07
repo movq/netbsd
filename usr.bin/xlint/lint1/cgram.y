@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.48 2009/10/03 17:09:18 christos Exp $ */
+/* $NetBSD: cgram.y,v 1.53 2011/12/25 20:11:22 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.48 2009/10/03 17:09:18 christos Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.53 2011/12/25 20:11:22 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -53,7 +53,7 @@ int	blklev;
 
 /*
  * level for memory allocation. Normaly the same as blklev.
- * An exeption is the declaration of arguments in prototypes. Memory
+ * An exception is the declaration of arguments in prototypes. Memory
  * for these can't be freed after the declaration, but symbols must
  * be removed from the symbol table after the declaration.
  */
@@ -107,7 +107,7 @@ static inline void RESTORE(const char *file, size_t line)
 #endif
 %}
 
-%expect 3
+%expect 5
 
 %union {
 	int	y_int;
@@ -808,7 +808,7 @@ enums_with_opt_comma:
 			error(54);
 		} else {
 			/* trailing "," prohibited in enum declaration */
-			(void)gnuism(54);
+			c99ism(54);
 		}
 		$$ = $1;
 	  }
@@ -1310,7 +1310,7 @@ labeled_stmnt:
 	;
 
 label:
-	  identifier T_COLON {
+	  T_NAME T_COLON {
 		symtyp = FLAB;
 		label(T_NAME, getsym($1), NULL);
 	  }
@@ -1329,9 +1329,19 @@ label:
 	  }
 	;
 
+stmnt_d_list:
+	  stmnt_list
+	| stmnt_d_list declaration_list stmnt_list {
+		if (!Sflag)
+			c99ism(327);
+	}
+	;
+
 comp_stmnt:
-	  comp_stmnt_lbrace declaration_list opt_stmnt_list comp_stmnt_rbrace
-	| comp_stmnt_lbrace opt_stmnt_list comp_stmnt_rbrace
+	  comp_stmnt_lbrace comp_stmnt_rbrace
+	| comp_stmnt_lbrace stmnt_list comp_stmnt_rbrace
+	| comp_stmnt_lbrace declaration_list comp_stmnt_rbrace
+	| comp_stmnt_lbrace declaration_list stmnt_d_list comp_stmnt_rbrace
 	;
 
 comp_stmnt_lbrace:
@@ -1350,11 +1360,6 @@ comp_stmnt_rbrace:
 		blklev--;
 		ftflg = 0;
 	  }
-	;
-
-opt_stmnt_list:
-	  /* empty */
-	| stmnt_list
 	;
 
 stmnt_list:
@@ -1789,8 +1794,9 @@ point_or_arrow:
 
 point:
 	  T_STROP {
-		if ($1 != POINT)
+		if ($1 != POINT) {
 			error(249, yytext);
+		}
 	  }
 	;
 

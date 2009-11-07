@@ -1,4 +1,4 @@
-/* $NetBSD: getline.c,v 1.1 2009/07/13 22:19:25 roy Exp $ */
+/* $NetBSD: getline.c,v 1.3 2009/12/02 08:46:33 roy Exp $ */
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -28,9 +28,15 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: getline.c,v 1.1 2009/07/13 22:19:25 roy Exp $");
+__RCSID("$NetBSD: getline.c,v 1.3 2009/12/02 08:46:33 roy Exp $");
+
+#include "namespace.h"
 
 #include <stdio.h>
+
+#ifdef __weak_alias
+__weak_alias(getline, _getline)
+#endif
 
 ssize_t
 getline(char **__restrict buf, size_t *__restrict buflen, FILE *__restrict fp)

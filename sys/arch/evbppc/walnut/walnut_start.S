@@ -1,4 +1,4 @@
-/*	$NetBSD: walnut_start.S,v 1.16 2009/02/13 22:41:01 apb Exp $	*/
+/*	$NetBSD: walnut_start.S,v 1.22 2011/06/20 19:56:11 matt Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -68,7 +68,6 @@
  */
 
 #undef PPC_4XX_NOCACHE
-#define _NOREGNAMES
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -88,8 +87,8 @@
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/dcr405gp.h>
-#include <powerpc/ibm4xx/pmap.h>
+#include <powerpc/ibm4xx/spr.h>
+#include <powerpc/ibm4xx/dcr4xx.h>
 
 /* Function pointer for requesting board_config_data from openbios*/
 #define BOARD_CFG_FP       0xFFFE0B50
@@ -98,12 +97,6 @@
  * Some instructions gas doesn't understand (yet?)
  */
 #define	bdneq	bdnzf 2,
-
-/*
- * Globals
- */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 
 /*
  * This symbol is here for the benefit of kvm_mkdb, and is supposed to
@@ -179,7 +172,7 @@ __start_cpu0:
 	addi	%r8,%r8,_C_LABEL(end)@l
 /* zero bss */
 	li	%r4,0
-2:	stwu	%r4,%r4(3)
+2:	stwu	%r4,%r4(%r3)
 	cmpw	%r3,%r8
 	bne+	2b
 
@@ -198,7 +191,7 @@ __start_cpu0:
 	mtpid	%r0
 	sync
 
-	INIT_CPUINFO(8,1,9,0)
+	INIT_CPUINFO(%r8,%r1,%r9,%r0)
 	mr	%r4,%r8
 
 	lis	%r3,__start@ha

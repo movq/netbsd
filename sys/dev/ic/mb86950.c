@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86950.c,v 1.15 2009/05/12 14:25:17 cegger Exp $	*/
+/*	$NetBSD: mb86950.c,v 1.19 2012/02/02 19:43:03 tls Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -67,7 +67,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.15 2009/05/12 14:25:17 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.19 2012/02/02 19:43:03 tls Exp $");
 
 /*
  * Device driver for Fujitsu mb86950 based Ethernet cards.
@@ -120,8 +120,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.15 2009/05/12 14:25:17 cegger Exp $");
  */
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -131,9 +129,7 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.15 2009/05/12 14:25:17 cegger Exp $");
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -150,10 +146,8 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.15 2009/05/12 14:25:17 cegger Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -299,10 +293,8 @@ mb86950_config(struct mb86950_softc *sc, int *media,
 
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 	    RND_TYPE_NET, 0);
-#endif
 
 /* XXX No! This doesn't work - DLCR6 of the mb86950 is different
 
@@ -579,11 +571,8 @@ mb86950_start(struct ifnet *ifp)
 	if (m == 0)
 		return;
 
-#if NBPFILTER > 0
 	/* Tap off here if there is a BPF listener. */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	/* Send the packet to the mb86950 */
 	len = mb86950_put_fifo(sc,m);
@@ -913,14 +902,11 @@ mb86950_get_fifo(struct mb86950_softc *sc, u_int len)
 	/* Get a packet. */
 	bus_space_read_multi_stream_2(bst, bsh, BMPR_FIFO, mtod(m, u_int16_t *), (len + 1) >> 1);
 
-#if NBPFILTER > 0
 	/*
 	 * Check if there's a BPF listener on this interface.  If so, hand off
 	 * the raw packet to bpf.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 	return (0);
@@ -965,22 +951,15 @@ mb86950_disable(struct mb86950_softc *sc)
 int
 mb86950_activate(device_t self, enum devact act)
 {
-	struct mb86950_softc *sc = (struct mb86950_softc *)self;
-	int rv, s;
+	struct mb86950_softc *sc = device_private(self);
 
-	rv = 0;
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_ec.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (rv);
 }
 
 /*
@@ -1000,10 +979,9 @@ mb86950_detach(struct mb86950_softc *sc)
 	/* Delete all media. */
 	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 
-#if NRND > 0
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
-#endif
+
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 

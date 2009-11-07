@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.37 2009/03/14 21:04:04 dsl Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.41.2.1 2012/05/21 15:25:58 riz Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -35,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup
+ * Machine dependent functions for kernel setup
  *
  * Created      : 17/09/94
  */
@@ -44,14 +44,13 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.37 2009/03/14 21:04:04 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.41.2.1 2012/05/21 15:25:58 riz Exp $");
 
 #include <sys/mount.h>		/* XXX only needed by syscallargs.h */
 #include <sys/proc.h>
 #include <sys/signal.h>
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/ucontext.h>
 
@@ -109,7 +108,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	fp--;
 	
 	/* make the stack aligned */
-	fp = (struct sigframe_siginfo *)STACKALIGN(fp);
+	fp = (struct sigframe_siginfo *)STACK_ALIGN(fp, STACK_ALIGNBYTES);
 
 	/* populate the siginfo frame */
 	frame.sf_si._info = ksi->ksi_info;
@@ -200,6 +199,20 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	arm_fpe_getcontext(p, (struct fpreg *)(void *)&mcp->fpregs);
 	*flags |= _UC_FPU;
 #endif
+
+	mcp->_mc_tlsbase = (uintptr_t)l->l_private;
+	*flags |= _UC_TLSBASE;
+}
+
+int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+{
+	const __greg_t *gr = mcp->__gregs;
+
+	/* Make sure the processor mode has not been tampered with. */
+	if (!VALID_R15_PSR(gr[_REG_PC], gr[_REG_CPSR]))
+		return EINVAL;
+	return 0;
 }
 
 int
@@ -208,12 +221,13 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	struct trapframe *tf = process_frame(l);
 	const __greg_t *gr = mcp->__gregs;
 	struct proc *p = l->l_proc;
+	int error;
 
 	if ((flags & _UC_CPU) != 0) {
 		/* Restore General Register context. */
-		/* Make sure the processor mode has not been tampered with. */
-		if (!VALID_R15_PSR(gr[_REG_PC], gr[_REG_CPSR]))
-			return EINVAL;
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
 
 		tf->tf_r0     = gr[_REG_R0];
 		tf->tf_r1     = gr[_REG_R1];
@@ -240,6 +254,9 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		arm_fpe_setcontext(p, (struct fpreg *)(void *)&mcp->__fpregs);
 	}
 #endif
+
+	if ((flags & _UC_TLSBASE) != 0)
+		lwp_setprivate(l, (void *)(uintptr_t)mcp->_mc_tlsbase);
 
 	mutex_enter(p->p_lock);
 	if (flags & _UC_SETSTACK)

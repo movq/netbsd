@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uuid.c,v 1.16 2008/11/18 14:01:03 joerg Exp $	*/
+/*	$NetBSD: kern_uuid.c,v 1.18 2011/11/19 22:51:25 tls Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.16 2008/11/18 14:01:03 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.18 2011/11/19 22:51:25 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -44,6 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.16 2008/11/18 14:01:03 joerg Exp $")
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/uio.h>
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -126,7 +127,7 @@ uuid_node(uint16_t *node)
 	splx(s);
 
 	for (i = 0; i < (UUID_NODE_LEN>>1); i++)
-		node[i] = (uint16_t)arc4random();
+		node[i] = (uint16_t)cprng_fast32();
 	*((uint8_t*)node) |= 0x01;
 }
 
@@ -136,19 +137,15 @@ uuid_node(uint16_t *node)
  * the Unix time since 00:00:00.00, January 1, 1970 to the date of the
  * Gregorian reform to the Christian calendar.
  */
-/*
- * At present, NetBSD has no timespec source, only timeval sources.  So,
- * we use timeval.
- */
 static uint64_t
 uuid_time(void)
 {
-	struct timeval tv;
+	struct timespec tsp;
 	uint64_t xtime = 0x01B21DD213814000LL;
 
-	microtime(&tv);
-	xtime += (uint64_t)tv.tv_sec * 10000000LL;
-	xtime += (uint64_t)(10 * tv.tv_usec);
+	nanotime(&tsp);
+	xtime += (uint64_t)tsp.tv_sec * 10000000LL;
+	xtime += (uint64_t)(tsp.tv_nsec / 100);
 	return (xtime & ((1LL << 60) - 1LL));
 }
 
@@ -169,7 +166,7 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 	if (uuid_last.time.ll == 0LL || uuid_last.node[0] != uuid->node[0] ||
 	    uuid_last.node[1] != uuid->node[1] ||
 	    uuid_last.node[2] != uuid->node[2])
-		uuid->seq = (uint16_t)arc4random() & 0x3fff;
+		uuid->seq = (uint16_t)cprng_fast32() & 0x3fff;
 	else if (uuid_last.time.ll >= xtime)
 		uuid->seq = (uuid_last.seq + 1) & 0x3fff;
 	else

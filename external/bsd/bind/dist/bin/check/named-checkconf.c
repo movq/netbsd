@@ -1,7 +1,7 @@
-/*	$NetBSD: named-checkconf.c,v 1.1.1.2 2009/10/25 00:01:29 christos Exp $	*/
+/*	$NetBSD: named-checkconf.c,v 1.3.4.1 2012/06/05 21:15:45 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: named-checkconf.c,v 1.50 2009/09/29 15:06:05 fdupont Exp */
+/* Id: named-checkconf.c,v 1.56 2011/03/12 04:59:46 tbox Exp  */
 
 /*! \file */
 
@@ -58,7 +58,7 @@ isc_log_t *logc = NULL;
 		result = (r); \
 		if (result != ISC_R_SUCCESS) \
 			goto cleanup; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 /*% usage */
 ISC_PLATFORM_NORETURN_PRE static void
@@ -66,7 +66,7 @@ usage(void) ISC_PLATFORM_NORETURN_POST;
 
 static void
 usage(void) {
-	fprintf(stderr, "usage: %s [-h] [-j] [-v] [-z] [-t directory] "
+	fprintf(stderr, "usage: %s [-h] [-j] [-p] [-v] [-z] [-t directory] "
 		"[named.conf]\n", program);
 	exit(1);
 }
@@ -192,7 +192,7 @@ configure_zone(const char *vclass, const char *view,
 		if (obj != NULL)
 			maps[i++] = obj;
 	}
-	maps[i++] = NULL;
+	maps[i] = NULL;
 
 	cfg_map_get(zoptions, "type", &typeobj);
 	if (typeobj == NULL)
@@ -206,6 +206,24 @@ configure_zone(const char *vclass, const char *view,
 	if (fileobj == NULL)
 		return (ISC_R_FAILURE);
 	zfile = cfg_obj_asstring(fileobj);
+
+	obj = NULL;
+	if (get_maps(maps, "check-dup-records", &obj)) {
+		if (strcasecmp(cfg_obj_asstring(obj), "warn") == 0) {
+			zone_options |= DNS_ZONEOPT_CHECKDUPRR;
+			zone_options &= ~DNS_ZONEOPT_CHECKDUPRRFAIL;
+		} else if (strcasecmp(cfg_obj_asstring(obj), "fail") == 0) {
+			zone_options |= DNS_ZONEOPT_CHECKDUPRR;
+			zone_options |= DNS_ZONEOPT_CHECKDUPRRFAIL;
+		} else if (strcasecmp(cfg_obj_asstring(obj), "ignore") == 0) {
+			zone_options &= ~DNS_ZONEOPT_CHECKDUPRR;
+			zone_options &= ~DNS_ZONEOPT_CHECKDUPRRFAIL;
+		} else
+			INSIST(0);
+	} else {
+		zone_options |= DNS_ZONEOPT_CHECKDUPRR;
+		zone_options &= ~DNS_ZONEOPT_CHECKDUPRRFAIL;
+	}
 
 	obj = NULL;
 	if (get_maps(maps, "check-mx", &obj)) {
@@ -472,6 +490,10 @@ main(int argc, char **argv) {
 	if (conffile == NULL || conffile[0] == '\0')
 		conffile = NAMED_CONFFILE;
 
+#ifdef _WIN32
+	InitSockets();
+#endif
+
 	RUNTIME_CHECK(isc_mem_create(0, 0, &mctx) == ISC_R_SUCCESS);
 
 	RUNTIME_CHECK(setup_logging(mctx, stdout, &logc) == ISC_R_SUCCESS);
@@ -514,6 +536,10 @@ main(int argc, char **argv) {
 	isc_entropy_detach(&ectx);
 
 	isc_mem_destroy(&mctx);
+
+#ifdef _WIN32
+	DestroySockets();
+#endif
 
 	return (exit_status);
 }

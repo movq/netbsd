@@ -1,4 +1,4 @@
-.\"     $NetBSD: vme.9,v 1.11 2008/04/30 13:10:59 martin Exp $
+.\"     $NetBSD: vme.9,v 1.13 2011/07/01 17:34:44 dyoung Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -48,7 +48,7 @@
 .Nm vme_space_get
 .Nd Versa Module Euroboard bus
 .Sh SYNOPSIS
-.In machine/bus.h
+.In sys/bus.h
 .In dev/vme/vmereg.h
 .In dev/vme/vmevar.h
 .Ft int
@@ -329,15 +329,6 @@ and
 .Sh DMA SUPPORT
 Extensive DMA facilities are provided.
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing or using the
-machine-independent
-.Nm
-subsystem can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The
 .Nm
 subsystem itself is implemented within the file

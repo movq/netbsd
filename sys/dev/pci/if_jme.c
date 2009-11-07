@@ -1,4 +1,4 @@
-/*	$NetBSD: if_jme.c,v 1.12 2009/10/19 18:41:15 bouyer Exp $	*/
+/*	$NetBSD: if_jme.c,v 1.19 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2008 Manuel Bouyer.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.12 2009/10/19 18:41:15 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.19 2012/02/02 19:43:05 tls Exp $");
 
 
 #include <sys/param.h>
@@ -84,16 +84,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.12 2009/10/19 18:41:15 bouyer Exp $");
 #include <net/route.h>
 #include <net/netisr.h>
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -106,7 +100,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.12 2009/10/19 18:41:15 bouyer Exp $");
 #include <netinet/tcp.h>
 
 #include <net/if_ether.h>
-#include <uvm/uvm_extern.h>
 #if defined(INET)
 #include <netinet/if_inarp.h>
 #endif
@@ -171,9 +164,7 @@ struct jme_softc {
 	u_int32_t jme_flags;		/* device features, see below */
 	uint32_t jme_txcsr;		/* TX config register */
 	uint32_t jme_rxcsr;		/* RX config register */
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 	/* interrupt coalition parameters */
 	struct sysctllog *jme_clog;
 	int jme_intrxto;		/* interrupt RX timeout */
@@ -219,6 +210,7 @@ void jme_statchg(device_t);
 
 static int jme_eeprom_read_byte(struct jme_softc *, uint8_t, uint8_t *);
 static int jme_eeprom_macaddr(struct jme_softc *);
+static int jme_reg_macaddr(struct jme_softc *);
 
 #define JME_TIMEOUT		1000
 #define JME_PHY_TIMEOUT		1000
@@ -388,7 +380,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	jme_reset(sc);
 
 	/* read mac addr */
-	if (jme_eeprom_macaddr(sc)) {
+	if (jme_eeprom_macaddr(sc) && jme_reg_macaddr(sc)) {
 		aprint_error_dev(self, "error reading Ethernet address\n");
 		/* return; */
 	}
@@ -442,13 +434,14 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	for (i = 0; i < JME_NBUFS; i++) {
 		sc->jme_txmbuf[i] = sc->jme_rxmbuf[i] = NULL;
 		if (bus_dmamap_create(sc->jme_dmatag, JME_MAX_TX_LEN,
-		    JME_NBUFS, JME_MAX_TX_LEN, 0, BUS_DMA_NOWAIT,
+		    JME_NBUFS, JME_MAX_TX_LEN, 0,
+		    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
 		    &sc->jme_txmbufm[i]) != 0) {
 			aprint_error_dev(self, "can't allocate DMA TX map\n");
 			return;
 		}
 		if (bus_dmamap_create(sc->jme_dmatag, JME_MAX_RX_LEN,
-		    1, JME_MAX_RX_LEN, 0, BUS_DMA_NOWAIT,
+		    1, JME_MAX_RX_LEN, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
 		    &sc->jme_rxmbufm[i]) != 0) {
 			aprint_error_dev(self, "can't allocate DMA RX map\n");
 			return;
@@ -515,10 +508,9 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	else
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
+
 	sc->jme_intrxto = PCCRX_COAL_TO_DEFAULT;
 	sc->jme_intrxct = PCCRX_COAL_PKT_DEFAULT;
 	sc->jme_inttxto = PCCTX_COAL_TO_DEFAULT;
@@ -709,6 +701,8 @@ jme_add_rxbuf(jme_softc_t *sc, struct mbuf *m)
 	}
 	map = sc->jme_rxmbufm[i];
 	m->m_len = m->m_pkthdr.len = m->m_ext.ext_size;
+	KASSERT(m->m_len == MCLBYTES);
+
 	error = bus_dmamap_load_mbuf(sc->jme_dmatag, map, m,
 	    BUS_DMA_READ|BUS_DMA_NOWAIT);
 	if (error) {
@@ -1054,6 +1048,7 @@ jme_statchg(device_t self)
 static void
 jme_intr_rx(jme_softc_t *sc) {
 	struct mbuf *m, *mhead;
+	bus_dmamap_t mmap;
 	struct ifnet *ifp = &sc->jme_if;
 	uint32_t flags,  buflen;
 	int i, ipackets, nsegs, seg, error;
@@ -1067,7 +1062,7 @@ jme_intr_rx(jme_softc_t *sc) {
 	    sc->jme_rx_cons, le32toh(sc->jme_rxring[sc->jme_rx_cons].flags));
 #endif
 	ipackets = 0;
-	while((le32toh(sc->jme_rxring[ sc->jme_rx_cons].flags) & JME_RD_OWN)
+	while((le32toh(sc->jme_rxring[sc->jme_rx_cons].flags) & JME_RD_OWN)
 	    == 0) {
 		i = sc->jme_rx_cons;
 		desc = &sc->jme_rxring[i];
@@ -1075,11 +1070,19 @@ jme_intr_rx(jme_softc_t *sc) {
 		printf("rxintr i %d flags 0x%x buflen 0x%x\n",
 		    i,  le32toh(desc->flags), le32toh(desc->buflen));
 #endif
+		if (sc->jme_rxmbuf[i] == NULL) {
+			if ((error = jme_add_rxbuf(sc, NULL)) != 0) {
+				aprint_error_dev(sc->jme_dev,
+				    "can't add new mbuf to empty slot: %d\n",
+				    error);
+				break;
+			}
+			JME_DESC_INC(sc->jme_rx_cons, JME_NBUFS);
+			i = sc->jme_rx_cons;
+			continue;
+		}
 		if ((le32toh(desc->buflen) & JME_RD_VALID) == 0)
 			break;
-		bus_dmamap_sync(sc->jme_dmatag, sc->jme_rxmbufm[i], 0,
-		    sc->jme_rxmbufm[i]->dm_mapsize, BUS_DMASYNC_POSTREAD);
-		bus_dmamap_unload(sc->jme_dmatag, sc->jme_rxmbufm[i]);
 
 		buflen = le32toh(desc->buflen);
 		nsegs = JME_RX_NSEGS(buflen);
@@ -1097,6 +1100,10 @@ jme_intr_rx(jme_softc_t *sc) {
 			for (seg = 0; seg < nsegs; seg++) {
 				m = sc->jme_rxmbuf[i];
 				sc->jme_rxmbuf[i] = NULL;
+				mmap = sc->jme_rxmbufm[i];
+				bus_dmamap_sync(sc->jme_dmatag, mmap, 0,
+				    mmap->dm_mapsize, BUS_DMASYNC_POSTREAD);
+				bus_dmamap_unload(sc->jme_dmatag, mmap);
 				if ((error = jme_add_rxbuf(sc, m)) != 0)
 					aprint_error_dev(sc->jme_dev,
 					    "can't reuse mbuf: %d\n", error);
@@ -1108,11 +1115,24 @@ jme_intr_rx(jme_softc_t *sc) {
 		/* receive this packet */
 		mhead = m = sc->jme_rxmbuf[i];
 		sc->jme_rxmbuf[i] = NULL;
+		mmap = sc->jme_rxmbufm[i];
+		bus_dmamap_sync(sc->jme_dmatag, mmap, 0,
+		    mmap->dm_mapsize, BUS_DMASYNC_POSTREAD);
+		bus_dmamap_unload(sc->jme_dmatag, mmap);
 		/* add a new buffer to chain */
-		if (jme_add_rxbuf(sc, NULL) == ENOBUFS) {
-			for (seg = 0; seg < nsegs; seg++) {
+		if (jme_add_rxbuf(sc, NULL) != 0) {
+			if ((error = jme_add_rxbuf(sc, m)) != 0)
+				aprint_error_dev(sc->jme_dev,
+				    "can't reuse mbuf: %d\n", error);
+			JME_DESC_INC(sc->jme_rx_cons, JME_NBUFS);
+			i = sc->jme_rx_cons;
+			for (seg = 1; seg < nsegs; seg++) {
 				m = sc->jme_rxmbuf[i];
 				sc->jme_rxmbuf[i] = NULL;
+				mmap = sc->jme_rxmbufm[i];
+				bus_dmamap_sync(sc->jme_dmatag, mmap, 0,
+				    mmap->dm_mapsize, BUS_DMASYNC_POSTREAD);
+				bus_dmamap_unload(sc->jme_dmatag, mmap);
 				if ((error = jme_add_rxbuf(sc, m)) != 0)
 					aprint_error_dev(sc->jme_dev,
 					    "can't reuse mbuf: %d\n", error);
@@ -1134,7 +1154,13 @@ jme_intr_rx(jme_softc_t *sc) {
 			i = sc->jme_rx_cons;
 			m = sc->jme_rxmbuf[i];
 			sc->jme_rxmbuf[i] = NULL;
-			(void)jme_add_rxbuf(sc, NULL);
+			mmap = sc->jme_rxmbufm[i];
+			bus_dmamap_sync(sc->jme_dmatag, mmap, 0,
+			    mmap->dm_mapsize, BUS_DMASYNC_POSTREAD);
+			bus_dmamap_unload(sc->jme_dmatag, mmap);
+			if ((error = jme_add_rxbuf(sc, NULL)) != 0)
+				aprint_error_dev(sc->jme_dev,
+				    "can't add new mbuf: %d\n", error);
 			m->m_flags &= ~M_PKTHDR;
 			m_cat(mhead, m);
 			JME_DESC_INC(sc->jme_rx_cons, JME_NBUFS);
@@ -1146,10 +1172,7 @@ jme_intr_rx(jme_softc_t *sc) {
 		}
 		ifp->if_ipackets++;
 		ipackets++;
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, mhead);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, mhead);
 
 		if ((ifp->if_capenable & IFCAP_CSUM_IPv4_Rx) &&
 		    (flags & JME_RD_IPV4)) {
@@ -1192,11 +1215,8 @@ jme_intr_rx(jme_softc_t *sc) {
 		}
 		(*ifp->if_input)(ifp, mhead);
 	}
-#if NRND > 0
-	if (ipackets && RND_ENABLED(&sc->rnd_source))
+	if (ipackets)
 		rnd_add_uint32(&sc->rnd_source, ipackets);
-#endif /* NRND > 0 */
-
 }
 
 static int
@@ -1431,7 +1451,7 @@ jme_encap(struct jme_softc *sc, struct mbuf **m_head)
 	txd = &sc->jme_txring[prod];
 
 	error = bus_dmamap_load_mbuf(sc->jme_dmatag, sc->jme_txmbufm[prod],
-	    *m_head, BUS_DMA_WRITE);
+	    *m_head, BUS_DMA_NOWAIT | BUS_DMA_WRITE);
 	if (error) {
 		if (error == EFBIG) {
 			log(LOG_ERR, "%s: Tx packet consumes too many "
@@ -1665,11 +1685,8 @@ nexttx:
 			ifp->if_flags |= IFF_OACTIVE;
 			break;
 		}
-#if NBPFILTER > 0
 		/* Pass packet to bpf if there is a listener */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, mb_head);
-#endif
+		bpf_mtap(ifp, mb_head);
 	}
 #ifdef JMEDEBUG_TX
 	printf("jme_ifstart enq %d\n", enq);
@@ -2008,6 +2025,28 @@ jme_eeprom_macaddr(struct jme_softc *sc)
 	}
 
 	return (ENOENT);
+}
+
+static int
+jme_reg_macaddr(struct jme_softc *sc)
+{
+	uint32_t par0, par1;
+
+	par0 = bus_space_read_4(sc->jme_bt_mac, sc->jme_bh_mac, JME_PAR0);
+	par1 = bus_space_read_4(sc->jme_bt_mac, sc->jme_bh_mac, JME_PAR1);
+	par1 &= 0xffff;
+	if ((par0 == 0 && par1 == 0) ||
+	    (par0 == 0xffffffff && par1 == 0xffff)) {
+		return (ENOENT);
+	} else {
+		sc->jme_enaddr[0] = (par0 >> 0) & 0xff;
+		sc->jme_enaddr[1] = (par0 >> 8) & 0xff;
+		sc->jme_enaddr[2] = (par0 >> 16) & 0xff;
+		sc->jme_enaddr[3] = (par0 >> 24) & 0xff;
+		sc->jme_enaddr[4] = (par1 >> 0) & 0xff;
+		sc->jme_enaddr[5] = (par1 >> 8) & 0xff;
+	}
+	return (0);
 }
 
 /*

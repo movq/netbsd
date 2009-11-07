@@ -1,7 +1,7 @@
-/*	$NetBSD: namespace.h,v 1.1.1.1 2009/10/25 00:02:45 christos Exp $	*/
+/*	$NetBSD: namespace.h,v 1.3.4.1 2012/06/05 21:15:28 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009-2012  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: namespace.h,v 1.5 2009/10/01 01:30:01 sar Exp */
+/* Id */
 
 #ifndef ISCAPI_NAMESPACE_H
 #define ISCAPI_NAMESPACE_H 1
@@ -33,6 +33,7 @@
 #define isc_app_run isc__app_run
 #define isc_app_ctxrun isc__app_ctxrun
 #define isc_app_shutdown isc__app_shutdown
+#define isc_app_ctxfinish isc__app_ctxfinish
 #define isc_app_ctxshutdown isc__app_ctxshutdown
 #define isc_app_ctxsuspend isc__app_ctxsuspend
 #define isc_app_reload isc__app_reload
@@ -69,6 +70,7 @@
 #define isc_mem_getquota isc__mem_getquota
 #define isc_mem_gettag isc__mem_gettag
 #define isc_mem_inuse isc__mem_inuse
+#define isc_mem_isovermem isc__mem_isovermem
 #define isc_mem_setname isc__mem_setname
 #define isc_mem_setwater isc__mem_setwater
 #define isc_mem_printallactive isc__mem_printallactive
@@ -89,6 +91,7 @@
 #define isc_mempool_getfillcount isc__mempool_getfillcount
 
 #define isc_socket_create isc__socket_create
+#define isc_socket_dup isc__socket_dup
 #define isc_socket_attach isc__socket_attach
 #define isc_socket_detach isc__socket_detach
 #define isc_socketmgr_create isc__socketmgr_create
@@ -111,6 +114,7 @@
 #define isc_socket_listen isc__socket_listen
 #define isc_socket_accept isc__socket_accept
 #define isc_socket_connect isc__socket_connect
+#define isc_socket_getfd isc__socket_getfd
 #define isc_socket_getname isc__socket_getname
 #define isc_socket_gettag isc__socket_gettag
 #define isc_socket_getpeername isc__socket_getpeername
@@ -130,6 +134,7 @@
 #define isc_task_create isc__task_create
 #define isc_task_attach isc__task_attach
 #define isc_task_detach isc__task_detach
+/* #define isc_task_exiting isc__task_exiting XXXMPA */
 #define isc_task_send isc__task_send
 #define isc_task_sendanddetach isc__task_sendanddetach
 #define isc_task_purgerange isc__task_purgerange
@@ -145,9 +150,13 @@
 #define isc_task_gettag isc__task_gettag
 #define isc_task_getcurrenttime isc__task_getcurrenttime
 #define isc_taskmgr_create isc__taskmgr_create
+#define isc_taskmgr_setmode isc__taskmgr_setmode
+#define isc_taskmgr_mode isc__taskmgr_mode
 #define isc_taskmgr_destroy isc__taskmgr_destroy
 #define isc_task_beginexclusive isc__task_beginexclusive
 #define isc_task_endexclusive isc__task_endexclusive
+#define isc_task_setprivilege isc__task_setprivilege
+#define isc_task_privilege isc__task_privilege
 
 #define isc_timer_create isc__timer_create
 #define isc_timer_reset isc__timer_reset

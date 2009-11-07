@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.1 2009/08/07 20:57:58 haad Exp $	*/
+/*	$NetBSD: proc.h,v 1.5 2010/03/13 22:31:15 christos Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -74,6 +74,8 @@
 #define	max_ncpus	ncpu
 #define	boot_max_ncpus	ncpu
 #define	curthread	curlwp
+#define syscid PRI_NONE
+#define sysccid PRI_NONE
 
 #define	TS_RUN	0
 
@@ -89,9 +91,15 @@ typedef struct lwp	*kthread_id_t;
 #define	ZFS_KSTACK_PAGES	0
 #endif
 
-kthread_t *thread_create(void *, size_t, void (*)(), void *, size_t,
+struct contract {
+};
+
+kthread_t *thread_create(void *, size_t, void (*)(void *), void *, size_t,
 			 proc_t *, int, pri_t);
 void	thread_exit(void);
+void	thread_join(uint64_t);
+
+int newproc(void (*)(void *), caddr_t, id_t, int, struct contract **, pid_t);
 
 #endif	/* _KERNEL */
 

@@ -1,6 +1,6 @@
-/*	$NetBSD: selectiveencode.h,v 1.1.1.2 2009/10/25 00:01:47 christos Exp $	*/
+/*	$NetBSD: selectiveencode.h,v 1.2.6.1 2012/06/06 18:18:09 bouyer Exp $	*/
 
-/* Id: selectiveencode.h,v 1.2 2009/09/01 03:31:33 jinmei Exp */
+/* Id: selectiveencode.h,v 1.2 2009/09/01 03:31:33 jinmei Exp  */
 /*
  * Copyright (c) 2000,2002 Japan Network Information Center.
  * All rights reserved.

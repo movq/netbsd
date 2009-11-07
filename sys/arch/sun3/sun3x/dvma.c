@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.38 2008/04/28 20:23:38 martin Exp $	*/
+/*	$NetBSD: dvma.c,v 1.41 2012/01/27 18:53:04 para Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.38 2008/04/28 20:23:38 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.41 2012/01/27 18:53:04 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,7 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.38 2008/04/28 20:23:38 martin Exp $");
 #include <sys/extent.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
@@ -115,7 +114,7 @@ dvma_init(void)
 	 * Create the extent map for DVMA pages.
 	 */
 	dvma_extent = extent_create("dvma", DVMA_MAP_BASE,
-	    DVMA_MAP_BASE + (DVMA_MAP_AVAIL - 1), M_DEVBUF,
+	    DVMA_MAP_BASE + (DVMA_MAP_AVAIL - 1),
 	    NULL, 0, EX_NOCOALESCE|EX_NOWAIT);
 
 	/*
@@ -219,7 +218,8 @@ dvma_mapin(void *kmem_va, int len, int canwait)
 #endif	/* DEBUG */
 
 		iommu_enter((tva & IOMMU_VA_MASK), pa);
-		pmap_kenter_pa(tva, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(tva,
+		    pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE, 0);
 	}
 	pmap_update(pmap_kernel());
 
@@ -350,7 +350,8 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 			panic("%s: unmapped VA", __func__);
 #endif
 		iommu_enter((dva & IOMMU_VA_MASK), pa);
-		pmap_kenter_pa(dva, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(dva,
+		    pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE, 0);
 		kva += PAGE_SIZE;
 		dva += PAGE_SIZE;
 		sgsize -= PAGE_SIZE;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs.c,v 1.2 2009/10/11 10:54:52 haad Exp $	*/
+/*	$NetBSD: vfs.c,v 1.4 2011/04/02 04:57:35 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2006-2007 Pawel Jakub Dawidek <pjd@FreeBSD.org>
@@ -38,8 +38,6 @@
 #include <sys/pathname.h>
 #include <sys/priv.h>
 #include <lib/libkern/libkern.h>
-
-MALLOC_DECLARE(M_MOUNT);
 
 int
 lookupname(char *dirname, enum uio_seg seg, vnode_t **dirvpp, vnode_t **compvpp)
@@ -268,7 +266,7 @@ domount(kthread_t *td, vnode_t *vp, const char *fstype, char *fspath,
 	 */
 	vn_lock(vp, LK_SHARED | LK_RETRY);
 	mp = vfs_mount_alloc(vp, vfsp, fspath, td);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	mp->mnt_optnew = NULL;
 	vfs_setmntopt(mp, "from", fspec, 0);
@@ -334,7 +332,7 @@ domount(kthread_t *td, vnode_t *vp, const char *fstype, char *fspath,
 			panic("mount: lost mount");
 		mountcheckdirs(vp, mvp);
 		vput(mvp);
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		if ((mp->mnt_flag & MNT_RDONLY) == 0)
 			error = vfs_allocate_syncvnode(mp);
 		vfs_unbusy(mp, td);
@@ -346,7 +344,7 @@ domount(kthread_t *td, vnode_t *vp, const char *fstype, char *fspath,
 		simple_lock(&vp->v_interlock);
 		vp->v_iflag &= ~VI_MOUNT;
 		simple_unlock(&vp->v_interlock);
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		vfs_unbusy(mp, td);
 		vfs_mount_destroy(mp);
 	}

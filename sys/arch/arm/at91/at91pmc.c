@@ -1,5 +1,5 @@
-/*	$Id: at91pmc.c,v 1.3 2009/10/23 06:53:13 snj Exp $	*/
-/*	$NetBSD: at91pmc.c,v 1.3 2009/10/23 06:53:13 snj Exp $	*/
+/*	$Id: at91pmc.c,v 1.5 2011/11/04 17:21:46 aymeric Exp $	*/
+/*	$NetBSD: at91pmc.c,v 1.5 2011/11/04 17:21:46 aymeric Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD");
 #include <sys/time.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -69,6 +69,8 @@ at91pmc_get_clocks(struct at91bus_clocks *clocks)
 	} else if (((mclk / 1000) % 1000) <= 10) {
 	  mclk -= (mclk % 1000000U);
 	}
+
+	PMCREG(PMC_PLLICPR) = PMC_PLLICPR_ICPPLLA | PMC_PLLICPR_ICPPLLB;
 
 	reg = PMCREG(PMC_PLLAR); pllaclk = 0;
 	if (reg & PMC_PLL_DIV) {

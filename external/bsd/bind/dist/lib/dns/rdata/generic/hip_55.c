@@ -1,7 +1,7 @@
-/*	$NetBSD: hip_55.c,v 1.1.1.1 2009/10/25 00:02:40 christos Exp $	*/
+/*	$NetBSD: hip_55.c,v 1.2.6.1 2012/06/05 21:15:10 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2009, 2011  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: hip_55.c,v 1.4 2009/09/02 23:43:54 each Exp */
+/* Id: hip_55.c,v 1.8 2011/01/13 04:59:26 tbox Exp  */
 
 /* reviewed: TBC */
 
@@ -124,8 +124,6 @@ static inline isc_result_t
 totext_hip(ARGS_TOTEXT) {
 	isc_region_t region;
 	dns_name_t name;
-	dns_name_t prefix;
-	isc_boolean_t sub;
 	size_t length, key_len, hit_len;
 	unsigned char algorithm;
 	char buf[sizeof("225 ")];
@@ -177,12 +175,10 @@ totext_hip(ARGS_TOTEXT) {
 	 * Rendezvous Servers.
 	 */
 	dns_name_init(&name, NULL);
-	dns_name_init(&prefix, NULL);
 	while (region.length > 0) {
 		dns_name_fromregion(&name, &region);
 
-		sub = name_prefix(&name, tctx->origin, &prefix);
-		RETERR(dns_name_totext(&prefix, sub, target));
+		RETERR(dns_name_totext(&name, ISC_FALSE, target));
 		isc_region_consume(&region, name.length);
 		if (region.length > 0)
 			RETERR(str_totext(tctx->linebreak, target));
@@ -449,6 +445,64 @@ dns_rdata_hip_current(dns_rdata_hip_t *hip, dns_name_t *name) {
 	dns_name_fromregion(name, &region);
 
 	INSIST(name->length + hip->offset <= hip->servers_len);
+}
+
+static inline int
+casecompare_hip(ARGS_COMPARE) {
+	isc_region_t r1;
+	isc_region_t r2;
+	dns_name_t name1;
+	dns_name_t name2;
+	int order;
+	isc_uint8_t hit_len;
+	isc_uint16_t key_len;
+
+	REQUIRE(rdata1->type == rdata2->type);
+	REQUIRE(rdata1->rdclass == rdata2->rdclass);
+	REQUIRE(rdata1->type == 55);
+	REQUIRE(rdata1->length != 0);
+	REQUIRE(rdata2->length != 0);
+
+	dns_rdata_toregion(rdata1, &r1);
+	dns_rdata_toregion(rdata2, &r2);
+
+	INSIST(r1.length > 4);
+	INSIST(r2.length > 4);
+	r1.length = 4;
+	r2.length = 4;
+	order = isc_region_compare(&r1, &r2);
+	if (order != 0)
+		return (order);
+
+	hit_len = uint8_fromregion(&r1);
+	isc_region_consume(&r1, 2);         /* hit length + algorithm */
+	key_len = uint16_fromregion(&r1);
+
+	dns_rdata_toregion(rdata1, &r1);
+	dns_rdata_toregion(rdata2, &r2);
+	isc_region_consume(&r1, 4);
+	isc_region_consume(&r2, 4);
+	INSIST(r1.length >= (unsigned) (hit_len + key_len));
+	INSIST(r2.length >= (unsigned) (hit_len + key_len));
+	order = isc_region_compare(&r1, &r2);
+	if (order != 0)
+		return (order);
+	isc_region_consume(&r1, hit_len + key_len);
+	isc_region_consume(&r2, hit_len + key_len);
+
+	dns_name_init(&name1, NULL);
+	dns_name_init(&name2, NULL);
+	while (r1.length != 0 && r2.length != 0) {
+		dns_name_fromregion(&name1, &r1);
+		dns_name_fromregion(&name2, &r2);
+		order = dns_name_rdatacompare(&name1, &name2);
+		if (order != 0)
+			return (order);
+
+		isc_region_consume(&r1, name_length(&name1));
+		isc_region_consume(&r2, name_length(&name2));
+	}
+	return (isc_region_compare(&r1, &r2));
 }
 
 #endif	/* RDATA_GENERIC_HIP_5_C */

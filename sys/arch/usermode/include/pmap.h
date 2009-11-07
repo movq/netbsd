@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.h,v 1.2 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: pmap.h,v 1.5 2011/08/24 19:59:26 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,10 +30,5 @@
 #define _ARCH_USERMODE_INCLUDE_PMAP_H
 
 #define	PMAP_GROWKERNEL		1
-#define PMAP_MAP_POOLPAGE(x)	(x)
-#define PMAP_UNMAP_POOLPAGE(x)	(x)
-
-typedef struct pmap {
-} *pmap_t;
 
 #endif /* !_ARCH_USERMODE_INCLUDE_PMAP_H */

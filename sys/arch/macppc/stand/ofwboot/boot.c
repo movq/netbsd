@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.23 2009/01/28 15:03:28 tsutsui Exp $	*/
+/*	$NetBSD: boot.c,v 1.26.10.1 2012/02/22 18:45:26 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -96,8 +96,8 @@ char bootdev[MAXBOOTPATHLEN];
 char bootfile[MAXBOOTPATHLEN];
 int boothowto;
 bool floppyboot;
+int ofw_version = 0;
 
-static int ofw_version = 0;
 static const char *kernels[] = { "/netbsd", "/netbsd.gz", "/netbsd.macppc", NULL };
 
 static void
@@ -208,8 +208,7 @@ _rtt(void)
 void
 main(void)
 {
-	extern char bootprog_name[], bootprog_rev[],
-		    bootprog_maker[], bootprog_date[];
+	extern char bootprog_name[], bootprog_rev[];
 	int chosen, options, openprom;
 	char bootline[512];		/* Should check size? */
 	char *cp;
@@ -219,7 +218,6 @@ main(void)
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	/*
 	 * Figure out what version of Open Firmware...
@@ -288,7 +286,7 @@ main(void)
 
 			loadflag = LOAD_KERNEL;
 			if (floppyboot)
-				loadflag &= ~LOAD_NOTE;
+				loadflag &= ~LOAD_BACKWARDS;
 
 			marks[MARK_START] = 0;
 			if (loadfile(kernels[i], marks, loadflag) >= 0)
@@ -332,8 +330,8 @@ loaded:
 	esym = (void *)marks[MARK_END];
 
 	printf(" start=0x%x\n", entry);
-	__syncicache((void *) entry, (u_int) ssym - (u_int) entry);
-	chain((boot_entry_t) entry, bootline, ssym, esym);
+	__syncicache((void *)(uintptr_t)entry, (size_t)ssym - entry);
+	chain((boot_entry_t)(uintptr_t)entry, bootline, ssym, esym);
 
 	OF_exit();
 }

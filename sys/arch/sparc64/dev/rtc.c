@@ -1,4 +1,4 @@
-/*	$NetBSD: rtc.c,v 1.6 2008/12/14 23:13:18 mrg Exp $	*/
+/*	$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.6 2008/12/14 23:13:18 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $");
 
 /*
  * Clock driver for 'rtc' - mc146818 driver.
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.6 2008/12/14 23:13:18 mrg Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/clock_subr.h>
@@ -166,6 +166,7 @@ rtc_ebus_attach(device_t parent, device_t self, void *aux)
 	mc146818_attach(sc);
 
 	aprint_normal(": %s\n", model);
+	aprint_naive(": Clock\n");
 
 	/*
 	 * Turn interrupts off, just in case. (Although they shouldn't

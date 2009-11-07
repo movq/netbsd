@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.121 2009/07/22 19:48:27 kleink Exp $	*/
+/*	$NetBSD: unistd.h,v 1.128 2011/11/05 09:27:06 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -70,6 +70,9 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#if _FORTIFY_SOURCE > 0
+#include <ssp/unistd.h>
+#endif
 
 /*
  * IEEE Std 1003.1-90
@@ -107,7 +110,9 @@ int	 execve(const char *, char * const *, char * const *);
 int	 execvp(const char *, char * const *);
 pid_t	 fork(void);
 long	 fpathconf(int, int);
+#if __SSP_FORTIFY_LEVEL == 0
 char	*getcwd(char *, size_t);
+#endif
 gid_t	 getegid(void);
 uid_t	 geteuid(void);
 gid_t	 getgid(void);
@@ -123,7 +128,9 @@ int	 link(const char *, const char *);
 long	 pathconf(const char *, int);
 int	 pause(void);
 int	 pipe(int *);
+#if __SSP_FORTIFY_LEVEL == 0
 ssize_t	 read(int, void *, size_t);
+#endif
 int	 rmdir(const char *);
 int	 setgid(gid_t);
 int	 setpgid(pid_t, pid_t);
@@ -253,19 +260,21 @@ int	 lchown(const char *, uid_t, gid_t) __RENAME(__posix_lchown);
 int	 lchown(const char *, uid_t, gid_t);
 #endif
 int	 lockf(int, int, off_t);
+#if __SSP_FORTIFY_LEVEL == 0
 ssize_t	 readlink(const char * __restrict, char * __restrict, size_t);
+#endif
 void	*sbrk(intptr_t);
 /* XXX prototype wrong! */
 int	 setpgrp(pid_t, pid_t);			/* obsoleted by setpgid() */
 int	 setregid(gid_t, gid_t);
 int	 setreuid(uid_t, uid_t);
-void	 swab(const void *, void *, size_t);
+void	 swab(const void * __restrict, void * __restrict, ssize_t);
 int	 symlink(const char *, const char *);
 void	 sync(void);
 useconds_t ualarm(useconds_t, useconds_t);
 int	 usleep(useconds_t);
 #ifndef __LIBC12_SOURCE__
-pid_t	 vfork(void) __RENAME(__vfork14);
+pid_t	 vfork(void) __RENAME(__vfork14) __returns_twice;
 #endif
 
 #ifndef __AUDIT__
@@ -282,6 +291,24 @@ ssize_t	 pread(int, void *, size_t, off_t);
 ssize_t	 pwrite(int, const void *, size_t, off_t);
 #endif
 
+/*
+ * X/Open Extended API set 2 (a.k.a. C063)
+ */
+#if defined(_INCOMPLETE_XOPEN_C063)
+int	linkat(int, const char *, int, const char *, int);
+int	renameat(int, const char *, int, const char *);
+int	mkfifoat(int, const char *, mode_t);
+int	mknodat(int, const char *, mode_t, uint32_t);
+int	mkdirat(int, const char *, mode_t);
+int	faccessat(int, const char *, int, int);
+int	fchmodat(int, const char *, mode_t, int);
+int	fchownat(int, const char *, uid_t, gid_t, int);
+int	fexecve(int, char * const *, char * const *);
+int	readlinkat(int, const char *, char *, size_t);
+int	symlinkat(const char *, int, const char *);
+int	unlinkat(int, const char *, int);
+#endif
+
 
 /*
  * Implementation-defined extensions
@@ -291,6 +318,7 @@ int	 acct(const char *);
 int	 closefrom(int);
 int	 des_cipher(const char *, char *, long, int);
 int	 des_setkey(const char *);
+int	 dup3(int, int, int);
 void	 endusershell(void);
 int	 exect(const char *, char * const *, char * const *);
 int	 fchroot(int);
@@ -306,11 +334,12 @@ int	 initgroups(const char *, gid_t);
 int	 iruserok(uint32_t, int, const char *, const char *);
 int      issetugid(void);
 int	 nfssvc(int, void *);
+int	 pipe2(int *, int);
 int	 profil(char *, size_t, u_long, u_int);
 #ifndef __PSIGNAL_DECLARED
 #define __PSIGNAL_DECLARED
 /* also in signal.h */
-void	psignal(unsigned int, const char *);
+void	 psignal(int, const char *);
 #endif /* __PSIGNAL_DECLARED */
 int	 rcmd(char **, int, const char *, const char *, const char *, int *);
 int	 reboot(int, char *);
@@ -355,8 +384,4 @@ extern	 char *suboptarg;	/* getsubopt(3) external variable */
 #endif
 
 __END_DECLS
-
-#if _FORTIFY_SOURCE > 0
-#include <ssp/unistd.h>
-#endif
 #endif /* !_UNISTD_H_ */

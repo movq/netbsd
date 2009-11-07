@@ -1,4 +1,4 @@
-/*	$NetBSD: igsfb.c,v 1.44 2008/04/08 12:07:26 cegger Exp $ */
+/*	$NetBSD: igsfb.c,v 1.52 2012/01/11 20:41:28 macallan Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Valeriy E. Ushakov
@@ -31,7 +31,7 @@
  * Integraphics Systems IGA 168x and CyberPro series.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igsfb.c,v 1.44 2008/04/08 12:07:26 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igsfb.c,v 1.52 2012/01/11 20:41:28 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +53,10 @@ __KERNEL_RCSID(0, "$NetBSD: igsfb.c,v 1.44 2008/04/08 12:07:26 cegger Exp $");
 #include <dev/ic/igsfbvar.h>
 
 
-struct igsfb_devconfig igsfb_console_dc;
+struct igsfb_devconfig igsfb_console_dc = {
+	.dc_mmap = NULL,
+	.dc_modestring = "",
+};
 
 /*
  * wsscreen
@@ -191,16 +194,20 @@ igsfb_attach_subr(struct igsfb_softc *sc, int isconsole)
 	dc->dc_console.scr_flags |= VCONS_SCREEN_IS_STATIC;
 
 	printf("%s: %dMB, %s%dx%d, %dbpp\n",
-	       device_xname(&sc->sc_dev),
+	       device_xname(sc->sc_dev),
 	       (uint32_t)(dc->dc_vmemsz >> 20),
 	       (dc->dc_hwflags & IGSFB_HW_BSWAP)
 		   ? (dc->dc_hwflags & IGSFB_HW_BE_SELECT)
 		       ? "hardware bswap, " : "software bswap, "
 		   : "",
 	       dc->dc_width, dc->dc_height, dc->dc_depth);
-
+	printf("%s: using %dbpp for X\n", device_xname(sc->sc_dev),
+	       dc->dc_maxdepth);
 	ri = &dc->dc_console.scr_ri;
 	ri->ri_ops.eraserows(ri, 0, ri->ri_rows, defattr);
+
+	if (isconsole)
+		vcons_replay_msgbuf(&dc->dc_console);
 
 	/* attach wsdisplay */
 	waa.console = isconsole;
@@ -208,7 +215,7 @@ igsfb_attach_subr(struct igsfb_softc *sc, int isconsole)
 	waa.accessops = &igsfb_accessops;
 	waa.accesscookie = &dc->dc_vd;
 
-	config_found(&sc->sc_dev, &waa, wsemuldisplaydevprint);
+	config_found(sc->sc_dev, &waa, wsemuldisplaydevprint);
 }
 
 
@@ -272,21 +279,12 @@ igsfb_init_video(struct igsfb_devconfig *dc)
 		}
 	}
 
-	/*
-	 * XXX: TODO: make it possible to select the desired video mode.
-	 * For now - hardcode to 1024x768/8bpp.  This is what Krups OFW uses.
-	 */
 	igsfb_hw_setup(dc);
-
-	dc->dc_width = 1024;
-	dc->dc_height = 768;
-	dc->dc_depth = 8;
-	dc->dc_stride = dc->dc_width;
 
 	/*
 	 * Don't map in all N megs, just the amount we need for the wsscreen.
 	 */
-	dc->dc_fbsz = dc->dc_width * dc->dc_height; /* XXX: 8bpp specific */
+	dc->dc_fbsz = dc->dc_stride * dc->dc_height;
 	if (bus_space_map(dc->dc_memt, fbaddr, dc->dc_fbsz,
 			  dc->dc_memflags | BUS_SPACE_MAP_LINEAR,
 			  &dc->dc_fbh) != 0)
@@ -406,11 +404,17 @@ igsfb_init_wsdisplay(void *cookie, struct vcons_screen *scr, int existing,
 	struct rasops_info *ri = &scr->scr_ri;
 	int wsfcookie;
 
-	if ((scr == &dc->dc_console) && (dc->dc_vd.active != NULL))
-		return;
+	if (scr == &dc->dc_console) {
+		if (ri->ri_flg == 0) {
+			/* first time, need to set RI_NO_AUTO */
+			ri->ri_flg |= RI_NO_AUTO;
+		} else {
+			/* clear it on 2nd run */
+			ri->ri_flg &= ~RI_NO_AUTO;
+		}
+	}
+	ri->ri_flg |= RI_CENTER | RI_FULLCLEAR;
 
-
-	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
 	if (IGSFB_HW_SOFT_BSWAP(dc))
 		ri->ri_flg |= RI_BSWAP;
 
@@ -428,14 +432,15 @@ igsfb_init_wsdisplay(void *cookie, struct vcons_screen *scr, int existing,
 	/* prefer gallant that is identical to the one the prom uses */
 	wsfcookie = wsfont_find("Gallant", 12, 22, 0,
 				WSDISPLAY_FONTORDER_L2R,
-				WSDISPLAY_FONTORDER_L2R);
+				WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (wsfcookie <= 0) {
 #ifdef DIAGNOSTIC
 		printf("unable to find font Gallant 12x22\n");
 #endif
 		wsfcookie = wsfont_find(NULL, 0, 0, 0, /* any font at all? */
 					WSDISPLAY_FONTORDER_L2R,
-					WSDISPLAY_FONTORDER_L2R);
+					WSDISPLAY_FONTORDER_L2R,
+					WSFONT_FIND_BITMAP);
 	}
 
 	if (wsfcookie <= 0) {
@@ -451,7 +456,7 @@ igsfb_init_wsdisplay(void *cookie, struct vcons_screen *scr, int existing,
 
 
 	/* XXX: TODO: compute term size based on font dimensions? */
-	rasops_init(ri, 34, 80);
+	rasops_init(ri, 0, 0);
 	rasops_reconfig(ri, ri->ri_height / ri->ri_font->fontheight,
 	    ri->ri_width / ri->ri_font->fontwidth);
 
@@ -569,7 +574,7 @@ igsfb_init_bit_table(struct igsfb_devconfig *dc)
 
 /*
  * wsdisplay_accessops: mmap()
- *   XXX: allow mmapping i/o mapped i/o regs if INSECURE???
+ *   XXX: security considerations for allowing mmapping i/o mapped i/o regs?
  */
 static paddr_t
 igsfb_mmap(void *v, void *vs, off_t offset, int prot)
@@ -577,11 +582,12 @@ igsfb_mmap(void *v, void *vs, off_t offset, int prot)
 	struct vcons_data *vd = v;
 	struct igsfb_devconfig *dc = vd->cookie;
 
-	if (offset >= dc->dc_memsz || offset < 0)
-		return -1;
-
-	return bus_space_mmap(dc->dc_memt, dc->dc_memaddr, offset, prot,
-			      dc->dc_memflags | BUS_SPACE_MAP_LINEAR);
+	if (offset < dc->dc_memsz && offset >= 0)
+		return bus_space_mmap(dc->dc_memt, dc->dc_memaddr, offset,
+		    prot, dc->dc_memflags | BUS_SPACE_MAP_LINEAR);
+	if (dc->dc_mmap)
+		return dc->dc_mmap(v, vs, offset, prot);
+	return -1;
 }
 
 
@@ -611,13 +617,13 @@ igsfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 #define	wsd_fbip ((struct wsdisplay_fbinfo *)data)
 		wsd_fbip->height = dc->dc_height;
 		wsd_fbip->width = dc->dc_width;
-		wsd_fbip->depth = dc->dc_depth;
+		wsd_fbip->depth = dc->dc_maxdepth;
 		wsd_fbip->cmsize = IGS_CMAP_SIZE;
 #undef wsd_fbip
 		return 0;
 
 	case WSDISPLAYIO_LINEBYTES:
-		*(int *)data = dc->dc_stride;
+		*(int *)data = dc->dc_width * (dc->dc_maxdepth >> 3);
 		return 0;
 
 	case WSDISPLAYIO_SMODE:
@@ -630,8 +636,14 @@ igsfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 				igsfb_update_cursor(dc,
 					WSDISPLAY_CURSOR_DOCUR);
 			}
+			if ((dc->dc_mode != NULL) && (dc->dc_maxdepth != 8))
+				igsfb_set_mode(dc, dc->dc_mode,
+				    dc->dc_maxdepth);
 		} else {
 			dc->dc_mapped = 0;
+			if ((dc->dc_mode != NULL) && (dc->dc_maxdepth != 8))
+				igsfb_set_mode(dc, dc->dc_mode, 8);
+			igsfb_init_cmap(dc);
 			/* reinit sprite for text cursor */
 			if (dc->dc_hwflags & IGSFB_HW_TEXT_CURSOR) {
 				igsfb_make_text_cursor(dc, dc->dc_vd.active);
@@ -1168,6 +1180,7 @@ igsfb_accel_wait(struct igsfb_devconfig *dc)
 	int timo = 100000;
 	uint8_t reg;
 
+	bus_space_write_1(t, h, IGS_COP_MAP_FMT_REG, (dc->dc_depth >> 3) - 1);
 	while (timo--) {
 		reg = bus_space_read_1(t, h, IGS_COP_CTL_REG);
 		if ((reg & IGS_COP_CTL_BUSY) == 0)

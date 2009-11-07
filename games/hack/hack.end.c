@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.end.c,v 1.13 2009/08/12 07:28:40 dholland Exp $	*/
+/*	$NetBSD: hack.end.c,v 1.17 2011/08/06 20:42:43 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.end.c,v 1.13 2009/08/12 07:28:40 dholland Exp $");
+__RCSID("$NetBSD: hack.end.c,v 1.17 2011/08/06 20:42:43 dholland Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -206,7 +206,7 @@ done(const char *st1)
 	}
 	if (*st1 == 'c')
 		killer = st1;	/* after outrip() */
-	settty((char *) 0);	/* does a clear_screen() */
+	settty(NULL);		/* does a clear_screen() */
 	if (!done_stopprint)
 		printf("Goodbye %s %s...\n\n", pl_character, plname);
 	{
@@ -300,7 +300,7 @@ done(const char *st1)
 	exit(0);
 }
 
-#define newttentry() (struct toptenentry *) alloc(sizeof(struct toptenentry))
+#define newttentry() ((struct toptenentry *) alloc(sizeof(struct toptenentry)))
 #define	NAMSZ	8
 #define	DTHSZ	40
 #define	PERSMAX	1
@@ -648,7 +648,7 @@ clearlocks(void)
 #ifdef NOSAVEONHANGUP
 /*ARGSUSED*/
 void
-hangup(int n __unused)
+hang_up(int n __unused)
 {
 	(void) signal(SIGINT, SIG_IGN);
 	clearlocks();
@@ -804,7 +804,7 @@ prscore(int argc, char **argv)
 					break;
 				}
 			}
-		free((char *) t1);
+		free(t1);
 	}
 #ifdef nonsense
 	totchars[totcharct] = 0;

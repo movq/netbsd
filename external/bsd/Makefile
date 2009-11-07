@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile,v 1.19 2009/11/02 10:13:19 plunky Exp $
+#	$NetBSD: Makefile,v 1.31 2011/11/05 22:40:26 christos Exp $
 
 .include <bsd.own.mk>
 
-SUBDIR+= am-utils bind dhcpcd fetch file flex libarchive libevent \
-	mdocml pkg_install top byacc
+SUBDIR=	acpica am-utils bind cron dhcpcd fetch file flex less libarchive \
+	libevent liblzf libpcap mdocml openresolv top byacc wpa ntp tcpdump \
+	tmux tre
 
 .if (${MKATF} != "no")
 SUBDIR+= atf
@@ -14,8 +15,11 @@ SUBDIR+= iscsi
 .if (${MKLDAP} != "no")
 SUBDIR+= openldap
 .endif
+.if (${MKLLVM} != "no")
+SUBDIR+= llvm
+.endif
 .if (${MKCRYPTO} != "no")
-SUBDIR+= ../../crypto/external/bsd
+SUBDIR+= pkg_install ../../crypto/external/bsd
 .endif
 .if (${MKPCC} != "no")
 SUBDIR+= pcc

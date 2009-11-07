@@ -1,6 +1,6 @@
-/*	$Vendor-Id: msec.c,v 1.5 2009/10/26 17:05:44 kristaps Exp $ */
+/*	$Vendor-Id: msec.c,v 1.10 2011/12/02 01:37:14 schwarze Exp $ */
 /*
- * Copyright (c) 2009 Kristaps Dzonsons <kristaps@kth.se>
+ * Copyright (c) 2009 Kristaps Dzonsons <kristaps@bsd.lv>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,17 +14,21 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
-#include "libmdoc.h"
+#include "mandoc.h"
+#include "libmandoc.h"
 
 #define LINE(x, y) \
 	if (0 == strcmp(p, x)) return(y);
 
 const char *
-mdoc_a2msec(const char *p)
+mandoc_a2msec(const char *p)
 {
 
 #include "msec.in"

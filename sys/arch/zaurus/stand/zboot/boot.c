@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.1 2009/03/02 09:33:02 nonaka Exp $	*/
+/*	$NetBSD: boot.c,v 1.5 2012/01/18 23:12:21 nonaka Exp $	*/
 
 /*
  * Copyright (c) 2009 NONAKA Kimihiro <nonaka@netbsd.org>
@@ -53,6 +53,7 @@ const char *default_filename;
 int default_timeout = 5;
 
 static char probed_disks[256];
+static char bootconfpath[1024];
 
 static void bootcmd_help(char *);
 static void bootcmd_ls(char *);
@@ -128,7 +129,7 @@ parsebootfile(const char *fname, char **fsname, char **devname,
 			} while (isnum(fname[i]));
 		}
 
-#define isvalidpart(c) ((c) >= 'a' && (c) <= 'a' + MAXPARTITIONS)
+#define isvalidpart(c) ((c) >= 'a' && (c) < 'a' + MAXPARTITIONS)
 		if (i < devlen) {
 			if (!isvalidpart(fname[i]))
 				return (EPART);
@@ -172,12 +173,9 @@ print_banner(void)
 {
 	extern const char bootprog_name[];
 	extern const char bootprog_rev[];
-	extern const char bootprog_date[];
-	extern const char bootprog_maker[];
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 }
 
 void
@@ -199,7 +197,10 @@ boot(dev_t bootdev)
 
 	diskprobe(probed_disks, sizeof(probed_disks));
 
-	parsebootconf(_PATH_BOOTCONF);
+	snprintf(bootconfpath, sizeof(bootconfpath), "%s%d%c:%s",
+	    default_devname, default_unit, 'a' + default_partition,
+	    _PATH_BOOTCONF);
+	parsebootconf(bootconfpath);
 
 #ifdef SUPPORT_CONSDEV
 	/*
@@ -299,8 +300,9 @@ bootcmd_help(char *arg)
 {
 
 	printf("commands are:\n"
-	    "boot [xdNx:][filename] [-acdqsv]\n"
-	    "     (ex. \"hd0a:netbsd.old -s\"\n"
+	    "boot [xdNx:][filename] [-1acdqsv]\n"
+	    "     (ex. \"boot hd0a:netbsd.old -s\")\n"
+	    "     (ex. \"boot path:/mnt/card/netbsd -1\")\n"
 	    "ls [path]\n"
 #ifdef SUPPORT_CONSDEV
 	    "consdev {glass|com [speed]}\n"
@@ -326,7 +328,7 @@ bootcmd_ls(char *arg)
 	const char *save = default_filename;
 
 	default_filename = "/";
-	ufs_ls(arg);
+	ls(arg);
 	default_filename = save;
 }
 

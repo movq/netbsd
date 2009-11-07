@@ -1,41 +1,31 @@
-/*	$NetBSD: if_iwi.c,v 1.82 2009/09/05 14:09:55 tsutsui Exp $  */
+/*	$NetBSD: if_iwi.c,v 1.89.2.1 2012/03/22 22:55:18 riz Exp $  */
+/*	$OpenBSD: if_iwi.c,v 1.111 2010/11/15 19:11:57 damien Exp $	*/
 
 /*-
- * Copyright (c) 2004, 2005
+ * Copyright (c) 2004-2008
  *      Damien Bergamini <damien.bergamini@free.fr>. All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice unmodified, this list of conditions, and the following
- *    disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.82 2009/09/05 14:09:55 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.89.2.1 2012/03/22 22:55:18 riz Exp $");
 
 /*-
  * Intel(R) PRO/Wireless 2200BG/2225BG/2915ABG driver
  * http://www.intel.com/network/connectivity/products/wireless/prowireless_mobile.htm
  */
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -47,6 +37,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.82 2009/09/05 14:09:55 tsutsui Exp $");
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
+#include <sys/proc.h>
+#include <sys/cprng.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -58,9 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.82 2009/09/05 14:09:55 tsutsui Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -75,8 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.82 2009/09/05 14:09:55 tsutsui Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
-
-#include <crypto/arc4/arc4.h>
 
 #include <dev/pci/if_iwireg.h>
 #include <dev/pci/if_iwivar.h>
@@ -215,21 +203,18 @@ iwi_attach(device_t parent, device_t self, void *aux)
 	struct ifnet *ifp = &sc->sc_if;
 	struct pci_attach_args *pa = aux;
 	const char *intrstr;
-	char devinfo[256];
 	bus_space_tag_t memt;
 	bus_space_handle_t memh;
 	pci_intr_handle_t ih;
 	pcireg_t data;
 	uint16_t val;
-	int error, revision, i;
+	int error, i;
 
 	sc->sc_dev = self;
 	sc->sc_pct = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof devinfo);
-	revision = PCI_REVISION(pa->pa_class);
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
+	pci_aprint_devinfo(pa, NULL);
 
 	/* clear unit numbers allocated to IBSS */
 	sc->sc_unr = 0;
@@ -240,6 +225,12 @@ iwi_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
+
+	/* clear device specific PCI configuration register 0x41 */
+	data = pci_conf_read(sc->sc_pct, sc->sc_pcitag, 0x40);
+	data &= ~0x0000ff00;
+	pci_conf_write(sc->sc_pct, sc->sc_pcitag, 0x40, data);
+
 
 	/* enable bus-mastering */
 	data = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
@@ -414,9 +405,8 @@ iwi_attach(device_t parent, device_t self, void *aux)
 		goto fail;
 	}
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
-	    sizeof (struct ieee80211_frame) + 64, &sc->sc_drvbpf);
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof(struct ieee80211_frame) + 64, &sc->sc_drvbpf);
 
 	sc->sc_rxtap_len = sizeof sc->sc_rxtapu;
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
@@ -425,7 +415,6 @@ iwi_attach(device_t parent, device_t self, void *aux)
 	sc->sc_txtap_len = sizeof sc->sc_txtapu;
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(IWI_TX_RADIOTAP_PRESENT);
-#endif
 
 	iwi_sysctlattach(sc);	
 
@@ -1216,7 +1205,6 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data, int i,
 	if (ic->ic_state == IEEE80211_S_SCAN)
 		iwi_fix_channel(ic, m);
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct iwi_rx_radiotap_header *tap = &sc->sc_rxtap;
 
@@ -1231,7 +1219,6 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data, int i,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m);
 	}
-#endif
 	wh = mtod(m, struct ieee80211_frame *);
 	ni = ieee80211_find_rxnode(ic, (struct ieee80211_frame_min *)wh);
 
@@ -1594,7 +1581,6 @@ iwi_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni,
 		wh = mtod(m0, struct ieee80211_frame *);
 	}
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct iwi_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -1604,7 +1590,6 @@ iwi_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
 	}
-#endif
 
 	data = &txq->data[txq->cur];
 	desc = &txq->desc[txq->cur];
@@ -1763,10 +1748,7 @@ iwi_start(struct ifnet *ifp)
 			break;
 		}
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf != NULL)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		m0 = ieee80211_encap(ic, m0, ni);
 		if (m0 == NULL) {
@@ -1775,10 +1757,7 @@ iwi_start(struct ifnet *ifp)
 			continue;
 		}
 
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf != NULL)
-			bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m0);
 
 		if (iwi_tx_start(ifp, m0, ni, ac) != 0) {
 			ieee80211_free_node(ni);
@@ -2175,7 +2154,7 @@ iwi_cache_firmware(struct iwi_softc *sc)
 {
 	struct iwi_firmware *kfw = &sc->fw;
 	firmware_handle_t fwh;
-	const struct iwi_firmware_hdr *hdr;
+	struct iwi_firmware_hdr *hdr;
 	off_t size;	
 	char *fw;
 	int error;
@@ -2213,8 +2192,12 @@ iwi_cache_firmware(struct iwi_softc *sc)
 	if (error != 0)
 		goto fail2;
 
+	hdr = (struct iwi_firmware_hdr *)sc->sc_blob;
+	hdr->version = le32toh(hdr->version);
+	hdr->bsize = le32toh(hdr->bsize);
+	hdr->usize = le32toh(hdr->usize);
+	hdr->fsize = le32toh(hdr->fsize);
 
-	hdr = (const struct iwi_firmware_hdr *)sc->sc_blob;
 	if (size < sizeof(struct iwi_firmware_hdr) + hdr->bsize + hdr->usize + hdr->fsize) {
 		aprint_error_dev(sc->sc_dev, "image '%s' too small\n",
 		    sc->sc_fwname);
@@ -2222,14 +2205,13 @@ iwi_cache_firmware(struct iwi_softc *sc)
 		goto fail2;
 	}
 
-	hdr = (const struct iwi_firmware_hdr *)sc->sc_blob;
-	DPRINTF(("firmware version = %d\n", le32toh(hdr->version)));
-	if ((IWI_FW_GET_MAJOR(le32toh(hdr->version)) != IWI_FW_REQ_MAJOR) ||
-	    (IWI_FW_GET_MINOR(le32toh(hdr->version)) != IWI_FW_REQ_MINOR)) {
+	DPRINTF(("firmware version = %d\n", hdr->version));
+	if ((IWI_FW_GET_MAJOR(hdr->version) != IWI_FW_REQ_MAJOR) ||
+	    (IWI_FW_GET_MINOR(hdr->version) != IWI_FW_REQ_MINOR)) {
 		aprint_error_dev(sc->sc_dev,
 		    "version for '%s' %d.%d != %d.%d\n", sc->sc_fwname,
-		    IWI_FW_GET_MAJOR(le32toh(hdr->version)),
-		    IWI_FW_GET_MINOR(le32toh(hdr->version)),
+		    IWI_FW_GET_MAJOR(hdr->version),
+		    IWI_FW_GET_MINOR(hdr->version),
 		    IWI_FW_REQ_MAJOR, IWI_FW_REQ_MINOR);
 		error = EIO;
 		goto fail2;
@@ -2405,7 +2387,8 @@ iwi_config(struct iwi_softc *sc)
 			return error;
 	}
 
-	data = htole32(arc4random());
+	cprng_fast(&data, sizeof(data));
+	data = htole32(data);
 	DPRINTF(("Setting initialization vector to %u\n", le32toh(data)));
 	error = iwi_cmd(sc, IWI_CMD_SET_IV, &data, sizeof data, 0);
 	if (error != 0)

@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_anon.h,v 1.26 2009/06/14 21:36:03 yamt Exp $	*/
+/*	$NetBSD: uvm_anon.h,v 1.30 2011/08/06 17:25:03 rmind Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -52,14 +45,21 @@
  */
 
 struct vm_anon {
-	kmutex_t an_lock;	/* lock for an_ref */
-	struct vm_page *an_page;/* if in RAM [an_lock] */
-	int an_ref;		/* reference count [an_lock] */
+	kmutex_t		*an_lock;	/* Lock for an_ref */
+	union {
+		uintptr_t	au_ref;		/* Reference count [an_lock] */
+		struct vm_anon	*au_link;	/* Link for deferred free */
+	} an_u;
+#define	an_ref	an_u.au_ref
+#define	an_link	an_u.au_link
+	struct vm_page		*an_page;	/* If in RAM [an_lock] */
 #if defined(VMSWAP) || 1 /* XXX libkvm */
-	int an_swslot;		/* drum swap slot # (if != 0)
-				   [an_lock.  also, it is ok to read
-				   an_swslot if we hold an_page PG_BUSY] */
-#endif /* defined(VMSWAP) */
+	/*
+	 * Drum swap slot # (if != 0) [an_lock.  also, it is ok to read
+	 * an_swslot if we hold an_page PG_BUSY].
+	 */
+	int			an_swslot;
+#endif
 };
 
 /*
@@ -100,7 +100,8 @@ struct vm_aref {
  */
 
 struct vm_anon *uvm_analloc(void);
-void uvm_anfree(struct vm_anon *);
+void uvm_anon_free(struct vm_anon *);
+void uvm_anon_freelst(struct vm_amap *, struct vm_anon *);
 void uvm_anon_init(void);
 struct vm_page *uvm_anon_lockloanpg(struct vm_anon *);
 #if defined(VMSWAP)
@@ -109,7 +110,7 @@ void uvm_anon_dropswap(struct vm_anon *);
 #define	uvm_anon_dropswap(a)	/* nothing */
 #endif /* defined(VMSWAP) */
 void uvm_anon_release(struct vm_anon *);
-bool uvm_anon_pagein(struct vm_anon *);
+bool uvm_anon_pagein(struct vm_amap *, struct vm_anon *);
 #endif /* _KERNEL */
 
 #endif /* _UVM_UVM_ANON_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: canfield.c,v 1.26 2009/08/12 05:35:44 dholland Exp $	*/
+/*	$NetBSD: canfield.c,v 1.28 2011/05/23 22:46:35 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)canfield.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: canfield.c,v 1.26 2009/08/12 05:35:44 dholland Exp $");
+__RCSID("$NetBSD: canfield.c,v 1.28 2011/05/23 22:46:35 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,6 +66,7 @@ __RCSID("$NetBSD: canfield.c,v 1.26 2009/08/12 05:35:44 dholland Exp $");
 #include <time.h>
 #include <unistd.h>
 
+#include "betinfo.h"
 #include "pathnames.h"
 
 #define	decksize	52
@@ -183,16 +184,6 @@ static int uid;
 /*
  * Variables associated with betting 
  */
-struct betinfo {
-	long	hand;		/* cost of dealing hand */
-	long	inspection;	/* cost of inspecting hand */
-	long	game;		/* cost of buying game */
-	long	runs;		/* cost of running through hands */
-	long	information;	/* cost of information */
-	long	thinktime;	/* cost of thinking time */
-	long	wins;		/* total winnings */
-	long	worth;		/* net worth after costs */
-};
 static struct betinfo this, game, total;
 static bool startedgame = FALSE, infullgame = FALSE;
 static time_t acctstart;
@@ -1622,7 +1613,7 @@ instruct(void)
 		return;
 	clear();
 	for (cp = basicinstructions; *cp != 0; cp++)
-		printw(*cp);
+		printw("%s", *cp);
 	refresh();
 	getch();
 	clear();
@@ -1635,7 +1626,7 @@ instruct(void)
 		return;
 	clear();
 	for (cp = bettinginstructions; *cp != 0; cp++)
-		printw(*cp);
+		printw("%s", *cp);
 	refresh();
 	getch();
 }

@@ -1,15 +1,15 @@
-/*	$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $	*/
+/*	$NetBSD: util.c,v 1.51 2011/04/02 07:58:30 mbalmer Exp $	*/
 
 /*
  * Missing stuff from OS's
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $";
+static char rcsid[] = "$NetBSD: util.c,v 1.51 2011/04/02 07:58:30 mbalmer Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $");
+__RCSID("$NetBSD: util.c,v 1.51 2011/04/02 07:58:30 mbalmer Exp $");
 #endif
 #endif
 
@@ -18,6 +18,7 @@ __RCSID("$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
+#include <signal.h>
 
 #include "make.h"
 
@@ -48,7 +49,7 @@ findenv(const char *name, int *offset)
 	char *p, *q;
 
 	for (i = 0; (q = environ[i]); i++) {
-		char *p = strchr(q, '=');
+		p = strchr(q, '=');
 		if (p == NULL)
 			continue;
 		if (strncmp(name, q, len = p - q) == 0) {
@@ -231,24 +232,6 @@ random(void)
 }
 #endif
 
-/* turn into bsd signals */
-void (*
-signal(int s, void (*a)(int)))(int)
-{
-    struct sigvec osv, sv;
-
-    (void)sigvector(s, NULL, &osv);
-    sv = osv;
-    sv.sv_handler = a;
-#ifdef SV_BSDSIG
-    sv.sv_flags = SV_BSDSIG;
-#endif
-
-    if (sigvector(s, &sv, NULL) == -1)
-        return (BADSIG);
-    return (osv.sv_handler);
-}
-
 #if !defined(__hpux__) && !defined(__hpux)
 int
 utimes(char *file, struct timeval tvp[2])
@@ -370,12 +353,9 @@ getwd(char *pathname)
 } /* end getwd */
 #endif /* __hpux */
 
-#if defined(sun) && defined(__svr4__)
-#include <signal.h>
-
-/* turn into bsd signals */
+/* force posix signals */
 void (*
-signal(int s, void (*a)(int)))(int)
+bmake_signal(int s, void (*a)(int)))(int)
 {
     struct sigaction sa, osa;
 
@@ -388,7 +368,6 @@ signal(int s, void (*a)(int)))(int)
     else
 	return osa.sa_handler;
 }
-#endif
 
 #if !defined(MAKE_NATIVE) && !defined(HAVE_VSNPRINTF)
 #include <stdarg.h>

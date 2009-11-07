@@ -1,4 +1,4 @@
-/*	$NetBSD: hifn7751.c,v 1.42 2009/04/28 22:43:50 dyoung Exp $	*/
+/*	$NetBSD: hifn7751.c,v 1.50 2012/02/02 19:43:04 tls Exp $	*/
 /*	$FreeBSD: hifn7751.c,v 1.5.2.7 2003/10/08 23:52:00 sam Exp $ */
 /*	$OpenBSD: hifn7751.c,v 1.140 2003/08/01 17:55:54 deraadt Exp $	*/
 
@@ -48,14 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hifn7751.c,v 1.42 2009/04/28 22:43:50 dyoung Exp $");
-
-#include "rnd.h"
-
-#if NRND == 0
-#error hifn7751 requires rnd pseudo-devices
-#endif
-
+__KERNEL_RCSID(0, "$NetBSD: hifn7751.c,v 1.50 2012/02/02 19:43:04 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,15 +59,14 @@ __KERNEL_RCSID(0, "$NetBSD: hifn7751.c,v 1.42 2009/04/28 22:43:50 dyoung Exp $")
 #include <sys/mbuf.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-
 #ifdef __OpenBSD__
 #include <crypto/crypto.h>
 #include <dev/rndvar.h>
 #else
 #include <opencrypto/cryptodev.h>
+#include <sys/cprng.h>
 #include <sys/rnd.h>
+#include <sys/sha1.h>
 #endif
 
 #include <dev/pci/pcireg.h>
@@ -262,9 +254,7 @@ hifn_attach(device_t parent, device_t self, void *aux)
 		panic("hifn_attach: impossible");
 	}
 
-	aprint_naive(": Crypto processor\n");
-	aprint_normal(": %s, rev. %d\n", hp->hifn_name,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo_fancy(pa, "Crypto processor", hp->hifn_name, 1);
 
 	sc->sc_pci_pc = pa->pa_pc;
 	sc->sc_pci_tag = pa->pa_tag;
@@ -371,8 +361,8 @@ hifn_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(&sc->sc_dv, "couldn't establish interrupt\n");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		goto fail_mem;
 	}
 
@@ -384,9 +374,9 @@ hifn_attach(device_t parent, device_t self, void *aux)
 		rbase = 'M';
 		rseg /= 1024;
 	}
-	aprint_normal_dev(&sc->sc_dv, "%s, %d%cB %cram, interrupting at %s\n",
+	aprint_normal_dev(&sc->sc_dv, "%s, %d%cB %cRAM, interrupting at %s\n",
 	    hifncap, rseg, rbase,
-	    sc->sc_drammodel ? 'd' : 's', intrstr);
+	    sc->sc_drammodel ? 'D' : 'S', intrstr);
 
 	sc->sc_cid = crypto_get_driverid(0);
 	if (sc->sc_cid < 0) {
@@ -554,11 +544,11 @@ hifn_rng(void *vsc)
 {
 	struct hifn_softc *sc = vsc;
 #ifdef __NetBSD__
-	u_int32_t num[HIFN_RNG_BITSPER * RND_ENTROPY_THRESHOLD];
+	uint32_t num[64];
 #else
-	u_int32_t num[2];
+	uint32_t num[2];
 #endif
-	u_int32_t sts;
+	uint32_t sts;
 	int i;
 
 	if (sc->sc_flags & HIFN_IS_7811) {
@@ -2080,7 +2070,7 @@ hifn_newsession(void *arg, u_int32_t *sidp, struct cryptoini *cri)
 			   to generate IVs has been FIPS140-2
 			   certified by several labs. */
 #ifdef __NetBSD__
-			arc4randbytes(sc->sc_sessions[i].hs_iv,
+			cprng_fast(sc->sc_sessions[i].hs_iv,
 			    c->cri_alg == CRYPTO_AES_CBC ?
 				HIFN_AES_IV_LENGTH : HIFN_IV_LENGTH);
 #else	/* FreeBSD and OpenBSD have get_random_bytes */
@@ -2395,7 +2385,7 @@ hifn_process(void *arg, struct cryptop *crp, int hint)
 		 */
 #ifdef HIFN_DEBUG
 		if (hifn_debug)
-			printf(device_xname(&sc->sc_dv), "requeue request\n");
+			printf("%s: requeue request\n", device_xname(&sc->sc_dv));
 #endif
 		free(cmd, M_DEVBUF);
 		sc->sc_needwakeup |= CRYPTO_SYMQ;

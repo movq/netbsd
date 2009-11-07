@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: config.h.in,v 1.106.40.6 2009/03/13 05:35:43 marka Exp */
+/* Id */
 
 /*! \file */
 
@@ -119,7 +119,7 @@ int sigwait(const unsigned int *set, int *sig);
  * The silly continuation line is to keep configure from
  * commenting out the #undef.
  */
- 
+
 #undef \
 	va_start
 #define	va_start(ap, last) \
@@ -154,6 +154,15 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define if threads need PTHREAD_SCOPE_SYSTEM */
 /* #undef NEED_PTHREAD_SCOPE_SYSTEM */
 
+/* Define if building universal (internal helper macro) */
+/* #undef AC_APPLE_UNIVERSAL_BUILD */
+
+/* Define to enable the "filter-aaaa-on-v4" option. */
+/* #undef ALLOW_FILTER_AAAA_ON_V4 */
+
+/* define if ATF unit tests are to be built. */
+/* #undef ATF_TEST */
+
 /* Define if recvmsg() does not meet all of the BSD socket API specifications.
    */
 /* #undef BROKEN_RECVMSG */
@@ -164,14 +173,47 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to enable "rrset-order fixed" syntax. */
 #define DNS_RDATASET_FIXED 1
 
+/* Define to enable rpz-nsdname rules. */
+#define ENABLE_RPZ_NSDNAME 1
+
+/* Define to enable rpz-nsip rules. */
+#define ENABLE_RPZ_NSIP 1
+
 /* Solaris hack to get select_large_fdset. */
 /* #undef FD_SETSIZE */
+
+/* Define to nothing if C supports flexible array members, and to 1 if it does
+   not. That way, with a declaration like `struct s { int n; double
+   d[FLEXIBLE_ARRAY_MEMBER]; };', the struct hack can be used with pre-C99
+   compilers. When computing the size of such an object, don't use 'sizeof
+   (struct s)' as it overestimates the size. Use 'offsetof (struct s, d)'
+   instead. Don't use 'offsetof (struct s, d[0])', as this doesn't work with
+   MSVC and with C++ compilers. */
+#define FLEXIBLE_ARRAY_MEMBER /**/
 
 /* Define to 1 if you have the `chroot' function. */
 #define HAVE_CHROOT 1
 
+/* Define to 1 if you have the <devpoll.h> header file. */
+/* #undef HAVE_DEVPOLL_H */
+
+/* Define to 1 if you have the `dlclose' function. */
+#define HAVE_DLCLOSE 1
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
+
+/* Define to 1 if you have the `dlopen' function. */
+#define HAVE_DLOPEN 1
+
+/* Define to 1 if you have the `dlsym' function. */
+#define HAVE_DLSYM 1
+
+/* Define to 1 if you have the `EVP_sha256' function. */
+#define HAVE_EVP_SHA256 1
+
+/* Define to 1 if you have the `EVP_sha512' function. */
+#define HAVE_EVP_SHA512 1
 
 /* Define to 1 if you have the <fcntl.h> header file. */
 #define HAVE_FCNTL_H 1
@@ -179,17 +221,35 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <gssapi/gssapi.h> header file. */
 #define HAVE_GSSAPI_GSSAPI_H 1
 
+/* Define to 1 if you have the <gssapi/gssapi_krb5.h> header file. */
+#define HAVE_GSSAPI_GSSAPI_KRB5_H 1
+
 /* Define to 1 if you have the <gssapi.h> header file. */
 #define HAVE_GSSAPI_H 1
 
+/* Define to 1 if you have the <gssapi_krb5.h> header file. */
+/* #undef HAVE_GSSAPI_KRB5_H */
+
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
+
+/* Define to 1 if you have the <kerberosv5/krb5.h> header file. */
+/* #undef HAVE_KERBEROSV5_KRB5_H */
+
+/* Define to 1 if you have the <krb5.h> header file. */
+#define HAVE_KRB5_H 1
+
+/* Define to 1 if you have the <krb5/krb5.h> header file. */
+#define HAVE_KRB5_KRB5_H 1
 
 /* Define to 1 if you have the `c' library (-lc). */
 /* #undef HAVE_LIBC */
 
 /* Define to 1 if you have the `cap' library (-lcap). */
 /* #undef HAVE_LIBCAP */
+
+/* if system have backtrace function */
+/* #undef HAVE_LIBCTRACE */
 
 /* Define to 1 if you have the `c_r' library (-lc_r). */
 /* #undef HAVE_LIBC_R */
@@ -198,7 +258,7 @@ int sigwait(const unsigned int *set, int *sig);
 /* #undef HAVE_LIBNSL */
 
 /* Define to 1 if you have the `pthread' library (-lpthread). */
-/* #undef HAVE_LIBPTHREAD */
+#define HAVE_LIBPTHREAD 1
 
 /* Define to 1 if you have the `scf' library (-lscf). */
 /* #undef HAVE_LIBSCF */
@@ -221,17 +281,17 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
 
-/* Define to 1 if you have the <dlfcn.h> header file. */
-#define HAVE_DLFCN_H 1
-
-/* Define to 1 if you have the <fcntl.h> header file. */
-#define HAVE_FCNTL_H 1
-
 /* Define to 1 if you have the `nanosleep' function. */
 #define HAVE_NANOSLEEP 1
 
 /* Define to 1 if you have the <net/if6.h> header file. */
 /* #undef HAVE_NET_IF6_H */
+
+/* Define if your OpenSSL version supports GOST. */
+/* #undef HAVE_OPENSSL_GOST */
+
+/* Define to 1 if you have the `readline' function. */
+#define HAVE_READLINE 1
 
 /* Define to 1 if you have the <regex.h> header file. */
 #define HAVE_REGEX_H 1
@@ -305,8 +365,11 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
 
-/* Defined if extern char *optarg is not declared. */
-/* #undef NEED_OPTARG */
+/* Define to 1 if you have the `usleep' function. */
+#define HAVE_USLEEP 1
+
+/* return type of gai_strerror */
+#define IRS_GAISTRERROR_RETURN_T const char *
 
 /* Define to the buffer length type used by getnameinfo(3). */
 #define IRS_GETNAMEINFO_BUFLEN_T socklen_t
@@ -314,8 +377,11 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to the flags type used by getnameinfo(3). */
 #define IRS_GETNAMEINFO_FLAGS_T int
 
-/* Define to the return type of gai_strerror(3). */
-#define IRS_GAISTRERROR_RETURN_T const char *
+/* Define to allow building of objects for dlopen(). */
+#define ISC_DLZ_DLOPEN 1
+
+/* Defined if extern char *optarg is not declared. */
+/* #undef NEED_OPTARG */
 
 /* Define if connect does not honour the permission on the UNIX domain socket.
    */
@@ -333,12 +399,18 @@ int sigwait(const unsigned int *set, int *sig);
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME ""
 
+/* Define to the home page for this package. */
+#define PACKAGE_URL ""
+
 /* Define to the version of this package. */
 #define PACKAGE_VERSION ""
 
 /* Sets which flag to pass to open/fcntl to make non-blocking
    (O_NDELAY/O_NONBLOCK). */
 #define PORT_NONBLOCK O_NONBLOCK
+
+/* The size of `void *', as computed by sizeof. */
+#define SIZEOF_VOID_P 8
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -350,27 +422,30 @@ int sigwait(const unsigned int *set, int *sig);
    non-blocking. */
 /* #undef USE_FIONBIO_IOCTL */
 
-/** define if the system have backtrace function. */
-/* #undef HAVE_LIBCTRACE */
-
 /* define if idnkit support is to be included. */
 /* #undef WITH_IDN */
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
-   significant byte first (like Motorola and SPARC, unlike Intel and VAX). */
+   significant byte first (like Motorola and SPARC, unlike Intel). */
 #include <sys/endian.h>
 #if _BYTE_ORDER == _BIG_ENDIAN
 #define WORDS_BIGENDIAN
+#endif
+#if defined AC_APPLE_UNIVERSAL_BUILD
+# if defined __BIG_ENDIAN__
+#  define WORDS_BIGENDIAN 1
+# endif
+#else
+# ifndef WORDS_BIGENDIAN
+/* #  undef WORDS_BIGENDIAN */
+# endif
 #endif
 
 /* Define to empty if `const' does not conform to ANSI C. */
 /* #undef const */
 
-/* Define to `__inline__' or `__inline' if that's what the C compiler
-   calls it, or to nothing if 'inline' is not supported under any name.  */
-#ifndef __cplusplus
+/* Define to empty if your compiler does not support "static inline". */
 /* #undef inline */
-#endif
 
 /* Define to `unsigned int' if <sys/types.h> does not define. */
 /* #undef size_t */

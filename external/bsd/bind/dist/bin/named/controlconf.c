@@ -1,7 +1,7 @@
-/*	$NetBSD: controlconf.c,v 1.1.1.1 2009/03/22 14:55:56 christos Exp $	*/
+/*	$NetBSD: controlconf.c,v 1.3.4.1 2012/06/05 21:15:22 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2008, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2001-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: controlconf.c,v 1.60 2008/07/23 23:27:54 marka Exp */
+/* Id: controlconf.c,v 1.63 2011/12/22 08:07:48 marka Exp  */
 
 /*! \file */
 
@@ -375,17 +375,8 @@ control_recvmessage(isc_task_t *task, isc_event_t *event) {
 		if (result == ISC_R_SUCCESS)
 			break;
 		isc_mem_put(listener->mctx, secret.rstart, REGION_SIZE(secret));
-		if (result == ISCCC_R_BADAUTH) {
-			/*
-			 * For some reason, request is non-NULL when
-			 * isccc_cc_fromwire returns ISCCC_R_BADAUTH.
-			 */
-			if (request != NULL)
-				isccc_sexpr_free(&request);
-		} else {
-			log_invalid(&conn->ccmsg, result);
-			goto cleanup;
-		}
+		log_invalid(&conn->ccmsg, result);
+		goto cleanup;
 	}
 
 	if (key == NULL) {
@@ -804,7 +795,7 @@ register_keys(const cfg_obj_t *control, const cfg_obj_t *keylist,
 		 result = (x); \
 		 if (result != ISC_R_SUCCESS) \
 			goto cleanup; \
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 static isc_result_t
 get_rndckey(isc_mem_t *mctx, controlkeylist_t *keyids) {
@@ -861,7 +852,7 @@ get_rndckey(isc_mem_t *mctx, controlkeylist_t *keyids) {
 		cfg_obj_log(key, ns_g_lctx, ISC_LOG_WARNING,
 			    "secret for key '%s' on command channel: %s",
 			    keyid->keyname, isc_result_totext(result));
-		CHECK(result);
+		goto cleanup;
 	}
 
 	keyid->secret.length = isc_buffer_usedlength(&b);
@@ -1149,6 +1140,11 @@ add_listener(ns_controls_t *cp, controllistener_t **listenerp,
 					   type, &listener->sock);
 	if (result == ISC_R_SUCCESS)
 		isc_socket_setname(listener->sock, "control", NULL);
+
+#ifndef ISC_ALLOW_MAPPED
+	if (result == ISC_R_SUCCESS)
+		isc_socket_ipv6only(listener->sock, ISC_TRUE);
+#endif
 
 	if (result == ISC_R_SUCCESS)
 		result = isc_socket_bind(listener->sock, &listener->address,

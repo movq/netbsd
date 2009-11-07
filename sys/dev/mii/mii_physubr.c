@@ -1,4 +1,4 @@
-/*	$NetBSD: mii_physubr.c,v 1.65 2009/11/06 18:41:25 dyoung Exp $	*/
+/*	$NetBSD: mii_physubr.c,v 1.73 2011/12/10 02:46:07 buhrow Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.65 2009/11/06 18:41:25 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.73 2011/12/10 02:46:07 buhrow Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.65 2009/11/06 18:41:25 dyoung Exp 
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
+#include <sys/module.h>
 #include <sys/proc.h>
 
 #include <net/if.h>
@@ -51,6 +52,28 @@ __KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.65 2009/11/06 18:41:25 dyoung Exp 
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
+
+const char *(*mii_get_descr)(int, int) = mii_get_descr_stub;
+
+int mii_verbose_loaded = 0;
+
+const char *mii_get_descr_stub(int oui, int model)
+{
+	mii_load_verbose();
+	if (mii_verbose_loaded)
+		return mii_get_descr(oui, model);
+	else
+		return NULL;
+}
+
+/*    
+ * Routine to load the miiverbose kernel module as needed
+ */
+void mii_load_verbose(void)
+{
+	if (mii_verbose_loaded == 0)
+		module_autoload("miiverbose", MODULE_CLASS_MISC);
+}  
 
 static void mii_phy_statusmsg(struct mii_softc *);
 
@@ -163,15 +186,21 @@ mii_phy_setmedia(struct mii_softc *sc)
 		bmcr |= BMCR_LOOP;
 
 	PHY_WRITE(sc, MII_ANAR, anar);
-	PHY_WRITE(sc, MII_BMCR, bmcr);
 	if (sc->mii_flags & MIIF_HAVE_GTCR)
 		PHY_WRITE(sc, MII_100T2CR, gtcr);
+	if (IFM_SUBTYPE(ife->ifm_media) == IFM_1000_T) {
+		mii_phy_auto(sc, 0);
+	} else {
+		PHY_WRITE(sc, MII_BMCR, bmcr);
+	}
 }
 
 int
 mii_phy_auto(struct mii_softc *sc, int waitfor)
 {
 	int i;
+	struct mii_data *mii = sc->mii_pdata;
+	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 
 	if ((sc->mii_flags & MIIF_DOINGAUTO) == 0) {
 		/*
@@ -205,6 +234,16 @@ mii_phy_auto(struct mii_softc *sc, int waitfor)
 				     (EXTSR_1000THDX|EXTSR_1000TFDX)))
 					anar |= ANAR_X_PAUSE_ASYM;
 			}
+
+			/*
+			 *for 1000-base-T, autonegotiation mus be enabled, but 
+			 *if we're not set to auto, only advertise
+			 *1000-base-T with the link partner.
+			 */
+			if (IFM_SUBTYPE(ife->ifm_media) == IFM_1000_T) {
+				anar &= ~(ANAR_T4|ANAR_TX_FD|ANAR_TX|ANAR_10_FD|ANAR_10);
+			}
+				
 			PHY_WRITE(sc, MII_ANAR, anar);
 			if (sc->mii_flags & MIIF_HAVE_GTCR) {
 				uint16_t gtcr = 0;
@@ -287,7 +326,8 @@ mii_phy_tick(struct mii_softc *sc)
 	 * status so we can generate an announcement if the status
 	 * changes.
 	 */
-	if (IFM_SUBTYPE(ife->ifm_media) != IFM_AUTO)
+	if ((IFM_SUBTYPE(ife->ifm_media) != IFM_AUTO) &&
+	(IFM_SUBTYPE(ife->ifm_media) != IFM_1000_T))
 		return (0);
 
 	/* Read the status register twice; BMSR_LINK is latch-low. */
@@ -554,7 +594,7 @@ mii_phy_detach(device_t self, int flags)
 	/* XXX Invalidate parent's media setting? */
 
 	if (sc->mii_flags & MIIF_DOINGAUTO)
-		callout_stop(&sc->mii_nway_ch);
+		callout_halt(&sc->mii_nway_ch, NULL);
 
 	callout_destroy(&sc->mii_nway_ch);
 
@@ -623,7 +663,7 @@ mii_phy_flowstatus(struct mii_softc *sc)
 }
 
 bool
-mii_phy_resume(device_t dv PMF_FN_ARGS)
+mii_phy_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct mii_softc *sc = device_private(dv);
 

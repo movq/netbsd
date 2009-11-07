@@ -1,7 +1,7 @@
-#	$NetBSD: list.ramdisk,v 1.13 2009/09/20 23:19:53 abs Exp $
+#	$NetBSD: list.ramdisk,v 1.21 2011/07/03 23:11:33 tron Exp $
 
-SRCDIRS	usr.bin/less
-SRCDIRS	bin sbin usr.bin usr.sbin
+SRCDIRS	external/bsd/less/bin
+SRCDIRS	bin sbin usr.bin usr.sbin libexec
 
 # Programs for a minimal ramdisk image
 
@@ -18,6 +18,7 @@ PROG	bin/rm
 PROG	bin/sh
 PROG	bin/stty
 
+PROG	sbin/chown	bin/chgrp
 PROG	sbin/disklabel
 PROG	sbin/dmesg
 PROG	sbin/fsck
@@ -50,7 +51,6 @@ PROG	usr/bin/sed
 # sysinst doesn't use installboot
 # PROG	usr/sbin/installboot
 
-PROG	usr/sbin/chown	usr/bin/chgrp
 PROG	usr/sbin/chroot
 
 SPECIAL	ifconfig	srcdir	distrib/utils/x_ifconfig
@@ -62,26 +62,23 @@ SPECIAL	route		srcdir	distrib/utils/x_route
 ARGVLN	sh -sh
 
 # libhack.o is built by Makefile & included Makefile.inc
-LIBS	libhack.o -lbz2 -ledit -lutil -lcurses -ltermcap -lrmt -lcrypt -ll -lm -lz -lprop
+LIBS	libhack.o -lbz2 -ledit -lutil -lcurses -lterminfo -lrmt -lcrypt -ll -lm -lz -llzma -lprop
 
 # various files that we need in /etc for the install
 COPY	${NETBSDSRCDIR}/etc/group		etc/group
 COPY	${NETBSDSRCDIR}/etc/master.passwd	etc/master.passwd
 COPY	${NETBSDSRCDIR}/etc/netconfig		etc/netconfig
-COPY	${DISTRIBDIR}/common/protocols	etc/protocols
+COPY	${DISTRIBDIR}/common/protocols		etc/protocols
 COPY	${DISTRIBDIR}/common/services		etc/services
 
 # we need the boot block in /usr/mdec + the MBR copy
 COPY	${DESTDIR}/usr/mdec/boot		usr/mdec/boot
 COPY	${DESTDIR}/usr/mdec/bootxx_ffsv1	usr/mdec/bootxx_ffsv1
 COPY	${DESTDIR}/usr/mdec/bootxx_ffsv2	usr/mdec/bootxx_ffsv2
+COPY	${DESTDIR}/usr/mdec/bootxx_lfsv2	usr/mdec/bootxx_lfsv2
 COPY	${DESTDIR}/usr/mdec/mbr			usr/mdec/mbr
 COPY	${DESTDIR}/usr/mdec/mbr_ext		usr/mdec/mbr_ext
 COPY	${DESTDIR}/usr/mdec/mbr_bootsel		usr/mdec/mbr_bootsel
 
-# and the common installation tools
-COPY	${DISTRIBDIR}/common/termcap		usr/share/misc/termcap
-
 # and the boot script
-CMD	sed -e "s/@BOOTMODEL@/${BOOTMODEL}/" < ${CURDIR}/../common/dot.profile > .profile
-MTREE	./.profile	type=file uname=root gname=wheel mode=0444
+COPY	${CURDIR}/../common/dot.profile		.profile

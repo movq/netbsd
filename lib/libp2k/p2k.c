@@ -1,4 +1,4 @@
-/*	$NetBSD: p2k.c,v 1.27 2009/10/19 17:34:07 pooka Exp $	*/
+/*	$NetBSD: p2k.c,v 1.55.4.1 2012/08/12 13:02:59 martin Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008, 2009  Antti Kantee.  All Rights Reserved.
@@ -62,6 +62,11 @@
 #include <rump/p2k.h>
 #include <rump/ukfs.h>
 
+/* NetBSD-5 compat */
+#ifndef MOUNT_RUMPFS
+#define MOUNT_RUMPFS    "rumpfs"
+#endif
+
 PUFFSOP_PROTOS(p2k)
 
 LIST_HEAD(p2k_vp_hash, p2k_node);
@@ -71,38 +76,38 @@ struct p2k_mount {
 	struct puffs_usermount *p2m_pu;
 	struct ukfs *p2m_ukfs;
 	struct p2k_vp_hash p2m_vphash[NHASHBUCK];
+	struct mount *p2m_mp;
 	int p2m_nvnodes;
+	int p2m_imtmpfsman;
+	bool p2m_hasdebug;
 };
 
 struct p2k_node {
+	struct puffs_node p2n_pn;
 	struct vnode *p2n_vp;
-	struct componentname *p2n_cn;
-
-	/*
-	 * Ok, then, uhm, we need .. *drumroll*.. two componentname
-	 * storages for rename.  This is because the source dir is
-	 * unlocked after the first lookup, and someone else might
-	 * race in here.  However, we know it's not another rename
-	 * because of the kernel rename lock.  And we need two since
-	 * srcdir and targdir might be the same.  It's a wonderful world.
-	 */
-	struct componentname *p2n_cn_ren_src, *p2n_cn_ren_targ;
 
 	LIST_ENTRY(p2k_node) p2n_entries;
 };
 
 #define OPC2VP(opc) (((struct p2k_node *)opc)->p2n_vp)
 
-static kauth_cred_t
+static int haswizard;
+static uid_t wizarduid;
+
+static struct kauth_cred *
 cred_create(const struct puffs_cred *pcr)
 {
 	gid_t groups[NGROUPS];
 	uid_t uid;
 	gid_t gid;
-	short ngroups = 0;
+	short ngroups = __arraycount(groups);
 
-	if (puffs_cred_getuid(pcr, &uid) == -1)
-		uid = 0;
+	if (haswizard) {
+		uid = wizarduid;
+	} else {
+		if (puffs_cred_getuid(pcr, &uid) == -1)
+			uid = 0;
+	}
 	if (puffs_cred_getgid(pcr, &gid) == -1)
 		gid = 0;
 	puffs_cred_getgroups(pcr, groups, &ngroups);
@@ -112,28 +117,28 @@ cred_create(const struct puffs_cred *pcr)
 }
 
 static __inline void
-cred_destroy(kauth_cred_t cred)
+cred_destroy(struct kauth_cred *cred)
 {
 
 	rump_pub_cred_put(cred);
 }
 
 static struct componentname *
-makecn(const struct puffs_cn *pcn, int myflags)
+makecn(const struct puffs_cn *pcn)
 {
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 
 	cred = cred_create(pcn->pcn_cred);
 	/* LINTED: prehistoric types in first two args */
-	return rump_pub_makecn(pcn->pcn_nameiop, pcn->pcn_flags | myflags,
-	    pcn->pcn_name, pcn->pcn_namelen, cred, rump_pub_lwp_curlwp());
+	return rump_pub_makecn(pcn->pcn_nameiop, pcn->pcn_flags,
+	    pcn->pcn_name, pcn->pcn_namelen, cred, rump_pub_lwproc_curlwp());
 }
 
 static __inline void
-freecn(struct componentname *cnp, int flags)
+freecn(struct componentname *cnp)
 {
 
-	rump_pub_freecn(cnp, flags | RUMPCN_FREECRED);
+	rump_pub_freecn(cnp, RUMPCN_FREECRED);
 }
 
 static void
@@ -143,15 +148,30 @@ makelwp(struct puffs_usermount *pu)
 	lwpid_t lid;
 
 	puffs_cc_getcaller(puffs_cc_getcc(pu), &pid, &lid);
-	rump_pub_lwp_alloc_and_switch(pid, lid);
+	rump_pub_allbetsareoff_setid(pid, lid);
 }
 
-/*ARGSUSED*/
+static volatile sig_atomic_t dodump;
 static void
-clearlwp(struct puffs_usermount *pu)
+dumpmp(struct puffs_usermount *pu)
+{
+	struct statvfs svfsb;
+
+	if (dodump && p2k_fs_statvfs(pu, &svfsb) == 0) {
+		rump_pub_vfs_mount_print(svfsb.f_mntonname, dodump-1);
+	}
+
+	dodump = 0;
+}
+
+static void
+sighand(int sig)
 {
 
-	rump_pub_lwp_release(rump_pub_lwp_curlwp());
+	if (sig == SIGINFO)
+		dodump = 1;
+	else if (sig == SIGUSR1)
+		dodump = 2;
 }
 
 static __inline struct p2k_vp_hash *
@@ -211,7 +231,6 @@ freep2n(struct p2k_node *p2n)
 {
 
 	assert(p2n->p2n_vp == NULL);
-	assert(p2n->p2n_cn == NULL);
 	LIST_REMOVE(p2n, p2n_entries);
 	free(p2n);
 }
@@ -257,7 +276,9 @@ p2k_init(uint32_t puffs_flags)
 {
 	struct puffs_ops *pops;
 	struct p2k_mount *p2m;
+	char *envbuf;
 	bool dodaemon;
+	bool hasdebug;
 
 	PUFFSOP_INIT(pops);
 
@@ -266,6 +287,7 @@ p2k_init(uint32_t puffs_flags)
 	PUFFSOP_SET(pops, p2k, fs, sync);
 	PUFFSOP_SET(pops, p2k, fs, fhtonode);
 	PUFFSOP_SET(pops, p2k, fs, nodetofh);
+	PUFFSOP_SET(pops, p2k, fs, extattrctl);
 
 	PUFFSOP_SET(pops, p2k, node, lookup);
 	PUFFSOP_SET(pops, p2k, node, create);
@@ -292,14 +314,23 @@ p2k_init(uint32_t puffs_flags)
 	PUFFSOP_SET(pops, p2k, node, read);
 	PUFFSOP_SET(pops, p2k, node, write);
 
+	PUFFSOP_SET(pops, p2k, node, pathconf);
+
 	PUFFSOP_SET(pops, p2k, node, inactive);
 	PUFFSOP_SET(pops, p2k, node, reclaim);
-	PUFFSOP_SET(pops, p2k, node, abortop);
+
+	PUFFSOP_SET(pops, p2k, node, getextattr);
+	PUFFSOP_SET(pops, p2k, node, setextattr);
+	PUFFSOP_SET(pops, p2k, node, listextattr);
+	PUFFSOP_SET(pops, p2k, node, deleteextattr);
 
 	dodaemon = true;
+	hasdebug = false;
+
 	if (getenv("P2K_DEBUG") != NULL) {
 		puffs_flags |= PUFFS_FLAG_OPDUMP;
 		dodaemon = false;
+		hasdebug = true;
 	}
 	if (getenv("P2K_NODETACH") != NULL) {
 		dodaemon = false;
@@ -313,6 +344,19 @@ p2k_init(uint32_t puffs_flags)
 	if (getenv("P2K_NOCACHE") != NULL) {
 		puffs_flags |= PUFFS_KFLAG_NOCACHE;
 	}
+	if ((envbuf = getenv("P2K_WIZARDUID")) != NULL) {
+		char *ep;
+
+		wizarduid = strtoul(envbuf, &ep, 10);
+		if (envbuf[0] == '\0' || *ep != '\0') {
+			printf("P2K_WIZARDUID: invalid uid %s\n", envbuf);
+		} else if (wizarduid > UID_MAX) {
+			printf("P2K_WIZARDUID: uid %s out-of-range\n", envbuf);
+		} else {
+			haswizard = 1;
+			printf("P2K WIZARD MODE: using uid %d\n", wizarduid);
+		}
+	}
 
 	p2m = allocp2m();
 	if (p2m == NULL)
@@ -325,6 +369,7 @@ p2k_init(uint32_t puffs_flags)
 		errno = sverrno;
 		return NULL;
 	}
+	p2m->p2m_hasdebug = hasdebug;
 
 	if (dodaemon) {
 		if (puffs_daemon(p2m->p2m_pu, 1, 1) == -1) {
@@ -336,6 +381,8 @@ p2k_init(uint32_t puffs_flags)
 	}
 	if (p2m)
 		rump_init();
+
+	rump_pub_lwproc_rfork(RUMP_RFCFDG);
 
 	return p2m;
 }
@@ -350,10 +397,11 @@ p2k_cancel(struct p2k_mount *p2m, int error)
 
 static int
 setupfs(struct p2k_mount *p2m, const char *vfsname, const char *devpath,
-	int partition, const char *mountpath, int mntflags,
+	struct ukfs_part *part, const char *mountpath, int mntflags,
 	void *arg, size_t alen)
 {
-	char partpath[UKFS_PARTITION_MAXPATHLEN];
+	char partpath[UKFS_DEVICE_MAXPATHLEN];
+	char partbuf[UKFS_DEVICE_MAXSTR];
 	char typebuf[PUFFS_TYPELEN];
 	struct puffs_usermount *pu = p2m->p2m_pu;
 	struct p2k_node *p2n_root;
@@ -369,41 +417,79 @@ setupfs(struct p2k_mount *p2m, const char *vfsname, const char *devpath,
 		strlcat(typebuf, vfsname, sizeof(typebuf));
 	}
 
-	if (UKFS_USEPARTITION(partition)) {
-		char partbuf[UKFS_PARTITION_MAGICLEN+1];
-
-		strlcpy(partpath, devpath, sizeof(partpath));
-		snprintf(partbuf, sizeof(partbuf), "%s%c%%",
-		    UKFS_PARTITION_SCANMAGIC, partition + 'a');
+	strlcpy(partpath, devpath, sizeof(partpath));
+	if (ukfs_part_tostring(part, partbuf, sizeof(partbuf))) {
 		strlcat(partpath, partbuf, sizeof(partpath));
-	} else {
-		strlcpy(partpath, devpath, sizeof(partpath));
 	}
 	puffs_setmntinfo(pu, partpath, typebuf);
 
 	if (ukfs_init() == -1)
 		goto out;
-	if (partition != UKFS_PARTITION_NA)
-		ukfs = ukfs_mount_disk(vfsname, devpath, partition,
-		    mountpath, mntflags, arg, alen);
-	else
-		ukfs = ukfs_mount(vfsname, devpath, mountpath, mntflags,
-		    arg, alen);
-	if (ukfs == NULL)
+
+	/* 
+	 * If we're mounting rumpfs, actually do no mount and redirect
+	 * requests to rump fs namespace root.  Strictly speaking, this
+	 * is not correct, but I don't think anyone will notice.
+	 * After all, we're mostly interested in things which reside
+	 * specifically on the rootfs, namely the contents of /dev
+	 */
+	if (strcmp(vfsname, MOUNT_RUMPFS) == 0) {
+		if ((rv = rump_pub_vfs_getmp("/", &p2m->p2m_mp)) != 0) {
+			errno = rv;
+			rv = -1;
+			goto out;
+		}
+	} else {
+		if (part != ukfs_part_na)
+			ukfs = ukfs_mount_disk(vfsname, devpath, part,
+			    mountpath, mntflags, arg, alen);
+		else
+			ukfs = ukfs_mount(vfsname, devpath, mountpath, mntflags,
+			    arg, alen);
+		if (ukfs == NULL)
+			goto out;
+		ukfs_setspecific(ukfs, p2m);
+		p2m->p2m_ukfs = ukfs;
+		p2m->p2m_mp = ukfs_getmp(ukfs);
+	}
+	if ((rv = rump_pub_vfs_root(p2m->p2m_mp, &p2m->p2m_rvp, 0)) != 0) {
+		errno = rv;
+		rv = -1;
 		goto out;
-	ukfs_setspecific(ukfs, p2m);
-	p2m->p2m_ukfs = ukfs;
+	}
+
 	p2m->p2m_pu = pu;
 
-	p2m->p2m_rvp = ukfs_getrvp(ukfs);
+	/*
+	 * Detect tmpfs.  XXX: this is a kludge.  See inactive().
+	 *
+	 * In reality we'd want "does file system use anon objects
+	 * for storage?".  But since tmpfs hides the anon object from
+	 * the public interface, we can't actually detect it sanely.
+	 * Therefore, use this kludge.
+	 */
+	p2m->p2m_imtmpfsman = strcmp(vfsname, MOUNT_TMPFS) == 0;
+
 	p2n_root = getp2n(p2m, p2m->p2m_rvp, true, NULL);
 	puffs_setfhsize(pu, 0, PUFFS_FHFLAG_PASSTHROUGH);
 	puffs_setstacksize(pu, PUFFS_STACKSIZE_MIN);
 	puffs_fakecc = 1;
-	puffs_set_prepost(pu, makelwp, clearlwp);
+	puffs_set_prepost(pu, makelwp, NULL);
+
+	if (p2m->p2m_hasdebug) {
+		struct timespec ts;
+
+		signal(SIGINFO, sighand);
+		signal(SIGUSR1, sighand);
+
+		ts.tv_sec = 0;
+		ts.tv_nsec = 1000*1000*10; /* 10ms */
+		puffs_ml_setloopfn(pu, dumpmp);
+		puffs_ml_settimeout(pu, &ts);
+	}
 	puffs_set_errnotify(pu, p2k_errcatcher);
 
-	puffs_setspecific(pu, ukfs);
+	puffs_setspecific(pu, p2m);
 	rv = puffs_mount(pu, mountpath, mntflags, p2n_root);
 
  out:
@@ -446,7 +532,7 @@ p2k_run_fs(const char *vfsname, const char *devpath, const char *mountpath,
 	p2m = p2k_init(puffs_flags);
 	if (p2m == NULL)
 		return -1;
-	rv = setupfs(p2m, vfsname, devpath, UKFS_PARTITION_NA, mountpath,
+	rv = setupfs(p2m, vfsname, devpath, ukfs_part_na, mountpath,
 	    mntflags, arg, alen);
 	if (rv == -1)
 		return rv;
@@ -454,7 +540,7 @@ p2k_run_fs(const char *vfsname, const char *devpath, const char *mountpath,
 }
 
 int
-p2k_run_diskfs(const char *vfsname, const char *devpath, int partition,
+p2k_run_diskfs(const char *vfsname, const char *devpath, struct ukfs_part *part,
 	const char *mountpath, int mntflags, void *arg, size_t alen,
 	uint32_t puffs_flags)
 {
@@ -464,7 +550,7 @@ p2k_run_diskfs(const char *vfsname, const char *devpath, int partition,
 	p2m = p2k_init(puffs_flags);
 	if (p2m == NULL)
 		return -1;
-	rv = setupfs(p2m, vfsname, devpath, partition, mountpath, mntflags,
+	rv = setupfs(p2m, vfsname, devpath, part, mountpath, mntflags,
 	    arg, alen);
 	if (rv == -1)
 		return rv;
@@ -476,24 +562,25 @@ p2k_setup_fs(struct p2k_mount *p2m, const char *vfsname, const char *devpath,
 	const char *mountpath, int mntflags, void *arg, size_t alen)
 {
 
-	return setupfs(p2m, vfsname, devpath, UKFS_PARTITION_NA, mountpath,
+	return setupfs(p2m, vfsname, devpath, ukfs_part_na, mountpath,
 	    mntflags, arg, alen);
 }
 
 int
 p2k_setup_diskfs(struct p2k_mount *p2m, const char *vfsname,
-	const char *devpath, int partition, const char *mountpath,
+	const char *devpath, struct ukfs_part *part, const char *mountpath,
 	int mntflags, void *arg, size_t alen)
 {
 
-	return setupfs(p2m, vfsname, devpath, partition, mountpath, mntflags,
+	return setupfs(p2m, vfsname, devpath, part, mountpath, mntflags,
 	    arg, alen);
 }
 
 int
 p2k_fs_statvfs(struct puffs_usermount *pu, struct statvfs *sbp)
 {
-	struct mount *mp = ukfs_getmp(puffs_getspecific(pu));
+	struct p2k_mount *p2m = puffs_getspecific(pu);
+	struct mount *mp = p2m->p2m_mp;
 
 	return rump_pub_vfs_statvfs(mp, sbp);
 }
@@ -502,20 +589,33 @@ p2k_fs_statvfs(struct puffs_usermount *pu, struct statvfs *sbp)
 int
 p2k_fs_unmount(struct puffs_usermount *pu, int flags)
 {
-	struct ukfs *fs = puffs_getspecific(pu);
-	struct p2k_mount *p2m = ukfs_getspecific(fs);
+	struct p2k_mount *p2m = puffs_getspecific(pu);
+	struct ukfs *fs = p2m->p2m_ukfs;
 	int error = 0;
 
-	rump_pub_lwp_release(rump_pub_lwp_curlwp()); /* ukfs & curlwp tricks */
-
 	rump_pub_vp_rele(p2m->p2m_rvp);
-	if (ukfs_release(fs, 0) != 0) {
-		ukfs_release(fs, UKFS_RELFLAG_FORCE);
-		error = 0;
+
+	if (fs) {
+		if (ukfs_release(fs, 0) != 0) {
+			struct statvfs svfsb;
+
+			if (p2m->p2m_hasdebug
+			    && p2k_fs_statvfs(pu, &svfsb) == 0) {
+				printf("\nSOFT UNMOUNT FAILED, MP INFO DUMP\n");
+				rump_pub_vfs_mount_print(svfsb.f_mntonname, 1);
+			}
+			ukfs_release(fs, UKFS_RELFLAG_FORCE);
+			error = 0;
+		}
 	}
 	p2m->p2m_ukfs = NULL;
 
-	rump_pub_lwp_alloc_and_switch(0, 0);
+	if (p2m->p2m_hasdebug) {
+		printf("-- rump kernel event counters --\n");
+		rump_printevcnts();
+		printf("-- end of event counters --\n");
+	}
+
 	return error;
 }
 
@@ -523,12 +623,13 @@ int
 p2k_fs_sync(struct puffs_usermount *pu, int waitfor,
 	const struct puffs_cred *pcr)
 {
-	struct mount *mp = ukfs_getmp(puffs_getspecific(pu));
-	kauth_cred_t cred;
+	struct p2k_mount *p2m = puffs_getspecific(pu);
+	struct mount *mp = p2m->p2m_mp;
+	struct kauth_cred *cred;
 	int rv;
 
 	cred = cred_create(pcr);
-	rv = rump_pub_vfs_sync(mp, waitfor, (kauth_cred_t)cred);
+	rv = rump_pub_vfs_sync(mp, waitfor, cred);
 	cred_destroy(cred);
 
 	return rv;
@@ -539,8 +640,8 @@ int
 p2k_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
 	struct puffs_newinfo *pni)
 {
-	struct mount *mp = ukfs_getmp(puffs_getspecific(pu));
-	struct p2k_mount *p2m = ukfs_getspecific(puffs_getspecific(pu));
+	struct p2k_mount *p2m = puffs_getspecific(pu);
+	struct mount *mp = p2m->p2m_mp;
 	struct p2k_node *p2n;
 	struct vnode *vp;
 	enum vtype vtype;
@@ -551,7 +652,7 @@ p2k_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
 	rv = rump_pub_vfs_fhtovp(mp, fid, &vp);
 	if (rv)
 		return rv;
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 
 	p2n = getp2n(p2m, vp, false, NULL);
 	if (p2n == NULL)
@@ -572,9 +673,29 @@ int
 p2k_fs_nodetofh(struct puffs_usermount *pu, puffs_cookie_t cookie, void *fid,
 	size_t *fidsize)
 {
-	struct vnode *vp = cookie;
+	struct vnode *vp = OPC2VP(cookie);
 
 	return rump_pub_vfs_vptofh(vp, fid, fidsize);
+}
+
+int
+p2k_fs_extattrctl(struct puffs_usermount *pu, int cmd,
+	puffs_cookie_t cookie, int flags,
+	int attrnamespace, const char *attrname)
+{
+	struct p2k_mount *p2m = puffs_getspecific(pu);
+	struct mount *mp = p2m->p2m_mp;
+	struct vnode *vp;
+
+	if (flags & PUFFS_EXTATTRCTL_HASNODE) {
+		vp = OPC2VP(cookie);
+		RUMP_VOP_LOCK(vp, LK_EXCLUSIVE | LK_RETRY);
+	} else {
+		vp = NULL;
+	}
+
+	/* vfsop unlocks (but doesn't release) vnode, so we're done here */
+	return rump_pub_vfs_extattrctl(mp, cmd, vp, attrnamespace, attrname);
 }
 
 /*ARGSUSED*/
@@ -582,7 +703,7 @@ int
 p2k_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_newinfo *pni, const struct puffs_cn *pcn)
 {
-	struct p2k_mount *p2m = ukfs_getspecific(puffs_getspecific(pu));
+	struct p2k_mount *p2m = puffs_getspecific(pu);
 	struct p2k_node *p2n_dir = opc, *p2n;
 	struct componentname *cn;
 	struct vnode *dvp = p2n_dir->p2n_vp, *vp;
@@ -591,62 +712,22 @@ p2k_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	uint64_t rdev; /* XXX: uint64_t because of stack overwrite in compat */
 	int rv;
 
-	cn = makecn(pcn, 0);
+	cn = makecn(pcn);
 	RUMP_VOP_LOCK(dvp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_LOOKUP(dvp, &vp, cn);
-	RUMP_VOP_UNLOCK(dvp, 0);
-	if (rump_pub_checksavecn(cn)) {
-		/*
-		 * XXX: detect RENAME by SAVESTART, both src and targ lookups
-		 *
-		 * XXX part deux: rename syscall actually does two lookups
-		 * for the source, the second without SAVESTART.  So detect
-		 * this also and compensate.
-		 */
-		if (pcn->pcn_flags & NAMEI_SAVESTART) {
-			if (pcn->pcn_nameiop == NAMEI_DELETE) {
-				assert(p2n_dir->p2n_cn_ren_src == NULL);
-				p2n_dir->p2n_cn_ren_src = cn;
-			} else {
-				assert(pcn->pcn_nameiop == NAMEI_RENAME);
-				assert(p2n_dir->p2n_cn_ren_targ == NULL);
-				p2n_dir->p2n_cn_ren_targ = cn;
-			}
-		} else {
-			if (pcn->pcn_nameiop == NAMEI_DELETE
-			    && p2n_dir->p2n_cn_ren_src) {
-				freecn(cn, RUMPCN_FORCEFREE);
-				cn = NULL;
-			} else {
-				assert(p2n_dir->p2n_cn == NULL);
-				p2n_dir->p2n_cn = cn;
-			}
-		}
-	} else {
-		freecn(cn, 0);
-		cn = NULL;
-	}
+	RUMP_VOP_UNLOCK(dvp);
+	freecn(cn);
+
 	if (rv) {
 		if (rv == EJUSTRETURN) {
 			rv = ENOENT;
 		}
 		return rv;
 	}
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 
 	p2n = getp2n(p2m, vp, false, NULL);
 	if (p2n == NULL) {
-		if (pcn->pcn_flags & NAMEI_SAVESTART) {
-			if (pcn->pcn_nameiop == NAMEI_DELETE) {
-				p2n_dir->p2n_cn_ren_src = NULL;
-			} else {
-				p2n_dir->p2n_cn_ren_targ = NULL;
-			}
-		} else {
-			p2n_dir->p2n_cn = NULL;
-		}
-		/* XXX: what in the world should happen with SAVESTART? */
-		RUMP_VOP_ABORTOP(dvp, cn);
 		return ENOMEM;
 	}
 
@@ -695,7 +776,7 @@ do_makenode(struct puffs_usermount *pu, struct p2k_node *p2n_dir,
 	int (*symfn)(struct vnode *, struct vnode **, struct componentname *,
 		      struct vattr *, char *))
 {
-	struct p2k_mount *p2m = ukfs_getspecific(puffs_getspecific(pu));
+	struct p2k_mount *p2m = puffs_getspecific(pu);
 	struct vnode *dvp = p2n_dir->p2n_vp;
 	struct p2k_node *p2n;
 	struct componentname *cn;
@@ -708,13 +789,7 @@ do_makenode(struct puffs_usermount *pu, struct p2k_node *p2n_dir,
 		return ENOMEM;
 	DOCOMPAT(vap, va_x);
 
-	if (p2n_dir->p2n_cn) {
-		cn = p2n_dir->p2n_cn;
-		p2n_dir->p2n_cn = NULL;
-	} else {
-		cn = makecn(pcn, RUMP_NAMEI_HASBUF);
-	}
-
+	cn = makecn(pcn);
 	RUMP_VOP_LOCK(dvp, LK_EXCLUSIVE);
 	rump_pub_vp_incref(dvp);
 	if (makefn) {
@@ -723,10 +798,10 @@ do_makenode(struct puffs_usermount *pu, struct p2k_node *p2n_dir,
 		rv = symfn(dvp, &vp, cn, va_x, link_target);
 	}
 	assert(RUMP_VOP_ISLOCKED(dvp) == 0);
-	freecn(cn, 0);
+	freecn(cn);
 
 	if (rv == 0) {
-		RUMP_VOP_UNLOCK(vp, 0);
+		RUMP_VOP_UNLOCK(vp);
 		p2n = getp2n(p2m, vp, true, p2n);
 		puffs_newinfo_setcookie(pni, p2n);
 	} else {
@@ -765,13 +840,13 @@ p2k_node_open(struct puffs_usermount *pu, puffs_cookie_t opc, int mode,
 	const struct puffs_cred *pcr)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	int rv;
 
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_OPEN(vp, mode, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	return rv;
@@ -783,12 +858,12 @@ p2k_node_close(struct puffs_usermount *pu, puffs_cookie_t opc, int flags,
 	const struct puffs_cred *pcr)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	RUMP_VOP_CLOSE(vp, flags, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	return 0;
@@ -800,13 +875,13 @@ p2k_node_access(struct puffs_usermount *pu, puffs_cookie_t opc, int mode,
 	const struct puffs_cred *pcr)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	int rv;
 
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_ACCESS(vp, mode, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	return rv;
@@ -818,7 +893,7 @@ p2k_node_getattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct vattr *vap, const struct puffs_cred *pcr)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	struct vattr *va_x;
 	int rv;
 
@@ -835,7 +910,7 @@ p2k_node_getattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_GETATTR(vp, va_x, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	if (needcompat()) {
@@ -852,7 +927,7 @@ p2k_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct vattr *vap, const struct puffs_cred *pcr)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	struct vattr *va_x;
 	int rv;
 
@@ -865,7 +940,7 @@ p2k_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_SETATTR(vp, va_x, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	UNDOCOMPAT(va_x);
@@ -879,7 +954,7 @@ p2k_node_fsync(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct puffs_cred *pcr, int flags, off_t offlo, off_t offhi)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	int rv;
 
 	/* "deadfs" */
@@ -889,7 +964,7 @@ p2k_node_fsync(struct puffs_usermount *pu, puffs_cookie_t opc,
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_FSYNC(vp, cred, flags, offlo, offhi);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	return rv;
@@ -900,7 +975,7 @@ int
 p2k_node_mmap(struct puffs_usermount *pu, puffs_cookie_t opc, vm_prot_t flags,
 	const struct puffs_cred *pcr)
 {
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	int rv;
 
 	cred = cred_create(pcr);
@@ -916,40 +991,16 @@ p2k_node_seek(struct puffs_usermount *pu, puffs_cookie_t opc,
 	off_t oldoff, off_t newoff, const struct puffs_cred *pcr)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	int rv;
 
 	cred = cred_create(pcr);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_SEEK(vp, oldoff, newoff, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	return rv;
-}
-
-/*ARGSUSED*/
-int
-p2k_node_abortop(struct puffs_usermount *pu, puffs_cookie_t opc,
-	const struct puffs_cn *pcn)
-{
-	struct p2k_node *p2n_dir = opc;
-	struct componentname *cnp;
-
-	if ((cnp = p2n_dir->p2n_cn) != NULL) {
-		freecn(cnp, 0);
-		p2n_dir->p2n_cn = NULL;
-	}
-	if ((cnp = p2n_dir->p2n_cn_ren_src) != NULL) {
-		freecn(cnp, RUMPCN_FORCEFREE);
-		p2n_dir->p2n_cn_ren_src = NULL;
-	}
-	if ((cnp = p2n_dir->p2n_cn_ren_targ) != NULL) {
-		freecn(cnp, RUMPCN_FORCEFREE);
-		p2n_dir->p2n_cn_ren_targ = NULL;
-	}
-
-	return 0;
 }
 
 static int
@@ -961,13 +1012,7 @@ do_nukenode(struct p2k_node *p2n_dir, struct p2k_node *p2n,
 	struct componentname *cn;
 	int rv;
 
-	if (p2n_dir->p2n_cn) {
-		cn = p2n_dir->p2n_cn;
-		p2n_dir->p2n_cn = NULL;
-	} else {
-		cn = makecn(pcn, RUMP_NAMEI_HASBUF);
-	}
-
+	cn = makecn(pcn);
 	RUMP_VOP_LOCK(dvp, LK_EXCLUSIVE);
 	rump_pub_vp_incref(dvp);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
@@ -975,7 +1020,7 @@ do_nukenode(struct p2k_node *p2n_dir, struct p2k_node *p2n,
 	rv = nukefn(dvp, vp, cn);
 	assert(RUMP_VOP_ISLOCKED(dvp) == 0);
 	assert(RUMP_VOP_ISLOCKED(vp) == 0);
-	freecn(cn, 0);
+	freecn(cn);
 
 	return rv;
 
@@ -996,21 +1041,14 @@ p2k_node_link(struct puffs_usermount *pu, puffs_cookie_t opc,
 	puffs_cookie_t targ, const struct puffs_cn *pcn)
 {
 	struct vnode *dvp = OPC2VP(opc);
-	struct p2k_node *p2n_dir = opc;
 	struct componentname *cn;
 	int rv;
 
-	if (p2n_dir->p2n_cn) {
-		cn = p2n_dir->p2n_cn;
-		p2n_dir->p2n_cn = NULL;
-	} else {
-		cn = makecn(pcn, RUMP_NAMEI_HASBUF);
-	}
-
+	cn = makecn(pcn);
 	RUMP_VOP_LOCK(dvp, LK_EXCLUSIVE);
 	rump_pub_vp_incref(dvp);
 	rv = RUMP_VOP_LINK(dvp, OPC2VP(targ), cn);
-	freecn(cn, 0);
+	freecn(cn);
 
 	return rv;
 }
@@ -1023,24 +1061,12 @@ p2k_node_rename(struct puffs_usermount *pu,
 	puffs_cookie_t targ_dir, puffs_cookie_t targ,
 	const struct puffs_cn *pcn_targ)
 {
-	struct p2k_node *p2n_srcdir = src_dir, *p2n_targdir = targ_dir;
 	struct vnode *dvp, *vp, *tdvp, *tvp = NULL;
 	struct componentname *cn_src, *cn_targ;
 	int rv;
 
-	if (p2n_srcdir->p2n_cn_ren_src) {
-		cn_src = p2n_srcdir->p2n_cn_ren_src;
-		p2n_srcdir->p2n_cn_ren_src = NULL;
-	} else {
-		cn_src = makecn(pcn_src, RUMP_NAMEI_HASBUF);
-	}
-
-	if (p2n_targdir->p2n_cn_ren_targ) {
-		cn_targ = p2n_targdir->p2n_cn_ren_targ;
-		p2n_targdir->p2n_cn_ren_targ = NULL;
-	} else {
-		cn_targ = makecn(pcn_targ, RUMP_NAMEI_HASBUF);
-	}
+	cn_src = makecn(pcn_src);
+	cn_targ = makecn(pcn_targ);
 
 	dvp = OPC2VP(src_dir);
 	vp = OPC2VP(src);
@@ -1062,8 +1088,8 @@ p2k_node_rename(struct puffs_usermount *pu,
 	if (tvp) {
 		assert(RUMP_VOP_ISLOCKED(tvp) == 0);
 	}
-	freecn(cn_src, RUMPCN_FORCEFREE);
-	freecn(cn_targ, RUMPCN_FORCEFREE);
+	freecn(cn_src);
+	freecn(cn_targ);
 
 	return rv;
 }
@@ -1106,7 +1132,7 @@ p2k_node_readdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	off_t *cookies, size_t *ncookies)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	struct uio *uio;
 	off_t *vop_cookies;
 	int vop_ncookies;
@@ -1124,7 +1150,7 @@ p2k_node_readdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	} else {
 		rv = RUMP_VOP_READDIR(vp, uio, cred, eofflag, NULL, NULL);
 	}
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	if (rv == 0) {
 		*reslen = rump_pub_uio_getresid(uio);
 		*readoff = rump_pub_uio_getoff(uio);
@@ -1141,7 +1167,7 @@ p2k_node_readlink(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct puffs_cred *pcr, char *linkname, size_t *linklen)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	struct uio *uio;
 	int rv;
 
@@ -1149,7 +1175,7 @@ p2k_node_readlink(struct puffs_usermount *pu, puffs_cookie_t opc,
 	uio = rump_pub_uio_setup(linkname, *linklen, 0, RUMPUIO_READ);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_READLINK(vp, uio, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	*linklen -= rump_pub_uio_free(uio);
 	cred_destroy(cred);
 
@@ -1163,7 +1189,7 @@ p2k_node_read(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct puffs_cred *pcr, int ioflag)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	struct uio *uio;
 	int rv;
 
@@ -1171,7 +1197,7 @@ p2k_node_read(struct puffs_usermount *pu, puffs_cookie_t opc,
 	uio = rump_pub_uio_setup(buf, *resid, offset, RUMPUIO_READ);
 	RUMP_VOP_LOCK(vp, LK_SHARED);
 	rv = RUMP_VOP_READ(vp, uio, ioflag, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	*resid = rump_pub_uio_free(uio);
 	cred_destroy(cred);
 
@@ -1185,7 +1211,7 @@ p2k_node_write(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct puffs_cred *pcr, int ioflag)
 {
 	struct vnode *vp = OPC2VP(opc);
-	kauth_cred_t cred;
+	struct kauth_cred *cred;
 	struct uio *uio;
 	int rv;
 
@@ -1197,8 +1223,127 @@ p2k_node_write(struct puffs_usermount *pu, puffs_cookie_t opc,
 	uio = rump_pub_uio_setup(buf, *resid, offset, RUMPUIO_WRITE);
 	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
 	rv = RUMP_VOP_WRITE(vp, uio, ioflag, cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	RUMP_VOP_UNLOCK(vp);
 	*resid = rump_pub_uio_free(uio);
+	cred_destroy(cred);
+
+	return rv;
+}
+
+/*ARGSUSED*/
+int
+p2k_node_pathconf(struct puffs_usermount *pu, puffs_cookie_t opc,
+	int name, register_t *retval)
+{
+	struct vnode *vp = OPC2VP(opc);
+	int rv;
+
+	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
+	rv = RUMP_VOP_PATHCONF(vp, name, retval);
+	RUMP_VOP_UNLOCK(vp);
+
+	return rv;
+}
+
+/*ARGSUSED*/
+int
+p2k_node_getextattr(struct puffs_usermount *pu, puffs_cookie_t opc,
+	int attrnamespace, const char *attrname, size_t *attrsize,
+	uint8_t *attr, size_t *resid, const struct puffs_cred *pcr)
+{
+	struct vnode *vp = OPC2VP(opc);
+	struct kauth_cred *cred;
+	struct uio *uio;
+	int rv;
+
+	if (attr)
+		uio = rump_pub_uio_setup(attr, *resid, 0, RUMPUIO_READ);
+	else
+		uio = NULL;
+
+	cred = cred_create(pcr);
+	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
+	rv = RUMP_VOP_GETEXTATTR(vp, attrnamespace, attrname, uio,
+	    attrsize, cred);
+	RUMP_VOP_UNLOCK(vp);
+	cred_destroy(cred);
+
+	if (uio)
+		*resid = rump_pub_uio_free(uio);
+
+	return rv;
+}
+
+/*ARGSUSED*/
+int
+p2k_node_setextattr(struct puffs_usermount *pu, puffs_cookie_t opc,
+	int attrnamespace, const char *attrname,
+	uint8_t *attr, size_t *resid, const struct puffs_cred *pcr)
+{
+	struct vnode *vp = OPC2VP(opc);
+	struct kauth_cred *cred;
+	struct uio *uio;
+	int rv;
+
+	if (attr)
+		uio = rump_pub_uio_setup(attr, *resid, 0, RUMPUIO_READ);
+	else
+		uio = NULL;
+
+	cred = cred_create(pcr);
+	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
+	rv = RUMP_VOP_SETEXTATTR(vp, attrnamespace, attrname, uio, cred);
+	RUMP_VOP_UNLOCK(vp);
+	cred_destroy(cred);
+
+	if (uio)
+		*resid = rump_pub_uio_free(uio);
+
+	return rv;
+}
+
+/*ARGSUSED*/
+int
+p2k_node_listextattr(struct puffs_usermount *pu, puffs_cookie_t opc,
+	int attrnamespace, size_t *attrsize, uint8_t *attrs,
+	size_t *resid, int flags, const struct puffs_cred *pcr)
+{
+	struct vnode *vp = OPC2VP(opc);
+	struct kauth_cred *cred;
+	struct uio *uio;
+	int rv;
+
+	if (attrs)
+		uio = rump_pub_uio_setup(attrs, *resid, 0, RUMPUIO_READ);
+	else
+		uio = NULL;
+
+	cred = cred_create(pcr);
+	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
+	rv = RUMP_VOP_LISTEXTATTR(vp, attrnamespace, uio, attrsize,
+	    flags, cred);
+	RUMP_VOP_UNLOCK(vp);
+	cred_destroy(cred);
+
+	if (uio)
+		*resid = rump_pub_uio_free(uio);
+
+	return rv;
+}
+
+/*ARGSUSED*/
+int
+p2k_node_deleteextattr(struct puffs_usermount *pu, puffs_cookie_t opc,
+	int attrnamespace, const char *attrname, const struct puffs_cred *pcr)
+{
+	struct vnode *vp = OPC2VP(opc);
+	struct kauth_cred *cred;
+	int rv;
+
+	cred = cred_create(pcr);
+	RUMP_VOP_LOCK(vp, LK_EXCLUSIVE);
+	rv = RUMP_VOP_DELETEEXTATTR(vp, attrnamespace, attrname, cred);
+	RUMP_VOP_UNLOCK(vp);
 	cred_destroy(cred);
 
 	return rv;
@@ -1208,6 +1353,7 @@ p2k_node_write(struct puffs_usermount *pu, puffs_cookie_t opc,
 int
 p2k_node_inactive(struct puffs_usermount *pu, puffs_cookie_t opc)
 {
+	struct p2k_mount *p2m = puffs_getspecific(pu);
 	struct p2k_node *p2n = opc;
 	struct vnode *vp = OPC2VP(opc);
 	bool recycle = false;
@@ -1219,10 +1365,16 @@ p2k_node_inactive(struct puffs_usermount *pu, puffs_cookie_t opc)
 
 	/*
 	 * Flush all cached vnode pages from the rump kernel -- they
-	 * are kept in puffs for all things that matter.
+	 * are kept in puffs for all things that matter.  However,
+	 * don't do this for tmpfs (vnodes are backed by an aobj), since that
+	 * would cause us to clear the backing storage leaving us without
+	 * a way to regain the data from "stable storage".
 	 */
-	rump_pub_vp_interlock(vp);
-	(void) RUMP_VOP_PUTPAGES(vp, 0, 0, PGO_ALLPAGES|PGO_CLEANIT|PGO_FREE);
+	if (!p2m->p2m_imtmpfsman) {
+		rump_pub_vp_interlock(vp);
+		RUMP_VOP_PUTPAGES(vp, 0, 0,
+		    PGO_ALLPAGES|PGO_CLEANIT|PGO_FREE);
+	}
 
 	/*
 	 * Ok, this is where we get nasty.  We pretend the vnode is

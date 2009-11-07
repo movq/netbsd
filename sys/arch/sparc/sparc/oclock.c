@@ -1,4 +1,4 @@
-/*	$NetBSD: oclock.c,v 1.18 2008/04/28 20:23:36 martin Exp $ */
+/*	$NetBSD: oclock.c,v 1.20 2011/07/01 18:51:51 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oclock.c,v 1.18 2008/04/28 20:23:36 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oclock.c,v 1.20 2011/07/01 18:51:51 dyoung Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: oclock.c,v 1.18 2008/04/28 20:23:36 martin Exp $");
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/promlib.h>
 #include <machine/autoconf.h>
 
@@ -180,7 +180,7 @@ oclockattach(device_t parent, device_t self, void *aux)
 	timer_init = oclock_init;
 
 	/* link interrupt handler */
-	intr_establish(10, 0, &level10, NULL);
+	intr_establish(10, 0, &level10, NULL, false);
 
 	/* Our TOD clock year 0 represents 1968 */
 	sc->sc_year0 = 1968;

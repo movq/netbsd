@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia_dma.c,v 1.18 2009/03/14 15:35:59 dsl Exp $ */
+/* $NetBSD: mcpcia_dma.c,v 1.21 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.18 2009/03/14 15:35:59 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.21 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.18 2009/03/14 15:35:59 dsl Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -186,12 +184,12 @@ mcpcia_dma_init(struct mcpcia_config *ccp)
 	alpha_sgmap_init(&ccp->cc_dmat_pci_sgmap, &ccp->cc_pci_sgmap,
 	    "mcpcia pci sgmap",
 	    MCPCIA_PCI_SG_MAPPED_BASE, 0, MCPCIA_PCI_SG_MAPPED_SIZE,
-	    sizeof(u_int64_t), NULL, 0);
+	    sizeof(uint64_t), NULL, 0);
 
 	alpha_sgmap_init(&ccp->cc_dmat_isa_sgmap, &ccp->cc_isa_sgmap,
 	    "mcpcia isa sgmap",
 	    MCPCIA_ISA_SG_MAPPED_BASE, 0, MCPCIA_ISA_SG_MAPPED_SIZE,
-	    sizeof(u_int64_t), NULL, 0);
+	    sizeof(uint64_t), NULL, 0);
 
 	/*
 	 * Disable windows first.

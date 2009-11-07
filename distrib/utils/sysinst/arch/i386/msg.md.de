@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.de,v 1.17 2009/08/24 09:46:24 martin Exp $	*/
+/*	$NetBSD: msg.md.de,v 1.20.6.1 2012/05/17 18:57:14 sborrill Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -39,9 +35,12 @@
 /* MD Message catalog -- German, i386 version */
 
 message md_hello
+{
+}
+
+message md_may_remove_boot_medium
 {Wenn Sie von einer Diskette oder einem USB Laufwerk gebootet haben,
 können Sie diese(s) jetzt entfernen.
-
 }
 
 message Keyboard_type {Tastaturschema}
@@ -56,22 +55,22 @@ message getboottype
 
 Normale Bootblöcke benutzen die BIOS Konsolenschnittstelle als Konsole
 (meistens der Monitor und die Tastatur). Serielle Bootblöcke benutzen den
-ersten seriellen Anschluss als Konsole.
+gewählten seriellen Anschluss als Konsole.
 
 Selektierter Bootblock: }
 
 message console_PC {BIOS Konsole}
-message console_com {Serieller Anschluss com%d mit %d baud}
+message console_com {Serielle Konsole an com%d mit %d baud}
 message console_unchanged {Unverändert}
 
 message Bootblocks_selection
 {Auswahl der Bootblöcke}
-message Use_normal_bootblocks	{BIOS Konsole benutzen}
-message Use_serial_com0		{Serieller Anschluss com0 benutzen}
-message Use_serial_com1		{Serieller Anschluss com1 benutzen}
-message Use_serial_com2		{Serieller Anschluss com2 benutzen}
-message Use_serial_com3		{Serieller Anschluss com3 benutzen}
-message serial_baud_rate	{Serielle baud Rate}
+message Use_normal_bootblocks	{BIOS Konsole}
+message Use_serial_com0		{Serielle Konsole an com0}
+message Use_serial_com1		{Serielle Konsole an com1}
+message Use_serial_com2		{Serielle Konsole an com2}
+message Use_serial_com3		{Serielle Konsole an com3}
+message serial_baud_rate	{Serielle Geschwindigkeit wählen...}
 message Use_existing_bootblocks	{Vorhandene Bootblöcke benutzen}
 
 message dobootblks
@@ -113,12 +112,12 @@ message biosmultmatch_row
 
 message biosgeom_advise
 {
-Achtung: sysinst hat festgestellt, daß die von Ihnen ausgewählte Festplatte
+Achtung: sysinst hat festgestellt, dass die von Ihnen ausgewählte Festplatte
 einer anderen - dem BIOS bekannten - entspricht; damit sind obige Werte mit
 höchster Wahrscheinlichkeit korrekt, sollten also nicht verändert werden (die
 Werte für Zylinder, Köpfe und Sektoren sind wahrscheinlich 1023, 255 und 63 -
 dies ist korrekt).
-Sie sollten nur die Geometrie abändern falls Sie wissen, daß das BIOS
+Sie sollten nur die Geometrie abändern falls Sie wissen, dass das BIOS
 falsche Werte liefert.
 }
 
@@ -128,13 +127,13 @@ message pickdisk
 message partabovechs
 {Der NetBSD Teil der Festplatte liegt außerhalb der vom BIOS dieser Maschine
 adressierbaren Bereich. Eventuell können Sie von dieser Partition nicht
-booten. Sind Sie sicher, daß Sie fortfahren möchten?
+booten. Sind Sie sicher, dass Sie fortfahren möchten?
 
 (Antworten Sie mit 'nein' um die Partitionen erneut zu editieren.)}
 
 
 message missing_bootmenu_text
-{Sie haben mehr als ein Betriebssystem auf dieser Festplatte; allerdings ist kein 
+{Sie haben mehr als ein Betriebssystem auf dieser Festplatte; allerdings ist kein
 'bootmenu' (Eintrag für den NetBSD Bootloader) für die aktive Partition und/oder
 der Partition vorhanden, auf die NetBSD installiert werden soll.
 
@@ -146,13 +145,13 @@ message no_extended_bootmenu
 {Sie haben eine erweiterte Partition in das 'bootmenu' eingetragen.
 Doch scheint Ihr BIOS System den 'read' (Lese-) Befehl für diese
 Version des 'bootmenu' Codes nicht zu unterstützen.
-Sind Sie sicher, daß Sie dennoch fortfahren möchten?
+Sind Sie sicher, dass Sie dennoch fortfahren möchten?
 
 (Antworten Sie 'nein' um zum Partitionierungsmenü zurück zu
 gelangen.)}
 
 message installbootsel
-{Ihre Konfiguration benötigt den NetBSD Bootselect (Bootauswahl) Code, um 
+{Ihre Konfiguration benötigt den NetBSD Bootselect (Bootauswahl) Code, um
 das zu startende Betriebssystem beim Start des Computers zu wählen.
 
 Dieser ist gegenwärtig noch nicht installiert; wollen Sie dies jetzt tun?}

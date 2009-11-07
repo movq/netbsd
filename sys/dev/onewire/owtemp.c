@@ -1,4 +1,4 @@
-/*	$NetBSD: owtemp.c,v 1.14 2008/05/05 13:58:58 xtraeme Exp $ */
+/*	$NetBSD: owtemp.c,v 1.16 2011/06/20 17:24:16 pgoyette Exp $ */
 /*	$OpenBSD: owtemp.c,v 1.1 2006/03/04 16:27:03 grange Exp $	*/
 
 /*
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: owtemp.c,v 1.14 2008/05/05 13:58:58 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: owtemp.c,v 1.16 2011/06/20 17:24:16 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,6 +106,7 @@ owtemp_attach(device_t parent, device_t self, void *aux)
 
 	/* Initialize sensor */
 	sc->sc_sensor.units = ENVSYS_STEMP;
+	sc->sc_sensor.state = ENVSYS_SINVALID;
 	(void)strlcpy(sc->sc_sensor.desc,
 	    device_xname(self), sizeof(sc->sc_sensor.desc));
 	if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_sensor)) {
@@ -143,14 +144,12 @@ owtemp_activate(device_t self, enum devact act)
 	struct owtemp_softc *sc = device_private(self);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	return (0);
 }
 
 static void

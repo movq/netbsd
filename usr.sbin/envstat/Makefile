@@ -1,7 +1,11 @@
-# $NetBSD: Makefile,v 1.7 2009/10/29 14:38:37 christos Exp $
+# $NetBSD: Makefile,v 1.10 2010/12/14 08:04:14 pooka Exp $
 
-PROG=		envstat
+RUMPPRG=	envstat
 SRCS+=		envstat.c config.c config_yacc.y config_lex.l
+
+.PATH: ${.CURDIR}/../../common/lib/libprop
+CPPFLAGS+=	-DRUMP_ACTION
+RUMPSRCS+=	prop_kern.c
 
 LDADD=		-lprop
 DPADD=		${LIBPROP}

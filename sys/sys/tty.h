@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.h,v 1.86 2009/01/22 20:40:20 drochner Exp $	*/
+/*	$NetBSD: tty.h,v 1.90 2011/09/24 00:05:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -126,6 +126,7 @@ struct tty {
 	int	t_state;		/* Device and driver (TS*) state. */
 	int	t_wopen;		/* Processes waiting for open. */
 	int	t_flags;		/* Tty flags. */
+	int	t_qsize;		/* Tty character queue size */
 	struct	pgrp *t_pgrp;		/* Foreground process group. */
 	struct	session *t_session;	/* Enclosing session. */
 	struct	selinfo t_rsel;		/* Tty read/oob select. */
@@ -141,8 +142,8 @@ struct tty {
 	void	*t_sc;			/* XXX: net/if_sl.c:sl_softc. */
 	short	t_column;		/* Tty output column. */
 	short	t_rocount, t_rocol;	/* Tty. */
-	short	t_hiwat;		/* High water mark. */
-	short	t_lowat;		/* Low water mark. */
+	int	t_hiwat;		/* High water mark. */
+	int	t_lowat;		/* Low water mark. */
 	short	t_gen;			/* Generation number. */
 	sigset_t t_sigs[TTYSIG_COUNT];	/* Pending signals */
 	int	t_sigcount;		/* # pending signals */
@@ -162,13 +163,14 @@ struct tty {
 
 #define	TTMASK	15
 #define	OBUFSIZ	100
-#define	TTYHOG	1024
+#define	TTYHOG	tp->t_qsize
 
 #ifdef _KERNEL
-#define	TTMAXHIWAT	roundup(2048, CBSIZE)
-#define	TTMINHIWAT	roundup(100, CBSIZE)
-#define	TTMAXLOWAT	256
-#define	TTMINLOWAT	32
+#define	TTMAXHIWAT	roundup(tp->t_qsize << 1, 64)
+#define	TTMINHIWAT	roundup(tp->t_qsize >> 3, 64)
+#define	TTMAXLOWAT	(tp->t_qsize >> 2)
+#define	TTMINLOWAT	(tp->t_qsize >> 5)
+#define	TTROUND		64
 #endif /* _KERNEL */
 
 /* These flags are kept in t_state. */
@@ -282,6 +284,7 @@ void	 ttypend(struct tty *);
 void	 ttyretype(struct tty *);
 void	 ttyrub(int, struct tty *);
 int	 ttysleep(struct tty *, kcondvar_t *, bool, int);
+int	 ttypause(struct tty *, int);
 int	 ttywait(struct tty *);
 int	 ttywflush(struct tty *);
 void	 ttysig(struct tty *, enum ttysigtype, int);
@@ -289,8 +292,8 @@ void	 tty_attach(struct tty *);
 void	 tty_detach(struct tty *);
 void	 tty_init(void);
 struct tty
-	*ttymalloc(void);
-void	 ttyfree(struct tty *);
+	*tty_alloc(void);
+void	 tty_free(struct tty *);
 u_char	*firstc(struct clist *, int *);
 bool	 ttypull(struct tty *);
 

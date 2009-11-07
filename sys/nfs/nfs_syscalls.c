@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_syscalls.c,v 1.151 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: nfs_syscalls.c,v 1.153 2009/12/31 20:01:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.151 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.153 2009/12/31 20:01:33 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

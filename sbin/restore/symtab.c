@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.25 2009/04/07 12:38:12 lukem Exp $	*/
+/*	$NetBSD: symtab.c,v 1.28 2011/09/16 16:13:18 plunky Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)symtab.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: symtab.c,v 1.25 2009/04/07 12:38:12 lukem Exp $");
+__RCSID("$NetBSD: symtab.c,v 1.28 2011/09/16 16:13:18 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -456,7 +456,7 @@ dumpsymtable(const char *filename, int32_t checkpt)
 	FILE *fd;
 	struct symtableheader hdr;
 
-	vprintf(stdout, "Check pointing the restore\n");
+	vprintf(stdout, "Checkpointing the restore\n");
 	if (Nflag)
 		return;
 	if ((fd = fopen(filename, "w")) == NULL) {
@@ -549,7 +549,7 @@ initsymtable(const char *filename)
 		entrytblsize = maxino / HASHFACTOR;
 		entry = (struct entry **)
 			calloc((unsigned)entrytblsize, sizeof(struct entry *));
-		if (entry == (struct entry **)NULL)
+		if (entry == NULL)
 			panic("no memory for entry table\n");
 		ep = addentry(".", ROOTINO, NODE);
 		ep->e_flags |= NEW;
@@ -572,6 +572,7 @@ initsymtable(const char *filename)
 		fprintf(stderr, "read: %s\n", strerror(errno));
 		panic("cannot read symbol table file %s\n", filename);
 	}
+	(void)close(fd);
 	switch (command) {
 	case 'r':
 		/*

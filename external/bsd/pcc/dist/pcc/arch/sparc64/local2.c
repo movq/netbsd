@@ -1,3 +1,6 @@
+/*	Id: local2.c,v 1.26 2011/06/23 13:41:25 ragge Exp 	*/	
+/*	$NetBSD: local2.c,v 1.1.1.4 2011/09/01 12:46:49 plunky Exp $	*/
+
 /*
  * Copyright (c) 2008 David Crawshaw <david@zentus.com>
  * 
@@ -56,9 +59,6 @@ prologue(struct interpass_prolog *ipp)
 			stack += 16;
 
 	/* TODO printf("\t.proc %d\n"); */
-	printf("\t.global %s\n", ipp->ipp_name);
-	printf("\t.align 4\n");
-	printf("%s:\n", ipp->ipp_name);
 	if (SIMM13(stack))
 		printf("\tsave %%sp,-%d,%%sp\n", stack);
 	else {
@@ -263,7 +263,7 @@ conput(FILE * fp, NODE * p)
 		if (p->n_lval > 0)
 			fprintf(fp, "+");
 		if (p->n_lval)
-			fprintf(fp, "%lld", p->n_lval);
+			fprintf(fp, CONFMT, p->n_lval);
 	} else
 		fprintf(fp, CONFMT, p->n_lval);
 }
@@ -302,7 +302,7 @@ adrput(FILE * io, NODE * p)
 		if (off > 0)
 			fprintf(io, "+");
 		if (off != 0)
-			fprintf(io, CONFMT, off);
+			fprintf(io, CONFMT, (long long int)off);
 		return;
 	case OREG:
 		fprintf(io, "%s", rnames[p->n_rval]);
@@ -313,7 +313,7 @@ adrput(FILE * io, NODE * p)
 		if (off > 0)
 			fprintf(io, "+");
 		if (off)
-			fprintf(io, "%lld", off);
+			fprintf(io, CONFMT, (CONSZ)off);
 		return;
 	case ICON:
 		/* addressable value of the constant */

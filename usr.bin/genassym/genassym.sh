@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: genassym.sh,v 1.5 2009/10/18 18:14:00 snj Exp $
+#	$NetBSD: genassym.sh,v 1.7 2011/07/05 05:19:02 matt Exp $
 #
 # Copyright (c) 1997 Matthias Pfaller.
 # All rights reserved.
@@ -37,25 +37,22 @@ usage()
 	echo "usage: ${progname} [-c | -f] -- compiler command" >&2
 }
 
-args=`getopt cf $*`
-if [ $? != 0 ]; then
-	usage;
-	exit 1;
-fi
-set -- $args
-
-for i; do
+while getopts cf i
+do
 	case "$i" in
-	-c)
+	c)
 		ccode=1
-		shift;;
-	-f)
+		;;
+	f)
 		fcode=1
-		shift;;
-	--)
-		shift; break;;
+		;;
 	esac
 done
+shift $(($OPTIND - 1))
+if [ $# -eq 0 ]; then
+	usage
+	exit 1
+fi
 
 # Deal with any leading environment settings..
 
@@ -82,7 +79,11 @@ trap "rm -rf $genassym_temp" 0 1 2 3 15
 
 $AWK '
 BEGIN {
+	printf("#if __GNUC__ >= 4\n");
+	printf("#define	offsetof(type, member) __builtin_offsetof(type, member)\n");
+	printf("#else\n");
 	printf("#define	offsetof(type, member) ((size_t)(&((type *)0)->member))\n");
+	printf("#endif\n");
 	defining = 0;
 	type = "long";
 	asmtype = "n";

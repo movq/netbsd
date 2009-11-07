@@ -1,4 +1,4 @@
-/*	$NetBSD: libi386.h,v 1.32 2009/09/13 22:45:27 jmcneill Exp $	*/
+/*	$NetBSD: libi386.h,v 1.38 2011/11/28 07:56:54 tls Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -69,6 +69,7 @@ void initio(int);
 #define CONSDEV_AUTO (-1)
 int iskey(int);
 char awaitkey(int, int);
+void wait_sec(int);
 
 /* this is in "user code"! */
 int parsebootfile(const char *, char **, char **, int *, int *, const char **);
@@ -97,30 +98,30 @@ void command_help(char *);
 extern const struct bootblk_command commands[];
 
 /* asm bios/dos calls */
-int biosdisk_extread(int, void *);
+__compactcall int biosdisk_extread(int, void *);
 int biosdisk_read(int, int, int, int, int, void *);
-int biosdisk_reset(int);
+__compactcall int biosdisk_reset(int);
 
-int biosgetrtc(u_long *);
+__compactcall int biosgetrtc(u_long *);
 int biosgetsystime(void);
 int comgetc(int);
 void cominit(int);
-int computc(int, int);
+__compactcall int computc(int, int);
 int comstatus(int);
 int congetc(void);
 int conisshift(void);
 int coniskey(void);
-void conputc(int);
+__compactcall void conputc(int);
 void conclr(void);
 
 int getextmem2(int *);
-int getextmemps2(void *);
+__compactcall int getextmemps2(void *);
 int getmementry(int *, int *);
 
-int biosdisk_int13ext(int);
-int biosdisk_getinfo(int);
+__compactcall int biosdisk_int13ext(int);
+__compactcall int biosdisk_getinfo(int);
 struct biosdisk_extinfo;
-void biosdisk_getextinfo(int, struct biosdisk_extinfo *);
+__compactcall int biosdisk_getextinfo(int, struct biosdisk_extinfo *);
 int get_harddrives(void);
 void biosdisk_probe(void);
 
@@ -136,6 +137,9 @@ int dosseek(int, int, int);
 extern int doserrno;	/* in dos_file.S */
 
 void module_add(char *);
+void splash_add(char *);
+void rnd_add(char *);
+void userconf_add(char *);
 
 struct btinfo_framebuffer;
 void framebuffer_configure(struct btinfo_framebuffer *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: h_tools.c,v 1.2 2008/04/28 20:24:12 martin Exp $	*/
+/*	$NetBSD: h_tools.c,v 1.4 2011/06/11 18:03:17 christos Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -92,7 +92,7 @@ getfh_main(int argc, char **argv)
 			if (fh != NULL)
 				free(fh);
 			if (errno != E2BIG) {
-				perror("getfh");
+				warn("getfh");
 				return EXIT_FAILURE;
 			}
 		}
@@ -100,7 +100,7 @@ getfh_main(int argc, char **argv)
 
 	error = write(STDOUT_FILENO, fh, fh_size);
 	if (error == -1) {
-		perror("write");
+		warn("write");
 		return EXIT_FAILURE;
 	}
 	free(fh);
@@ -124,7 +124,7 @@ kqueue_main(int argc, char **argv)
 	argc--;
 	argv++;
 
-	changes = malloc(sizeof(struct kevent) * (argc - 1));
+	changes = malloc(sizeof(struct kevent) * argc);
 	if (changes == NULL)
 		errx(EXIT_FAILURE, "not enough memory");
 
@@ -206,7 +206,7 @@ rename_main(int argc, char **argv)
 		return EXIT_FAILURE;
 
 	if (rename(argv[1], argv[2]) == -1) {
-		perror("rename");
+		warn("rename");
 		return EXIT_FAILURE;
 	}
 
@@ -226,7 +226,7 @@ sockets_main(int argc, char **argv)
 
 	fd = socket(PF_LOCAL, SOCK_STREAM, 0);
 	if (fd == -1) {
-		perror("socket");
+		warn("socket");
 		return EXIT_FAILURE;
 	}
 
@@ -235,7 +235,7 @@ sockets_main(int argc, char **argv)
 
 	error = bind(fd, (struct sockaddr *)&addr, sizeof(addr));
 	if (error == -1) {
-		perror("connect");
+		warn("connect");
 		return EXIT_FAILURE;
 	}
 
@@ -257,7 +257,7 @@ statvfs_main(int argc, char **argv)
 
 	error = statvfs(argv[1], &buf);
 	if (error != 0) {
-		perror("statvfs");
+		warn("statvfs");
 		return EXIT_FAILURE;
 	}
 

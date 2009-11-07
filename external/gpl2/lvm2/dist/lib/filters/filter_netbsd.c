@@ -1,4 +1,4 @@
-/*      $NetBSD: filter_netbsd.c,v 1.2 2009/01/30 09:59:46 haad Exp $        */
+/*      $NetBSD: filter_netbsd.c,v 1.4 2012/01/04 16:37:45 mhitch Exp $        */
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
@@ -54,6 +54,16 @@ int md_major(void)
 	return _md_major;
 }
 
+int dev_subsystem_part_major(const struct device *dev)
+{
+	return 0;
+}
+
+const char *dev_subsystem_name(const struct device *dev)
+{
+	return "";
+}
+
 /*
  * Devices are only checked for partition tables if their minor number
  * is a multiple of the number corresponding to their type below
@@ -72,6 +82,7 @@ static const device_info_t device_info[] = {
 	{"cgd", 1},
 	{"ccd", 1},	
 	{"xbd", 64},
+	{"ld", 64},
 	{NULL, -1}
 };
 
@@ -211,9 +222,9 @@ static int _scan_dev(const struct config_node *cn)
 			
 			if (!strncmp(name, kd[i].d_name, strlen(name))){
 					_char_device_major[kd[i].d_cmajor] =
-					    device_info[j].max_partitions;
+					    cv->v.i;
 					_block_device_major[kd[i].d_bmajor] =
-					    device_info[j].max_partitions;
+					    cv->v.i;
 					break;
 			}
 		}

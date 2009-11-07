@@ -1,4 +1,4 @@
-/*	$NetBSD: write.c,v 1.25 2008/07/21 14:19:28 lukem Exp $	*/
+/*	$NetBSD: write.c,v 1.27 2011/09/06 18:46:35 joerg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)write.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: write.c,v 1.25 2008/07/21 14:19:28 lukem Exp $");
+__RCSID("$NetBSD: write.c,v 1.27 2011/09/06 18:46:35 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,13 +65,11 @@ __RCSID("$NetBSD: write.c,v 1.25 2008/07/21 14:19:28 lukem Exp $");
 #include "utmpentry.h"
 #include "term_chk.h"
 
-void done(int);
-void do_write(int, const char *, const uid_t);
-void wr_fputs(char *);
-int search_utmp(char *, char *, uid_t, gid_t);
-int utmp_chk(const char *, const char *);
-int main(int, char **);
-
+__dead static void done(int);
+static void do_write(int, const char *, const uid_t);
+static void wr_fputs(char *);
+static int search_utmp(char *, char *, uid_t, gid_t);
+static int utmp_chk(const char *, const char *);
 
 int
 main(int argc, char **argv)
@@ -127,7 +125,7 @@ main(int argc, char **argv)
  * utmp_chk - checks that the given user is actually logged in on
  *     the given tty
  */
-int
+static int
 utmp_chk(const char *user, const char *tty)
 {
 	struct utmpentry *ep;
@@ -151,7 +149,7 @@ utmp_chk(const char *user, const char *tty)
  * Special case for writing to yourself - ignore the terminal you're
  * writing from, unless that's the only terminal with messages enabled.
  */
-int
+static int
 search_utmp(char *user, char *mytty, uid_t myuid, gid_t saved_egid)
 {
 	char tty[MAXPATHLEN];
@@ -214,7 +212,7 @@ search_utmp(char *user, char *mytty, uid_t myuid, gid_t saved_egid)
 /*
  * do_write - actually make the connection
  */
-void
+static void
 do_write(int ttyfd, const char *mytty, const uid_t myuid)
 {
 	const char *login;
@@ -242,7 +240,7 @@ do_write(int ttyfd, const char *mytty, const uid_t myuid)
 		(void)strlcpy(host, "???", sizeof(host));
 	else
 		host[sizeof(host) - 1] = '\0';
-	now = time((time_t *)NULL);
+	now = time(NULL);
 	nows = ctime(&now);
 	nows[16] = '\0';
 	(void)printf("\r\n\a\a\aMessage from %s@%s on %s at %s ...\r\n",
@@ -255,7 +253,7 @@ do_write(int ttyfd, const char *mytty, const uid_t myuid)
 /*
  * done - cleanup and exit
  */
-void
+static void
 done(int signo)
 {
 
@@ -270,7 +268,7 @@ done(int signo)
  * wr_fputs - like fputs(), but makes control characters visible and
  *     turns \n into \r\n
  */
-void
+static void
 wr_fputs(char *s)
 {
 	unsigned char c;

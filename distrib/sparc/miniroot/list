@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.32 2009/09/20 23:19:55 abs Exp $
+#	$NetBSD: list,v 1.37 2011/11/18 21:32:46 njoly Exp $
 
 # Sparc extra's
 PROG	bin/rcmd
@@ -18,21 +18,21 @@ PROG	usr/sbin/installboot
 
 # crunchgen source directory specials
 SPECIAL	vi	srcdir usr.bin/nvi/build
-SPECIAL	less	srcdir usr.bin/less/less
+SPECIAL	less	srcdir external/bsd/less/bin/less
 
 # Minimize use of MFS
 SYMLINK	/tmp	var/tmp
 
 # we need the contents of /usr/mdec
-COPYDIR	${DESTDIR}/usr/mdec	usr/mdec
-# ensure binstall is executable
-MTREE	./usr/mdec/binstall	mode=0555
-
-# the zoneinfo
-COPYDIR	${DESTDIR}/usr/share/zoneinfo	usr/share/zoneinfo
-
-# and the termcap file
-COPY	${DISTRIBDIR}/common/termcap	usr/share/misc/termcap
+COPY	${DESTDIR}/usr/mdec/binstall	usr/mdec/binstall	555
+COPY	${DESTDIR}/usr/mdec/boot	usr/mdec/boot
+LINK	usr/mdec/boot			usr/mdec/boot.388000
+COPY	${DESTDIR}/usr/mdec/boot.net	usr/mdec/boot.net
+COPY	${DESTDIR}/usr/mdec/bootblk	usr/mdec/bootblk
+COPY	${DESTDIR}/usr/mdec/bootjs.net	usr/mdec/bootjs.net
+COPY	${DESTDIR}/usr/mdec/bootxx	usr/mdec/bootxx
+COPY	${DESTDIR}/usr/mdec/ofwboot	usr/mdec/ofwboot
+LINK	usr/mdec/ofwboot		usr/mdec/ofwboot.net
 
 # copy the kernel
 COPY	${KERNOBJDIR}/GENERIC/netbsd	netbsd

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_devar.h,v 1.52 2009/05/06 10:34:32 cegger Exp $	*/
+/*	$NetBSD: if_devar.h,v 1.57 2012/02/02 19:43:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -31,10 +31,7 @@
 
 #if defined(__NetBSD__)
 
-#include "rnd.h"
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #if NetBSD >= 199803
 #define	TULIP_BUS_DMA		1
@@ -694,8 +691,8 @@ struct _tulip_softc_t {
     tulip_srom_connection_t tulip_conntype;
     tulip_desc_t *tulip_rxdescs;
     tulip_desc_t *tulip_txdescs;
-#if defined(__NetBSD__) && NRND > 0
-    rndsource_element_t    tulip_rndsource;
+#if defined(__NetBSD__)
+    krndsource_t    tulip_rndsource;
 #endif
 };
 
@@ -942,11 +939,6 @@ static tulip_softc_t *tulips[TULIP_MAX_DEVICES];
 #endif
 #if BSD >= 199506
 #define TULIP_IFP_TO_SOFTC(ifp) ((tulip_softc_t *)((ifp)->if_softc))
-#if NBPFILTER > 0
-#define	TULIP_BPF_MTAP(sc, m)	bpf_mtap(&(sc)->tulip_if, m)
-#define	TULIP_BPF_TAP(sc, p, l)	bpf_tap(&(sc)->tulip_if, p, l)
-#define	TULIP_BPF_ATTACH(sc)	bpfattach(&(sc)->tulip_if, DLT_EN10MB, sizeof(struct ether_header))
-#endif
 #define	tulip_intrfunc_t	void
 #define	TULIP_VOID_INTRFUNC
 #define	IFF_NOTRAILERS		0
@@ -1055,16 +1047,6 @@ extern struct cfdriver de_cd;
 #endif
 #ifndef TULIP_RESTORESPL
 #define	TULIP_RESTORESPL(s)		splx(s)
-#endif
-
-/*
- * While I think FreeBSD's 2.2 change to the bpf is a nice simplification,
- * it does add yet more conditional code to this driver.  Sigh.
- */
-#if !defined(TULIP_BPF_MTAP) && NBPFILTER > 0
-#define	TULIP_BPF_MTAP(sc, m)	bpf_mtap((sc)->tulip_bpf, m)
-#define	TULIP_BPF_TAP(sc, p, l)	bpf_tap((sc)->tulip_bpf, p, l)
-#define	TULIP_BPF_ATTACH(sc)	bpfattach(&(sc)->tulip_bpf, &(sc)->tulip_if, DLT_EN10MB, sizeof(struct ether_header))
 #endif
 
 #if defined(TULIP_PERFSTATS)

@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2009 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2012 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,7 @@
 #include "dhcp.h"
 #include "if-options.h"
 #include "if-pref.h"
+#include "ipv6rs.h"
 #include "net.h"
 #include "signals.h"
 
@@ -62,7 +63,6 @@
 #endif
 
 static struct rt *routes;
-
 
 static int
 exec_script(char *const *argv, char *const *env)
@@ -163,23 +163,39 @@ arraytostr(const char *const *argv, char **s)
 }
 
 static ssize_t
-make_env(const struct interface *iface, char ***argv)
+make_env(const struct interface *iface, const char *reason, char ***argv)
 {
 	char **env, *p;
 	ssize_t e, elen, l;
 	const struct if_options *ifo = iface->state->options;
 	const struct interface *ifp;
+	int dhcp, ra;
+
+	dhcp = ra = 0;
+	if (strcmp(reason, "ROUTERADVERT") == 0)
+		ra = 1;
+	else
+		dhcp = 1;
+
+	/* When dumping the lease, we only want to report interface and
+	   reason - the other interface variables are meaningless */
+	if (options & DHCPCD_DUMPLEASE)
+		elen = 2;
+	else
+		elen = 10;
 
 	/* Make our env */
-	elen = 8;
 	env = xmalloc(sizeof(char *) * (elen + 1));
 	e = strlen("interface") + strlen(iface->name) + 2;
 	env[0] = xmalloc(e);
 	snprintf(env[0], e, "interface=%s", iface->name);
-	e = strlen("reason") + strlen(iface->state->reason) + 2;
+	e = strlen("reason") + strlen(reason) + 2;
 	env[1] = xmalloc(e);
-	snprintf(env[1], e, "reason=%s", iface->state->reason);
-	e = 20;
+	snprintf(env[1], e, "reason=%s", reason);
+	if (options & DHCPCD_DUMPLEASE)
+		goto dumplease;
+
+ 	e = 20;
 	env[2] = xmalloc(e);
 	snprintf(env[2], e, "pid=%d", getpid());
 	env[3] = xmalloc(e);
@@ -205,6 +221,13 @@ make_env(const struct interface *iface, char ***argv)
 		e--;
 	}
 	*--p = '\0';
+	if ((dhcp && iface->state->new) || (ra && iface->ras)) {
+		env[8] = strdup("if_up=true");
+		env[9] = strdup("if_down=false");
+	} else {
+		env[8] = strdup("if_up=false");
+		env[9] = strdup("if_down=true");
+	}
 	if (*iface->state->profile) {
 		e = strlen("profile=") + strlen(iface->state->profile) + 2;
 		env[elen] = xmalloc(e);
@@ -227,7 +250,7 @@ make_env(const struct interface *iface, char ***argv)
 			snprintf(env[elen++], e, "old_ssid=%s", iface->ssid);
 		}
 	}
-	if (iface->state->old) {
+	if (dhcp && iface->state->old) {
 		e = configure_env(NULL, NULL, iface->state->old, ifo);
 		if (e > 0) {
 			env = xrealloc(env, sizeof(char *) * (elen + e + 1));
@@ -237,7 +260,9 @@ make_env(const struct interface *iface, char ***argv)
 		append_config(&env, &elen, "old",
 		    (const char *const *)ifo->config);
 	}
-	if (iface->state->new) {
+
+dumplease:
+	if (dhcp && iface->state->new) {
 		e = configure_env(NULL, NULL, iface->state->new, ifo);
 		if (e > 0) {
 			env = xrealloc(env, sizeof(char *) * (elen + e + 1));
@@ -246,6 +271,13 @@ make_env(const struct interface *iface, char ***argv)
 		}
 		append_config(&env, &elen, "new",
 		    (const char *const *)ifo->config);
+	}
+	if (ra) {
+		e = ipv6rs_env(NULL, NULL, iface);
+		if (e > 0) {
+			env = xrealloc(env, sizeof(char *) * (elen + e + 1));
+			elen += ipv6rs_env(env + elen, NULL, iface);
+		}
 	}
 
 	/* Add our base environment */
@@ -267,8 +299,8 @@ make_env(const struct interface *iface, char ***argv)
 	return elen;
 }
 
-int
-send_interface(int fd, const struct interface *iface)
+static int
+send_interface1(int fd, const struct interface *iface, const char *reason)
 {
 	char **env, **ep, *s;
 	ssize_t elen;
@@ -276,7 +308,7 @@ send_interface(int fd, const struct interface *iface)
 	int retval;
 
 	retval = 0;
-	make_env(iface, &env);
+	make_env(iface, reason, &env);
 	elen = arraytostr((const char *const *)env, &s);
 	iov[0].iov_base = &elen;
 	iov[0].iov_len = sizeof(ssize_t);
@@ -292,7 +324,20 @@ send_interface(int fd, const struct interface *iface)
 }
 
 int
-run_script(const struct interface *iface)
+send_interface(int fd, const struct interface *iface)
+{
+	int retval = 0;
+	if (send_interface1(fd, iface, iface->state->reason) == -1)
+		retval = -1;
+	if (iface->ras) {
+		if (send_interface1(fd, iface, "ROUTERADVERT") == -1)
+			retval = -1;
+	}
+	return retval;
+}
+
+int
+run_script_reason(const struct interface *iface, const char *reason)
 {
 	char *const argv[2] = { UNCONST(iface->state->options->script), NULL };
 	char **env = NULL, **ep;
@@ -303,11 +348,18 @@ run_script(const struct interface *iface)
 	const struct fd_list *fd;
 	struct iovec iov[2];
 
+	if (iface->state->options->script == NULL ||
+	    iface->state->options->script[0] == '\0' ||
+	    strcmp(iface->state->options->script, "/dev/null") == 0)
+		return 0;
+
+	if (reason == NULL)
+		reason = iface->state->reason;
 	syslog(LOG_DEBUG, "%s: executing `%s', reason %s",
-	    iface->name, argv[0], iface->state->reason);
+	    iface->name, argv[0], reason);
 
 	/* Make our env */
-	elen = make_env(iface, &env);
+	elen = make_env(iface, reason, &env);
 	env = xrealloc(env, sizeof(char *) * (elen + 2));
 	/* Add path to it */
 	path = getenv("PATH");
@@ -460,10 +512,8 @@ c_route(struct rt *ort, struct rt *nrt, const struct interface *iface)
 	/* We delete and add the route so that we can change metric.
 	 * This also has the nice side effect of flushing ARP entries so
 	 * we don't have to do that manually. */
-	del_route(ort->iface, &ort->dest, &ort->net, &ort->gate,
-	    ort->iface->metric);
-	if (!add_route(iface, &nrt->dest, &nrt->net, &nrt->gate,
-		iface->metric))
+	del_route(ort->iface, &ort->dest, &ort->net, &ort->gate, ort->metric);
+	if (!add_route(iface, &nrt->dest, &nrt->net, &nrt->gate, nrt->metric))
 		return 0;
 	syslog(LOG_ERR, "%s: add_route: %m", iface->name);
 	return -1;
@@ -547,7 +597,23 @@ get_routes(const struct interface *iface)
 		return nrt;
 	}
 
-	return get_option_routes(iface->name, iface->state->new);
+	return get_option_routes(iface->state->new,
+	    iface->name, &iface->state->options->options);
+}
+
+/* Some DHCP servers add set host routes by setting the gateway
+ * to the assinged IP address. This differs from our notion of a host route
+ * where the gateway is the destination address, so we fix it. */
+static struct rt *
+massage_host_routes(struct rt *rt, const struct interface *iface)
+{
+	struct rt *r;
+
+	for (r = rt; r; r = r->next)
+		if (r->gate.s_addr == iface->addr.s_addr &&
+		    r->net.s_addr == INADDR_BROADCAST)
+			r->gate.s_addr = r->dest.s_addr;
+	return rt;
 }
 
 static struct rt *
@@ -566,6 +632,58 @@ add_destination_route(struct rt *rt, const struct interface *iface)
 	return r;
 }
 
+/* We should check to ensure the routers are on the same subnet
+ * OR supply a host route. If not, warn and add a host route. */
+static struct rt *
+add_router_host_route(struct rt *rt, const struct interface *ifp)
+{
+	struct rt *rtp, *rtl, *rtn;
+	const char *cp, *cp2, *cp3, *cplim;
+
+	for (rtp = rt, rtl = NULL; rtp; rtl = rtp, rtp = rtp->next) {
+		if (rtp->dest.s_addr != INADDR_ANY)
+			continue;
+		/* Scan for a route to match */
+		for (rtn = rt; rtn != rtp; rtn = rtn->next) {
+			/* match host */
+			if (rtn->dest.s_addr == rtp->gate.s_addr)
+				break;
+			/* match subnet */
+			cp = (const char *)&rtp->gate.s_addr;
+			cp2 = (const char *)&rtn->dest.s_addr;
+			cp3 = (const char *)&rtn->net.s_addr;
+			cplim = cp3 + sizeof(rtn->net.s_addr);
+			while (cp3 < cplim) {
+				if ((*cp++ ^ *cp2++) & *cp3++)
+					break;
+			}
+			if (cp3 == cplim)
+				break;
+		}
+		if (rtn != rtp)
+			continue;
+		if (ifp->flags & IFF_NOARP) {
+			syslog(LOG_WARNING,
+			    "%s: forcing router %s through interface",
+			    ifp->name, inet_ntoa(rtp->gate));
+			rtp->gate.s_addr = 0;
+			continue;
+		}
+		syslog(LOG_WARNING, "%s: router %s requires a host route",
+		    ifp->name, inet_ntoa(rtp->gate));
+		rtn = xmalloc(sizeof(*rtn));
+		rtn->dest.s_addr = rtp->gate.s_addr;
+		rtn->net.s_addr = INADDR_BROADCAST;
+		rtn->gate.s_addr = rtp->gate.s_addr;
+		rtn->next = rtp;
+		if (rtl == NULL)
+			rt = rtn;
+		else
+			rtl->next = rtn;
+	}
+	return rt;
+}
+
 void
 build_routes(void)
 {
@@ -576,17 +694,23 @@ build_routes(void)
 		if (ifp->state->new == NULL)
 			continue;
 		dnr = get_routes(ifp);
+		dnr = massage_host_routes(dnr, ifp);
 		dnr = add_subnet_route(dnr, ifp);
+		dnr = add_router_host_route(dnr, ifp);
 		dnr = add_destination_route(dnr, ifp);
 		for (rt = dnr; rt && (rtn = rt->next, 1); lrt = rt, rt = rtn) {
 			rt->iface = ifp;
+			rt->metric = ifp->metric;
 			/* Is this route already in our table? */
 			if ((find_route(nrs, rt, NULL, NULL)) != NULL)
 				continue;
+			rt->src.s_addr = ifp->addr.s_addr;
 			/* Do we already manage it? */
 			if ((or = find_route(routes, rt, &rtl, NULL))) {
 				if (or->iface != ifp ||
-				    rt->gate.s_addr != or->gate.s_addr)
+				    or->src.s_addr != ifp->addr.s_addr ||
+				    rt->gate.s_addr != or->gate.s_addr ||
+				    rt->metric != or->metric)
 				{
 					if (c_route(or, rt, ifp) != 0)
 						continue;

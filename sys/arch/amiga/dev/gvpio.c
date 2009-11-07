@@ -1,4 +1,4 @@
-/*	$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $ */
+/*	$NetBSD: gvpio.c,v 1.19 2011/07/19 15:55:26 dyoung Exp $ */
 
 /*
  * Copyright (c) 1997 Ignatios Souvatzis
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Ignatios Souvatzis
- *      for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.19 2011/07/19 15:55:26 dyoung Exp $");
 
 /*
  * GVP I/O Extender
@@ -44,8 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $");
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/param.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <amiga/include/cpu.h>
@@ -108,7 +102,9 @@ gvpioattach(struct device *parent, struct device *self, void *auxp)
 	struct gvpbus_args *gap;
 	struct supio_attach_args supa;
 	volatile void *gbase;
+#ifdef __m68k__
 	u_int16_t needpsl;
+#endif
 
 	giosc = (struct gvpio_softc *)self;
 	gap = auxp;
@@ -140,6 +136,7 @@ gvpioattach(struct device *parent, struct device *self, void *auxp)
 		++giosd;
 	}
 	if (giosc->sc_comhdls.lh_first) {
+#ifdef __m68k__
 		/* XXX this should be really in the interrupt stuff */
 		needpsl = PSL_S|PSL_IPL6;
 		if (ipl2spl_table[IPL_SERIAL] < needpsl) {
@@ -149,6 +146,7 @@ gvpioattach(struct device *parent, struct device *self, void *auxp)
 			    needpsl);
 			ipl2spl_table[IPL_SERIAL] = needpsl;
 		}
+#endif
 		giosc->sc_comisr.isr_intr = gvp_com_intr;
 		giosc->sc_comisr.isr_arg = giosc;
 		giosc->sc_comisr.isr_ipl = 6;

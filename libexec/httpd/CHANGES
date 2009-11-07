@@ -1,4 +1,39 @@
-$eterna: CHANGES,v 1.68 2009/05/22 21:51:38 mrg Exp $
+$eterna: CHANGES,v 1.78 2011/11/18 01:25:11 mrg Exp $
+
+changes since bozohttpd 20100920:
+	o  add -P <pidfile> option, from jmmv@netbsd.org
+	o  avoid crashes with http basic auth, from pooka@netbsd.org
+	o  add support for REDIRECT_STATUS variable, from tls@netbsd.org
+	o  support .mp4 files in the default map
+	o  directory indexes with files with : are now displayed properly, from
+	   reed@netbsd.org
+	o  allow -I option to be useful in non-inetd mode as well
+
+changes since bozohttpd 20100617:
+	o  properly fully disable multi-file mode for now
+	o  fix the -t and -U options when used without the -e option, broken since
+	   the library-ifcation
+	o  be explicit that logs go to the FTP facility in syslog
+	o  use scandir() with alphasort() for sorted directory lists, from moof
+	o  fix a serious error in vhost handling; "Host:.." would allow access to
+	   the next level directory from the virtual root directory, from seanb
+	o  fix some various non standard compile time errors, from rudolf
+	o  fix dynamic CGI content maps, from rudolf
+
+changes since bozohttpd 20100509:
+	o  fix some compile issues
+	o  fix SSL mode.  from rtr
+	o  fix some cgi-bin issues, as seen with cvsweb
+	o  disable multi-file daemon mode for now, it breaks
+	o  return 404's instead of 403's when chdir of ~user dirs fail
+	o  remove "noreturn" attribute from bozo_http_error() that was
+	   causing incorrect runtime behaviour
+
+changes since bozohttpd 20090522:
+	o  major rework and clean up of internal interfaces.  move the main
+	   program into main.c, the remaining parts are useable as library.
+	   add bindings for lua.  by Alistair G. Crooks <agc@netbsd.org>
+	o  fix http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=566325
 
 changes since bozohttpd 20090417:
 	o  avoid dying in daemon mode for some uncommon, but recoverable, errors

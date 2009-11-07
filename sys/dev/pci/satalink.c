@@ -1,4 +1,4 @@
-/*	$NetBSD: satalink.c,v 1.38 2008/04/28 20:23:55 martin Exp $	*/
+/*	$NetBSD: satalink.c,v 1.43 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.38 2008/04/28 20:23:55 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.43 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -262,8 +262,10 @@ static void satalink_attach(device_t, device_t, void *);
 CFATTACH_DECL_NEW(satalink, sizeof(struct pciide_softc),
     satalink_match, satalink_attach, NULL, NULL);
 
-static void sii3112_chip_map(struct pciide_softc*, struct pci_attach_args*);
-static void sii3114_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void sii3112_chip_map(struct pciide_softc*,
+    const struct pci_attach_args*);
+static void sii3114_chip_map(struct pciide_softc*,
+    const struct pci_attach_args*);
 static void sii3112_drv_probe(struct ata_channel*);
 static void sii3112_setup_channel(struct ata_channel*);
 
@@ -271,6 +273,11 @@ static const struct pciide_product_desc pciide_satalink_products[] =  {
 	{ PCI_PRODUCT_CMDTECH_3112,
 	  0,
 	  "Silicon Image SATALink 3112",
+	  sii3112_chip_map,
+	},
+	{ PCI_PRODUCT_CMDTECH_240,
+	  0,
+	  "Silicon Image SATALink Sil240",
 	  sii3112_chip_map,
 	},
 	{ PCI_PRODUCT_CMDTECH_3512,
@@ -287,6 +294,11 @@ static const struct pciide_product_desc pciide_satalink_products[] =  {
 	  0,
 	  "Silicon Image SATALink 3114",
 	  sii3114_chip_map,
+	},
+	{ PCI_PRODUCT_ATI_IXP_SATA_300,
+	  0,
+	  "ATI IXP 300 SATA",
+	  sii3112_chip_map,
 	},
 	{ 0,
 	  0,
@@ -383,7 +395,8 @@ ba5_write_4(struct pciide_softc *sc, bus_addr_t reg, uint32_t val)
  * This may also happen on the 3114 (ragge 050527)
  */
 static void
-sii_fixup_cacheline(struct pciide_softc *sc, struct pci_attach_args *pa, int n)
+sii_fixup_cacheline(struct pciide_softc *sc, const struct pci_attach_args *pa,
+    int n)
 {
 	pcireg_t cls, reg;
 	int i;
@@ -410,10 +423,9 @@ sii_fixup_cacheline(struct pciide_softc *sc, struct pci_attach_args *pa, int n)
 }
 
 static void
-sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+sii3112_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t interface, scs_cmd, cfgctl;
 	int channel;
 
@@ -443,7 +455,7 @@ sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 				   PCI_MAPREG_TYPE_MEM|
 				   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 				   &sc->sc_ba5_st, &sc->sc_ba5_sh,
-				   NULL, NULL) != 0)
+				   NULL, &sc->sc_ba5_ss) != 0)
 			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 			    "unable to map SATALink BA5 register space\n");
 		else
@@ -469,7 +481,9 @@ sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	 * apparently hard to tickle, but we'll go ahead and play it
 	 * safe.
 	 */
-	if (PCI_REVISION(pa->pa_class) <= 0x01) {
+	if ((PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CMDTECH_3112 ||
+	     PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CMDTECH_AAR_1210SA) &&
+	    PCI_REVISION(pa->pa_class) <= 0x01) {
 		sc->sc_dma_maxsegsz = 8192;
 		sc->sc_dma_boundary = 8192;
 	}
@@ -511,13 +525,12 @@ sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }
 
 static void
-sii3114_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
+sii3114_mapreg_dma(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *pc;
 	int chan, reg;
@@ -654,7 +667,7 @@ sii3114_mapchan(struct pciide_channel *cp)
 }
 
 static void
-sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+sii3114_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pcireg_t scs_cmd;
@@ -697,7 +710,7 @@ sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			   PCI_MAPREG_TYPE_MEM|
 			   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			   &sc->sc_ba5_st, &sc->sc_ba5_sh,
-			   NULL, NULL) != 0) {
+			   NULL, &sc->sc_ba5_ss) != 0) {
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "unable to map SATALink BA5 register space\n");
 		return;
@@ -758,8 +771,8 @@ sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
 		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.8 2009/04/03 10:38:12 tsutsui Exp $
+# $NetBSD: Makefile,v 1.13 2011/07/13 14:09:36 mrg Exp $
 
 .include <bsd.own.mk>
 .include <bsd.sys.mk>	# for ${HOST_SH}
@@ -12,8 +12,12 @@ BINMODE= 444
 
 NETBSD_VERS!=	${HOST_SH} ${S}/conf/osrelease.sh
 
-SRCS=	start.S
+.PATH:		${S}/dev/arcbios
+
+SRCS=	start.S arcbios_calls.S
 SRCS+=	boot.c bootinfo.c conf.c devopen.c disk.c getchar.c getopt.c putchar.c
+
+.include "${S}/dev/arcbios/Makefile.inc"
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
@@ -21,10 +25,10 @@ LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
 
-AFLAGS=    -x assembler-with-cpp -traditional-cpp -mno-abicalls -mips2
+AFLAGS=    -x assembler-with-cpp -mno-abicalls -mips2 -mabi=32
 AFLAGS+=   -D_LOCORE -D_KERNEL
 CFLAGS=    -Os -mmemcpy -G 1024
-CFLAGS+=   -ffreestanding -mno-abicalls -msoft-float -mips2
+CFLAGS+=   -ffreestanding -mno-abicalls -msoft-float -mips2 -mabi=32
 CFLAGS+=   -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CPPFLAGS+= -nostdinc -I. -I${S}
 CPPFLAGS+= -D_STANDALONE -DNO_ABICALLS -D${MACHINE}
@@ -32,13 +36,15 @@ CPPFLAGS+= -DNETBSD_VERS='"${NETBSD_VERS}"'
 #CPPFLAGS+= -DBOOT_DEBUG
 LDSCRIPT=  ${S}/arch/mips/conf/stand.ldscript
 TEXTADDR=  0x80f00000
+LD+=		-m elf32ltsmip
 
 # if there is a 'version' file, add rule for vers.c and add it to SRCS
 # and CLEANFILES
 .if exists(version)
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version ${MACHINE}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/version ${MACHINE}
 
 SRCS+=	vers.c
 CLEANFILES+= vers.c
@@ -59,7 +65,7 @@ LIBZ=    ${ZLIB}
 
 LIBS=  ${LIBSA} ${LIBKERN} ${LIBZ}
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 cleanlibdir:
 	-rm -rf lib
 

@@ -1,4 +1,4 @@
-# $NetBSD: t_event.sh,v 1.1 2009/11/02 10:15:45 plunky Exp $
+# $NetBSD: t_event.sh,v 1.3 2010/11/29 18:21:15 pgoyette Exp $
 #
 # Copyright (c) 2009 The NetBSD Foundation, Inc.
 # All rights reserved.

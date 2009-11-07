@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk_mbr.c,v 1.36 2009/06/03 15:07:30 pooka Exp $	*/
+/*	$NetBSD: subr_disk_mbr.c,v 1.42.8.1 2012/08/12 19:02:33 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.36 2009/06/03 15:07:30 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.42.8.1 2012/08/12 19:02:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.36 2009/06/03 15:07:30 pooka Exp
 #include <sys/fcntl.h>
 #include <sys/conf.h>
 #include <sys/cdio.h>
+#include <sys/dkbad.h>
 #include <fs/udf/ecma167-udf.h>
 
 #include <sys/kauth.h>
@@ -78,12 +79,16 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.36 2009/06/03 15:07:30 pooka Exp
 typedef struct mbr_partition mbr_partition_t;
 
 /*
- * We allocate a buffer 2 sectors large, and look in both....
+ * We allocate a buffer 3 sectors large, and look in all....
  * That means we find labels written by other ports with different offsets.
  * LABELSECTOR and LABELOFFSET are only used if the disk doesn't have a label.
  */
-#if LABELSECTOR > 1 || LABELOFFSET > 512
+#define SCANBLOCKS 3
+#define DISKLABEL_SIZE 404
+#if LABELSECTOR*DEV_BSIZE + LABELOFFSET > SCANBLOCKS*DEV_BSIZE - DISKLABEL_SIZE
+#if _MACHINE != ews4800mips /* XXX: fail silently, ews4800mips LABELSECTOR */
 #error Invalid LABELSECTOR or LABELOFFSET
+#endif
 #endif
 
 #define MBR_LABELSECTOR	1
@@ -359,14 +364,16 @@ scan_iso_vrs(mbr_args_t *a)
 		a->lp->d_partitions[0].p_size   = a->lp->d_secperunit;
 		a->lp->d_partitions[0].p_cdsession = is_iso9660;
 		a->lp->d_partitions[0].p_fstype = FS_ISO9660;
+#ifdef notyet
 	} else {
 		a->lp->d_partitions[0].p_size   = 0;
 		a->lp->d_partitions[0].p_fstype = FS_UNUSED;
+#endif
 	}
 
 	/* add udf partition if found */
 	if (is_udf >= 0) {
-		/* set the RAW partion to UDF for CD/USB stick etc */
+		/* set the RAW partition to UDF for CD/USB stick etc */
 		a->lp->d_partitions[RAW_PART].p_fstype = FS_UDF;
 		/* UDF doesn't care about the cd session specified here */
 	}
@@ -394,7 +401,6 @@ const char *
 readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
     struct cpu_disklabel *osdep)
 {
-	struct dkbad *bdp;
 	int rval;
 	int i;
 	mbr_args_t a;
@@ -428,10 +434,10 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 
 	/*
 	 * Get a buffer big enough to read a disklabel in and initialize it
-	 * make it two sectors long for the validate_label(); see comment at
+	 * make it three sectors long for the validate_label(); see comment at
 	 * start of file.
 	 */
-	a.bp = geteblk(2 * (int)lp->d_secsize);
+	a.bp = geteblk(SCANBLOCKS * (int)lp->d_secsize);
 	a.bp->b_dev = dev;
 
 	if (osdep)
@@ -462,8 +468,9 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 #endif
 
 	/* Obtain bad sector table if requested and present */
+#ifdef __HAVE_DISKLABEL_DKBAD
 	if (rval == SCAN_FOUND && osdep && (lp->d_flags & D_BADSECT)) {
-		struct dkbad *db;
+		struct dkbad *bdp, *db;
 		int blkno;
 
 		bdp = &osdep->bad;
@@ -493,6 +500,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 		} while (a.bp->b_error && (i += 2) < 10 &&
 			i < lp->d_nsectors);
 	}
+#endif /* __HAVE_DISKLABEL_DKBAD */
 
 	brelse(a.bp, 0);
 	if (rval == SCAN_ERROR || rval == SCAN_CONTINUE)
@@ -570,7 +578,7 @@ validate_label(mbr_args_t *a, uint label_sector)
 	int error;
 
 	/* Next, dig out disk label */
-	if (read_sector(a, label_sector, 2)) {
+	if (read_sector(a, label_sector, SCANBLOCKS)) {
 		a->msg = "disk label read failed";
 		return SCAN_ERROR;
 	}
@@ -590,7 +598,7 @@ validate_label(mbr_args_t *a, uint label_sector)
 		if ((char *)dlp > dlp_lim) {
 			if (a->action != WRITE_LABEL)
 				return SCAN_CONTINUE;
-			/* Write at arch. dependant default location */
+			/* Write at arch. dependent default location */
 			dlp_byte = (char *)a->bp->b_data + LABELOFFSET;
 			if (label_sector)
 				dlp_byte += MBR_LABELSECTOR * a->lp->d_secsize;
@@ -704,7 +712,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	a.strat = strat;
 
 	/* get a buffer and initialize it */
-	a.bp = geteblk(2 * (int)lp->d_secsize);
+	a.bp = geteblk(SCANBLOCKS * (int)lp->d_secsize);
 	a.bp->b_dev = dev;
 
 	/* osdep => we expect an mbr with label in netbsd ptn */

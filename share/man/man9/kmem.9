@@ -1,4 +1,4 @@
-.\"	$NetBSD: kmem.9,v 1.3 2009/08/03 22:20:07 wiz Exp $
+.\"	$NetBSD: kmem.9,v 1.13 2011/06/14 00:18:00 rmind Exp $
 .\"
 .\" Copyright (c)2006 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\" ------------------------------------------------------------
-.Dd August 3, 2009
+.Dd June 14, 2011
 .Dt KMEM 9
 .Os
 .\" ------------------------------------------------------------
@@ -45,6 +45,9 @@
 .Ft void
 .Fn kmem_free \
 "void *p" "size_t size"
+.Ft char *
+.Fn kmem_asprintf \
+"const char *fmt" "..."
 .\" ------------------------------------------------------------
 .Pp
 .Cd "options DEBUG"
@@ -93,6 +96,17 @@ is the equivalent of
 except that it initializes the memory to zero.
 .Pp
 .\" ------------------------------------------------------------
+.Fn kmem_asprintf
+functions as the well known
+.Fn asprintf
+function, but allocates memory using
+.Fn kmem_alloc .
+This routine can sleep during allocation.
+The size of the allocated area is the length of the returned character string, plus one (for the NUL terminator).
+This must be taken into consideration when freeing the returned area with
+.Fn kmem_free .
+.Pp
+.\" ------------------------------------------------------------
 .Fn kmem_free
 frees kernel wired memory allocated by
 .Fn kmem_alloc
@@ -130,6 +144,9 @@ caller can sleep for an unbounded amount of time in order to satisfy the
 allocation.
 This can in turn block other threads that wish to acquire locks held by the
 caller.
+It should be noted that
+.Fn kmem_free
+may also block.
 .Pp
 For some locks this is permissible or even unavoidable.
 For others, particularly locks that may be taken from soft interrupt context,
@@ -228,15 +245,6 @@ Otherwise,
 is returned.
 .\" ------------------------------------------------------------
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing the
-.Nm
-subsystem
-can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The
 .Nm
 subsystem is implemented within the file
@@ -245,17 +253,22 @@ subsystem is implemented within the file
 .Sh SEE ALSO
 .Xr intro 9 ,
 .Xr memoryallocators 9 ,
-.Xr pool_cache 9
+.Xr percpu 9 ,
+.Xr pool_cache 9 ,
+.Xr uvm_km 9
 .\" ------------------------------------------------------------
 .Sh CAVEATS
+Neither
 .Fn kmem_alloc
-cannot be used from interrupt context, from a soft interrupt, or from
+nor
+.Fn kmem_free
+can be used from interrupt context, from a soft interrupt, or from
 a callout.
 Use
 .Xr pool_cache 9
 in these situations.
 .\" ------------------------------------------------------------
-.Sh SECURITY CONSIDERATION
+.Sh SECURITY CONSIDERATIONS
 As the memory allocated by
 .Fn kmem_alloc
 is uninitialized, it can contain security-sensitive data left by its

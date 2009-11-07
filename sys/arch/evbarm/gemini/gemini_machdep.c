@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_machdep.c,v 1.12 2009/08/11 17:04:15 matt Exp $	*/
+/*	$NetBSD: gemini_machdep.c,v 1.18 2011/07/01 20:39:34 dyoung Exp $	*/
 
 /* adapted from:
  *	NetBSD: sdp24xx_machdep.c,v 1.4 2008/08/27 11:03:10 matt Exp
@@ -129,7 +129,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gemini_machdep.c,v 1.12 2009/08/11 17:04:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gemini_machdep.c,v 1.18 2011/07/01 20:39:34 dyoung Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
@@ -140,7 +140,6 @@ __KERNEL_RCSID(0, "$NetBSD: gemini_machdep.c,v 1.12 2009/08/11 17:04:15 matt Exp
 #include "opt_gemini.h"
 #include "geminiwdt.h"
 #include "geminiipm.h"
-#include "md.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -167,7 +166,7 @@ __KERNEL_RCSID(0, "$NetBSD: gemini_machdep.c,v 1.12 2009/08/11 17:04:15 matt Exp
 #endif
 
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <arm/armreg.h>
@@ -193,7 +192,7 @@ __KERNEL_RCSID(0, "$NetBSD: gemini_machdep.c,v 1.12 2009/08/11 17:04:15 matt Exp
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
+ * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
 
@@ -259,8 +258,6 @@ unsigned long gemini_ipmq_vbase = GEMINI_IPMQ_VBASE;
 #endif	/* DEBUG */
 #endif	/* NGEMINIIPM > 0 */
 
-
-extern struct user *proc0paddr;
 
 /*
  * Macros to translate between physical and virtual for a subset of the
@@ -687,8 +684,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init.
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -1244,7 +1240,7 @@ printf("%s:%d: pmap_link_l2pt ipmq_pt\n", __FUNCTION__, __LINE__);
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(l1_pa);
+	cpu_setttb(l1_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

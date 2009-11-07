@@ -1,4 +1,4 @@
-/*	$NetBSD: if_aue.c,v 1.115 2009/09/23 19:07:19 plunky Exp $	*/
+/*	$NetBSD: if_aue.c,v 1.124 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -77,11 +77,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.115 2009/09/23 19:07:19 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.124 2012/02/02 19:43:07 tls Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,20 +90,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.115 2009/09/23 19:07:19 plunky Exp $");
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/device.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 
-#define BPF_MTAP(ifp, m) bpf_mtap((ifp)->if_bpf, (m))
-
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <net/if_ether.h>
 #ifdef INET
@@ -129,8 +121,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.115 2009/09/23 19:07:19 plunky Exp $");
 #include <dev/usb/if_auereg.h>
 
 #ifdef AUE_DEBUG
-#define DPRINTF(x)	if (auedebug) logprintf x
-#define DPRINTFN(n,x)	if (auedebug >= (n)) logprintf x
+#define DPRINTF(x)	if (auedebug) printf x
+#define DPRINTFN(n,x)	if (auedebug >= (n)) printf x
 int	auedebug = 0;
 #else
 #define DPRINTF(x)
@@ -193,6 +185,7 @@ Static const struct aue_type aue_devs[] = {
  {{ USB_VENDOR_HP,		USB_PRODUCT_HP_HN210E},		  PII },
  {{ USB_VENDOR_IODATA,		USB_PRODUCT_IODATA_USBETTX},	  0 },
  {{ USB_VENDOR_IODATA,		USB_PRODUCT_IODATA_USBETTXS},	  PII },
+ {{ USB_VENDOR_IODATA,		USB_PRODUCT_IODATA_ETXUS2},	  PII },
  {{ USB_VENDOR_KINGSTON,	USB_PRODUCT_KINGSTON_KNU101TX},   0 },
  {{ USB_VENDOR_LINKSYS,		USB_PRODUCT_LINKSYS_USB10TX1},	  LSYS|PII },
  {{ USB_VENDOR_LINKSYS,		USB_PRODUCT_LINKSYS_USB10T},	  LSYS },
@@ -829,7 +822,7 @@ aue_attach(device_t parent, device_t self, void *aux)
 	 * A Pegasus chip was detected. Inform the world.
 	 */
 	ifp = GET_IFP(sc);
-	aprint_error_dev(self, "Ethernet address %s\n", ether_sprintf(eaddr));
+	aprint_normal_dev(self, "Ethernet address %s\n", ether_sprintf(eaddr));
 
 	/* Initialize interface info.*/
 	ifp->if_softc = sc;
@@ -861,10 +854,8 @@ aue_attach(device_t parent, device_t self, void *aux)
 	/* Attach the interface. */
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(sc->aue_dev),
 	    RND_TYPE_NET, 0);
-#endif
 
 	callout_init(&(sc->aue_stat_ch), 0);
 
@@ -890,7 +881,7 @@ aue_detach(device_t self, int flags)
 		return (0);
 	}
 
-	callout_stop(&(sc->aue_stat_ch));
+	callout_stop(&sc->aue_stat_ch);
 	/*
 	 * Remove any pending tasks.  They cannot be executing because they run
 	 * in the same thread as detach.
@@ -914,9 +905,7 @@ aue_detach(device_t self, int flags)
 	if (ifp->if_flags & IFF_RUNNING)
 		aue_stop(sc);
 
-#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
 	mii_detach(&sc->aue_mii, MII_PHY_ANY, MII_OFFSET_ANY);
 	ifmedia_delete_instance(&sc->aue_mii.mii_media, IFM_INST_ANY);
 	ether_ifdetach(ifp);
@@ -955,16 +944,13 @@ aue_activate(device_t self, enum devact act)
 	DPRINTFN(2,("%s: %s: enter\n", device_xname(sc->aue_dev), __func__));
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->aue_ec.ec_if);
 		sc->aue_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (0);
 }
 
 /*
@@ -1173,16 +1159,13 @@ aue_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 		goto done1;
 	}
 
-#if NBPFILTER > 0
 	/*
 	 * Handle BPF listeners. Let the BPF user see the packet, but
 	 * don't pass it up to the ether_input() layer unless it's
 	 * a broadcast packet, multicast packet, matches our ethernet
 	 * address or the interface is in promiscuous mode.
 	 */
-	if (ifp->if_bpf)
-		BPF_MTAP(ifp, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	DPRINTFN(10,("%s: %s: deliver %d\n", device_xname(sc->aue_dev),
 		    __func__, m->m_len));
@@ -1387,14 +1370,11 @@ aue_start(struct ifnet *ifp)
 
 	IFQ_DEQUEUE(&ifp->if_snd, m_head);
 
-#if NBPFILTER > 0
 	/*
 	 * If there's a BPF listener, bounce a copy of this frame
 	 * to him.
 	 */
-	if (ifp->if_bpf)
-		BPF_MTAP(ifp, m_head);
-#endif
+	bpf_mtap(ifp, m_head);
 
 	ifp->if_flags |= IFF_OACTIVE;
 
@@ -1664,7 +1644,7 @@ aue_stop(struct aue_softc *sc)
 	aue_csr_write_1(sc, AUE_CTL0, 0);
 	aue_csr_write_1(sc, AUE_CTL1, 0);
 	aue_reset(sc);
-	callout_stop(&(sc->aue_stat_ch));
+	callout_stop(&sc->aue_stat_ch);
 
 	/* Stop transfers. */
 	if (sc->aue_ep[AUE_ENDPT_RX] != NULL) {

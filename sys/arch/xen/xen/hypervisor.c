@@ -1,4 +1,4 @@
-/* $NetBSD: hypervisor.c,v 1.50 2009/10/23 02:32:34 snj Exp $ */
+/* $NetBSD: hypervisor.c,v 1.60.2.2 2012/04/18 19:53:28 snj Exp $ */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -53,7 +53,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.50 2009/10/23 02:32:34 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.60.2.2 2012/04/18 19:53:28 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,8 +77,9 @@ __KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.50 2009/10/23 02:32:34 snj Exp $");
 #include <xen/xen.h>
 #include <xen/hypervisor.h>
 #include <xen/evtchn.h>
-#include <xen/xen3-public/version.h>
+#include <xen/xen-public/version.h>
 
+#include <sys/cpu.h>
 #include <sys/dirent.h>
 #include <sys/stat.h>
 #include <sys/tree.h>
@@ -93,7 +94,6 @@ __KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.50 2009/10/23 02:32:34 snj Exp $");
 #include <dev/pci/pcivar.h>
 #if NACPICA > 0
 #include <dev/acpi/acpivar.h>
-#include <dev/acpi/acpi_madt.h>       
 #include <machine/mpconfig.h>
 #include <xen/mpacpi.h>       
 #endif
@@ -169,6 +169,12 @@ struct  x86_isa_chipset x86_isa_chipset;
 #endif
 #endif
 
+int xen_version;
+
+/* power management, for save/restore */
+static bool hypervisor_suspend(device_t, const pmf_qual_t *);
+static bool hypervisor_resume(device_t, const pmf_qual_t *);
+
 /*
  * Probe for the hypervisor; always succeeds.
  */
@@ -177,10 +183,19 @@ hypervisor_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct hypervisor_attach_args *haa = aux;
 
-	if (strcmp(haa->haa_busname, "hypervisor") == 0)
+	if (strncmp(haa->haa_busname, "hypervisor", sizeof("hypervisor")) == 0)
 		return 1;
 	return 0;
 }
+
+#ifdef MULTIPROCESSOR
+static int
+hypervisor_vcpu_print(void *aux, const char *parent)
+{
+	/* Unconfigured cpus are ignored quietly. */
+	return (QUIET);
+}
+#endif /* MULTIPROCESSOR */
 
 /*
  * Attach the hypervisor.
@@ -188,51 +203,69 @@ hypervisor_match(device_t parent, cfdata_t match, void *aux)
 void
 hypervisor_attach(device_t parent, device_t self, void *aux)
 {
-	int xen_version;
+
 #if NPCI >0
 #ifdef PCI_BUS_FIXUP
 	int pci_maxbus = 0;
 #endif
 #endif /* NPCI */
 	union hypervisor_attach_cookie hac;
+	char xen_extra_version[XEN_EXTRAVERSION_LEN];
 
-#ifdef DOM0OPS
-	if (xendomain_is_privileged()) {
-		xenkernfs_init();
-	}
-#endif
+	xenkernfs_init();
+
 	xen_version = HYPERVISOR_xen_version(XENVER_version, NULL);
-	aprint_normal(": Xen version %d.%d\n", (xen_version & 0xffff0000) >> 16,
-	       xen_version & 0x0000ffff);
+	memset(xen_extra_version, 0, sizeof(xen_extra_version));
+	HYPERVISOR_xen_version(XENVER_extraversion, xen_extra_version);
+	aprint_normal(": Xen version %d.%d%s\n", XEN_MAJOR(xen_version),
+		XEN_MINOR(xen_version), xen_extra_version);
 
 	xengnt_init();
-
-	memset(&hac.hac_vcaa, 0, sizeof(hac.hac_vcaa));
-	hac.hac_vcaa.vcaa_name = "vcpu";
-	hac.hac_vcaa.vcaa_caa.cpu_number = 0;
-	hac.hac_vcaa.vcaa_caa.cpu_role = CPU_ROLE_SP;
-	hac.hac_vcaa.vcaa_caa.cpu_func = 0;
-	config_found_ia(self, "xendevbus", &hac.hac_vcaa, hypervisor_print);
-
 	events_init();
 
+	memset(&hac, 0, sizeof(hac));
+	hac.hac_vcaa.vcaa_name = "vcpu";
+	hac.hac_vcaa.vcaa_caa.cpu_number = 0;
+	hac.hac_vcaa.vcaa_caa.cpu_role = CPU_ROLE_BP;
+	hac.hac_vcaa.vcaa_caa.cpu_func = NULL; /* See xen/x86/cpu.c:vcpu_attach() */
+	config_found_ia(self, "xendevbus", &hac.hac_vcaa, hypervisor_print);
+
+#ifdef MULTIPROCESSOR
+
+	/* 
+	 * The xenstore contains the configured number of vcpus.
+	 * The xenstore however, is not accessible until much later in
+	 * the boot sequence. We therefore bruteforce check for
+	 * allocated vcpus (See: cpu.c:vcpu_match()) by iterating
+	 * through the maximum supported by NetBSD MP.
+	 */
+	cpuid_t vcpuid;
+
+	for (vcpuid = 1; vcpuid < maxcpus; vcpuid++) {
+		memset(&hac, 0, sizeof(hac));
+		hac.hac_vcaa.vcaa_name = "vcpu";
+		hac.hac_vcaa.vcaa_caa.cpu_number = vcpuid;
+		hac.hac_vcaa.vcaa_caa.cpu_role = CPU_ROLE_AP;
+		hac.hac_vcaa.vcaa_caa.cpu_func = NULL; /* See xen/x86/cpu.c:vcpu_attach() */
+		if (NULL == config_found_ia(self, "xendevbus", &hac.hac_vcaa, hypervisor_vcpu_print)) {
+			break;
+		}
+	}
+
+#endif /* MULTIPROCESSOR */
+
 #if NXENBUS > 0
+	memset(&hac, 0, sizeof(hac));
 	hac.hac_xenbus.xa_device = "xenbus";
 	config_found_ia(self, "xendevbus", &hac.hac_xenbus, hypervisor_print);
 #endif
 #if NXENCONS > 0
+	memset(&hac, 0, sizeof(hac));
 	hac.hac_xencons.xa_device = "xencons";
 	config_found_ia(self, "xendevbus", &hac.hac_xencons, hypervisor_print);
 #endif
-#if NXENNET_HYPERVISOR > 0
-	hac.hac_xennet.xa_device = "xennet";
-	xennet_scan(self, &hac.hac_xennet, hypervisor_print);
-#endif
-#if NXBD_HYPERVISOR > 0
-	hac.hac_xbd.xa_device = "xbd";
-	xbd_scan(self, &hac.hac_xbd, hypervisor_print);
-#endif
 #if NNPX > 0
+	memset(&hac, 0, sizeof(hac));
 	hac.hac_xennpx.xa_device = "npx";
 	config_found_ia(self, "xendevbus", &hac.hac_xennpx, hypervisor_print);
 #endif
@@ -240,26 +273,28 @@ hypervisor_attach(device_t parent, device_t self, void *aux)
 #if NPCI > 0
 #if NACPICA > 0
 	if (acpi_present) {
-		hac.hac_acpi.aa_iot = X86_BUS_SPACE_IO;
-		hac.hac_acpi.aa_memt = X86_BUS_SPACE_MEM;
+		memset(&hac, 0, sizeof(hac));
+		hac.hac_acpi.aa_iot = x86_bus_space_io;
+		hac.hac_acpi.aa_memt = x86_bus_space_mem;
 		hac.hac_acpi.aa_pc = NULL;
 		hac.hac_acpi.aa_pciflags =
-			PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+			PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 			PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY |
 			PCI_FLAGS_MWI_OKAY;
 		hac.hac_acpi.aa_ic = &x86_isa_chipset;
 		config_found_ia(self, "acpibus", &hac.hac_acpi, 0);
 	}
 #endif /* NACPICA */
-	hac.hac_pba.pba_iot = X86_BUS_SPACE_IO;
-	hac.hac_pba.pba_memt = X86_BUS_SPACE_MEM;
+	memset(&hac, 0, sizeof(hac));
+	hac.hac_pba.pba_iot = x86_bus_space_io;
+	hac.hac_pba.pba_memt = x86_bus_space_mem;
 	hac.hac_pba.pba_dmat = &pci_bus_dma_tag;
 #ifdef _LP64
 	hac.hac_pba.pba_dmat64 = &pci_bus_dma64_tag;
 #else
 	hac.hac_pba.pba_dmat64 = NULL;
 #endif /* _LP64 */
-	hac.hac_pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
+	hac.hac_pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY;
 	hac.hac_pba.pba_bridgetag = NULL;
 	hac.hac_pba.pba_bus = 0;
 #if NACPICA > 0 && defined(ACPI_SCANPCI)
@@ -279,9 +314,10 @@ hypervisor_attach(device_t parent, device_t self, void *aux)
 #endif
 #if NISA > 0
 	if (isa_has_been_seen == 0) {
+		memset(&hac, 0, sizeof(hac));
 		hac.hac_iba._iba_busname = "isa";
-		hac.hac_iba.iba_iot = X86_BUS_SPACE_IO;
-		hac.hac_iba.iba_memt = X86_BUS_SPACE_MEM;
+		hac.hac_iba.iba_iot = x86_bus_space_io;
+		hac.hac_iba.iba_memt = x86_bus_space_mem;
 		hac.hac_iba.iba_dmat = &isa_bus_dma_tag;
 		hac.hac_iba.iba_ic = NULL; /* No isa DMA yet */
 		config_found_ia(self, "isabus", &hac.hac_iba, isabusprint);
@@ -296,6 +332,30 @@ hypervisor_attach(device_t parent, device_t self, void *aux)
 #endif /* DOM0OPS */
 
 	hypervisor_machdep_attach();
+
+	if (!pmf_device_register(self, hypervisor_suspend, hypervisor_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+}
+
+static bool
+hypervisor_suspend(device_t dev, const pmf_qual_t *qual)
+{
+	events_suspend();
+	xengnt_suspend();
+	
+	return true;
+}
+
+static bool
+hypervisor_resume(device_t dev, const pmf_qual_t *qual)
+{
+	hypervisor_machdep_resume();
+
+	xengnt_resume();
+	events_resume();
+
+	return true;
 }
 
 static int
@@ -307,8 +367,6 @@ hypervisor_print(void *aux, const char *parent)
 		aprint_normal("%s at %s", hac->hac_device, parent);
 	return (UNCONF);
 }
-
-#if defined(DOM0OPS)
 
 #define DIR_MODE	(S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH)
 
@@ -324,4 +382,3 @@ xenkernfs_init(void)
 	kernfs_addentry(NULL, dkt);
 	kernxen_pkt = KERNFS_ENTOPARENTDIR(dkt);
 }
-#endif /* DOM0OPS */

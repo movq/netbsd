@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.37 2009/03/14 21:04:10 dsl Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.40 2010/02/14 11:09:54 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.37 2009/03/14 21:04:10 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.40 2010/02/14 11:09:54 drochner Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.37 2009/03/14 21:04:10 dsl Exp $
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/signalvar.h>
 #include <sys/signal.h>
 
@@ -63,9 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.37 2009/03/14 21:04:10 dsl Exp $
 #include <compat/ibcs2/ibcs2_syscallargs.h>
 
 void
-ibcs2_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+ibcs2_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct trapframe *tf;
 
 	setregs(l, epp, stack);
@@ -75,7 +74,7 @@ ibcs2_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 		pcb->pcb_savefpu.sv_87.sv_env.en_cw = __iBCS2_NPXCW__;
 	tf = l->l_md.md_regs;
 	tf->tf_eax = 0x2000000;		/* XXX base of heap */
-	tf->tf_cs = GSEL(LUCODEBIG_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODEBIG_SEL, SEL_UPL);
 }
 
 /*

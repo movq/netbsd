@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.57 2009/08/21 04:10:33 thorpej Exp $	*/
+/*	$NetBSD: bus.c,v 1.64 2012/02/12 16:34:10 matt Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.57 2009/08/21 04:10:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.64 2012/02/12 16:34:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.57 2009/08/21 04:10:33 thorpej Exp $");
 #include <sys/mbuf.h>
 
 #define _SGIMIPS_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/machtype.h>
 
@@ -383,14 +383,14 @@ bus_space_read_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o)
 			s = splhigh();
 			delay(10);
 #endif
-			reg = mips3_ld( (u_int64_t *)(vaddr_t)(bsh + o));
+			reg = mips3_ld((volatile uint64_t *)(vaddr_t)(bsh + o));
 #ifdef MACE_NEEDS_DELAYS
 			delay(10);
 			splx(s);
 #endif
 			break;
 		default:
-			reg = mips3_ld( (u_int64_t *)(vaddr_t)(bsh + o));
+			reg = mips3_ld((volatile uint64_t *)(vaddr_t)(bsh + o));
 			break;
 	}
 	return reg;
@@ -412,14 +412,14 @@ bus_space_write_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o, u_i
 			s = splhigh();
 			delay(10);
 #endif
-			mips3_sd( (u_int64_t *)(vaddr_t)(bsh + o), v);
+			mips3_sd((volatile uint64_t *)(vaddr_t)(bsh + o), v);
 #ifdef MACE_NEEDS_DELAYS
 			delay(10);
 			splx(s);
 #endif
 			break;
 		default:
-			mips3_sd( (u_int64_t *)(vaddr_t)(bsh + o), v);
+			mips3_sd((volatile uint64_t *)(vaddr_t)(bsh + o), v);
 			break;
 	}
 }
@@ -840,7 +840,8 @@ _bus_dmamap_sync_mips1(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 
 #ifdef DIAGNOSTIC
 	if (offset >= map->dm_mapsize)
-		panic("_bus_dmamap_sync_mips1: bad offset %llu (map size is %llu)"
+		panic("_bus_dmamap_sync_mips1: bad offset %"PRIxPSIZE
+		" (map size is %"PRIxPSIZE")"
 		    , offset, map->dm_mapsize);
 	if (len == 0 || (offset + len) > map->dm_mapsize)
 		panic("_bus_dmamap_sync_mips1: bad length");
@@ -882,7 +883,7 @@ _bus_dmamap_sync_mips1(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 	 * NOTE: Even though this is `wbinv_all', since the cache is
 	 * write-through, it just invalidates it.
 	 */
-	if (len >= mips_pdcache_size) {
+	if (len >= mips_cache_info.mci_pdcache_size) {
 		mips_dcache_wbinv_all();
 		return;
 	}
@@ -942,8 +943,8 @@ _bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 
 #ifdef DIAGNOSTIC
 	if (offset >= map->dm_mapsize)
-		panic("_bus_dmamap_sync_mips3: bad offset %llu "
-		    "(map size is %llu)", offset, map->dm_mapsize);
+		panic("_bus_dmamap_sync_mips3: bad offset %"PRIxPSIZE
+		    "(map size is %"PRIxPSIZE")", offset, map->dm_mapsize);
 	if (len == 0 || (offset + len) > map->dm_mapsize)
 		panic("_bus_dmamap_sync_mips3: bad length");
 #endif
@@ -1045,22 +1046,24 @@ _bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 			mips_dcache_wbinv_range(start, minlen);
 			break;
 
-		case BUS_DMASYNC_PREREAD:
+		case BUS_DMASYNC_PREREAD: {
+			struct mips_cache_info * const mci = &mips_cache_info;
 			end = start + minlen;
-			preboundary = start & ~mips_dcache_align_mask;
-			firstboundary = (start + mips_dcache_align_mask)
-			    & ~mips_dcache_align_mask;
-			lastboundary = end & ~mips_dcache_align_mask;
+			preboundary = start & ~mci->mci_dcache_align_mask;
+			firstboundary = (start + mci->mci_dcache_align_mask)
+			    & ~mci->mci_dcache_align_mask;
+			lastboundary = end & ~mci->mci_dcache_align_mask;
 			if (preboundary < start && preboundary < lastboundary)
 				mips_dcache_wbinv_range(preboundary,
-				    mips_dcache_align);
+				    mci->mci_dcache_align);
 			if (firstboundary < lastboundary)
 				mips_dcache_inv_range(firstboundary,
 				    lastboundary - firstboundary);
 			if (lastboundary < end)
 				mips_dcache_wbinv_range(lastboundary,
-				    mips_dcache_align);
+				    mci->mci_dcache_align);
 			break;
+		}
 
 		case BUS_DMASYNC_PREWRITE:
 			mips_dcache_wb_range(start, minlen);
@@ -1083,12 +1086,9 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 		  bus_size_t boundary, bus_dma_segment_t *segs,
 		  int nsegs, int *rsegs, int flags)
 {
-	extern paddr_t avail_start, avail_end;
-
 	return (_bus_dmamem_alloc_range_common(t, size, alignment, boundary,
-					       segs, nsegs, rsegs, flags,
-					       avail_start /*low*/,
-					       avail_end - PAGE_SIZE /*high*/));
+	    segs, nsegs, rsegs, flags,
+	    mips_avail_start /*low*/, mips_avail_end - PAGE_SIZE /*high*/));
 }
 
 /*
@@ -1115,6 +1115,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	int curseg;
 	const uvm_flag_t kmflags =
 	    (flags & BUS_DMA_NOWAIT) != 0 ? UVM_KMF_NOWAIT : 0;
+	u_int pmapflags;
 
 	/*
 	 * If we're only mapping 1 segment, use KSEG0 or KSEG1, to avoid
@@ -1138,21 +1139,19 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 
 	*kvap = (void *)va;
 
+	pmapflags = VM_PROT_READ | VM_PROT_WRITE | PMAP_WIRED;
+	if (flags & BUS_DMA_COHERENT)
+		pmapflags |= PMAP_NOCACHE;
+
 	for (curseg = 0; curseg < nsegs; curseg++) {
 		for (addr = segs[curseg].ds_addr;
 		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
 		    addr += PAGE_SIZE, va += PAGE_SIZE, size -= PAGE_SIZE) {
 			if (size == 0)
 				panic("_bus_dmamem_map: size botch");
-			pmap_enter(pmap_kernel(), va, 
-#if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
-			    (flags & BUS_DMA_COHERENT) ?
-			      addr | PMAP_NOCACHE : addr,
-#else
-			    addr,
-#endif
+			pmap_enter(pmap_kernel(), va, addr,
 			    VM_PROT_READ | VM_PROT_WRITE,
-			    VM_PROT_READ | VM_PROT_WRITE | PMAP_WIRED);
+			    pmapflags);
 		}
 	}
 	pmap_update(pmap_kernel());
@@ -1194,7 +1193,7 @@ _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 		return (-1);
 	
 #if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
-	return (mips_btop(rv | PMAP_NOCACHE));
+	return (mips_btop(rv | PGC_NOCACHE));
 #else
 	return (mips_btop(rv));
 #endif
@@ -1211,8 +1210,387 @@ bus_space_mmap(bus_space_tag_t space, bus_addr_t addr, off_t off,
 	} else
 #if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
 		return mips_btop((MIPS_KSEG1_TO_PHYS(addr) + off)
-		    | PMAP_NOCACHE);
+		    | PGC_NOCACHE);
 #else
 		return mips_btop((MIPS_KSEG1_TO_PHYS(addr) + off));
 #endif
 }
+
+/*
+ * Utility macros; do not use outside this file.
+ */
+#define	__PB_TYPENAME_PREFIX(BITS)	___CONCAT(u_int,BITS)
+#define	__PB_TYPENAME(BITS)		___CONCAT(__PB_TYPENAME_PREFIX(BITS),_t)
+
+/*
+ *	void bus_space_read_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ * Read `count' 1, 2, 4, or 8 byte quantities from bus space
+ * described by tag/handle/offset and copy into buffer provided.
+ */
+
+#define __SGIMIPS_bus_space_read_multi(BYTES,BITS)			\
+void __CONCAT(bus_space_read_multi_,BYTES)				\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__PB_TYPENAME(BITS) *, bus_size_t);				\
+									\
+void									\
+__CONCAT(bus_space_read_multi_,BYTES)(					\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	__PB_TYPENAME(BITS) *a,						\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--)							\
+		*a++ = __CONCAT(bus_space_read_,BYTES)(t, h, o);	\
+}
+
+__SGIMIPS_bus_space_read_multi(1,8)
+__SGIMIPS_bus_space_read_multi(2,16)
+__SGIMIPS_bus_space_read_multi(4,32)
+
+#undef __SGIMIPS_bus_space_read_multi
+
+#define __SGIMIPS_bus_space_read_multi_stream(BYTES,BITS)		\
+void __CONCAT(bus_space_read_multi_stream_,BYTES)			\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__PB_TYPENAME(BITS) *, bus_size_t);				\
+									\
+void									\
+__CONCAT(bus_space_read_multi_stream_,BYTES)(				\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	__PB_TYPENAME(BITS) *a,						\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--)							\
+		*a++ = __CONCAT(bus_space_read_stream_,BYTES)(t, h, o);	\
+}
+
+
+__SGIMIPS_bus_space_read_multi_stream(2,16)
+__SGIMIPS_bus_space_read_multi_stream(4,32)
+
+#undef __SGIMIPS_bus_space_read_multi_stream
+
+/*
+ *	void bus_space_read_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ * Read `count' 1, 2, 4, or 8 byte quantities from bus space
+ * described by tag/handle and starting at `offset' and copy into
+ * buffer provided.
+ */
+
+#define __SGIMIPS_bus_space_read_region(BYTES,BITS)			\
+void __CONCAT(bus_space_read_region_,BYTES)				\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__PB_TYPENAME(BITS) *, bus_size_t);				\
+									\
+void									\
+__CONCAT(bus_space_read_region_,BYTES)(					\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	__PB_TYPENAME(BITS) *a,						\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--) {							\
+		*a++ = __CONCAT(bus_space_read_,BYTES)(t, h, o);	\
+		o += BYTES;						\
+	}								\
+}
+
+__SGIMIPS_bus_space_read_region(1,8)
+__SGIMIPS_bus_space_read_region(2,16)
+__SGIMIPS_bus_space_read_region(4,32)
+
+#undef __SGIMIPS_bus_space_read_region
+
+/*
+ *	void bus_space_read_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    u_intN_t *addr, bus_size_t count);
+ *
+ * Read `count' 1, 2, 4, or 8 byte quantities from bus space
+ * described by tag/handle and starting at `offset' and copy into
+ * buffer provided. No byte order translation is done.
+ */
+
+#define __SGIMIPS_bus_space_read_region_stream(BYTES,BITS)		\
+void __CONCAT(bus_space_read_region_stream_,BYTES)			\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__PB_TYPENAME(BITS) *, bus_size_t);				\
+									\
+void									\
+__CONCAT(bus_space_read_region_stream_,BYTES)(				\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	__PB_TYPENAME(BITS) *a,						\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--) {							\
+		*a++ = __CONCAT(bus_space_read_stream_,BYTES)(t, h, o);	\
+		o += BYTES;						\
+	}								\
+}
+
+__SGIMIPS_bus_space_read_region_stream(2,16)
+__SGIMIPS_bus_space_read_region_stream(4,32)
+
+#undef __SGIMIPS_bus_space_read_region_stream
+
+/*
+ *	void bus_space_write_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    const u_intN_t *addr, bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
+ * provided to bus space described by tag/handle/offset.
+ */
+
+#define __SGIMIPS_bus_space_write_multi(BYTES,BITS)			\
+void __CONCAT(bus_space_write_multi_,BYTES)				\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	const __PB_TYPENAME(BITS) *, bus_size_t);			\
+									\
+void									\
+__CONCAT(bus_space_write_multi_,BYTES)(					\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	const __PB_TYPENAME(BITS) *a,					\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--)							\
+		__CONCAT(bus_space_write_,BYTES)(t, h, o, *a++);	\
+}
+
+__SGIMIPS_bus_space_write_multi(1,8)
+__SGIMIPS_bus_space_write_multi(2,16)
+__SGIMIPS_bus_space_write_multi(4,32)
+
+#undef __SGIMIPS_bus_space_write_multi
+
+#define __SGIMIPS_bus_space_write_multi_stream(BYTES,BITS)		\
+void __CONCAT(bus_space_write_multi_stream_,BYTES)			\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	const __PB_TYPENAME(BITS) *, bus_size_t);			\
+									\
+void									\
+__CONCAT(bus_space_write_multi_stream_,BYTES)(				\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	const __PB_TYPENAME(BITS) *a,					\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--)							\
+		__CONCAT(bus_space_write_stream_,BYTES)(t, h, o, *a++);	\
+}
+
+__SGIMIPS_bus_space_write_multi_stream(2,16)
+__SGIMIPS_bus_space_write_multi_stream(4,32)
+
+#undef __SGIMIPS_bus_space_write_multi_stream
+
+/*
+ *	void bus_space_write_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    const u_intN_t *addr, bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte quantities from the buffer provided
+ * to bus space described by tag/handle starting at `offset'.
+ */
+
+#define __SGIMIPS_bus_space_write_region(BYTES,BITS)			\
+void __CONCAT(bus_space_write_region_,BYTES)				\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	const __PB_TYPENAME(BITS) *, bus_size_t);			\
+									\
+void									\
+__CONCAT(bus_space_write_region_,BYTES)(				\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	const __PB_TYPENAME(BITS) *a,					\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--) {							\
+		__CONCAT(bus_space_write_,BYTES)(t, h, o, *a++);	\
+		o += BYTES;						\
+	}								\
+}
+
+__SGIMIPS_bus_space_write_region(1,8)
+__SGIMIPS_bus_space_write_region(2,16)
+__SGIMIPS_bus_space_write_region(4,32)
+
+#undef __SGIMIPS_bus_space_write_region
+
+/*
+ *	void bus_space_write_region_stream_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset,
+ *	    const u_intN_t *addr, bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte quantities from the buffer provided
+ * to bus space described by tag/handle starting at `offset', but without
+ * byte-order translation
+ */
+
+#define __SGIMIPS_bus_space_write_region_stream(BYTES,BITS)		\
+void __CONCAT(bus_space_write_region_stream_,BYTES)			\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	const __PB_TYPENAME(BITS) *, bus_size_t);			\
+									\
+void									\
+__CONCAT(bus_space_write_region_stream_,BYTES)(				\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	const __PB_TYPENAME(BITS) *a,					\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--) {							\
+		__CONCAT(bus_space_write_stream_,BYTES)(t, h, o, *a++);	\
+		o += BYTES;						\
+	}								\
+}
+
+__SGIMIPS_bus_space_write_region_stream(2,16)
+__SGIMIPS_bus_space_write_region_stream(4,32)
+
+#undef __SGIMIPS_bus_space_write_region_stream
+
+/*
+ *	void bus_space_set_multi_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_size_t count);
+ *
+ * Write the 1, 2, 4, or 8 byte value `val' to bus space described
+ * by tag/handle/offset `count' times.
+ */
+
+#define __SGIMIPS_bus_space_set_multi(BYTES,BITS)			\
+void __CONCAT(bus_space_set_multi_,BYTES)				\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__PB_TYPENAME(BITS), bus_size_t);				\
+									\
+void									\
+__CONCAT(bus_space_set_multi_,BYTES)(					\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	__PB_TYPENAME(BITS) v,						\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--)							\
+		__CONCAT(bus_space_write_,BYTES)(t, h, o, v);		\
+}
+
+__SGIMIPS_bus_space_set_multi(1,8)
+__SGIMIPS_bus_space_set_multi(2,16)
+__SGIMIPS_bus_space_set_multi(4,32)
+
+#undef __SGIMIPS_bus_space_set_multi
+
+/*
+ *	void bus_space_set_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_size_t count);
+ *
+ * Write `count' 1, 2, 4, or 8 byte value `val' to bus space described
+ * by tag/handle starting at `offset'.
+ */
+
+#define __SGIMIPS_bus_space_set_region(BYTES,BITS)			\
+void __CONCAT(bus_space_set_region_,BYTES)				\
+	(bus_space_tag_t, bus_space_handle_t, bus_size_t,		\
+	__PB_TYPENAME(BITS), bus_size_t);				\
+									\
+void									\
+__CONCAT(bus_space_set_region_,BYTES)(					\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h,						\
+	bus_size_t o,							\
+	__PB_TYPENAME(BITS) v,						\
+	bus_size_t c)							\
+{									\
+									\
+	while (c--) {							\
+		__CONCAT(bus_space_write_,BYTES)(t, h, o, v);		\
+		o += BYTES;						\
+	}								\
+}
+
+__SGIMIPS_bus_space_set_region(1,8)
+__SGIMIPS_bus_space_set_region(2,16)
+__SGIMIPS_bus_space_set_region(4,32)
+
+#undef __SGIMIPS_bus_space_set_region
+
+/*
+ *	void bus_space_copy_region_N(bus_space_tag_t tag,
+ *	    bus_space_handle_t bsh1, bus_size_t off1,
+ *	    bus_space_handle_t bsh2, bus_size_t off2,
+ *	    bus_size_t count);
+ *
+ * Copy `count' 1, 2, 4, or 8 byte values from bus space starting
+ * at tag/bsh1/off1 to bus space starting at tag/bsh2/off2.
+ */
+
+#define	__SGIMIPS_copy_region(BYTES)					\
+void __CONCAT(bus_space_copy_region_,BYTES)				\
+	(bus_space_tag_t,						\
+	    bus_space_handle_t bsh1, bus_size_t off1,			\
+	    bus_space_handle_t bsh2, bus_size_t off2,			\
+	    bus_size_t count);						\
+									\
+void									\
+__CONCAT(bus_space_copy_region_,BYTES)(					\
+	bus_space_tag_t t,						\
+	bus_space_handle_t h1,						\
+	bus_size_t o1,							\
+	bus_space_handle_t h2,						\
+	bus_size_t o2,							\
+	bus_size_t c)							\
+{									\
+	bus_size_t o;							\
+									\
+	if ((h1 + o1) >= (h2 + o2)) {					\
+		/* src after dest: copy forward */			\
+		for (o = 0; c != 0; c--, o += BYTES)			\
+			__CONCAT(bus_space_write_,BYTES)(t, h2, o2 + o,	\
+			    __CONCAT(bus_space_read_,BYTES)(t, h1, o1 + o)); \
+	} else {							\
+		/* dest after src: copy backwards */			\
+		for (o = (c - 1) * BYTES; c != 0; c--, o -= BYTES)	\
+			__CONCAT(bus_space_write_,BYTES)(t, h2, o2 + o,	\
+			    __CONCAT(bus_space_read_,BYTES)(t, h1, o1 + o)); \
+	}								\
+}
+
+__SGIMIPS_copy_region(1)
+__SGIMIPS_copy_region(2)
+__SGIMIPS_copy_region(4)
+
+#undef __SGIMIPS_copy_region
+
+#undef __PB_TYPENAME_PREFIX
+#undef __PB_TYPENAME
+

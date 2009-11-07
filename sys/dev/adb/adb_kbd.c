@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_kbd.c,v 1.13 2009/03/18 10:22:39 cegger Exp $	*/
+/*	$NetBSD: adb_kbd.c,v 1.16 2011/11/16 06:56:49 macallan Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.13 2009/03/18 10:22:39 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.16 2011/11/16 06:56:49 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -75,6 +75,7 @@ struct adbkbd_softc {
 	struct sysmon_pswitch sc_sm_pbutton;
 	int sc_leds;
 	int sc_have_led_control;
+	int sc_power_button_delay;
 	int sc_msg_len;
 	int sc_event;
 	int sc_poll;
@@ -148,7 +149,8 @@ const struct wsmouse_accessops adbkms_accessops = {
 	adbkms_disable,
 };
 
-static int  adbkbd_sysctl_button(SYSCTLFN_ARGS);
+static int  adbkbd_sysctl_mid(SYSCTLFN_ARGS);
+static int  adbkbd_sysctl_right(SYSCTLFN_ARGS);
 static void adbkbd_setup_sysctl(struct adbkbd_softc *);
 
 #endif /* NWSMOUSE > 0 */
@@ -193,6 +195,19 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_leds = 0;	/* initially off */
 	sc->sc_have_led_control = 0;
+
+	/*
+	 * If this is != 0 then pushing the power button will not immadiately
+	 * send a shutdown event to sysmon but instead require another key
+	 * press within 5 seconds with a gap of at least two seconds. The 
+	 * reason to do this is the fact that some PowerBook keyboards,
+	 * like the 2400, 3400 and original G3 have their power buttons
+	 * right next to the backspace key and it's extremely easy to hit
+	 * it by accident.
+	 * On most other keyboards the power button is sufficiently far out
+	 * of the way so we don't need this.
+	 */
+	sc->sc_power_button_delay = 0;
 	sc->sc_msg_len = 0;
 	sc->sc_poll = 0;
 	sc->sc_capslock = 0;
@@ -243,10 +258,12 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 	case ADB_PBKBD:
 		printf("PowerBook keyboard\n");
 		sc->sc_power = 0x7e;
+		sc->sc_power_button_delay = 1;
 		break;
 	case ADB_PBISOKBD:
 		printf("PowerBook keyboard (ISO layout)\n");
 		sc->sc_power = 0x7e;
+		sc->sc_power_button_delay = 1;
 		break;
 	case ADB_ADJKPD:
 		printf("adjustable keypad\n");
@@ -262,10 +279,12 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 		break;
 	case ADB_PBEXTISOKBD:
 		printf("PowerBook extended keyboard (ISO layout)\n");
+		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBEXTJAPKBD:
 		printf("PowerBook extended keyboard (Japanese layout)\n");
+		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_JPKBDII:
@@ -273,6 +292,7 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 		break;
 	case ADB_PBEXTKBD:
 		printf("PowerBook extended keyboard\n");
+		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_DESIGNKBD:
@@ -281,6 +301,7 @@ adbkbd_attach(device_t parent, device_t self, void *aux)
 		break;
 	case ADB_PBJPKBD:
 		printf("PowerBook keyboard (Japanese layout)\n");
+		sc->sc_power_button_delay = 1;
 		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBG3KBD:
@@ -391,7 +412,8 @@ adbkbd_keys(struct adbkbd_softc *sc, uint8_t k1, uint8_t k2)
 		uint32_t diff = now - sc->sc_timestamp;
 
 		sc->sc_timestamp = now;
-		if ((diff > 1) && (diff < 5)) {
+		if (((diff > 1) && (diff < 5)) ||
+		     (sc->sc_power_button_delay == 0)) {
 
 			/* power button, report to sysmon */
 			sc->sc_pe = k1;
@@ -655,54 +677,78 @@ adbkms_disable(void *v)
 static void
 adbkbd_setup_sysctl(struct adbkbd_softc *sc)
 {
-	struct sysctlnode *node, *me;
+	const struct sysctlnode *me, *node;
 	int ret;
 
 	DPRINTF("%s: sysctl setup\n", device_xname(sc->sc_dev));
-	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&me,
+	ret = sysctl_createv(NULL, 0, NULL, &me,
 	       CTLFLAG_READWRITE,
 	       CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
 	       NULL, 0, NULL, 0,
 	       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 
 	ret = sysctl_createv(NULL, 0, NULL,
-	    (const struct sysctlnode **)&node, 
-	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
-	    CTLTYPE_INT, "middle", "middle mouse button", adbkbd_sysctl_button, 
-		    1, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
+	    (void *)&node, 
+	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
+	    CTLTYPE_INT, "middle", "middle mouse button", adbkbd_sysctl_mid, 
+		    1, sc, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
 		    CTL_EOL);
-	node->sysctl_data = sc;
 
 	ret = sysctl_createv(NULL, 0, NULL, 
-	    (const struct sysctlnode **)&node, 
-	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
-	    CTLTYPE_INT, "right", "right mouse button", adbkbd_sysctl_button, 
-		    2, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
+	    (void *)&node, 
+	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC,
+	    CTLTYPE_INT, "right", "right mouse button", adbkbd_sysctl_right, 
+		    2, sc, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
 		    CTL_EOL);
-	node->sysctl_data = sc;
 }
 
 static int
-adbkbd_sysctl_button(SYSCTLFN_ARGS)
+adbkbd_sysctl_mid(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node = *rnode;
 	struct adbkbd_softc *sc=(struct adbkbd_softc *)node.sysctl_data;
 	const int *np = newp;
-	int btn = node.sysctl_idata, reg;
+	int reg;
 
-	DPRINTF("adbkbd_sysctl_button %d\n", btn);
-	node.sysctl_idata = sc->sc_trans[btn];
-	reg = sc->sc_trans[btn];
+	DPRINTF("adbkbd_sysctl_mid\n");
+	reg = sc->sc_trans[1];
 	if (np) {
 		/* we're asked to write */	
 		node.sysctl_data = &reg;
 		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
 			
-			sc->sc_trans[btn] = node.sysctl_idata;
+			sc->sc_trans[1] = *(int *)node.sysctl_data;
 			return 0;
 		}
 		return EINVAL;
 	} else {
+		node.sysctl_data = &reg;
+		node.sysctl_size = 4;
+		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
+	}
+}
+
+static int
+adbkbd_sysctl_right(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct adbkbd_softc *sc=(struct adbkbd_softc *)node.sysctl_data;
+	const int *np = newp;
+	int reg;
+
+	DPRINTF("adbkbd_sysctl_right\n");
+	reg = sc->sc_trans[2];
+	if (np) {
+		/* we're asked to write */	
+		node.sysctl_data = &reg;
+		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
+			
+			sc->sc_trans[2] = *(int *)node.sysctl_data;
+			return 0;
+		}
+		return EINVAL;
+	} else {
+		node.sysctl_data = &reg;
 		node.sysctl_size = 4;
 		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 	}

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2009/05/05 18:49:49 christos Exp $
+#	$NetBSD: Makefile,v 1.7 2011/09/16 16:41:21 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -9,14 +9,15 @@ TOPDIR=${.CURDIR}/../dist
 .PATH:	${TOPDIR} ${TOPDIR}/machine
 
 WARNS=	4
+CWARNFLAGS+=	-Wno-missing-noreturn
 
 CPPFLAGS+=-I${.CURDIR} -I${TOPDIR} -I.
 SRCS=	color.c commands.c display.c hash.c screen.c \
 	top.c username.c utils.c version.c m_netbsd.c
 DPSRCS+=sigdesc.h config.h
 
-LDADD+=	-ltermcap -lm -lkvm -lutil
-DPADD+=	${LIBTERMCAP} ${LIBM} ${LIBKVM} ${LIBUTIL}
+LDADD+=	-lterminfo -lm -lkvm -lutil
+DPADD+=	${LIBTERMINFO} ${LIBM} ${LIBKVM} ${LIBUTIL}
 
 sigdesc.h: ${TOPDIR}/sigconv.awk ${DESTDIR}/usr/include/sys/signal.h
 	${_MKTARGET_CREATE}
@@ -36,4 +37,5 @@ commands.c: sigdesc.h
 config.h: config.h.in
 	${TOOL_SED} -e s/@MACHINE@/${MACHINE}/ < $? > $@
 
+COPTS.display.c = -Wno-format-nonliteral
 .include <bsd.prog.mk>

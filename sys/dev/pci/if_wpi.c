@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpi.c,v 1.43 2009/09/05 14:09:55 tsutsui Exp $    */
+/*  $NetBSD: if_wpi.c,v 1.50.2.3 2012/08/12 18:55:10 martin Exp $    */
 
 /*-
  * Copyright (c) 2006, 2007
@@ -18,13 +18,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.43 2009/09/05 14:09:55 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.50.2.3 2012/08/12 18:55:10 martin Exp $");
 
 /*
  * Driver for Intel PRO/Wireless 3945ABG 802.11 network adapters.
  */
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -39,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.43 2009/09/05 14:09:55 tsutsui Exp $");
 #include <sys/conf.h>
 #include <sys/kauth.h>
 #include <sys/callout.h>
+#include <sys/proc.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -48,9 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.43 2009/09/05 14:09:55 tsutsui Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -171,7 +169,7 @@ static int  wpi_reset(struct wpi_softc *);
 static void wpi_hw_config(struct wpi_softc *);
 static int  wpi_init(struct ifnet *);
 static void wpi_stop(struct ifnet *, int);
-static bool wpi_resume(device_t PMF_FN_PROTO);
+static bool wpi_resume(device_t, const pmf_qual_t *);
 static int	wpi_getrfkill(struct wpi_softc *);
 static void wpi_sysctlattach(struct wpi_softc *);
 
@@ -211,12 +209,11 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct pci_attach_args *pa = aux;
 	const char *intrstr;
-	char devinfo[256];
 	bus_space_tag_t memt;
 	bus_space_handle_t memh;
 	pci_intr_handle_t ih;
 	pcireg_t data;
-	int error, ac, revision;
+	int error, ac;
 
 	RUN_ONCE(&wpi_firmware_init, wpi_attach_once);
 	sc->fw_used = false;
@@ -228,9 +225,7 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	callout_init(&sc->calib_to, 0);
 	callout_setfunc(&sc->calib_to, wpi_calib_timeout, sc);
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof devinfo);
-	revision = PCI_REVISION(pa->pa_class);
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
+	pci_aprint_devinfo(pa, NULL);
 
 	/* enable bus-mastering */
 	data = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
@@ -315,7 +310,9 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 
 	/* set device capabilities */
 	ic->ic_caps =
+#ifdef notyet
 		IEEE80211_C_IBSS |       /* IBSS mode support */
+#endif
 		IEEE80211_C_WPA |        /* 802.11i */
 		IEEE80211_C_MONITOR |    /* monitor mode supported */
 		IEEE80211_C_TXPMGT |     /* tx power management */
@@ -365,10 +362,9 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	else
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
-		sizeof (struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
-		&sc->sc_drvbpf);
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof(struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
+	    &sc->sc_drvbpf);
 
 	sc->sc_rxtap_len = sizeof sc->sc_rxtapu;
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
@@ -377,7 +373,6 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	sc->sc_txtap_len = sizeof sc->sc_txtapu;
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(WPI_TX_RADIOTAP_PRESENT);
-#endif
 
 	ieee80211_announce(ic);
 
@@ -400,10 +395,8 @@ wpi_detach(device_t self, int flags __unused)
 
 	wpi_stop(ifp, 1);
 
-#if NBPFILTER > 0
 	if (ifp != NULL)
-		bpfdetach(ifp);
-#endif
+		bpf_detach(ifp);
 	ieee80211_ifdetach(&sc->sc_ic);
 	if (ifp != NULL)
 		if_detach(ifp);
@@ -1153,9 +1146,9 @@ wpi_cache_firmware(struct wpi_softc *sc)
 	}
 
 	/* load firmware image from disk */
-	if ((error = firmware_open("if_wpi","iwlwifi-3945.ucode", &fw) != 0)) {
+	if ((error = firmware_open("if_wpi","iwlwifi-3945.ucode", &fw)) != 0) {
 		aprint_error_dev(sc->sc_dev, "could not read firmware file\n");
-		goto fail1;
+		goto fail0;
 	}
 
 	wpi_firmware_size = firmware_get_size(fw);
@@ -1199,8 +1192,9 @@ fail2:
 	firmware_free(wpi_firmware_image, wpi_firmware_size);
 fail1:
 	firmware_close(fw);
-	if (--wpi_firmware_users == 0)
-		firmware_free(wpi_firmware_image, wpi_firmware_size);
+fail0:
+	wpi_firmware_users--;
+	KASSERT(wpi_firmware_users == 0);
 	mutex_exit(&wpi_firmware_mutex);
 	return error;
 }
@@ -1482,7 +1476,6 @@ wpi_rx_intr(struct wpi_softc *sc, struct wpi_rx_desc *desc,
 	if (ic->ic_state == IEEE80211_S_SCAN)
 		wpi_fix_channel(ic, m);
 	
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct wpi_rx_radiotap_header *tap = &sc->sc_rxtap;
 
@@ -1518,7 +1511,6 @@ wpi_rx_intr(struct wpi_softc *sc, struct wpi_rx_desc *desc,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m);
 	}
-#endif
 
 	/* grab a reference to the source node */
 	wh = mtod(m, struct ieee80211_frame *);
@@ -1824,7 +1816,6 @@ wpi_tx_data(struct wpi_softc *sc, struct mbuf *m0, struct ieee80211_node *ni,
 	rate &= IEEE80211_RATE_VAL;
 
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct wpi_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -1838,7 +1829,6 @@ wpi_tx_data(struct wpi_softc *sc, struct mbuf *m0, struct ieee80211_node *ni,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
 	}
-#endif
 
 	cmd = &ring->cmd[ring->cur];
 	cmd->code = WPI_CMD_TX_DATA;
@@ -1993,10 +1983,7 @@ wpi_start(struct ifnet *ifp)
 				ifp->if_oerrors++;
 				continue;
 			}
-#if NBPFILTER > 0
-			if (ic->ic_rawbpf != NULL)
-				bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+			bpf_mtap3(ic->ic_rawbpf, m0);
 			if (wpi_tx_data(sc, m0, ni, 0) != 0) {
 				ifp->if_oerrors++;
 				break;
@@ -2039,20 +2026,14 @@ wpi_start(struct ifnet *ifp)
 				break;
 			}
 			IFQ_DEQUEUE(&ifp->if_snd, m0);
-#if NBPFILTER > 0
-			if (ifp->if_bpf != NULL)
-				bpf_mtap(ifp->if_bpf, m0);
-#endif
+			bpf_mtap(ifp, m0);
 			m0 = ieee80211_encap(ic, m0, ni);
 			if (m0 == NULL) {
 				ieee80211_free_node(ni);
 				ifp->if_oerrors++;
 				continue;
 			}
-#if NBPFILTER > 0
-			if (ic->ic_rawbpf != NULL)
-				bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+			bpf_mtap3(ic->ic_rawbpf, m0);
 			if (wpi_tx_data(sc, m0, ni, ac) != 0) {
 				ieee80211_free_node(ni);
 				ifp->if_oerrors++;
@@ -3203,7 +3184,7 @@ wpi_stop(struct ifnet *ifp, int disable)
 }
 
 static bool
-wpi_resume(device_t dv PMF_FN_ARGS)
+wpi_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct wpi_softc *sc = device_private(dv);
 

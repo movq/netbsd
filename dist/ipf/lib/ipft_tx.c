@@ -1,4 +1,4 @@
-/*	$NetBSD: ipft_tx.c,v 1.8 2008/05/20 07:08:07 darrenr Exp $	*/
+/*	$NetBSD: ipft_tx.c,v 1.10 2012/02/15 17:55:06 riz Exp $	*/
 
 /*
  * Copyright (C) 2000-2006 by Darren Reed.

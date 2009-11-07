@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.3 2009/03/14 14:46:06 dsl Exp $	*/
+/*	$NetBSD: boot.c,v 1.5 2011/01/22 19:19:22 joerg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -40,6 +40,7 @@
 #include <machine/cpu.h>
 #include <machine/iplcb.h>
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 
 #include "boot.h"
 
@@ -62,7 +63,7 @@ struct btinfo_console btinfo_console;
 struct ipl_directory ipldir;*/
 
 extern u_long ns_per_tick;
-extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
+extern char bootprog_name[], bootprog_rev[];
 
 void boot(void *, void *);
 static void exec_kernel(char *);
@@ -212,7 +213,6 @@ boot(void *iplcb_p, void *extiplcb_p)
 	setled(0x38000000); /* attempting boot */
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	for (;;) {
 		name = names[n++];

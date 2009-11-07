@@ -1,4 +1,4 @@
-/*	$NetBSD: vtpbc_mainbus.c,v 1.15 2008/04/28 20:23:10 martin Exp $	*/
+/*	$NetBSD: vtpbc_mainbus.c,v 1.18 2011/07/09 16:03:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,19 +30,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vtpbc_mainbus.c,v 1.15 2008/04/28 20:23:10 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vtpbc_mainbus.c,v 1.18 2011/07/09 16:03:01 matt Exp $");
 
 #include "opt_algor_p4032.h"
 #include "opt_algor_p5064.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/reboot.h>
 #include <sys/device.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
+#include <algor/autoconf.h>
 
 #include <algor/pci/vtpbcvar.h>
 
@@ -100,12 +100,12 @@ vtpbc_mainbus_attach(struct device *parent, struct device *self, void *aux)
 	printf("%s: PCI DMA window base: 0x%08lx\n", sc->sc_dev.dv_xname,
 	    (u_long) vt->vt_dma_winbase);
 
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 
 	if (vt->vt_pci_iobase == (bus_addr_t) -1)
-		pba.pba_flags &= ~PCI_FLAGS_IO_ENABLED;
+		pba.pba_flags &= ~PCI_FLAGS_IO_OKAY;
 
 #if defined(ALGOR_P4032)
 	    {

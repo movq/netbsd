@@ -65,6 +65,8 @@
 #error IDEA is disabled.
 #endif
 
+#include <sys/types.h>
+
 #define IDEA_ENCRYPT	1
 #define IDEA_DECRYPT	0
 
@@ -83,6 +85,9 @@ typedef struct idea_key_st
 const char *idea_options(void);
 void idea_ecb_encrypt(const unsigned char *in, unsigned char *out,
 	IDEA_KEY_SCHEDULE *ks);
+#ifdef OPENSSL_FIPS
+void private_idea_set_encrypt_key(const unsigned char *key, IDEA_KEY_SCHEDULE *ks);
+#endif
 void idea_set_encrypt_key(const unsigned char *key, IDEA_KEY_SCHEDULE *ks);
 void idea_set_decrypt_key(IDEA_KEY_SCHEDULE *ek, IDEA_KEY_SCHEDULE *dk);
 void idea_cbc_encrypt(const unsigned char *in, unsigned char *out,

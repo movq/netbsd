@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf.c,v 1.132 2009/04/05 16:31:21 bouyer Exp $	*/
+/*	$NetBSD: uipc_mbuf.c,v 1.145 2012/02/10 17:35:47 para Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -62,9 +62,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.132 2009/04/05 16:31:21 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.145 2012/02/10 17:35:47 para Exp $");
 
 #include "opt_mbuftrace.h"
+#include "opt_nmbclusters.h"
 #include "opt_ddb.h"
 
 #include <sys/param.h>
@@ -72,7 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.132 2009/04/05 16:31:21 bouyer Exp $
 #include <sys/atomic.h>
 #include <sys/cpu.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
 #define MBTYPES
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
@@ -86,8 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.132 2009/04/05 16:31:21 bouyer Exp $
 
 #include <net/if.h>
 
-#include <uvm/uvm.h>
-
 pool_cache_t mb_cache;	/* mbuf cache */
 pool_cache_t mcl_cache;	/* mbuf cluster cache */
 
@@ -99,17 +97,9 @@ int	max_datalen;
 
 static int mb_ctor(void *, void *, int);
 
-static void	*mclpool_alloc(struct pool *, int);
-static void	mclpool_release(struct pool *, void *);
-
 static void	sysctl_kern_mbuf_setup(void);
 
 static struct sysctllog *mbuf_sysctllog;
-
-static struct pool_allocator mclpool_allocator = {
-	.pa_alloc = mclpool_alloc,
-	.pa_free = mclpool_release,
-};
 
 static struct mbuf *m_copym0(struct mbuf *, int, int, int, int);
 static struct mbuf *m_split0(struct mbuf *, int, int, int);
@@ -122,7 +112,7 @@ static int m_copyback0(struct mbuf **, int, int, const void *, int, int);
 #define	M_COPYBACK0_EXTEND	0x0008	/* extend chain */
 
 static const char mclpool_warnmsg[] =
-    "WARNING: mclpool limit reached; increase NMBCLUSTERS";
+    "WARNING: mclpool limit reached; increase kern.mbuf.nmbclusters";
 
 MALLOC_DEFINE(M_MBUF, "mbuf", "mbuf");
 
@@ -157,6 +147,28 @@ do {									\
 	MCLREFDEBUGN((n), __FILE__, __LINE__);				\
 } while (/* CONSTCOND */ 0)
 
+static int
+nmbclusters_limit(void)
+{
+#if defined(PMAP_MAP_POOLPAGE)
+	/* direct mapping, doesn't use space in kmem_map */
+	vsize_t max_size = physmem / 4;
+#else
+	vsize_t max_size = MIN(physmem / 4, nkmempages / 4);
+#endif
+
+	max_size = max_size * PAGE_SIZE / MCLBYTES;
+#ifdef NMBCLUSTERS_MAX
+	max_size = MIN(max_size, NMBCLUSTERS_MAX);
+#endif
+
+#ifdef NMBCLUSTERS
+	return MIN(max_size, NMBCLUSTERS);
+#else
+	return max_size;
+#endif
+}
+
 /*
  * Initialize the mbuf allocator.
  */
@@ -169,18 +181,27 @@ mbinit(void)
 
 	sysctl_kern_mbuf_setup();
 
-	mclpool_allocator.pa_backingmap = mb_map;
-
 	mb_cache = pool_cache_init(msize, 0, 0, 0, "mbpl",
 	    NULL, IPL_VM, mb_ctor, NULL, NULL);
 	KASSERT(mb_cache != NULL);
 
-	mcl_cache = pool_cache_init(mclbytes, 0, 0, 0, "mclpl",
-	    &mclpool_allocator, IPL_VM, NULL, NULL, NULL);
+	mcl_cache = pool_cache_init(mclbytes, 0, 0, 0, "mclpl", NULL,
+	    IPL_VM, NULL, NULL, NULL);
 	KASSERT(mcl_cache != NULL);
 
 	pool_cache_set_drain_hook(mb_cache, m_reclaim, NULL);
 	pool_cache_set_drain_hook(mcl_cache, m_reclaim, NULL);
+
+	/*
+	 * Set an arbitrary default limit on the number of mbuf clusters.
+	 */
+#ifdef NMBCLUSTERS
+	nmbclusters = nmbclusters_limit();
+#else
+	nmbclusters = MAX(1024,
+	    (vsize_t)physmem * PAGE_SIZE / MCLBYTES / 16);
+	nmbclusters = MIN(nmbclusters, nmbclusters_limit());
+#endif
 
 	/*
 	 * Set the hard limit on the mclpool to the number of
@@ -215,8 +236,8 @@ mbinit(void)
 }
 
 /*
- * sysctl helper routine for the kern.mbuf subtree.  nmbclusters may
- * or may not be writable, and mblowat and mcllowat need range
+ * sysctl helper routine for the kern.mbuf subtree.
+ * nmbclusters, mblowat and mcllowat need range
  * checking and pool tweaking after being reset.
  */
 static int
@@ -229,11 +250,6 @@ sysctl_kern_mbuf(SYSCTLFN_ARGS)
 	node.sysctl_data = &newval;
 	switch (rnode->sysctl_num) {
 	case MBUF_NMBCLUSTERS:
-		if (mb_map != NULL) {
-			node.sysctl_flags &= ~CTLFLAG_READWRITE;
-			node.sysctl_flags |= CTLFLAG_READONLY;
-		}
-		/* FALLTHROUGH */
 	case MBUF_MBLOWAT:
 	case MBUF_MCLLOWAT:
 		newval = *(int*)rnode->sysctl_data;
@@ -251,6 +267,8 @@ sysctl_kern_mbuf(SYSCTLFN_ARGS)
 	switch (node.sysctl_num) {
 	case MBUF_NMBCLUSTERS:
 		if (newval < nmbclusters)
+			return (EINVAL);
+		if (newval > nmbclusters_limit())
 			return (EINVAL);
 		nmbclusters = newval;
 		pool_cache_sethardlimit(mcl_cache, nmbclusters,
@@ -428,22 +446,6 @@ sysctl_kern_mbuf_setup(void)
 #endif /* MBUFTRACE */
 }
 
-static void *
-mclpool_alloc(struct pool *pp, int flags)
-{
-	bool waitok = (flags & PR_WAITOK) ? true : false;
-
-	return ((void *)uvm_km_alloc_poolpage(mb_map, waitok));
-}
-
-static void
-mclpool_release(struct pool *pp, void *v)
-{
-
-	uvm_km_free_poolpage(mb_map, (vaddr_t)v);
-}
-
-/*ARGSUSED*/
 static int
 mb_ctor(void *arg, void *object, int flags)
 {
@@ -491,6 +493,8 @@ struct mbuf *
 m_get(int nowait, int type)
 {
 	struct mbuf *m;
+
+	KASSERT(type != MT_FREE);
 
 	m = pool_cache_get(mb_cache,
 	    nowait == M_WAIT ? PR_WAITOK|PR_LIMITFAIL : 0);
@@ -597,9 +601,9 @@ m_prepend(struct mbuf *m, int len, int how)
 	struct mbuf *mn;
 
 	MGET(mn, how, m->m_type);
-	if (mn == (struct mbuf *)NULL) {
+	if (mn == NULL) {
 		m_freem(m);
-		return ((struct mbuf *)NULL);
+		return (NULL);
 	}
 	if (m->m_flags & M_PKTHDR) {
 		M_MOVE_PKTHDR(mn, m);
@@ -1247,6 +1251,62 @@ m_makewritable(struct mbuf **mp, int off, int len, int how)
 	return error;
 }
 
+/*
+ * Copy the mbuf chain to a new mbuf chain that is as short as possible.
+ * Return the new mbuf chain on success, NULL on failure.  On success,
+ * free the old mbuf chain.
+ */
+struct mbuf *
+m_defrag(struct mbuf *mold, int flags)
+{
+	struct mbuf *m0, *mn, *n;
+	size_t sz = mold->m_pkthdr.len;
+
+#ifdef DIAGNOSTIC
+	if ((mold->m_flags & M_PKTHDR) == 0)
+		panic("m_defrag: not a mbuf chain header");
+#endif
+
+	MGETHDR(m0, flags, MT_DATA);
+	if (m0 == NULL)
+		return NULL;
+	M_COPY_PKTHDR(m0, mold);
+	mn = m0;
+
+	do {
+		if (sz > MHLEN) {
+			MCLGET(mn, M_DONTWAIT);
+			if ((mn->m_flags & M_EXT) == 0) {
+				m_freem(m0);
+				return NULL;
+			}
+		}
+
+		mn->m_len = MIN(sz, MCLBYTES);
+
+		m_copydata(mold, mold->m_pkthdr.len - sz, mn->m_len,
+		     mtod(mn, void *));
+
+		sz -= mn->m_len;
+
+		if (sz > 0) {
+			/* need more mbufs */
+			MGET(n, M_NOWAIT, MT_DATA);
+			if (n == NULL) {
+				m_freem(m0);
+				return NULL;
+			}
+
+			mn->m_next = n;
+			mn = n;
+		}
+	} while (sz > 0);
+
+	m_freem(mold);
+
+	return m0;
+}
+
 int
 m_copyback0(struct mbuf **mp0, int off, int len, const void *vp, int flags,
     int how)
@@ -1341,7 +1401,7 @@ extend:
 			 * if we're going to write into the middle of
 			 * a mbuf, split it first.
 			 */
-			if (off > 0 && len < mlen) {
+			if (off > 0) {
 				n = m_split0(m, off, how, 0);
 				if (n == NULL)
 					goto enobufs;
@@ -1385,19 +1445,6 @@ extend:
 			else
 				datap = NULL;
 			eatlen = n->m_len;
-			KDASSERT(off == 0 || eatlen >= mlen);
-			if (off > 0) {
-				KDASSERT(len >= mlen);
-				m->m_len = off;
-				m->m_next = n;
-				if (datap) {
-					m_copydata(m, off, mlen, datap);
-					datap += mlen;
-				}
-				eatlen -= mlen;
-				mp = &m->m_next;
-				m = m->m_next;
-			}
 			while (m != NULL && M_READONLY(m) &&
 			    n->m_type == m->m_type && eatlen > 0) {
 				mlen = min(eatlen, m->m_len);
@@ -1608,7 +1655,7 @@ m_print(const struct mbuf *m, const char *modif, void (*pr)(const char *, ...))
 nextchain:
 	(*pr)("MBUF %p\n", m);
 	snprintb(buf, sizeof(buf), M_FLAGS_BITS, (u_int)m->m_flags);
-	(*pr)("  data=%p, len=%d, type=%d, flags=0x%s\n",
+	(*pr)("  data=%p, len=%d, type=%d, flags=%s\n",
 	    m->m_data, m->m_len, m->m_type, buf);
 	(*pr)("  owner=%p, next=%p, nextpkt=%p\n", m->m_owner, m->m_next,
 	    m->m_nextpkt);

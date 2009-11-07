@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.16 2009/07/21 09:49:15 phx Exp $	*/
+/*	$NetBSD: cpu.h,v 1.20 2011/06/20 06:35:39 matt Exp $	*/
 
 /*
  * Copyright (C) 1995-1997 Wolfgang Solfrank.
@@ -30,12 +30,15 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef	_MACHINE_CPU_H_
-#define	_MACHINE_CPU_H_
+#ifndef	_AMIGAPPC_CPU_H_
+#define	_AMIGAPPC_CPU_H_
+#define	_MACHINE_CPU_H_		/* for <m68k/cpu.h> */
 
-#if defined(_KERNEL)
+#if defined(_KERNEL) && !defined(_MODULE)
 #define	CPU_MAXNUM	1
-
+/*
+ * Amiga models
+ */
 #define A1200		1200
 #define A3000		3000
 #define A4000		4000
@@ -44,21 +47,38 @@ extern int machineid;
 /*
  * Prototypes from amiga_init.c
  */
-void	*alloc_z2mem (long);
+void	*alloc_z2mem(long);
 
 /*
  * Prototypes from autoconf.c
  */
-int     is_a1200 (void);
-int     is_a3000 (void);
-int     is_a4000 (void);
+#define	is_a600()	0
+int     is_a1200(void);
+int     is_a3000(void);
+int     is_a4000(void);
 
 /*
  * Prototypes from machdep.c
  */
 int dma_cachectl(void *, int);
-#endif
+
+/*
+ * Prototypes from powerpc/powerpc/trap.c
+ */
+int badaddr_read(void *, size_t, int *);
+
+/*
+ * Reorder protection when accessing device registers.
+ */
+#define amiga_membarrier() __asm volatile ("eieio")
+
+/*
+ * Finish all bus operations and flush pipelines.
+ */
+#define amiga_cpu_sync() __asm volatile ("sync; isync")
+
+#endif /* _KERNEL && !_MODULE */
 
 #include <powerpc/cpu.h>
 
-#endif	/* _MACHINE_CPU_H_ */
+#endif	/* _AMIGAPPC_CPU_H_ */

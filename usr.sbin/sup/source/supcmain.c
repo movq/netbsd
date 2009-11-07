@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmain.c,v 1.30 2009/10/17 20:46:03 christos Exp $	*/
+/*	$NetBSD: supcmain.c,v 1.32 2011/09/21 19:34:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -470,7 +470,7 @@ doswitch(int *argc, char ***argv, TREE ** collTp, int *oflagsp, int *aflagsp,
 	int oflags, aflags;
 	int c;
 
-#define SUPOPTIONS "abBdDeEfkKlmM:NoOPRsStuvXzZ=:"
+#define SUPOPTIONS "abBCdDeEfkKlmM:NoOPRsStuvXzZ=:"
 
 	oflags = aflags = 0;
 	while ((c = getopt(*argc, *argv, SUPOPTIONS)) != -1)
@@ -501,6 +501,9 @@ doswitch(int *argc, char ***argv, TREE ** collTp, int *oflagsp, int *aflagsp,
 		case 'B':
 			oflags &= ~CFBACKUP;
 			aflags |= CFBACKUP;
+			break;
+		case 'C':
+			oflags |= CFCANONICALIZE;
 			break;
 		case 'd':
 			oflags |= CFDELETE;
@@ -725,7 +728,7 @@ init(int argc, char **argv)
 	Tfree(&collT);
 	if (firstC == NULL)
 		logquit(1, "No collections to upgrade");
-	timenow = time((time_t *) NULL);
+	timenow = time(NULL);
 	if (*supfname == '\0')
 		p = "standard input";
 	else if (sysflag)

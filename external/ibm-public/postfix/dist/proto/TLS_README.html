@@ -27,6 +27,11 @@ code.  Assuming that OpenSSL is written as carefully as Wietse's
 own code, every 1000 lines introduce one additional bug into
 Postfix.  </p>
 
+<p> At this time, you should no longer be using OpenSSL releases prior
+to the most recent 0.9.8 release unless all relevant security fixes have
+been backported to the earlier release by you or your O/S vendor. OpenSSL
+0.9.7 and earlier are no longer maintained by the OpenSSL team. </p>
+
 <h2> What Postfix TLS support does for you </h2>
 
 <p> Transport Layer Security (TLS, formerly called SSL) provides
@@ -785,11 +790,17 @@ Postfix &lt; 2.6, the minimum opportunistic TLS cipher grade is always
 "export". </p>
 
 <p> With mandatory TLS encryption, the Postfix SMTP server will by
-default only use SSLv3 or TLSv1. SSLv2 is only used when TLS encryption
+default disable SSLv2. SSLv2 is used only when TLS encryption
 is optional. The mandatory TLS protocol list is specified via the
 smtpd_tls_mandatory_protocols configuration parameter.  The
 corresponding smtpd_tls_protocols parameter (Postfix &ge; 2.6)
 controls the SSL/TLS protocols used with opportunistic TLS. </p>
+
+<p> Note that the OpenSSL library only supports protocol exclusion
+(not inclusion). For this reason, Postfix can exclude only protocols
+that are known at the time the Postfix software is written. If new
+protocols are added to the OpenSSL library, they cannot be excluded
+without corresponding changes to the Postfix source code. </p>
 
 <p> For a server that is not a public Internet MX host, Postfix (&ge; 2.3)
 supports configurations with no <a href="#server_cert_key">server
@@ -808,9 +819,10 @@ ciphers: </p>
     smtpd_tls_mandatory_ciphers = high
     smtpd_tls_mandatory_exclude_ciphers = aNULL, MD5
     smtpd_tls_security_level = encrypt
-    smtpd_tls_mandatory_protocols = TLSv1
-    # Also available with Postfix &ge; 2.5:
+    # Preferred form with Postfix &ge; 2.5:
     smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3
+    # Alternative form.
+    smtpd_tls_mandatory_protocols = TLSv1
 </pre>
 </blockquote>
 
@@ -852,6 +864,25 @@ secure for most situations. </p>
 </pre>
 </blockquote>
 
+<p> Postfix 2.8 and later, in combination with OpenSSL 0.9.7 and later
+allows TLS servers to preempt the TLS client's cipher preference list.
+This is possible only with SSLv3 and later, as in SSLv2 the client
+chooses the cipher from a list supplied by the server. </p>
+
+<p> By default, the OpenSSL server selects the client's most preferred
+cipher that the server supports. With SSLv3 and later, the server
+may choose its own most preferred cipher that is supported (offered)
+by the client. Setting "tls_preempt_cipherlist = yes" enables server
+cipher preferences. The default OpenSSL behaviour applies with
+"tls_preempt_cipherlist = no". </p>
+
+<p> While server cipher selection may in some cases lead to a more secure
+or performant cipher choice, there is some risk of interoperability
+issues. In the past, some SSL clients have listed lower priority ciphers
+that they did not implement correctly. If the server chooses a cipher
+that the client prefers less, it may select a cipher whose client
+implementation is flawed. </p>
+
 <h3><a name="server_misc"> Miscellaneous server controls</a> </h3>
 
 <p> The smtpd_starttls_timeout parameter limits the time of Postfix
@@ -866,6 +897,30 @@ handshake procedures.  </p>
     smtpd_starttls_timeout = 300s
 </pre>
 </blockquote>
+
+<p> With Postfix 2.8 and later, the tls_disable_workarounds parameter
+specifies a list or bit-mask of OpenSSL bug work-arounds to disable. This
+may be necessary if one of the work-arounds enabled by default in
+OpenSSL proves to pose a security risk, or introduces an unexpected
+interoperability issue. Some bug work-arounds known to be problematic
+are disabled in the default value of the parameter when linked with
+an OpenSSL library that could be vulnerable. </p>
+
+<p> Example: </p>
+ 
+<blockquote>
+<pre>
+/etc/postfix/main.cf:
+    tls_disable_workarounds = 0xFFFFFFFF
+    tls_disable_workarounds = CVE-2010-4180, LEGACY_SERVER_CONNECT
+</pre>
+</blockquote>
+
+<p> Note: Disabling LEGACY_SERVER_CONNECT is not wise at this
+time, lots of servers are still unpatched and Postfix is <a
+href="http://www.postfix.org/wip.html#tls-renegotiation">not
+significantly vulnerable</a> to the renegotiation issue in the TLS
+protocol. </p>
 
 <h2> <a name="client_tls">SMTP Client specific settings</a> </h2>
 
@@ -1407,9 +1462,9 @@ should use the new TLS policy settings. </p>
 <p> Examples: </p>
 
 <p> In the example below, traffic to <i>example.com</i> and its sub-domains
-via the corresponding MX hosts always uses TLS. The protocol version will be
-"SSLv3" or "TLSv1" (the default setting of smtp_tls_mandatory_protocols
-excludes "SSLv2"). Only high or medium strength (i.e. 128 bit or
+via the corresponding MX hosts always uses TLS. The SSLv2 protocol
+will be disabled (the default setting of smtp_tls_mandatory_protocols
+excludes "SSLv2"). Only high- or medium-strength (i.e. 128 bit or
 better) ciphers will be used by default for all "encrypt" security
 level sessions. </p>
 
@@ -2237,7 +2292,7 @@ as specified by the smtp_tls_mandatory_ciphers configuration
 parameter. This setting controls the minimum acceptable SMTP client
 TLS cipher grade for use with mandatory TLS encryption. The default
 value "medium" is suitable for most destinations with which you may
-want to enforce TLS, and is beyond the reach of today's crypt-analytic
+want to enforce TLS, and is beyond the reach of today's cryptanalytic
 methods. See smtp_tls_policy_maps for information on how to configure
 ciphers on a per-destination basis. </p>
 
@@ -2258,7 +2313,7 @@ Postfix &lt; 2.6, the minimum opportunistic TLS cipher grade is always
 "export". </p>
 
 <p> With mandatory TLS encryption, the Postfix SMTP client will by
-default only use SSLv3 or TLSv1. SSLv2 is only used when TLS encryption
+default disable SSLv2. SSLv2 is used only when TLS encryption
 is optional. The mandatory TLS protocol list is specified via the
 smtp_tls_mandatory_protocols configuration parameter.  The corresponding
 smtp_tls_protocols parameter (Postfix &ge; 2.6) controls
@@ -2272,9 +2327,10 @@ the SSL/TLS protocols used with opportunistic TLS. </p>
     smtp_tls_mandatory_ciphers = medium
     smtp_tls_mandatory_exclude_ciphers = RC4, MD5
     smtp_tls_exclude_ciphers = aNULL
-    smtp_tls_mandatory_protocols = SSLv3, TLSv1
-    # Also available with Postfix &ge; 2.5:
+    # Preferred form with Postfix &ge; 2.5:
     smtp_tls_mandatory_protocols = !SSLv2
+    # Alternative form.
+    smtp_tls_mandatory_protocols = SSLv3, TLSv1
     # Also available with Postfix &ge; 2.6:
     smtp_tls_ciphers = export
     smtp_tls_protocols = !SSLv2

@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_dev.c,v 1.8 2009/10/10 21:10:04 pooka Exp $	*/
+/*	$NetBSD: rump_dev.c,v 1.19 2011/03/28 22:23:39 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,22 +26,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_dev.c,v 1.8 2009/10/10 21:10:04 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_dev.c,v 1.19 2011/03/28 22:23:39 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 
+#include "rump_private.h"
 #include "rump_dev_private.h"
 
-void nocomponent(void);
-void nocomponent() {}
-__weak_alias(rump_dev_cgd_init,nocomponent);
-__weak_alias(rump_dev_raidframe_init,nocomponent);
-__weak_alias(rump_dev_netsmb_init,nocomponent);
-__weak_alias(rump_dev_rnd_init,nocomponent);
-__weak_alias(rump_dev_rumpusbhc_init,nocomponent);
-
-__weak_alias(rump_device_configuration,nocomponent);
+int nocomponent(void);
+int nocomponent() {return 0;}
+__weak_alias(rump_device_components,nocomponent);
+__weak_alias(buf_syncwait,nocomponent);
 
 const char *rootspec = "rump0a"; /* usually comes from config */
 
@@ -50,24 +46,30 @@ rump_dev_init(void)
 {
 	extern int cold;
 
+	pmf_init();
+
 	KERNEL_LOCK(1, curlwp);
 
 	config_init_mi();
 
-	rump_dev_cgd_init();
-	rump_dev_raidframe_init();
-	rump_dev_netsmb_init();
-	rump_dev_rnd_init();
-	rump_dev_rumpusbhc_init();
+	rump_component_init(RUMP_COMPONENT_DEV);
+	rump_device_components();
 
 	rump_pdev_finalize();
 
-	rump_device_configuration();
-
 	cold = 0;
-	if (config_rootfound("mainbus", NULL) == NULL)
-		panic("no mainbus");
+	if (rump_component_count(RUMP_COMPONENT_DEV) > 0) {
+		extern struct cfdriver mainbus_cd;
+		extern struct cfattach mainbus_ca;
+		extern struct cfdata cfdata[];
 
+		config_cfdata_attach(cfdata, 0);
+		config_cfdriver_attach(&mainbus_cd);
+		config_cfattach_attach("mainbus", &mainbus_ca);
+		if (config_rootfound("mainbus", NULL) == NULL)
+			panic("no mainbus");
+
+	}
 	config_finalize();
 
 	KERNEL_UNLOCK_LAST(curlwp);
@@ -80,11 +82,16 @@ cpu_rootconf(void)
 	panic("%s: unimplemented", __func__);
 }
 
-#ifdef __HAVE_DEVICE_REGISTER
 void
 device_register(struct device *dev, void *v)
 {
 
 	/* nada */
 }
-#endif
+
+void
+device_register_post_config(struct device *dev, void *v)
+{
+
+	/* nada */
+}

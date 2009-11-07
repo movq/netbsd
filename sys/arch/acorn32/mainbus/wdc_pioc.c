@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pioc.c,v 1.23 2008/03/18 23:52:16 cube Exp $	*/
+/*	$NetBSD: wdc_pioc.c,v 1.25 2011/07/19 15:59:53 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Mark Brinicombe.
@@ -34,14 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pioc.c,v 1.23 2008/03/18 23:52:16 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pioc.c,v 1.25 2011/07/19 15:59:53 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <acorn32/mainbus/piocvar.h>
@@ -74,7 +74,7 @@ CFATTACH_DECL_NEW(wdc_pioc, sizeof(struct wdc_pioc_softc),
     wdc_pioc_probe, wdc_pioc_attach, NULL, NULL);
 
 /*
- * int wdc_pioc_probe(struct device *parent, struct cfdata *cf, void *aux)
+ * int wdc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
  *
  * Make sure we are trying to attach a wdc device and then
  * probe for one.
@@ -137,7 +137,7 @@ wdc_pioc_probe(device_t parent, cfdata_t cf, void *aux)
 }
 
 /*
- * void wdc_pioc_attach(struct device *parent, struct device *self, void *aux)
+ * void wdc_pioc_attach(device_t parent, device_t self, void *aux)
  *
  * attach the wdc device
  */

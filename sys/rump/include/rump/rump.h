@@ -1,9 +1,7 @@
-/*	$NetBSD: rump.h,v 1.33 2009/11/03 18:22:16 pooka Exp $	*/
+/*	$NetBSD: rump.h,v 1.53 2011/03/21 16:41:08 pooka Exp $	*/
 
 /*
- * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
- *
- * Development of this software was supported by Google Summer of Code.
+ * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,41 +41,57 @@ struct vfsops;
 struct fid;
 struct statvfs;
 struct stat;
+struct kauth_cred;
+struct lwp;
+struct modinfo;
+struct uio;
 
 /* yetch */
-#if !defined(_RUMPKERNEL) && !defined(__NetBSD__)
-struct kauth_cred;
-typedef struct kauth_cred *kauth_cred_t;
-#endif
 #if defined(__NetBSD__)
 #include <prop/proplib.h>
 #else
+#ifndef HAVE_PROP_DICTIONARY_T
+#define HAVE_PROP_DICTIONARY_T
 struct prop_dictionary;
 typedef struct prop_dictionary *prop_dictionary_t;
+#endif
 #endif /* __NetBSD__ */
-
-struct lwp;
-struct modinfo;
 
 #include <rump/rumpvnode_if.h>
 #include <rump/rumpdefs.h>
 
 /* rumpkern */
 enum rump_uiorw { RUMPUIO_READ, RUMPUIO_WRITE };
-typedef int (*rump_sysproxy_t)(int, void *, uint8_t *, size_t, register_t *);
+
+enum rump_sigmodel {
+	RUMP_SIGMODEL_PANIC,
+	RUMP_SIGMODEL_IGNORE,
+	RUMP_SIGMODEL_HOST,
+	RUMP_SIGMODEL_RAISE,
+	RUMP_SIGMODEL_RECORD
+};
+
+/* flags to rump_lwproc_rfork */
+#define RUMP_RFFDG	0x01
+#define RUMP_RFCFDG	0x02
 
 /* rumpvfs */
 #define RUMPCN_FREECRED  0x02
-#define RUMPCN_FORCEFREE 0x04
 #define RUMP_ETFS_SIZE_ENDOFF ((uint64_t)-1)
-enum rump_etfs_type { RUMP_ETFS_REG, RUMP_ETFS_BLK, RUMP_ETFS_CHR };
+enum rump_etfs_type {
+	RUMP_ETFS_REG,
+	RUMP_ETFS_BLK,
+	RUMP_ETFS_CHR,
+	RUMP_ETFS_DIR,		/* only the registered directory */
+	RUMP_ETFS_DIR_SUBDIRS	/* dir + subdirectories (recursive) */
+};
 
 /*
  * Something like rump capabilities would be nicer, but let's
  * do this for a start.
  */
-#define RUMP_VERSION	01
-#define rump_init()	rump__init(RUMP_VERSION)
+#define RUMP_VERSION			01
+#define rump_init()			rump__init(RUMP_VERSION)
 
 /* um, what's the point ?-) */
 #ifdef _BEGIN_DECLS
@@ -86,10 +100,20 @@ _BEGIN_DECLS
 
 int	rump_boot_gethowto(void);
 void	rump_boot_sethowto(int);
+void	rump_boot_setsigmodel(enum rump_sigmodel);
 
+void	rump_schedule(void);
+void	rump_unschedule(void);
+
+void	rump_printevcnts(void);
+
+int	rump_daemonize_begin(void);
 int	rump__init(int);
+int	rump_init_server(const char *);
+int	rump_daemonize_done(int);
+#define RUMP_DAEMONIZE_SUCCESS 0
 
-#ifndef _RUMPKERNEL
+#ifndef _KERNEL
 #include <rump/rumpkern_if_pub.h>
 #include <rump/rumpvfs_if_pub.h>
 #include <rump/rumpnet_if_pub.h>
@@ -121,22 +145,31 @@ _END_DECLS
 #endif /* RUMP_SYS_NETWORKING */
 
 #ifdef RUMP_SYS_IOCTL
-#define ioctl(...) rump_sys_ioctl(__VA_ARGS__)
+#error deprecated syscall selection.  use rumphijack
 #endif /* RUMP_SYS_IOCTL */
 
 #ifdef RUMP_SYS_CLOSE
-#define close(a) rump_sys_close(a)
+#error deprecated syscall selection.  use rumphijack
 #endif /* RUMP_SYS_CLOSE */
 
+#ifdef RUMP_SYS_OPEN
+#error deprecated syscall selection.  use rumphijack
+#endif /* RUMP_SYS_OPEN */
+
 #ifdef RUMP_SYS_READWRITE
-#define read(a,b,c) rump_sys_read(a,b,c)
-#define readv(a,b,c) rump_sys_readv(a,b,c)
-#define pread(a,b,c,d) rump_sys_pread(a,b,c,d)
-#define preadv(a,b,c,d) rump_sys_preadv(a,b,c,d)
-#define write(a,b,c) rump_sys_write(a,b,c)
-#define writev(a,b,c) rump_sys_writev(a,b,c)
-#define pwrite(a,b,c,d) rump_sys_pwrite(a,b,c,d)
-#define pwritev(a,b,c,d) rump_sys_pwritev(a,b,c,d)
+#error deprecated syscall selection.  use rumphijack
 #endif /* RUMP_SYS_READWRITE */
+
+#ifdef RUMP_SYS_FILEOPS
+#error deprecated syscall selection.  use rumphijack
+#endif /* RUMP_SYS_FILEOPS */
+
+#ifdef RUMP_SYS_STAT
+#error deprecated syscall selection.  use rumphijack
+#endif /* RUMP_SYS_STAT */
+
+#ifdef RUMP_SYS_PROCOPS
+#error deprecated syscall selection.  use rumphijack
+#endif /* RUMP_SYS_PROCOPS */
 
 #endif /* _RUMP_RUMP_H_ */

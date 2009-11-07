@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.99 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.102 2011/12/19 11:59:56 drochner Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.99 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.102 2011/12/19 11:59:56 drochner Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_eon.h"			/* ISO CLNL over IP */
@@ -116,14 +116,14 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.99 2009/09/16 15:23:05 pooka Exp $");
  * TCP/IP protocol family: IP, ICMP, UDP, TCP.
  */
 
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 #include <netinet6/ipsec.h>
 #include <netinet6/ah.h>
 #ifdef IPSEC_ESP
 #include <netinet6/esp.h>
 #endif
 #include <netinet6/ipcomp.h>
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -183,7 +183,7 @@ PR_WRAP_CTLOUTPUT(tcp_ctloutput)
 #define	udp_ctloutput	udp_ctloutput_wrapper
 #define	tcp_ctloutput	tcp_ctloutput_wrapper
 
-#if defined(IPSEC) || defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 PR_WRAP_CTLINPUT(ah4_ctlinput)
 
 #define	ah4_ctlinput	ah4_ctlinput_wrapper
@@ -215,8 +215,9 @@ const struct protosw inetsw[] = {
 {	.pr_domain = &inetdomain,
 	.pr_init = ip_init,
 	.pr_output = ip_output,
+	.pr_fasttimo = ip_fasttimo,
 	.pr_slowtimo = ip_slowtimo,
-	.pr_drain = ip_drain,
+	.pr_drain = ip_drainstub,
 },
 {	.pr_type = SOCK_DGRAM,
 	.pr_domain = &inetdomain,
@@ -237,8 +238,9 @@ const struct protosw inetsw[] = {
 	.pr_ctloutput = tcp_ctloutput,
 	.pr_usrreq = tcp_usrreq,
 	.pr_init = tcp_init,
+	.pr_fasttimo = tcp_fasttimo,
 	.pr_slowtimo = tcp_slowtimo,
-	.pr_drain = tcp_drain,
+	.pr_drain = tcp_drainstub,
 },
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
@@ -268,7 +270,7 @@ const struct protosw inetsw[] = {
 	.pr_init = ipflow_poolinit,
 },
 #endif /* GATEWAY */
-#ifdef IPSEC
+#ifdef KAME_IPSEC
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
 	.pr_protocol = IPPROTO_AH,
@@ -294,7 +296,7 @@ const struct protosw inetsw[] = {
 	.pr_input = ipcomp4_input,
 	.pr_init = ipcomp4_init,
 },
-#endif /* IPSEC */
+#endif /* KAME_IPSEC */
 #ifdef FAST_IPSEC
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
@@ -467,7 +469,7 @@ struct domain inetdomain = {
 	.dom_externalize = NULL, .dom_dispose = NULL,
 	.dom_protosw = inetsw,
 	.dom_protoswNPROTOSW = &inetsw[__arraycount(inetsw)],
-	.dom_rtattach = rn_inithead,
+	.dom_rtattach = rt_inithead,
 	.dom_rtoffset = 32,
 	.dom_maxrtkey = sizeof(struct ip_pack4),
 #ifdef IPSELSRC

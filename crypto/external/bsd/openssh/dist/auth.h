@@ -1,5 +1,5 @@
-/*	$NetBSD: auth.h,v 1.2 2009/06/07 22:38:46 christos Exp $	*/
-/* $OpenBSD: auth.h,v 1.62 2008/11/04 08:22:12 djm Exp $ */
+/*	$NetBSD: auth.h,v 1.5 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: auth.h,v 1.69 2011/05/23 03:30:07 djm Exp $ */
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -54,6 +54,7 @@ struct Authctxt {
 	int		 valid;		/* user exists and is allowed to login */
 	int		 attempt;
 	int		 failures;
+	int		 server_caused_failure; 
 	int		 force_pwchange;
 	char		*user;		/* username sent by the client */
 	char		*service;
@@ -88,7 +89,7 @@ struct Authctxt {
 #endif
 
 struct Authmethod {
-	char	*name;
+	const char	*name;
 	int	(*userauth)(Authctxt *authctxt);
 	int	*enabled;
 };
@@ -151,10 +152,10 @@ void	krb5_cleanup_proc(Authctxt *authctxt);
 void	do_authentication(Authctxt *);
 void	do_authentication2(Authctxt *);
 
-void	auth_log(Authctxt *, int, char *, char *);
-void	userauth_finish(Authctxt *, int, char *);
+void	auth_log(Authctxt *, int, const char *, const char *);
+void	userauth_finish(Authctxt *, int, const char *);
 void	userauth_send_banner(const char *);
-int	auth_root_allowed(char *);
+int	auth_root_allowed(const char *);
 
 char	*auth2_read_banner(void);
 
@@ -176,10 +177,12 @@ struct passwd * getpwnamallow(const char *user);
 char	*get_challenge(Authctxt *);
 int	verify_response(Authctxt *, const char *);
 
-char	*authorized_keys_file(struct passwd *);
-char	*authorized_keys_file2(struct passwd *);
+char	*expand_authorized_keys(const char *, struct passwd *pw);
+char	*authorized_principals_file(struct passwd *);
 
 FILE	*auth_openkeyfile(const char *, struct passwd *, int);
+FILE	*auth_openprincipals(const char *, struct passwd *, int);
+int	 auth_key_is_revoked(Key *);
 
 HostStatus
 check_key_in_hostfiles(struct passwd *, Key *, const char *,
@@ -187,7 +190,8 @@ check_key_in_hostfiles(struct passwd *, Key *, const char *,
 
 /* hostkey handling */
 Key	*get_hostkey_by_index(int);
-Key	*get_hostkey_by_type(int);
+Key	*get_hostkey_public_by_type(int);
+Key	*get_hostkey_private_by_type(int);
 int	 get_hostkey_index(Key *);
 int	 ssh1_session_key(BIGNUM *);
 

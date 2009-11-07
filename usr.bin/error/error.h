@@ -1,4 +1,4 @@
-/*	$NetBSD: error.h,v 1.15 2009/08/13 06:59:37 dholland Exp $	*/
+/*	$NetBSD: error.h,v 1.18.4.1 2012/03/05 19:12:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -88,6 +88,8 @@ typedef int Errorclass;
 extern const char *class_table[];
 extern int class_count[];
 
+extern size_t filelevel;
+
 #define nunknown	class_count[C_UNKNOWN]
 #define nignore		class_count[C_IGNORE]
 #define nsyncerrors	class_count[C_SYNC]
@@ -106,14 +108,13 @@ extern int class_count[];
 extern FILE *errorfile;	/* where error file comes from */
 extern FILE *queryfile;	/* where the query responses from the user come from*/
 
-extern char *processname;
 extern char *scriptname;
 
 extern const char *suffixlist;
 
 extern boolean query;
 extern boolean terse;
-int inquire(const char *, ...);	/* inquire for yes/no */
+int inquire(const char *, ...) __printflike(1, 2);	/* inquire for yes/no */
 
 /*
  * codes for inquire() to return
@@ -202,6 +203,7 @@ extern boolean *touchedfiles;		/* which files we touched */
  */
 extern int language;
 extern char *currentfilename;
+extern char default_currentfilename[];
 
 /*
  * Macros for initializing arrays of string constants.

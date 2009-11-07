@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.62 2009/10/02 21:04:03 christos Exp $	*/
+/*	$NetBSD: tree.c,v 1.68 2011/02/05 17:14:14 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: tree.c,v 1.62 2009/10/02 21:04:03 christos Exp $");
+__RCSID("$NetBSD: tree.c,v 1.68 2011/02/05 17:14:14 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -50,9 +50,6 @@ __RCSID("$NetBSD: tree.c,v 1.62 2009/10/02 21:04:03 christos Exp $");
 #include "lint1.h"
 #include "cgram.h"
 #include "externs1.h"
-
-/* Various flags for each operator. */
-static	mod_t	modtab[NOPS];
 
 static	tnode_t	*getinode(tspec_t, int64_t);
 static	void	ptrcmpok(op_t, tnode_t *, tnode_t *);
@@ -91,136 +88,6 @@ static	void	chkcomp(op_t, tnode_t *, tnode_t *);
 static	void	precconf(tnode_t *);
 
 extern sig_atomic_t fpe;
-
-/*
- * Initialize mods of operators.
- */
-void
-initmtab(void)
-{
-	static	struct {
-		op_t	op;
-		mod_t	m;
-	} imods[] = {
-		{ ARROW,  { 1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
-		    "->" } },
-		{ POINT,  { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "." } },
-		{ NOT,    { 0,1,0,1,0,1,0,1,0,0,0,0,0,0,0,1,0,0,
-		    "!" } },
-		{ COMPL,  { 0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,1,1,
-		    "~" } },
-		{ INCBEF, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "prefix++" } },
-		{ DECBEF, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "prefix--" } },
-		{ INCAFT, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "postfix++" } },
-		{ DECAFT, { 0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "postfix--" } },
-		{ UPLUS,  { 0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,0,
-		    "unary +" } },
-		{ UMINUS, { 0,0,0,0,1,1,1,0,0,0,1,0,0,0,0,1,1,0,
-		    "unary -" } },
-		{ STAR,   { 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
-		    "unary *" } },
-		{ AMPER,  { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "unary &" } },
-		{ MULT,   { 1,0,0,0,1,1,1,0,1,0,0,1,0,0,0,1,1,0,
-		    "*" } },
-		{ DIV,    { 1,0,0,0,1,1,1,0,1,0,1,1,0,0,0,1,1,0,
-		    "/" } },
-		{ MOD,    { 1,0,1,0,0,1,1,0,1,0,1,1,0,0,0,1,1,0,
-		    "%" } },
-		{ PLUS,   { 1,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,0,0,
-		    "+" } },
-		{ MINUS,  { 1,0,0,1,0,1,1,0,1,0,0,0,0,0,0,1,0,0,
-		    "-" } },
-		{ SHL,    { 1,0,1,0,0,1,1,0,0,0,0,0,1,0,0,1,1,0,
-		    "<<" } },
-		{ SHR,    { 1,0,1,0,0,1,1,0,0,0,1,0,1,0,0,1,1,0,
-		    ">>" } },
-		{ LT,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
-		    "<" } },
-		{ LE,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
-		    "<=" } },
-		{ GT,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
-		    ">" } },
-		{ GE,     { 1,1,0,1,0,1,1,0,1,0,1,1,0,1,1,0,1,0,
-		    ">=" } },
-		{ EQ,     { 1,1,0,1,0,1,1,0,1,0,0,0,0,1,1,0,1,0,
-		    "==" } },
-		{ NE,     { 1,1,0,1,0,1,1,0,1,0,0,0,0,1,1,0,1,0,
-		    "!=" } },
-		{ AND,    { 1,0,1,0,0,1,1,0,1,0,0,0,1,0,0,1,0,0,
-		    "&" } },
-		{ XOR,    { 1,0,1,0,0,1,1,0,1,0,0,0,1,0,0,1,0,0,
-		    "^" } },
-		{ OR,     { 1,0,1,0,0,1,1,0,1,0,0,0,1,0,0,1,0,0,
-		    "|" } },
-		{ LOGAND, { 1,1,0,1,0,1,0,1,0,0,0,0,0,0,0,1,0,0,
-		    "&&" } },
-		{ LOGOR,  { 1,1,0,1,0,1,0,1,0,0,0,0,1,0,0,1,0,0,
-		    "||" } },
-		{ QUEST,  { 1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,
-		    "?" } },
-		{ COLON,  { 1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,
-		    ":" } },
-		{ ASSIGN, { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,
-		    "=" } },
-		{ MULASS, { 1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "*=" } },
-		{ DIVASS, { 1,0,0,0,1,0,0,0,0,1,0,1,0,0,0,1,0,0,
-		    "/=" } },
-		{ MODASS, { 1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1,0,0,
-		    "%=" } },
-		{ ADDASS, { 1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "+=" } },
-		{ SUBASS, { 1,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "-=" } },
-		{ SHLASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "<<=" } },
-		{ SHRASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    ">>=" } },
-		{ ANDASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "&=" } },
-		{ XORASS, { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "^=" } },
-		{ ORASS,  { 1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,
-		    "|=" } },
-		{ NAME,   { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "NAME" } },
-		{ CON,    { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "CON" } },
-		{ STRING, { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "STRING" } },
-		{ FSEL,   { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "FSEL" } },
-		{ CALL,   { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
-		    "CALL" } },
-		{ COMMA,  { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,
-		    "," } },
-		{ CVT,    { 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
-		    "CVT" } },
-		{ ICALL,  { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
-		    "ICALL" } },
-		{ LOAD,	  { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-		    "LOAD" } },
-		{ PUSH,   { 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
-		    "PUSH" } },
-		{ RETURN, { 1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,
-		    "RETURN" } },
-		{ INIT,   { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
-		    "INIT" } },
-		{ FARG,   { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
-		    "FARG" } },
-		{ NOOP,   { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, NULL } }
-	};
-	int	i;
-
-	for (i = 0; imods[i].op != NOOP; i++)
-		STRUCT_ASSIGN(modtab[imods[i].op], imods[i].m);
-}
 
 /*
  * Increase degree of reference.
@@ -1139,7 +1006,7 @@ typeok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 		goto assign;
 	case SHRASS:
 		if (pflag && !isutyp(lt) && !(tflag && isutyp(rt))) {
-			/* bitwise operation on s.v. possibly nonportabel */
+			/* bitwise operation on s.v. possibly nonportable */
 			warning(117);
 		}
 		goto assign;
@@ -1513,6 +1380,10 @@ mktnode(op_t op, type_t *type, tnode_t *ln, tnode_t *rn)
 {
 	tnode_t	*ntn;
 	tspec_t	t;
+#ifdef notyet
+	size_t l;
+	uint64_t rnum;
+#endif
 
 	ntn = getnode();
 
@@ -1521,7 +1392,42 @@ mktnode(op_t op, type_t *type, tnode_t *ln, tnode_t *rn)
 	ntn->tn_left = ln;
 	ntn->tn_right = rn;
 
-	if (op == STAR || op == FSEL) {
+	switch (op) {
+#ifdef notyet
+	case SHR:
+		if (rn->tn_op != CON)
+			break;
+		rnum = rn->tn_val->v_quad;
+		l = tsize(ln->tn_type) / CHAR_BIT;
+		t = ln->tn_type->t_tspec;
+		switch (l) {
+		case 8:
+			if (rnum >= 56)
+				t = UCHAR;
+			else if (rnum >= 48)
+				t = USHORT;
+			else if (rnum >= 32)
+				t = UINT;
+			break;
+		case 4:
+			if (rnum >= 24)
+				t = UCHAR;
+			else if (rnum >= 16)
+				t = USHORT;
+			break;
+		case 2:
+			if (rnum >= 8)
+				t = UCHAR;
+			break;
+		default:
+			break;
+		}
+		if (t != ln->tn_type->t_tspec)
+			ntn->tn_type->t_tspec = t;
+		break;
+#endif
+	case STAR:
+	case FSEL:
 		if (ln->tn_type->t_tspec == PTR) {
 			t = ln->tn_type->t_subt->t_tspec;
 			if (t != FUNC && t != VOID)
@@ -1529,9 +1435,12 @@ mktnode(op_t op, type_t *type, tnode_t *ln, tnode_t *rn)
 		} else {
 			LERROR("mktnode()");
 		}
+		break;
+	default:
+		break;
 	}
 
-	return (ntn);
+	return ntn;
 }
 
 /*
@@ -3965,19 +3874,23 @@ catstrg(strg_t *strg1, strg_t *strg2)
 		return (strg1);
 	}
 
-	len = (len1 = strg1->st_len) + (len2 = strg2->st_len);
+	len1 = strg1->st_len;
+	len2 = strg2->st_len + 1;	/* + NUL */
+	len = len1 + len2;
 
-	if (strg1->st_tspec == CHAR) {
-		strg1->st_cp = xrealloc(strg1->st_cp, len + 1);
-		(void)memcpy(strg1->st_cp + len1, strg2->st_cp, len2 + 1);
-		free(strg2->st_cp);
-	} else {
-		strg1->st_wcp = xrealloc(strg1->st_wcp,
-					 (len + 1) * sizeof (wchar_t));
-		(void)memcpy(strg1->st_wcp + len1, strg2->st_wcp,
-			     (len2 + 1) * sizeof (wchar_t));
-		free(strg2->st_wcp);
-	}
+#define COPY(F) \
+    do { \
+	strg1->F = xrealloc(strg1->F, len * sizeof(*strg1->F)); \
+	(void)memcpy(strg1->F + len1, strg2->F, len2 * sizeof(*strg1->F)); \
+	free(strg2->F); \
+    } while (/*CONSTCOND*/0)
+
+	if (strg1->st_tspec == CHAR)
+		COPY(st_cp);
+	else
+		COPY(st_wcp);
+
+	strg1->st_len = len - 1; /* - NUL */;
 	free(strg2);
 
 	return (strg1);

@@ -1,5 +1,5 @@
-/*	$NetBSD: packet.h,v 1.2 2009/06/07 22:38:47 christos Exp $	*/
-/* $OpenBSD: packet.h,v 1.49 2008/07/10 18:08:11 markus Exp $ */
+/*	$NetBSD: packet.h,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: packet.h,v 1.56 2011/05/06 21:14:05 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -20,6 +20,7 @@
 #include <termios.h>
 
 #include <openssl/bn.h>
+#include <openssl/ec.h>
 
 void	 packet_request_rekeying(void);
 void     packet_set_connection(int, int);
@@ -33,7 +34,7 @@ u_int	 packet_get_encryption_key(u_char *);
 void     packet_set_protocol_flags(u_int);
 u_int	 packet_get_protocol_flags(void);
 void     packet_start_compression(int);
-void     packet_set_interactive(int);
+void     packet_set_interactive(int, int, int);
 int      packet_is_interactive(void);
 void     packet_set_server(void);
 void     packet_set_authenticated(void);
@@ -42,8 +43,10 @@ int	 packet_authentication_state(void);
 void     packet_start(u_char);
 void     packet_put_char(int ch);
 void     packet_put_int(u_int value);
+void     packet_put_int64(u_int64_t value);
 void     packet_put_bignum(BIGNUM * value);
 void     packet_put_bignum2(BIGNUM * value);
+void     packet_put_ecpoint(const EC_GROUP *, const EC_POINT *);
 void     packet_put_string(const void *buf, u_int len);
 void     packet_put_cstring(const char *str);
 void     packet_put_raw(const void *buf, u_int len);
@@ -58,12 +61,15 @@ int      packet_read_poll_seqnr(u_int32_t *seqnr_p);
 
 u_int	 packet_get_char(void);
 u_int	 packet_get_int(void);
+u_int64_t packet_get_int64(void);
 void     packet_get_bignum(BIGNUM * value);
 void     packet_get_bignum2(BIGNUM * value);
+void	 packet_get_ecpoint(const EC_GROUP *, EC_POINT *);
 void	*packet_get_raw(u_int *length_ptr);
 void	*packet_get_string(u_int *length_ptr);
+char	*packet_get_cstring(u_int *length_ptr);
 void	*packet_get_string_ptr(u_int *length_ptr);
-void     packet_disconnect(const char *fmt,...) __attribute__((format(printf, 1, 2)));
+__dead void     packet_disconnect(const char *fmt,...) __attribute__((format(printf, 1, 2)));
 void     packet_send_debug(const char *fmt,...) __attribute__((format(printf, 1, 2)));
 
 void	 set_newkeys(int mode);
@@ -75,6 +81,7 @@ void	 packet_get_state(int, u_int32_t *, u_int64_t *, u_int32_t *, u_int64_t *);
 void	 packet_set_state(int, u_int32_t, u_int64_t, u_int32_t, u_int64_t);
 int	 packet_get_ssh1_cipher(void);
 void	 packet_set_iv(int, u_char *);
+void	*packet_get_newkeys(int);
 
 int      packet_write_poll(void);
 int      packet_write_wait(void);
@@ -82,7 +89,6 @@ int      packet_have_data_to_write(void);
 int      packet_not_very_much_data_to_write(void);
 
 int	 packet_connection_is_on_socket(void);
-int	 packet_connection_is_ipv4(void);
 int	 packet_remaining(void);
 void	 packet_send_ignore(int);
 void	 packet_add_padding(u_char);
@@ -90,10 +96,10 @@ void	 packet_add_padding(u_char);
 void	 tty_make_modes(int, struct termios *);
 void	 tty_parse_modes(int, int *);
 
-extern u_int max_packet_size;
-extern int keep_alive_timeouts;
+void	 packet_set_alive_timeouts(int);
+int	 packet_inc_alive_timeouts(void);
 int	 packet_set_maxsize(u_int);
-#define  packet_get_maxsize() max_packet_size
+u_int	 packet_get_maxsize(void);
 
 /* don't allow remaining bytes after the end of the message */
 #define packet_check_eom() \
@@ -108,5 +114,11 @@ do { \
 
 int	 packet_need_rekeying(void);
 void	 packet_set_rekey_limit(u_int32_t);
+
+void	 packet_backup_state(void);
+void	 packet_restore_state(void);
+
+void	*packet_get_input(void);
+void	*packet_get_output(void);
 
 #endif				/* PACKET_H */

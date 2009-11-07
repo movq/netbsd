@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.19 2009/03/13 18:24:41 cube Exp $	*/
+/*	$NetBSD: gram.y,v 1.24 2010/04/30 20:47:18 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -73,6 +73,7 @@ static	int	adepth;
 #define	new_px(p, x)	new0(NULL, NULL, p, 0, x)
 #define	new_sx(s, x)	new0(NULL, s, NULL, 0, x)
 #define	new_nsx(n,s,x)	new0(n, s, NULL, 0, x)
+#define	new_i(i)	new0(NULL, NULL, NULL, i, NULL)
 
 #define	fx_atom(s)	new0(s, NULL, NULL, FX_ATOM, NULL)
 #define	fx_not(e)	new0(NULL, NULL, NULL, FX_NOT, e)
@@ -80,7 +81,7 @@ static	int	adepth;
 #define	fx_or(e1, e2)	new0(NULL, NULL, e1, FX_OR, e2)
 
 static	void	cleanup(void);
-static	void	setmachine(const char *, const char *, struct nvlist *);
+static	void	setmachine(const char *, const char *, struct nvlist *, int);
 static	void	check_maxpart(void);
 
 static	void	app(struct nvlist *, struct nvlist *);
@@ -107,15 +108,16 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 %token	DEVICE DEVCLASS DUMPS DEVICE_MAJOR
 %token	ENDFILE
 %token	XFILE FILE_SYSTEM FLAGS
-%token	IDENT
+%token	IDENT IOCONF
+%token	LINKZERO
 %token	XMACHINE MAJOR MAKEOPTIONS MAXUSERS MAXPARTITIONS MINOR
 %token	NEEDS_COUNT NEEDS_FLAG NO
 %token	XOBJECT OBSOLETE ON OPTIONS
-%token	PACKAGE PLUSEQ PREFIX PSEUDO_DEVICE
+%token	PACKAGE PLUSEQ PREFIX PSEUDO_DEVICE PSEUDO_ROOT
 %token	ROOT
-%token	SOURCE
+%token	SINGLE SOURCE
 %token	TYPE
-%token	VERSION
+%token	VECTOR VERSION
 %token	WITH
 %token	<num> NUMBER
 %token	<str> PATHNAME QSTRING WORD EMPTYSTRING
@@ -147,7 +149,6 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 %type	<val>	flags_opt
 %type	<str>	deffs
 %type	<list>	deffses
-%type	<str>	fsoptfile_opt
 %type	<list>	defopt
 %type	<list>	defopts
 %type	<str>	optdep
@@ -157,6 +158,7 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 %type	<list>	subarches_opt subarches
 %type	<str>	filename stringvalue locname mkvarname
 %type	<val>	device_major_block device_major_char
+%type	<list>	devnodes devnodetype devnodeflags devnode_dims
 
 %%
 
@@ -186,9 +188,10 @@ topthing:
 	'\n';
 
 machine_spec:
-	XMACHINE WORD '\n'		{ setmachine($2,NULL,NULL); } |
-	XMACHINE WORD WORD subarches_opt '\n'	{ setmachine($2,$3,$4); } |
-	error { stop("cannot proceed without machine specifier"); };
+	XMACHINE WORD '\n'		{ setmachine($2,NULL,NULL,0); } |
+	XMACHINE WORD WORD subarches_opt '\n'	{ setmachine($2,$3,$4,0); } |
+	IOCONF WORD '\n'		{ setmachine($2,NULL,NULL,1); } |
+	error { stop("cannot proceed without machine or ioconf specifier"); };
 
 subarches_opt:
 	subarches			|
@@ -208,8 +211,8 @@ object:
 	XOBJECT filename fopts oflgs	{ addobject($2, $3, $4); };
 
 device_major:
-	DEVICE_MAJOR WORD device_major_char device_major_block fopts
-					{ adddevm($2, $3, $4, $5); };
+	DEVICE_MAJOR WORD device_major_char device_major_block fopts devnodes
+					{ adddevm($2, $3, $4, $5, $6); };
 
 device_major_block:
 	BLOCK NUMBER			{ $$ = $2.val; } |
@@ -242,6 +245,25 @@ fflag:
 	NEEDS_COUNT			{ $$ = FI_NEEDSCOUNT; } |
 	NEEDS_FLAG			{ $$ = FI_NEEDSFLAG; };
 
+devnodes:
+	devnodetype ',' devnodeflags	{ $$ = nvcat($1, $3); } |
+	devnodetype			{ $$ = $1; } |
+	/* empty */			{ $$ = new_s("DEVNODE_DONTBOTHER"); };
+
+devnodetype:
+	SINGLE				{ $$ = new_s("DEVNODE_SINGLE"); } |
+	VECTOR '=' devnode_dims		{ $$ = nvcat(new_s("DEVNODE_VECTOR"), $3); };
+
+devnode_dims:
+	NUMBER ':' NUMBER		{ struct nvlist *__nv1, *__nv2;
+					  __nv1 = new_i($1.val);
+					  __nv2 = new_i($3.val);
+					  $$ = nvcat(__nv1, __nv2); } |
+	NUMBER				{ $$ = new_i($1.val); }
+
+devnodeflags:
+	LINKZERO			{ $$ = new_s("DEVNODE_FLAG_LINKZERO");};
+	
 oflgs:
 	oflgs oflag			{ $$ = $1 | $2; } |
 	/* empty */			{ $$ = 0; };
@@ -276,8 +298,7 @@ one_def:
 	device_major			{ do_devsw = 1; } |
 	prefix |
 	DEVCLASS WORD			{ (void)defattr($2, NULL, NULL, 1); } |
-	DEFFS fsoptfile_opt deffses defoptdeps
-					{ deffilesystem($2, $3, $4); } |
+	DEFFS deffses defoptdeps	{ deffilesystem($2, $3); } |
 	DEFINE WORD interface_opt attrs_opt
 					{ (void)defattr($2, $3, $4, 0); } |
 	DEFOPT optfile_opt defopts defoptdeps
@@ -390,10 +411,6 @@ locdefault:
 locdefaults:
 	'=' '{' values '}'		{ $$ = $3; };
 
-fsoptfile_opt:
-	filename			{ $$ = $1; } |
-	/* empty */			{ $$ = NULL; };
-
 optfile_opt:
 	filename			{ $$ = $1; } |
 	/* empty */			{ $$ = NULL; };
@@ -469,6 +486,7 @@ config_spec:
 	NO CONFIG WORD			{ delconf($3); } |
 	NO PSEUDO_DEVICE WORD		{ delpseudo($3); } |
 	PSEUDO_DEVICE WORD npseudo	{ addpseudo($2, $3); } |
+	PSEUDO_ROOT device_instance	{ addpseudoroot($2); } |
 	NO device_instance AT attachment
 					{ deldevi($2, $4); } |
 	NO DEVICE AT attachment		{ deldeva($4); } |
@@ -618,10 +636,19 @@ cleanup(void)
 }
 
 static void
-setmachine(const char *mch, const char *mcharch, struct nvlist *mchsubarches)
+setmachine(const char *mch, const char *mcharch, struct nvlist *mchsubarches,
+	int isioconf)
 {
 	char buf[MAXPATHLEN];
 	struct nvlist *nv;
+
+	if (isioconf) {
+		fprintf(stderr, "WARNING: ioconf is an experimental feature\n");
+		if (include(_PATH_DEVNULL, ENDDEFS, 0, 0) != 0)
+			exit(1);
+		ioconfname = mch;
+		return;
+	}
 
 	machine = mch;
 	machinearch = mcharch;
@@ -643,8 +670,7 @@ setmachine(const char *mch, const char *mcharch, struct nvlist *mchsubarches)
 	 * Set up the file inclusion stack.  This empty include tells
 	 * the parser there are no more device definitions coming.
 	 */
-	strlcpy(buf, _PATH_DEVNULL, sizeof(buf));
-	if (include(buf, ENDDEFS, 0, 0) != 0)
+	if (include(_PATH_DEVNULL, ENDDEFS, 0, 0) != 0)
 		exit(1);
 
 	/* Include arch/${MACHINE}/conf/files.${MACHINE} */
@@ -684,7 +710,7 @@ static void
 check_maxpart(void)
 {
 
-	if (maxpartitions <= 0) {
+	if (maxpartitions <= 0 && ioconfname == NULL) {
 		stop("cannot proceed without maxpartitions specifier");
 	}
 }

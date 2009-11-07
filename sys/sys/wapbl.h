@@ -1,4 +1,4 @@
-/*	$NetBSD: wapbl.h,v 1.10 2009/04/10 21:14:14 ad Exp $	*/
+/*	$NetBSD: wapbl.h,v 1.13 2011/11/21 04:36:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003,2008 The NetBSD Foundation, Inc.
@@ -109,8 +109,6 @@ struct wapbl_entry {
 #endif
 };
 
-void	wapbl_init(void);
-
 /* Start using a log */
 int	wapbl_start(struct wapbl **, struct mount *, struct vnode *, daddr_t,
 		    size_t, size_t, struct wapbl_replay *,
@@ -172,7 +170,8 @@ void	wapbl_register_deallocation(struct wapbl *, daddr_t, int);
 void	wapbl_jlock_assert(struct wapbl *wl);
 void	wapbl_junlock_assert(struct wapbl *wl);
 
-void	wapbl_print(struct wapbl *wl, int full, void (*pr)(const char *, ...));
+void	wapbl_print(struct wapbl *wl, int full, void (*pr)(const char *, ...)
+    __printflike(1, 2));
 
 #if defined(WAPBL_DEBUG) || defined(DDB)
 void	wapbl_dump(struct wapbl *);

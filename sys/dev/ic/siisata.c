@@ -1,4 +1,4 @@
-/* $NetBSD: siisata.c,v 1.8 2009/10/19 18:41:13 bouyer Exp $ */
+/* $NetBSD: siisata.c,v 1.15 2011/09/27 01:02:38 jym Exp $ */
 
 /* from ahcisata_core.c */
 
@@ -53,8 +53,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*-
- * Copyright (c) 2007, 2008, 2009 Jonathan A. Kollasch.
+/*
+ * Copyright (c) 2007, 2008, 2009, 2010 Jonathan A. Kollasch.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -76,8 +76,10 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: siisata.c,v 1.15 2011/09/27 01:02:38 jym Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -87,26 +89,22 @@
 #include <sys/syslog.h>
 #include <sys/disklabel.h>
 #include <sys/buf.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/proc.h>
 
 #include <dev/ata/atareg.h>
 #include <dev/ata/satavar.h>
 #include <dev/ata/satareg.h>
 #include <dev/ata/satafisvar.h>
+#include <dev/ata/satafisreg.h>
 #include <dev/ic/siisatavar.h>
-#include <dev/ic/wdcreg.h>
+#include <dev/ic/siisatareg.h>
 
 #include <dev/scsipi/scsi_all.h> /* for SCSI status */
 
 #include "atapibus.h"
 
 #ifdef SIISATA_DEBUG
-#if 0
-int siisata_debug_mask = 0xffff;
-#else
 int siisata_debug_mask = 0;
-#endif
 #endif
 
 #define ATA_DELAY 10000		/* 10s for a drive I/O */
@@ -239,10 +237,8 @@ static void
 siisata_attach_port(struct siisata_softc *sc, int port)
 {
 	int j;
-	bus_dma_segment_t seg;
 	int dmasize;
 	int error;
-	int rseg;
 	void *prbp;
 	struct siisata_channel *schp;
 	struct ata_channel *chp;
@@ -267,7 +263,7 @@ siisata_attach_port(struct siisata_softc *sc, int port)
 	    __func__, dmasize), DEBUG_FUNCS);
 
 	error = bus_dmamem_alloc(sc->sc_dmat, dmasize, PAGE_SIZE, 0,
-	    &seg, 1, &rseg, BUS_DMA_NOWAIT);
+	    &schp->sch_prb_seg, 1, &schp->sch_prb_nseg, BUS_DMA_NOWAIT);
 	if (error) {
 		aprint_error_dev(sc->sc_atac.atac_dev,
 		    "unable to allocate PRB table memory, "
@@ -275,13 +271,15 @@ siisata_attach_port(struct siisata_softc *sc, int port)
 		return;
 	}
 
-	error = bus_dmamem_map(sc->sc_dmat, &seg, rseg, dmasize,
-	    &prbp, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
+	error = bus_dmamem_map(sc->sc_dmat,
+	    &schp->sch_prb_seg, schp->sch_prb_nseg,
+	    dmasize, &prbp, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error) {
 		aprint_error_dev(sc->sc_atac.atac_dev,
 		    "unable to map PRB table memory, "
 		    "error=%d\n", error);
-		bus_dmamem_free(sc->sc_dmat, &seg, rseg);
+		bus_dmamem_free(sc->sc_dmat,
+		    &schp->sch_prb_seg, schp->sch_prb_nseg);
 		return;
 	}
 
@@ -292,7 +290,8 @@ siisata_attach_port(struct siisata_softc *sc, int port)
 		    "unable to create PRB table map, "
 		    "error=%d\n", error);
 		bus_dmamem_unmap(sc->sc_dmat, prbp, dmasize);
-		bus_dmamem_free(sc->sc_dmat, &seg, rseg);
+		bus_dmamem_free(sc->sc_dmat,
+		    &schp->sch_prb_seg, schp->sch_prb_nseg);
 		return;
 	}
 
@@ -304,7 +303,8 @@ siisata_attach_port(struct siisata_softc *sc, int port)
 		    "error=%d\n", error);
 		bus_dmamap_destroy(sc->sc_dmat, schp->sch_prbd);
 		bus_dmamem_unmap(sc->sc_dmat, prbp, dmasize);
-		bus_dmamem_free(sc->sc_dmat, &seg, rseg);
+		bus_dmamem_free(sc->sc_dmat,
+		    &schp->sch_prb_seg, schp->sch_prb_nseg);
 		return;
 	}
 
@@ -363,7 +363,6 @@ siisata_detach(struct siisata_softc *sc, int flags)
 	struct scsipi_adapter *adapt = &atac->atac_atapi_adapter._generic;
 	struct siisata_channel *schp;
 	struct ata_channel *chp;
-	bus_dmamap_t dmam;
 	int i, j, error;
 
 	for (i = 0; i < sc->sc_atac.atac_nchannels; i++) {
@@ -378,12 +377,12 @@ siisata_detach(struct siisata_softc *sc, int flags)
 		for (j = 0; j < SIISATA_MAX_SLOTS; j++)
 			bus_dmamap_destroy(sc->sc_dmat, schp->sch_datad[j]);
 
-		dmam = schp->sch_prbd;
-		bus_dmamap_unload(sc->sc_dmat, dmam);
-		bus_dmamap_destroy(sc->sc_dmat, dmam);
+		bus_dmamap_unload(sc->sc_dmat, schp->sch_prbd);
+		bus_dmamap_destroy(sc->sc_dmat, schp->sch_prbd);
 		bus_dmamem_unmap(sc->sc_dmat, schp->sch_prb[0],
-		    dmam->dm_mapsize);
-		bus_dmamem_free(sc->sc_dmat, dmam->dm_segs, dmam->dm_nsegs);
+		    SIISATA_CMD_SIZE * SIISATA_MAX_SLOTS);
+		bus_dmamem_free(sc->sc_dmat,
+		    &schp->sch_prb_seg, schp->sch_prb_nseg);
 
 		free(chp->ch_queue, M_DEVBUF);
 		chp->atabus = NULL;
@@ -455,6 +454,7 @@ siisata_intr_port(struct siisata_channel *schp)
 		/* is this expected? */
 		/* XXX improve */
 		if ((schp->sch_active_slots & __BIT(slot)) == 0) {
+			PRWRITE(sc, PRX(chp->ch_channel, PRO_PIS), 0xffffffff);
 			log(LOG_WARNING, "%s: unexpected command "
 			    "completion on port %d\n",
 			    SIISATANAME(sc), chp->ch_channel);
@@ -849,7 +849,7 @@ siisata_cmd_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 #ifdef SIISATA_DEBUG
 	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
 #endif
-	
+
 	SIISATA_DEBUG_PRINT(
 	    ("%s: %s\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
 
@@ -859,39 +859,33 @@ siisata_cmd_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 	else
 		callout_stop(&chp->ch_callout);
 
+	if (chp->ch_status & WDCS_BSY) {
+		ata_c->flags |= AT_TIMEOU;
+	} else if (chp->ch_status & WDCS_ERR) {
+		ata_c->r_error = chp->ch_error;
+		ata_c->flags |= AT_ERROR;
+	}
+
 	if (chp->ch_drive[xfer->c_drive].drive_flags & DRIVE_WAITDRAIN) {
 		siisata_cmd_kill_xfer(chp, xfer, KILL_GONE);
 		chp->ch_drive[xfer->c_drive].drive_flags &= ~DRIVE_WAITDRAIN;
 		wakeup(&chp->ch_queue->active_xfer);
 		return 0;
-	}
+	} else
+		siisata_cmd_done(chp, xfer, slot);
 
-	chp->ch_queue->active_xfer = NULL;
-
-	{
-		ata_c->r_head = 0;
-		ata_c->r_count = 0;
-		ata_c->r_sector = 0;
-		ata_c->r_cyl = 0;
-		if (chp->ch_status & WDCS_BSY) {
-			ata_c->flags |= AT_TIMEOU;
-		} else if (chp->ch_status & WDCS_ERR) {
-			ata_c->r_error = chp->ch_error;
-			ata_c->flags |= AT_ERROR;
-		}
-	}
-	siisata_cmd_done(chp, xfer, slot);
 	return 0;
 }
 
 void
 siisata_cmd_done(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 {
+	uint32_t fis[howmany(RDH_FISLEN,sizeof(uint32_t))];
 	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
 	struct siisata_channel *schp = (struct siisata_channel *)chp;
 	struct ata_command *ata_c = xfer->c_cmd;
-	int i;
 	uint16_t *idwordbuf;
+	int i;
 
 	SIISATA_DEBUG_PRINT(
 	    ("%s: %s.\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
@@ -906,11 +900,17 @@ siisata_cmd_done(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 		bus_dmamap_unload(sc->sc_dmat, schp->sch_datad[slot]);
 	}
 
-	idwordbuf = xfer->c_databuf;
+	if (ata_c->flags & AT_READREG) {
+		bus_space_read_region_stream_4(sc->sc_prt, sc->sc_prh,
+		    PRSX(chp->ch_channel, slot, PRSO_FIS),
+		    fis, __arraycount(fis));
+		satafis_rdh_cmd_readreg(ata_c, (uint8_t *)fis);
+	}
 
 	/* correct the endianess of IDENTIFY data */
 	if (ata_c->r_command == WDCC_IDENTIFY ||
 	    ata_c->r_command == ATAPI_IDENTIFY_DEVICE) {
+		idwordbuf = xfer->c_databuf;
 		for (i = 0; i < (xfer->c_bcount / sizeof(*idwordbuf)); i++) {
 			idwordbuf[i] = le16toh(idwordbuf[i]);
 		}
@@ -920,6 +920,7 @@ siisata_cmd_done(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 	if (PRREAD(sc, PRSX(chp->ch_channel, slot, PRSO_RTC)))
 		ata_c->flags |= AT_XFDONE;
 
+	chp->ch_queue->active_xfer = NULL;
 	ata_free_xfer(chp, xfer);
 	if (ata_c->flags & AT_WAIT)
 		wakeup(ata_c);
@@ -1069,8 +1070,6 @@ siisata_bio_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 		ata_bio->error = NOERROR;
 	}
 
-	chp->ch_queue->active_xfer = NULL;
-
 	bus_dmamap_sync(sc->sc_dmat, schp->sch_datad[slot], 0,
 	    schp->sch_datad[slot]->dm_mapsize,
 	    (ata_bio->flags & ATA_READ) ? BUS_DMASYNC_POSTREAD :
@@ -1083,6 +1082,8 @@ siisata_bio_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 		wakeup(&chp->ch_queue->active_xfer);
 		return 0;
 	}
+
+	chp->ch_queue->active_xfer = NULL;
 	ata_free_xfer(chp, xfer);
 	ata_bio->flags |= ATA_ITSDONE;
 	if (chp->ch_status & WDCS_DWF) {
@@ -1183,8 +1184,8 @@ siisata_activate_prb(struct siisata_channel *schp, int slot)
 
 	sc = (struct siisata_softc *)schp->ata_channel.ch_atac;
 
-	KASSERTMSG(((schp->sch_active_slots & __BIT(slot)) == __BIT(slot)),
-	    ("%s: trying to activate active slot %d", SIISATANAME(sc), slot));
+	KASSERTMSG((schp->sch_active_slots & __BIT(slot)) != __BIT(slot),
+	    "%s: trying to activate active slot %d", SIISATANAME(sc), slot);
 
 	SIISATA_PRB_SYNC(sc, schp, slot, BUS_DMASYNC_PREWRITE);
 	/* keep track of what's going on */
@@ -1205,9 +1206,9 @@ siisata_deactivate_prb(struct siisata_channel *schp, int slot)
 	
 	sc = (struct siisata_softc *)schp->ata_channel.ch_atac;
 
-	KASSERTMSG(((schp->sch_active_slots & __BIT(slot)) == 0),
-	    ("%s: trying to deactivate inactive slot %d", SIISATANAME(sc),
-	    slot));
+	KASSERTMSG((schp->sch_active_slots & __BIT(slot)) != 0,
+	    "%s: trying to deactivate inactive slot %d", SIISATANAME(sc),
+	    slot);
 
 	schp->sch_active_slots &= ~__BIT(slot); /* mark free */
 	SIISATA_PRB_SYNC(sc, schp, slot, BUS_DMASYNC_POSTWRITE);
@@ -1609,7 +1610,6 @@ siisata_atapi_complete(struct ata_channel *chp, struct ata_xfer *xfer,
 
 	chp->ch_queue->active_xfer = NULL;
 	ata_free_xfer(chp, xfer);
-
 	sc_xfer->resid = sc_xfer->datalen;
 	sc_xfer->resid -= PRREAD(sc, PRSX(chp->ch_channel, slot, PRSO_RTC));
 	SIISATA_DEBUG_PRINT(("%s: %s datalen %d resid %d\n", SIISATANAME(sc),

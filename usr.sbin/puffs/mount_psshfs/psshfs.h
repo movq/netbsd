@@ -1,4 +1,4 @@
-/*	$NetBSD: psshfs.h,v 1.38 2009/11/05 13:28:20 pooka Exp $	*/
+/*	$NetBSD: psshfs.h,v 1.40 2010/04/01 02:34:09 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006-2009  Antti Kantee.  All Rights Reserved.
@@ -176,6 +176,10 @@ struct psshfs_ctx {
 	time_t mounttime;
 
 	int refreshival;
+
+	int domangleuid, domanglegid;
+	uid_t mangleuid, myuid;
+	gid_t manglegid, mygid;
 };
 #define PSSHFD_META 0
 #define PSSHFD_DATA 1
@@ -196,7 +200,8 @@ void	psbuf_put_4(struct puffs_framebuf *, uint32_t);
 void	psbuf_put_8(struct puffs_framebuf *, uint64_t);
 void	psbuf_put_str(struct puffs_framebuf *, const char *);
 void	psbuf_put_data(struct puffs_framebuf *, const void *, uint32_t);
-void	psbuf_put_vattr(struct puffs_framebuf *, const struct vattr *);
+void	psbuf_put_vattr(struct puffs_framebuf *, const struct vattr *,
+			const struct psshfs_ctx *);
 
 uint8_t		psbuf_get_type(struct puffs_framebuf *);
 uint32_t	psbuf_get_len(struct puffs_framebuf *);
@@ -225,14 +230,14 @@ int	sftp_readdir(struct puffs_usermount *, struct psshfs_ctx *,
 
 struct psshfs_dir *lookup(struct psshfs_dir *, size_t, const char *);
 struct puffs_node *makenode(struct puffs_usermount *, struct puffs_node *,
-			    struct psshfs_dir *, const struct vattr *);
+			    const struct psshfs_dir *, const struct vattr *);
 struct puffs_node *allocnode(struct puffs_usermount *, struct puffs_node *,
 			    const char *, const struct vattr *);
 struct psshfs_dir *direnter(struct puffs_node *, const char *);
 void nukenode(struct puffs_node *, const char *, int);
 void doreclaim(struct puffs_node *);
 int getpathattr(struct puffs_usermount *, const char *, struct vattr *);
-int getnodeattr(struct puffs_usermount *, struct puffs_node *);
+int getnodeattr(struct puffs_usermount *, struct puffs_node *, const char *);
 
 void closehandles(struct puffs_usermount *, struct psshfs_node *, int);
 void lazyopen_rresp(struct puffs_usermount *, struct puffs_framebuf *,

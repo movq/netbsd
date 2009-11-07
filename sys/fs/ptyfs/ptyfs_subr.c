@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_subr.c,v 1.18 2009/03/24 22:05:24 haad Exp $	*/
+/*	$NetBSD: ptyfs_subr.c,v 1.23 2011/06/12 03:35:53 rmind Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_subr.c,v 1.18 2009/03/24 22:05:24 haad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_subr.c,v 1.23 2011/06/12 03:35:53 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,10 +129,12 @@ ptyfs_getinfo(struct ptyfsnode *ptyfs, struct lwp *l)
 
 	if (ptyfs_save_ptm != NULL && ptyfs_save_ptm != &ptm_ptyfspty) {
 		int error;
+		struct pathbuf *pb;
 		struct nameidata nd;
 		char ttyname[64];
 		kauth_cred_t cred;
 		struct vattr va;
+
 		/*
 		 * We support traditional ptys, so we copy the info
 		 * from the inode
@@ -142,14 +144,22 @@ ptyfs_getinfo(struct ptyfsnode *ptyfs, struct lwp *l)
 			ptyfs->ptyfs_pty, ptyfs->ptyfs_type == PTYFSpts ? 't'
 			: 'p')) != 0)
 				goto out;
-		NDINIT(&nd, LOOKUP, NOFOLLOW|LOCKLEAF, UIO_SYSSPACE, ttyname);
-		if ((error = namei(&nd)) != 0)
+		pb = pathbuf_create(ttyname);
+		if (pb == NULL) {
+			error = ENOMEM;
+ 			goto out;
+		}
+		NDINIT(&nd, LOOKUP, NOFOLLOW|LOCKLEAF, pb);
+		if ((error = namei(&nd)) != 0) {
+			pathbuf_destroy(pb);
 			goto out;
+		}
 		cred = kauth_cred_alloc();
 		error = VOP_GETATTR(nd.ni_vp, &va, cred);
 		kauth_cred_free(cred);
-		VOP_UNLOCK(nd.ni_vp, 0);
+		VOP_UNLOCK(nd.ni_vp);
 		vrele(nd.ni_vp);
+		pathbuf_destroy(pb);
 		if (error)
 			goto out;
 		ptyfs->ptyfs_uid = va.va_uid;
@@ -210,7 +220,8 @@ ptyfs_allocvp(struct mount *mp, struct vnode **vpp, ptyfstype type, int pty,
 	if ((*vpp = ptyfs_used_get(type, pty, mp, LK_EXCLUSIVE)) != NULL)
 		return 0;
 
-	if ((error = getnewvnode(VT_PTYFS, mp, ptyfs_vnodeop_p, &vp)) != 0) {
+	error = getnewvnode(VT_PTYFS, mp, ptyfs_vnodeop_p, NULL, &vp);
+	if (error) {
 		*vpp = NULL;
 		return error;
 	}
@@ -367,9 +378,9 @@ loop:
 		    	if (flags == 0) {
 				mutex_exit(&ptyfs_used_slock);
 			} else {
-				mutex_enter(&vp->v_interlock);
+				mutex_enter(vp->v_interlock);
 				mutex_exit(&ptyfs_used_slock);
-				if (vget(vp, flags | LK_INTERLOCK))
+				if (vget(vp, flags))
 					goto loop;
 			}
 			return vp;
@@ -388,7 +399,7 @@ ptyfs_hashins(struct ptyfsnode *pp)
 	struct ptyfs_hashhead *ppp;
 
 	/* lock the ptyfsnode, then put it on the appropriate hash list */
-	vlockmgr(&pp->ptyfs_vnode->v_lock, LK_EXCLUSIVE);
+	VOP_LOCK(PTYFSTOV(pp), LK_EXCLUSIVE);
 
 	mutex_enter(&ptyfs_used_slock);
 	ppp = &ptyfs_used_tbl[PTYHASH(pp->ptyfs_type, pp->ptyfs_pty,

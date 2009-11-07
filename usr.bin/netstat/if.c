@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.67 2009/09/27 18:19:18 plunky Exp $	*/
+/*	$NetBSD: if.c,v 1.73 2012/02/12 19:11:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)if.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: if.c,v 1.67 2009/09/27 18:19:18 plunky Exp $");
+__RCSID("$NetBSD: if.c,v 1.73 2012/02/12 19:11:33 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,8 +65,11 @@ __RCSID("$NetBSD: if.c,v 1.67 2009/09/27 18:19:18 plunky Exp $");
 #include <err.h>
 
 #include "netstat.h"
+#include "prog_ops.h"
 
 #define	MAXIF	100
+
+#define HUMBUF_SIZE 7
 
 struct	iftot {
 	char ift_name[IFNAMSIZ];	/* interface name */
@@ -80,7 +83,8 @@ struct	iftot {
 	int ift_dr;			/* drops */
 };
 
-static void print_addr(struct sockaddr *, struct sockaddr **, struct if_data *);
+static void print_addr(struct sockaddr *, struct sockaddr **, struct if_data *,
+    struct ifnet *);
 static void sidewaysintpr(u_int, u_long);
 
 static void iftot_banner(struct iftot *);
@@ -161,11 +165,11 @@ intpr_sysctl(void)
 	size_t len;
 	char name[IFNAMSIZ + 1];	/* + 1 for `*' */
 
-	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
+	if (prog_sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
 		err(1, "sysctl");
 	if ((buf = malloc(len)) == NULL)
 		err(1, NULL);
-	if (sysctl(mib, 6, buf, &len, NULL, 0) == -1)
+	if (prog_sysctl(mib, 6, buf, &len, NULL, 0) == -1)
 		err(1, "sysctl");
 
 	intpr_header();
@@ -217,7 +221,7 @@ intpr_sysctl(void)
 			}
 
 			printf("%-5s %-5" PRIu64, name, ifd->ifi_mtu);
-			print_addr(rti_info[RTAX_IFP], rti_info, ifd);
+			print_addr(rti_info[RTAX_IFP], rti_info, ifd, NULL);
 			break;
 
 		case RTM_NEWADDR:
@@ -235,24 +239,26 @@ intpr_sysctl(void)
 			get_rtaddrs(ifam->ifam_addrs, sa, rti_info);
 
 			printf("%-5s %-5" PRIu64, name, ifd->ifi_mtu);
-			print_addr(rti_info[RTAX_IFA], rti_info, ifd);
+			print_addr(rti_info[RTAX_IFA], rti_info, ifd, NULL);
 			break;
 		}
 	}
 }
 
+union ifaddr_u {
+	struct ifaddr ifa;
+	struct in_ifaddr in;
+#ifdef INET6
+	struct in6_ifaddr in6;
+#endif /* INET6 */
+	struct iso_ifaddr iso;
+};
+
 static void
 intpr_kvm(u_long ifnetaddr, void (*pfunc)(const char *))
 {
 	struct ifnet ifnet;
-	union {
-		struct ifaddr ifa;
-		struct in_ifaddr in;
-#ifdef INET6
-		struct in6_ifaddr in6;
-#endif /* INET6 */
-		struct iso_ifaddr iso;
-	} ifaddr;
+	union ifaddr_u ifaddr;
 	u_long ifaddraddr;
 	struct ifnet_head ifhead;	/* TAILQ_HEAD */
 	char name[IFNAMSIZ + 1];	/* + 1 for `*' */
@@ -318,7 +324,7 @@ intpr_kvm(u_long ifnetaddr, void (*pfunc)(const char *))
 			cp = (CP(ifaddr.ifa.ifa_addr) - CP(ifaddraddr)) +
 			    CP(&ifaddr);
 			sa = (struct sockaddr *)cp;
-			print_addr(sa, (void *)&ifaddr, &ifnet.if_data);
+			print_addr(sa, (void *)&ifaddr, &ifnet.if_data, &ifnet);
 		}
 		ifaddraddr = (u_long)ifaddr.ifa.ifa_list.tqe_next;
 	}
@@ -326,7 +332,8 @@ intpr_kvm(u_long ifnetaddr, void (*pfunc)(const char *))
 }
 
 static void
-print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
+print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd,
+    struct ifnet *ifnet)
 {
 	char hexsep = '.';		/* for hexprint */
 	static const char hexfmt[] = "%02x%c";	/* for hexprint */
@@ -377,13 +384,13 @@ print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
 			n = 17;
 		printf("%-*.*s ", n, n, cp);
 
-#if 0 /* XXX-elad */
-		if (aflag) {
+		if (aflag && ifnet) {
 			u_long multiaddr;
 			struct in_multi inm;
+			union ifaddr_u *ifaddr = (union ifaddr_u *)rtinfo;
 
 			multiaddr = (u_long)
-			    ifaddr.in.ia_multiaddrs.lh_first;
+			    ifaddr->in.ia_multiaddrs.lh_first;
 			while (multiaddr != 0) {
 				kread(multiaddr, (char *)&inm,
 				   sizeof inm);
@@ -394,7 +401,6 @@ print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
 				   (u_long)inm.inm_list.le_next;
 			}
 		}
-#endif /* 0 */
 		break;
 #ifdef INET6
 	case AF_INET6:
@@ -438,14 +444,14 @@ print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
 			n = 17;
 		printf("%-*.*s ", n, n, cp);
 
-#if 0 /* XXX-elad */
-		if (aflag) {
+		if (aflag && ifnet) {
 			u_long multiaddr;
 			struct in6_multi inm;
 			struct sockaddr_in6 as6;
+			union ifaddr_u *ifaddr = (union ifaddr_u *)rtinfo;
 		
 			multiaddr = (u_long)
-			    ifaddr.in6.ia6_multiaddrs.lh_first;
+			    ifaddr->in6.ia6_multiaddrs.lh_first;
 			while (multiaddr != 0) {
 				kread(multiaddr, (char *)&inm,
 				   sizeof inm);
@@ -481,7 +487,6 @@ print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
 				   (u_long)inm.in6m_entry.le_next;
 			}
 		}
-#endif /* 0 */
 		break;
 #endif /*INET6*/
 #ifndef SMALL
@@ -523,9 +528,19 @@ print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
 	}
 
 	if (bflag) {
-		printf("%10llu %10llu", 
-			(unsigned long long)ifd->ifi_ibytes,
-			(unsigned long long)ifd->ifi_obytes);
+		char humbuf[HUMBUF_SIZE];
+
+		if (hflag && humanize_number(humbuf, sizeof(humbuf),
+		    ifd->ifi_ibytes, "", HN_AUTOSCALE, HN_NOSPACE | HN_B) > 0)
+			printf("%10s ", humbuf);
+		else
+			printf("%10llu ", (unsigned long long)ifd->ifi_ibytes);
+
+		if (hflag && humanize_number(humbuf, sizeof(humbuf),
+		    ifd->ifi_obytes, "", HN_AUTOSCALE, HN_NOSPACE | HN_B) > 0)
+			printf("%10s", humbuf);
+		else
+			printf("%10llu", (unsigned long long)ifd->ifi_obytes);
 	} else {
 		printf("%8llu %5llu %8llu %5llu %5llu",
 			(unsigned long long)ifd->ifi_ipackets,
@@ -535,9 +550,9 @@ print_addr(struct sockaddr *sa, struct sockaddr **rtinfo, struct if_data *ifd)
 			(unsigned long long)ifd->ifi_collisions);
 	}
 	if (tflag)
-		printf(" %4d", 0 /* XXX-elad ifnet.if_timer */);
+		printf(" %4d", ifnet ? ifnet->if_timer : 0);
 	if (dflag)
-		printf(" %5d", 0 /* XXX-elad ifnet.if_snd.ifq_drops */);
+		printf(" %5d", ifnet ? ifnet->if_snd.ifq_drops : 0);
 	putchar('\n');
 }
 
@@ -624,7 +639,7 @@ iftot_print_sum(struct iftot *cur, struct iftot *old)
 		printf(" %5llu", (unsigned long long)(cur->ift_dr - old->ift_dr));
 }
 
-static void
+__dead static void
 sidewaysintpr_sysctl(unsigned interval)
 {
 	sigset_t emptyset;
@@ -793,11 +808,27 @@ loop:
 		}
 		if (ip == interesting) {
 			if (bflag) {
-				printf("%10llu %8.8s %10llu %5.5s",
-				    (unsigned long long)(ifnet.if_ibytes -
-					ip->ift_ib), " ",
-				    (unsigned long long)(ifnet.if_obytes -
-					ip->ift_ob), " ");
+				char humbuf[HUMBUF_SIZE];
+
+				if (hflag && humanize_number(humbuf,
+				    sizeof(humbuf),
+				    ifnet.if_ibytes - ip->ift_ib, "",
+				    HN_AUTOSCALE, HN_NOSPACE | HN_B) > 0)
+					printf("%10s %8.8s ", humbuf, " ");
+				else
+					printf("%10llu %8.8s ", 
+					    (unsigned long long)
+					    (ifnet.if_ibytes-ip->ift_ib), " ");
+
+				if (hflag && humanize_number(humbuf,
+				    sizeof(humbuf),
+				    ifnet.if_obytes - ip->ift_ob, "",
+				    HN_AUTOSCALE, HN_NOSPACE | HN_B) > 0)
+					printf("%10s %5.5s", humbuf, " ");
+				else
+					printf("%10llu %5.5s", 
+					    (unsigned long long)
+					    (ifnet.if_obytes-ip->ift_ob), " ");
 			} else {
 				printf("%8llu %5llu %8llu %5llu %5llu",
 				    (unsigned long long)
@@ -836,11 +867,25 @@ loop:
 	}
 	if (lastif - iftot > 0) {
 		if (bflag) {
-			printf("  %10llu %8.8s %10llu %5.5s",
-			    (unsigned long long)
-				(sum->ift_ib - total->ift_ib), " ",
-			    (unsigned long long)
-				(sum->ift_ob - total->ift_ob), " ");
+			char humbuf[HUMBUF_SIZE];
+
+			if (hflag && humanize_number(humbuf,
+			    sizeof(humbuf), sum->ift_ib - total->ift_ib, "",
+			    HN_AUTOSCALE, HN_NOSPACE | HN_B) > 0)
+				printf("  %10s %8.8s ", humbuf, " ");
+			else
+				printf("  %10llu %8.8s ", 
+				    (unsigned long long)
+				    (sum->ift_ib - total->ift_ib), " ");
+
+			if (hflag && humanize_number(humbuf,
+			    sizeof(humbuf), sum->ift_ob -  total->ift_ob, "",
+			    HN_AUTOSCALE, HN_NOSPACE | HN_B) > 0)
+				printf("%10s %5.5s", humbuf, " ");
+			else
+				printf("%10llu %5.5s", 
+				    (unsigned long long)
+				    (sum->ift_ob - total->ift_ob), " ");
 		} else {
 			printf("  %8llu %5llu %8llu %5llu %5llu",
 			    (unsigned long long)
@@ -905,13 +950,6 @@ catchalarm(signo)
 	signalled = true;
 }
 
-#define ROUNDUP(a, size) \
-	(((a) & ((size)-1)) ? (1 + ((a) | ((size)-1))) : (a))
-
-#define NEXT_SA(ap) (ap) = (struct sockaddr *) \
-	((caddr_t)(ap) + ((ap)->sa_len ? ROUNDUP((ap)->sa_len,\
-	sizeof(u_long)) : sizeof(u_long)))
-
 static void
 get_rtaddrs(int addrs, struct sockaddr *sa, struct sockaddr **rti_info)
 {   
@@ -920,9 +958,8 @@ get_rtaddrs(int addrs, struct sockaddr *sa, struct sockaddr **rti_info)
 	for (i = 0; i < RTAX_MAX; i++) {
 		if (addrs & (1 << i)) {
 			rti_info[i] = sa;
-			NEXT_SA(sa);
-			/* sa = (struct sockaddr *)((char *)(sa) +
-			    roundup(sa->sa_len, sizeof(long))); */
+			sa = (struct sockaddr *)((char *)(sa) +
+			    RT_ROUNDUP(sa->sa_len));
 		} else 
 			rti_info[i] = NULL;
 	}
@@ -941,11 +978,11 @@ fetchifs(void)
 	char name[IFNAMSIZ];
 	size_t len;
 
-	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
+	if (prog_sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
 		err(1, "sysctl");
 	if ((buf = malloc(len)) == NULL)
 		err(1, NULL);
-	if (sysctl(mib, 6, buf, &len, NULL, 0) == -1)
+	if (prog_sysctl(mib, 6, buf, &len, NULL, 0) == -1)
 		err(1, "sysctl");
 
 	lim = buf + len;

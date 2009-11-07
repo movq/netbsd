@@ -1,4 +1,4 @@
-/*	$NetBSD: comsat.c,v 1.39 2009/03/14 11:43:24 lukem Exp $	*/
+/*	$NetBSD: comsat.c,v 1.42 2010/05/29 23:12:30 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "from: @(#)comsat.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: comsat.c,v 1.39 2009/03/14 11:43:24 lukem Exp $");
+__RCSID("$NetBSD: comsat.c,v 1.42 2010/05/29 23:12:30 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -89,7 +89,7 @@ static volatile sig_atomic_t needupdate;
 
 int main(int, char *[]);
 static void jkfprintf(FILE *, const char *, off_t, const char *);
-static void mailfor(const char *);
+static void mailfor(char *);
 static void notify(const struct utmpentry *, off_t);
 static void onalrm(int);
 static void checkutmp(void);
@@ -183,7 +183,7 @@ checkutmp(void)
 }
 
 static void
-mailfor(const char *name)
+mailfor(char *name)
 {
 	struct utmpentry *ep;
 	char *cp, *fn;
@@ -250,7 +250,7 @@ notify(const struct utmpentry *ep, off_t offset)
 		return;
 	}
 	(void)signal(SIGALRM, SIG_DFL);
-	(void)alarm((u_int)30);
+	(void)alarm(30);
 	if ((tp = fopen(tty, "w")) == NULL) {
 		dsyslog(LOG_ERR, "open `%s' (%s)", tty, strerror(errno));
 		_exit(1);
@@ -261,7 +261,7 @@ notify(const struct utmpentry *ep, off_t offset)
 	}
 	cr = (ttybuf.c_oflag & ONLCR) && (ttybuf.c_oflag & OPOST) ?
 	    "\n" : "\n\r";
-	/* Set uid/gid/groups to users in case mail drop is on nfs */
+	/* Set uid/gid/groups to user's in case mail drop is on nfs */
 	if ((p = getpwnam(ep->name)) == NULL ||
 	    initgroups(p->pw_name, p->pw_gid) == -1 ||
 	    setgid(p->pw_gid) == -1 ||
@@ -292,7 +292,7 @@ jkfprintf(FILE *tp, const char *name, off_t offset, const char *cr)
 	/*
 	 * Print the first 7 lines or 560 characters of the new mail
 	 * (whichever comes first).  Skip header crap other than
-	 * From, Subject, To, and Date.
+	 * From and Subject.
 	 */
 	linecnt = 7;
 	charcnt = 560;

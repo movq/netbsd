@@ -1,4 +1,4 @@
-.\"	$NetBSD: login.conf.5,v 1.23 2009/10/14 23:40:05 joerg Exp $
+.\"	$NetBSD: login.conf.5,v 1.25 2011/06/04 05:30:45 dholland Exp $
 .\"
 .\" Copyright (c) 1995,1996,1997 Berkeley Software Design, Inc.
 .\" All rights reserved.
@@ -164,7 +164,7 @@ Number of login attempts after which to start random back-off.
 .\"
 .sp
 .It Sy maxproc Ta number Ta "" Ta
-Maximum number of process.
+Maximum number of processes.
 .\"
 .sp
 .It Sy memorylocked Ta size Ta "" Ta
@@ -195,8 +195,8 @@ Maximum number of open file descriptors per process.
 .\"XX Length of time a password may be expired but not quite dead yet.
 .\"XX When set (for both the client and remote server machine when doing
 .\"XX remote authentication), a user is allowed to log in just one more
-.\"XX time after their password (but not account) has expired.  This allows
-.\"XX a grace period for updating their password.
+.\"XX time after their password (but not account) has expired.
+.\"XX This allows a grace period for updating their password.
 .\"
 .sp
 .It Sy passwordtime Ta time Ta "" Ta
@@ -305,7 +305,7 @@ and
 will never define capabilities which start with
 .Li x-
 or
-.Li X- ,
+.Li X- ;
 these are reserved for external use (unless included through contributed
 software).
 .Pp
@@ -323,7 +323,8 @@ Path name to a text file.
 A comma or whitespace separated list of values.
 .\"
 .It Sy number
-A number.  A leading
+A number.
+A leading
 .Li 0x
 implies the number is expressed in hexadecimal.
 A leading

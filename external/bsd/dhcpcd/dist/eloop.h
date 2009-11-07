@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2008 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2010 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -30,12 +30,22 @@
 
 #include <time.h>
 
+#ifndef ELOOP_QUEUE
+  #define ELOOP_QUEUE 0
+#endif
+
+#define add_timeout_tv(a, b, c) add_q_timeout_tv(ELOOP_QUEUE, a, b, c)
+#define add_timeout_sec(a, b, c) add_q_timeout_sec(ELOOP_QUEUE, a, b, c)
+#define delete_timeout(a, b) delete_q_timeout(ELOOP_QUEUE, a, b)
+#define delete_timeouts(a, ...) delete_q_timeouts(ELOOP_QUEUE, a, __VA_ARGS__)
+
 void add_event(int fd, void (*)(void *), void *);
 void delete_event(int fd);
-void add_timeout_sec(time_t, void (*)(void *), void *);
-void add_timeout_tv(const struct timeval *, void (*)(void *), void *);
-void delete_timeout(void (*)(void *), void *);
-void delete_timeouts(void *, void (*)(void *), ...);
+void add_q_timeout_sec(int queue, time_t, void (*)(void *), void *);
+void add_q_timeout_tv(int queue, const struct timeval *, void (*)(void *),
+    void *);
+void delete_q_timeout(int, void (*)(void *), void *);
+void delete_q_timeouts(int, void *, void (*)(void *), ...);
 void start_eloop(void);
 
 #endif

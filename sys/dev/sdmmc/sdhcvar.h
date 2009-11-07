@@ -1,4 +1,4 @@
-/*	$NetBSD: sdhcvar.h,v 1.1 2009/04/21 03:00:30 nonaka Exp $	*/
+/*	$NetBSD: sdhcvar.h,v 1.6.2.1 2012/08/09 06:36:48 jdc Exp $	*/
 /*	$OpenBSD: sdhcvar.h,v 1.3 2007/09/06 08:01:01 jsg Exp $	*/
 
 /*
@@ -37,15 +37,26 @@ struct sdhc_softc {
 	uint32_t		sc_flags;
 #define	SDHC_FLAG_USE_DMA	0x0001
 #define	SDHC_FLAG_FORCE_DMA	0x0002
-#define	SDHC_FLAG_NO_PWR0	0x0004
+#define	SDHC_FLAG_NO_PWR0	0x0004	/* Freescale ESDHC */
+#define	SDHC_FLAG_HAVE_DVS	0x0008	/* Freescale ESDHC */
+#define	SDHC_FLAG_32BIT_ACCESS	0x0010	/* Freescale ESDHC */
+#define	SDHC_FLAG_ENHANCED	0x0020	/* Freescale ESDHC */
+#define	SDHC_FLAG_8BIT_MODE	0x0040	/* MMC 8bit mode is supported */
+#define	SDHC_FLAG_HAVE_CGM	0x0080	/* Netlogic XLP */
+#define	SDHC_FLAG_NO_LED_ON	0x0100	/* LED_ON unsupported in HOST_CTL */
+#define	SDHC_FLAG_HOSTCAPS	0x0200	/* No device provided capabilities */
+
+	uint32_t		sc_clkbase;
+	uint32_t		sc_caps;/* attachment provided capabilities */
 };
 
 /* Host controller functions called by the attachment driver. */
 int	sdhc_host_found(struct sdhc_softc *, bus_space_tag_t,
 	    bus_space_handle_t, bus_size_t);
 int	sdhc_intr(void *);
-bool	sdhc_suspend(device_t dev PMF_FN_ARGS);
-bool	sdhc_resume(device_t dev PMF_FN_ARGS);
-bool	sdhc_shutdown(device_t dev, int flags);
+int	sdhc_detach(device_t, int);
+bool	sdhc_suspend(device_t, const pmf_qual_t *);
+bool	sdhc_resume(device_t, const pmf_qual_t *);
+bool	sdhc_shutdown(device_t, int);
 
 #endif	/* _SDHCVAR_H_ */

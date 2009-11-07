@@ -1,4 +1,4 @@
-/*	$NetBSD: clmpcc.c,v 1.42 2009/03/14 21:04:19 dsl Exp $ */
+/*	$NetBSD: clmpcc.c,v 1.45 2011/10/01 15:59:01 chs Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.42 2009/03/14 21:04:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.45 2011/10/01 15:59:01 chs Exp $");
 
 #include "opt_ddb.h"
 
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: clmpcc.c,v 1.42 2009/03/14 21:04:19 dsl Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -289,7 +288,7 @@ clmpcc_attach(struct clmpcc_softc *sc)
 		ch->ch_sc = sc;
 		ch->ch_car = chan;
 
-		tp = ttymalloc();
+		tp = tty_alloc();
 		tp->t_oproc = clmpcc_start;
 		tp->t_param = clmpcc_param;
 
@@ -796,8 +795,8 @@ clmpcc_param(struct tty *tp, struct termios *t)
 	struct clmpcc_chan *ch = &sc->sc_chans[CLMPCCCHAN(tp->t_dev)];
 	u_char cor;
 	u_char oldch;
-	int oclk, obpr;
-	int iclk, ibpr;
+	int oclk = 0, obpr = 0;
+	int iclk = 0, ibpr = 0;
 	int s;
 
 	/* Check requested parameters. */

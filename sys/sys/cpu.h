@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.30 2009/04/19 14:11:37 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.35 2012/01/29 22:55:40 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2007 YAMAMOTO Takashi,
@@ -37,8 +37,13 @@
 
 struct cpu_info;
 
+#ifdef _KERNEL
 #ifndef cpu_idle
 void cpu_idle(void);
+#endif
+
+#ifdef CPU_UCODE
+#include <dev/firmload.h>
 #endif
 
 /*
@@ -68,7 +73,7 @@ void cpu_need_resched(struct cpu_info *, int);
 void	cpu_offline_md(void);
 #endif
 
-lwp_t	*cpu_switchto(lwp_t *, lwp_t *, bool);
+struct lwp *cpu_switchto(struct lwp *, struct lwp *, bool);
 struct	cpu_info *cpu_lookup(u_int);
 int	cpu_setstate(struct cpu_info *, bool);
 int	cpu_setintr(struct cpu_info *, bool);
@@ -77,22 +82,45 @@ bool	cpu_softintr_p(void);
 bool	cpu_kpreempt_enter(uintptr_t, int);
 void	cpu_kpreempt_exit(uintptr_t);
 bool	cpu_kpreempt_disabled(void);
-int	cpu_lwp_setprivate(lwp_t *, void *);
+int	cpu_lwp_setprivate(struct lwp *, void *);
 void	cpu_intr_redistribute(void);
 u_int	cpu_intr_count(struct cpu_info *);
+#endif
 
 CIRCLEQ_HEAD(cpuqueue, cpu_info);
 
+#ifdef _KERNEL
 extern kmutex_t cpu_lock;
 extern u_int maxcpus;
 extern struct cpuqueue cpu_queue;
-  
+extern kcpuset_t *kcpuset_attached;
+extern kcpuset_t *kcpuset_running;
+
 static inline u_int
 cpu_index(struct cpu_info *ci)
 {
 	return ci->ci_index;
 }
 
+static inline char *
+cpu_name(struct cpu_info *ci)
+{
+	return ci->ci_data.cpu_name;
+}
+
+#ifdef CPU_UCODE
+struct cpu_ucode_softc {
+	char *sc_blob;
+	off_t sc_blobsize;
+};
+
+int cpu_ucode_get_version(void *);
+int cpu_ucode_apply(void *);
+int cpu_ucode_load(struct cpu_ucode_softc *, const char *);
+int cpu_ucode_md_open(firmware_handle_t *, const char *);
+#endif
+
+#endif
 #endif	/* !_LOCORE */
 
 /* flags for cpu_need_resched */

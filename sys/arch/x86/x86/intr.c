@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.65 2009/08/18 16:41:03 jmcneill Exp $	*/
+/*	$NetBSD: intr.c,v 1.72 2011/08/01 10:42:24 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -133,7 +133,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.65 2009/08/18 16:41:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.72 2011/08/01 10:42:24 drochner Exp $");
 
 #include "opt_intrdebug.h"
 #include "opt_multiprocessor.h"
@@ -174,6 +174,10 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.65 2009/08/18 16:41:03 jmcneill Exp $");
 
 #if NPCI > 0
 #include <dev/pci/ppbreg.h>
+#endif
+
+#ifdef DDB
+#include <ddb/db_output.h>
 #endif
 
 struct pic softintr_pic = {
@@ -218,12 +222,11 @@ intr_default_setup(void)
  * Handle a NMI, possibly a machine check.
  * return true to panic system, false to ignore.
  */
-int
+void
 x86_nmi(void)
 {
 
 	log(LOG_CRIT, "NMI port 61 %x, port 70 %x\n", inb(0x61), inb(0x70));
-	return(0);
 }
 
 /*
@@ -325,7 +328,7 @@ intr_add_pcibus(struct pcibus_attach_args *pba)
 
 static int
 intr_find_pcibridge(int bus, pcitag_t *pci_bridge_tag,
-		    pci_chipset_tag_t *pci_chipset_tag)
+		    pci_chipset_tag_t *pc)
 {
 	struct intr_extra_bus *iebp;
 	struct mp_bus *mpb;
@@ -338,7 +341,7 @@ intr_find_pcibridge(int bus, pcitag_t *pci_bridge_tag,
 		if (mpb->mb_pci_bridge_tag == NULL)
 			return ENOENT;
 		*pci_bridge_tag = *mpb->mb_pci_bridge_tag;
-		*pci_chipset_tag = mpb->mb_pci_chipset_tag;
+		*pc = mpb->mb_pci_chipset_tag;
 		return 0;
 	}
 
@@ -347,7 +350,7 @@ intr_find_pcibridge(int bus, pcitag_t *pci_bridge_tag,
 			if (iebp->pci_bridge_tag == NULL)
 				return ENOENT;
 			*pci_bridge_tag = *iebp->pci_bridge_tag;
-			*pci_chipset_tag = iebp->pci_chipset_tag;
+			*pc = iebp->pci_chipset_tag;
 			return 0;
 		}
 	}
@@ -362,18 +365,18 @@ intr_find_mpmapping(int bus, int pin, int *handle)
 #if NPCI > 0
 	int dev, func;
 	pcitag_t pci_bridge_tag;
-	pci_chipset_tag_t pci_chipset_tag;
+	pci_chipset_tag_t pc;
 #endif
 
 #if NPCI > 0
 	while (intr_scan_bus(bus, pin, handle) != 0) {
 		if (intr_find_pcibridge(bus, &pci_bridge_tag,
-		    &pci_chipset_tag) != 0)
+		    &pc) != 0)
 			return ENOENT;
 		dev = pin >> 2;
 		pin = pin & 3;
 		pin = PPB_INTERRUPT_SWIZZLE(pin + 1, dev) - 1;
-		pci_decompose_tag(pci_chipset_tag, pci_bridge_tag, &bus,
+		pci_decompose_tag(pc, pci_bridge_tag, &bus,
 		    &dev, &func);
 		pin |= (dev << 2);
 	}
@@ -477,7 +480,8 @@ intr_allocate_slot(struct pic *pic, int pin, int level,
 			if ((isp = ci->ci_isources[slot]) == NULL) {
 				continue;
 			}
-			if (isp->is_pic == pic && isp->is_pin == pin) {
+			if (isp->is_pic == pic &&
+			    pin != -1 && isp->is_pin == pin) {
 				*idt_slot = isp->is_idtvec;
 				*index = slot;
 				*cip = ci;
@@ -690,7 +694,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 
 #ifdef DIAGNOSTIC
 	if (legacy_irq != -1 && (legacy_irq < 0 || legacy_irq > 15))
-		panic("intr_establish: bad legacy IRQ value");
+		panic("%s: bad legacy IRQ value", __func__);
 
 	if (legacy_irq == -1 && pic == &i8259_pic)
 		panic("intr_establish: non-legacy IRQ on i8259");
@@ -698,7 +702,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 
 	ih = kmem_alloc(sizeof(*ih), KM_SLEEP);
 	if (ih == NULL) {
-		printf("intr_establish: can't allocate handler info\n");
+		printf("%s: can't allocate handler info\n", __func__);
 		return NULL;
 	}
 
@@ -718,9 +722,9 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 	    source->is_pic->pic_type != pic->pic_type) {
 		mutex_exit(&cpu_lock);
 		kmem_free(ih, sizeof(*ih));
-		printf("intr_establish: can't share intr source between "
+		printf("%s: can't share intr source between "
 		       "different PIC types (legacy_irq %d pin %d slot %d)\n",
-		    legacy_irq, pin, slot);
+		    __func__, legacy_irq, pin, slot);
 		return NULL;
 	}
 
@@ -741,15 +745,16 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 			mutex_exit(&cpu_lock);
 			kmem_free(ih, sizeof(*ih));
 			intr_source_free(ci, slot, pic, idt_vec);
-			printf("intr_establish: pic %s pin %d: can't share "
-			       "type %d with %d\n", pic->pic_name, pin,
+			printf("%s: pic %s pin %d: can't share "
+			       "type %d with %d\n",
+				__func__, pic->pic_name, pin,
 				source->is_type, type);
 			return NULL;
 		}
 		break;
 	default:
-		panic("intr_establish: bad intr type %d for pic %s pin %d\n",
-		    source->is_type, pic->pic_name, pin);
+		panic("%s: bad intr type %d for pic %s pin %d\n",
+		    __func__, source->is_type, pic->pic_name, pin);
 		/* NOTREACHED */
 	}
 
@@ -855,7 +860,7 @@ intr_disestablish_xcall(void *arg1, void *arg2)
 		;
 	if (q == NULL) {
 		x86_write_psl(psl);
-		panic("intr_disestablish: handler not registered");
+		panic("%s: handler not registered", __func__);
 		/* NOTREACHED */
 	}
 
@@ -915,7 +920,7 @@ intr_string(int ih)
 #endif
 
 	if (ih == 0)
-		panic("pci_intr_string: bogus handle 0x%x", ih);
+		panic("%s: bogus handle 0x%x", __func__, ih);
 
 
 #if NIOAPIC > 0
@@ -983,6 +988,7 @@ cpu_intr_init(struct cpu_info *ci)
 	struct intrsource *isp;
 #if NLAPIC > 0 && defined(MULTIPROCESSOR)
 	int i;
+	static int first = 1;
 #endif
 #ifdef INTRSTACKSIZE
 	vaddr_t istack;
@@ -997,15 +1003,17 @@ cpu_intr_init(struct cpu_info *ci)
 	isp->is_handlers = &fake_timer_intrhand;
 	isp->is_pic = &local_pic;
 	ci->ci_isources[LIR_TIMER] = isp;
-	evcnt_attach_dynamic(&isp->is_evcnt, EVCNT_TYPE_MISC, NULL,
+	evcnt_attach_dynamic(&isp->is_evcnt,
+	    first ? EVCNT_TYPE_INTR : EVCNT_TYPE_MISC, NULL,
 	    device_xname(ci->ci_dev), "timer");
+	first = 0;
 
 #ifdef MULTIPROCESSOR
 	isp = kmem_zalloc(sizeof(*isp), KM_SLEEP);
 	KASSERT(isp != NULL);
 	isp->is_recurse = Xrecurse_lapic_ipi;
 	isp->is_resume = Xresume_lapic_ipi;
-	fake_ipi_intrhand.ih_level = IPL_IPI;
+	fake_ipi_intrhand.ih_level = IPL_HIGH;
 	isp->is_handlers = &fake_ipi_intrhand;
 	isp->is_pic = &local_pic;
 	ci->ci_isources[LIR_IPI] = isp;
@@ -1054,6 +1062,11 @@ cpu_intr_init(struct cpu_info *ci)
 }
 
 #if defined(INTRDEBUG) || defined(DDB)
+
+#ifdef DDB
+#define printf db_printf
+#endif
+
 void
 intr_printconfig(void)
 {
@@ -1083,6 +1096,9 @@ intr_printconfig(void)
 		}
 	}
 }
+#ifdef DDB
+#undef printf
+#endif
 #endif
 
 void

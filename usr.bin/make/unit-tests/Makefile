@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.24 2009/10/07 16:40:30 sjg Exp $
+# $NetBSD: Makefile,v 1.33 2011/09/29 23:38:04 sjg Exp $
 #
 # Unit tests for make(1)
 # The main targets are:
@@ -21,35 +21,51 @@ UNIT_TESTS:= ${.PARSEDIR}
 SUBFILES= \
 	comment \
 	cond1 \
+	error \
 	export \
 	export-all \
+	doterror \
 	dotwait \
 	forsubst \
+	hash \
+	misc \
 	moderrs \
 	modmatch \
 	modmisc \
 	modorder \
 	modts \
 	modword \
+	phony-end \
 	posix \
 	qequals \
+	sysv \
 	ternary \
+	unexport \
+	unexport-env \
 	varcmd
 
 all: ${SUBFILES}
+
+flags.doterror=
 
 # the tests are actually done with sub-makes.
 .PHONY: ${SUBFILES}
 .PRECIOUS: ${SUBFILES}
 ${SUBFILES}:
-	-@${.MAKE} -k -f ${UNIT_TESTS}/$@
+	-@${.MAKE} ${flags.$@:U-k} -f ${UNIT_TESTS}/$@
 
 clean:
 	rm -f *.out *.fail *.core
 
-.include <bsd.obj.mk>
+.-include <bsd.obj.mk>
 
 TEST_MAKE?= ${.MAKE}
+TOOL_SED?= sed
+
+# ensure consistent results from sort(1)
+LC_ALL= C
+LANG= C
+.export LANG LC_ALL
 
 # The driver.
 # We always pretend .MAKE was called 'make' 

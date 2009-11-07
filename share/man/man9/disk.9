@@ -1,4 +1,4 @@
-.\"	$NetBSD: disk.9,v 1.32 2009/05/20 06:38:39 wiz Exp $
+.\"	$NetBSD: disk.9,v 1.36 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright (c) 1995, 1996 Jason R. Thorpe.
 .\" All rights reserved.
@@ -30,7 +30,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd May 19, 2009
+.Dd December 30, 2009
 .Dt DISK 9
 .Os
 .Sh NAME
@@ -42,6 +42,7 @@
 .Nm disk_destroy ,
 .Nm disk_busy ,
 .Nm disk_unbusy ,
+.Nm disk_isbusy ,
 .Nm disk_find ,
 .Nm disk_blocksize
 .Nd generic disk framework
@@ -63,6 +64,8 @@
 .Fn disk_busy "struct disk *"
 .Ft void
 .Fn disk_unbusy "struct disk *" "long bcount" "int read"
+.Ft bool
+.Fn disk_isbusy "struct disk *"
 .Ft struct disk *
 .Fn disk_find "const char *"
 .Ft void
@@ -126,7 +129,8 @@ may grow or shrink over time as disks are dynamically added and removed
 from the system.
 Drivers which currently make use of the detachment
 capability of the framework are the
-.Nm ccd
+.Nm ccd ,
+.Nm dm ,
 and
 .Nm vnd
 pseudo-device drivers.
@@ -181,6 +185,10 @@ The third argument
 specifies the direction of I/O;
 if non-zero it means reading from the disk,
 otherwise it means writing to the disk.
+.It Fn disk_isbusy
+Returns
+.Ar true
+if disk is marked as busy and false if it is not.
 .It Fn disk_find
 Return a pointer to the disk structure corresponding to the name provided,
 or NULL if the disk does not exist.
@@ -218,7 +226,7 @@ Get disklabel.
 .It Dv DIOCSDINFO "struct disklabel"
 Set in-memory disklabel.
 .It Dv DIOCWDINFO "struct disklabel"
-Set in-memory disklabel, and write on-disk disklabel.
+Set in-memory disklabel and write on-disk disklabel.
 .It Dv DIOCGPART "struct partinfo"
 Get partition information.
 This is used internally.
@@ -374,6 +382,14 @@ This functionality is provided by the
 and
 .Fn disk_unbusy
 routines.
+Because
+.Nm struct disk
+is part of device driver private data it needs to be guarded.
+Mutual exclusion must be done by driver
+.Fn disk_busy
+and
+.Fn disk_unbusy
+are not thread safe.
 The
 .Fn disk_busy
 routine should be called immediately before a command to the disk is
@@ -392,7 +408,9 @@ foostart(sc)
 	[ . . . ]
 
 	/* Tell the disk framework we're going busy. */
+	mutex_enter(\*[Am]sc-\*[Gt]sc_dk_mtx);
 	disk_busy(\*[Am]sc-\*[Gt]sc_dk);
+	mutex_exit(\*[Am]sc-\*[Gt]sc_dk_mtx);
 
 	/* Send command to the drive. */
 	[ . . . ]
@@ -403,10 +421,6 @@ When
 .Fn disk_busy
 is called, a timestamp is taken if the disk's busy counter moves from
 0 to 1, indicating the disk has gone from an idle to non-idle state.
-Note that
-.Fn disk_busy
-must be called at
-.Fn splbio .
 At the end of a transaction, the
 .Fn disk_unbusy
 routine should be called.
@@ -417,7 +431,7 @@ and
 .Fn disk_unbusy
 are balanced.
 This routine also performs the actual metrics calculation.
-A timestamp is taken, and the difference from the timestamp taken in
+A timestamp is taken and the difference from the timestamp taken in
 .Fn disk_busy
 is added to the disk's total running time.
 The disk's timestamp is then updated in case there is more than one
@@ -451,27 +465,25 @@ foodone(xfer)
 
 	[ . . . ]
 
+	mutex_enter(\*[Am]sc-\*[Gt]sc_dk_mtx);
 	/* Notify the disk framework that we've completed the transfer. */
 	disk_unbusy(\*[Am]sc-\*[Gt]sc_dk, nbytes,
 	    bp != NULL ? bp-\*[Gt]b_flags \*[Am] B_READ : 0);
+	mutex_exit(\*[Am]sc-\*[Gt]sc_dk_mtx);
 
 	[ . . . ]
 }
 .Ed
 .Pp
+.Fn disk_isbusy
+is used to get status of disk device it returns true if device is
+currently busy and false if it is not.
 Like
-.Fn disk_busy ,
+.Fn disk_busy
+and
 .Fn disk_unbusy
-must be called at
-.Fn splbio .
+it requires explicit locking from user side.
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual
-code implementing or using the disk framework can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The disk framework itself is implemented within the file
 .Pa sys/kern/subr_disk.c .
 Data structures and function prototypes for the framework are located in
@@ -488,18 +500,20 @@ and
 .Pp
 The
 .Nx
-.Nm ccd
+.Nm ccd ,
+.Nm dm ,
 and
 .Nm vnd
 drivers use the detachment capability of the framework.
 They are located in
-.Pa sys/dev/ccd.c
+.Pa sys/dev/ccd.c ,
+.Pa sys/dev/vnd.c ,
 and
-.Pa sys/dev/vnd.c .
+.Pa sys/dev/dm/device-mapper.c .
 .Sh SEE ALSO
 .Xr ccd 4 ,
-.Xr vnd 4 ,
-.Xr spl 9
+.Xr dm 4 ,
+.Xr vnd 4
 .Sh HISTORY
 The
 .Nx

@@ -1,4 +1,4 @@
-/*	$NetBSD: synapticsreg.h,v 1.5 2007/01/17 23:14:03 uwe Exp $	*/
+/*	$NetBSD: synapticsreg.h,v 1.7 2011/09/10 18:38:20 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -45,6 +45,10 @@
 #define SYNAPTICS_READ_MODEL_ID		0x3
 #define SYNAPTICS_EXTENDED_QUERY	0x9
 
+/* Synaptics special commands */
+#define SYNAPTICS_CMD_SET_MODE2		0x14
+#define SYNAPTICS_CMD_CLIENT_CMD	0x28
+
 /* Magic numbers. */
 #define SYNAPTICS_MIN_VERSION		45 /* 4.5 */
 #define SYNAPTICS_MAGIC_BYTE		0x47
@@ -64,6 +68,7 @@
 #define SYNAPTICS_MODE_RATE		(1 << 6)
 #define SYNAPTICS_MODE_SLEEP		(1 << 3)
 #define SYNAPTICS_MODE_GEST		(1 << 2)
+#define SYNAPTICS_MODE_4BYTE_CLIENT	(1 << 1)
 #define SYNAPTICS_MODE_W		(1)
 
 /* Extended mode button masks. */
@@ -90,6 +95,8 @@
 #define	SYNAPTICS_WIDTH_TWO_FINGERS	0
 #define	SYNAPTICS_WIDTH_THREE_OR_MORE	1
 #define	SYNAPTICS_WIDTH_PEN		2
+#define	SYNAPTICS_WIDTH_ADVANCEDGESTURE	2
+#define	SYNAPTICS_WIDTH_PASSTHROUGH	3
 #define	SYNAPTICS_WIDTH_FINGER_MIN	4
 #define	SYNAPTICS_WIDTH_FINGER_NORMAL	5
 #define	SYNAPTICS_WIDTH_FINGER_MAX	7

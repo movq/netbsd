@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.57 2009/06/05 01:36:07 mrg Exp $
+#	$NetBSD: genassym.cf,v 1.67 2011/08/15 02:19:44 mrg Exp $
 
 #
 # Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -75,7 +75,6 @@ include <sys/proc.h>
 include <sys/proc.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
-include <sys/user.h>
 include <sys/device.h>
 include <sys/disklabel.h>
 include <sys/disk.h>
@@ -83,6 +82,7 @@ include <sys/mutex.h>
 
 include <uvm/uvm.h>
 
+include <machine/pcb.h>
 include <machine/cpu.h>
 include <machine/oldmon.h>
 include <machine/bsd_openprom.h>
@@ -96,7 +96,7 @@ include <sparc/dev/zsreg.h>
 include <sparc/dev/zsvar.h>
 endif
 
-include <machine/bus.h>
+include <sys/bus.h>
 include <sparc/dev/audioamdvar.h>
 
 include <sparc/dev/fdreg.h>
@@ -107,7 +107,7 @@ define	BSD		BSD
 define	USRSTACK	USRSTACK
 
 # proc fields and values
-define	L_ADDR		offsetof(struct lwp, l_addr)
+define	L_PCB		offsetof(struct lwp, l_addr)
 define	L_PROC		offsetof(struct lwp, l_proc)
 define	L_STAT		offsetof(struct lwp, l_stat)
 define	L_WCHAN		offsetof(struct lwp, l_wchan)
@@ -125,11 +125,20 @@ define	PMAP_CTXNUM	offsetof(struct pmap, pm_ctxnum)
 define	PMAP_CPUSET	offsetof(struct pmap, pm_cpuset)
 
 # interrupt/fault metering
-define	V_INTR		offsetof(struct uvmexp, intrs)
-define	V_SOFT		offsetof(struct uvmexp, softs)
-define	V_FAULTS	offsetof(struct uvmexp, faults)
+define	CPUINFO_NINTR	offsetof(struct cpu_info, ci_data.cpu_nintr)
+define	CPUINFO_NSOFT	offsetof(struct cpu_info, ci_data.cpu_nsoft)
+define	CPUINFO_NFAULT	offsetof(struct cpu_info, ci_data.cpu_nfault)
+define	CPUINFO_LEV14	offsetof(struct cpu_info, ci_sintrcnt[14])
+define	CPUINFO_INTRCNT	offsetof(struct cpu_info, ci_intrcnt)
+define	CPUINFO_SINTRCNT	offsetof(struct cpu_info, ci_sintrcnt)
 define	EV_COUNT	offsetof(struct evcnt, ev_count)
 define	EV_STRUCTSIZE	sizeof(struct evcnt)
+
+# interrupt handler fields
+define	IH_FUN		offsetof(struct intrhand, ih_fun)
+define	IH_ARG		offsetof(struct intrhand, ih_arg)
+define	IH_NEXT		offsetof(struct intrhand, ih_next)
+define	IH_CLASSIPL	offsetof(struct intrhand, ih_classipl)
 
 # CPU info structure
 define	CPUINFO_STRUCTSIZE	sizeof(struct cpu_info)
@@ -161,6 +170,8 @@ define	CPUINFO_IDLESPIN	offsetof(struct cpu_info, idlespin)
 define	CPUINFO_MTX_COUNT	offsetof(struct cpu_info, ci_mtx_count)
 define	CPUINFO_MTX_OLDSPL	offsetof(struct cpu_info, ci_mtx_oldspl)
 define	CPUINFO_IDEPTH		offsetof(struct cpu_info, ci_idepth)
+define	CPUINFO_SAVEFPSTATE	offsetof(struct cpu_info, ci_savefpstate)
+define	CPUINFO_SAVEFPSTATE_NULL offsetof(struct cpu_info, ci_savefpstate_null)
 
 # PTE bits and related information
 define	PG_W		PG_W

@@ -1,4 +1,4 @@
-# $NetBSD: t_cut.sh,v 1.1 2009/02/13 05:19:51 jmmv Exp $
+# $NetBSD: t_cut.sh,v 1.3 2010/11/07 17:51:22 jmmv Exp $
 #
 # Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
 # All rights reserved.

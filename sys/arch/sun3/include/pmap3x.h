@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap3x.h,v 1.26 2008/12/09 20:45:45 pooka Exp $	*/
+/*	$NetBSD: pmap3x.h,v 1.29 2011/06/03 17:03:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -29,22 +29,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef _KERNEL
 /*
  * Physical map structures exported to the VM code.
- * XXX - Does user-level code really see this struct?
  */
-
-#include <sys/simplelock.h>
 
 struct pmap {
 	struct a_tmgr_struct	*pm_a_tmgr; 	/* Level-A table manager */
-	u_long              	pm_a_phys;  	/* MMU level-A phys addr */
-	struct simplelock	pm_lock;    	/* lock on pmap */
-	int             	pm_refcount;	/* reference count */
+	paddr_t              	pm_a_phys;  	/* MMU level-A phys addr */
+	u_int             	pm_refcount;	/* reference count */
 	int             	pm_version;
 };
 
-#ifdef _KERNEL
 /* Common function for pmap_resident_count(), pmap_wired_count() */
 segsz_t pmap_count(pmap_t, int);
 
@@ -79,5 +75,14 @@ pmap_remove_all(struct pmap *pmap)
 #define	PMAP_VME32	0x20	/* etc. */
 #define	PMAP_NC		0x40	/* tells pmap_enter to set PTE_CI */
 #define	PMAP_SPEC	0xFF	/* mask to get all above. */
-
+ 
 #endif	/* _KERNEL */
+
+/* MMU specific segment size */
+#define	SEGSHIFT	19	        /* LOG2(NBSG) */
+#define	NBSG		(1 << SEGSHIFT)	/* bytes/segment */
+#define	SEGOFSET	(NBSG - 1)	/* byte offset into segment */
+
+#define	sun3x_round_seg(x)	((((vaddr_t)(x)) + SEGOFSET) & ~SEGOFSET)
+#define	sun3x_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
+#define	sun3x_seg_offset(x)	((vaddr_t)(x) & SEGOFSET)

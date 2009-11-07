@@ -1,4 +1,4 @@
-/*	$NetBSD: minidebug.c,v 1.19 2009/03/14 21:04:04 dsl Exp $	*/
+/*	$NetBSD: minidebug.c,v 1.21 2011/08/18 21:04:23 matt Exp $	*/
 /*	$OpenBSD: minidebug.c,v 1.2 1998/03/16 09:03:36 pefo Exp $	*/
 
 /*-
@@ -40,12 +40,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: minidebug.c,v 1.19 2009/03/14 21:04:04 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: minidebug.c,v 1.21 2011/08/18 21:04:23 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <dev/cons.h>
 #include <uvm/uvm_extern.h>
 #undef SP
@@ -80,7 +79,7 @@ static char *spec_name[64] = {
 /*56 */	"dsll","spec71","dsrl","dsra","dsll32","spec75","dsrl32","dsra32"
 };
 
-static char *bcond_name[32] = {
+static char *regimm_name[32] = {
 /* 0 */	"bltz",	"bgez", "bltzl", "bgezl", "?", "?", "?", "?",
 /* 8 */	"tgei", "tgeiu", "tlti", "tltiu", "teqi", "?", "tnei", "?",
 /*16 */	"bltzal", "bgezal", "bltzall", "bgezall", "?", "?", "?", "?",
@@ -760,8 +759,8 @@ mdbprintins(int ins, int mdbdot)
 		};
 		break;
 
-	case OP_BCOND:
-		printf("%s\t%s,", bcond_name[i.IType.rt],
+	case OP_REGIMM:
+		printf("%s\t%s,", regimm_name[i.IType.rt],
 		    reg_name[i.IType.rs]);
 		goto pr_displ;
 

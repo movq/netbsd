@@ -1,11 +1,11 @@
-/*	$NetBSD: namei.h,v 1.67 2009/09/27 17:24:31 dholland Exp $	*/
+/*	$NetBSD: namei.h,v 1.80 2011/11/25 16:52:47 dholland Exp $	*/
 
 
 /*
  * WARNING: GENERATED FILE.  DO NOT EDIT
  * (edit namei.src and run make namei in src/sys/sys)
- *   by:   NetBSD: gennameih.awk,v 1.4 2008/12/03 10:54:27 ad Exp 
- *   from: NetBSD: namei.src,v 1.13 2009/09/27 17:23:54 dholland Exp 
+ *   by:   NetBSD: gennameih.awk,v 1.5 2009/12/23 14:17:19 pooka Exp 
+ *   from: NetBSD: namei.src,v 1.25 2011/11/25 16:51:43 dholland Exp 
  */
 
 /*
@@ -49,18 +49,53 @@
 #include <sys/kauth.h>
 
 /*
+ * Abstraction for a single pathname.
+ *
+ * This contains both the pathname string and (eventually) all
+ * metadata that determines how the path is to be interpreted.
+ * It is an opaque structure; the implementation is in vfs_lookup.c.
+ *
+ * To call namei, first set up a pathbuf with pathbuf_create or
+ * pathbuf_copyin, then do NDINIT(), then call namei, then AFTER THE
+ * STRUCT NAMEIDATA IS DEAD, call pathbuf_destroy. Don't destroy the
+ * pathbuf before you've finished using the nameidata, or mysterious
+ * bad things may happen.
+ *
+ * pathbuf_assimilate is like pathbuf_create but assumes ownership of
+ * the string buffer passed in, which MUST BE of size PATH_MAX and
+ * have been allocated with PNBUF_GET(). This should only be used when
+ * absolutely necessary; e.g. nfsd uses it for loading paths from
+ * mbufs.
+ */
+struct pathbuf;
+
+struct pathbuf *pathbuf_create(const char *path);
+struct pathbuf *pathbuf_assimilate(char *path);
+int pathbuf_copyin(const char *userpath, struct pathbuf **ret);
+void pathbuf_destroy(struct pathbuf *);
+
+/* get a copy of the (current) path string */
+void pathbuf_copystring(const struct pathbuf *, char *buf, size_t maxlen);
+
+/* hold a reference copy of the original path string */
+const char *pathbuf_stringcopy_get(struct pathbuf *);
+void pathbuf_stringcopy_put(struct pathbuf *, const char *);
+
+// XXX remove this
+int pathbuf_maybe_copyin(const char *userpath, enum uio_seg seg, struct pathbuf **ret);
+
+/*
  * Encapsulation of namei parameters.
  */
 struct nameidata {
 	/*
 	 * Arguments to namei/lookup.
 	 */
-	const char *ni_dirp;		/* pathname pointer */
-	enum	uio_seg ni_segflg;	/* location of pathname */
+	struct pathbuf *ni_pathbuf;	/* pathname container */
+	char *ni_pnbuf;			/* extra pathname buffer ref (XXX) */
 	/*
 	 * Arguments to lookup.
 	 */
-	struct	vnode *ni_startdir;	/* starting directory */
 	struct	vnode *ni_rootdir;	/* logical root directory */
 	struct	vnode *ni_erootdir;	/* emulation root directory */
 	/*
@@ -89,7 +124,6 @@ struct nameidata {
 		/*
 		 * Shared between lookup and commit routines.
 		 */
-		char		*cn_pnbuf;	/* pathname buffer */
 		const char 	*cn_nameptr;	/* pointer to looked up name */
 		size_t		cn_namelen;	/* length of looked up comp */
 		u_long		cn_hash;	/* hash val of looked up name */
@@ -122,41 +156,27 @@ struct nameidata {
 #define	MODMASK		0x010000fc	/* mask of operational modifiers */
 /*
  * Namei parameter descriptors.
- *
- * SAVENAME may be set by either the callers of namei or by VOP_LOOKUP.
- * If the caller of namei sets the flag (for example execve wants to
- * know the name of the program that is being executed), then it must
- * free the buffer. If VOP_LOOKUP sets the flag, then the buffer must
- * be freed by either the commit routine or the VOP_ABORT routine.
- * SAVESTART is set only by the callers of namei. It implies SAVENAME
- * plus the addition of saving the parent directory that contains the
- * name in ni_startdir. It allows repeated calls to lookup for the
- * name being sought. The caller is responsible for releasing the
- * buffer and for vrele'ing ni_startdir.
  */
 #define	NOCROSSMOUNT	0x0000100	/* do not cross mount points */
 #define	RDONLY		0x0000200	/* lookup with read-only semantics */
-#define	HASBUF		0x0000400	/* has allocated pathname buffer */
-#define	SAVENAME	0x0000800	/* save pathname buffer */
-#define	SAVESTART	0x0001000	/* save starting directory */
 #define	ISDOTDOT	0x0002000	/* current component name is .. */
 #define	MAKEENTRY	0x0004000	/* entry is to be added to name cache */
 #define	ISLASTCN	0x0008000	/* this is last component of pathname */
-#define	ISSYMLINK	0x0010000	/* symlink needs interpretation */
 #define	ISWHITEOUT	0x0020000	/* found whiteout */
 #define	DOWHITEOUT	0x0040000	/* do whiteouts */
 #define	REQUIREDIR	0x0080000	/* must be a directory */
 #define	CREATEDIR	0x0200000	/* trailing slashes are ok */
-#define	PARAMASK	0x02fff00	/* mask of parameter descriptors */
+#define	INRENAME	0x0400000	/* operation is a part of ``rename'' */
+#define	INRELOOKUP	0x0800000	/* set while inside relookup() */
+#define	PARAMASK	0x0eee300	/* mask of parameter descriptors */
 
 /*
  * Initialization of an nameidata structure.
  */
-#define NDINIT(ndp, op, flags, segflg, namep) { \
+#define NDINIT(ndp, op, flags, pathbuf) { \
 	(ndp)->ni_cnd.cn_nameiop = op; \
 	(ndp)->ni_cnd.cn_flags = flags; \
-	(ndp)->ni_segflg = segflg; \
-	(ndp)->ni_dirp = namep; \
+	(ndp)->ni_pathbuf = pathbuf; \
 	(ndp)->ni_cnd.cn_cred = kauth_cred_get(); \
 }
 #endif
@@ -164,7 +184,7 @@ struct nameidata {
 /*
  * This structure describes the elements in the cache of recent
  * names looked up by namei. NCHNAMLEN is sized to make structure
- * size a power of two to optimize malloc's. Minimum reasonable
+ * size a power of two to optimize allocations.  Minimum reasonable
  * size is 15.
  */
 
@@ -193,7 +213,6 @@ struct	namecache {
 };
 
 #ifdef _KERNEL
-#include <sys/mallocvar.h>
 #include <sys/pool.h>
 
 struct mount;
@@ -237,8 +256,8 @@ int namei_simple_user(const char *, namei_simple_flags_t, struct vnode **);
 int	namei(struct nameidata *);
 uint32_t namei_hash(const char *, const char **);
 int	lookup_for_nfsd(struct nameidata *, struct vnode *, int neverfollow);
-int	lookup_for_nfsd_index(struct nameidata *);
-int	relookup(struct vnode *, struct vnode **, struct componentname *);
+int	lookup_for_nfsd_index(struct nameidata *, struct vnode *);
+int	relookup(struct vnode *, struct vnode **, struct componentname *, int);
 void	cache_purge1(struct vnode *, const struct componentname *, int);
 #define	PURGE_PARENTS	1
 #define	PURGE_CHILDREN	2
@@ -252,7 +271,8 @@ void	nchinit(void);
 void	nchreinit(void);
 void	cache_cpu_init(struct cpu_info *);
 void	cache_purgevfs(struct mount *);
-void	namecache_print(struct vnode *, void (*)(const char *, ...));
+void	namecache_print(struct vnode *, void (*)(const char *, ...)
+    __printflike(1, 2));
 
 #endif
 
@@ -295,17 +315,15 @@ extern struct nchstats nchstats;
 #define NAMEI_MODMASK	0x010000fc
 #define NAMEI_NOCROSSMOUNT	0x0000100
 #define NAMEI_RDONLY	0x0000200
-#define NAMEI_HASBUF	0x0000400
-#define NAMEI_SAVENAME	0x0000800
-#define NAMEI_SAVESTART	0x0001000
 #define NAMEI_ISDOTDOT	0x0002000
 #define NAMEI_MAKEENTRY	0x0004000
 #define NAMEI_ISLASTCN	0x0008000
-#define NAMEI_ISSYMLINK	0x0010000
 #define NAMEI_ISWHITEOUT	0x0020000
 #define NAMEI_DOWHITEOUT	0x0040000
 #define NAMEI_REQUIREDIR	0x0080000
 #define NAMEI_CREATEDIR	0x0200000
-#define NAMEI_PARAMASK	0x02fff00
+#define NAMEI_INRENAME	0x0400000
+#define NAMEI_INRELOOKUP	0x0800000
+#define NAMEI_PARAMASK	0x0eee300
 
 #endif /* !_SYS_NAMEI_H_ */

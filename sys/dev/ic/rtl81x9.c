@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9.c,v 1.87 2009/09/15 19:29:17 dyoung Exp $	*/
+/*	$NetBSD: rtl81x9.c,v 1.93 2012/02/02 19:43:03 tls Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -86,10 +86,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.87 2009/09/15 19:29:17 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.93 2012/02/02 19:43:03 tls Exp $");
 
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,20 +99,14 @@ __KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.87 2009/09/15 19:29:17 dyoung Exp $");
 #include <sys/kernel.h>
 #include <sys/socket.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_ether.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -747,10 +739,8 @@ rtk_attach(struct rtk_softc *sc)
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 
 	return;
  fail_4:
@@ -835,9 +825,7 @@ rtk_detach(struct rtk_softc *sc)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->rnd_source);
-#endif
 
 	ether_ifdetach(ifp);
 	if_detach(ifp);
@@ -851,6 +839,9 @@ rtk_detach(struct rtk_softc *sc)
 	bus_dmamem_unmap(sc->sc_dmat, sc->rtk_rx_buf,
 	    RTK_RXBUFLEN + 16);
 	bus_dmamem_free(sc->sc_dmat, &sc->sc_dmaseg, sc->sc_dmanseg);
+
+	/* we don't want to run again */
+	sc->sc_flags &= ~RTK_ATTACHED;
 
 	return 0;
 }
@@ -1084,10 +1075,7 @@ rtk_rxeof(struct rtk_softc *sc)
 
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		/* pass it on. */
 		(*ifp->if_input)(ifp, m);
 	}
@@ -1218,10 +1206,7 @@ rtk_intr(void *arg)
 	if (IFQ_IS_EMPTY(&ifp->if_snd) == 0)
 		rtk_start(ifp);
 
-#if NRND > 0
-	if (RND_ENABLED(&sc->rnd_source))
-		rnd_add_uint32(&sc->rnd_source, status);
-#endif
+	rnd_add_uint32(&sc->rnd_source, status);
 
 	return handled;
 }
@@ -1251,7 +1236,7 @@ rtk_start(struct ifnet *ifp)
 		 * fit in one DMA segment, and we need to copy.  Note,
 		 * the packet must also be aligned.
 		 * if the packet is too small, copy it too, so we're sure
-		 * so have enouth room for the pad buffer.
+		 * so have enough room for the pad buffer.
 		 */
 		if ((mtod(m_head, uintptr_t) & 3) != 0 ||
 		    m_head->m_pkthdr.len < ETHER_PAD_LEN ||
@@ -1295,14 +1280,11 @@ rtk_start(struct ifnet *ifp)
 			}
 		}
 		IFQ_DEQUEUE(&ifp->if_snd, m_head);
-#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m_head);
-#endif
+		bpf_mtap(ifp, m_head);
 		if (m_new != NULL) {
 			m_freem(m_head);
 			m_head = m_new;

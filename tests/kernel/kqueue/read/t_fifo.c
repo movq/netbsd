@@ -1,4 +1,4 @@
-/* $NetBSD: t_fifo.c,v 1.1 2009/02/20 21:39:57 jmmv Exp $ */
+/* $NetBSD: t_fifo.c,v 1.3 2010/11/07 17:51:20 jmmv Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_fifo.c,v 1.1 2009/02/20 21:39:57 jmmv Exp $");
+__RCSID("$NetBSD: t_fifo.c,v 1.3 2010/11/07 17:51:20 jmmv Exp $");
 
 #include <sys/event.h>
 #include <sys/stat.h>

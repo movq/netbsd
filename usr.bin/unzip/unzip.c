@@ -1,7 +1,7 @@
-/* $NetBSD: unzip.c,v 1.10 2009/10/25 20:14:50 wiz Exp $ */
+/* $NetBSD: unzip.c,v 1.19 2011/09/06 18:43:41 joerg Exp $ */
 
 /*-
- * Copyright (c) 2009 Joerg Sonnenberger <joerg@NetBSD.org>
+ * Copyright (c) 2009, 2010 Joerg Sonnenberger <joerg@NetBSD.org>
  * Copyright (c) 2007-2008 Dag-Erling Coïdan Smørgrav
  * All rights reserved.
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: unzip.c,v 1.10 2009/10/25 20:14:50 wiz Exp $");
+__RCSID("$NetBSD: unzip.c,v 1.19 2011/09/06 18:43:41 joerg Exp $");
 
 #include <sys/queue.h>
 #include <sys/stat.h>
@@ -70,6 +70,7 @@ static int		 q_opt;		/* quiet */
 static int		 t_opt;		/* test */
 static int		 u_opt;		/* update */
 static int		 v_opt;		/* verbose/list */
+static const char *	 y_str = "";	/* 4 digit year */
 
 /* time when unzip started */
 static time_t		 now;
@@ -97,7 +98,7 @@ static int		 tty;
 static int noeol;
 
 /* fatal error message + errno */
-static void
+__dead __printflike(1, 2) static void
 error(const char *fmt, ...)
 {
 	va_list ap;
@@ -114,7 +115,7 @@ error(const char *fmt, ...)
 }
 
 /* fatal error message, no errno */
-static void
+__dead __printflike(1, 2) static void
 errorx(const char *fmt, ...)
 {
 	va_list ap;
@@ -132,7 +133,7 @@ errorx(const char *fmt, ...)
 
 #if 0
 /* non-fatal error message + errno */
-static void
+__printflike(1, 2) static void
 warning(const char *fmt, ...)
 {
 	va_list ap;
@@ -147,9 +148,8 @@ warning(const char *fmt, ...)
 	fprintf(stderr, ": %s\n", strerror(errno));
 }
 #endif
-
 /* non-fatal error message, no errno */
-static void
+__printflike(1, 2) static void
 warningx(const char *fmt, ...)
 {
 	va_list ap;
@@ -165,7 +165,7 @@ warningx(const char *fmt, ...)
 }
 
 /* informational message (if not -q) */
-static void
+__printflike(1, 2) static void
 info(const char *fmt, ...)
 {
 	va_list ap;
@@ -184,7 +184,7 @@ info(const char *fmt, ...)
 }
 
 /* debug message (if unzip_debug) */
-static void
+__printflike(1, 2) static void
 debug(const char *fmt, ...)
 {
 	va_list ap;
@@ -388,7 +388,7 @@ extract_dir(struct archive *a, struct archive_entry *e, const char *path)
 {
 	int mode;
 
-	mode = archive_entry_filetype(e) & 0777;
+	mode = archive_entry_mode(e) & 0777;
 	if (mode == 0)
 		mode = 0755;
 
@@ -449,13 +449,41 @@ handle_existing_file(char **path)
 			*path = NULL;
 			alen = 0;
 			len = getline(path, &alen, stdin);
-			if ((*path)[len - 1] != '\n')
+			if ((*path)[len - 1] == '\n')
 				(*path)[len - 1] = '\0';
 			return 0;
 		default:
 			break;
 		}
 	}
+}
+
+/*
+ * Detect binary files by a combination of character white list and
+ * black list. NUL bytes and other control codes without use in text files
+ * result directly in switching the file to binary mode. Otherwise, at least
+ * one white-listed byte has to be found.
+ *
+ * Black-listed: 0..6, 14..25, 28..31
+ * White-listed: 9..10, 13, >= 32
+ *
+ * See the proginfo/txtvsbin.txt in the zip sources for a detailed discussion.
+ */
+#define BYTE_IS_BINARY(x)	((x) < 32 && (0xf3ffc07fU & (1U << (x))))
+#define	BYTE_IS_TEXT(x)		((x) >= 32 || (0x00002600U & (1U << (x))))
+
+static int
+check_binary(const unsigned char *buf, size_t len)
+{
+	int rv;
+	for (rv = 1; len--; ++buf) {
+		if (BYTE_IS_BINARY(*buf))
+			return 1;
+		if (BYTE_IS_TEXT(*buf))
+			rv = 0;
+	}
+
+	return rv;
 }
 
 /*
@@ -472,7 +500,7 @@ extract_file(struct archive *a, struct archive_entry *e, char **path)
 	ssize_t len;
 	unsigned char *p, *q, *end;
 
-	mode = archive_entry_filetype(e) & 0777;
+	mode = archive_entry_mode(e) & 0777;
 	if (mode == 0)
 		mode = 0644;
 	mtime = archive_entry_mtime(e);
@@ -544,25 +572,21 @@ recheck:
 		 * guess wrong, we print a warning message later.
 		 */
 		if (a_opt && n == 0) {
-			for (p = buffer; p < end; ++p) {
-				if (!isascii((unsigned char)*p)) {
-					text = 0;
-					break;
-				}
-			}
+			if (check_binary(buffer, len))
+				text = 0;
 		}
 
 		/* simple case */
 		if (!a_opt || !text) {
 			if (write(fd, buffer, len) != len)
-				error("write('%s')", path);
+				error("write('%s')", *path);
 			continue;
 		}
 
 		/* hard case: convert \r\n to \n (sigh...) */
 		for (p = buffer; p < end; p = q + 1) {
 			for (q = p; q < end; q++) {
-				if (!warn && !isascii(*q)) {
+				if (!warn && BYTE_IS_BINARY(*q)) {
 					warningx("%s may be corrupted due"
 					    " to weak text file detection"
 					    " heuristic", *path);
@@ -797,9 +821,14 @@ list(struct archive *a, struct archive_entry *e)
 {
 	char buf[20];
 	time_t mtime;
+	struct tm *tm;
 
 	mtime = archive_entry_mtime(e);
-	strftime(buf, sizeof(buf), "%m-%d-%g %R", localtime(&mtime));
+	tm = localtime(&mtime);
+	if (*y_str)
+		strftime(buf, sizeof(buf), "%m-%d-%G %R", tm);
+	else
+		strftime(buf, sizeof(buf), "%m-%d-%g %R", tm);
 
 	if (v_opt == 1) {
 		printf(" %8ju  %s   %s\n",
@@ -865,15 +894,15 @@ unzip(const char *fn)
 	ac(archive_read_support_format_zip(a));
 	ac(archive_read_open_fd(a, fd, 8192));
 
-	if (!q_opt)
+	if (!q_opt && !p_opt)
 	    printf("Archive:  %s\n", fn);
 
 	if (v_opt == 1) {
-		printf("  Length     Date   Time    Name\n");
-		printf(" --------    ----   ----    ----\n");
+		printf("  Length     %sDate   Time    Name\n", y_str);
+		printf(" --------    %s----   ----    ----\n", y_str);
 	} else if (v_opt == 2) {
-		printf(" Length   Method    Size  Ratio   Date   Time   CRC-32    Name\n");
-		printf("--------  ------  ------- -----   ----   ----   ------    ----\n");
+		printf(" Length   Method    Size  Ratio   %sDate   Time   CRC-32    Name\n", y_str);
+		printf("--------  ------  ------- -----   %s----   ----   ------    ----\n", y_str);
 	}
 
 	total_size = 0;
@@ -898,13 +927,13 @@ unzip(const char *fn)
 	}
 
 	if (v_opt == 1) {
-		printf(" --------                   -------\n");
-		printf(" %8ju                   %ju file%s\n",
-		    total_size, file_count, file_count != 1 ? "s" : "");
+		printf(" --------                   %s-------\n", y_str);
+		printf(" %8ju                   %s%ju file%s\n",
+		    total_size, y_str, file_count, file_count != 1 ? "s" : "");
 	} else if (v_opt == 2) {
-		printf("--------          -------  ---                            -------\n");
-		printf("%8ju          %7ju   0%%                            %ju file%s\n",
-		    total_size, total_size, file_count,
+		printf("--------          -------  ---                            %s-------\n", y_str);
+		printf("%8ju          %7ju   0%%                            %s%ju file%s\n",
+		    total_size, total_size, y_str, file_count,
 		    file_count != 1 ? "s" : "");
 	}
 
@@ -916,7 +945,7 @@ unzip(const char *fn)
 
 	if (t_opt) {
 		if (error_count > 0) {
-			errorx("%d checksum error(s) found.", error_count);
+			errorx("%ju checksum error(s) found.", error_count);
 		}
 		else {
 			printf("No errors detected in compressed data of %s.\n",
@@ -925,11 +954,12 @@ unzip(const char *fn)
 	}
 }
 
-static void
+static void __dead
 usage(void)
 {
 
-	fprintf(stderr, "usage: unzip [-aCcfjLlnopqtuv] [-d dir] [-x pattern] zipfile\n");
+	fprintf(stderr, "Usage: %s [-aCcfjLlnopqtuvy] [-d dir] [-x pattern] "
+	    "zipfile\n", getprogname());
 	exit(1);
 }
 
@@ -939,7 +969,7 @@ getopts(int argc, char *argv[])
 	int opt;
 
 	optreset = optind = 1;
-	while ((opt = getopt(argc, argv, "aCcd:fjLlnopqtuvx:")) != -1)
+	while ((opt = getopt(argc, argv, "aCcd:fjLlnopqtuvyx:")) != -1)
 		switch (opt) {
 		case 'a':
 			a_opt = 1;
@@ -990,6 +1020,9 @@ getopts(int argc, char *argv[])
 			break;
 		case 'x':
 			add_pattern(&exclude, optarg);
+			break;
+		case 'y':
+			y_str = "  ";
 			break;
 		default:
 			usage();

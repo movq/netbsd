@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.60 2009/06/29 05:08:18 dholland Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.67 2011/12/05 11:12:10 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.60 2009/06/29 05:08:18 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.67 2011/12/05 11:12:10 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.60 2009/06/29 05:08:18 dholland E
 
 #include <fs/union/union.h>
 
-MODULE(MODULE_CLASS_VFS, union, "layerfs");
+MODULE(MODULE_CLASS_VFS, union, NULL);
 
 VFS_PROTOS(union);
 
@@ -148,11 +148,8 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		goto bad;
 	}
 
-	printf("WARNING: the union file system is experimental\n"
-	    "WARNING: it can cause crashes and file system corruption\n");
-
 	lowerrootvp = mp->mnt_vnodecovered;
-	VREF(lowerrootvp);
+	vref(lowerrootvp);
 
 	/*
 	 * Find upper node.
@@ -203,12 +200,17 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		goto bad;
 	}
 
+	mp->mnt_iflag |= IMNT_MPSAFE;
+
 	/*
 	 * Unless the mount is readonly, ensure that the top layer
 	 * supports whiteout operations
 	 */
 	if ((mp->mnt_flag & MNT_RDONLY) == 0) {
-		error = VOP_WHITEOUT(um->um_uppervp, (struct componentname *) 0, LOOKUP);
+		vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
+		error = VOP_WHITEOUT(um->um_uppervp,
+		    (struct componentname *) 0, LOOKUP);
+		VOP_UNLOCK(um->um_uppervp);
 		if (error)
 			goto bad;
 	}
@@ -384,10 +386,10 @@ union_root(struct mount *mp, struct vnode **vpp)
 	/*
 	 * Return locked reference to root.
 	 */
-	VREF(um->um_uppervp);
+	vref(um->um_uppervp);
 	vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
 	if (um->um_lowervp)
-		VREF(um->um_lowervp);
+		vref(um->um_lowervp);
 	error = union_allocvp(vpp, mp, NULL, NULL, NULL,
 			      um->um_uppervp, um->um_lowervp, 1);
 
@@ -516,7 +518,7 @@ struct vfsops union_vfsops = {
 	(void *)eopnotsupp,		/* vfs_fhtovp */
 	(void *)eopnotsupp,		/* vfs_vptofh */
 	union_init,
-	NULL,				/* vfs_reinit */
+	union_reinit,
 	union_done,
 	NULL,				/* vfs_mountroot */
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,

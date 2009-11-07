@@ -1,5 +1,5 @@
-/*	$Id: at91aic.c,v 1.3 2009/10/23 06:53:12 snj Exp $	*/
-/*	$NetBSD: at91aic.c,v 1.3 2009/10/23 06:53:12 snj Exp $	*/
+/*	$Id: at91aic.c,v 1.8 2011/11/04 17:16:38 aymeric Exp $	*/
+/*	$NetBSD: at91aic.c,v 1.8 2011/11/04 17:16:38 aymeric Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy.
@@ -49,7 +49,7 @@
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -75,7 +75,7 @@ volatile u_int32_t aic_intr_enabled;
 static int	at91aic_match(device_t, cfdata_t, void *);
 static void	at91aic_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(at91aic, sizeof(struct device),
+CFATTACH_DECL_NEW(at91aic, 0,
 	      at91aic_match, at91aic_attach, NULL, NULL);
 
 static int
@@ -89,7 +89,13 @@ at91aic_match(device_t parent, cfdata_t match, void *aux)
 static void
 at91aic_attach(device_t parent, device_t self, void *aux)
 {
+	int i;
+
 	(void)parent; (void)self; (void)aux;
+	for (i = 0; i < NIRQ; i++) {
+		evcnt_attach_dynamic(&intrq[i].iq_ev, EVCNT_TYPE_INTR,
+				     NULL, "aic", intrq[i].iq_name);
+	}
 	printf("\n");
 }
 
@@ -145,23 +151,20 @@ at91aic_calculate_masks(void)
 		aic_imask[ipl] = aic_irqs;
 	}
 
-	aic_imask[IPL_NONE] = 0;
+	/* IPL_NONE must open up all interrupts */
+	KASSERT(aic_imask[IPL_NONE] == 0);
+	KASSERT(aic_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(aic_imask[IPL_SOFTBIO] == 0);
+	KASSERT(aic_imask[IPL_SOFTNET] == 0);
+	KASSERT(aic_imask[IPL_SOFTSERIAL] == 0);
 
 	/*
-	 * splvm() blocks all interrupts that use the kernel memory
-	 * allocation facilities.
+	 * Enforce a hierarchy that gives "slow" device (or devices with
+	 * limited input buffer space/"real-time" requirements) a better
+	 * chance at not dropping data.
 	 */
-	aic_imask[IPL_VM] |= aic_imask[IPL_NONE];
-
-	/*
-	 * splclock() must block anything that uses the scheduler.
-	 */
-	aic_imask[IPL_CLOCK] |= aic_imask[IPL_VM];
-
-	/*
-	 * splhigh() must block "everything".
-	 */
-	aic_imask[IPL_HIGH] |= aic_imask[IPL_CLOCK];
+	aic_imask[IPL_SCHED] |= aic_imask[IPL_VM];
+	aic_imask[IPL_HIGH] |= aic_imask[IPL_SCHED];
 
 	/*
 	 * Now compute which IRQs must be blocked when servicing any
@@ -249,8 +252,6 @@ at91aic_init(void)
 		TAILQ_INIT(&iq->iq_list);
 
 		sprintf(iq->iq_name, "irq %d", i);
-		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
-				     NULL, "aic", iq->iq_name);
 	}
 
 	/* All interrupts should use IRQ not FIQ */
@@ -372,7 +373,7 @@ intr_process(struct intrq *iq, int pcpl, struct irqframe *frame)
 	intr = iq - intrq;
 
 	iq->iq_ev.ev_count++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	if ((1U << intr) & aic_imask[pcpl]) {
 		panic("interrupt %d should be masked! (aic_imask=0x%X)", intr, aic_imask[pcpl]);

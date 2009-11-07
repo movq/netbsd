@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.kern.inc,v 1.124 2009/05/13 18:06:26 cube Exp $
+#	$NetBSD: Makefile.kern.inc,v 1.152 2012/02/12 16:34:11 matt Exp $
 #
 # This file contains common `MI' targets and definitions and it is included
 # at the bottom of each `MD' ${MACHINE}/conf/Makefile.${MACHINE}.
@@ -57,52 +57,62 @@ S!=	cd ../../../..; pwd
 INCLUDES?=	-I. ${EXTRA_INCLUDES} -I${S}/../common/include -I$S/arch \
 		-I$S -nostdinc
 CPPFLAGS+=	${INCLUDES} ${IDENT} ${PARAM} -D_KERNEL -D_KERNEL_OPT
+CPPFLAGS+=	-std=gnu99
 DEFCOPTS?=	-O2
 COPTS?=		${DEFCOPTS}
-COPTS+=		-std=gnu99
 DBG=		# might contain unwanted -Ofoo
 DEFWARNINGS?=	yes
 .if (${DEFWARNINGS} == "yes")
-. if !defined(NOGCCERROR)
-CWARNFLAGS+=	-Werror
-. endif
 CWARNFLAGS+=	-Wall -Wno-main -Wno-format-zero-length -Wpointer-arith
 CWARNFLAGS+=	-Wmissing-prototypes -Wstrict-prototypes
+CWARNFLAGS+=	-Wold-style-definition
 CWARNFLAGS+=	-Wswitch -Wshadow
 CWARNFLAGS+=	-Wcast-qual -Wwrite-strings
 CWARNFLAGS+=	-Wno-unreachable-code
-# Add -Wno-sign-compare.  -Wsign-compare is included in -Wall as of GCC 3.3,
-# but our sources aren't up for it yet.
-CWARNFLAGS+=	-Wno-sign-compare
-. if (defined(HAVE_GCC) && ${HAVE_GCC} > 3) || defined(HAVE_PCC)
+. if defined(HAVE_GCC) || defined(HAVE_PCC)
 CWARNFLAGS+=	-Wno-pointer-sign -Wno-attributes
 .  if ${MACHINE} == "i386" || ${MACHINE_ARCH} == "x86_64" || \
 	${MACHINE_ARCH} == "sparc64" || ${MACHINE} == "prep"
 CWARNFLAGS+=	-Wextra -Wno-unused-parameter
 .  endif
+.  if ${MACHINE} == "i386" || ${MACHINE_ARCH} == "x86_64"
+CWARNFLAGS+=	-Wold-style-definition
+.  endif
 . endif
+# Add -Wno-sign-compare.  -Wsign-compare is included in -Wall as of GCC 3.3,
+# but our sources aren't up for it yet.
+CWARNFLAGS+=	-Wno-sign-compare
 .endif
+
+CWARNFLAGS.clang+=	-Wno-unknown-pragmas -Wno-conversion \
+			-Wno-self-assign
+
+CWARNFLAGS.ah_regdomain.c= ${${ACTIVE_CC} == "clang":? \
+    -Wno-shift-count-negative -Wno-shift-count-overflow:}
 
 CFLAGS+=	-ffreestanding -fno-zero-initialized-in-bss
 CFLAGS+=	${DEBUG} ${COPTS}
-AFLAGS+=	-D_LOCORE -Wa,-fatal-warnings
+AFLAGS+=	-D_LOCORE -Wa,--fatal-warnings
 
 # XXX
-.if defined(HAVE_GCC) && ${HAVE_GCC} > 3
+.if defined(HAVE_GCC)
 CFLAGS+=	-fno-strict-aliasing
 .endif
 
 .if ${USE_SSP:Uno} == "yes"
-CFLAGS+=-fstack-protector -Wstack-protector --param ssp-buffer-size=1
-LDFLAGS+=-fstack-protector -Wstack-protector --param ssp-buffer-size=1
 COPTS.kern_ssp.c+=	-fno-stack-protector -D__SSP__
+.endif
+
+# for multi-cpu machines, cpu_hatch() straddles the init of
+# __stack_chk_guard, so ensure stack protection is disabled
+.if ${MACHINE} == "i386" || ${MACHINE_ARCH} == "x86_64"
+COPTS.cpu.c+=		-fno-stack-protector
 .endif
 
 # If we want the bpendtsleep: label in kern_synch.c, we need to use
 # -fno-reorder-blocks.  Don't make this a config(1) defflag without
 # making sure this fragment remains valid.
-.if defined(HAVE_GCC) && ${HAVE_GCC} > 3 && \
-	!empty(${CFLAGS:M-DKERN_SYNCH_BPENDTSLEEP_LABEL})
+.if defined(HAVE_GCC) && !empty(${CFLAGS:M-DKERN_SYNCH_BPENDTSLEEP_LABEL})
 COPTS.kern_synch.c+=	-fno-reorder-blocks
 .endif
 
@@ -115,25 +125,36 @@ COPTS.${j}+=-g
 . endfor
 .endfor
 
-# Always compile subr_debug_info.c with debug informations.
+# Always compile debugsyms.c with debug information.
 # This allows gdb to use type informations.
 #
 COPTS.debugsyms.c+=	-g
 
+# Add CTF sections for DTrace
+.if defined(CTFCONVERT)
+COMPILE_CTFCONVERT=	${_MKSHECHO}\
+			${CTFCONVERT} ${CTFFLAGS} ${.TARGET} && \
+			${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.else
+COMPILE_CTFCONVERT=	${_MKSHECHO}
+.endif
+
 # compile rules: rules are named ${TYPE}_${SUFFIX} where TYPE is NORMAL or
 # NOPROF and SUFFIX is the file suffix, capitalized (e.g. C for a .c file).
-NORMAL_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}"; \
+NORMAL_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}" && \
 		${_MKSHECHO}\
-		${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $<; \
-		${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $<
-NOPROF_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}"; \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $< && \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $< && \
+		${COMPILE_CTFCONVERT}
+NOPROF_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}" && \
 		${_MKSHECHO}\
-		${CC} ${CFLAGS} ${CPPFLAGS} -c $<; \
-		${CC} ${CFLAGS} ${CPPFLAGS} -c $<
-NORMAL_S?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}"; \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} -c $< && \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} -c $< && \
+		${COMPILE_CTFCONVERT}
+NORMAL_S?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}" && \
 		${_MKSHECHO}\
-		${CC} ${AFLAGS} ${CPPFLAGS} -c $<; \
-		${CC} ${AFLAGS} ${CPPFLAGS} -c $<
+		${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} -c $< && \
+		${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} -c $<
 
 ##
 ## (3) libkern and compat
@@ -199,13 +220,22 @@ ${_cfile:T:R}.o: ${_cfile}
 #	${SYSTEM_LD_TAIL}
 SYSTEM_OBJ?=	${MD_OBJS} ${MI_OBJS} ${OBJS:O} ${SYSLIBCOMPAT} ${LIBKERN}
 SYSTEM_DEP?=	Makefile ${SYSTEM_OBJ:O} .gdbinit
+.if defined(KERNLDSCRIPT)
+SYSTEM_DEP+=	${KERNLDSCRIPT}
+.endif
+.if defined(CTFMERGE)
+SYSTEM_CTFMERGE= ${CTFMERGE} ${CTFFLAGS} -o ${.TARGET} ${SYSTEM_OBJ} ${EXTRA_OBJ} vers.o
+.else
+SYSTEM_CTFMERGE= ${_MKSHECHO}
+.endif
 SYSTEM_LD_HEAD?=@rm -f $@
 SYSTEM_LD?=	@${_MKSHMSG} "   link  ${.CURDIR:T}/${.TARGET}"; \
 		${_MKSHECHO}\
 		${LD} -Map $@.map --cref ${LINKFLAGS} -o $@ '$${SYSTEM_OBJ}' '$${EXTRA_OBJ}' vers.o; \
 		${LD} -Map $@.map --cref ${LINKFLAGS} -o $@ ${SYSTEM_OBJ} ${EXTRA_OBJ} vers.o
 SYSTEM_LD_TAIL?=@${TOOL_SED} '/const char sccs/!d;s/.*@(.)//;s/\\.*//' vers.c; \
-		${SIZE} $@; chmod 755 $@
+		${SIZE} $@; chmod 755 $@; \
+		${SYSTEM_CTFMERGE}
 
 TEXTADDR?=	${LOADADDRESS}			# backwards compatibility
 LINKTEXT?=	${TEXTADDR:C/.+/-Ttext &/}
@@ -228,14 +258,21 @@ DEBUG?=
 SYSTEM_LD_TAIL+=${SYSTEM_LD_TAIL_DEBUG}
 LINKFLAGS+=	${LINKFLAGS_DEBUG}
 EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.gdb@}
+CTFFLAGS+=	-g
+SYSTEM_LD_TAIL+=; \
+	if grep '^\#define.*SYMTAB_SPACE' opt_ksyms.h > /dev/null; then \
+		echo "${DBSYM} $@.gdb"; \
+		${DBSYM} $@.gdb || (rm -f $@ ; exit 1) || exit 1; \
+	fi
+
 .elifndef PROF
 LINKFLAGS+=	${LINKFLAGS_NORMAL}
 .endif
 
 SYSTEM_LD_TAIL+=; \
-	if grep '^\#define.*SYMTAB_SPACE' opt_ddbparam.h > /dev/null; then \
+	if grep '^\#define.*SYMTAB_SPACE' opt_ksyms.h > /dev/null; then \
 		echo "${DBSYM} $@"; \
-		${DBSYM} $@; \
+		${DBSYM} $@ || (rm -f $@ ; exit 1) || exit 1; \
 	fi
 
 SYSTEM_LD_HEAD+=${SYSTEM_LD_HEAD_EXTRA}
@@ -257,9 +294,9 @@ ${MD_SFILES:C/\.[Ss]/.o/} ${SFILES:C/\.[Ss]/.o/}: assym.h
 MKREPRO?=no
 
 .if ${MKREPRO} == "yes"
-_NVFLAGS=-r
+_NVFLAGS=${NVFLAGS} -r
 .else
-_NVFLAGS=
+_NVFLAGS=${NVFLAGS}
 .endif
 
 .if !target(vers.o)
@@ -334,16 +371,20 @@ SRCS=${SSRCS} ${CSRCS}
 DEPS=	${SRCS:T:O:u:R:S/$/.d/g}
 
 .for _s in ${SSRCS}
+.if !target(${_s:T:R}.d)
 ${_s:T:R}.d: ${_s} assym.h
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET} -- ${MKDEP_AFLAGS} \
 	    ${CPPFLAGS} ${CPPFLAGS.${_s:T}} ${_s}
+.endif
 .endfor
 .for _s in ${CSRCS}
+.if !target(${_s:T:R}.d)
 ${_s:T:R}.d: ${_s}
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET} -- ${MKDEP_CFLAGS} \
 	    ${CPPFLAGS} ${CPPFLAGS.${_s:T}} ${_s}
+.endif
 .endfor
 
 assym.d: assym.h
@@ -481,12 +522,12 @@ EXTRA_CLEAN+= .gdbinit
 
 # The following files use alloca(3) or variable array allocations.
 # Their full name is noted as documentation.
-VARSTACK=dev/cgd.c kern/uipc_socket.c miscfs/genfs/genfs_vnops.c \
+VARSTACK=kern/uipc_socket.c miscfs/genfs/genfs_vnops.c \
     nfs/nfs_bio.c uvm/uvm_bio.c \
     uvm/uvm_pager.c dev/ic/aic7xxx.c dev/ic/aic79xx.c arch/xen/i386/gdt.c \
     dev/ofw/ofw_subr.c
 
-. if (defined(HAVE_GCC) && ${HAVE_GCC} > 3) || defined(HAVE_PCC)
+.if defined(HAVE_GCC) || defined(HAVE_PCC)
 .for __varstack in ${VARSTACK}
 COPTS.${__varstack:T} += -Wno-stack-protector
 .endfor
@@ -498,6 +539,7 @@ CPPFLAGS+=	${CPPFLAGS.${.IMPSRC:T}}
 CWARNFLAGS+=	${CWARNFLAGS.${.IMPSRC:T}}
 
 .include <bsd.files.mk>
+.include <bsd.clang-analyze.mk>
 
 ##
 ## the end

@@ -1,7 +1,7 @@
-/*	$NetBSD: log.h,v 1.1.1.2 2009/10/25 00:02:38 christos Exp $	*/
+/*	$NetBSD: log.h,v 1.2.6.1 2012/06/05 21:14:57 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009, 2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: log.h,v 1.44 2009/01/17 23:47:43 tbox Exp */
+/* Id: log.h,v 1.47 2011/10/13 22:48:24 tbox Exp  */
 
 /*! \file dns/log.h
  * \author  Principal Authors: DCL */
@@ -44,6 +44,7 @@ LIBDNS_EXTERNAL_DATA extern isc_logmodule_t dns_modules[];
 #define DNS_LOGCATEGORY_LAME_SERVERS	(&dns_categories[9])
 #define DNS_LOGCATEGORY_DELEGATION_ONLY	(&dns_categories[10])
 #define DNS_LOGCATEGORY_EDNS_DISABLED	(&dns_categories[11])
+#define DNS_LOGCATEGORY_RPZ		(&dns_categories[12])
 
 /* Backwards compatibility. */
 #define DNS_LOGCATEGORY_GENERAL		ISC_LOGCATEGORY_GENERAL
@@ -75,6 +76,7 @@ LIBDNS_EXTERNAL_DATA extern isc_logmodule_t dns_modules[];
 #define DNS_LOGMODULE_HINTS		(&dns_modules[24])
 #define DNS_LOGMODULE_ACACHE		(&dns_modules[25])
 #define DNS_LOGMODULE_DLZ		(&dns_modules[26])
+#define DNS_LOGMODULE_DNSSEC		(&dns_modules[27])
 
 ISC_LANG_BEGINDECLS
 

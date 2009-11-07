@@ -1,4 +1,4 @@
-/* $NetBSD: cfb.c,v 1.57 2009/08/22 17:38:06 tsutsui Exp $ */
+/* $NetBSD: cfb.c,v 1.61 2012/01/11 21:12:36 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.57 2009/08/22 17:38:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.61 2012/01/11 21:12:36 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,8 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.57 2009/08/22 17:38:06 tsutsui Exp $");
 
 #include <dev/tc/tcvar.h>
 #include <dev/ic/bt459reg.h>
-
-#include <uvm/uvm_extern.h>
 
 #if defined(pmax)
 #define	machine_btop(x) mips_btop(MIPS_KSEG1_TO_PHYS(x))
@@ -255,6 +253,7 @@ cfbattach(device_t parent, device_t self, void *aux)
 	console = (ta->ta_addr == cfb_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &cfb_console_ri;
+		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
@@ -319,6 +318,8 @@ cfb_common_init(struct rasops_info *ri)
 	cfbhwinit(base);
 
 	ri->ri_flg = RI_CENTER;
+	if (ri == &cfb_console_ri)
+		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = 8;
 	ri->ri_width = 1024;
 	ri->ri_height = 864;
@@ -331,10 +332,10 @@ cfb_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_L2R,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("cfb: font table is empty\n");
 		return;

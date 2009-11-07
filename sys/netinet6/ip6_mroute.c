@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_mroute.c,v 1.98 2009/09/16 15:23:05 pooka Exp $	*/
+/*	$NetBSD: ip6_mroute.c,v 1.103 2011/12/31 20:41:59 christos Exp $	*/
 /*	$KAME: ip6_mroute.c,v 1.49 2001/07/25 09:21:18 jinmei Exp $	*/
 
 /*
@@ -117,7 +117,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_mroute.c,v 1.98 2009/09/16 15:23:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_mroute.c,v 1.103 2011/12/31 20:41:59 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_mrouting.h"
@@ -512,7 +512,7 @@ ip6_mrouter_done(void)
 	mifi_t mifi;
 	int i;
 	struct ifnet *ifp;
-	struct in6_ifreq ifr;
+	struct sockaddr_in6 sin6;
 	struct mf6c *rt;
 	struct rtdetq *rte;
 	int s;
@@ -538,10 +538,11 @@ ip6_mrouter_done(void)
 		for (mifi = 0; mifi < nummifs; mifi++) {
 			if (mif6table[mifi].m6_ifp &&
 			    !(mif6table[mifi].m6_flags & MIFF_REGISTER)) {
-				ifr.ifr_addr.sin6_family = AF_INET6;
-				ifr.ifr_addr.sin6_addr= in6addr_any;
+				sin6.sin6_family = AF_INET6;
+				sin6.sin6_addr = in6addr_any;
 				ifp = mif6table[mifi].m6_ifp;
-				(*ifp->if_ioctl)(ifp, SIOCDELMULTI, &ifr);
+				if_mcast_op(ifp, SIOCDELMULTI,
+				    sin6tocsa(&sin6));
 			}
 		}
 	}
@@ -567,7 +568,7 @@ ip6_mrouter_done(void)
 			for (rte = rt->mf6c_stall; rte != NULL; ) {
 				struct rtdetq *n = rte->next;
 
-				m_free(rte->m);
+				m_freem(rte->m);
 				free(rte, M_MRTABLE);
 				rte = n;
 			}
@@ -643,7 +644,7 @@ add_m6if(struct mif6ctl *mifcp)
 {
 	struct mif6 *mifp;
 	struct ifnet *ifp;
-	struct in6_ifreq ifr;
+	struct sockaddr_in6 sin6;
 	int error, s;
 #ifdef notyet
 	struct tbf *m_tbf = tbftable + mifcp->mif6c_mifi;
@@ -686,9 +687,9 @@ add_m6if(struct mif6ctl *mifcp)
 		 * Enable promiscuous reception of all IPv6 multicasts
 		 * from the interface.
 		 */
-		ifr.ifr_addr.sin6_family = AF_INET6;
-		ifr.ifr_addr.sin6_addr = in6addr_any;
-		error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, &ifr);
+		sin6.sin6_family = AF_INET6;
+		sin6.sin6_addr = in6addr_any;
+		error = if_mcast_op(ifp, SIOCADDMULTI, sin6tosa(&sin6));
 		splx(s);
 		if (error)
 			return error;
@@ -731,7 +732,7 @@ del_m6if(mifi_t *mifip)
 	struct mif6 *mifp = mif6table + *mifip;
 	mifi_t mifi;
 	struct ifnet *ifp;
-	struct in6_ifreq ifr;
+	struct sockaddr_in6 sin6;
 	int s;
 
 	if (*mifip >= nummifs)
@@ -748,9 +749,9 @@ del_m6if(mifi_t *mifip)
 		 */
 		ifp = mifp->m6_ifp;
 
-		ifr.ifr_addr.sin6_family = AF_INET6;
-		ifr.ifr_addr.sin6_addr = in6addr_any;
-		(*ifp->if_ioctl)(ifp, SIOCDELMULTI, &ifr);
+		sin6.sin6_family = AF_INET6;
+		sin6.sin6_addr = in6addr_any;
+		if_mcast_op(ifp, SIOCDELMULTI, sin6tosa(&sin6));
 	} else {
 		if (reg_mif_num != (mifi_t)-1) {
 			if_detach(&multicast_register_if6);
@@ -1017,8 +1018,7 @@ socket_send(struct socket *s, struct mbuf *mm, struct sockaddr_in6 *src)
 {
 	if (s) {
 		if (sbappendaddr(&s->so_rcv,
-				 (struct sockaddr *)src,
-				 mm, (struct mbuf *)0) != 0) {
+		    (struct sockaddr *)src, mm, NULL) != 0) {
 			sorwakeup(s);
 			return 0;
 		}
@@ -1574,7 +1574,7 @@ phyint_send(struct ip6_hdr *ip6, struct mif6 *mifp, struct mbuf *m)
 
 #ifdef MRT6DEBUG
 		if (mrt6debug & DEBUG_XMIT)
-			log(LOG_DEBUG, "phyint_send on mif %d err %d\n",
+			log(LOG_DEBUG, "phyint_send on mif %td err %d\n",
 			    mifp - mif6table, error);
 #endif
 		splx(s);
@@ -1611,7 +1611,7 @@ phyint_send(struct ip6_hdr *ip6, struct mif6 *mifp, struct mbuf *m)
 		error = nd6_output(ifp, ifp, mb_copy, &dst6, NULL);
 #ifdef MRT6DEBUG
 		if (mrt6debug & DEBUG_XMIT)
-			log(LOG_DEBUG, "phyint_send on mif %d err %d\n",
+			log(LOG_DEBUG, "phyint_send on mif %td err %d\n",
 			    mifp - mif6table, error);
 #endif
 	} else {
@@ -1911,8 +1911,7 @@ pim6_input(struct mbuf **mp, int *offp, int proto)
 #endif
 
 		looutput(mif6table[reg_mif_num].m6_ifp, m,
-			      (struct sockaddr *)__UNCONST(&dst),
-			      (struct rtentry *) NULL);
+			      (struct sockaddr *)__UNCONST(&dst), NULL);
 
 		/* prepare the register head to send to the mrouting daemon */
 		m = mcp;

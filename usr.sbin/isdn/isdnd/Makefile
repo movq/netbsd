@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2009/10/29 14:39:23 christos Exp $
+#	$NetBSD: Makefile,v 1.11 2011/06/20 07:44:02 mrg Exp $
 
 PROG	=	isdnd
 SRCS	=	rc_parse.y rc_scan.l main.c rc_config.c log.c curses.c	\
@@ -22,7 +22,7 @@ YHEADER=1
 .if !defined(I4B_WITHOUT_CURSES)
 CPPFLAGS+=	-DUSE_CURSES
 LDADD   +=      -lcurses
-LDADD   += 	-ltermlib
+LDADD   += 	-lterminfo
 .endif
 
 .if defined(I4B_EXTERNAL_MONITOR)
@@ -32,7 +32,7 @@ CPPFLAGS+=	-DI4B_NOTCPIP_MONITOR
 .endif
 .endif
 
-.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
+.if defined(HAVE_GCC) || defined(HAVE_PCC)
 COPTS.alias.c+=		-Wno-pointer-sign
 COPTS.holiday.c+=	-Wno-pointer-sign
 COPTS.monitor.c+=	-Wno-pointer-sign

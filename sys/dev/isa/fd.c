@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.93 2009/06/05 21:52:31 haad Exp $	*/
+/*	$NetBSD: fd.c,v 1.100 2012/02/02 19:43:04 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2008 The NetBSD Foundation, Inc.
@@ -81,9 +81,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.93 2009/06/05 21:52:31 haad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.100 2012/02/02 19:43:04 tls Exp $");
 
-#include "rnd.h"
 #include "opt_ddb.h"
 
 /*
@@ -93,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.93 2009/06/05 21:52:31 haad Exp $");
 #if !defined(alpha) && !defined(algor) && !defined(atari) && \
     !defined(bebox) && !defined(evbmips) && !defined(i386) && \
     !defined(prep) && !defined(sandpoint) && !defined(x86_64) && \
-    !defined(mvmeppc)
+    !defined(mvmeppc) && !defined(ofppc)
 #error platform not supported by this driver, yet
 #endif
 
@@ -116,13 +115,9 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.93 2009/06/05 21:52:31 haad Exp $");
 #include <sys/fdio.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
 
 #include <prop/proplib.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
 
@@ -208,8 +203,8 @@ void fdattach(device_t, device_t, void *);
 static int fddetach(device_t, int);
 static int fdcintr1(struct fdc_softc *);
 static void fdcintrcb(void *);
-static bool fdcsuspend(device_t PMF_FN_PROTO);
-static bool fdcresume(device_t PMF_FN_PROTO);
+static bool fdcsuspend(device_t, const pmf_qual_t *);
+static bool fdcresume(device_t, const pmf_qual_t *);
 
 extern struct cfdriver fd_cd;
 
@@ -287,7 +282,7 @@ fdprint(void *aux, const char *fdc)
 }
 
 static bool
-fdcresume(device_t self PMF_FN_ARGS)
+fdcresume(device_t self, const pmf_qual_t *qual)
 {
 	struct fdc_softc *fdc = device_private(self);
 
@@ -298,7 +293,7 @@ fdcresume(device_t self PMF_FN_ARGS)
 }
 
 static bool
-fdcsuspend(device_t self PMF_FN_ARGS)
+fdcsuspend(device_t self, const pmf_qual_t *qual)
 {
 	struct fdc_softc *fdc = device_private(self);
 	int drive;
@@ -355,7 +350,7 @@ void
 fdcattach(struct fdc_softc *fdc)
 {
 	mutex_init(&fdc->sc_mtx, MUTEX_DEFAULT, IPL_BIO);
-	cv_init(&fdc->sc_cv, "fdcwakeup");
+	cv_init(&fdc->sc_cv, "fdcwake");
 	callout_init(&fdc->sc_timo_ch, 0);
 	callout_init(&fdc->sc_intr_ch, 0);
 
@@ -574,10 +569,8 @@ fdattach(device_t parent, device_t self, void *aux)
 	fd->sc_roothook =
 	    mountroothook_establish(fd_mountroot_hook, fd->sc_dev);
 
-#if NRND > 0
 	rnd_attach_source(&fd->rnd_source, device_xname(fd->sc_dev),
 			  RND_TYPE_DISK, 0);
-#endif
 
 	fd_set_properties(fd);
 
@@ -609,9 +602,8 @@ fddetach(device_t self, int flags)
 #if 0 /* XXX need to undo at detach? */
 	fd_set_properties(fd);
 #endif
-#if NRND > 0
+
 	rnd_detach_source(&fd->rnd_source);
-#endif
 
 	disk_detach(&fd->sc_dk);
 	disk_destroy(&fd->sc_dk);
@@ -788,9 +780,7 @@ fdfinish(struct fd_softc *fd, struct buf *bp)
 	bp->b_resid = fd->sc_bcount;
 	fd->sc_skip = 0;
 
-#if NRND > 0
 	rnd_add_uint32(&fd->rnd_source, bp->b_blkno);
-#endif
 
 	biodone(bp);
 	/* turn off motor 5s from now */
@@ -1625,7 +1615,7 @@ fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct lwp *l)
 	bp->b_bcount = sizeof(struct fd_idfield_data) * finfo->fd_formb_nsecs;
 	bp->b_data = (void *)finfo;
 
-#ifdef DEBUG
+#ifdef FD_DEBUG
 	printf("fdformat: blkno %" PRIx64 " count %x\n",
 	    bp->b_blkno, bp->b_bcount);
 #endif

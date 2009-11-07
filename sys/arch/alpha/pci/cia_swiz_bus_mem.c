@@ -1,4 +1,4 @@
-/* $NetBSD: cia_swiz_bus_mem.c,v 1.16 2000/06/29 08:58:46 mrg Exp $ */
+/* $NetBSD: cia_swiz_bus_mem.c,v 1.18 2011/07/01 19:19:49 dyoung Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(1, "$NetBSD: cia_swiz_bus_mem.c,v 1.16 2000/06/29 08:58:46 mrg Exp $");
+__KERNEL_RCSID(1, "$NetBSD: cia_swiz_bus_mem.c,v 1.18 2011/07/01 19:19:49 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,9 +37,7 @@ __KERNEL_RCSID(1, "$NetBSD: cia_swiz_bus_mem.c,v 1.16 2000/06/29 08:58:46 mrg Ex
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <alpha/pci/ciareg.h>
 #include <alpha/pci/ciavar.h>

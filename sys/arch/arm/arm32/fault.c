@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.72 2008/11/19 06:32:58 matt Exp $	*/
+/*	$NetBSD: fault.c,v 1.79 2012/02/09 23:32:55 christos Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -82,12 +82,11 @@
 #include "opt_sa.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.72 2008/11/19 06:32:58 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.79 2012/02/09 23:32:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
 
@@ -194,7 +193,7 @@ data_abort_fixup(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l)
 	/*
 	 * Oops, couldn't fix up the instruction
 	 */
-	printf("data_abort_fixup: fixup for %s mode data abort failed.\n",
+	printf("%s: fixup for %s mode data abort failed.\n", __func__,
 	    TRAP_USERMODE(tf) ? "user" : "kernel");
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
@@ -241,7 +240,7 @@ data_abort_handler(trapframe_t *tf)
 
 	UVMHIST_CALLED(maphist);
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	/* Re-enable interrupts if they were enabled previously */
 	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
@@ -260,10 +259,14 @@ data_abort_handler(trapframe_t *tf)
 		LWP_CACHE_CREDS(l, l->l_proc);
 
 	/* Grab the current pcb */
-	pcb = &l->l_addr->u_pcb;
+	pcb = lwp_getpcb(l);
 
 	/* Invoke the appropriate handler, if necessary */
 	if (__predict_false(data_aborts[fsr & FAULT_TYPE_MASK].func != NULL)) {
+#ifdef DIAGNOSTIC
+		printf("%s: data_aborts fsr=0x%x far=0x%x\n",
+		    __func__, fsr, far);
+#endif
 		if ((data_aborts[fsr & FAULT_TYPE_MASK].func)(tf, fsr, far,
 		    l, &ksi))
 			goto do_trapsignal;
@@ -291,8 +294,9 @@ data_abort_handler(trapframe_t *tf)
 		return;
 	}
 
-	if (user)
-		l->l_addr->u_pcb.pcb_tf = tf;
+	if (user) {
+		pcb->pcb_tf = tf;
+	}
 
 	/*
 	 * Make sure the Program Counter is sane. We could fall foul of
@@ -306,8 +310,8 @@ data_abort_handler(trapframe_t *tf)
 	 * at some point.
 	 */
 	if (__predict_false(!user && (tf->tf_pc & 3) != 0)) {
-		printf("\ndata_abort_fault: Misaligned Kernel-mode "
-		    "Program Counter\n");
+		printf("\n%s: Misaligned Kernel-mode Program Counter\n",
+		    __func__);
 		dab_fatal(tf, fsr, far, l, NULL);
 	}
 #else
@@ -328,8 +332,8 @@ data_abort_handler(trapframe_t *tf)
 		/*
 		 * The kernel never executes Thumb code.
 		 */
-		printf("\ndata_abort_fault: Misaligned Kernel-mode "
-		    "Program Counter\n");
+		printf("\n%s: Misaligned Kernel-mode Program Counter\n",
+		    __func__);
 		dab_fatal(tf, fsr, far, l, NULL);
 	}
 #endif
@@ -480,6 +484,8 @@ data_abort_handler(trapframe_t *tf)
 	if (__predict_true(error == 0)) {
 		if (user)
 			uvm_grow(l->l_proc, va); /* Record any stack growth */
+		else
+			ucas_ras_check(tf);
 		UVMHIST_LOG(maphist, " <- uvm", 0, 0, 0, 0);
 		goto out;
 	}
@@ -589,13 +595,14 @@ dab_fatal(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 static int
 dab_align(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
 	/* Alignment faults are always fatal if they occur in kernel mode */
 	if (!TRAP_USERMODE(tf))
 		dab_fatal(tf, fsr, far, l, NULL);
 
 	/* pcb_onfault *must* be NULL at this point */
-	KDASSERT(l->l_addr->u_pcb.pcb_onfault == NULL);
+	KDASSERT(pcb->pcb_onfault == NULL);
 
 	/* See if the CPU state needs to be fixed up */
 	(void) data_abort_fixup(tf, fsr, far, l);
@@ -607,7 +614,7 @@ dab_align(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 	ksi->ksi_addr = (u_int32_t *)(intptr_t)far;
 	ksi->ksi_trap = fsr;
 
-	l->l_addr->u_pcb.pcb_tf = tf;
+	pcb->pcb_tf = tf;
 
 	return (1);
 }
@@ -638,7 +645,7 @@ static int
 dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
     ksiginfo_t *ksi)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 #ifdef __XSCALE__
 	if ((fsr & FAULT_IMPRECISE) != 0 &&
@@ -714,7 +721,7 @@ dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
 	ksi->ksi_addr = (u_int32_t *)(intptr_t)far;
 	ksi->ksi_trap = fsr;
 
-	l->l_addr->u_pcb.pcb_tf = tf;
+	pcb->pcb_tf = tf;
 
 	return (1);
 }
@@ -733,14 +740,13 @@ prefetch_abort_fixup(trapframe_t *tf)
 	/*
 	 * Oops, couldn't fix up the instruction
 	 */
-	printf(
-	    "prefetch_abort_fixup: fixup for %s mode prefetch abort failed.\n",
+	printf("%s: fixup for %s mode prefetch abort failed.\n", __func__,
 	    TRAP_USERMODE(tf) ? "user" : "kernel");
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
 		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
+		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1)),
+		    *((u_int16 *)((tf->tf_pc + 2) & ~1)));
 	}
 	else
 #endif
@@ -775,6 +781,7 @@ void
 prefetch_abort_handler(trapframe_t *tf)
 {
 	struct lwp *l;
+	struct pcb *pcb;
 	struct vm_map *map;
 	vaddr_t fault_pc, va;
 	ksiginfo_t ksi;
@@ -783,9 +790,10 @@ prefetch_abort_handler(trapframe_t *tf)
 	UVMHIST_FUNC("prefetch_abort_handler"); UVMHIST_CALLED(maphist);
 
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	l = curlwp;
+	pcb = lwp_getpcb(l);
 
 	if ((user = TRAP_USERMODE(tf)) != 0)
 		LWP_CACHE_CREDS(l, l->l_proc);
@@ -810,7 +818,7 @@ prefetch_abort_handler(trapframe_t *tf)
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
 		ksi.ksi_addr = (u_int32_t *)(intptr_t) tf->tf_pc;
-		l->l_addr->u_pcb.pcb_tf = tf;
+		pcb->pcb_tf = tf;
 		goto do_trapsignal;
 	default:
 		break;
@@ -822,8 +830,7 @@ prefetch_abort_handler(trapframe_t *tf)
 
 	/* Get fault address */
 	fault_pc = tf->tf_pc;
-	l = curlwp;
-	l->l_addr->u_pcb.pcb_tf = tf;
+	pcb->pcb_tf = tf;
 	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, tf=0x%x)", fault_pc, l, tf,
 	    0);
 
@@ -866,6 +873,7 @@ prefetch_abort_handler(trapframe_t *tf)
 	}
 #endif
 
+	KASSERT(pcb->pcb_onfault == NULL);
 	error = uvm_fault(map, va, VM_PROT_READ);
 
 #ifdef KERN_SA
@@ -928,7 +936,7 @@ badaddr_read(void *addr, size_t size, void *rptr)
 	 */
 	s = splhigh();
 	if ((curpcb_save = curpcb) == NULL)
-		curpcb = &lwp0.l_addr->u_pcb;
+		curpcb = lwp_getpcb(&lwp0);
 
 	/* Read from the test address. */
 	switch (size) {
@@ -952,7 +960,7 @@ badaddr_read(void *addr, size_t size, void *rptr)
 
 	default:
 		curpcb = curpcb_save;
-		panic("badaddr: invalid size (%lu)", (u_long) size);
+		panic("%s: invalid size (%lu)", __func__, (u_long)size);
 	}
 
 	/* Restore curpcb */

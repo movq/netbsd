@@ -1,7 +1,9 @@
-/* $OpenLDAP: pkg/ldap/libraries/libldap/stctrl.c,v 1.3.2.2 2008/02/11 23:26:41 kurt Exp $ */
+/*	$NetBSD: stctrl.c,v 1.1.1.3 2010/12/12 15:21:37 adam Exp $	*/
+
+/* OpenLDAP: pkg/ldap/libraries/libldap/stctrl.c,v 1.3.2.5 2010/04/13 20:23:00 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2008 The OpenLDAP Foundation.
+ * Copyright 1998-2010 The OpenLDAP Foundation.
  * Portions Copyright 2007 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -60,6 +62,7 @@ param_error:;
 	}
 
 	assert( LDAP_VALID( ld ) );
+	ld->ld_errno = LDAP_SUCCESS;
 
 	/* check sizes according to I.D. */
 	if ( sessionSourceIp == NULL ) {

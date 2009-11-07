@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpdefs.h,v 1.5 2009/11/03 18:23:15 pooka Exp $	*/
+/*	$NetBSD: rumpdefs.h,v 1.10 2011/02/01 21:21:34 pooka Exp $	*/
 
 /*
  *	AUTOMATICALLY GENERATED.  DO NOT EDIT.
@@ -9,7 +9,7 @@
 
 #include <rump/rump_namei.h>
 
-/*	NetBSD: fcntl.h,v 1.35 2009/03/11 06:05:29 mrg Exp 	*/
+/*	NetBSD: fcntl.h,v 1.36 2010/09/21 19:26:18 chs Exp 	*/
 #define	RUMP_O_RDONLY	0x00000000	/* open for reading only */
 #define	RUMP_O_WRONLY	0x00000001	/* open for writing only */
 #define	RUMP_O_RDWR		0x00000002	/* open for reading and writing */
@@ -24,32 +24,26 @@
 #define	RUMP_O_CREAT		0x00000200	/* create if nonexistent */
 #define	RUMP_O_TRUNC		0x00000400	/* truncate to zero length */
 #define	RUMP_O_EXCL		0x00000800	/* error if already exists */
+#define	RUMP_O_NOCTTY	0x00008000	/* don't assign controlling terminal */
 #define	RUMP_O_DSYNC		0x00010000	/* write: I/O data completion */
 #define	RUMP_O_RSYNC		0x00020000	/* read: I/O completion as for write */
 #define	RUMP_O_DIRECT	0x00080000	/* direct I/O hint */
-#define	RUMP_O_NOCTTY	0x00008000	/* don't assign controlling terminal */
+#define	RUMP_O_DIRECTORY	0x00200000	/* fail if not a directory */
 
-/*	NetBSD: vnode.h,v 1.210 2009/10/06 04:28:10 elad Exp 	*/
+/*	NetBSD: vnode.h,v 1.223 2010/07/28 11:03:47 hannken Exp 	*/
 #ifndef __VTYPE_DEFINED
 #define __VTYPE_DEFINED
 enum vtype	{ VNON, VREG, VDIR, VBLK, VCHR, VLNK, VSOCK, VFIFO, VBAD };
 #endif /* __VTYPE_DEFINED */
+#define	RUMP_LK_SHARED	0x00000001	
+#define	RUMP_LK_EXCLUSIVE	0x00000002	
+#define	RUMP_LK_NOWAIT	0x00000010	
+#define	RUMP_LK_RETRY	0x00020000	
 
 /*	NetBSD: errno.h,v 1.39 2006/10/31 00:38:07 cbiere Exp 	*/
 #ifndef EJUSTRETURN
 #define	EJUSTRETURN	-2		/* don't modify regs, just return */
 #endif /* EJUSTRETURN */
-
-/*	NetBSD: lock.h,v 1.83 2008/04/28 20:24:10 martin Exp 	*/
-#define	RUMP_LK_TYPE_MASK	0x0000000f	
-#define	RUMP_LK_SHARED	0x00000001	
-#define	RUMP_LK_EXCLUSIVE	0x00000002	
-#define	RUMP_LK_RELEASE	0x00000006	
-#define	RUMP_LK_EXCLOTHER	0x00000008	
-#define	RUMP_LK_NOWAIT	0x00000010	
-#define	RUMP_LK_CANRECURSE	0x00000040	
-#define	RUMP_LK_INTERLOCK	0x00010000	
-#define	RUMP_LK_RETRY	0x00020000	
 
 /*	NetBSD: reboot.h,v 1.25 2007/12/25 18:33:48 perry Exp 	*/
 #define	RUMP_RB_AUTOBOOT	0	

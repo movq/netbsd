@@ -1,28 +1,35 @@
-# $NetBSD: Makefile,v 1.1 2009/01/19 07:13:05 jmmv Exp $
+# $NetBSD: Makefile,v 1.6 2010/10/20 09:20:11 jmmv Exp $
 
 .include <bsd.own.mk>
 
+TESTS_SUBDIRS=	detail
+
 TESTSDIR=	${TESTSBASE}/atf/atf-c++
+ATFFILE=	yes
 
 SRCDIR=		${NETBSDSRCDIR}/external/bsd/atf/dist
-.PATH:		${SRCDIR}/tests/atf/atf-c++
+.PATH:		${SRCDIR}/atf-c++
+.PATH:		${SRCDIR}/atf-c++/detail
 
 CPPFLAGS+=	-DHAVE_CONFIG_H
-CPPFLAGS+=	-I${NETBSDSRCDIR}/lib/libatf-c
+CPPFLAGS+=	-I${NETBSDSRCDIR}/lib/libatf-c++
 
-TESTS_CXX=	t_check
-TESTS_CXX+=	t_config
-TESTS_CXX+=	t_env
-TESTS_CXX+=	t_expand
-TESTS_CXX+=	t_fs
-TESTS_CXX+=	t_io
-TESTS_CXX+=	t_macros
-TESTS_CXX+=	t_parser
-TESTS_CXX+=	t_process
-TESTS_CXX+=	t_signals
-TESTS_CXX+=	t_tests
-TESTS_CXX+=	t_text
-TESTS_CXX+=	t_user
-TESTS_CXX+=	t_utils
+FILESDIR=	${TESTSDIR}
+FILES=		macros_hpp_test.cpp
+
+TESTS_CXX=
+.for test in	atf_c++_test \
+		build_test \
+		check_test \
+		config_test \
+		macros_test \
+		tests_test \
+		utils_test
+TESTS_CXX+=	${test}
+SRCS.${test}=	${test}.cpp test_helpers.cpp
+.endfor
+.undef test
+
+TESTS_SH=	pkg_config_test
 
 .include <bsd.test.mk>

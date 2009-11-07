@@ -1,4 +1,4 @@
-/*	$NetBSD: sockin.c,v 1.20 2009/10/20 12:17:44 tron Exp $	*/
+/*	$NetBSD: sockin.c,v 1.26 2011/03/31 19:40:54 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2008, 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sockin.c,v 1.20 2009/10/20 12:17:44 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sockin.c,v 1.26 2011/03/31 19:40:54 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/condvar.h>
@@ -42,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: sockin.c,v 1.20 2009/10/20 12:17:44 tron Exp $");
 #include <sys/socketvar.h>
 #include <sys/time.h>
 
+#include <net/bpf.h>
+#include <net/if.h>
 #include <net/radix.h>
 
 #include <netinet/in.h>
@@ -91,7 +93,7 @@ struct domain sockindomain = {
 	.dom_dispose = NULL,
 	.dom_protosw = sockinsw,
 	.dom_protoswNPROTOSW = &sockinsw[__arraycount(sockinsw)],
-	.dom_rtattach = rn_inithead,
+	.dom_rtattach = rt_inithead,
 	.dom_rtoffset = 32,
 	.dom_maxrtkey = sizeof(struct sockaddr_in),
 	.dom_ifattach = NULL,
@@ -115,6 +117,10 @@ static LIST_HEAD(, sockin_unit) su_ent = LIST_HEAD_INITIALIZER(su_ent);
 static kmutex_t su_mtx;
 static bool rebuild;
 static int nsock;
+
+/* XXX: for the bpf hack */
+static struct ifnet sockin_if;
+int ifpromisc(struct ifnet *ifp, int pswitch) { return 0; }
 
 static int
 registersock(struct socket *so, int news)
@@ -206,6 +212,8 @@ sockin_process(struct socket *so)
 		return;
 	}
 	m->m_len = m->m_pkthdr.len = n;
+
+	bpf_mtap_af(&sockin_if, AF_UNSPEC, m);
 
 	mutex_enter(softnet_lock);
 	if (so->so_proto->pr_type == SOCK_DGRAM) {
@@ -340,6 +348,8 @@ sockin_init(void)
 		printf("sockin_init: no threads => no worker thread\n");
 	}
 	mutex_init(&su_mtx, MUTEX_DEFAULT, IPL_NONE);
+	strlcpy(sockin_if.if_xname, "sockin0", sizeof(sockin_if.if_xname));
+	bpf_attach(&sockin_if, DLT_NULL, 0);
 }
 
 static int
@@ -413,6 +423,8 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		size_t tot;
 		int s;
 
+		bpf_mtap_af(&sockin_if, AF_UNSPEC, m);
+
 		memset(&mhdr, 0, sizeof(mhdr));
 
 		iov_max = 0;
@@ -477,6 +489,10 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			nam->m_len = slen;
 		break;
 	}
+
+	case PRU_CONTROL:
+		error = ENOTTY;
+		break;
 
 	default:
 		panic("sockin_usrreq: IMPLEMENT ME, req %d not supported", req);

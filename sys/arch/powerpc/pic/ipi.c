@@ -1,4 +1,4 @@
-/* $NetBSD: ipi.c,v 1.4 2008/04/28 20:23:32 martin Exp $ */
+/* $NetBSD: ipi.c,v 1.10 2011/06/20 06:23:52 matt Exp $ */
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.4 2008/04/28 20:23:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.10 2011/06/20 06:23:52 matt Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_pic.h"
@@ -37,46 +37,41 @@ __KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.4 2008/04/28 20:23:32 martin Exp $");
 #include "opt_altivec.h"
 
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/xcall.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
-#include <powerpc/atomic.h>
-#include <powerpc/fpu.h>
-#include <powerpc/altivec.h>
+#include <powerpc/psl.h>
 
-#include <arch/powerpc/pic/picvar.h>
-#include <arch/powerpc/pic/ipivar.h>
+#include <powerpc/pic/picvar.h>
+#include <powerpc/pic/ipivar.h>
 #include "opt_ipi.h"
 
 #ifdef MULTIPROCESSOR
 
 struct ipi_ops ipiops;
-volatile u_long IPI[CPU_MAXNUM];
 
 /* Process an actual IPI */
 
 int
-ppcipi_intr(void *v)
+ipi_intr(void *v)
 {
-	int cpu_id = curcpu()->ci_index;
+	struct cpu_info * const ci = curcpu();
+	int cpu_id = cpu_index(ci);
 	int msr;
-	u_long ipi;
+	uint32_t ipi;
 
-	curcpu()->ci_ev_ipi.ev_count++;
-	ipi = atomic_loadlatch_ulong(&IPI[cpu_id], 0);
+	ci->ci_ev_ipi.ev_count++;
+	ipi = atomic_swap_32(&ci->ci_pending_ipis, 0);
 
-	if (ipi == PPC_IPI_NOMESG)
+	if (ipi == IPI_NOMESG)
 		return 1;
 
-	if (ipi & PPC_IPI_FLUSH_FPU)
-		save_fpu_cpu();
+	if (ipi & IPI_XCALL)
+		xc_ipi_handler();
 
-#ifdef ALTIVEC
-	if (ipi & PPC_IPI_FLUSH_VEC)
-		save_vec_cpu();
-#endif
-
-	if (ipi & PPC_IPI_HALT) {
+	if (ipi & IPI_HALT) {
 		aprint_normal("halting CPU %d\n", cpu_id);
 		msr = (mfmsr() & ~PSL_EE) | PSL_POW;
 		for (;;) {
@@ -84,7 +79,7 @@ ppcipi_intr(void *v)
 			mtmsr(msr);
 		}
 	}
+
 	return 1;
 }
-
 #endif /*MULTIPROCESSOR*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bwi_pci.c,v 1.8 2009/04/26 10:45:19 cegger Exp $	*/
+/*	$NetBSD: if_bwi_pci.c,v 1.12 2011/07/26 20:51:24 dyoung Exp $	*/
 /*	$OpenBSD: if_bwi_pci.c,v 1.6 2008/02/14 22:10:02 brad Exp $ */
 
 /*
@@ -22,10 +22,9 @@
  * PCI front end
  */
 
-#include "bpfilter.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bwi_pci.c,v 1.8 2009/04/26 10:45:19 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bwi_pci.c,v 1.12 2011/07/26 20:51:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -37,7 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_bwi_pci.c,v 1.8 2009/04/26 10:45:19 cegger Exp $"
 #include <sys/sockio.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -55,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_bwi_pci.c,v 1.8 2009/04/26 10:45:19 cegger Exp $"
 #include <dev/pci/pcidevs.h>
 
 /* Base Address Register */
-#define BWI_PCI_BAR0	0x10
+#define BWI_PCI_BAR0 PCI_BAR(0)
 
 static int	bwi_pci_match(device_t, cfdata_t, void *);
 static void	bwi_pci_attach(device_t, device_t, void *);
@@ -114,7 +113,7 @@ bwi_pci_attach(device_t parent, device_t self, void *aux)
 	int error = 0;
 
 	aprint_naive("\n");
-	aprint_normal(": Broadcom Wireless");
+	aprint_normal(": Broadcom Wireless\n");
 
 	sc->sc_dev = self;
 	sc->sc_dmat = pa->pa_dmat;

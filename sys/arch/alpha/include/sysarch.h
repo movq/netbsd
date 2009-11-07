@@ -1,4 +1,4 @@
-/* $NetBSD: sysarch.h,v 1.13 2008/04/28 20:23:11 martin Exp $ */
+/* $NetBSD: sysarch.h,v 1.20 2012/02/06 02:14:13 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #ifndef _ALPHA_SYSARCH_H_
 #define _ALPHA_SYSARCH_H_
 
-#include <machine/bus.h>
+#include <machine/bus_user.h>
 #include <machine/ieeefp.h>
 
 /*
@@ -78,7 +78,7 @@ struct alpha_pci_conf_readwrite_args {
 	u_int device;
 	u_int function;
 	u_int reg;
-	u_int32_t val;
+	uint32_t val;
 };
 
 #ifdef _KERNEL
@@ -105,8 +105,8 @@ void	*alpha_pci_mem_map(bus_addr_t, bus_size_t, int,
 void	alpha_pci_mem_unmap(struct alpha_bus_space_translation *,
 	    void *addr, bus_size_t);
 
-u_int32_t alpha_pci_conf_read(u_int, u_int, u_int, u_int);
-void	alpha_pci_conf_write(u_int, u_int, u_int, u_int, u_int32_t);
+uint32_t alpha_pci_conf_read(u_int, u_int, u_int, u_int);
+void	alpha_pci_conf_write(u_int, u_int, u_int, u_int, uint32_t);
 
 int	sysarch(int, void *);
 __END_DECLS

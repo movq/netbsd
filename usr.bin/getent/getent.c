@@ -1,4 +1,4 @@
-/*	$NetBSD: getent.c,v 1.16 2009/04/12 10:27:08 lukem Exp $	*/
+/*	$NetBSD: getent.c,v 1.18 2011/10/11 19:24:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004-2006 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getent.c,v 1.16 2009/04/12 10:27:08 lukem Exp $");
+__RCSID("$NetBSD: getent.c,v 1.18 2011/10/11 19:24:43 christos Exp $");
 #endif /* not lint */
 
 #include <sys/socket.h>
@@ -80,7 +80,6 @@ static int	protocols(int, char *[]);
 static int	rpc(int, char *[]);
 static int	services(int, char *[]);
 static int	shells(int, char *[]);
-static int	termcap(int, char *[]);
 
 enum {
 	RV_OK		= 0,
@@ -106,7 +105,6 @@ static struct getentdb {
 	{	"rpc",		rpc,		},
 	{	"services",	services,	},
 	{	"shells",	shells,		},
-	{	"termcap",	termcap,	},
 
 	{	NULL,		NULL,		},
 };
@@ -134,12 +132,17 @@ static int
 usage(void)
 {
 	struct getentdb	*curdb;
+	size_t i;
 
 	(void)fprintf(stderr, "Usage: %s database [key ...]\n",
 	    getprogname());
-	(void)fprintf(stderr, "       database may be one of:\n\t");
-	for (curdb = databases; curdb->name != NULL; curdb++)
-		(void)fprintf(stderr, " %s", curdb->name);
+	(void)fprintf(stderr, "\tdatabase may be one of:");
+	for (i = 0, curdb = databases; curdb->name != NULL; curdb++, i++) {
+		if (i % 7 == 0)
+			(void)fputs("\n\t\t", stderr);
+		(void)fprintf(stderr, "%s%s", i % 7 == 0 ? "" : " ",
+		    curdb->name);
+	}
 	(void)fprintf(stderr, "\n");
 	exit(RV_USAGE);
 	/* NOTREACHED */
@@ -682,15 +685,6 @@ disktab(int argc, char *argv[])
 	return handlecap(_PATH_DISKTAB, argc, argv);
 }
 
-		/*
-		 * termcap
-		 */
-
-static int
-termcap(int argc, char *argv[])
-{
-	return handlecap(_PATH_TERMCAP, argc, argv);
-}
 		/*
 		 * protocols
 		 */

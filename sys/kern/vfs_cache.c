@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.84 2009/02/18 13:36:11 yamt Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.88.8.1 2012/08/12 12:59:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.84 2009/02/18 13:36:11 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.88.8.1 2012/08/12 12:59:49 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"
@@ -111,30 +111,37 @@ struct nchcpu {
 /*
  * Structures associated with name cacheing.
  */
-LIST_HEAD(nchashhead, namecache) *nchashtbl;
-u_long	nchash;				/* size of hash table - 1 */
+
+static kmutex_t *namecache_lock __read_mostly;
+static pool_cache_t namecache_cache __read_mostly;
+static TAILQ_HEAD(, namecache) nclruhead __cacheline_aligned;
+
+static LIST_HEAD(nchashhead, namecache) *nchashtbl __read_mostly;
+static u_long	nchash __read_mostly;
+
 #define	NCHASH(cnp, dvp)	\
 	(((cnp)->cn_hash ^ ((uintptr_t)(dvp) >> 3)) & nchash)
 
-LIST_HEAD(ncvhashhead, namecache) *ncvhashtbl;
-u_long	ncvhash;			/* size of hash table - 1 */
+static LIST_HEAD(ncvhashhead, namecache) *ncvhashtbl __read_mostly;
+static u_long	ncvhash __read_mostly;
+
 #define	NCVHASH(vp)		(((uintptr_t)(vp) >> 3) & ncvhash)
 
-long	numcache;			/* number of cache entries allocated */
-static u_int	cache_gcpend;		/* number of entries pending GC */
-static void	*cache_gcqueue;		/* garbage collection queue */
+/* Number of cache entries allocated. */
+static long	numcache __cacheline_aligned;
 
-TAILQ_HEAD(, namecache) nclruhead =		/* LRU chain */
-	TAILQ_HEAD_INITIALIZER(nclruhead);
+/* Garbage collection queue and number of entries pending in it. */
+static void	*cache_gcqueue;
+static u_int	cache_gcpend;
+
+/* Cache effectiveness statistics. */
+struct nchstats	nchstats __cacheline_aligned;
 #define	COUNT(c,x)	(c.x++)
-struct	nchstats nchstats;		/* cache effectiveness statistics */
 
-static pool_cache_t namecache_cache;
-
-int cache_lowat = 95;
-int cache_hiwat = 98;
-int cache_hottime = 5;			/* number of seconds */
-int doingcache = 1;			/* 1 => enable the cache */
+static const int cache_lowat = 95;
+static const int cache_hiwat = 98;
+static const int cache_hottime = 5;	/* number of seconds */
+static int doingcache = 1;		/* 1 => enable the cache */
 
 static struct evcnt cache_ev_scan;
 static struct evcnt cache_ev_gc;
@@ -142,11 +149,8 @@ static struct evcnt cache_ev_over;
 static struct evcnt cache_ev_under;
 static struct evcnt cache_ev_forced;
 
-/* A single lock to serialize modifications. */
-static kmutex_t *namecache_lock;
-
 static void cache_invalidate(struct namecache *);
-static inline struct namecache *cache_lookup_entry(
+static struct namecache *cache_lookup_entry(
     const struct vnode *, const struct componentname *);
 static void cache_thread(void *);
 static void cache_invalidate(struct namecache *);
@@ -369,10 +373,10 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		mutex_exit(&ncp->nc_lock);
 		mutex_exit(&cpup->cpu_lock);
 	} else {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		mutex_exit(&ncp->nc_lock);
 		mutex_exit(&cpup->cpu_lock);
-		error = vget(vp, LK_NOWAIT | LK_INTERLOCK);
+		error = vget(vp, LK_NOWAIT);
 		if (error) {
 			KASSERT(error == EBUSY);
 			/*
@@ -396,7 +400,7 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	if (vp == dvp) {	/* lookup on "." */
 		error = 0;
 	} else if (cnp->cn_flags & ISDOTDOT) {
-		VOP_UNLOCK(dvp, 0);
+		VOP_UNLOCK(dvp);
 		error = vn_lock(vp, LK_EXCLUSIVE);
 		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 	} else {
@@ -467,10 +471,10 @@ cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
 		mutex_exit(&ncp->nc_lock);
 		mutex_exit(&cpup->cpu_lock);
 	} else {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		mutex_exit(&ncp->nc_lock);
 		mutex_exit(&cpup->cpu_lock);
-		error = vget(vp, LK_NOWAIT | LK_INTERLOCK);
+		error = vget(vp, LK_NOWAIT);
 		if (error) {
 			KASSERT(error == EBUSY);
 			/*
@@ -492,7 +496,7 @@ cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
 /*
  * Scan cache looking for name of directory entry pointing at vp.
  *
- * Fill in dvpp.
+ * If the lookup succeeds the vnode is referenced and stored in dvpp.
  *
  * If bufp is non-NULL, also place the name in the buffer which starts
  * at bufp, immediately before *bpp, and move bpp backwards to point
@@ -508,6 +512,7 @@ cache_revlookup(struct vnode *vp, struct vnode **dvpp, char **bpp, char *bufp)
 	struct vnode *dvp;
 	struct ncvhashhead *nvcpp;
 	char *bp;
+	int error, nlen;
 
 	if (!doingcache)
 		goto out;
@@ -532,24 +537,38 @@ cache_revlookup(struct vnode *vp, struct vnode **dvpp, char **bpp, char *bufp)
 				panic("cache_revlookup: found entry for ..");
 #endif
 			COUNT(nchstats, ncs_revhits);
+			nlen = ncp->nc_nlen;
 
 			if (bufp) {
 				bp = *bpp;
-				bp -= ncp->nc_nlen;
+				bp -= nlen;
 				if (bp <= bufp) {
 					*dvpp = NULL;
 					mutex_exit(&ncp->nc_lock);
 					mutex_exit(namecache_lock);
 					return (ERANGE);
 				}
-				memcpy(bp, ncp->nc_name, ncp->nc_nlen);
+				memcpy(bp, ncp->nc_name, nlen);
 				*bpp = bp;
 			}
 
-			/* XXX MP: how do we know dvp won't evaporate? */
+			if (vtryget(dvp)) {
+				mutex_exit(&ncp->nc_lock); 
+				mutex_exit(namecache_lock);
+			} else {
+				mutex_enter(dvp->v_interlock);
+				mutex_exit(&ncp->nc_lock); 
+				mutex_exit(namecache_lock);
+				error = vget(dvp, LK_NOWAIT);
+				if (error) {
+					KASSERT(error == EBUSY);
+					if (bufp)
+						(*bpp) += nlen;
+					*dvpp = NULL;
+					return -1;
+				}
+			}
 			*dvpp = dvp;
-			mutex_exit(&ncp->nc_lock);
-			mutex_exit(namecache_lock);
 			return (0);
 		}
 		mutex_exit(&ncp->nc_lock);
@@ -572,12 +591,11 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	struct nchashhead *ncpp;
 	struct ncvhashhead *nvcpp;
 
-#ifdef DIAGNOSTIC
-	if (cnp->cn_namelen > NCHNAMLEN)
-		panic("cache_enter: name too long");
-#endif
-	if (!doingcache)
+	/* First, check whether we can/should add a cache entry. */
+	if ((cnp->cn_flags & MAKEENTRY) == 0 ||
+	    __predict_false(cnp->cn_namelen > NCHNAMLEN || !doingcache)) {
 		return;
+	}
 
 	if (numcache > desiredvnodes) {
 		mutex_enter(namecache_lock);
@@ -613,6 +631,7 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 		 */
 		ncp->nc_flags = cnp->cn_flags & ISWHITEOUT;
 	}
+
 	/* Fill in cache info. */
 	ncp->nc_dvp = dvp;
 	LIST_INSERT_HEAD(&dvp->v_dnclist, ncp, nc_dvlist);
@@ -622,9 +641,10 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 		ncp->nc_vlist.le_prev = NULL;
 		ncp->nc_vlist.le_next = NULL;
 	}
+	KASSERT(cnp->cn_namelen <= NCHNAMLEN);
 	ncp->nc_nlen = cnp->cn_namelen;
-	TAILQ_INSERT_TAIL(&nclruhead, ncp, nc_lru);
 	memcpy(ncp->nc_name, cnp->cn_nameptr, (unsigned)ncp->nc_nlen);
+	TAILQ_INSERT_TAIL(&nclruhead, ncp, nc_lru);
 	ncpp = &nchashtbl[NCHASH(cnp, dvp)];
 
 	/*
@@ -670,6 +690,7 @@ nchinit(void)
 {
 	int error;
 
+	TAILQ_INIT(&nclruhead);
 	namecache_cache = pool_cache_init(sizeof(struct namecache), 
 	    coherency_unit, 0, 0, "ncache", NULL, IPL_NONE, cache_ctor,
 	    cache_dtor, NULL);

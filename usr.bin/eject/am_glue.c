@@ -1,4 +1,4 @@
-/*	$NetBSD: am_glue.c,v 1.1 2009/01/16 17:31:22 christos Exp $	*/
+/*	$NetBSD: am_glue.c,v 1.4 2010/06/23 18:07:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: am_glue.c,v 1.1 2009/01/16 17:31:22 christos Exp $");
+__RCSID("$NetBSD: am_glue.c,v 1.4 2010/06/23 18:07:59 yamt Exp $");
 #endif /* not lint */
 
 #ifdef HAVE_CONFIG_H
@@ -36,11 +36,16 @@ __RCSID("$NetBSD: am_glue.c,v 1.1 2009/01/16 17:31:22 christos Exp $");
 #endif /* HAVE_CONFIG_H */
 #include <am_defs.h>
 #include <amu.h>
+#include <rpc/pmap_prot.h>
+#include <rpc/pmap_clnt.h>
+
+#include <stdbool.h>
 
 #include "am_glue.h"
 
 static CLIENT *clnt;
 
+static struct timeval tv = { 5, 0 };
 /*
  * Appease lint: Properly typecast some numbers defined in
  * src/extern/bsd/am-utils/dist/include/amq_defs.h.
@@ -49,12 +54,51 @@ static CLIENT *clnt;
 #define xAMQ_VERSION		(rpcvers_t)AMQ_VERSION
 #define xAMQPROC_SYNC_UMNT	(rpcproc_t)AMQPROC_SYNC_UMNT
 
-void
+static int
+ping_pmap(void)
+{
+	u_short port = 0;
+	CLIENT *cl;
+	struct pmap parms;
+	struct sockaddr_in si;
+	int s = -1, rv;
+	static struct timeval pingtv = { 1, 0 };
+
+	(void)memset(&si, 0, sizeof(si));
+	si.sin_family = AF_INET;
+	si.sin_len = sizeof(si);
+	si.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	si.sin_port = htons(PMAPPORT);
+
+	if ((cl = clntudp_bufcreate(&si, PMAPPROG, PMAPVERS, pingtv,
+	    &s, RPCSMALLMSGSIZE, RPCSMALLMSGSIZE)) == NULL)
+		return -1;
+
+	parms.pm_prog = PMAPPROG;
+	parms.pm_vers = PMAPVERS;
+	parms.pm_prot = IPPROTO_UDP;
+	parms.pm_port = 0;  /* not needed or used */
+
+	rv = CLNT_CALL(cl, (rpcproc_t)PMAPPROC_GETPORT,
+	    (xdrproc_t)xdr_pmap, &parms,
+	    (xdrproc_t)xdr_u_short, &port, pingtv) == RPC_SUCCESS ? 0 : -1;
+
+	CLNT_DESTROY(cl);
+	return rv;
+}
+
+static void
 am_init(void)
 {
-	static struct timeval tv = { 5, 0 };
 	static const char *server = "localhost";
+	static bool called;
 
+	if (called)
+		return;
+	called = true;
+
+	if (ping_pmap() == -1)
+		return;
 	/*
 	 * Create RPC endpoint
 	 */
@@ -74,6 +118,8 @@ am_unmount(const char *dirname)
 {
 	static struct timeval timeout = { ALLOWED_MOUNT_TIME, 0 };
 	amq_sync_umnt result;
+
+	am_init();
 
 	if (clnt == NULL)
 		return AMQ_UMNT_FAILED;

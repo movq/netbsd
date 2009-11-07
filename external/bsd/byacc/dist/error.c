@@ -1,11 +1,10 @@
-/*	$NetBSD: error.c,v 1.3 2009/10/29 12:55:52 christos Exp $	*/
-/* Id: error.c,v 1.6 2008/11/24 21:30:35 tom Exp */
+/*	$NetBSD: error.c,v 1.7 2011/09/10 21:29:04 christos Exp $	*/
+/* Id: error.c,v 1.9 2011/09/05 23:27:43 tom Exp */
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: error.c,v 1.3 2009/10/29 12:55:52 christos Exp $");
-
+__RCSID("$NetBSD: error.c,v 1.7 2011/09/10 21:29:04 christos Exp $");
 
 /* routines for printing error messages  */
 
@@ -31,6 +30,14 @@ open_error(const char *filename)
 }
 
 void
+missing_brace(void)
+{
+    fprintf(stderr, "%s: e - line %d of \"%s\", missing '}'\n",
+	    myname, lineno, input_file_name);
+    done(1);
+}
+
+void
 unexpected_EOF(void)
 {
     fprintf(stderr, "%s: e - line %d of \"%s\", unexpected end-of-file\n",
@@ -38,7 +45,7 @@ unexpected_EOF(void)
     done(1);
 }
 
-void
+static void
 print_pos(char *st_line, char *st_cptr)
 {
     char *s;
@@ -47,7 +54,7 @@ print_pos(char *st_line, char *st_cptr)
 	return;
     for (s = st_line; *s != '\n'; ++s)
     {
-	if (isprint((unsigned char)*s) || *s == '\t')
+	if (isprint(UCH(*s)) || *s == '\t')
 	    putc(*s, stderr);
 	else
 	    putc('?', stderr);

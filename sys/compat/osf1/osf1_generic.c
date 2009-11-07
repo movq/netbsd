@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_generic.c,v 1.15 2009/04/01 03:06:06 dogcow Exp $ */
+/* $NetBSD: osf1_generic.c,v 1.17 2010/04/23 15:19:20 rmind Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_generic.c,v 1.15 2009/04/01 03:06:06 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_generic.c,v 1.17 2010/04/23 15:19:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,7 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_generic.c,v 1.15 2009/04/01 03:06:06 dogcow Exp
 #include <sys/proc.h>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/malloc.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/select.h>
@@ -82,10 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_generic.c,v 1.15 2009/04/01 03:06:06 dogcow Exp
  * the other word of our iov_len is zero!
  */
 
-#if __GNUC_PREREQ__(3, 0)
-__attribute ((noinline))
-#endif  
-static int
+static int __noinline
 osf1_get_iov(struct osf1_iovec *uiov, unsigned int iovcnt, struct iovec **iovp)
 {
 	struct iovec *iov = *iovp;
@@ -96,7 +92,7 @@ osf1_get_iov(struct osf1_iovec *uiov, unsigned int iovcnt, struct iovec **iovp)
 		return EINVAL;
 
 	if (iovcnt > UIO_SMALLIOV) {
-		iov = malloc(iovcnt * sizeof *iov, M_IOV, M_WAITOK);
+		iov = kmem_alloc(iovcnt * sizeof(*iov), KM_SLEEP);
 		*iovp = iov;
 		/* Caller must free - even if we return an error */
 	}
@@ -133,7 +129,7 @@ osf1_sys_readv(struct lwp *l, const struct osf1_sys_readv_args *uap, register_t 
 	}
 
 	if (niov != aiov)
-		free(niov, M_IOV);
+		kmem_free(niov, SCARG(uap, iovcnt) * sizeof(*niov));
 
 	return error;
 }
@@ -153,13 +149,14 @@ osf1_sys_writev(struct lwp *l, const struct osf1_sys_writev_args *uap, register_
 	}
 
 	if (niov != aiov)
-		free(niov, M_IOV);
+		kmem_free(niov, SCARG(uap, iovcnt) * sizeof(*niov));
 
 	return error;
 }
 
 int
-osf1_sys_select(struct lwp *l, const struct osf1_sys_select_args *uap, register_t *retval)
+osf1_sys_select(struct lwp *l, const struct osf1_sys_select_args *uap,
+    register_t *retval)
 {
 	struct osf1_timeval otv;
 	struct timespec ats, *ts = NULL;
@@ -176,6 +173,6 @@ osf1_sys_select(struct lwp *l, const struct osf1_sys_select_args *uap, register_
 		ts = &ats;
 	}
 
-	return selcommon(l, retval, SCARG(uap, nd), SCARG(uap, in),
+	return selcommon(retval, SCARG(uap, nd), SCARG(uap, in),
 	    SCARG(uap, ou), SCARG(uap, ex), ts, NULL);
 }

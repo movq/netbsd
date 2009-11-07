@@ -1,27 +1,50 @@
-#	$NetBSD: Makefile.inc,v 1.1 2008/08/24 05:47:05 gmcgarry Exp $
+#	$NetBSD: Makefile.inc,v 1.16.2.1 2012/04/03 16:36:20 riz Exp $
 
-MDIR=	${DIST}/arch/${TARGMACH}
-MIPDIR=	${DIST}/mip
+PCC_DIR:=${.PARSEDIR}
+PCC_DIST=${PCC_DIR}/dist/pcc
+PCC_LIBS=${PCC_DIR}/dist/pcc-libs
+
+# (these strings will be updated by the prepare-import.sh script)
+PCC_VERSION=1.1.0.DEVEL
+PCC_DATESTAMP=20120325
 
 TARGOS = netbsd
-# XXX Currently only handles i386
-.if ${MACHINE_ARCH} == "i386"
-TARGMACH = i386
-.elif ${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb"
+
+.if ${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb"
 TARGMACH = mips
-.elif ${MACHINE_ARCH} == "vax"
-TARGMACH = vax
+.elif ${MACHINE_ARCH} == "x86_64"
+TARGMACH = amd64
 .else
-ERROR!= echo "ERROR: ${MACHINE_ARCH} not yet supported - write code!" >&2;echo
+TARGMACH = ${MACHINE_ARCH}
 .endif
 
-libexecdir = /usr/libexec
-includedir = /usr/include
-
-CPPFLAGS+= -DLIBEXECDIR=\"${libexecdir}\" -DINCLUDEDIR=\"${includedir}\"
-CPPFLAGS+= -I${DIST}/os/${TARGOS} -I${MDIR} -Dmach_${TARGMACH} -Dos_${TARGOS}
-CPPFLAGS+= -I${.CURDIR} -I${.CURDIR}/..
-
-.if exists(${.CURDIR}/../../../Makefile.inc)
-.include "${.CURDIR}/../../../Makefile.inc"
+.if !exists(${PCC_DIST}/arch/${TARGMACH})
+ERROR!= echo "ERROR: ${TARGMACH} not yet supported - write code!" >&2;echo
 .endif
+
+VERSSTR="pcc ${PCC_VERSION} ${PCC_DATESTAMP} for ${TARGOS}-${TARGMACH}"
+
+CPPFLAGS+=	-DGCC_COMPAT
+CPPFLAGS+=	-DPCC_DEBUG
+CPPFLAGS+=	-DVERSSTR=${VERSSTR:Q}
+CPPFLAGS+=	-Dos_${TARGOS}
+CPPFLAGS+=	-Dmach_${TARGMACH}
+CPPFLAGS+=	-I${PCC_DIR}/include
+
+.include <bsd.endian.mk>
+
+# We only build binaries from here where the pcc host and target architectures
+# will be the same. For a cross-compiler, use the tools/pcc build.
+#
+.if ${TARGET_ENDIANNESS} == "1234"
+CPPFLAGS+=	-DHOST_LITTLE_ENDIAN
+CPPFLAGS+=	-DTARGET_LITTLE_ENDIAN
+.elif ${TARGET_ENDIANNESS} == "4321"
+CPPFLAGS+=	-DHOST_BIG_ENDIAN
+CPPFLAGS+=	-DTARGET_BIG_ENDIAN
+.else
+ERROR!= echo "ERROR: Unknown TARGET_ENDIANNESS" >&2;echo
+.endif
+
+# top-level Makefile.inc
+.include "../../../Makefile.inc"

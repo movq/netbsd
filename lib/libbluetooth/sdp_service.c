@@ -1,4 +1,4 @@
-/*	$NetBSD: sdp_service.c,v 1.2 2009/05/14 19:12:45 plunky Exp $	*/
+/*	$NetBSD: sdp_service.c,v 1.4 2010/11/20 12:12:21 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sdp_service.c,v 1.2 2009/05/14 19:12:45 plunky Exp $");
+__RCSID("$NetBSD: sdp_service.c,v 1.4 2010/11/20 12:12:21 plunky Exp $");
+
+#include <sys/atomic.h>
 
 #include <errno.h>
 #include <limits.h>
@@ -43,6 +45,7 @@ __RCSID("$NetBSD: sdp_service.c,v 1.2 2009/05/14 19:12:45 plunky Exp $");
 
 /*
  * If AttributeIDList is given as NULL, request all attributes.
+ * (this is actually const data but we can't declare it const)
  */
 static uint8_t ail_default[] = { 0x0a, 0x00, 0x00, 0xff, 0xff };
 
@@ -56,13 +59,11 @@ static size_t
 sdp_response_max(void)
 {
 	static size_t max = UINT16_MAX;
-	static bool check = true;
+	static unsigned int check = 1;
 	char *env, *ep;
 	unsigned long v;
 
-	while (check) {
-		check = false;	/* only check env once */
-
+	while (atomic_swap_uint(&check, 0)) { /* only check env once */
 		env = getenv("SDP_RESPONSE_MAX");
 		if (env == NULL)
 			break;
@@ -193,7 +194,7 @@ sdp_service_search(struct sdp_session *ss, const sdp_data_t *ssp,
 		    || ptr + ptr[0] + 1 != end)
 			break;
 
-		memcpy(ss->cs, ptr, ptr[0] + 1);
+		memcpy(ss->cs, ptr, (size_t)(ptr[0] + 1));
 
 		/*
 		 * Complete?
@@ -312,7 +313,7 @@ sdp_service_attribute(struct sdp_session *ss, uint32_t id,
 		    || ptr + ptr[0] + 1 != end)
 			break;
 
-		memcpy(ss->cs, ptr, ptr[0] + 1);
+		memcpy(ss->cs, ptr, (size_t)(ptr[0] + 1));
 
 		/*
 		 * Complete?
@@ -448,7 +449,7 @@ sdp_service_search_attribute(struct sdp_session *ss, const sdp_data_t *ssp,
 		    || ptr + ptr[0] + 1 != end)
 			break;
 
-		memcpy(ss->cs, ptr, ptr[0] + 1);
+		memcpy(ss->cs, ptr, (size_t)(ptr[0] + 1));
 
 		/*
 		 * Complete?

@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_icp.c,v 1.23 2009/01/29 12:14:40 bouyer Exp $	*/
+/*	$NetBSD: ld_icp.c,v 1.25 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,9 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.23 2009/01/29 12:14:40 bouyer Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.25 2012/02/02 19:43:03 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,11 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.23 2009/01/29 12:14:40 bouyer Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 

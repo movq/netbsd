@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_hppa.c,v 1.3 2008/01/15 13:57:42 ad Exp $	*/
+/*	$NetBSD: kvm_hppa.c,v 1.6 2010/09/20 23:23:16 jym Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_hp300.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_hppa.c,v 1.3 2008/01/15 13:57:42 ad Exp $");
+__RCSID("$NetBSD: kvm_hppa.c,v 1.6 2010/09/20 23:23:16 jym Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -53,7 +53,8 @@ __RCSID("$NetBSD: kvm_hppa.c,v 1.3 2008/01/15 13:57:42 ad Exp $");
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/kcore.h>
-#include <machine/kcore.h>
+#include <sys/types.h>
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <nlist.h>
@@ -66,6 +67,7 @@ __RCSID("$NetBSD: kvm_hppa.c,v 1.3 2008/01/15 13:57:42 ad Exp $");
 
 #include "kvm_private.h"
 
+#include <machine/kcore.h>
 #include <machine/pmap.h>
 #include <machine/pte.h>
 #include <machine/vmparam.h>
@@ -76,8 +78,7 @@ __RCSID("$NetBSD: kvm_hppa.c,v 1.3 2008/01/15 13:57:42 ad Exp $");
 #endif
 
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 
 	/* Not actually used for anything right now, but safe. */
@@ -87,21 +88,17 @@ _kvm_freevtop(kd)
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 
-	return (0);
+	return 0;
 }
 
 /*
  * Translate a kernel virtual address to a physical address.
  */
 int
-_kvm_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
 #if 0
 	cpu_kcore_hdr_t *cpu_kh;
@@ -113,7 +110,7 @@ _kvm_kvatop(kd, va, pa)
 
 	if (ISALIVE(kd)) {
 		_kvm_err(kd, 0, "vatop called in live kernel!");
-		return (0);
+		return 0;
 	}
 
 	_kvm_syserr(kd, 0, "could not read PTE");
@@ -159,16 +156,14 @@ _kvm_kvatop(kd, va, pa)
  lose:
 #endif
 	*pa = (u_long)~0L;
-	return (0);
+	return 0;
 }
 
 /*
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t *kd;
-	u_long pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 #if 0
 	cpu_kcore_hdr_t *cpu_kh;
@@ -189,7 +184,7 @@ _kvm_pa2off(kd, pa)
 		off += ramsegs[i].size;
 	}
 
-	return (kd->dump_off + off);
+	return kd->dump_off + off;
 #endif
 	return 0;
 }
@@ -200,13 +195,12 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 
 	kd->usrstack = USRSTACK;
 	kd->min_uva = VM_MIN_ADDRESS;
 	kd->max_uva = VM_MAXUSER_ADDRESS;
 
-	return (0);
+	return 0;
 }

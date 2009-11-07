@@ -1,4 +1,4 @@
-/*	$NetBSD: if_age.c,v 1.34 2009/10/08 08:57:19 cegger Exp $ */
+/*	$NetBSD: if_age.c,v 1.40 2011/10/25 21:47:38 bouyer Exp $ */
 /*	$OpenBSD: if_age.c,v 1.1 2009/01/16 05:00:34 kevlo Exp $	*/
 
 /*-
@@ -31,9 +31,8 @@
 /* Driver for Attansic Technology Corp. L1 Gigabit Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.34 2009/10/08 08:57:19 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.40 2011/10/25 21:47:38 bouyer Exp $");
 
-#include "bpfilter.h"
 #include "vlan.h"
 
 #include <sys/param.h>
@@ -64,9 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.34 2009/10/08 08:57:19 cegger Exp $");
 #include <net/if_types.h>
 #include <net/if_vlanvar.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/rnd.h>
 
@@ -83,7 +80,7 @@ static int	age_match(device_t, cfdata_t, void *);
 static void	age_attach(device_t, device_t, void *);
 static int	age_detach(device_t, int);
 
-static bool	age_resume(device_t PMF_FN_PROTO);
+static bool	age_resume(device_t, const pmf_qual_t *);
 
 static int	age_miibus_readreg(device_t, int, int);
 static void	age_miibus_writereg(device_t, int, int, int);
@@ -93,6 +90,7 @@ static int	age_init(struct ifnet *);
 static int	age_ioctl(struct ifnet *, u_long, void *);
 static void	age_start(struct ifnet *);
 static void	age_watchdog(struct ifnet *);
+static bool	age_shutdown(device_t, int);
 static void	age_mediastatus(struct ifnet *, struct ifmediareq *);
 static int	age_mediachange(struct ifnet *);
 
@@ -290,7 +288,7 @@ age_attach(device_t parent, device_t self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-	if (pmf_device_register(self, NULL, age_resume))
+	if (pmf_device_register1(self, NULL, age_resume, age_shutdown))
 		pmf_class_network_register(self, ifp);
 	else
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -498,64 +496,60 @@ age_intr(void *arg)
 	cmb = sc->age_rdata.age_cmb_block;
 	if (cmb == NULL) {
 		/* Happens when bringing up the interface
-		 * w/o having a carrier. Ack. the interrupt.
+		 * w/o having a carrier. Ack the interrupt.
 		 */
 		CSR_WRITE_4(sc, AGE_INTR_STATUS, status);
 		return 0;
 	}
 
-	/* Disable interrupts. */
-	CSR_WRITE_4(sc, AGE_INTR_STATUS, status | INTR_DIS_INT);
-		
-	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_cmb_block_map, 0,
-	    sc->age_cdata.age_cmb_block_map->dm_mapsize, BUS_DMASYNC_POSTREAD);
-	status = le32toh(cmb->intr_status);
-	if ((status & AGE_INTRS) == 0)
-		goto back;
-
-	sc->age_tpd_cons = (le32toh(cmb->tpd_cons) & TPD_CONS_MASK) >>
-	    TPD_CONS_SHIFT;
-	sc->age_rr_prod = (le32toh(cmb->rprod_cons) & RRD_PROD_MASK) >>
-	    RRD_PROD_SHIFT;
-
-	/* Let hardware know CMB was served. */
-	cmb->intr_status = 0;
 	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_cmb_block_map, 0,
 	    sc->age_cdata.age_cmb_block_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
+	    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
+	status = le32toh(cmb->intr_status);
+	/* ACK/reenable interrupts */
+	CSR_WRITE_4(sc, AGE_INTR_STATUS, status);
+	while ((status & AGE_INTRS) != 0) {
+		sc->age_tpd_cons = (le32toh(cmb->tpd_cons) & TPD_CONS_MASK) >>
+		    TPD_CONS_SHIFT;
+		sc->age_rr_prod = (le32toh(cmb->rprod_cons) & RRD_PROD_MASK) >>
+		    RRD_PROD_SHIFT;
 
-	if (ifp->if_flags & IFF_RUNNING) {
-		if (status & INTR_CMB_RX)
-			age_rxintr(sc, sc->age_rr_prod);
+		/* Let hardware know CMB was served. */
+		cmb->intr_status = 0;
+		bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_cmb_block_map, 0,
+		    sc->age_cdata.age_cmb_block_map->dm_mapsize,
+		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 
-		if (status & INTR_CMB_TX)
-			age_txintr(sc, sc->age_tpd_cons);
+		if (ifp->if_flags & IFF_RUNNING) {
+			if (status & INTR_CMB_RX)
+				age_rxintr(sc, sc->age_rr_prod);
 
-		if (status & (INTR_DMA_RD_TO_RST | INTR_DMA_WR_TO_RST)) {
-			if (status & INTR_DMA_RD_TO_RST)
-				printf("%s: DMA read error! -- resetting\n",
-				    device_xname(sc->sc_dev));
-			if (status & INTR_DMA_WR_TO_RST)
-				printf("%s: DMA write error! -- resetting\n",
-				    device_xname(sc->sc_dev));
-			age_init(ifp);
-		}
+			if (status & INTR_CMB_TX)
+				age_txintr(sc, sc->age_tpd_cons);
 
-		if (!IFQ_IS_EMPTY(&ifp->if_snd))
+			if (status & (INTR_DMA_RD_TO_RST | INTR_DMA_WR_TO_RST)) {
+				if (status & INTR_DMA_RD_TO_RST)
+					printf("%s: DMA read error! -- "
+					    "resetting\n",
+					    device_xname(sc->sc_dev));
+				if (status & INTR_DMA_WR_TO_RST)
+					printf("%s: DMA write error! -- "
+					    "resetting\n",
+					    device_xname(sc->sc_dev));
+				age_init(ifp);
+			}
+
 			age_start(ifp);
 
-		if (status & INTR_SMB)
-			age_stats_update(sc);
+			if (status & INTR_SMB)
+				age_stats_update(sc);
+		}
+		/* check if more interrupts did came in */
+		bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_cmb_block_map, 0,
+		    sc->age_cdata.age_cmb_block_map->dm_mapsize,
+		    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
+		status = le32toh(cmb->intr_status);
 	}
-
-	/* Check whether CMB was updated while serving Tx/Rx/SMB handler. */
-	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_cmb_block_map, 0,
-	    sc->age_cdata.age_cmb_block_map->dm_mapsize,
-	    BUS_DMASYNC_POSTREAD);
-
-back:
-	/* Re-enable interrupts. */
-	CSR_WRITE_4(sc, AGE_INTR_STATUS, 0);
 
 	return 1;
 }
@@ -705,7 +699,7 @@ age_dma_alloc(struct age_softc *sc)
 	/* Allocate DMA'able memory for TX ring */
 	error = bus_dmamem_alloc(sc->sc_dmat, AGE_TX_RING_SZ, 
 	    ETHER_ALIGN, 0, &sc->age_rdata.age_tx_ring_seg, 1, 
-	    &nsegs, BUS_DMA_WAITOK);
+	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Tx ring, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
@@ -714,7 +708,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->age_rdata.age_tx_ring_seg,
 	    nsegs, AGE_TX_RING_SZ, (void **)&sc->age_rdata.age_tx_ring,
-	    BUS_DMA_NOWAIT);
+	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error) 
 		return ENOBUFS;
 
@@ -722,7 +716,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	/*  Load the DMA map for Tx ring. */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_tx_ring_map,
-	    sc->age_rdata.age_tx_ring, AGE_TX_RING_SZ, NULL, BUS_DMA_WAITOK);
+	    sc->age_rdata.age_tx_ring, AGE_TX_RING_SZ, NULL, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for Tx ring, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
@@ -747,7 +741,7 @@ age_dma_alloc(struct age_softc *sc)
 	/* Allocate DMA'able memory for RX ring */
 	error = bus_dmamem_alloc(sc->sc_dmat, AGE_RX_RING_SZ, 
 	    ETHER_ALIGN, 0, &sc->age_rdata.age_rx_ring_seg, 1, 
-	    &nsegs, BUS_DMA_WAITOK);
+	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Rx ring, "
 		    "error = %i.\n", device_xname(sc->sc_dev), error);
@@ -756,7 +750,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->age_rdata.age_rx_ring_seg,
 	    nsegs, AGE_RX_RING_SZ, (void **)&sc->age_rdata.age_rx_ring,
-	    BUS_DMA_NOWAIT);
+	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error)
 		return ENOBUFS;
 
@@ -764,7 +758,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	/* Load the DMA map for Rx ring. */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_rx_ring_map,
-	    sc->age_rdata.age_rx_ring, AGE_RX_RING_SZ, NULL, BUS_DMA_WAITOK);
+	    sc->age_rdata.age_rx_ring, AGE_RX_RING_SZ, NULL, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for Rx ring, "
 		    "error = %i.\n", device_xname(sc->sc_dev), error);
@@ -789,7 +783,7 @@ age_dma_alloc(struct age_softc *sc)
 	/* Allocate DMA'able memory for RX return ring */
 	error = bus_dmamem_alloc(sc->sc_dmat, AGE_RR_RING_SZ, 
 	    ETHER_ALIGN, 0, &sc->age_rdata.age_rr_ring_seg, 1, 
-	    &nsegs, BUS_DMA_WAITOK);
+	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Rx "
 		    "return ring, error = %i.\n",
@@ -799,7 +793,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->age_rdata.age_rr_ring_seg,
 	    nsegs, AGE_RR_RING_SZ, (void **)&sc->age_rdata.age_rr_ring,
-	    BUS_DMA_NOWAIT);
+	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error)
 		return ENOBUFS;
 
@@ -807,7 +801,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	/*  Load the DMA map for Rx return ring. */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_rr_ring_map,
-	    sc->age_rdata.age_rr_ring, AGE_RR_RING_SZ, NULL, BUS_DMA_WAITOK);
+	    sc->age_rdata.age_rr_ring, AGE_RR_RING_SZ, NULL, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for Rx return ring, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
@@ -833,7 +827,7 @@ age_dma_alloc(struct age_softc *sc)
 	/* Allocate DMA'able memory for CMB block */
 	error = bus_dmamem_alloc(sc->sc_dmat, AGE_CMB_BLOCK_SZ, 
 	    ETHER_ALIGN, 0, &sc->age_rdata.age_cmb_block_seg, 1, 
-	    &nsegs, BUS_DMA_WAITOK);
+	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for "
 		    "CMB block, error = %i\n", device_xname(sc->sc_dev), error);
@@ -842,7 +836,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->age_rdata.age_cmb_block_seg,
 	    nsegs, AGE_CMB_BLOCK_SZ, (void **)&sc->age_rdata.age_cmb_block,
-	    BUS_DMA_NOWAIT);
+	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error)
 		return ENOBUFS;
 
@@ -851,7 +845,7 @@ age_dma_alloc(struct age_softc *sc)
 	/*  Load the DMA map for CMB block. */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_cmb_block_map,
 	    sc->age_rdata.age_cmb_block, AGE_CMB_BLOCK_SZ, NULL, 
-	    BUS_DMA_WAITOK);
+	    BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for CMB block, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
@@ -877,7 +871,7 @@ age_dma_alloc(struct age_softc *sc)
 	/* Allocate DMA'able memory for SMB block */
 	error = bus_dmamem_alloc(sc->sc_dmat, AGE_SMB_BLOCK_SZ, 
 	    ETHER_ALIGN, 0, &sc->age_rdata.age_smb_block_seg, 1, 
-	    &nsegs, BUS_DMA_WAITOK);
+	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for "
 		    "SMB block, error = %i\n", device_xname(sc->sc_dev), error);
@@ -886,7 +880,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->age_rdata.age_smb_block_seg,
 	    nsegs, AGE_SMB_BLOCK_SZ, (void **)&sc->age_rdata.age_smb_block,
-	    BUS_DMA_NOWAIT);
+	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (error)
 		return ENOBUFS;
 
@@ -895,7 +889,7 @@ age_dma_alloc(struct age_softc *sc)
 	/*  Load the DMA map for SMB block */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_smb_block_map,
 	    sc->age_rdata.age_smb_block, AGE_SMB_BLOCK_SZ, NULL, 
-	    BUS_DMA_WAITOK);
+	    BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for SMB block, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
@@ -1037,6 +1031,10 @@ age_start(struct ifnet *ifp)
 
 	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
 		return;
+	if ((sc->age_flags & AGE_FLAG_LINK) == 0)
+		return;
+	if (IFQ_IS_EMPTY(&ifp->if_snd))
+		return;
 
 	enq = 0;
 	for (;;) {
@@ -1058,14 +1056,11 @@ age_start(struct ifnet *ifp)
 		}
 		enq = 1;
 
-#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		if (ifp->if_bpf != NULL)
-			bpf_mtap(ifp->if_bpf, m_head);
-#endif
+		bpf_mtap(ifp, m_head);
 	}
 
 	if (enq) {
@@ -1092,18 +1087,29 @@ age_watchdog(struct ifnet *ifp)
 	if (sc->age_cdata.age_tx_cnt == 0) {
 		printf("%s: watchdog timeout (missed Tx interrupts) "
 		    "-- recovering\n", device_xname(sc->sc_dev));
-		if (!IFQ_IS_EMPTY(&ifp->if_snd))
-			age_start(ifp);
+		age_start(ifp);
 		return;
 	}
 
 	printf("%s: watchdog timeout\n", device_xname(sc->sc_dev));
 	ifp->if_oerrors++;
 	age_init(ifp);
-
-	if (!IFQ_IS_EMPTY(&ifp->if_snd))
-		age_start(ifp);
+	age_start(ifp);
 }
+
+static bool 
+age_shutdown(device_t self, int howto) 
+{
+	struct age_softc *sc;
+	struct ifnet *ifp;
+
+	sc = device_private(self);
+	ifp = &sc->sc_ec.ec_if;
+	age_stop(ifp, 1); 
+
+	return true;
+}       
+
 
 static int
 age_ioctl(struct ifnet *ifp, u_long cmd, void *data)
@@ -1159,7 +1165,7 @@ age_mac_config(struct age_softc *sc)
 }
 
 static bool
-age_resume(device_t dv PMF_FN_ARGS)
+age_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct age_softc *sc = device_private(dv);
 	uint16_t cmd;
@@ -1240,6 +1246,8 @@ age_encap(struct age_softc *sc, struct mbuf **m_head)
 		bus_dmamap_unload(sc->sc_dmat, map);
 		return ENOBUFS;
 	}
+	bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+	    BUS_DMASYNC_PREWRITE);
 
 	m = *m_head;
 	/* Configure Tx IP/TCP/UDP checksum offload. */
@@ -1263,36 +1271,46 @@ age_encap(struct age_softc *sc, struct mbuf **m_head)
 #endif
 
 	desc = NULL;
-	for (i = 0; i < nsegs; i++) {
+	KASSERT(nsegs > 0);
+	for (i = 0; ; i++) {
 		desc = &sc->age_rdata.age_tx_ring[prod];
 		desc->addr = htole64(map->dm_segs[i].ds_addr);
 		desc->len = 
 		    htole32(AGE_TX_BYTES(map->dm_segs[i].ds_len) | vtag);
 		desc->flags = htole32(cflags);
 		sc->age_cdata.age_tx_cnt++;
+		if (i == (nsegs - 1))
+			break;
+		
+		/* sync this descriptor and go to the next one */
+		bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map,
+		    prod * sizeof(struct tx_desc), sizeof(struct tx_desc),
+		    BUS_DMASYNC_PREWRITE);
 		AGE_DESC_INC(prod, AGE_TX_RING_CNT);
 	}
 
-	/* Update producer index. */
-	sc->age_cdata.age_tx_prod = prod;
-
-	/* Set EOP on the last descriptor. */
-	prod = (prod + AGE_TX_RING_CNT - 1) % AGE_TX_RING_CNT;
-	desc = &sc->age_rdata.age_tx_ring[prod];
+	/* Set EOP on the last descriptor and sync it. */
 	desc->flags |= htole32(AGE_TD_EOP);
-
-	/* Swap dmamap of the first and the last. */
-	txd = &sc->age_cdata.age_txdesc[prod];
-	map = txd_last->tx_dmamap;
-	txd_last->tx_dmamap = txd->tx_dmamap;
-	txd->tx_dmamap = map;
-	txd->tx_m = m;
-
-	/* Sync descriptors. */
-	bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
+	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map,
+	    prod * sizeof(struct tx_desc), sizeof(struct tx_desc),
 	    BUS_DMASYNC_PREWRITE);
-	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map, 0,
-	    sc->age_cdata.age_tx_ring_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
+
+	if (nsegs > 1) {
+		/* Swap dmamap of the first and the last. */
+		txd = &sc->age_cdata.age_txdesc[prod];
+		map = txd_last->tx_dmamap;
+		txd_last->tx_dmamap = txd->tx_dmamap;
+		txd->tx_dmamap = map;
+		txd->tx_m = m;
+		KASSERT(txd_last->tx_m == NULL);
+	} else {
+		KASSERT(txd_last == &sc->age_cdata.age_txdesc[prod]);
+		txd_last->tx_m = m;
+	}
+
+	/* Update producer index. */
+	AGE_DESC_INC(prod, AGE_TX_RING_CNT);
+	sc->age_cdata.age_tx_prod = prod;
 
 	return 0;
 }
@@ -1304,8 +1322,13 @@ age_txintr(struct age_softc *sc, int tpd_cons)
 	struct age_txdesc *txd;
 	int cons, prog;
 
-	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map, 0,
-	    sc->age_cdata.age_tx_ring_map->dm_mapsize, BUS_DMASYNC_POSTREAD);
+
+	if (sc->age_cdata.age_tx_cnt <= 0) {
+		if (ifp->if_timer != 0)
+			printf("timer running without packets\n");
+		if (sc->age_cdata.age_tx_cnt)
+			printf("age_tx_cnt corrupted\n");
+	}
 
 	/*
 	 * Go through our Tx list and free mbufs for those
@@ -1323,6 +1346,9 @@ age_txintr(struct age_softc *sc, int tpd_cons)
 		 * Clear Tx descriptors, it's not required but would
 		 * help debugging in case of Tx issues.
 		 */
+		bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map,
+		    cons * sizeof(struct tx_desc), sizeof(struct tx_desc),
+		    BUS_DMASYNC_POSTWRITE);
 		txd->tx_desc->addr = 0;
 		txd->tx_desc->len = 0;
 		txd->tx_desc->flags = 0;
@@ -1344,10 +1370,6 @@ age_txintr(struct age_softc *sc, int tpd_cons)
 		 */
 		if (sc->age_cdata.age_tx_cnt == 0)
 			ifp->if_timer = 0;
-
-		bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map, 0,
-		    sc->age_cdata.age_tx_ring_map->dm_mapsize,
-		    BUS_DMASYNC_PREWRITE);
 	}
 }
 
@@ -1485,10 +1507,7 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 			}
 #endif
 
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
+			bpf_mtap(ifp, m);
 			/* Pass it on. */
 			ether_input(ifp, m);
 
@@ -1960,7 +1979,8 @@ age_stats_update(struct age_softc *sc)
 	stat = &sc->age_stat;
 
 	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_smb_block_map, 0,
-	    sc->age_cdata.age_smb_block_map->dm_mapsize, BUS_DMASYNC_POSTREAD);
+	    sc->age_cdata.age_smb_block_map->dm_mapsize,
+	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
 	smb = sc->age_rdata.age_smb_block;
 	if (smb->updated == 0)
@@ -2041,7 +2061,8 @@ age_stats_update(struct age_softc *sc)
 	smb->updated = 0;
 
 	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_smb_block_map, 0,
-	    sc->age_cdata.age_smb_block_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
+	    sc->age_cdata.age_smb_block_map->dm_mapsize,
+	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 }
 
 static void
@@ -2166,7 +2187,8 @@ age_init_cmb_block(struct age_softc *sc)
 	rd = &sc->age_rdata;
 	memset(rd->age_cmb_block, 0, AGE_CMB_BLOCK_SZ);
 	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_cmb_block_map, 0,
-	    sc->age_cdata.age_cmb_block_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
+	    sc->age_cdata.age_cmb_block_map->dm_mapsize,
+	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 }
 
 static void
@@ -2188,10 +2210,10 @@ age_newbuf(struct age_softc *sc, struct age_rxdesc *rxd, int init)
 	bus_dmamap_t map;
 	int error;
 
-	MGETHDR(m, init ? M_WAITOK : M_DONTWAIT, MT_DATA);
+	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return ENOBUFS;
-	MCLGET(m, init ? M_WAITOK : M_DONTWAIT);
+	MCLGET(m, M_DONTWAIT);
 	if (!(m->m_flags & M_EXT)) {
 		 m_freem(m);
 		 return ENOBUFS;
@@ -2244,7 +2266,7 @@ age_rxvlan(struct age_softc *sc)
 
 	reg = CSR_READ_4(sc, AGE_MAC_CFG);
 	reg &= ~MAC_CFG_VLAN_TAG_STRIP;
-	if (sc->sc_ec.ec_capabilities & ETHERCAP_VLAN_HWTAGGING)
+	if (sc->sc_ec.ec_capenable & ETHERCAP_VLAN_HWTAGGING)
 		reg |= MAC_CFG_VLAN_TAG_STRIP;
 	CSR_WRITE_4(sc, AGE_MAC_CFG, reg);
 }

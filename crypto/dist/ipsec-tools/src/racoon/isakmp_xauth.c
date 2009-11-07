@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_xauth.c,v 1.20 2009/04/20 13:23:55 tteras Exp $	*/
+/*	$NetBSD: isakmp_xauth.c,v 1.24 2011/11/15 13:51:23 tteras Exp $	*/
 
 /* Id: isakmp_xauth.c,v 1.38 2006/08/22 18:17:17 manubsd Exp */
 
@@ -372,10 +372,7 @@ xauth_reply_stub(sc)
 }
 
 int
-xauth_reply(iph1, port, id, res)
-	struct ph1handle *iph1;
-	int port;
-	int id;
+xauth_reply(struct ph1handle *iph1, int port, int id, int res)
 {
 	struct xauth_state *xst = &iph1->mode_cfg->xauth;
 	char *usr = xst->authdata.generic.usr;
@@ -507,7 +504,7 @@ xauth_radius_init(void)
 		if (!auth_added) {
 			if (rad_config(radius_auth_state, NULL) != 0) {
 				plog(LLV_ERROR, LOCATION, NULL, 
-				    "Cannot open librarius config file: %s\n", 
+				    "Cannot open libradius config file: %s\n", 
 				    rad_strerror(radius_auth_state));
 				rad_close(radius_auth_state);
 				radius_auth_state = NULL;
@@ -547,7 +544,7 @@ xauth_radius_init(void)
 		if (!acct_added) {
 			if (rad_config(radius_acct_state, NULL) != 0) {
 				plog(LLV_ERROR, LOCATION, NULL, 
-				    "Cannot open librarius config file: %s\n", 
+				    "Cannot open libradius config file: %s\n", 
 				    rad_strerror(radius_acct_state));
 				rad_close(radius_acct_state);
 				radius_acct_state = NULL;
@@ -805,6 +802,7 @@ xauth_ldap_init_conf(void)
 	xauth_ldap_config.pver = 3;
 	xauth_ldap_config.host = NULL;
 	xauth_ldap_config.port = LDAP_PORT;
+	xauth_ldap_config.tls = 0;
 	xauth_ldap_config.base = NULL;
 	xauth_ldap_config.subtree = 0;
 	xauth_ldap_config.bind_dn = NULL;
@@ -918,6 +916,17 @@ xauth_login_ldap(iph1, usr, pwd)
 	/* initialize the protocol version */
 	ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION,
 		&xauth_ldap_config.pver);
+
+	/* Enable TLS */
+	if (xauth_ldap_config.tls) {
+		res = ldap_start_tls_s(ld, NULL, NULL);
+		if (res != LDAP_SUCCESS) {
+			plog(LLV_ERROR, LOCATION, NULL,
+			     "ldap_start_tls_s failed: %s\n",
+			     ldap_err2string(res));
+			goto ldap_end;
+		}
+	}
 
 	/*
 	 * attempt to bind to the ldap server.
@@ -1146,6 +1155,17 @@ xauth_group_ldap(udn, grp)
 	/* initialize the protocol version */
 	ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION,
 		&xauth_ldap_config.pver);
+
+	/* Enable TLS */
+	if (xauth_ldap_config.tls) {
+		res = ldap_start_tls_s(ld, NULL, NULL);
+		if (res != LDAP_SUCCESS) {
+			plog(LLV_ERROR, LOCATION, NULL,
+			     "ldap_start_tls_s failed: %s\n",
+			     ldap_err2string(res));
+			goto ldap_group_end;
+		}
+	}
 
 	/*
 	 * attempt to bind to the ldap server.
@@ -1763,4 +1783,43 @@ xauth_rmconf_delete(xauth_rmconf)
 	}
 
 	return;
+}
+
+struct xauth_rmconf *
+xauth_rmconf_dup(xauth_rmconf)
+	struct xauth_rmconf *xauth_rmconf;
+{
+	struct xauth_rmconf *new;
+
+	if (xauth_rmconf != NULL) {
+		new = racoon_malloc(sizeof(*new));
+		if (new == NULL) {
+			plog(LLV_ERROR, LOCATION, NULL, 
+			    "xauth_rmconf_dup: malloc failed\n");
+			return NULL;
+		}
+
+		memcpy(new, xauth_rmconf, sizeof(*new));
+
+		if (xauth_rmconf->login != NULL) {
+			new->login = vdup(xauth_rmconf->login);
+			if (new->login == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL, 
+				    "xauth_rmconf_dup: malloc failed (login)\n");
+				return NULL;
+			}
+		}
+		if (xauth_rmconf->pass != NULL) {
+			new->pass = vdup(xauth_rmconf->pass);
+			if (new->pass == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL, 
+				    "xauth_rmconf_dup: malloc failed (password)\n");
+				return NULL;
+			}
+		}
+
+		return new;
+	}
+
+	return NULL;
 }

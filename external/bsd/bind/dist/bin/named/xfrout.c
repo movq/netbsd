@@ -1,7 +1,7 @@
-/*	$NetBSD: xfrout.c,v 1.1.1.2 2009/10/25 00:01:33 christos Exp $	*/
+/*	$NetBSD: xfrout.c,v 1.3.4.1 2012/06/05 21:15:21 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: xfrout.c,v 1.136 2009/06/30 02:52:32 each Exp */
+/* Id */
 
 #include <config.h>
 
@@ -30,9 +30,7 @@
 
 #include <dns/db.h>
 #include <dns/dbiterator.h>
-#ifdef DLZ
 #include <dns/dlz.h>
-#endif
 #include <dns/fixedname.h>
 #include <dns/journal.h>
 #include <dns/message.h>
@@ -93,7 +91,7 @@
 			   "bad zone transfer request: %s (%s)", \
 			   msg, isc_result_totext(code));	\
 		if (result != ISC_R_SUCCESS) goto failure;	\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define FAILQ(code, msg, question, rdclass) \
 	do {							\
@@ -107,12 +105,12 @@
 			   "bad zone transfer request: '%s/%s': %s (%s)", \
 			   _buf1, _buf2, msg, isc_result_totext(code));	\
 		if (result != ISC_R_SUCCESS) goto failure;	\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 #define CHECK(op) \
 	do { result = (op); 					\
 		if (result != ISC_R_SUCCESS) goto failure; 	\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 
 /**************************************************************************/
 
@@ -256,7 +254,7 @@ ixfr_rrstream_create(isc_mem_t *mctx,
 	s->journal = NULL;
 
 	CHECK(dns_journal_open(mctx, journal_filename,
-			       ISC_FALSE, &s->journal));
+			       DNS_JOURNAL_READ, &s->journal));
 	CHECK(dns_journal_iter_init(s->journal, begin_serial, end_serial));
 
 	*sp = (rrstream_t *) s;
@@ -754,9 +752,7 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 	char msg[NS_CLIENT_ACLMSGSIZE("zone transfer")];
 	char keyname[DNS_NAME_FORMATSIZE];
 	isc_boolean_t is_poll = ISC_FALSE;
-#ifdef DLZ
 	isc_boolean_t is_dlz = ISC_FALSE;
-#endif
 
 	switch (reqtype) {
 	case dns_rdatatype_axfr:
@@ -808,15 +804,15 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 	result = dns_zt_find(client->view->zonetable, question_name, 0, NULL,
 			     &zone);
 
-	if (result != ISC_R_SUCCESS)
-#ifdef DLZ
-	{
+	if (result != ISC_R_SUCCESS) {
 		/*
-		 * Normal zone table does not have a match.  Try the DLZ database
+		 * Normal zone table does not have a match.
+		 * Try the DLZ database
 		 */
 		if (client->view->dlzdatabase != NULL) {
 			result = dns_dlzallowzonexfr(client->view,
-						     question_name, &client->peeraddr,
+						     question_name,
+						     &client->peeraddr,
 						     &db);
 
 			if (result == ISC_R_NOPERM) {
@@ -836,10 +832,8 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 				goto failure;
 			}
 			if (result != ISC_R_SUCCESS)
-#endif
-			FAILQ(DNS_R_NOTAUTH, "non-authoritative zone",
-				  question_name, question_class);
-#ifdef DLZ
+				FAILQ(DNS_R_NOTAUTH, "non-authoritative zone",
+				      question_name, question_class);
 			is_dlz = ISC_TRUE;
 			/*
 			 * DLZ only support full zone transfer, not incremental
@@ -859,19 +853,17 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 		}
 	} else {
 		/* zone table has a match */
-#endif
 		switch(dns_zone_gettype(zone)) {
 			case dns_zone_master:
 			case dns_zone_slave:
+			case dns_zone_dlz:
 				break;	/* Master and slave zones are OK for transfer. */
 			default:
 				FAILQ(DNS_R_NOTAUTH, "non-authoritative zone", question_name, question_class);
 			}
 		CHECK(dns_zone_getdb(zone, &db));
 		dns_db_currentversion(db, &ver);
-#ifdef DLZ
 	}
-#endif
 
 	xfrout_log1(client, question_name, question_class, ISC_LOG_DEBUG(6),
 		    "%s question section OK", mnemonic);
@@ -925,22 +917,15 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 		    "%s authority section OK", mnemonic);
 
 	/*
-	 * Decide whether to allow this transfer.
-	 */
-#ifdef DLZ
-	/*
-	 * if not a DLZ zone decide whether to allow this transfer.
+	 * If not a DLZ zone, decide whether to allow this transfer.
 	 */
 	if (!is_dlz) {
-#endif
 		ns_client_aclmsg("zone transfer", question_name, reqtype,
 				 client->view->rdclass, msg, sizeof(msg));
 		CHECK(ns_client_checkacl(client, NULL, msg,
 					 dns_zone_getxfracl(zone),
 					 ISC_TRUE, ISC_LOG_ERROR));
-#ifdef DLZ
 	}
-#endif
 
 	/*
 	 * AXFR over UDP is not possible.
@@ -964,10 +949,9 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 	/*
 	 * Get a dynamically allocated copy of the current SOA.
 	 */
-#ifdef DLZ
 	if (is_dlz)
 		dns_db_currentversion(db, &ver);
-#endif
+
 	CHECK(dns_db_createsoatuple(db, ver, mctx, DNS_DIFFOP_EXISTS,
 				    &current_soa_tuple));
 
@@ -1053,11 +1037,10 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 
 
 
-#ifdef DLZ
 	if (is_dlz)
-		CHECK(xfrout_ctx_create(mctx, client, request->id, question_name,
-					reqtype, question_class, zone, db, ver,
-					quota, stream,
+		CHECK(xfrout_ctx_create(mctx, client, request->id,
+					question_name, reqtype, question_class,
+					zone, db, ver, quota, stream,
 					dns_message_gettsigkey(request),
 					tsigbuf,
 					3600,
@@ -1066,10 +1049,9 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 					ISC_TRUE : ISC_FALSE,
 					&xfr));
 	else
-#endif
-		CHECK(xfrout_ctx_create(mctx, client, request->id, question_name,
-					reqtype, question_class, zone, db, ver,
-					quota, stream,
+		CHECK(xfrout_ctx_create(mctx, client, request->id,
+					question_name, reqtype, question_class,
+					zone, db, ver, quota, stream,
 					dns_message_gettsigkey(request),
 					tsigbuf,
 					dns_zone_getmaxxfrout(zone),
@@ -1084,9 +1066,9 @@ ns_xfr_start(ns_client_t *client, dns_rdatatype_t reqtype) {
 
 	CHECK(xfr->stream->methods->first(xfr->stream));
 
-	if (xfr->tsigkey != NULL) {
+	if (xfr->tsigkey != NULL)
 		dns_name_format(&xfr->tsigkey->name, keyname, sizeof(keyname));
-	} else
+	else
 		keyname[0] = '\0';
 	if (is_poll)
 		xfrout_log1(client, question_name, question_class,
@@ -1156,7 +1138,8 @@ xfrout_ctx_create(isc_mem_t *mctx, ns_client_t *client, unsigned int id,
 	xfr = isc_mem_get(mctx, sizeof(*xfr));
 	if (xfr == NULL)
 		return (ISC_R_NOMEMORY);
-	xfr->mctx = mctx;
+	xfr->mctx = NULL;
+	isc_mem_attach(mctx, &xfr->mctx);
 	xfr->client = NULL;
 	ns_client_attach(client, &xfr->client);
 	xfr->id = id;
@@ -1306,6 +1289,13 @@ sendstream(xfrout_ctx_t *xfr) {
 			isc_buffer_free(&xfr->lasttsig);
 
 		/*
+		 * Account for reserved space.
+		 */
+		if (xfr->tsigkey != NULL)
+			INSIST(msg->reserved != 0U);
+		isc_buffer_add(&xfr->buf, msg->reserved);
+
+		/*
 		 * Include a question section in the first message only.
 		 * BIND 8.2.1 will not recognize an IXFR if it does not
 		 * have a question section.
@@ -1343,9 +1333,13 @@ sendstream(xfrout_ctx_t *xfr) {
 			ISC_LIST_APPEND(qname->list, qrdataset, link);
 
 			dns_message_addname(msg, qname, DNS_SECTION_QUESTION);
-		}
-		else
+		} else {
+			/*
+			 * Reserve space for the 12-byte message header
+			 */
+			isc_buffer_add(&xfr->buf, 12);
 			msg->tcp_continuation = 1;
+		}
 	}
 
 	/*
@@ -1530,6 +1524,7 @@ sendstream(xfrout_ctx_t *xfr) {
 static void
 xfrout_ctx_destroy(xfrout_ctx_t **xfrp) {
 	xfrout_ctx_t *xfr = *xfrp;
+	ns_client_t *client = NULL;
 
 	INSIST(xfr->sends == 0);
 
@@ -1553,9 +1548,14 @@ xfrout_ctx_destroy(xfrout_ctx_t **xfrp) {
 	if (xfr->db != NULL)
 		dns_db_detach(&xfr->db);
 
+	/*
+	 * We want to detch the client after we have released the memory
+	 * context as ns_client_detach checks the memory reference count.
+	 */
+	ns_client_attach(xfr->client, &client);
 	ns_client_detach(&xfr->client);
-
-	isc_mem_put(xfr->mctx, xfr, sizeof(*xfr));
+	isc_mem_putanddetach(&xfr->mctx, xfr, sizeof(*xfr));
+	ns_client_detach(&client);
 
 	*xfrp = NULL;
 }

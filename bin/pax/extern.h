@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.56 2009/04/07 19:52:35 perry Exp $	*/
+/*	$NetBSD: extern.h,v 1.58 2011/08/29 14:47:47 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -204,7 +204,6 @@ extern int sep;
 extern int havechd;
 void options(int, char **);
 OPLIST * opt_next(void);
-int opt_add(const char *);
 int bad_opt(void);
 int mkpath(char *);
 char *chdname;
@@ -233,14 +232,12 @@ extern int cflag;
 extern int cwdfd;
 extern int dflag;
 extern int iflag;
-extern int jflag;
 extern int kflag;
 extern int lflag;
 extern int nflag;
 extern int tflag;
 extern int uflag;
 extern int vflag;
-extern int zflag;
 extern int Dflag;
 extern int Hflag;
 extern int Lflag;
@@ -266,9 +263,6 @@ extern const char *argv0;
 extern FILE *listf;
 extern char *tempfile;
 extern char *tempbase;
-
-int main(int, char **);
-void sig_cleanup(int);
 
 /*
  * sel_subs.c

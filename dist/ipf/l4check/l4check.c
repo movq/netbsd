@@ -1,4 +1,4 @@
-/*	$NetBSD: l4check.c,v 1.3 2008/05/20 07:08:06 darrenr Exp $	*/
+/*	$NetBSD: l4check.c,v 1.5 2012/02/15 17:55:05 riz Exp $	*/
 
 /*
  * (C)Copyright March, 2000 - Darren Reed.

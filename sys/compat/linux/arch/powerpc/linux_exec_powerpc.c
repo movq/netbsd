@@ -1,4 +1,4 @@
-/* $NetBSD: linux_exec_powerpc.c,v 1.21 2008/04/28 20:23:43 martin Exp $ */
+/* $NetBSD: linux_exec_powerpc.c,v 1.23.2.1 2012/02/24 16:38:07 riz Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -41,20 +41,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_powerpc.c,v 1.21 2008/04/28 20:23:43 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_powerpc.c,v 1.23.2.1 2012/02/24 16:38:07 riz Exp $");
 
-#if defined (__alpha__)
-#define ELFSIZE 64
-#elif defined (__powerpc__)
 #define ELFSIZE 32
-#else
-#error Unified linux_elf_{32|64}copyargs not tested for this platform
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
@@ -69,12 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_powerpc.c,v 1.21 2008/04/28 20:23:43 mart
  * Alpha and PowerPC specific linux copyargs function.
  */
 int
-ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
-	struct lwp *l;
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	char **stackp;
-	void *argp;
+ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
+			 struct ps_strings *arginfo, char **stackp,
+			 void *argp)
 {
 	size_t len;
 	AuxInfo ai[LINUX_ELF_AUX_ENTRIES], *a;
@@ -172,8 +162,7 @@ ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
 		a->a_v = LINUX_ELF_HWCAP;
 		a++;
 
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
+		exec_free_emul_arg(pack);
 	}
 
 	a->a_type = AT_NULL;

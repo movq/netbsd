@@ -1,4 +1,4 @@
-/*	$NetBSD: svc.c,v 1.28 2008/04/25 17:44:44 christos Exp $	*/
+/*	$NetBSD: svc.c,v 1.30 2010/07/08 20:12:37 tron Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)svc.c 1.44 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc.c	2.4 88/08/11 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc.c,v 1.28 2008/04/25 17:44:44 christos Exp $");
+__RCSID("$NetBSD: svc.c,v 1.30 2010/07/08 20:12:37 tron Exp $");
 #endif
 #endif
 
@@ -628,7 +628,7 @@ svc_getreq(rdfds)
 	fd_set readfds;
 
 	FD_ZERO(&readfds);
-	readfds.fds_bits[0] = rdfds;
+	readfds.fds_bits[0] = (unsigned int)rdfds;
 	svc_getreqset(&readfds);
 }
 
@@ -636,15 +636,14 @@ void
 svc_getreqset(readfds)
 	fd_set *readfds;
 {
-	int bit, fd;
-	int32_t mask, *maskp;
-	int sock;
+	uint32_t mask, *maskp;
+	int sock, bit, fd;
 
 	_DIAGASSERT(readfds != NULL);
 
 	maskp = readfds->fds_bits;
 	for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS) {
-	    for (mask = *maskp++; (bit = ffs(mask)) != 0;
+	    for (mask = *maskp++; (bit = ffs((int)mask)) != 0;
 		mask ^= (1 << (bit - 1))) {
 		/* sock has input waiting */
 		fd = sock + bit - 1;

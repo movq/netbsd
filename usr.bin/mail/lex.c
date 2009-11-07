@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.c,v 1.38 2009/07/14 21:15:48 apb Exp $	*/
+/*	$NetBSD: lex.c,v 1.40 2011/09/16 15:39:27 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)lex.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: lex.c,v 1.38 2009/07/14 21:15:48 apb Exp $");
+__RCSID("$NetBSD: lex.c,v 1.40 2011/09/16 15:39:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -176,7 +176,7 @@ setfile(const char *name)
 	if ((ibuf = Fopen(name, "r")) == NULL) {
 		if (!isedit && errno == ENOENT)
 			goto nomail;
-		warn("%s", name);
+		warn("Can't open `%s'", name);
 		return -1;
 	}
 
@@ -239,10 +239,10 @@ setfile(const char *name)
 	    "%s/mail.RxXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(tempname)) == -1 ||
 	    (otf = fdopen(fd, "w")) == NULL)
-		err(1, "%s", tempname);
+		err(EXIT_FAILURE, "Can't create tmp file `%s'", tempname);
 	(void)fcntl(fileno(otf), F_SETFD, FD_CLOEXEC);
 	if ((itf = fopen(tempname, "r")) == NULL)
-		err(1, "%s", tempname);
+		err(EXIT_FAILURE, "Can't create tmp file `%s'", tempname);
 	(void)fcntl(fileno(itf), F_SETFD, FD_CLOEXEC);
 	(void)rm(tempname);
 	setptr(ibuf, (off_t)0);
@@ -337,7 +337,7 @@ comment_char(char *line)
 static jmp_buf	pipestop;
 
 /*ARGSUSED*/
-static void
+__dead static void
 lex_brokpipe(int signo)
 {
 
@@ -747,7 +747,7 @@ execute(char linebuf[], enum execute_contxt_e contxt)
 		break;
 
 	default:
-		errx(1, "Unknown argtype");
+		errx(EXIT_FAILURE, "Unknown argtype");
 	}
 
 out:
@@ -785,7 +785,7 @@ out:
  * Close all open files except 0, 1, 2, and the temporary.
  * Also, unstack all source files.
  */
-static void
+__dead static void
 lex_intr(int signo)
 {
 
@@ -811,7 +811,7 @@ lex_intr(int signo)
  * Branch here on hangup signal and simulate "exit".
  */
 /*ARGSUSED*/
-static void
+__dead static void
 lex_hangup(int s __unused)
 {
 

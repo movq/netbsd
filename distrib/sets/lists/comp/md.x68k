@@ -1,4 +1,4 @@
-# $NetBSD: md.x68k,v 1.56 2008/08/22 13:42:19 lukem Exp $
+# $NetBSD: md.x68k,v 1.59 2011/11/19 12:27:42 isaki Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/x68k				comp-c-include
 ./usr/include/x68k/_G_config.h			comp-obsolete		obsolete
@@ -46,7 +46,7 @@
 ./usr/include/x68k/pci_machdep.h		comp-obsolete		obsolete
 ./usr/include/x68k/pmap.h			comp-c-include
 ./usr/include/x68k/pmc.h			comp-c-include
-./usr/include/x68k/powioctl.h			comp-c-include
+./usr/include/x68k/powioctl.h			comp-obsolete		obsolete
 ./usr/include/x68k/proc.h			comp-c-include
 ./usr/include/x68k/profile.h			comp-c-include
 ./usr/include/x68k/psl.h			comp-c-include
@@ -58,11 +58,11 @@
 ./usr/include/x68k/setjmp.h			comp-c-include
 ./usr/include/x68k/signal.h			comp-c-include
 ./usr/include/x68k/sram.h			comp-c-include
-./usr/include/x68k/stdarg.h			comp-c-include
+./usr/include/x68k/stdarg.h			comp-obsolete		obsolete
 ./usr/include/x68k/svr4_machdep.h		comp-obsolete		obsolete
 ./usr/include/x68k/trap.h			comp-c-include
 ./usr/include/x68k/types.h			comp-c-include
-./usr/include/x68k/varargs.h			comp-c-include
+./usr/include/x68k/varargs.h			comp-obsolete		obsolete
 ./usr/include/x68k/vmparam.h			comp-c-include
 ./usr/include/x68k/vuid_event.h			comp-c-include
 ./usr/include/x68k/wchar_limits.h		comp-c-include
@@ -72,5 +72,7 @@
 ./usr/libdata/debug/usr/bin/palette.debug	comp-util-debug		debug
 ./usr/libdata/debug/usr/bin/rtcalarm.debug	comp-util-debug		debug
 ./usr/libdata/debug/usr/bin/tvctrl.debug	comp-util-debug		debug
+./usr/libdata/debug/usr/mdec/installboot.debug	comp-sysutil-debug	debug
+./usr/libdata/debug/usr/mdec/newdisk.debug	comp-sysutil-debug	debug
 ./usr/libdata/debug/usr/sbin/memswitch.debug	comp-sysutil-debug	debug
-./usr/libdata/debug/usr/sbin/poffd.debug	comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/poffd.debug	comp-obsolete		obsolete

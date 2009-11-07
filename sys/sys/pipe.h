@@ -1,4 +1,4 @@
-/* $NetBSD: pipe.h,v 1.28 2009/06/28 15:18:50 rmind Exp $ */
+/* $NetBSD: pipe.h,v 1.32 2009/12/20 09:36:06 dsl Exp $ */
 
 /*
  * Copyright (c) 1996 John S. Dyson
@@ -26,9 +26,9 @@
 #ifndef _SYS_PIPE_H_
 #define _SYS_PIPE_H_
 
-#ifndef _KERNEL
 #include <sys/selinfo.h>		/* for struct selinfo */
-#endif
+
+#include <uvm/uvm_extern.h>
 
 /*
  * Pipe buffer size, keep moderate in value, pipes take kva space.
@@ -96,6 +96,7 @@ struct pipemapping {
 				   pointers/data. */
 #define	PIPE_LWANT	0x200	/* Process wants exclusive access to
 				   pointers/data. */
+#define	PIPE_RESTART	0x400	/* Return ERESTART to blocked syscalls */
 
 /*
  * Per-pipe data structure.

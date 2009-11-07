@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.2 2008/04/28 20:23:09 martin Exp $	*/
+/*	$NetBSD: main.c,v 1.4 2010/12/13 20:48:45 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.2 2008/04/28 20:23:09 martin Exp $");
+__RCSID("$NetBSD: main.c,v 1.4 2010/12/13 20:48:45 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
@@ -39,18 +39,26 @@ __RCSID("$NetBSD: main.c,v 1.2 2008/04/28 20:23:09 martin Exp $");
 #include <unistd.h>
 #include <err.h>
 
+#include "prog_ops.h"
+
 int	main(int, char **);
 static void	usage(void) __dead;
 
 int
 main(int argc, char **argv)
 {
+	int i;
 
-	if (argc != 2)
+	if (argc < 2)
 		usage();
 
-	if (modctl(MODCTL_UNLOAD, argv[1])) {
-		err(EXIT_FAILURE, NULL);
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
+
+	for (i = 1; i < argc; i++) {
+		if (prog_modctl(MODCTL_UNLOAD, argv[i])) {
+			err(EXIT_FAILURE, NULL);
+		}
 	}
 
 	exit(EXIT_SUCCESS);
@@ -60,6 +68,6 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "Usage: %s <module_name>\n", getprogname());
+	(void)fprintf(stderr, "Usage: %s <module_name ...>\n", getprogname());
 	exit(EXIT_FAILURE);
 }

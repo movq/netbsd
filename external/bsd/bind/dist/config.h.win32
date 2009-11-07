@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004, 2006-2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2006-2009, 2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -15,7 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: config.h.win32,v 1.23 2009/10/12 16:41:12 each Exp */
+/* Id: config.h.win32,v 1.28 2011/10/30 23:39:39 marka Exp  */
 
 /*
  * win32 configuration file
@@ -49,11 +49,9 @@
 #define _USE_32BIT_TIME_T 1
 
 /*
- * Windows NT and 2K only
+ * Minimum version is Windows XP
  */
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0400
-#endif
+#define _WIN32_WINNT 0x0501
 
 /* Define if you have the ANSI C header files.  */
 #define STDC_HEADERS 1
@@ -126,6 +124,13 @@
 /* Define if you have DH_generate_parameters(). */
 #define HAVE_DH_GENERATE_PARAMETERS
 
+/*
+ * Define to 1 if you want to use the DLZ "dlopen" driver
+ * (which has the same name on windows even though it uses
+ * LoadLibrary() instead of dlopen()).
+ */
+#define ISC_DLZ_DLOPEN 1
+
 #define WANT_IPV6
 
 #define S_IFMT   _S_IFMT         /* file type mask */
@@ -163,7 +168,9 @@
  */
 
 #define snprintf _snprintf
+#if _MSC_VER <= 1400
 #define vsnprintf _vsnprintf
+#endif
 #define strcasecmp  _stricmp
 #define strncasecmp _strnicmp
 #define strdup _strdup
@@ -254,3 +261,20 @@ typedef long off_t;
  */
 /* #undef USE_PKCS11 */
 
+/** define if struct addrinfo exists */
+#define HAVE_ADDRINFO
+
+/** define if getaddrinfo() exists */
+#define HAVE_GETADDRINFO
+
+/** define if gai_strerror() exists */
+#define HAVE_GAISTRERROR
+
+/* Define if your OpenSSL version supports GOST. */
+#define HAVE_OPENSSL_GOST
+
+/* Define to enable rpz-nsdname rules. */
+#define ENABLE_RPZ_NSDNAME
+
+/* Define to enable rpz-nsip rules. */
+#define ENABLE_RPZ_NSIP

@@ -1,4 +1,4 @@
-/*	$NetBSD: libpfkey.h,v 1.17 2009/08/17 13:52:14 vanhu Exp $	*/
+/*	$NetBSD: libpfkey.h,v 1.19 2012/01/04 15:55:35 drochner Exp $	*/
 
 /* Id: libpfkey.h,v 1.13 2005/12/04 20:26:43 manubsd Exp */
 
@@ -59,7 +59,11 @@ struct sadb_alg;
 
 #ifndef HAVE_IPSEC_POLICY_T
 typedef caddr_t ipsec_policy_t;
+#ifdef __NetBSD__
+#define __ipsec_const const
+#else
 #define __ipsec_const
+#endif
 #else
 #define __ipsec_const const
 #endif
@@ -208,6 +212,10 @@ int pfkey_send_add_nat __P((int, u_int, u_int, struct sockaddr *,
 
 #ifndef IPPROTO_IPCOMP
 #define IPPROTO_IPCOMP IPPROTO_COMP
+#endif
+
+#ifndef IPPROTO_MH
+#define IPPROTO_MH		135
 #endif
 
 static __inline u_int8_t

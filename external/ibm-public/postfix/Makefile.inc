@@ -1,19 +1,35 @@
-#	$NetBSD: Makefile.inc,v 1.2 2009/06/25 18:21:50 tron Exp $
+#	$NetBSD: Makefile.inc,v 1.13.4.1 2012/03/08 17:54:45 riz Exp $
 
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# network client and server
+CWARNFLAGS.clang+=	-Wno-empty-body -Wno-format-extra-args
 
 WARNS?=	0
 
 PFIX_DISTDIR=	${NETBSDSRCDIR}/external/ibm-public/postfix/dist
 
-CPPFLAGS+= -DNETBSD4 -DUSE_SASL_AUTH -DDEF_SERVER_SASL_TYPE=\"dovecot\" \
+CPPFLAGS+= -DNETBSD4 -DUSE_SASL_AUTH \
 	-I${DIST} \
 	-I${PFIX_DISTDIR}/src/dns -I${PFIX_DISTDIR}/src/global \
 	-I${PFIX_DISTDIR}/src/master -I${PFIX_DISTDIR}/src/util \
 	-I${PFIX_DISTDIR}/src/tls -I${PFIX_DISTDIR}/src/milter \
-	-I${PFIX_DISTDIR}/src/xsasl
+	-I${PFIX_DISTDIR}/src/xsasl \
+	${${ACTIVE_CC} == "clang":?-Wno-comment:}
+
+CPPFLAGS+= -DUSE_SASL_AUTH
+CPPFLAGS+= -DDEF_SERVER_SASL_TYPE=\"dovecot\"
+
+.if (${MKCRYPTO} != "no")
+CPPFLAGS+= -DUSE_SASLC_SASL
+CPPFLAGS+= -DDEF_CLIENT_SASL_TYPE=\"saslc\"
+DPADD+= ${LIBSASCL} ${LIBSSL}
+LDADD+= -lsaslc -lssl
+. if (${MKKERBEROS} != "no")
+DPADD+= ${LIBGSSAPI}
+LDADD+= -lgssapi
+. endif
+.endif
 
 .if defined(HAVE_PCC)
 # code uses gcc-specific aggregate dynamic array
@@ -28,6 +44,13 @@ CPPFLAGS+=	-DUSE_TLS
 # IPv6 support.
 .if ${MKINET6} == "no"
 CPPFLAGS+=	-DNO_IPV6
+.endif
+
+# SQLite support.
+CPPFLAGS+=	-DHAS_SQLITE
+. if defined(PROG)
+DPADD+=		${LIBSQLITE3}
+LDADD+=		-lsqlite3
 .endif
 
 # LDAP support.

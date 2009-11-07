@@ -1,4 +1,4 @@
-/*	$NetBSD: spic_acpi.c,v 1.4 2009/08/09 19:36:28 christos Exp $	*/
+/*	$NetBSD: spic_acpi.c,v 1.6 2010/03/05 14:00:17 jruoho Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,20 +30,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spic_acpi.c,v 1.4 2009/08/09 19:36:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spic_acpi.c,v 1.6 2010/03/05 14:00:17 jruoho Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/proc.h>
-#include <sys/kernel.h>
-#include <sys/callout.h>
-#include <sys/bus.h>
+#include <sys/systm.h>
+
+#include <dev/acpi/acpireg.h>
+#include <dev/acpi/acpivar.h>
 
 #include <dev/ic/spicvar.h>
 
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpivar.h>
+#define _COMPONENT		ACPI_RESOURCE_COMPONENT
+ACPI_MODULE_NAME		("spic_acpi")
 
 struct spic_acpi_softc {
 	struct spic_softc sc_spic;	/* spic device */

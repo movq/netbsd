@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.35 2009/04/14 22:15:27 lukem Exp $
+#	$NetBSD: Makefile,v 1.37 2012/01/06 14:08:08 drochner Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 .include <bsd.own.mk>
@@ -15,15 +15,12 @@ SRCS=	bufcache.c cmds.c cmdtab.c disks.c df.c drvstats.c fetch.c \
 	globalcmds.c icmp.c iostat.c ip.c keyboard.c main.c mbufs.c \
 	netcmds.c netstat.c pigs.c ps.c swap.c tcp.c vmstat.c utmpentry.c \
 	syscall.c
-DPADD=	${LIBCURSES} ${LIBM} ${LIBKVM}
-LDADD=	-lutil -lcurses -lm -lkvm
+DPADD=	${LIBCURSES} ${LIBTERMINFO} ${LIBM} ${LIBKVM}
+LDADD=	-lutil -lcurses -lterminfo -lm -lkvm
 BINGRP=	kmem
 BINMODE=2555
 LINKS=	${BINDIR}/systat ${BINDIR}/sysstat
 MLINKS+=systat.1 sysstat.1
-
-CPPFLAGS+=-DIPSEC
-SRCS+=	ipsec.c
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6

@@ -1,4 +1,4 @@
-/*	$NetBSD: rum_at_usb.c,v 1.1 2009/10/04 10:43:03 pooka Exp $	*/
+/*	$NetBSD: rum_at_usb.c,v 1.4 2010/03/08 10:36:10 pooka Exp $	*/
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -10,6 +10,9 @@
  * rum @ usb
  *
  * handwritten device configuration.... 'nuf said
+ *
+ * I could convert this to use the new ioconf keyword in config,
+ * except I don't have the hardware for testing anymore ...
  */
 
 static const struct cfiattrdata uroothub_iattrdata = {
@@ -42,14 +45,14 @@ CFDRIVER_DECL(uhub, DV_DULL, uhub_attrs);
 
 CFDRIVER_DECL(rum, DV_IFNET, NULL);
 
-struct cfparent rumpusbhc_pspec = {
+struct cfparent ugenhc_pspec = {
 	"usbus",
-	"rumpusbhc",
+	"ugenhc",
 	DVUNIT_ANY
 };
 
 struct cfdata usb_cfdata[] = {
-	{ "usb", "usb", 0, FSTATE_STAR, NULL, 0, &rumpusbhc_pspec },
+	{ "usb", "usb", 0, FSTATE_STAR, NULL, 0, &ugenhc_pspec },
 };
 
 struct cfparent usb_pspec = {
@@ -78,6 +81,7 @@ struct cfdata rum_cfdata[] = {
 	{ "rum", "rum", 0, FSTATE_STAR, NULL, 0, &usbdevif_pspec },
 };
 
+#include "rump_private.h"
 #include "rump_dev_private.h"
 
 #define FLAWLESSCALL(call)						\
@@ -87,8 +91,7 @@ do {									\
 		panic("\"%s\" failed", #call);				\
 } while (/*CONSTCOND*/0)
 
-void
-rump_device_configuration(void)
+RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 {
 	extern struct cfattach usb_ca, uhub_ca, uroothub_ca, rum_ca;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: printpool_live.c,v 1.1.1.2 2008/05/20 06:45:04 darrenr Exp $	*/
+/*	$NetBSD: printpool_live.c,v 1.2 2012/02/15 17:55:07 riz Exp $	*/
 
 /*
  * Copyright (C) 2002 by Darren Reed.

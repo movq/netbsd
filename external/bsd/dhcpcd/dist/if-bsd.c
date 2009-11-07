@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2009 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2012 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,8 @@
 #include <netinet/in.h>
 #ifdef __DragonFly__
 #  include <netproto/802_11/ieee80211_ioctl.h>
+#elif __APPLE__
+  /* FIXME: Add apple includes so we can work out SSID */
 #else
 #  include <net80211/ieee80211_ioctl.h>
 #endif
@@ -59,18 +61,34 @@
 #include "if-options.h"
 #include "net.h"
 
-#define ROUNDUP(a)							      \
+#ifndef RT_ROUNDUP
+#define RT_ROUNDUP(a)							      \
 	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
-#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
+#define RT_ADVANCE(x, n) (x += RT_ROUNDUP((n)->sa_len))
+#endif
 
 /* FIXME: Why do we need to check for sa_family 255 */
 #define COPYOUT(sin, sa)						      \
-	sin.s_addr = ((sa) != NULL && ((sa)->sa_family == AF_INET ||	      \
-		(sa)->sa_family == 255))				      \
-	    ?								      \
+	sin.s_addr = ((sa) != NULL) ?					      \
 	    (((struct sockaddr_in *)(void *)sa)->sin_addr).s_addr : 0
 
 static int r_fd = -1;
+static char *link_buf;
+static ssize_t link_buflen;
+
+int
+if_init(_unused struct interface *iface)
+{
+	/* BSD promotes secondary address by default */
+	return 0;
+}
+
+int
+if_conf(_unused struct interface *iface)
+{
+	/* No extra checks needed on BSD */
+	return 0;
+}
 
 int
 init_sockets(void)
@@ -177,12 +195,12 @@ if_route(const struct interface *iface, const struct in_addr *dest,
 		struct rt_msghdr hdr;
 		char buffer[sizeof(su) * 4];
 	} rtm;
-	char *bp = rtm.buffer, *p;
+	char *bp = rtm.buffer;
 	size_t l;
 	int retval = 0;
 
 #define ADDSU(_su) {							      \
-		l = ROUNDUP(_su.sa.sa_len);				      \
+		l = RT_ROUNDUP(_su.sa.sa_len);				      \
 		memcpy(bp, &(_su), l);					      \
 		bp += l;						      \
 	}
@@ -232,20 +250,8 @@ if_route(const struct interface *iface, const struct in_addr *dest,
 	} else
 		ADDADDR(gate);
 
-	if (rtm.hdr.rtm_addrs & RTA_NETMASK) {
-		/* Ensure that netmask is set correctly */
-		memset(&su, 0, sizeof(su));
-		su.sin.sin_family = AF_INET;
-		su.sin.sin_len = sizeof(su.sin);
-		memcpy(&su.sin.sin_addr, &net->s_addr, sizeof(su.sin.sin_addr));
-		p = su.sa.sa_len + (char *)&su;
-		for (su.sa.sa_len = 0; p > (char *)&su;)
-			if (*--p != 0) {
-				su.sa.sa_len = 1 + p - (char *)&su;
-				break;
-			}
-		ADDSU(su);
-	}
+	if (rtm.hdr.rtm_addrs & RTA_NETMASK)
+		ADDADDR(net);
 
 	if (rtm.hdr.rtm_addrs & RTA_IFA)
 		ADDADDR(&iface->addr);
@@ -282,17 +288,16 @@ get_addrs(int type, char *cp, struct sockaddr **sa)
 			    inet_ntoa(((struct sockaddr_in *)sa[i])->
 				sin_addr));
 #endif
-			ADVANCE(cp, sa[i]);
+			RT_ADVANCE(cp, sa[i]);
 		} else
 			sa[i] = NULL;
 	}
 }
 
-#define BUFFER_LEN	2048
 int
 manage_link(int fd)
 {
-	char buffer[2048], *p, *e, *cp;
+	char *p, *e, *cp;
 	char ifname[IF_NAMESIZE];
 	ssize_t bytes;
 	struct rt_msghdr *rtm;
@@ -301,9 +306,23 @@ manage_link(int fd)
 	struct ifa_msghdr *ifam;
 	struct rt rt;
 	struct sockaddr *sa, *rti_info[RTAX_MAX];
+	int len;
+#ifdef RTM_CHGADDR
+	struct sockaddr_dl sdl;
+	unsigned char *hwaddr;
+#endif
 
 	for (;;) {
-		bytes = read(fd, buffer, BUFFER_LEN);
+		if (ioctl(fd, FIONREAD, &len) == -1)
+			return -1;
+		if (link_buflen < len) {
+			p = realloc(link_buf, len);
+			if (p == NULL)
+				return -1;
+			link_buf = p;
+			link_buflen = len;
+		}
+		bytes = read(fd, link_buf, link_buflen);
 		if (bytes == -1) {
 			if (errno == EAGAIN)
 				return 0;
@@ -311,10 +330,11 @@ manage_link(int fd)
 				continue;
 			return -1;
 		}
-		e = buffer + bytes;
-		for (p = buffer; p < e; p += rtm->rtm_msglen) {
+		e = link_buf + bytes;
+		for (p = link_buf; p < e; p += rtm->rtm_msglen) {
 			rtm = (struct rt_msghdr *)(void *)p;
 			switch(rtm->rtm_type) {
+#ifdef RTM_IFANNOUNCE
 			case RTM_IFANNOUNCE:
 				ifan = (struct if_announcemsghdr *)(void *)p;
 				switch(ifan->ifan_what) {
@@ -326,16 +346,35 @@ manage_link(int fd)
 					break;
 				}
 				break;
+#endif
 			case RTM_IFINFO:
 				ifm = (struct if_msghdr *)(void *)p;
 				memset(ifname, 0, sizeof(ifname));
-				if (if_indextoname(ifm->ifm_index, ifname))
-					handle_interface(0, ifname);
+				if (!(if_indextoname(ifm->ifm_index, ifname)))
+					break;
+				switch (ifm->ifm_data.ifi_link_state) {
+				case LINK_STATE_DOWN:
+					len = -1;
+					break;
+				case LINK_STATE_UP:
+					len = 1;
+					break;
+				default:
+					/* handle_carrier will re-load
+					 * the interface flags and check for
+					 * IFF_RUNNING as some drivers that
+					 * don't handle link state also don't
+					 * set IFF_RUNNING when this routing
+					 * message is generated.
+					 * As such, it is a race ...*/
+					len = 0;
+					break;
+				}
+				handle_carrier(len, ifm->ifm_flags, ifname);
 				break;
 			case RTM_DELETE:
-				if (!(rtm->rtm_addrs & RTA_DST) ||
-				    !(rtm->rtm_addrs & RTA_GATEWAY) ||
-				    !(rtm->rtm_addrs & RTA_NETMASK))
+				if (~rtm->rtm_addrs &
+				    (RTA_DST | RTA_GATEWAY | RTA_NETMASK))
 					break;
 				if (rtm->rtm_pid == getpid())
 					break;
@@ -351,17 +390,41 @@ manage_link(int fd)
 				COPYOUT(rt.gate, rti_info[RTAX_GATEWAY]);
 				route_deleted(&rt);
 				break;
-			case RTM_DELADDR:
+#ifdef RTM_CHGADDR
+			case RTM_CHGADDR:	/* FALLTHROUGH */
+#endif
+			case RTM_DELADDR:	/* FALLTHROUGH */
 			case RTM_NEWADDR:
 				ifam = (struct ifa_msghdr *)(void *)p;
+				if (!if_indextoname(ifam->ifam_index, ifname))
+					break;
 				cp = (char *)(void *)(ifam + 1);
 				get_addrs(ifam->ifam_addrs, cp, rti_info);
-				COPYOUT(rt.dest, rti_info[RTAX_IFA]);
-				COPYOUT(rt.net, rti_info[RTAX_NETMASK]);
-				COPYOUT(rt.gate, rti_info[RTAX_BRD]);
-				if (if_indextoname(ifam->ifam_index, ifname))
+				if (rti_info[RTAX_IFA] == NULL)
+					break;
+				switch (rti_info[RTAX_IFA]->sa_family) {
+#ifdef RTM_CHGADDR
+				case AF_LINK:
+					if (rtm->rtm_type != RTM_CHGADDR)
+						break;
+					memcpy(&sdl, rti_info[RTAX_IFA],
+					    rti_info[RTAX_IFA]->sa_len);
+					hwaddr = xmalloc(sdl.sdl_alen);
+					memcpy(hwaddr, LLADDR(&sdl),
+					    sdl.sdl_alen);
+					handle_hwaddr(ifname, hwaddr,
+					    sdl.sdl_alen);
+					break;
+#endif
+				case AF_INET:
+				case 255: /* FIXME: Why 255? */
+					COPYOUT(rt.dest, rti_info[RTAX_IFA]);
+					COPYOUT(rt.net, rti_info[RTAX_NETMASK]);
+					COPYOUT(rt.gate, rti_info[RTAX_BRD]);
 					handle_ifa(rtm->rtm_type, ifname,
 					    &rt.dest, &rt.net, &rt.gate);
+					break;
+				}
 				break;
 			}
 		}

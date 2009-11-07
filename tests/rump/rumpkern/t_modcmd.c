@@ -1,4 +1,4 @@
-/*	$NetBSD: t_modcmd.c,v 1.4 2009/11/06 15:26:54 pooka Exp $	*/
+/*	$NetBSD: t_modcmd.c,v 1.9 2010/05/31 23:51:28 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -29,6 +29,7 @@
 
 #include <sys/types.h>
 #include <sys/mount.h>
+#include <sys/sysctl.h>
 
 #include <rump/rump.h>
 #include <rump/rump_syscalls.h>
@@ -46,7 +47,6 @@
 #include <util.h>
 
 #include "../../h_macros.h"
-
 /*
  * We verify that modules can be loaded and unloaded.
  * tmpfs was chosen because it does not depend on an image.
@@ -59,15 +59,71 @@ ATF_TC_HEAD(cmsg_modcmd, tc)
 	    "a module (vfs/tmpfs) is possible");
 }
 
+static int
+disable_autoload(void)
+{
+	struct sysctlnode q, ans[256];
+	int mib[3];
+	size_t alen;
+	unsigned i;
+	bool no;
+
+	mib[0] = CTL_KERN;
+	mib[1] = CTL_QUERY;
+	alen = sizeof(ans);
+
+	memset(&q, 0, sizeof(q));
+	q.sysctl_flags = SYSCTL_VERSION;
+
+	if (rump_sys___sysctl(mib, 2, ans, &alen, &q, sizeof(q)) == -1)
+		return -1;
+
+	for (i = 0; i < __arraycount(ans); i++)
+		if (strcmp("module", ans[i].sysctl_name) == 0)
+			break;
+	if (i == __arraycount(ans)) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	mib[1] = ans[i].sysctl_num;
+	mib[2] = CTL_QUERY;
+
+	if (rump_sys___sysctl(mib, 3, ans, &alen, &q, sizeof(q)) == -1)
+		return errno;
+
+	for (i = 0; i < __arraycount(ans); i++)
+		if (strcmp("autoload", ans[i].sysctl_name) == 0)
+			break;
+	if (i == __arraycount(ans)) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	mib[2] = ans[i].sysctl_num;
+
+	no = false;
+	alen = 0;
+	if (rump_sys___sysctl(mib, 3, NULL, &alen, &no, sizeof(no)) == -1)
+		return errno;
+
+	return 0;
+
+}
+
 #define TMPFSMODULE "librumpfs_tmpfs.so"
 ATF_TC_BODY(cmsg_modcmd, tc)
 {
 	struct tmpfs_args args;
-	struct modinfo **mi;
+	const struct modinfo *const *mi_start, *const *mi_end;
 	void *handle;
-	int rv;
+	int i, rv, loop = 0;
 
 	rump_init();
+
+	if (disable_autoload() == -1)
+		atf_tc_fail_errno("count not disable module autoload");
+
 	memset(&args, 0, sizeof(args));
 	args.ta_version = TMPFS_ARGS_VERSION;
 	args.ta_root_mode = 0777;
@@ -82,18 +138,33 @@ ATF_TC_BODY(cmsg_modcmd, tc)
 		const char *dlmsg = dlerror();
 		atf_tc_fail("cannot open %s: %s", TMPFSMODULE, dlmsg);
 	}
-	mi = dlsym(handle, "__start_link_set_modules");
-	if (mi == NULL)
+
+ again:
+	mi_start = dlsym(handle, "__start_link_set_modules");
+	mi_end = dlsym(handle, "__stop_link_set_modules");
+	if (mi_start == NULL || mi_end == NULL)
 		atf_tc_fail("cannot find module info");
-	if ((rv = rump_pub_module_init(*mi, NULL)) != 0)
+	if ((rv = rump_pub_module_init(mi_start, (size_t)(mi_end-mi_start)))!=0)
 		atf_tc_fail("module init failed: %d (%s)", rv, strerror(rv));
+	if ((rv = rump_pub_module_init(mi_start, (size_t)(mi_end-mi_start)))==0)
+		atf_tc_fail("module double init succeeded");
 
 	if (rump_sys_mount(MOUNT_TMPFS, "/mp", 0, &args, sizeof(args)) == -1)
 		atf_tc_fail_errno("still cannot mount");
 	if (rump_sys_unmount("/mp", 0) == -1)
 		atf_tc_fail("cannot unmount");
-	if ((rv = rump_pub_module_fini(*mi)) != 0)
-		atf_tc_fail("module fini failed: %d (%s)", rv, strerror(rv));
+	for (i = 0; i < (int)(mi_end-mi_start); i++) {
+		if ((rv = rump_pub_module_fini(mi_start[i])) != 0)
+			atf_tc_fail("module fini failed: %d (%s)",
+			    rv, strerror(rv));
+	}
+	for (i = 0; i < (int)(mi_end-mi_start); i++) {
+		if ((rv = rump_pub_module_fini(mi_start[i])) == 0)
+			atf_tc_fail("module double fini succeeded");
+	}
+	if (loop++ == 0)
+		goto again;
+
 	if (dlclose(handle)) {
 		const char *dlmsg = dlerror();
 		atf_tc_fail("cannot close %s: %s", TMPFSMODULE, dlmsg);

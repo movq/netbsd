@@ -1,6 +1,4 @@
-/*	$NetBSD: cleanup.h,v 1.2 2009/06/23 11:41:06 tron Exp $	*/
-
-/*	$NetBSD: cleanup.h,v 1.2 2009/06/23 11:41:06 tron Exp $	*/
+/*	$NetBSD: cleanup.h,v 1.4 2011/03/02 19:56:38 tron Exp $	*/
 
 /*++
 /* NAME
@@ -36,6 +34,8 @@
 #include <mime_state.h>
 #include <string_list.h>
 #include <cleanup_user.h>
+#include <header_body_checks.h>
+#include <dsn_mask.h>
 
  /*
   * Milter library.
@@ -82,6 +82,8 @@ typedef struct CLEANUP_STATE {
     off_t   append_rcpt_pt_target;	/* target of above record */
     off_t   append_hdr_pt_offset;	/* append header here */
     off_t   append_hdr_pt_target;	/* target of above record */
+    off_t   append_meta_pt_offset;	/* append meta record here */
+    off_t   append_meta_pt_target;	/* target of above record */
     ssize_t rcpt_count;			/* recipient count */
     char   *reason;			/* failure reason */
     char   *smtp_reply;			/* failure reason, SMTP-style */
@@ -112,6 +114,8 @@ typedef struct CLEANUP_STATE {
     VSTRING *milter_ext_from;		/* externalized sender */
     VSTRING *milter_ext_rcpt;		/* externalized recipient */
     VSTRING *milter_err_text;		/* milter call-back reply */
+    HBC_CHECKS *milter_hbc_checks;	/* Milter header checks */
+    VSTRING *milter_hbc_reply;		/* Milter header checks reply */
 
     /*
      * Support for Milter body replacement requests.
@@ -283,7 +287,14 @@ extern void cleanup_out_recipient(CLEANUP_STATE *, const char *, int, const char
   */
 extern void cleanup_addr_sender(CLEANUP_STATE *, const char *);
 extern void cleanup_addr_recipient(CLEANUP_STATE *, const char *);
-extern void cleanup_addr_bcc(CLEANUP_STATE *, const char *);
+extern void cleanup_addr_bcc_dsn(CLEANUP_STATE *, const char *, const char *, int);
+
+#define NO_DSN_ORCPT	((char *) 0)
+#define NO_DSN_NOTIFY	DSN_NOTIFY_NEVER
+#define DEF_DSN_NOTIFY	(0)
+
+#define cleanup_addr_bcc(state, addr) \
+    cleanup_addr_bcc_dsn((state), (addr), NO_DSN_ORCPT, NO_DSN_NOTIFY)
 
  /*
   * cleanup_bounce.c.

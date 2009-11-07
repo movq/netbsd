@@ -1,4 +1,4 @@
-/*	$NetBSD: ippool_y.y,v 1.4 2009/08/19 08:35:32 darrenr Exp $	*/
+/*	$NetBSD: ippool_y.y,v 1.7 2012/02/15 17:55:11 riz Exp $	*/
 
 /*
  * Copyright (C) 2001-2006 by Darren Reed.
@@ -69,7 +69,7 @@ static ip_pool_node_t *add_poolhosts __P((char *));
 
 %token  <num>   YY_NUMBER YY_HEX
 %token  <str>   YY_STR
-%token	  YY_COMMENT 
+%token	  YY_COMMENT
 %token	  YY_CMP_EQ YY_CMP_NE YY_CMP_LE YY_CMP_GE YY_CMP_LT YY_CMP_GT
 %token	  YY_RANGE_OUT YY_RANGE_IN
 %token  <ip6>   YY_IPV6

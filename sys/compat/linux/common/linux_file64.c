@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_file64.c,v 1.49 2009/05/15 17:02:54 pooka Exp $	*/
+/*	$NetBSD: linux_file64.c,v 1.53 2011/10/14 09:23:28 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.49 2009/05/15 17:02:54 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.53 2011/10/14 09:23:28 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -254,11 +254,14 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 
 	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VDIR) {
-		error = EINVAL;
+		error = ENOTDIR;
 		goto out1;
 	}
 
-	if ((error = VOP_GETATTR(vp, &va, l->l_cred)))
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error)
 		goto out1;
 
 	nbytes = SCARG(uap, count);
@@ -336,14 +339,18 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG(uap, dent))
+	if (outp == (void *)SCARG(uap, dent)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);

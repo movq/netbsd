@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_stat.c,v 1.32 2009/10/21 21:12:07 rmind Exp $	 */
+/*	$NetBSD: uvm_stat.c,v 1.37 2011/05/17 04:18:07 mrg Exp $	 */
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,182 +32,37 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_stat.c,v 1.32 2009/10/21 21:12:07 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_stat.c,v 1.37 2011/05/17 04:18:07 mrg Exp $");
 
-#include "opt_uvmhist.h"
 #include "opt_readahead.h"
 #include "opt_ddb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm.h>
 #include <uvm/uvm_ddb.h>
 
-/*
- * globals
- */
-
-#ifdef UVMHIST
-struct uvm_history_head uvm_histories;
-#endif
-
-#ifdef UVMHIST_PRINT
-int uvmhist_print_enabled = 1;
-#endif
-
 #ifdef DDB
-
-/*
- * prototypes
- */
-
-#ifdef UVMHIST
-void uvmhist_dump(struct uvm_history *);
-void uvm_hist(u_int32_t);
-static void uvmhist_dump_histories(struct uvm_history *[]);
-#endif
-void uvmcnt_dump(void);
-
-
-#ifdef UVMHIST
-/* call this from ddb */
-void
-uvmhist_dump(struct uvm_history *l)
-{
-	int lcv, s;
-
-	s = splhigh();
-	lcv = l->f;
-	do {
-		if (l->e[lcv].fmt)
-			uvmhist_entry_print(&l->e[lcv]);
-		lcv = (lcv + 1) % l->n;
-	} while (lcv != l->f);
-	splx(s);
-}
-
-/*
- * print a merged list of uvm_history structures
- */
-static void
-uvmhist_dump_histories(struct uvm_history *hists[])
-{
-	struct timeval  tv;
-	int	cur[MAXHISTS];
-	int	s, lcv, hi;
-
-	/* so we don't get corrupted lists! */
-	s = splhigh();
-
-	/* find the first of each list */
-	for (lcv = 0; hists[lcv]; lcv++)
-		 cur[lcv] = hists[lcv]->f;
-
-	/*
-	 * here we loop "forever", finding the next earliest
-	 * history entry and printing it.  cur[X] is the current
-	 * entry to test for the history in hists[X].  if it is
-	 * -1, then this history is finished.
-	 */
-	for (;;) {
-		hi = -1;
-		tv.tv_sec = tv.tv_usec = 0;
-
-		/* loop over each history */
-		for (lcv = 0; hists[lcv]; lcv++) {
-restart:
-			if (cur[lcv] == -1)
-				continue;
-
-			/*
-			 * if the format is empty, go to the next entry
-			 * and retry.
-			 */
-			if (hists[lcv]->e[cur[lcv]].fmt == NULL) {
-				cur[lcv] = (cur[lcv] + 1) % (hists[lcv]->n);
-				if (cur[lcv] == hists[lcv]->f)
-					cur[lcv] = -1;
-				goto restart;
-			}
-
-			/*
-			 * if the time hasn't been set yet, or this entry is
-			 * earlier than the current tv, set the time and history
-			 * index.
-			 */
-			if (tv.tv_sec == 0 ||
-			    timercmp(&hists[lcv]->e[cur[lcv]].tv, &tv, <)) {
-				tv = hists[lcv]->e[cur[lcv]].tv;
-				hi = lcv;
-			}
-		}
-
-		/* if we didn't find any entries, we must be done */
-		if (hi == -1)
-			break;
-
-		/* print and move to the next entry */
-		uvmhist_entry_print(&hists[hi]->e[cur[hi]]);
-		cur[hi] = (cur[hi] + 1) % (hists[hi]->n);
-		if (cur[hi] == hists[hi]->f)
-			cur[hi] = -1;
-	}
-	splx(s);
-}
-
-/*
- * call this from ddb.  `bitmask' is from <uvm/uvm_stat.h>.  it
- * merges the named histories.
- */
-void
-uvm_hist(u_int32_t bitmask)	/* XXX only support 32 hists */
-{
-	struct uvm_history *hists[MAXHISTS + 1];
-	int i = 0;
-
-	if ((bitmask & UVMHIST_MAPHIST) || bitmask == 0)
-		hists[i++] = &maphist;
-
-	if ((bitmask & UVMHIST_PDHIST) || bitmask == 0)
-		hists[i++] = &pdhist;
-
-	if ((bitmask & UVMHIST_UBCHIST) || bitmask == 0)
-		hists[i++] = &ubchist;
-
-	if ((bitmask & UVMHIST_LOANHIST) || bitmask == 0)
-		hists[i++] = &loanhist;
-
-	hists[i] = NULL;
-
-	uvmhist_dump_histories(hists);
-}
-
-/*
- * uvmhist_print: ddb hook to print uvm history
- */
-void
-uvmhist_print(void (*pr)(const char *, ...))
-{
-	uvmhist_dump(LIST_FIRST(&uvm_histories));
-}
-
-#endif /* UVMHIST */
 
 /*
  * uvmexp_print: ddb hook to print interesting uvm counters
  */
 void
-uvmexp_print(void (*pr)(const char *, ...))
+uvmexp_print(void (*pr)(const char *, ...)
+    __attribute__((__format__(__printf__,1,2))))
 {
 	int active, inactive;
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci;
 
 	uvm_estimatepageable(&active, &inactive);
 
 	(*pr)("Current UVM status:\n");
-	(*pr)("  pagesize=%d (0x%x), pagemask=0x%x, pageshift=%d\n",
+	(*pr)("  pagesize=%d (0x%x), pagemask=0x%x, pageshift=%d\n, ncolors=%d",
 	    uvmexp.pagesize, uvmexp.pagesize, uvmexp.pagemask,
-	    uvmexp.pageshift);
+	    uvmexp.pageshift, uvmexp.ncolors);
 	(*pr)("  %d VM pages: %d active, %d inactive, %d wired, %d free\n",
 	    uvmexp.npages, active, inactive, uvmexp.wired,
 	    uvmexp.free);
@@ -222,9 +70,16 @@ uvmexp_print(void (*pr)(const char *, ...))
 	    uvmexp.anonpages, uvmexp.filepages, uvmexp.execpages);
 	(*pr)("  freemin=%d, free-target=%d, wired-max=%d\n",
 	    uvmexp.freemin, uvmexp.freetarg, uvmexp.wiredmax);
-	(*pr)("  faults=%d, traps=%d, intrs=%d, ctxswitch=%d\n",
-	    uvmexp.faults, uvmexp.traps, uvmexp.intrs, uvmexp.swtch);
-	(*pr)("  softint=%d, syscalls=%d\n", uvmexp.softs, uvmexp.syscalls);
+
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		(*pr)("  cpu%u:\n", cpu_index(ci));
+		(*pr)("    faults=%" PRIu64 ", traps=%" PRIu64 ", "
+		    "intrs=%" PRIu64 ", ctxswitch=%" PRIu64 "\n",
+		    ci->ci_data.cpu_nfault, ci->ci_data.cpu_ntrap,
+		    ci->ci_data.cpu_nintr, ci->ci_data.cpu_nswtch);
+		(*pr)("    softint=%" PRIu64 ", syscalls=%" PRIu64 "\n",
+		    ci->ci_data.cpu_nsoft, ci->ci_data.cpu_nsyscall);
+	}
 
 	(*pr)("  fault counts:\n");
 	(*pr)("    noram=%d, noanon=%d, pgwait=%d, pgrele=%d\n",

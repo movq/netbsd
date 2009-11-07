@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.8 2008/08/29 18:58:22 matt Exp $	*/
+/*	$NetBSD: proc.h,v 1.10 2011/01/14 02:06:24 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994 Mark Brinicombe.

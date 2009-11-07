@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.208 2009/11/07 07:27:43 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.224 2011/12/12 19:03:09 mrg Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,54 +37,14 @@
  *
  *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.74 92/12/20$
- *
- *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2009/11/07 07:27:43 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.224 2011/12/12 19:03:09 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
 #include "opt_modular.h"
 #include "opt_panicbutton.h"
-#include "hil.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,11 +66,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2009/11/07 07:27:43 cegger Exp $")
 #include <sys/signalvar.h>
 #include <sys/syscallargs.h>
 #include <sys/tty.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -126,12 +87,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2009/11/07 07:27:43 cegger Exp $")
 #include <machine/cpu.h>
 #include <machine/hp300spu.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #define	MAXMEM	64*1024	/* XXX - from cmap.h */
 #include <uvm/uvm_extern.h>
@@ -140,9 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2009/11/07 07:27:43 cegger Exp $")
 
 #include "opt_useleds.h"
 
-#include <hp300/dev/hilreg.h>
-#include <hp300/dev/hilioctl.h>
-#include <hp300/dev/hilvar.h>
 #ifdef USELEDS
 #include <hp300/hp300/leds.h>
 #endif
@@ -155,7 +115,6 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
 
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 extern paddr_t avail_end;
@@ -222,15 +181,28 @@ hp300_init(void)
 
 	extern paddr_t avail_start, avail_end;
 
+#ifdef CACHE_HAVE_VAC
+	/*
+	 * Determine VA aliasing distance if any
+	 */
+	switch (machineid) {
+	case HP_320:
+		pmap_aliasmask = 0x3fff;	/* 16KB */
+		break;
+	case HP_350:
+		pmap_aliasmask = 0x7fff;	/* 32KB */
+		break;
+	default:
+		break;
+	}
+#endif
+
 	/*
 	 * Tell the VM system about available physical memory.  The
 	 * hp300 only has one segment.
 	 */
 	uvm_page_physload(atop(avail_start), atop(avail_end),
 	    atop(avail_start), atop(avail_end), VM_FREELIST_DEFAULT);
-
-	/* Initialize the interrupt handlers. */
-	intr_init();
 
 	/* Calibrate the delay loop. */
 	hp300_calibrate_delay();
@@ -250,6 +222,8 @@ hp300_init(void)
 	 * exists by searching for the MAGIC record.  If it's not
 	 * there, disable bootinfo.
 	 */
+	bootinfo_va = virtual_avail;
+	virtual_avail += PAGE_SIZE;
 	pmap_enter(pmap_kernel(), bootinfo_va, bootinfo_pa,
 	    VM_PROT_READ|VM_PROT_WRITE,
 	    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
@@ -261,6 +235,7 @@ hp300_init(void)
 		pmap_remove(pmap_kernel(), bootinfo_va,
 		    bootinfo_va + PAGE_SIZE);
 		pmap_update(pmap_kernel());
+		virtual_avail -= PAGE_SIZE;
 		bootinfo_va = 0;
 	}
 }
@@ -288,7 +263,9 @@ consinit(void)
 	/*
 	 * Issue a warning if the boot loader didn't provide bootinfo.
 	 */
-	if (bootinfo_va == 0)
+	if (bootinfo_va != 0)
+		printf("bootinfo found at 0x%08lx\n", bootinfo_pa);
+	else
 		printf("WARNING: boot loader did not provide bootinfo\n");
 
 #if NKSYMS || defined(DDB) || defined(MODULAR)
@@ -344,14 +321,7 @@ cpu_startup(void)
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+	    VM_PHYS_SIZE, 0, false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -366,39 +336,6 @@ cpu_startup(void)
 
 	/* Safe to use malloc for extio_ex now. */
 	extio_ex_malloc_safe = 1;
-}
-
-/*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
 }
 
 /*
@@ -617,16 +554,16 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "machdep", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_MACHDEP, CTL_EOL);
+	    CTLFLAG_PERMANENT,
+	    CTLTYPE_NODE, "machdep", NULL,
+	    NULL, 0, NULL, 0,
+	    CTL_MACHDEP, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "console_device", NULL,
-		       sysctl_consdev, 0, NULL, sizeof(dev_t),
-		       CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
+	    CTLFLAG_PERMANENT,
+	    CTLTYPE_STRUCT, "console_device", NULL,
+	    sysctl_consdev, 0, NULL, sizeof(dev_t),
+	    CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
 }
 
 int	waittime = -1;
@@ -634,10 +571,11 @@ int	waittime = -1;
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* If system is cold, just halt. */
 	if (cold) {
@@ -686,7 +624,7 @@ cpu_reboot(int howto, char *bootstr)
 	printf("rebooting...\n");
 	DELAY(1000000);
 	doboot();
-	/*NOTREACHED*/
+	/* NOTREACHED */
 }
 
 /*
@@ -807,20 +745,12 @@ long	dumplo = 0;		/* blocks */
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int chdrsize;	/* size of dump header */
 	int nblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		return;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	if (bdev->d_psize == NULL)
-		return;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	chdrsize = cpu_dumpsize();
 
 	dumpsize = btoc(cpu_kcore_hdr.un._m68k.ram_segs[0].size);
@@ -972,13 +902,13 @@ badaddr(void *addr)
 	int i;
 	label_t	faultbuf;
 
-	nofault = (int *) &faultbuf;
+	nofault = (int *)&faultbuf;
 	if (setjmp((label_t *)nofault)) {
-		nofault = (int *) 0;
+		nofault = (int *)0;
 		return 1;
 	}
 	i = *(volatile short *)addr;
-	nofault = (int *) 0;
+	nofault = (int *)0;
 	return 0;
 }
 
@@ -988,9 +918,9 @@ badbaddr(void *addr)
 	int i;
 	label_t	faultbuf;
 
-	nofault = (int *) &faultbuf;
+	nofault = (int *)&faultbuf;
 	if (setjmp((label_t *)nofault)) {
-		nofault = (int *) 0;
+		nofault = (int *)0;
 		return 1;
 	}
 	i = *(volatile char *)addr;
@@ -1048,7 +978,8 @@ candbtimer(void *arg)
 static int innmihand;	/* simple mutex */
 
 /*
- * Level 7 interrupts can be caused by the keyboard or parity errors.
+ * Level 7 interrupts can be caused by HIL keyboards (in cooked mode only,
+ * but we run them in raw mode) or parity errors.
  */
 void
 nmihand(struct frame frame)
@@ -1059,57 +990,12 @@ nmihand(struct frame frame)
 		return;
 	innmihand = 1;
 
-#if NHIL > 0
-	/* Check for keyboard <CRTL>+<SHIFT>+<RESET>. */
-	if (kbdnmi()) {
-		printf("Got a keyboard NMI");
-
-		/*
-		 * We can:
-		 *
-		 *	- enter DDB
-		 *
-		 *	- Start the crashandburn sequence
-		 *
-		 *	- Ignore it.
-		 */
-#ifdef DDB
-		printf(": entering debugger\n");
-		Debugger();
-#else
-#ifdef PANICBUTTON
-		if (panicbutton) {
-			/* XXX */
-			callout_init(&candbtimer_ch, 0);
-			if (crashandburn) {
-				crashandburn = 0;
-				printf(": CRASH AND BURN!\n");
-				panic("forced crash");
-			} else {
-				/* Start the crashandburn sequence */
-				printf("\n");
-				crashandburn = 1;
-				callout_reset(&candbtimer_ch, hz / candbdiv,
-				    candbtimer, NULL);
-			}
-		} else
-#endif /* PANICBUTTON */
-			printf(": ignoring\n");
-#endif /* DDB */
-
-		goto nmihand_out;	/* no more work to do */
-	}
-#endif
-
 	if (parityerror(&frame))
 		return;
 	/* panic?? */
 	printf("unexpected level 7 interrupt ignored\n");
 
-#if NHIL > 0
-nmihand_out:
 	innmihand = 0;
-#endif
 }
 
 /*
@@ -1129,14 +1015,14 @@ parityenable(void)
 {
 	label_t	faultbuf;
 
-	nofault = (int *) &faultbuf;
+	nofault = (int *)&faultbuf;
 	if (setjmp((label_t *)nofault)) {
-		nofault = (int *) 0;
+		nofault = (int *)0;
 		printf("Parity detection disabled\n");
 		return;
 	}
 	*PARREG = 1;
-	nofault = (int *) 0;
+	nofault = (int *)0;
 	gotparmem = 1;
 }
 
@@ -1161,7 +1047,7 @@ parityerror(struct frame *fp)
 	else if (USERMODE(fp->f_sr)) {
 		printf("pid %d: parity error\n", curproc->p_pid);
 		uprintf("sorry, pid %d killed due to memory parity error\n",
-			curproc->p_pid);
+		    curproc->p_pid);
 		psignal(curproc, SIGKILL);
 #ifdef DEBUG
 	} else if (ignorekperr) {
@@ -1232,7 +1118,7 @@ parityerrorfind(void)
 	 */
 	printf("Couldn't locate parity error\n");
 	found = 0;
-done:
+ done:
 	looking = 0;
 	pmap_remove(pmap_kernel(), (vaddr_t)vmmap, (vaddr_t)&vmmap[PAGE_SIZE]);
 	pmap_update(pmap_kernel());
@@ -1284,3 +1170,34 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 
 	return ENOEXEC;
 }
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return (pa < lowram || pa >= 0xfffffffc) ? EFAULT : 0;
+}
+
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+
+	/*
+	 * Do not allow reading intio or dio device space.  This could lead
+	 * to corruption of device registers.
+	 */
+	*handled = false;
+	return (ISIIOVA(ptr) || ((uint8_t *)ptr >= extiobase &&
+	    (uint8_t *)ptr < extiobase + (EIOMAPSIZE * PAGE_SIZE)))
+	    ? EFAULT : 0;
+}
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

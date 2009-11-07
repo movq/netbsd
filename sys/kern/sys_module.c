@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_module.c,v 1.10 2009/10/16 00:27:07 jnemeth Exp $	*/
+/*	$NetBSD: sys_module.c,v 1.13 2011/07/08 09:32:45 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_module.c,v 1.10 2009/10/16 00:27:07 jnemeth Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_module.c,v 1.13 2011/07/08 09:32:45 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +50,7 @@ handle_modctl_load(modctl_load_t *ml)
 	char *props;
 	int error;
 	prop_dictionary_t dict;
-	size_t propslen;
+	size_t propslen = 0;
 
 	if ((ml->ml_props != NULL && ml->ml_propslen == 0) ||
 	    (ml->ml_props == NULL && ml->ml_propslen > 0)) {
@@ -144,11 +144,11 @@ sys_modctl(struct lwp *l, const struct sys_modctl_args *uap,
 		if (error != 0) {
 			break;
 		}
-		mutex_enter(&module_lock);
-		mslen = (module_count + 1) * sizeof(modstat_t);
+		kernconfig_lock();
+		mslen = (module_count+module_builtinlist+1) * sizeof(modstat_t);
 		mso = kmem_zalloc(mslen, KM_SLEEP);
 		if (mso == NULL) {
-			mutex_exit(&module_lock);
+			kernconfig_unlock();
 			return ENOMEM;
 		}
 		ms = mso;
@@ -169,7 +169,25 @@ sys_modctl(struct lwp *l, const struct sys_modctl_args *uap,
 			ms->ms_source = mod->mod_source;
 			ms++;
 		}
-		mutex_exit(&module_lock);
+		TAILQ_FOREACH(mod, &module_builtins, mod_chain) {
+			mi = mod->mod_info;
+			strlcpy(ms->ms_name, mi->mi_name, sizeof(ms->ms_name));
+			if (mi->mi_required != NULL) {
+				strlcpy(ms->ms_required, mi->mi_required,
+				    sizeof(ms->ms_required));
+			}
+			if (mod->mod_kobj != NULL) {
+				kobj_stat(mod->mod_kobj, &addr, &size);
+				ms->ms_addr = addr;
+				ms->ms_size = size;
+			}
+			ms->ms_class = mi->mi_class;
+			ms->ms_refcnt = -1;
+			KASSERT(mod->mod_source == MODULE_SOURCE_KERNEL);
+			ms->ms_source = mod->mod_source;
+			ms++;
+		}
+		kernconfig_unlock();
 		error = copyout(mso, iov.iov_base,
 		    min(mslen - sizeof(modstat_t), iov.iov_len));
 		kmem_free(mso, mslen);

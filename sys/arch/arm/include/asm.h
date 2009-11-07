@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.12 2008/08/29 19:00:25 matt Exp $	*/
+/*	$NetBSD: asm.h,v 1.14 2011/06/30 20:09:20 wiz Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -57,7 +57,7 @@
 /*
  * gas/arm uses @ as a single comment character and thus cannot be used here
  * Instead it recognised the # instead of an @ symbols in .type directives
- * We define a couple of macros so that assembly code will not be dependant
+ * We define a couple of macros so that assembly code will not be dependent
  * on one or the other.
  */
 #define _ASM_TYPE_FUNCTION	%function
@@ -139,9 +139,17 @@
 	.globl alias;							\
 	alias = sym
 
+#ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(_C_LABEL(sym)),1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
+#else
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
+#endif /* __STDC__ */
 
 #ifdef __thumb__
 # define XPUSH		push

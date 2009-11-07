@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urlreg.h,v 1.5 2009/09/04 18:10:08 dyoung Exp $	*/
+/*	$NetBSD: if_urlreg.h,v 1.8 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -152,7 +152,7 @@ struct url_cdata {
 };
 
 struct url_softc {
-	USBBASEDEVICE		sc_dev;	/* base device */
+	device_t		sc_dev;	/* base device */
 	usbd_device_handle	sc_udev;
 
 	/* USB */
@@ -164,7 +164,7 @@ struct url_softc {
 	usbd_pipe_handle	sc_pipe_rx;
 	usbd_pipe_handle	sc_pipe_tx;
 	usbd_pipe_handle	sc_pipe_intr;
-	usb_callout_t		sc_stat_ch;
+	struct callout		sc_stat_ch;
 	u_int			sc_rx_errs;
 	/* u_int		sc_intr_errs; */
 	struct timeval		sc_rx_notice;
@@ -175,9 +175,7 @@ struct url_softc {
 	krwlock_t		sc_mii_rwlock;
 	int			sc_link;
 #define	sc_media url_mii.mii_media
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 	struct url_cdata	sc_cdata;
 
 	int                     sc_attached;

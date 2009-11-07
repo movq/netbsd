@@ -1,4 +1,4 @@
-/*	$NetBSD: repulse.c,v 1.16 2008/04/28 20:23:12 martin Exp $ */
+/*	$NetBSD: repulse.c,v 1.18 2011/11/23 23:07:28 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.16 2008/04/28 20:23:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.18 2011/11/23 23:07:28 jmcneill Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -38,8 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.16 2008/04/28 20:23:12 martin Exp $");
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/fcntl.h>		/* FREAD */
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -86,6 +85,7 @@ int rep_set_port(void *, mixer_ctrl_t *);
 int rep_get_port(void *, mixer_ctrl_t *);
 int rep_query_devinfo(void *, mixer_devinfo_t *);
 size_t rep_round_buffersize(void *, int, size_t);
+void rep_get_locks(void *, kmutex_t **, kmutex_t **);
 
 int rep_start_input(void *, void *, int, void (*)(void *), void *);
 int rep_start_output(void *, void *, int, void (*)(void *), void *);
@@ -123,6 +123,7 @@ const struct audio_hw_if rep_hw_if = {
 	/* trigger_output */ 0,
 	/* trigger_input */ 0,
 	/* dev_ioctl */ 0,
+	rep_get_locks,
 };
 
 /* hardware registers */
@@ -220,6 +221,8 @@ struct repulse_softc {
 	int	  sc_playscale;
 	unsigned  sc_playflags;
 
+	kmutex_t  sc_lock;
+	kmutex_t  sc_intr_lock;
 };
 
 int repulse_match (struct device *, struct cfdata *, void *);
@@ -311,7 +314,10 @@ repulse_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_achost.attach = repac_attach;
 	sc->sc_achost.flags = 0;
 
-	if (ac97_attach(&sc->sc_achost, self)) {
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
+
+	if (ac97_attach(&sc->sc_achost, self, &sc->sc_lock)) {
 		printf("%s: error attaching codec\n", self->dv_xname);
 		return;
 	}
@@ -578,6 +584,15 @@ size_t
 rep_round_buffersize(void *arg, int direction, size_t size)
 {
 	return size;
+}
+
+void
+rep_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
+{
+	struct repulse_softc *sc = opaque;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
 }
 
 
@@ -949,6 +964,9 @@ rep_intr(void *tag)
 	foundone = 0;
 
 	sc = tag;
+
+	mutex_spin_enter(&sc->sc_intr_lock);
+
 	bp = sc->sc_boardp;
 	status = bp->rhw_status;
 
@@ -967,6 +985,8 @@ rep_intr(void *tag)
 			sc->sc_captflags);
 		(*sc->sc_captmore)(sc->sc_captarg);
 	}
+
+	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return foundone;
 }

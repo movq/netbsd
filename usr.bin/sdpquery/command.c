@@ -1,4 +1,4 @@
-/*	$NetBSD: command.c,v 1.2 2009/10/06 19:21:17 plunky Exp $	*/
+/*	$NetBSD: command.c,v 1.4 2011/02/08 18:14:00 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: command.c,v 1.2 2009/10/06 19:21:17 plunky Exp $");
+__RCSID("$NetBSD: command.c,v 1.4 2011/02/08 18:14:00 plunky Exp $");
 
 #include <bluetooth.h>
 #include <err.h>
@@ -82,6 +82,8 @@ static struct alias {
 	  "OPUSH",	"Object Push Service"				},
 	{ SDP_SERVICE_CLASS_PANU,
 	  "PANU",	"Personal Area Networking User Service"		},
+	{ SDP_SERVICE_CLASS_PNP_INFORMATION,
+	  "PNP",	"PNP Information Service"			},
 	{ SDP_UUID_PROTOCOL_RFCOMM,
 	  "RFCOMM",	"RFCOMM Protocol"				},
 	{ SDP_UUID_PROTOCOL_SDP,
@@ -95,9 +97,7 @@ static struct alias {
 int
 do_sdp_browse(int argc, const char **argv)
 {
-#define STR(x)	__STRING(x)
-	const char *av = STR(SDP_SERVICE_CLASS_PUBLIC_BROWSE_GROUP);
-#undef STR
+	const char *av = ___STRING(SDP_SERVICE_CLASS_PUBLIC_BROWSE_GROUP);
 
 	if (argc > 1)
 		errx(EXIT_FAILURE, "Too many arguments");

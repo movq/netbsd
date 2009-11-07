@@ -1,4 +1,4 @@
-#	$NetBSD: files.mii,v 1.44 2009/04/19 11:17:46 msaitoh Exp $
+#	$NetBSD: files.mii,v 1.48 2011/01/26 18:48:12 bouyer Exp $
 
 defflag	opt_mii.h	MIIVERBOSE
 
@@ -12,6 +12,7 @@ define	mii_phy
 file	dev/mii/mii_physubr.c			mii_phy
 
 file	dev/mii/mii_ethersubr.c			mii & ether
+file	dev/mii/mii_verbose.c			mii & miiverbose
 
 define	ukphy_subr
 file	dev/mii/ukphy_subr.c			ukphy_subr
@@ -135,3 +136,15 @@ file	dev/mii/mvphy.c				mvphy
 device	atphy: mii_phy
 attach	atphy at mii
 file	dev/mii/atphy.c				atphy
+
+device	ihphy: mii_phy
+attach	ihphy at mii
+file	dev/mii/ihphy.c				ihphy
+
+device	etphy: mii_phy
+attach	etphy at mii
+file	dev/mii/etphy.c				etphy
+
+device	rdcphy: mii_phy
+attach	rdcphy at mii
+file	dev/mii/rdcphy.c			rdcphy

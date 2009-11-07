@@ -1,4 +1,4 @@
-/*      $NetBSD: at91dbguvar.h,v 1.3 2009/10/23 06:53:13 snj Exp $	*/
+/*      $NetBSD: at91dbguvar.h,v 1.5 2012/02/02 19:42:57 tls Exp $	*/
 
 /*-
  * Copyright (c) 2007 Embedtronics Oy
@@ -81,8 +81,8 @@ struct at91dbgu_softc {
 	int			(*disable)(struct at91dbgu_softc *);
 
 	int			enabled;
-#if NRND > 0 && defined(RND_COM)
-	rndsource_element_t  rnd_source;
+#ifdef RND_COM
+	krndsource_t  rnd_source;
 #endif
 };
 

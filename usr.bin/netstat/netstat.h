@@ -1,4 +1,4 @@
-/*	$NetBSD: netstat.h,v 1.39 2009/09/14 10:36:51 degroote Exp $	*/
+/*	$NetBSD: netstat.h,v 1.43 2011/06/21 19:42:45 kefren Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -32,6 +32,7 @@
  */
 
 #include <sys/cdefs.h>
+#include <kvm.h>
 
 int	Aflag;		/* show addresses of protocol control block */
 int	aflag;		/* show all sockets (including servers) */
@@ -41,6 +42,7 @@ int	dflag;		/* show i/f dropped packets */
 #ifndef SMALL
 int	gflag;		/* show group (multicast) routing or stats */
 #endif
+int	hflag;		/* humanize byte counts */
 int	iflag;		/* show interfaces */
 int	Lflag;		/* don't show LLINFO entries */
 int	lflag;		/* show routing table with use and ref */
@@ -53,7 +55,9 @@ int	pflag;		/* show given protocol */
 int	qflag;		/* show softintrq */
 int	rflag;		/* show routing tables (or routing stats) */
 int	sflag;		/* show protocol statistics */
+int	tagflag;	/* show route tags */
 int	tflag;		/* show i/f watchdog timers */
+int	Vflag;		/* show Vestigial TIME_WAIT (VTW) information */
 int	vflag;		/* verbose route information or don't truncate names */
 
 char	*interface;	/* desired i/f for stats, or NULL for all i/fs */
@@ -168,5 +172,9 @@ void	mrt_stats __P((u_long, u_long));
 
 void	bpf_stats(void);
 void	bpf_dump(const char *);
+
+kvm_t *get_kvmd(void);
+
+char	*mpls_ntoa(const struct sockaddr *);
 
 #define PLEN    (LONG_BIT / 4 + 2)

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ntwoc_isa.c,v 1.21 2009/05/12 09:10:15 cegger Exp $	*/
+/*	$NetBSD: if_ntwoc_isa.c,v 1.23 2010/08/03 14:06:10 jakllsch Exp $	*/
 /*
  * Copyright (c) 1999 Christian E. Hopps
  * Copyright (c) 1996 John Hay.
@@ -29,11 +29,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: if_ntwoc_isa.c,v 1.21 2009/05/12 09:10:15 cegger Exp $
+ * $Id: if_ntwoc_isa.c,v 1.23 2010/08/03 14:06:10 jakllsch Exp $
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_isa.c,v 1.21 2009/05/12 09:10:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_isa.c,v 1.23 2010/08/03 14:06:10 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -705,6 +705,9 @@ ntwoc_isa_shutdown(void *aux)
 	mcr = bus_space_read_1(sc->sc_sca.sc_iot, sc->sc_sca.sc_ioh, NTWOC_MCR);
 	mcr |= (NTWOC_MCR_DTR0 | NTWOC_MCR_DTR1);
 	bus_space_write_1(sc->sc_sca.sc_iot, sc->sc_sca.sc_ioh, NTWOC_MCR, mcr);
+
+	/* turn off the card */
+	bus_space_write_1(sc->sc_sca.sc_iot, sc->sc_sca.sc_ioh, NTWOC_PCR, 0);
 }
 
 static void
@@ -782,17 +785,17 @@ ntwoc_isa_setup_memory(struct sca_softc *sc)
 	for (i = 0; i < sc->sc_numports; i++) {
 		scp = &sc->sc_ports[i];
 		scp->sp_txdesc_p = (bus_addr_t)(j * sc->scu_pagesize);
-		scp->sp_txdesc = (void *)scp->sp_txdesc_p;
+		scp->sp_txdesc = (void *)(uintptr_t)scp->sp_txdesc_p;
 		scp->sp_txbuf_p = scp->sp_txdesc_p;
 		scp->sp_txbuf_p += SCA_BSIZE;
-		scp->sp_txbuf = (void *)scp->sp_txbuf_p;
+		scp->sp_txbuf = (void *)(uintptr_t)scp->sp_txbuf_p;
 		j++;
 
 		scp->sp_rxdesc_p = (bus_addr_t)(j * sc->scu_pagesize);
-		scp->sp_rxdesc = (void *)scp->sp_txdesc_p;
+		scp->sp_rxdesc = (void *)(uintptr_t)scp->sp_txdesc_p;
 		scp->sp_rxbuf_p = scp->sp_rxdesc_p;
 		scp->sp_rxbuf_p += SCA_BSIZE;
-		scp->sp_rxbuf = (void *)scp->sp_rxbuf_p;
+		scp->sp_rxbuf = (void *)(uintptr_t)scp->sp_rxbuf_p;
 		j++;
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap3.h,v 1.45 2008/12/09 20:45:45 pooka Exp $	*/
+/*	$NetBSD: pmap3.h,v 1.48 2011/06/03 17:03:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -29,22 +29,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef _KERNEL
 /*
  * Physical map structures exported to the VM code.
- * XXX - Does user-level code really see this struct?
  */
-
-#include <sys/simplelock.h>
 
 struct pmap {
 	unsigned char   	*pm_segmap; 	/* soft copy of segmap */
 	int             	pm_ctxnum;	/* MMU context number */
-	struct simplelock	pm_lock;    	/* lock on pmap */
-	int             	pm_refcount;	/* reference count */
+	u_int             	pm_refcount;	/* reference count */
 	int             	pm_version;
 };
 
-#ifdef _KERNEL
 /*
  * We give the pmap code a chance to resolve faults by
  * reloading translations that it was forced to unload.
@@ -96,3 +92,12 @@ pmap_remove_all(struct pmap *pmap)
 #define	PMAP_SPEC	0x1C	/* mask to get all above. */
 
 #endif	/* _KERNEL */
+
+/* MMU specific segment size */
+#define	SEGSHIFT	17	        /* LOG2(NBSG) */
+#define	NBSG		(1 << SEGSHIFT)	/* bytes/segment */
+#define	SEGOFSET	(NBSG - 1)	/* byte offset into segment */
+
+#define	sun3_round_seg(x)	((((vaddr_t)(x)) + SEGOFSET) & ~SEGOFSET)
+#define	sun3_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
+#define	sun3_seg_offset(x)	((vaddr_t)(x) & SEGOFSET)

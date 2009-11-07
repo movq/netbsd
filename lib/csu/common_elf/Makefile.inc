@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.31 2009/02/18 15:21:52 christos Exp $
-
-.include <bsd.own.mk>
+#	$NetBSD: Makefile.inc,v 1.34 2011/06/30 20:09:15 wiz Exp $
 
 .if !defined(ELFSIZE)
 ELFSIZE=32
@@ -16,9 +14,11 @@ CPPFLAGS+=	-DDWARF2_EH
 CPPFLAGS+=	-DJCR
 CPPFLAGS+=	-DDSO_HANDLE
 
-.if defined(HAVE_GCC) && ${HAVE_GCC} > 3
+.if defined(HAVE_GCC)
 CFLAGS+=	-fno-unit-at-a-time
 .endif
+
+.include <bsd.own.mk>
 
 .PATH:		${.CURDIR}/../common_elf
 
@@ -39,7 +39,7 @@ crt0.o: crt0.c
 	${OBJCOPY} -R .ident ${.TARGET}
 .endif
 
-# dependant on crt0.o to pick up header dependencies
+# dependent on crt0.o to pick up header dependencies
 gcrt0.o: ${.CURDIR}/crt0.c crt0.o
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} -DMCRT0 ${.CURDIR}/crt0.c -o ${.TARGET}.o

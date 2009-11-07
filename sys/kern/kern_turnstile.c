@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_turnstile.c,v 1.26 2009/10/21 21:12:06 rmind Exp $	*/
+/*	$NetBSD: kern_turnstile.c,v 1.31 2011/12/02 12:31:53 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2009 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_turnstile.c,v 1.26 2009/10/21 21:12:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_turnstile.c,v 1.31 2011/12/02 12:31:53 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/lockdebug.h>
@@ -69,18 +69,16 @@ __KERNEL_RCSID(0, "$NetBSD: kern_turnstile.c,v 1.26 2009/10/21 21:12:06 rmind Ex
 #include <sys/sleepq.h>
 #include <sys/systm.h>
 
-#include <uvm/uvm_extern.h>
-
 #define	TS_HASH_SIZE	64
 #define	TS_HASH_MASK	(TS_HASH_SIZE - 1)
 #define	TS_HASH(obj)	(((uintptr_t)(obj) >> 3) & TS_HASH_MASK)
 
-tschain_t	turnstile_tab[TS_HASH_SIZE];
-pool_cache_t	turnstile_cache;
+static tschain_t	turnstile_tab[TS_HASH_SIZE]	__cacheline_aligned;
+pool_cache_t		turnstile_cache			__read_mostly;
 
-int	turnstile_ctor(void *, void *, int);
+static int		turnstile_ctor(void *, void *, int);
 
-extern turnstile_t turnstile0;
+extern turnstile_t	turnstile0;
 
 /*
  * turnstile_init:
@@ -111,7 +109,7 @@ turnstile_init(void)
  *
  *	Constructor for turnstiles.
  */
-int
+static int
 turnstile_ctor(void *arg, void *obj, int flags)
 {
 	turnstile_t *ts = obj;
@@ -197,87 +195,31 @@ turnstile_exit(wchan_t obj)
 }
 
 /*
- * turnstile_block:
+ * turnstile_lendpri:
  *
- *	 Enter an object into the turnstile chain and prepare the current
- *	 LWP for sleep.
+ *	Lend our priority to lwps on the blocking chain.
+ *
+ *
  */
-void
-turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
+
+static void
+turnstile_lendpri(lwp_t *cur)
 {
-	lwp_t *l;
-	lwp_t *cur; /* cached curlwp */
-	lwp_t *owner;
-	turnstile_t *ots;
-	tschain_t *tc;
-	sleepq_t *sq;
-	pri_t prio, obase;
-
-	tc = &turnstile_tab[TS_HASH(obj)];
-	l = cur = curlwp;
-
-	KASSERT(q == TS_READER_Q || q == TS_WRITER_Q);
-	KASSERT(mutex_owned(tc->tc_mutex));
-	KASSERT(l != NULL && l->l_ts != NULL);
-
-	if (ts == NULL) {
-		/*
-		 * We are the first thread to wait for this object;
-		 * lend our turnstile to it.
-		 */
-		ts = l->l_ts;
-		KASSERT(TS_ALL_WAITERS(ts) == 0);
-		KASSERT(TAILQ_EMPTY(&ts->ts_sleepq[TS_READER_Q]) &&
-			TAILQ_EMPTY(&ts->ts_sleepq[TS_WRITER_Q]));
-		ts->ts_obj = obj;
-		ts->ts_inheritor = NULL;
-		LIST_INSERT_HEAD(&tc->tc_chain, ts, ts_chain);
-	} else {
-		/*
-		 * Object already has a turnstile.  Put our turnstile
-		 * onto the free list, and reference the existing
-		 * turnstile instead.
-		 */
-		ots = l->l_ts;
-		KASSERT(ots->ts_free == NULL);
-		ots->ts_free = ts->ts_free;
-		ts->ts_free = ots;
-		l->l_ts = ts;
-
-		KASSERT(ts->ts_obj == obj);
-		KASSERT(TS_ALL_WAITERS(ts) != 0);
-		KASSERT(!TAILQ_EMPTY(&ts->ts_sleepq[TS_READER_Q]) ||
-			!TAILQ_EMPTY(&ts->ts_sleepq[TS_WRITER_Q]));
-	}
-
-	sq = &ts->ts_sleepq[q];
-	ts->ts_waiters[q]++;
-	sleepq_enter(sq, l, tc->tc_mutex);
-	/* now tc->tc_mutex is also cur->l_mutex and l->l_mutex */
-	LOCKDEBUG_BARRIER(tc->tc_mutex, 1);
-	l->l_kpriority = true;
-	obase = l->l_kpribase;
-	if (obase < PRI_KTHREAD)
-		l->l_kpribase = PRI_KTHREAD;
-	sleepq_enqueue(sq, obj, "tstile", sobj);
+	lwp_t * l = cur;
+	pri_t prio;
 
 	/*
-	 * Disable preemption across this entire block, as we may drop
-	 * scheduler locks (allowing preemption), and would prefer not
-	 * to be interrupted while in a state of flux.
-	 */
-	KPREEMPT_DISABLE(l);
-
-	/*
-	 * Lend our priority to lwps on the blocking chain.
-	 *
 	 * NOTE: if you get a panic in this code block, it is likely that
 	 * a lock has been destroyed or corrupted while still in use.  Try
 	 * compiling a kernel with LOCKDEBUG to pinpoint the problem.
 	 */
-	prio = lwp_eprio(l);
 
+	LOCKDEBUG_BARRIER(l->l_mutex, 1);
+	KASSERT(l == curlwp);
+	prio = lwp_eprio(l);
 	for (;;) {
+		lwp_t *owner;
+		turnstile_t *ts;
 		bool dolock;
 
 		if (l->l_wchan == NULL)
@@ -295,21 +237,11 @@ turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
 			 */
 			break;
 		}
-
-		if (l == owner) {
-			/* owner has changed, restart from curlwp */
-			lwp_unlock(l);
-			l = cur;
-			lwp_lock(l);
-			prio = lwp_eprio(l);
-			continue;
-		}
-			
 		if (l->l_mutex != owner->l_mutex)
 			dolock = true;
 		else
 			dolock = false;
-		if (dolock && !lwp_trylock(owner)) {
+		if (l == owner || (dolock && !lwp_trylock(owner))) {
 			/*
 			 * restart from curlwp.
 			 * Note that there may be a livelock here:
@@ -349,10 +281,135 @@ turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
 		lwp_lock(cur);
 	}
 	LOCKDEBUG_BARRIER(cur->l_mutex, 1);
+}
 
+/*
+ * turnstile_unlendpri: undo turnstile_lendpri
+ */
+
+static void
+turnstile_unlendpri(turnstile_t *ts)
+{
+	lwp_t * const l = curlwp;
+	turnstile_t *iter;
+	turnstile_t *next;
+	turnstile_t *prev = NULL;
+	pri_t prio;
+	bool dolock;
+
+	KASSERT(ts->ts_inheritor != NULL);
+	ts->ts_inheritor = NULL;
+	dolock = l->l_mutex == l->l_cpu->ci_schedstate.spc_lwplock;
+	if (dolock) {
+		lwp_lock(l);
+	}
+
+	/*
+	 * the following loop does two things.
+	 *
+	 * - remove ts from the list.
+	 *
+	 * - from the rest of the list, find the highest priority.
+	 */
+
+	prio = -1;
+	KASSERT(!SLIST_EMPTY(&l->l_pi_lenders));
+	for (iter = SLIST_FIRST(&l->l_pi_lenders);
+	    iter != NULL; iter = next) {
+		KASSERT(lwp_eprio(l) >= ts->ts_eprio);
+		next = SLIST_NEXT(iter, ts_pichain);
+		if (iter == ts) {
+			if (prev == NULL) {
+				SLIST_REMOVE_HEAD(&l->l_pi_lenders,
+				    ts_pichain);
+			} else {
+				SLIST_REMOVE_AFTER(prev, ts_pichain);
+			}
+		} else if (prio < iter->ts_eprio) {
+			prio = iter->ts_eprio;
+		}
+		prev = iter;
+	}
+
+	lwp_lendpri(l, prio);
+
+	if (dolock) {
+		lwp_unlock(l);
+	}
+}
+
+/*
+ * turnstile_block:
+ *
+ *	 Enter an object into the turnstile chain and prepare the current
+ *	 LWP for sleep.
+ */
+void
+turnstile_block(turnstile_t *ts, int q, wchan_t obj, syncobj_t *sobj)
+{
+	lwp_t * const l = curlwp; /* cached curlwp */
+	turnstile_t *ots;
+	tschain_t *tc;
+	sleepq_t *sq;
+	pri_t obase;
+
+	tc = &turnstile_tab[TS_HASH(obj)];
+
+	KASSERT(q == TS_READER_Q || q == TS_WRITER_Q);
+	KASSERT(mutex_owned(tc->tc_mutex));
+	KASSERT(l != NULL && l->l_ts != NULL);
+
+	if (ts == NULL) {
+		/*
+		 * We are the first thread to wait for this object;
+		 * lend our turnstile to it.
+		 */
+		ts = l->l_ts;
+		KASSERT(TS_ALL_WAITERS(ts) == 0);
+		KASSERT(TAILQ_EMPTY(&ts->ts_sleepq[TS_READER_Q]) &&
+			TAILQ_EMPTY(&ts->ts_sleepq[TS_WRITER_Q]));
+		ts->ts_obj = obj;
+		ts->ts_inheritor = NULL;
+		LIST_INSERT_HEAD(&tc->tc_chain, ts, ts_chain);
+	} else {
+		/*
+		 * Object already has a turnstile.  Put our turnstile
+		 * onto the free list, and reference the existing
+		 * turnstile instead.
+		 */
+		ots = l->l_ts;
+		KASSERT(ots->ts_free == NULL);
+		ots->ts_free = ts->ts_free;
+		ts->ts_free = ots;
+		l->l_ts = ts;
+
+		KASSERT(ts->ts_obj == obj);
+		KASSERT(TS_ALL_WAITERS(ts) != 0);
+		KASSERT(!TAILQ_EMPTY(&ts->ts_sleepq[TS_READER_Q]) ||
+			!TAILQ_EMPTY(&ts->ts_sleepq[TS_WRITER_Q]));
+	}
+
+	sq = &ts->ts_sleepq[q];
+	ts->ts_waiters[q]++;
+	sleepq_enter(sq, l, tc->tc_mutex);
+	LOCKDEBUG_BARRIER(tc->tc_mutex, 1);
+	l->l_kpriority = true;
+	obase = l->l_kpribase;
+	if (obase < PRI_KTHREAD)
+		l->l_kpribase = PRI_KTHREAD;
+	sleepq_enqueue(sq, obj, "tstile", sobj);
+
+	/*
+	 * Disable preemption across this entire block, as we may drop
+	 * scheduler locks (allowing preemption), and would prefer not
+	 * to be interrupted while in a state of flux.
+	 */
+	KPREEMPT_DISABLE(l);
+	KASSERT(tc->tc_mutex == l->l_mutex);
+	turnstile_lendpri(l);
 	sleepq_block(0, false);
-	cur->l_kpribase = obase;
-	KPREEMPT_ENABLE(cur);
+	l->l_kpribase = obase;
+	KPREEMPT_ENABLE(l);
 }
 
 /*
@@ -381,52 +438,7 @@ turnstile_wakeup(turnstile_t *ts, int q, int count, lwp_t *nl)
 	 */
 
 	if (ts->ts_inheritor != NULL) {
-		turnstile_t *iter;
-		turnstile_t *next;
-		turnstile_t *prev = NULL;
-		pri_t prio;
-		bool dolock;
-
-		ts->ts_inheritor = NULL;
-		l = curlwp;
-
-		dolock = l->l_mutex == l->l_cpu->ci_schedstate.spc_lwplock;
-		if (dolock) {
-			lwp_lock(l);
-		}
-
-		/*
-		 * the following loop does two things.
-		 *
-		 * - remove ts from the list.
-		 *
-		 * - from the rest of the list, find the highest priority.
-		 */
-
-		prio = -1;
-		KASSERT(!SLIST_EMPTY(&l->l_pi_lenders));
-		for (iter = SLIST_FIRST(&l->l_pi_lenders);
-		    iter != NULL; iter = next) {
-			KASSERT(lwp_eprio(l) >= ts->ts_eprio);
-			next = SLIST_NEXT(iter, ts_pichain);
-			if (iter == ts) {
-				if (prev == NULL) {
-					SLIST_REMOVE_HEAD(&l->l_pi_lenders,
-					    ts_pichain);
-				} else {
-					SLIST_REMOVE_AFTER(prev, ts_pichain);
-				}
-			} else if (prio < iter->ts_eprio) {
-				prio = iter->ts_eprio;
-			}
-			prev = iter;
-		}
-
-		lwp_lendpri(l, prio);
-
-		if (dolock) {
-			lwp_unlock(l);
-		}
+		turnstile_unlendpri(ts);
 	}
 
 	if (nl != NULL) {

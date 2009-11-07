@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom.c,v 1.29 2008/06/11 22:37:21 cegger Exp $ */
+/*	$NetBSD: sscom.c,v 1.37 2012/02/07 09:06:05 nisimura Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.29 2008/06/11 22:37:21 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.37 2012/02/07 09:06:05 nisimura Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"
@@ -107,7 +107,7 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.29 2008/06/11 22:37:21 cegger Exp $");
 #include "opt_lockdebug.h"
 
 #include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 #include <sys/rnd.h>
 #endif
 
@@ -129,7 +129,6 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.29 2008/06/11 22:37:21 cegger Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -146,7 +145,7 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.29 2008/06/11 22:37:21 cegger Exp $");
 
 #include <arm/s3c2xx0/s3c2xx0reg.h>
 #include <arm/s3c2xx0/s3c2xx0var.h>
-#if defined(SSCOM_S3C2410) || defined(SSCOM_S3C2400)
+#if defined(SSCOM_S3C2410) || defined(SSCOM_S3C2400) || defined(SSCOM_S3C2440)
 #include <arm/s3c2xx0/s3c24x0reg.h>
 #elif defined(SSCOM_S3C2800)
 #include <arm/s3c2xx0/s3c2800reg.h>
@@ -236,7 +235,7 @@ void	sscom_kgdb_putc (void *, int);
 #define	SSCOM_ISALIVE(sc)	((sc)->enabled != 0 && \
 				 device_is_active(&(sc)->sc_dev))
 #else
-#define	SSCOM_ISALIVE(sc)	device_is_active(&(sc)->sc_dev)
+#define	SSCOM_ISALIVE(sc)	device_is_active((sc)->sc_dev)
 #endif
 
 #define	BR	BUS_SPACE_BARRIER_READ
@@ -245,8 +244,8 @@ void	sscom_kgdb_putc (void *, int);
 
 #if (defined(MULTIPROCESSOR) || defined(LOCKDEBUG)) && defined(SSCOM_MPLOCK)
 
-#define SSCOM_LOCK(sc) simple_lock(&(sc)->sc_lock)
-#define SSCOM_UNLOCK(sc) simple_unlock(&(sc)->sc_lock)
+#define SSCOM_LOCK(sc) simple_lock((sc)->sc_lock)
+#define SSCOM_UNLOCK(sc) simple_unlock((sc)->sc_lock)
 
 #else
 
@@ -336,7 +335,7 @@ sscomstatus(struct sscom_softc *sc, const char *str)
 	int umcon = bus_space_read_1(sc->sc_iot, sc->sc_iot, SSCOM_UMCON);
 
 	printf("%s: %s %sclocal  %sdcd %sts_carr_on %sdtr %stx_stopped\n",
-	    sc->sc_dev.dv_xname, str,
+	    sc->sc_dev->dv_xname, str,
 	    ISSET(tp->t_cflag, CLOCAL) ? "+" : "-",
 	    "+",			/* DCD */
 	    ISSET(tp->t_state, TS_CARR_ON) ? "+" : "-",
@@ -344,7 +343,7 @@ sscomstatus(struct sscom_softc *sc, const char *str)
 	    sc->sc_tx_stopped ? "+" : "-");
 
 	printf("%s: %s %scrtscts %scts %sts_ttstop  %srts %xrx_flags\n",
-	    sc->sc_dev.dv_xname, str,
+	    sc->sc_dev->dv_xname, str,
 	    ISSET(tp->t_cflag, CRTSCTS) ? "+" : "-",
 	    ISSET(umstat, UMSTAT_CTS) ? "+" : "-",
 	    ISSET(tp->t_state, TS_TTSTOP) ? "+" : "-",
@@ -431,13 +430,19 @@ sscom_attach_subr(struct sscom_softc *sc)
 #endif
 
 	if (unit == sscomconsunit) {
-		sscomconsattached = 1;
+		int timo, stat;
 
+		sscomconsattached = 1;
 		sscomconstag = iot;
 		sscomconsioh = ioh;
 
+		/* wait for this transmission to complete */
+		timo = 1500000;
+		do {
+			stat = bus_space_read_1(iot, ioh, SSCOM_UTRSTAT);
+		} while ((stat & UTRSTAT_TXEMPTY) == 0 && --timo > 0);
+
 		/* Make sure the console is always "hardwired". */
-		delay(1000);			/* XXX: wait for output to finish */
 		SET(sc->sc_hwflags, SSCOM_HW_CONSOLE);
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 
@@ -445,7 +450,11 @@ sscom_attach_subr(struct sscom_softc *sc)
 	}
 
 	bus_space_write_1(iot, ioh, SSCOM_UFCON,
+#ifdef SSCOM_S3C2440
+	    UFCON_TXTRIGGER_16|UFCON_RXTRIGGER_16|UFCON_FIFO_ENABLE|
+#else
 	    UFCON_TXTRIGGER_8|UFCON_RXTRIGGER_8|UFCON_FIFO_ENABLE|
+#endif
 	    UFCON_TXFIFO_RESET|UFCON_RXFIFO_RESET);
 
 	bus_space_write_1(iot, ioh, SSCOM_UCON, sc->sc_ucon);
@@ -453,15 +462,13 @@ sscom_attach_subr(struct sscom_softc *sc)
 #ifdef KGDB
 	if (ISSET(sc->sc_hwflags, SSCOM_HW_KGDB)) {
 		sscom_kgdb_attached = 1;
-		printf("%s: kgdb\n", sc->sc_dev.dv_xname);
+		printf("%s: kgdb\n", sc->sc_dev->dv_xname);
 		sscom_enable_debugport(sc);
 		return;
 	}
 #endif
 
-
-
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sscomstart;
 	tp->t_param = sscomparam;
 	tp->t_hwiflow = sscomhwiflow;
@@ -472,7 +479,7 @@ sscom_attach_subr(struct sscom_softc *sc)
 	sc->sc_rbavail = sscom_rbuf_size;
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname);
+		    sc->sc_dev->dv_xname);
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (sscom_rbuf_size << 1);
@@ -485,15 +492,15 @@ sscom_attach_subr(struct sscom_softc *sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&sscom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
+		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
 
-		printf("%s: console (major=%d)\n", sc->sc_dev.dv_xname, maj);
+		printf("%s: console (major=%d)\n", device_xname(sc->sc_dev), maj);
 	}
 
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, sscomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
 			  RND_TYPE_TTY, 0);
 #endif
@@ -510,41 +517,32 @@ sscom_attach_subr(struct sscom_softc *sc)
 }
 
 int
-sscom_detach(struct device *self, int flags)
+sscom_detach(device_t self, int flags)
 {
+	struct sscom_softc *sc = device_private(self);
+
+	if (sc->sc_hwflags & (SSCOM_HW_CONSOLE|SSCOM_HW_KGDB))
+		return EBUSY;
+
 	return 0;
 }
 
 int
-sscom_activate(struct device *self, enum devact act)
+sscom_activate(device_t self, enum devact act)
 {
 #ifdef notyet
-	struct sscom_softc *sc = (struct sscom_softc *)self;
-	int s, rv = 0;
-
-	s = splserial();
-	SSCOM_LOCK(sc);
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (SSCOM_HW_CONSOLE|SSCOM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		sc->enabled = 0;
-		break;
-	}
-
-	SSCOM_UNLOCK(sc);	
-	splx(s);
-	return rv;
-#else
-	return 0;
+	struct sscom_softc *sc = device_private(self);
 #endif
+
+	switch (act) {
+	case DVACT_DEACTIVATE:
+#ifdef notyet
+		sc->enabled = 0;
+#endif
+		return 0;
+	default:
+		return EOPNOTSUPP;
+	}
 }
 
 void
@@ -609,7 +607,7 @@ sscomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sc->sc_rbuf == NULL)
 		return ENXIO;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return ENXIO;
 
 #ifdef KGDB
@@ -1184,7 +1182,7 @@ sscom_iflush(struct sscom_softc *sc)
 		(void)sscom_getc(iot,ioh);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: sscom_iflush timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: sscom_iflush timeout\n", sc->sc_dev->dv_xname);
 #endif
 }
 
@@ -1356,7 +1354,7 @@ sscomdiag(void *arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: %d silo overflow%s, %d ibuf flood%s\n",
-	    sc->sc_dev.dv_xname,
+	    sc->sc_dev->dv_xname,
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }
@@ -1735,7 +1733,7 @@ sscomrxintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | rsr);
 #endif
 
@@ -1800,7 +1798,7 @@ sscomtxintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | rsr);
 #endif
 
@@ -1824,7 +1822,11 @@ sscom_init(bus_space_tag_t iot, const struct sscom_uart_info *config,
 
 	bus_space_write_2(iot, ioh, SSCOM_UCON, 0);
 	bus_space_write_1(iot, ioh, SSCOM_UFCON, 
+#ifdef SSCOM_S3C2440
+	    UFCON_TXTRIGGER_16 | UFCON_RXTRIGGER_16 |
+#else
 	    UFCON_TXTRIGGER_8 | UFCON_RXTRIGGER_8 |
+#endif
 	    UFCON_TXFIFO_RESET | UFCON_RXFIFO_RESET |
 	    UFCON_FIFO_ENABLE );
 	/* tx/rx fifo reset are auto-cleared */

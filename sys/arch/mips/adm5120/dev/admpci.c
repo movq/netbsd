@@ -1,4 +1,4 @@
-/* $NetBSD: admpci.c,v 1.2 2009/10/19 23:19:38 rmind Exp $ */
+/* $NetBSD: admpci.c,v 1.9 2012/02/12 16:34:09 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 David Young.  All rights reserved.
@@ -61,9 +61,12 @@
 #include "pci.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: admpci.c,v 1.2 2009/10/19 23:19:38 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: admpci.c,v 1.9 2012/02/12 16:34:09 matt Exp $");
 
 #include <sys/types.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/systm.h>
@@ -74,10 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: admpci.c,v 1.2 2009/10/19 23:19:38 rmind Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/pte.h>
-
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pciconf.h>
@@ -85,6 +84,8 @@ __KERNEL_RCSID(0, "$NetBSD: admpci.c,v 1.2 2009/10/19 23:19:38 rmind Exp $");
 #ifdef	PCI_NETBSD_CONFIGURE
 #include <mips/cache.h>
 #endif
+
+#include <mips/pte.h>
 
 #include <mips/adm5120/include/adm5120_mainbusvar.h>
 #include <mips/adm5120/include/adm5120reg.h>
@@ -114,7 +115,7 @@ do {						\
 #define	ADMPCI_MAX_DEVICE
 
 struct admpci_softc {
-	struct device			sc_dev;
+	device_t			sc_dev;
 	struct mips_pci_chipset		sc_pc;
 
 	bus_space_tag_t			sc_memt;
@@ -125,11 +126,11 @@ struct admpci_softc {
 	bus_space_handle_t		sc_datah;
 };
 
-int		admpcimatch(struct device *, struct cfdata *, void *);
-void		admpciattach(struct device *, struct device *, void *);
+int		admpcimatch(device_t, cfdata_t, void *);
+void		admpciattach(device_t, device_t, void *);
 
 #if NPCI > 0
-static void admpci_attach_hook(struct device *, struct device *,
+static void admpci_attach_hook(device_t, device_t,
     struct pcibus_attach_args *);
 static int admpci_bus_maxdevs(void *, int);
 static pcitag_t admpci_make_tag(void *, int, int, int);
@@ -141,7 +142,7 @@ static void admpci_conf_interrupt(void *, int, int, int, int, int *);
 static void *admpci_intr_establish(void *, pci_intr_handle_t, int,
     int (*)(void *), void *);
 static void admpci_intr_disestablish(void *, void *);
-static int admpci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+static int admpci_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
 
 #ifdef	PCI_NETBSD_CONFIGURE
 static struct extent	*io_ex = NULL;
@@ -150,7 +151,7 @@ static struct extent	*mem_ex = NULL;
 
 #endif	/* NPCI > 0 */
 
-CFATTACH_DECL(admpci, sizeof(struct admpci_softc),
+CFATTACH_DECL_NEW(admpci, sizeof(struct admpci_softc),
     admpcimatch, admpciattach, NULL, NULL);
 
 int admpci_found = 0;
@@ -166,7 +167,7 @@ int admpci_found = 0;
 #endif
 
 int
-admpcimatch(struct device *parent, struct cfdata *match, void *aux)
+admpcimatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = (struct mainbus_attach_args *)aux;
 
@@ -174,10 +175,10 @@ admpcimatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-admpciattach(struct device *parent, struct device *self, void *aux)
+admpciattach(device_t parent, device_t self, void *aux)
 {
 	struct adm5120_config		*admc = &adm5120_configuration;
-	struct admpci_softc		*sc = (struct admpci_softc *)self;
+	struct admpci_softc		*sc = device_private(self);
 	struct mainbus_attach_args	*ma = (struct mainbus_attach_args *)aux;
 #if NPCI > 0
 	u_long				result;
@@ -187,24 +188,24 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 	
 	admpci_found = 1;
 
+	sc->sc_dev = self;
 	sc->sc_conft = ma->ma_obiot;
 	if (bus_space_map(sc->sc_conft, ADM5120_BASE_PCI_CONFDATA, 4, 0,
 		&sc->sc_datah) != 0) {
-		printf(
-		    "\n%s: unable to map PCI Configuration Data register\n",
-		    device_xname(&sc->sc_dev));
+		aprint_error(
+		    ": unable to map PCI Configuration Data register\n");
 		return;
 	}
 	if (bus_space_map(sc->sc_conft, ADM5120_BASE_PCI_CONFADDR, 4, 0,
 		&sc->sc_addrh) != 0) {
-		printf(
-		    "\n%s: unable to map PCI Configuration Address register\n",
-		    device_xname(&sc->sc_dev));
+		aprint_error(
+		    ": unable to map PCI Configuration Address register\n");
 		return;
 	}
 
-	printf(": ADM5120 Host-PCI Bridge, data %lx addr %lx, sc %p\n",
-	    sc->sc_datah, sc->sc_addrh, (void *)sc);
+	aprint_normal(": ADM5120 Host-PCI Bridge, "
+	    "data %"PRIxBSH" addr %"PRIxBSH", sc %p\n",
+	    sc->sc_datah, sc->sc_addrh, sc);
 
 #if NPCI > 0
 	sc->sc_memt = &admc->pcimem_space;
@@ -232,7 +233,7 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 #ifdef PCI_NETBSD_CONFIGURE
 	mem_ex = extent_create("pcimem",
 	    ADM5120_BOTTOM, ADM5120_TOP,
-	    M_DEVBUF, NULL, 0, EX_WAITOK);
+	    NULL, 0, EX_WAITOK);
 	(void)extent_alloc_subregion(mem_ex,
 	    ADM5120_BASE_SRAM1, ADM5120_BASE_PCI_MEM - 1,
 	    ADM5120_BASE_PCI_MEM - ADM5120_BASE_SRAM1,
@@ -246,10 +247,10 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 
 	io_ex = extent_create("pciio",
 	    ADM5120_BASE_PCI_IO, ADM5120_BASE_PCI_CONFADDR - 1,
-	    M_DEVBUF, NULL, 0, EX_WAITOK);
+	    NULL, 0, EX_WAITOK);
 
 	pci_configure_bus(&sc->sc_pc,
-	    io_ex, mem_ex, NULL, 0, mips_dcache_align);
+	    io_ex, mem_ex, NULL, 0, mips_cache_info.mci_dcache_align);
 	extent_destroy(mem_ex);
 	extent_destroy(io_ex);
 #endif
@@ -260,7 +261,7 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_dmat = ma->ma_dmat;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &sc->sc_pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 
@@ -271,7 +272,7 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 #if NPCI > 0
 
 void
-admpci_attach_hook(struct device *parent, struct device *self,
+admpci_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -425,7 +426,7 @@ admpci_conf_interrupt(void *v, int bus, int dev, int ipin, int swiz, int *iline)
  * XXX How to handle bridges?
  */
 static int
-admpci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+admpci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int bus, device, function;
 

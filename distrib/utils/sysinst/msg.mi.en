@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.en,v 1.159 2009/09/07 02:31:53 jnemeth Exp $	*/
+/*	$NetBSD: msg.mi.en,v 1.169.2.2 2012/07/05 17:29:15 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -79,20 +75,18 @@ In the following menus type the reference letter (a, b, c, ...) to
 select an item, or type CTRL+N/CTRL+P to select the next/previous item. 
 The arrow keys and Page-up/Page-down may also work. 
 Activate the current selection from the menu by typing the enter key.
-
 }
 
 message thanks
 {Thank you for using NetBSD!
-
 }
 
 message installusure
 {You have chosen to install NetBSD on your hard disk.  This will change
 information on your hard disk.  You should have made a full backup
-before this procedure!  This procedure will do the following things: 
-	a) Partition your disk 
-	b) Create new BSD file systems 
+before this procedure!  This procedure will do the following things:
+	a) Partition your disk
+	b) Create new BSD file systems
 	c) Load and install distribution sets
 	d) Some initial system configuration
 
@@ -123,6 +117,9 @@ Do you really want to reinstall NetBSD distribution sets?
 disks.)
 }
 
+message mount_failed
+{Mounting %s failed. Continue?
+}
 
 message nodisk
 {I can not find any hard disks for use by NetBSD.  You will be
@@ -135,7 +132,7 @@ Therefore I assume you want to %s NetBSD on it.
 }
 
 message ask_disk
-{On which disk do you want to install NetBSD? }
+{On which disk do you want to %s NetBSD? }
 
 message Available_disks
 {Available disks}
@@ -163,10 +160,10 @@ message megname
 
 message layout
 {NetBSD uses a BSD disklabel to carve up the NetBSD portion of the disk
-into multiple BSD partitions.  You must now set up your BSD disklabel. 
+into multiple BSD partitions.  You must now set up your BSD disklabel.
 
 You can use a simple editor to set the sizes of the NetBSD partitions,
-or keep the existing partition sizes and contents. 
+or keep the existing partition sizes and contents.
 
 You will then be given the opportunity to change any of the disklabel
 fields.
@@ -353,7 +350,7 @@ message packname
 message lastchance
 {Ok, we are now ready to install NetBSD on your hard disk (%s).  Nothing has been
 written yet.  This is your last chance to quit this process before anything
-gets changed.  
+gets changed.
 
 Shall we continue?
 }
@@ -470,6 +467,16 @@ the distribution is located.
 Remember, the directory should contain the .tgz files.
 
 }
+
+message Available_cds
+{Available CDs }
+
+message ask_cd
+{Multiple CDs found, please select the one containing the install CD.}
+
+message cd_path_not_found
+{The installation sets have not been found at the default location on this
+CD. Please check device and path name.}
 
 message localfssource
 {Enter the unmounted local device and directory on that device where
@@ -645,16 +652,16 @@ message badetcfstab
 }
 
 message X_oldexists
-{I cannot save /usr/X11R6/bin/X as /usr/X11R6/bin/X.old, because the
-target disk already has an /usr/X11R6/bin/X.old. Please fix this before
+{I cannot save %s/bin/X as %s/bin/X.old, because the
+target disk already has an %s/bin/X.old. Please fix this before
 continuing.
 
 One way is to start a shell from the Utilities menu, examine the
-target /usr/X11R6/bin/X and /usr/X11R6/bin/X.old.  If
-/usr/X11R6/bin/X.old is from a completed upgrade, you can rm -f
-/usr/X11R6/bin/X.old and restart.  Or if /usr/X11R6/bin/X.old is from
-a recent, incomplete upgrade, you can rm -f /usr/X11R6/bin/X and mv
-/usr/X11R6/bin/X.old to /usr/X11R6/bin/X.
+target %s/bin/X and %s/bin/X.old.  If
+%s/bin/X.old is from a completed upgrade, you can rm -f
+%s/bin/X.old and restart.  Or if %s/bin/X.old is from
+a recent, incomplete upgrade, you can rm -f %s/bin/X and mv
+%s/bin/X.old to %s/bin/X
 
 Aborting upgrade.}
 
@@ -676,7 +683,7 @@ message makedev
 
 message badfs
 {It appears that /dev/%s%c is not a BSD file system or the fsck was
-not successful.  The upgrade has been aborted.  (Error number %d.)
+not successful.  Try mounting it anyway?  (Error number %d.)
 }
 
 message rootmissing
@@ -765,6 +772,24 @@ message set_X11_servers
 message set_X11_prog
 {X11 programming}
 
+message set_source
+{Source sets}
+
+message set_syssrc
+{Kernel sources}
+
+message set_src
+{Base sources}
+
+message set_sharesrc
+{Share sources}
+
+message set_gnusrc
+{GNU sources}
+
+message set_xsrc
+{X11 sources}
+
 message cur_distsets_row
 {%-27s %3s}
 
@@ -821,22 +846,6 @@ Press 'x' followed by RETURN to quit the timezone selection.
 message tz_back
 { Back to main timezone list}
 
-message choose_crypt
-{Please choose the password cipher to use. NetBSD can be configured to use
-either the DES, MD5, Blowfish or SHA1 schemes.
-
-The traditional DES scheme is compatible with most other Unix-like operating
-systems, but only the first 8 characters of any password will be recognised.
-The MD5, Blowfish and SHA1 schemes allow for longer passwords, and some would
-argue that it's more secure.
-
-If you have a network and intend to use NIS, please bear in mind the
-capabilities of other machines on your network.
-
-If you are upgrading and would like to keep configuration unchanged,
-choose the last option "do not change".
-}
-
 message swapactive
 {The disk that you selected has a swap partition that may currently be
 in use if your system is low on memory. Because you are going to
@@ -886,6 +895,7 @@ message Upgrade_NetBSD_on_a_hard_disk {Upgrade NetBSD on a hard disk}
 message Re_install_sets_or_install_additional_sets {Re-install sets or install additional sets}
 message Reboot_the_computer {Reboot the computer}
 message Utility_menu {Utility menu}
+message exit_utility_menu {Back to main menu}
 message NetBSD_VERSION_Utilities {NetBSD-@@VERSION@@ Utilities}
 message Run_bin_sh {Run /bin/sh}
 message Set_timezone {Set timezone}
@@ -911,12 +921,14 @@ message local_fs {Unmounted fs}
 message local_dir {Local directory}
 message Select_your_distribution {Select your distribution}
 message Full_installation {Full installation}
+message Full_installation_nox {Installation without X11}
 message Minimal_installation {Minimal installation}
 message Custom_installation {Custom installation}
 message hidden {** hidden **}
 message Host {Host}
 message Base_dir {Base directory}
-message Set_dir {Set directory}
+message Set_dir_bin {Binary set directory}
+message Set_dir_src {Source set directory}
 message Xfer_dir {Transfer directory}
 message User {User}
 message Password {Password}
@@ -930,12 +942,6 @@ message Skip_set {Skip set}
 message Skip_group {Skip set group}
 message Abandon {Abandon installation}
 message Abort_fetch {Abort fetch}
-message Password_cipher {Password cipher}
-message DES {DES}
-message MD5 {MD5}
-message Blowfish_2_7_round {Blowfish 2^7 round}
-message SHA1 {SHA1}
-message do_not_change {do not change}
 message Device {Device}
 message File_system {File system}
 message Select_IPv6_DNS_server {  Select IPv6 DNS server}
@@ -969,3 +975,61 @@ message license
 {To use the network interface %s, you must agree to the license in
 file %s. To view this file now, you can type ^Z, look at the contents of
 the file and then type "fg" to resume.}
+
+message binpkg
+{To configure the binary package system, please choose the network location
+to fetch packages from.  Once your system comes up, you can use 'pkgin'
+to install additional packages, or remove packages.}
+
+message pkgpath
+{Enabling binary packages with pkgin requires setting up the repository.
+The following are the host, directory, user, and password that
+will be used.  If "user" is "ftp", then the password is not needed.
+
+}
+message rcconf_backup_failed {Making backup of rc.conf failed. Continue?}
+message rcconf_backup_succeeded {rc.conf backup saved to %s.}
+message rcconf_restore_failed {Restoring backup rc.conf failed.}
+message rcconf_delete_failed {Deleting old %s entry failed.}
+message Pkg_dir {Package directory}
+message configure_prior {configure a prior installation of}
+message configure {configure}
+message change {change}
+message password_set {password set}
+message YES {YES}
+message NO {NO}
+message DONE {DONE}
+message abandoned {Abandoned}
+message empty {***EMPTY***}
+message timezone {Timezone}
+message change_rootpw {Change root password}
+message enable_binpkg {Enable installation of binary packages}
+message enable_sshd {Enable sshd}
+message enable_ntpd {Enable ntpd}
+message run_ntpdate {Run ntpdate at boot}
+message enable_mdnsd {Enable mdnsd}
+message configmenu {Configure the additional items as needed.}
+message doneconfig {Finished configuring}
+message Install_pkgin {Install pkgin and update package summary}
+message binpkg_installed
+{Your system is now configured to use pkgin to install binary packages.  To
+install a package, run:
+
+pkgin install <packagename>
+
+from a root shell.  Read the pkgin(1) manual page for further information.}
+message Install_pkgsrc {Fetch and unpack pkgsrc}
+message pkgsrc
+{Installing pkgsrc requires unpacking an archive retrieved over the network.
+The following are the host, directory, user, and password that
+will be used.  If "user" is "ftp", then the password is not needed.
+
+}
+message Pkgsrc_dir {pkgsrc directory}
+message get_pkgsrc {Fetch and unpack pkgsrc for building from source}
+message retry_pkgsrc_network {Network configuration failed.  Retry?}
+message quit_pkgsrc {Quit without installing pkgsrc}
+message pkgin_failed
+{Installation of pkgin failed, possibly because no binary packages
+exist.  Please check the package path and try again.}
+message failed {Failed}

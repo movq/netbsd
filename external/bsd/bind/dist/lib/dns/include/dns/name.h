@@ -1,7 +1,7 @@
-/*	$NetBSD: name.h,v 1.3 2009/10/25 00:14:33 christos Exp $	*/
+/*	$NetBSD: name.h,v 1.5.6.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2009  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: name.h,v 1.132 2009/09/01 17:36:51 jinmei Exp */
+/* Id: name.h,v 1.137 2011/01/13 04:59:26 tbox Exp  */
 
 #ifndef DNS_NAME_H
 #define DNS_NAME_H 1
@@ -99,12 +99,6 @@ ISC_LANG_BEGINDECLS
  ***** Note that all names are not required to end with the root label,
  ***** as they are in the actual DNS wire protocol.
  *****/
-
-/***
- *** Compression pointer chaining limit
- ***/
-
-#define DNS_POINTER_MAXHOPS		16
 
 /***
  *** Types
@@ -764,7 +758,7 @@ dns_name_towire(const dns_name_t *name, dns_compress_t *cctx,
 
 isc_result_t
 dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
-		  dns_name_t *origin, unsigned int options,
+		  const dns_name_t *origin, unsigned int options,
 		  isc_buffer_t *target);
 /*%<
  * Convert the textual representation of a DNS name at source
@@ -810,15 +804,30 @@ dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
  *\li	#ISC_R_UNEXPECTEDEND
  */
 
+#define DNS_NAME_OMITFINALDOT	0x01U
+#define DNS_NAME_MASTERFILE	0x02U	/* escape $ and @ */
+
+isc_result_t
+dns_name_toprincipal(dns_name_t *name, isc_buffer_t *target);
+
 isc_result_t
 dns_name_totext(dns_name_t *name, isc_boolean_t omit_final_dot,
 		isc_buffer_t *target);
+
+isc_result_t
+dns_name_totext2(dns_name_t *name, unsigned int options, isc_buffer_t *target);
 /*%<
  * Convert 'name' into text format, storing the result in 'target'.
  *
  * Notes:
  *\li	If 'omit_final_dot' is true, then the final '.' in absolute
  *	names other than the root name will be omitted.
+ *
+ *\li	If DNS_NAME_OMITFINALDOT is set in options, then the final '.'
+ *	in absolute names other than the root name will be omitted.
+ *
+ *\li	If DNS_NAME_MASTERFILE is set in options, '$' and '@' will also
+ *	be escaped.
  *
  *\li	If dns_name_countlabels == 0, the name will be "@", representing the
  *	current origin as described by RFC1035.
@@ -1161,10 +1170,17 @@ dns_name_tostring(dns_name_t *source, char **target, isc_mem_t *mctx);
 isc_result_t
 dns_name_fromstring(dns_name_t *target, const char *src, unsigned int options,
 		    isc_mem_t *mctx);
+isc_result_t
+dns_name_fromstring2(dns_name_t *target, const char *src,
+		     const dns_name_t *origin, unsigned int options,
+		     isc_mem_t *mctx);
 /*%<
  * Convert a string to a name and place it in target, allocating memory
  * as necessary.  'options' has the same semantics as that of
  * dns_name_fromtext().
+ *
+ * If 'target' has a buffer then the name will be copied into it rather than
+ * memory being allocated.
  *
  * Requires:
  *

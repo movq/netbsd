@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.22 2009/09/19 14:57:28 abs Exp $ */
+/*	$NetBSD: md.c,v 1.26 2012/02/07 09:06:04 nisimura Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -59,9 +55,9 @@ md_init(void)
 }
 
 void
-md_init_set_status(int minimal)
+md_init_set_status(int flags)
 {
-	(void)minimal;
+	(void)flags;
 }
 
 int
@@ -70,6 +66,15 @@ md_get_info(void)
 	struct disklabel disklabel;
 	int fd;
 	char dev_name[100];
+
+	if (no_mbr)
+		return 1;
+
+	if (read_mbr(diskdev, &mbr) < 0)
+		memset(&mbr.mbr, 0, sizeof(mbr.mbr)-2);
+
+	if (edit_mbr(&mbr) == 0)
+		return 0;
 
 	if (strncmp(diskdev, "wd", 2) == 0)
 		disktype = "ST506";
@@ -91,7 +96,7 @@ md_get_info(void)
 		exit(1);
 	}
 	close(fd);
- 
+
 	dlcyl = disklabel.d_ncylinders;
 	dlhead = disklabel.d_ntracks;
 	dlsec = disklabel.d_nsectors;
@@ -100,7 +105,7 @@ md_get_info(void)
 
 	/*
 	 * Compute whole disk size. Take max of (dlcyl*dlhead*dlsec)
-	 * and secperunit,  just in case the disk is already labelled.  
+	 * and secperunit,  just in case the disk is already labelled.
 	 * (If our new label's RAW_PART size ends up smaller than the
 	 * in-core RAW_PART size  value, updating the label will fail.)
 	 */
@@ -135,6 +140,17 @@ md_check_partitions(void)
 int
 md_pre_disklabel(void)
 {
+	if (no_mbr)
+		return 0;
+
+	msg_display(MSG_dofdisk);
+
+	/* write edited MBR onto disk. */
+	if (write_mbr(diskdev, &mbr, 1) != 0) {
+		msg_display(MSG_wmbrfail);
+		process_menu(MENU_ok, NULL);
+		return 1;
+	}
 	return 0;
 }
 
@@ -184,4 +200,22 @@ md_update(void)
 {
 	md_post_newfs();
 	return 1;
+}
+
+int
+md_pre_mount()
+{
+	return 0;
+}
+
+int
+md_check_mbr(mbr_info_t *mbri)
+{
+	return 2;
+}
+
+int
+md_mbr_use_wholedisk(mbr_info_t *mbri)
+{
+	return mbr_use_wholedisk(mbri);
 }

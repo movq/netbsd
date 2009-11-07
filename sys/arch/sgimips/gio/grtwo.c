@@ -1,4 +1,4 @@
-/* $NetBSD: grtwo.c,v 1.10 2007/03/04 06:00:39 christos Exp $	 */
+/* $NetBSD: grtwo.c,v 1.12 2012/01/11 21:23:38 macallan Exp $	 */
 
 /*
  * Copyright (c) 2004 Christopher SEKIYA
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grtwo.c,v 1.10 2007/03/04 06:00:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grtwo.c,v 1.12 2012/01/11 21:23:38 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -266,7 +266,7 @@ grtwo_fill_rectangle(struct grtwo_devconfig * dc, int x1, int y1, int x2,
 	   y axis. */
 
 	/* There appears to be a limit to the number of vertical lines that we
-	   can run through the the graphics engine at one go.  This probably has
+	   can run through the graphics engine at one go.  This probably has
 	   something to do with vertical refresh.  Single-row fills are okay,
 	   multiple-row screw up the board in exciting ways.  The copy_rectangle
 	   workaround doesn't work for fills. */
@@ -476,7 +476,7 @@ grtwo_attach_common(struct grtwo_devconfig * dc, struct gio_attach_args * ga)
 	wsfont_init();
 
 	dc->dc_font = wsfont_find(NULL, 8, 16, 0, WSDISPLAY_FONTORDER_L2R,
-				  WSDISPLAY_FONTORDER_L2R);
+				  WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 
 	if (dc->dc_font < 0)
 		panic("grtwo_attach_common: no suitable fonts");

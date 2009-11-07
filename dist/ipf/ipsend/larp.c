@@ -1,4 +1,4 @@
-/*	$NetBSD: larp.c,v 1.3 2004/03/28 09:00:56 martti Exp $	*/
+/*	$NetBSD: larp.c,v 1.5 2012/02/15 17:55:05 riz Exp $	*/
 
 /*
  * larp.c (C) 1995-1998 Darren Reed

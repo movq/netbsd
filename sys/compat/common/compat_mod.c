@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_mod.c,v 1.8 2009/07/19 02:41:27 rmind Exp $	*/
+/*	$NetBSD: compat_mod.c,v 1.14 2011/08/08 23:44:06 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_mod.c,v 1.8 2009/07/19 02:41:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_mod.c,v 1.14 2011/08/08 23:44:06 jakllsch Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -49,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_mod.c,v 1.8 2009/07/19 02:41:27 rmind Exp $")
 #include <sys/rwlock.h>
 #include <sys/tty.h>
 #include <sys/signalvar.h>
-#include <sys/sched.h>	/* for cpuset_t */
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
 #include <sys/syscallvar.h>
@@ -64,8 +63,10 @@ MODULE(MODULE_CLASS_MISC, compat, NULL);
 int	ttcompat(struct tty *, u_long, void *, int, struct lwp *);
 
 #ifdef COMPAT_16
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 extern char sigcode[], esigcode[];
 struct uvm_object *emul_netbsd_object;
+#endif
 #endif
 
 extern krwlock_t exec_lock;
@@ -158,8 +159,10 @@ static const struct syscall_package compat_syscalls[] = {
 #endif
 
 #if defined(COMPAT_16)
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 	{ SYS_compat_16___sigaction14, 0, (sy_call_t *)compat_16_sys___sigaction14 },
 	{ SYS_compat_16___sigreturn14, 0, (sy_call_t *)compat_16_sys___sigreturn14 },
+#endif
 #endif
 
 #if defined(COMPAT_20)
@@ -231,8 +234,7 @@ static const struct syscall_package compat_syscalls[] = {
 # endif
 	{ SYS_compat_50___fhstat40, 0, (sy_call_t *)compat_50_sys___fhstat40 },
 	{ SYS_compat_50_aio_suspend, 0, (sy_call_t *)compat_50_sys_aio_suspend },
-	{ SYS_compat_50_mq_timedreceive, 0, (sy_call_t *)compat_50_sys_mq_timedreceive },
-	{ SYS_compat_50_mq_timedsend, 0, (sy_call_t *)compat_50_sys_mq_timedsend },
+	{ SYS_compat_50_quotactl, 0, (sy_call_t *)compat_50_sys_quotactl },
 #endif
 	{ 0, 0, NULL },
 };
@@ -256,6 +258,7 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		ttcompatvec = ttcompat;
 #endif
 #ifdef COMPAT_16
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 		KASSERT(emul_netbsd.e_sigobject == NULL);
 		rw_enter(&exec_lock, RW_WRITER);
 		emul_netbsd.e_sigcode = sigcode;
@@ -264,6 +267,7 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		rw_exit(&exec_lock);
 		KASSERT(sendsig_sigcontext_vec == NULL);
 		sendsig_sigcontext_vec = sendsig_sigcontext;
+#endif
 #endif
 #if defined(COMPAT_09) || defined(COMPAT_43)
 		compat_sysctl_init();
@@ -288,8 +292,9 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		if (p != NULL) {
 			return EBUSY;
 		}
+		sendsig_sigcontext_vec = NULL;
 #endif
-		/* Unlink the the system calls. */
+		/* Unlink the system calls. */
 		error = syscall_disestablish(NULL, compat_syscalls);
 		if (error != 0) {
 			return error;
@@ -306,6 +311,7 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		}
 #endif
 #ifdef COMPAT_16
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 		/*
 		 * The sigobject may persist if still in use, but
 		 * is reference counted so will die eventually.
@@ -320,6 +326,7 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		emul_netbsd.e_esigcode = NULL;
 		emul_netbsd.e_sigobject = NULL;
 		rw_exit(&exec_lock);
+#endif
 #endif	/* COMPAT_16 */
 #if defined(COMPAT_09) || defined(COMPAT_43)
 		compat_sysctl_fini();

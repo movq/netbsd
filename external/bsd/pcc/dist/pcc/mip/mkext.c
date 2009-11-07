@@ -1,3 +1,5 @@
+/*	Id: mkext.c,v 1.50 2011/06/05 08:54:43 plunky Exp 	*/	
+/*	$NetBSD: mkext.c,v 1.1.1.4 2011/09/01 12:47:13 plunky Exp $	*/
 
 /*
  * Generate defines for the needed hardops.
@@ -23,6 +25,7 @@ int chkop[DSIZE];
 
 void mktables(void);
 
+char *ftitle;
 char *cname = "external.c";
 char *hname = "external.h";
 FILE *fc, *fh;
@@ -198,7 +201,8 @@ main(int argc, char *argv[])
 	/* Sanity-check the table */
 	rval = 0;
 	for (q = table; q->op != FREE; q++) {
-		if (q->op == ASSIGN) {
+		switch (q->op) {
+		case ASSIGN:
 #define	F(x) (q->visit & x && q->rewrite & (RLEFT|RRIGHT) && \
 		    q->lshape & ~x && q->rshape & ~x)
 			if (F(INAREG) || F(INBREG) || F(INCREG) || F(INDREG) ||
@@ -207,10 +211,13 @@ main(int argc, char *argv[])
 				rval++;
 			}
 #undef F
+			/* FALLTHROUGH */
+		case STASG:
 			if ((q->visit & INREGS) && !(q->rewrite & RDEST)) {
-				compl(q, "ASSIGN reclaim must be RDEST");
+				compl(q, "ASSIGN/STASG reclaim must be RDEST");
 				rval++;
 			}
+			break;
 		}
 		/* check that reclaim is not the wrong class */
 		if ((q->rewrite & (RESC1|RESC2|RESC3)) && 
@@ -240,6 +247,19 @@ main(int argc, char *argv[])
 	fprintf(fc, "-1 };\n");
 	fprintf(fh, "#define NPERMREG %d\n", j+1);
 	fprintf(fc, "bittype validregs[] = {\n");
+
+if (bitsz == 64) {
+	for (j = 0; j < MAXREGS; j += bitsz) {
+		long cbit = 0;
+		for (i = 0; i < bitsz; i++) {
+			if (i+j == MAXREGS)
+				break;
+			if (rstatus[i+j] & INREGS)
+				cbit |= ((long)1 << i);
+		}
+		fprintf(fc, "\t0x%lx,\n", cbit);
+	}
+} else {
 	for (j = 0; j < MAXREGS; j += bitsz) {
 		int cbit = 0;
 		for (i = 0; i < bitsz; i++) {
@@ -250,6 +270,8 @@ main(int argc, char *argv[])
 		}
 		fprintf(fc, "\t0x%08x,\n", cbit);
 	}
+}
+
 	fprintf(fc, "};\n");
 	fprintf(fh, "extern bittype validregs[];\n");
 
@@ -395,7 +417,7 @@ main(int argc, char *argv[])
 	fprintf(fc, "};\n");
 
 	fprintf(fc, "int\ninterferes(int reg1, int reg2)\n{\n");
-	fprintf(fc, "return TESTBIT(ovlarr[reg1], reg2);\n}\n");
+	fprintf(fc, "return (TESTBIT(ovlarr[reg1], reg2)) != 0;\n}\n");
 	fclose(fc);
 	fprintf(fh, "#endif /* _EXTERNAL_H_ */\n");
 	fclose(fh);

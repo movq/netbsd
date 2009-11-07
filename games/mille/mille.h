@@ -1,4 +1,4 @@
-/*	$NetBSD: mille.h,v 1.17 2009/08/12 08:07:27 dholland Exp $	*/
+/*	$NetBSD: mille.h,v 1.19 2011/08/26 06:18:17 dholland Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -212,7 +212,8 @@ extern bool	Debug, Finished, Next, On_exit, Order, Saved;
 
 #define INITSTR_SIZE 100
 extern char	Initstr[INITSTR_SIZE];
-extern const char	*C_fmt, *const *C_name, *Fromfile;
+extern const char	*const *C_name, *Fromfile;
+#define C_fmt "%-18.18s"
 
 extern int	Card_no, End, Handstart, Movetype, Numgos,
 		Numneed[], Numseen[NUM_CARDS], Play, Window;
@@ -236,9 +237,9 @@ void	calcmove(void);
 int	canplay(const PLAY *, const PLAY *, CARD);
 int	check_ext(bool);
 void	check_more(void);
-void	die(int) __attribute__((__noreturn__));
+void	die(int) __dead;
 void	domove(void);
-bool	error(const char *, ...);
+bool	error(const char *, ...) __printflike(1,2);
 void	extrapolate(PLAY *);
 void	finalscore(PLAY *);
 CARD	getcard(void);

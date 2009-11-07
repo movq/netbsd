@@ -1,4 +1,4 @@
-/* $NetBSD: pic_i8259.c,v 1.3 2008/04/28 20:23:32 martin Exp $ */
+/* $NetBSD: pic_i8259.c,v 1.6 2012/02/01 09:54:03 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,18 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_i8259.c,v 1.3 2008/04/28 20:23:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_i8259.c,v 1.6 2012/02/01 09:54:03 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/kernel.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
-#include <machine/intr.h>
 
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -54,7 +54,7 @@ setup_i8259(void)
 	struct i8259_ops *i8259;
 	struct pic_ops *pic;
 
-	i8259 = malloc(sizeof(struct i8259_ops), M_DEVBUF, M_NOWAIT);
+	i8259 = kmem_alloc(sizeof(*i8259), KM_SLEEP);
 	KASSERT(i8259 != NULL);
 	pic = &i8259->pic;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: unix_recv_fd.c,v 1.2 2009/06/23 11:41:07 tron Exp $	*/
+/*	$NetBSD: unix_recv_fd.c,v 1.7 2012/01/20 14:08:04 joerg Exp $	*/
 
 /*++
 /* NAME
@@ -16,7 +16,7 @@
 /*
 /*	Arguments:
 /* .IP fd
-/*	File descriptor.
+/*	File descriptor that connects the sending and receiving processes.
 /* DIAGNOSTICS
 /*	unix_recv_fd() returns -1 upon failure.
 /* LICENSE
@@ -65,7 +65,7 @@ int     unix_recv_fd(int fd)
     /*
      * Adapted from: W. Richard Stevens, UNIX Network Programming, Volume 1,
      * Second edition. Except that we use CMSG_LEN instead of CMSG_SPACE, for
-     * portability to LP64 environments.
+     * portability to some LP64 environments. See also unix_send_fd.c.
      */
 #if defined(CMSG_SPACE) && !defined(NO_MSGHDR_MSG_CONTROL)
     union {
@@ -76,7 +76,11 @@ int     unix_recv_fd(int fd)
 
     memset((char *) &msg, 0, sizeof(msg));	/* Fix 200512 */
     msg.msg_control = control_un.control;
-    msg.msg_controllen = sizeof(control_un.control);	/* Fix 200506 */
+    if (unix_pass_fd_fix & UNIX_PASS_FD_FIX_CMSG_LEN) {
+	msg.msg_controllen = CMSG_LEN(sizeof(newfd));	/* Fix 200506 */
+    } else {
+	msg.msg_controllen = CMSG_SPACE(sizeof(newfd));	/* normal */
+    }
 #else
     msg.msg_accrights = (char *) &newfd;
     msg.msg_accrightslen = sizeof(newfd);
@@ -143,10 +147,10 @@ int     main(int argc, char **argv)
     ssize_t read_count;
     char    buf[1024];
 
-    if (argc != 2
+    if (argc < 2 || argc > 3
 	|| (endpoint = split_at(transport = argv[1], ':')) == 0
 	|| *endpoint == 0 || *transport == 0)
-	msg_fatal("usage: %s transport:endpoint", argv[0]);
+	msg_fatal("usage: %s transport:endpoint [workaround]", argv[0]);
 
     if (strcmp(transport, "unix") == 0) {
 	listen_sock = unix_listen(endpoint, 10, BLOCKING);
@@ -160,8 +164,10 @@ int     main(int argc, char **argv)
     if (client_sock < 0)
 	msg_fatal("accept: %m");
 
+    set_unix_pass_fd_fix(argv[2] ? argv[2] : "");
+
     while ((client_fd = unix_recv_fd(client_sock)) >= 0) {
-	msg_info("client_fd = %d", client_fd);
+	msg_info("client_fd = %d, fix=%d", client_fd, unix_pass_fd_fix);
 	while ((read_count = read(client_fd, buf, sizeof(buf))) > 0)
 	    write(1, buf, read_count);
 	if (read_count < 0)

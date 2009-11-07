@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2009/02/20 16:06:59 christos Exp $
+#	$NetBSD: Makefile,v 1.11 2010/02/04 12:54:55 roy Exp $
 
 .include <bsd.own.mk>
 
@@ -22,9 +22,9 @@ BUILDSYMLINKS=	XTerm-col.ad XTerm-color.ad
 
 LDADD+=	-lXft -lfontconfig -lfreetype -lexpat -lXrender
 DPADD+=	${LIBXFT} ${LIBFONTCONFIG} ${LIBFREETYPE} ${LIBEXPAT} ${LIBXRENDER}
-LDADD+=	-lXaw -lXmu -lXt -lSM -lICE -lXpm -lXext -lX11 -ltermcap -lutil
+LDADD+=	-lXaw -lXmu -lXt -lSM -lICE -lXpm -lXext -lX11 -lterminfo -lutil
 DPADD+=	${LIBXAW} ${LIBXMU} ${LIBXT} ${LIBSM} ${LIBICE} \
-	${LIBXPM} ${LIBXEXT} ${LIBX11} ${LIBTERMCAP} ${LIBUTIL}
+	${LIBXPM} ${LIBXEXT} ${LIBX11} ${LIBTERMINFO} ${LIBUTIL}
 
 SUBDIR=	resize uxterm
 

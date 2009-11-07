@@ -1,4 +1,4 @@
-/*	$NetBSD: adm1021.c,v 1.3 2009/06/05 12:42:43 hubertf Exp $ */
+/*	$NetBSD: adm1021.c,v 1.7 2011/06/20 20:16:19 pgoyette Exp $ */
 /*	$OpenBSD: adm1021.c,v 1.27 2007/06/24 05:34:35 dlg Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.3 2009/06/05 12:42:43 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.7 2011/06/20 20:16:19 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,18 +62,35 @@ void	admtemp_refresh(struct sysmon_envsys *, envsys_data_t *);
 CFATTACH_DECL_NEW(admtemp, sizeof(struct admtemp_softc),
 	admtemp_match, admtemp_attach, NULL, NULL);
 
+static const char * admtemp_compats[] = {
+	"i2c-max1617",
+	NULL
+};
 
 int
 admtemp_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct i2c_attach_args *ia = aux;
 
-	if (((ia->ia_addr >= 0x18) && (ia->ia_addr <= 0x1a)) ||
-	    ((ia->ia_addr >= 0x29) && (ia->ia_addr <= 0x2b)) ||
-	    ((ia->ia_addr >= 0x4c) && (ia->ia_addr <= 0x4e)))
-		return (1);
+	if (ia->ia_name == NULL) {
+		/*
+		 * Indirect config - not much we can do!
+		 * Check typical addresses.
+		 */
+		if (((ia->ia_addr >= 0x18) && (ia->ia_addr <= 0x1a)) ||
+		    ((ia->ia_addr >= 0x29) && (ia->ia_addr <= 0x2b)) ||
+		    ((ia->ia_addr >= 0x4c) && (ia->ia_addr <= 0x4e)))
+			return (1);
+	} else {
+		/*
+		 * Direct config - match via the list of compatible
+		 * hardware.
+		 */
+		if (iic_compat_match(ia, admtemp_compats))
+			return 1;
+	}
 
-	return (0);
+	return 0;
 }
 
 
@@ -88,6 +105,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	sc->sc_addr = ia->ia_addr;
 
 	aprint_normal(": ADM1021 or compatible environmental sensor\n");
+	aprint_naive(": Environmental sensor\n");
 
 	iic_acquire_bus(sc->sc_tag, 0);
 	cmd = ADM1021_CONFIG_READ;
@@ -135,8 +153,12 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	iic_release_bus(sc->sc_tag, 0);
 
 	/* Initialize sensor data. */
+	sc->sc_sensor[ADMTEMP_INT].state = ENVSYS_SINVALID;
 	sc->sc_sensor[ADMTEMP_INT].units = ENVSYS_STEMP;
+	sc->sc_sensor[ADMTEMP_EXT].state = ENVSYS_SINVALID;
 	sc->sc_sensor[ADMTEMP_EXT].units = ENVSYS_STEMP;
+	sc->sc_sensor[ADMTEMP_INT].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ADMTEMP_EXT].state = ENVSYS_SINVALID;
 	strlcpy(sc->sc_sensor[ADMTEMP_INT].desc, "internal",sizeof("internal"));
 	strlcpy(sc->sc_sensor[ADMTEMP_EXT].desc, "external",sizeof("external"));
 	sc->sc_sme = sysmon_envsys_create();

@@ -1,4 +1,4 @@
-# Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 1998-2002  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -13,7 +13,7 @@
 # OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 # PERFORMANCE OF THIS SOFTWARE.
 
-# Id: Makefile.in,v 1.107 2009/10/05 17:30:49 fdupont Exp
+# Id: Makefile.in,v 1.116 2011/03/10 23:47:49 tbox Exp 
 
 srcdir =	@srcdir@
 VPATH =		@srcdir@
@@ -43,9 +43,9 @@ DLZDRIVER_LIBS =	@DLZ_DRIVER_LIBS@
 CINCLUDES =	-I${srcdir}/include -I${srcdir}/unix/include -I. \
 		${LWRES_INCLUDES} ${DNS_INCLUDES} ${BIND9_INCLUDES} \
 		${ISCCFG_INCLUDES} ${ISCCC_INCLUDES} ${ISC_INCLUDES} \
-		${DLZDRIVER_INCLUDES} ${DBDRIVER_INCLUDES}
+		${DLZDRIVER_INCLUDES} ${DBDRIVER_INCLUDES} @DST_OPENSSL_INC@
 
-CDEFINES =      -DBIND9 @USE_DLZ@ @USE_PKCS11@
+CDEFINES =      @CONTRIB_DLZ@ @USE_PKCS11@ @USE_OPENSSL@
 
 CWARNINGS =
 
@@ -89,7 +89,7 @@ OBJS =		builtin.@O@ client.@O@ config.@O@ control.@O@ \
 		lwdgnba.@O@ lwdgrbn.@O@ lwdnoop.@O@ lwsearch.@O@ \
 		${DLZDRIVER_OBJS} ${DBDRIVER_OBJS}
 
-UOBJS =		unix/os.@O@
+UOBJS =		unix/os.@O@ unix/dlz_dlopen_driver.@O@
 
 SYMOBJS =	symtbl.@O@
 
@@ -118,7 +118,7 @@ main.@O@: main.c
 		-DNS_LOCALSTATEDIR=\"${localstatedir}\" \
 		-DNS_SYSCONFDIR=\"${sysconfdir}\" -c ${srcdir}/main.c
 
-bind.keys.h: ${top_srcdir}/bind.keys
+bind.keys.h: ${top_srcdir}/bind.keys ${srcdir}/bindkeys.pl
 	${PERL} ${srcdir}/bindkeys.pl < ${top_srcdir}/bind.keys > $@
 
 config.@O@: config.c bind.keys.h
@@ -143,9 +143,12 @@ docclean manclean maintainer-clean::
 	rm -f ${MANOBJS}
 
 clean distclean maintainer-clean::
-	rm -f ${TARGETS} ${OBJS} bind.keys.h
+	rm -f ${TARGETS} ${OBJS}
 
-bind9.xsl.h: bind9.xsl convertxsl.pl
+maintainer-clean::
+	rm -f bind.keys.h
+
+bind9.xsl.h: bind9.xsl ${srcdir}/convertxsl.pl
 	${PERL} ${srcdir}/convertxsl.pl < ${srcdir}/bind9.xsl > bind9.xsl.h
 
 depend: bind9.xsl.h

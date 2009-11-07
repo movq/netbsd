@@ -1,4 +1,4 @@
-/* $NetBSD: nsclpcsio_isa.c,v 1.28 2008/11/12 12:36:12 ad Exp $ */
+/* $NetBSD: nsclpcsio_isa.c,v 1.30 2011/07/15 20:56:26 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.28 2008/11/12 12:36:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.30 2011/07/15 20:56:26 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.28 2008/11/12 12:36:12 ad Exp $"
 #include <sys/mutex.h>
 #include <sys/gpio.h>
 #include <sys/bus.h>
+#include <sys/module.h>
 
 /* Don't use gpio for now in the module */
 #ifdef _MODULE
@@ -309,6 +310,7 @@ nsclpcsio_envsys_init(struct nsclpcsio_softc *sc)
 
 	sme = sysmon_envsys_create();
 	for (i = 0; i < SIO_NUM_SENSORS; i++) {
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
 		if (sysmon_envsys_sensor_attach(sme, &sc->sc_sensor[i]) != 0) {
 			aprint_error_dev(sc->sc_dev,
 			    "could not attach sensor %d", i);
@@ -672,3 +674,32 @@ nsclpcsio_gpio_pin_ctl(void *aux, int pin, int flags)
 	mutex_exit(&sc->sc_lock);
 }
 #endif /* NGPIO */
+
+MODULE(MODULE_CLASS_DRIVER, nsclpcsio, NULL);
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+nsclpcsio_modcmd(modcmd_t cmd, void *opaque)
+{
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		return config_init_component(cfdriver_ioconf_nsclpcsio,
+		    cfattach_ioconf_nsclpcsio, cfdata_ioconf_nsclpcsio);
+#else
+		return 0;
+#endif
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		return config_fini_component(cfdriver_ioconf_nsclpcsio,
+		    cfattach_ioconf_nsclpcsio, cfdata_ioconf_nsclpcsio);
+#else
+		return 0;
+#endif
+	default:
+		return ENOTTY;
+	}
+}

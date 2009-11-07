@@ -1,4 +1,4 @@
-.\"	$NetBSD: scanf.3,v 1.20 2008/05/30 17:29:54 gdt Exp $
+.\"	$NetBSD: scanf.3,v 1.27 2010/05/14 03:04:32 joerg Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     @(#)scanf.3	8.2 (Berkeley) 12/11/93
 .\"
-.Dd May 30, 2008
+.Dd March 21, 2010
 .Dt SCANF 3
 .Os
 .Sh NAME
@@ -73,6 +73,7 @@ the results from such conversions, if any,
 are stored through the
 .Em pointer
 arguments.
+.Pp
 The
 .Fn scanf
 function
@@ -106,6 +107,7 @@ the
 and
 .Fn vsprintf
 functions respectively.
+.Pp
 Each successive
 .Em pointer
 argument must correspond properly with
@@ -145,7 +147,7 @@ Indicates that the conversion will be one of
 or
 .Cm n
 and the next pointer is a pointer to a
-.Em short  int
+.Em short int
 (rather than
 .Em int ) .
 .It Cm hh
@@ -172,7 +174,7 @@ Indicates either that the conversion will be one of
 or
 .Cm n
 and the next pointer is a pointer to a
-.Em long  int
+.Em long int
 (rather than
 .Em int ) ,
 or that the conversion will be one of
@@ -181,6 +183,15 @@ and the next pointer is a pointer to
 .Em double
 (rather than
 .Em float ) .
+.It Cm ll
+Indicates that the conversion will be one of
+.Cm dioux
+or
+.Cm n
+and the next pointer is a pointer to a
+.Em long long int
+(rather than
+.Em int ) .
 .It Cm q
 Indicates that the conversion will be one of
 .Cm dioux
@@ -329,10 +340,10 @@ The string is to be made up of characters in
 (or not in)
 a particular set;
 the set is defined by the characters between the open bracket
-.Cm [
+.Cm \&[
 character
 and a close bracket
-.Cm ]
+.Cm \&]
 character.
 The set
 .Em excludes
@@ -388,6 +399,13 @@ and a `conversion' of
 .Ql %\e0
 causes an immediate return of
 .Dv EOF .
+.Pp
+The format string specifier macros described in
+.Xr inttypes 3
+should be used for the standard
+.Dq C99
+fixed-size integers documented in
+.Xr stdint 3 .
 .Sh RETURN VALUES
 These
 functions
@@ -409,6 +427,7 @@ If an error or end-of-file occurs after conversion has begun,
 the number of conversions which were successfully completed is returned.
 .Sh SEE ALSO
 .Xr getc 3 ,
+.Xr inttypes 3 ,
 .Xr printf 3 ,
 .Xr strtod 3 ,
 .Xr strtol 3 ,

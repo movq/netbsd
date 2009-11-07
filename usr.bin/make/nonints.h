@@ -1,4 +1,4 @@
-/*	$NetBSD: nonints.h,v 1.56 2009/01/28 21:38:13 dsl Exp $	*/
+/*	$NetBSD: nonints.h,v 1.63 2011/09/16 15:38:04 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -106,8 +106,12 @@ int For_Eval(char *);
 int For_Accum(char *);
 void For_Run(int);
 
+/* job.c */
+void JobReapChild(pid_t, int, Boolean);
+
 /* main.c */
 void Main_ParseArgLine(const char *);
+void MakeMode(const char *);
 int main(int, char **);
 char *Cmd_Exec(const char *, const char **);
 void Error(const char *, ...) __attribute__((__format__(__printf__, 1, 2)));
@@ -117,9 +121,10 @@ void Punt(const char *, ...)
     __attribute__((__format__(__printf__, 1, 2),__noreturn__));
 void DieHorribly(void) __attribute__((__noreturn__));
 int PrintAddr(void *, void *);
-void Finish(int);
+void Finish(int) __dead;
 int eunlink(const char *);
 void execError(const char *, const char *);
+char *getTmpdir(void);
 
 /* parse.c */
 void Parse_Error(int, const char *, ...)
@@ -131,7 +136,7 @@ void Parse_AddIncludeDir(char *);
 void Parse_File(const char *, int);
 void Parse_Init(void);
 void Parse_End(void);
-void Parse_SetInput(const char *, int, int, char *(*)(void *), void *);
+void Parse_SetInput(const char *, int, int, char *(*)(void *, size_t *), void *);
 Lst Parse_MainName(void);
 
 /* str.c */
@@ -193,3 +198,7 @@ void Var_End(void);
 void Var_Dump(GNode *);
 void Var_ExportVars(void);
 void Var_Export(char *, int);
+void Var_UnExport(char *);
+
+/* util.c */
+void (*bmake_signal(int, void (*)(int)))(int);

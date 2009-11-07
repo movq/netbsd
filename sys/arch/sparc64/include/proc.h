@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.11 2007/10/17 19:57:30 garbled Exp $ */
+/*	$NetBSD: proc.h,v 1.13 2011/01/14 02:06:32 rmind Exp $ */
 
 /*
  * Copyright (c) 1992, 1993

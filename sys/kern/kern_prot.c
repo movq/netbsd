@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_prot.c,v 1.109 2009/04/25 15:06:31 rmind Exp $	*/
+/*	$NetBSD: kern_prot.c,v 1.113 2011/04/27 06:22:11 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1991, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.109 2009/04/25 15:06:31 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.113 2011/04/27 06:22:11 martin Exp $");
 
 #include "opt_compat_43.h"
 
@@ -128,7 +128,7 @@ sys_getsid(struct lwp *l, const struct sys_getsid_args *uap, register_t *retval)
 	mutex_enter(proc_lock);
 	if (pid == 0)
 		*retval = l->l_proc->p_session->s_sid;
-	else if ((p = p_find(pid, PFIND_LOCKED)) != NULL)
+	else if ((p = proc_find(pid)) != NULL)
 		*retval = p->p_session->s_sid;
 	else
 		error = ESRCH;
@@ -150,7 +150,7 @@ sys_getpgid(struct lwp *l, const struct sys_getpgid_args *uap, register_t *retva
 	mutex_enter(proc_lock);
 	if (pid == 0)
 		*retval = l->l_proc->p_pgid;
-	else if ((p = p_find(pid, PFIND_LOCKED)) != NULL)
+	else if ((p = proc_find(pid)) != NULL)
 		*retval = p->p_pgid;
 	else
 		error = ESRCH;
@@ -231,7 +231,7 @@ sys_getgroups(struct lwp *l, const struct sys_getgroups_args *uap, register_t *r
 	*retval = kauth_cred_ngroups(l->l_cred);
 	if (SCARG(uap, gidsetsize) == 0)
 		return 0;
-	if (SCARG(uap, gidsetsize) < *retval)
+	if (SCARG(uap, gidsetsize) < (int)*retval)
 		return EINVAL;
 
 	return kauth_cred_getgroups(l->l_cred, SCARG(uap, gidset), *retval,
@@ -625,4 +625,3 @@ sys___setlogin(struct lwp *l, const struct sys___setlogin_args *uap, register_t 
 	mutex_exit(proc_lock);
 	return (0);
 }
-

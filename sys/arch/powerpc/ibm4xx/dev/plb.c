@@ -1,4 +1,4 @@
-/* $NetBSD: plb.c,v 1.14 2005/12/11 12:18:42 christos Exp $ */
+/* $NetBSD: plb.c,v 1.20 2011/06/18 06:41:42 matt Exp $ */
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -66,46 +66,64 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plb.c,v 1.14 2005/12/11 12:18:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plb.c,v 1.20 2011/06/18 06:41:42 matt Exp $");
 
 #include "locators.h"
+#include "emac.h"
+
+#define _POWERPC_BUS_DMA_PRIVATE
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
-#define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-
+#include <powerpc/ibm4xx/cpu.h>
+#include <powerpc/ibm4xx/spr.h>
+#include <powerpc/ibm4xx/dev/malvar.h>
 #include <powerpc/ibm4xx/dev/plbvar.h>
-#include <powerpc/ibm4xx/ibm405gp.h>
 
 /*
  * The devices that attach to the processor local bus on the 405GP CPU.
  */
 const struct plb_dev plb_devs [] = {
-	{ "cpu", },
-	{ "ecc", },
-	{ "opb", },
-	{ "pchb", },
-	{ NULL }
+	/* IBM 405GP */
+	{ IBM405GP,	"cpu", },
+	{ IBM405GP,	"ecc", },
+	{ IBM405GP,	"opb", },
+	{ IBM405GP,	"pchb", },
+
+	/* IBM 405GPr */
+	{ IBM405GPR,	"cpu", },
+	{ IBM405GPR,	"ecc", },
+	{ IBM405GPR,	"opb", },
+	{ IBM405GPR,	"pchb", },
+	{ IBM405GPR,	"exb", },
+
+	/* AMCC 405EX / EXR */
+	{ AMCC405EX,	"cpu", },
+	{ AMCC405EX,	"ecc", },
+	{ AMCC405EX,	"opb", },
+	{ AMCC405EX,	"pchb", },
+
+	{ 0,		NULL }
 };
 
-static int	plb_match(struct device *, struct cfdata *, void *);
-static void	plb_attach(struct device *, struct device *, void *);
+static int	plb_match(device_t, cfdata_t, void *);
+static void	plb_attach(device_t, device_t, void *);
 static int	plb_print(void *, const char *);
 
-CFATTACH_DECL(plb, sizeof(struct device),
-    plb_match, plb_attach, NULL, NULL);
+CFATTACH_DECL_NEW(plb, 0, plb_match, plb_attach, NULL, NULL);
 
 /*
  * "generic" DMA struct, nothing special.
  */
 struct powerpc_bus_dma_tag ibm4xx_default_bus_dma_tag = {
 	0,			/* _bounce_thresh */
-	_bus_dmamap_create, 
+	_bus_dmamap_create,
 	_bus_dmamap_destroy,
 	_bus_dmamap_load,
 	_bus_dmamap_load_mbuf,
@@ -126,25 +144,35 @@ struct powerpc_bus_dma_tag ibm4xx_default_bus_dma_tag = {
  * Probe for the plb; always succeeds.
  */
 static int
-plb_match(struct device *parent, struct cfdata *cf, void *aux)
+plb_match(device_t parent, cfdata_t cf, void *aux)
 {
 
-	return (1);
+	return 1;
 }
 
 /*
  * Attach the processor local bus.
  */
 static void
-plb_attach(struct device *parent, struct device *self, void *aux)
+plb_attach(device_t parent, device_t self, void *aux)
 {
 	struct plb_attach_args paa;
 	struct plb_dev *local_plb_devs = aux;
-	int i;
+	int pvr, i;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	pvr = mfpvr() >> 16;
+
+#if NEMAC > 0
+	mal_attach(pvr);
+#endif
 
 	for (i = 0; plb_devs[i].plb_name != NULL; i++) {
+		if (plb_devs[i].plb_pvr != pvr)
+			continue;
+
 		paa.plb_name = plb_devs[i].plb_name;
 		paa.plb_dmat = &ibm4xx_default_bus_dma_tag;
 		paa.plb_irq = PLBCF_IRQ_DEFAULT;
@@ -153,6 +181,9 @@ plb_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	while (local_plb_devs && local_plb_devs->plb_name != NULL) {
+		if (local_plb_devs->plb_pvr != pvr)
+			continue;
+
 		paa.plb_name = local_plb_devs->plb_name;
 		paa.plb_dmat = &ibm4xx_default_bus_dma_tag;
 		paa.plb_irq = PLBCF_IRQ_DEFAULT;
@@ -172,5 +203,5 @@ plb_print(void *aux, const char *pnp)
 	if (paa->plb_irq != PLBCF_IRQ_DEFAULT)
 		aprint_normal(" irq %d", paa->plb_irq);
 
-	return (UNCONF);
+	return UNCONF;
 }

@@ -1,11 +1,11 @@
-/*	$NetBSD: bitops.h,v 1.2 2008/04/28 20:24:10 martin Exp $	*/
+/*	$NetBSD: bitops.h,v 1.9 2011/07/30 16:35:58 christos Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
+ * by Christos Zoulas and Joerg Sonnenberger.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,6 +30,8 @@
  */
 #ifndef _SYS_BITOPS_H_
 #define _SYS_BITOPS_H_
+
+#include <sys/stdint.h>
 
 /*
  * Find First Set functions
@@ -253,7 +255,40 @@ fls64(uint64_t _n)
 	_ilog2_helper(_n,  2) \
 	_ilog2_helper(_n,  1) \
 	_ilog2_helper(_n,  0) \
-	-1) : ((sizeof(_n) >= 4 ? fls64(_n) : fls32(_n)) - 1) \
+	-1) : ((sizeof(_n) > 4 ? fls64(_n) : fls32(_n)) - 1) \
 )
+
+static __inline void
+fast_divide32_prepare(uint32_t _div, uint32_t * __restrict _m,
+    uint8_t *__restrict _s1, uint8_t *__restrict _s2)
+{
+	uint64_t _mt;
+	int _l;
+
+	_l = fls32(_div - 1);
+	_mt = (uint64_t)(0x100000000ULL * ((1ULL << _l) - _div));
+	*_m = (uint32_t)(_mt / _div + 1);
+	*_s1 = (_l > 1) ? 1 : _l;
+	*_s2 = (_l == 0) ? 0 : _l - 1;
+}
+
+/* ARGSUSED */
+static __inline uint32_t
+fast_divide32(uint32_t _v, uint32_t _div __unused, uint32_t _m, uint8_t _s1,
+    uint8_t _s2)
+{
+	uint32_t _t;
+
+	_t = (uint32_t)(((uint64_t)_v * _m) >> 32);
+	return (_t + ((_v - _t) >> _s1)) >> _s2;
+}
+
+static __inline uint32_t
+fast_remainder32(uint32_t _v, uint32_t _div, uint32_t _m, uint8_t _s1,
+    uint8_t _s2)
+{
+
+	return _v - _div * fast_divide32(_v, _div, _m, _s1, _s2);
+}
 
 #endif /* _SYS_BITOPS_H_ */

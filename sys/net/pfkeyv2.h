@@ -1,4 +1,4 @@
-/*	$NetBSD: pfkeyv2.h,v 1.26 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: pfkeyv2.h,v 1.30 2011/06/09 19:54:18 drochner Exp $	*/
 /*	$KAME: pfkeyv2.h,v 1.36 2003/07/25 09:33:37 itojun Exp $	*/
 
 /*
@@ -310,14 +310,16 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_EXT_NAT_T_TYPE         20
 #define SADB_X_EXT_NAT_T_SPORT        21
 #define SADB_X_EXT_NAT_T_DPORT        22
-#define SADB_X_EXT_NAT_T_OA           23
-#define SADB_X_EXT_NAT_T_FRAG	      24
+#define SADB_X_EXT_NAT_T_OA           23	/* compat */
+#define SADB_X_EXT_NAT_T_OAI          23
+#define SADB_X_EXT_NAT_T_OAR          24
+#define SADB_X_EXT_NAT_T_FRAG	      25
 #if 0
 #define	SADB_X_EXT_TAG		      25	/* KAME */
 #define	SADB_X_EXT_SA3		      26	/* KAME */
 #define	SADB_X_EXT_PACKET	      27	/* KAME */
 #endif
-#define SADB_EXT_MAX                  24
+#define SADB_EXT_MAX                  25
 
 #define SADB_SATYPE_UNSPEC	0
 #define SADB_SATYPE_AH		2
@@ -349,7 +351,10 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_AALG_SHA2_384	6
 #define SADB_X_AALG_SHA2_512	7
 #define SADB_X_AALG_RIPEMD160HMAC 8
-#define SADB_X_AALG_AES_XCBC_MAC 9 /* draft-ietf-ipsec-ciph-aes-xcbc-mac-04 */
+#define SADB_X_AALG_AES_XCBC_MAC 9 /* RFC3566 */
+#define SADB_X_AALG_AES128GMAC	11 /* RFC4543 + Errata1821 */
+#define SADB_X_AALG_AES192GMAC	12
+#define SADB_X_AALG_AES256GMAC	13
 /* private allocations should use 249-255 (RFC2407) */
 #define SADB_X_AALG_MD5		249	/* Keyed MD5 */
 #define SADB_X_AALG_SHA		250	/* Keyed SHA */
@@ -367,7 +372,12 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_EALG_BLOWFISHCBC	7
 #define SADB_X_EALG_RIJNDAELCBC	12
 #define SADB_X_EALG_AES		12
-#define SADB_X_EALG_AESCTR	13
+#define SADB_X_EALG_AESCTR	13 /* RFC3686 */
+#define SADB_X_EALG_AESGCM8	18 /* RFC4106 */
+#define SADB_X_EALG_AESGCM12	19
+#define SADB_X_EALG_AESGCM16	20
+#define SADB_X_EALG_CAMELLIACBC	22 /* RFC4312 */
+#define SADB_X_EALG_AESGMAC	23 /* RFC4543 + Errata1821 */
 /* private allocations should use 249-255 (RFC2407) */
 #define SADB_X_EALG_SKIPJACK    250
 
@@ -420,11 +430,11 @@ struct sadb_x_nat_t_frag {
 /* Utilities */
 #define PFKEY_ALIGN8(a) (1 + (((a) - 1) | (8 - 1)))
 #define	PFKEY_EXTLEN(msg) \
-	PFKEY_UNUNIT64(((struct sadb_ext *)(void *)(msg))->sadb_ext_len)
+	PFKEY_UNUNIT64(((const struct sadb_ext *)(const void *)(msg))->sadb_ext_len)
 #define PFKEY_ADDR_PREFIX(ext) \
-	(((struct sadb_address *)(void *)(ext))->sadb_address_prefixlen)
+	(((const struct sadb_address *)(const void *)(ext))->sadb_address_prefixlen)
 #define PFKEY_ADDR_PROTO(ext) \
-	(((struct sadb_address *)(void *)(ext))->sadb_address_proto)
+	(((const struct sadb_address *)(const void *)(ext))->sadb_address_proto)
 #define PFKEY_ADDR_SADDR(ext) \
 	((struct sockaddr *)(void *)((char *)(void *)(ext) + \
 	sizeof(struct sadb_address)))

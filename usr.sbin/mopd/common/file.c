@@ -1,4 +1,4 @@
-/*	$NetBSD: file.c,v 1.12 2009/10/20 00:51:13 snj Exp $	*/
+/*	$NetBSD: file.c,v 1.15 2011/08/31 13:09:10 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1995-96 Mats O Jansson.  All rights reserved.
@@ -26,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: file.c,v 1.12 2009/10/20 00:51:13 snj Exp $");
+__RCSID("$NetBSD: file.c,v 1.15 2011/08/31 13:09:10 nakayama Exp $");
 #endif
 
 #include "os.h"
@@ -58,12 +58,13 @@ __RCSID("$NetBSD: file.c,v 1.12 2009/10/20 00:51:13 snj Exp $");
 # endif
 #endif /* NOELF */
 
-int	getCLBYTES __P((int));
-int	getMID __P((int, int));
+#ifndef NOAOUT
+static int	getCLBYTES(int);
+static int	getMID(int, int);
+#endif
 
 const char *
-FileTypeName(type)
-	mopd_imagetype type;
+FileTypeName(mopd_imagetype type)
 {
 
 	switch (type) {
@@ -81,10 +82,7 @@ FileTypeName(type)
 }
 
 void
-mopFilePutLX(buf, idx, value, cnt)
-	u_char	       *buf;
-	int		idx, cnt;
-	u_int32_t	value;
+mopFilePutLX(u_char *buf, int idx, u_int32_t value, int cnt)
 {
 	int i;
 	for (i = 0; i < cnt; i++) {
@@ -94,10 +92,7 @@ mopFilePutLX(buf, idx, value, cnt)
 }
 
 void
-mopFilePutBX(buf, idx, value, cnt)
-	u_char	       *buf;
-	int		idx, cnt;
-	u_int32_t	value;
+mopFilePutBX(u_char *buf, int idx, u_int32_t value, int cnt)
 {
 	int i;
 	for (i = 0; i < cnt; i++) {
@@ -107,39 +102,39 @@ mopFilePutBX(buf, idx, value, cnt)
 }
 
 u_int32_t
-mopFileGetLX(buf, idx, cnt)
-	u_char	*buf;
-	int	idx, cnt;
+mopFileGetLX(u_char *buf, int idx, int cnt)
 {
 	u_int32_t ret = 0;
 	int i;
 
 	for (i = 0; i < cnt; i++) {
-		ret = ret*256 + buf[idx+cnt-1-i];
+		int j = idx + cnt - 1 - i;
+		if (j < 0)
+			abort();
+		ret = ret * 256 + buf[j];
 	}
 
 	return(ret);
 }
 
 u_int32_t
-mopFileGetBX(buf, idx, cnt)
-	u_char	*buf;
-	int	idx, cnt;
+mopFileGetBX(u_char *buf, int idx, int cnt)
 {
 	u_int32_t ret = 0;
 	int i;
 
 	for (i = 0; i < cnt; i++) {
-		ret = ret*256 + buf[idx+i];
+		int j = idx + i;
+		if (j < 0)
+			abort();
+		ret = ret * 256 + buf[j];
 	}
 
 	return(ret);
 }
 
 void
-mopFileSwapX(buf, idx, cnt)
-	u_char	*buf;
-	int	idx, cnt;
+mopFileSwapX(u_char *buf, int idx, int cnt)
 {
 	int i;
 	u_char c;
@@ -153,8 +148,7 @@ mopFileSwapX(buf, idx, cnt)
 }
 
 int
-CheckMopFile(fd)
-	int	fd;
+CheckMopFile(int fd)
 {
 	u_char	header[512];
 	short	image_type;
@@ -184,8 +178,7 @@ CheckMopFile(fd)
 }
 
 int
-GetMopFileInfo(dl)
-	struct		dllist *dl;
+GetMopFileInfo(struct dllist *dl)
 {
 	u_char		header[512];
 	short		image_type;
@@ -296,9 +289,8 @@ GetMopFileInfo(dl)
 }
 
 #ifndef NOAOUT
-int
-getMID(old_mid,new_mid)
-	int	old_mid, new_mid;
+static int
+getMID(int old_mid, int new_mid)
 {
 	int	mid;
 
@@ -358,9 +350,8 @@ getMID(old_mid,new_mid)
 	return(mid);
 }
 
-int
-getCLBYTES(mid)
-	int	mid;
+static int
+getCLBYTES(int mid)
 {
 	int	clbytes;
 
@@ -415,8 +406,7 @@ getCLBYTES(mid)
 #endif
 
 int
-CheckElfFile(fd)
-	int	fd;
+CheckElfFile(int fd)
 {
 #ifdef NOELF
 	return(-1);
@@ -443,8 +433,7 @@ CheckElfFile(fd)
 }
 
 int
-GetElfFileInfo(dl)
-	struct dllist	*dl;
+GetElfFileInfo(struct dllist *dl)
 {
 #ifdef NOELF
 	return(-1);
@@ -627,8 +616,7 @@ GetElfFileInfo(dl)
 }
 
 int
-CheckAOutFile(fd)
-	int	fd;
+CheckAOutFile(int fd)
 {
 #ifdef NOAOUT
 	return(-1);
@@ -661,8 +649,7 @@ CheckAOutFile(fd)
 }
 
 int
-GetAOutFileInfo(dl)
-	struct dllist	*dl;
+GetAOutFileInfo(struct dllist *dl)
 {
 #ifdef NOAOUT
 	return(-1);
@@ -863,8 +850,7 @@ GetAOutFileInfo(dl)
 }
 
 int
-GetFileInfo(dl)
-	struct dllist	*dl;
+GetFileInfo(struct dllist *dl)
 {
 	int	error;
 
@@ -900,9 +886,7 @@ GetFileInfo(dl)
 }
 
 ssize_t
-mopFileRead(dlslot, buf)
-	struct dllist *dlslot;
-	u_char	*buf;
+mopFileRead(struct dllist *dlslot, u_char *buf)
 {
 	ssize_t len, outlen;
 	int	bsz, sec;

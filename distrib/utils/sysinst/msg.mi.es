@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.es,v 1.28 2009/09/07 02:31:53 jnemeth Exp $	*/
+/*	$NetBSD: msg.mi.es,v 1.39.2.2 2012/07/05 17:29:16 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -84,19 +80,17 @@ seleccionar una opción, o teclee CTRL+N/CTRL+P para seleccionar la opción
 siguiente/anterior. 
 Las teclas de cursor y AvPág/RePág puede que también funcionen. 
 Active la selección actual desde el menú pulsando la tecla Intro.
-
 }
 
 message thanks
 {¡Gracias por usar NetBSD!
-
 }
 
 message installusure
 {Ha escogido instalar NetBSD en su disco duro.  Esto cambiará información
 de su disco duro.  ¡Debería haber hecho una copia de seguridad completa
 antes de este procedimiento!  Este procedimiento realizará las siguientes
-operaciones: 
+operaciones:
 	a) Particionar su disco
 	b) Crear nuevos sistemas de ficheros BSD
 	c) Cargar e instalar los conjuntos de distribución
@@ -130,6 +124,9 @@ ninguna información de configuración.  (Salga y escoja `instalar' o
 sus discos.)
 }
 
+message mount_failed
+{Mounting %s failed. Continue?
+}
 
 message nodisk
 {No se ha podido encontrar ningún disco duro para ser usado por NetBSD.
@@ -142,7 +139,7 @@ Por tanto se entiende que quiere %s NetBSD en él.
 }
 
 message ask_disk
-{¿En cuál disco quiere instalar NetBSD? }
+{¿En cuál disco quiere %s NetBSD? }
 
 message Available_disks
 {Discos disponibles}
@@ -170,7 +167,7 @@ message megname
 
 message layout
 {NetBSD usa una etiqueta de BSD para dividir la porción NetBSD del disco
-en varias particiones BSD.  Ahora debería configurar su etiqueta BSD. 
+en varias particiones BSD.  Ahora debería configurar su etiqueta BSD.
 
 Puede usar un simple editor para establecer los tamaños de las particiones
 NetBSD, o mantener los tamaños de partición y contenidos actuales.
@@ -361,7 +358,7 @@ message packname
 message lastchance
 {Bien, todo está preparado para instalar NetBSD en su disco duro (%s).
 Todavía no se ha escrito nada.  Ésta es su última oportunidad para salir
-del proceso antes de que se cambie nada.  
+del proceso antes de que se cambie nada.
 
 ¿Desea continuar?
 }
@@ -483,6 +480,16 @@ donde se encuentre la distribución.
 Recuerde, el directorio debe contener los archivos .tgz.
 
 }
+
+message Available_cds
+{Available CDs}
+
+message ask_cd
+{Multiple CDs found, please select the one containing the install CD.}
+
+message cd_path_not_found
+{The installation sets have not been found at the default location on this
+CD. Please check device and path name.}
 
 message localfssource
 {Introduzca el dispositivo local desmontado y el directorio de ese
@@ -665,16 +672,16 @@ Interrumpiendo la actualización.
 }
 
 message X_oldexists
-{No se puede guardar /usr/X11R6/bin/X como /usr/X11R6/bin/X.old, porque el
-disco objetivo ya tiene un /usr/X11R6/bin/X.old.  Por favor, arregle esto
+{No se puede guardar %s/bin/X como %s/bin/X.old, porque el
+disco objetivo ya tiene un %s/bin/X.old.  Por favor, arregle esto
 antes de continuar.
 
 Una manera es iniciando una shell desde el menú Utilidades, y examinar
-el objetivo /usr/X11R6/bin/X y /usr/X11R6/bin/X.old.  Si
-/usr/X11R6/bin/X.old es de una actualización completada, puede rm -f
-/usr/X11R6/bin/X.old y reiniciar.  O si /usr/X11R6/bin/X.old es de
-una actualizacion reciente e incompleta, puede rm -f /usr/X11R6/bin/X
-y mv /usr/X11R6/bin/X.old a /usr/X11R6/bin/X.
+el objetivo %s/bin/X y %s/bin/X.old.  Si
+%s/bin/X.old es de una actualización completada, puede rm -f
+%s/bin/X.old y reiniciar.  O si %s/bin/X.old es de
+una actualizacion reciente e incompleta, puede rm -f %s/bin/X
+y mv %s/bin/X.old a %s/bin/X.
 
 Interrumpiendo la actualización.}
 
@@ -697,7 +704,7 @@ message makedev
 
 message badfs
 {Parece que /dev/%s%c no es un sistema de archivos BSD o el fsck no ha sido
-correcto.  La actualización ha sido interrumpida.  (Error número %d.)
+correcto.  ¿Continuar?  (Error número %d.)
 }
 
 message rootmissing
@@ -706,7 +713,7 @@ message rootmissing
 
 message badroot
 {El nuevo sistema de archivos raíz no ha pasado la comprobación básica.
- ¿Está seguro de que ha instalado todos los conjuntos requeridos? 
+ ¿Está seguro de que ha instalado todos los conjuntos requeridos?
 
 }
 
@@ -788,6 +795,24 @@ message set_X11_servers
 message set_X11_prog
 {Programación de X11}
 
+message set_source
+{Source sets}
+
+message set_syssrc
+{Kernel sources}
+
+message set_src
+{Base sources}
+
+message set_sharesrc
+{Share sources}
+
+message set_gnusrc
+{GNU sources}
+
+message set_xsrc
+{X11 sources}
+
 message cur_distsets_row
 {%-27s %3s}
 
@@ -845,26 +870,9 @@ zona horaria.
 message tz_back
 { Volver a la lista principal de zonas horarias}
 
-message choose_crypt
-{Por favor, seleccione el algoritmo de cifrado de contraseñas a usar.
-NetBSD puede ser configurado para usar los esquemas DES, MD5 o Blowfish.
-
-El esquema tradicional DES es compatible con la mayoría de los demás
-sistemas operativos de tipo Unix, pero sólo se reconocerán los primeros 8
-carácteres de cualquier contraseña.
-Los esquemas MD5 y Blowfish permiten contraseñas más largas, y algunos
-aseguran que es más seguro.
-
-Si tiene una red y pretende usar NIS, por favor considere las capacidades
-de otras máquinas en su red.
-
-Si está actualizando y le gustaria mantener la configuración sin cambios,
-escoja la última opción «no cambiar».
-}
-
 message swapactive
 {El disco que ha seleccionado tiene una partición de intercambio (swap) que
-puede que esté en uso actualmente si su sistema tiene poca memoria.  Como 
+puede que esté en uso actualmente si su sistema tiene poca memoria.  Como
 se dispone a reparticionar este disco, esta partición swap será desactivada
 ahora.  Se advierte de que esto puede conducir a problemas de swap.
 Si obtuviera algun error, reinicie el sistema e inténtelo de nuevo.}
@@ -912,6 +920,7 @@ message Upgrade_NetBSD_on_a_hard_disk {Actualizar NetBSD en un disco duro}
 message Re_install_sets_or_install_additional_sets {Reinstalar conjuntos o instalar conjuntos adicionales}
 message Reboot_the_computer {Reiniciar la computadora}
 message Utility_menu {Menú de utilidades}
+message exit_utility_menu {Exit}
 message NetBSD_VERSION_Utilities {Utilidades de NetBSD-@@VERSION@@}
 message Run_bin_sh {Ejecutar /bin/sh}
 message Set_timezone {Establecer la zona horaria}
@@ -937,12 +946,14 @@ message local_fs {Sistema de archivos desmontado}
 message local_dir {Directorio Local}
 message Select_your_distribution {Seleccione su distribución}
 message Full_installation {Instalación completa}
+message Full_installation_nox {Instalación sin X11}
 message Minimal_installation {Instalación mínima}
 message Custom_installation {Instalación personalizada}
 message hidden {** oculto **}
 message Host {Máquina}
 message Base_dir {Directorio base}
-message Set_dir {Directorio de conjuntos}
+message Set_dir_src {Directorio de conjuntos binary} /* fix XLAT */
+message Set_dir_bin {Directorio de conjuntos source} /* fix XLAT */
 message Xfer_dir {Directorio a transferir a}
 message User {Usuario}
 message Password {Contraseña}
@@ -956,12 +967,6 @@ message Skip_set {Omitir conjunto}
 message Skip_group {Omitir grupo de conjuntos}
 message Abandon {Abandonar instalación}
 message Abort_fetch {Abortar lectura}
-message Password_cipher {Cifrado de las contraseñas}
-message DES {DES}
-message MD5 {MD5}
-message Blowfish_2_7_round {Blowfish 2^7 round}
-message SHA1 {SHA1}
-message do_not_change {no cambiar}
 message Device {Dispositivo}
 message File_system {Sistema de archivos}
 message Select_IPv6_DNS_server {  Seleccione servidor DNS de IPv6}
@@ -1010,3 +1015,59 @@ message license
 file %s.
 To view this file now, you can type ^Z, look at the contents of
 the file and then type "fg" to resume.}
+
+message binpkg
+{To configure the binary package system, please choose the network location
+to fetch packages from.  Once your system comes up, you can use 'pkgin'
+to install additional packages, or remove packages.}
+
+message pkgpath
+{The following are the protocol, host, directory, user, and password that
+will be used.  If "user" is "ftp", then the password is not needed.
+
+}
+message rcconf_backup_failed {Making backup of rc.conf failed. Continue?}
+message rcconf_backup_succeeded {rc.conf backup saved to %s.}
+message rcconf_restore_failed {Restoring backup rc.conf failed.}
+message rcconf_delete_failed {Deleting old %s entry failed.}
+message Pkg_dir {Package directory}
+message configure_prior {configure a prior installation of}
+message configure {configure}
+message change {change}
+message password_set {password set}
+message YES {YES}
+message NO {NO}
+message DONE {DONE}
+message abandoned {Abandoned}
+message empty {***EMPTY***}
+message timezone {Timezone}
+message change_rootpw {Change root password}
+message enable_binpkg {Enable installation of binary packages}
+message enable_sshd {Enable sshd}
+message enable_ntpd {Enable ntpd}
+message run_ntpdate {Run ntpdate at boot}
+message enable_mdnsd {Enable mdnsd}
+message configmenu {Configure the additional items as needed.}
+message doneconfig {Finished configuring}
+message Install_pkgin {Install pkgin and update package summary}
+message binpkg_installed 
+{You are now configured to use pkgin to install binary packages.  To
+install a package, run:
+
+pkgin install <packagename>
+
+from a root shell.  Read the pkgin(1) manual page for further information.}
+message Install_pkgsrc {Fetch and unpack pkgsrc}
+message pkgsrc
+{Installing pkgsrc requires unpacking an archive retrieved over the network.
+The following are the host, directory, user, and password that
+will be used.  If "user" is "ftp", then the password is not needed.
+
+}
+message Pkgsrc_dir {pkgsrc directory}
+message get_pkgsrc {Fetch and unpack pkgsrc for building from source}
+message retry_pkgsrc_network {Network configuration failed.  Retry?}
+message quit_pkgsrc {Quit without installing pkgsrc}
+message pkgin_failed 
+{Installation of pkgin failed, possibly because no binary packages  exist.  Please check the package path and try again.}
+message failed {Failed}

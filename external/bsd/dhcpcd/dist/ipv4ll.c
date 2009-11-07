@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2008 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2011 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -40,8 +40,8 @@
 #include "ipv4ll.h"
 #include "net.h"
 
-static struct dhcp_message*
-make_ipv4ll_lease(uint32_t old_addr)
+static struct dhcp_message *
+make_ipv4ll_lease(uint32_t addr)
 {
 	uint32_t u32;
 	struct dhcp_message *dhcp;
@@ -49,6 +49,7 @@ make_ipv4ll_lease(uint32_t old_addr)
 
 	dhcp = xzalloc(sizeof(*dhcp));
 	/* Put some LL options in */
+	dhcp->yiaddr = addr;
 	p = dhcp->options;
 	*p++ = DHO_SUBNETMASK;
 	*p++ = sizeof(u32);
@@ -62,22 +63,32 @@ make_ipv4ll_lease(uint32_t old_addr)
 	p += sizeof(u32);
 	*p++ = DHO_END;
 
+	return dhcp;
+}
+
+static struct dhcp_message *
+find_ipv4ll_lease(uint32_t old_addr)
+{
+	uint32_t addr;
+
 	for (;;) {
-		dhcp->yiaddr = htonl(LINKLOCAL_ADDR |
+		addr = htonl(LINKLOCAL_ADDR |
 		    (((uint32_t)abs((int)arc4random())
 			% 0xFD00) + 0x0100));
-		if (dhcp->yiaddr != old_addr &&
-		    IN_LINKLOCAL(ntohl(dhcp->yiaddr)))
+		if (addr != old_addr &&
+		    IN_LINKLOCAL(ntohl(addr)))
 			break;
 	}
-	return dhcp;
+	return make_ipv4ll_lease(addr);
 }
 
 void
 start_ipv4ll(void *arg)
 {
 	struct interface *iface = arg;
+	uint32_t addr;
 
+	delete_timeout(NULL, iface);
 	iface->state->probes = 0;
 	iface->state->claims = 0;
 	if (iface->addr.s_addr) {
@@ -88,17 +99,23 @@ start_ipv4ll(void *arg)
 		}
 	}
 
+	if (iface->state->offer == NULL)
+		addr = 0;
+	else {
+		addr = iface->state->offer->yiaddr;
+		free(iface->state->offer);
+	}
 	/* We maybe rebooting an IPv4LL address. */
-	if (!iface->state->offer ||
-	    !IN_LINKLOCAL(htonl(iface->state->offer->yiaddr)))
-	{
+	if (!IN_LINKLOCAL(htonl(addr))) {
 		syslog(LOG_INFO, "%s: probing for an IPv4LL address",
 		    iface->name);
-		delete_timeout(NULL, iface);
-		free(iface->state->offer);
-		iface->state->offer = make_ipv4ll_lease(0);
-		iface->state->lease.frominfo = 0;
+		addr = 0;
 	}
+	if (addr == 0)
+		iface->state->offer = find_ipv4ll_lease(addr);
+	else
+		iface->state->offer = make_ipv4ll_lease(addr);
+	iface->state->lease.frominfo = 0;
 	send_arp_probe(iface);
 }
 
@@ -108,12 +125,17 @@ handle_ipv4ll_failure(void *arg)
 	struct interface *iface = arg;
 	time_t up;
 
-	if (iface->state->fail.s_addr == iface->state->lease.addr.s_addr) {
+	if (iface->state->fail.s_addr == iface->addr.s_addr) {
 		up = uptime();
 		if (iface->state->defend + DEFEND_INTERVAL > up) {
-			drop_config(iface, "EXPIRE");
+			syslog(LOG_DEBUG,
+			    "%s: IPv4LL %d second defence failed",
+			    iface->name, DEFEND_INTERVAL);
+			drop_dhcp(iface, "EXPIRE");
 			iface->state->conflicts = -1;
 		} else {
+			syslog(LOG_DEBUG, "%s: defended IPv4LL address",
+			    iface->name);
 			iface->state->defend = up;
 			return;
 		}
@@ -122,6 +144,7 @@ handle_ipv4ll_failure(void *arg)
 	close_sockets(iface);
 	free(iface->state->offer);
 	iface->state->offer = NULL;
+	delete_timeout(NULL, iface);
 	if (++iface->state->conflicts > MAX_CONFLICTS) {
 		syslog(LOG_ERR, "%s: failed to acquire an IPv4LL address",
 		    iface->name);

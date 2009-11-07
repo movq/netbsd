@@ -1,4 +1,4 @@
-/*	$NetBSD: pnpbusvar.h,v 1.6 2008/04/28 20:23:33 martin Exp $	*/
+/*	$NetBSD: pnpbusvar.h,v 1.8 2011/07/01 16:55:42 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #define _PREP_PNPBUSVAR_H_
 
 #include <sys/queue.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/residual.h>
 
 struct pnpbus_mem {
@@ -114,7 +114,7 @@ struct pnpbus_dev_attach_args {
  * master bus
  */
 struct pnpbus_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	isa_chipset_tag_t sc_ic;
 
 	bus_space_tag_t sc_iot;		/* io space tag */

@@ -1,4 +1,4 @@
-/*	$NetBSD: unixdev.h,v 1.1 2009/03/02 09:33:02 nonaka Exp $	*/
+/*	$NetBSD: unixdev.h,v 1.3 2012/01/18 23:12:21 nonaka Exp $	*/
 /*	$OpenBSD: unixdev.h,v 1.1 2005/05/24 20:38:20 uwe Exp $	*/
 
 /*
@@ -43,6 +43,7 @@ int awaitkey(int, int);
 
 /* unixdev.c */
 int unixopen(struct open_file *, ...);
+int unixpathopen(struct open_file *, ...);
 int unixclose(struct open_file *);
 int unixioctl(struct open_file *, u_long, void *);
 int unixstrategy(void *, int, daddr_t, size_t, void *, size_t *);
@@ -59,6 +60,7 @@ off_t ulseek(int, off_t, int);
 void uexit(int) __attribute__((noreturn));
 int uselect(int, fd_set *, fd_set *, fd_set *, struct linux_timeval *);
 int ustat(const char *, struct linux_stat *);
+int ufstat(int, struct linux_stat *);
 int syscall(int, ...);
 int __syscall(quad_t, ...);
 

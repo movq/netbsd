@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_node.c,v 1.15 2009/11/05 19:42:44 pooka Exp $	*/
+/*	$NetBSD: puffs_node.c,v 1.23.2.2 2012/08/12 12:59:50 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.15 2009/11/05 19:42:44 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.23.2.2 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/hash.h>
@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.15 2009/11/05 19:42:44 pooka Exp $"
 #include <sys/mount.h>
 #include <sys/namei.h>
 #include <sys/vnode.h>
+
+#include <uvm/uvm.h>
 
 #include <fs/puffs/puffs_msgif.h>
 #include <fs/puffs/puffs_sys.h>
@@ -61,9 +63,10 @@ static struct puffs_node *puffs_cookie2pnode(struct puffs_mount *,
 					     puffs_cookie_t);
 
 struct pool puffs_pnpool;
+struct pool puffs_vapool;
 
 /*
- * Grab a vnode, intialize all the puffs-dependant stuff.
+ * Grab a vnode, intialize all the puffs-dependent stuff.
  */
 int
 puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
@@ -90,9 +93,10 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		goto bad;
 	}
 
-	error = getnewvnode(VT_PUFFS, mp, puffs_vnodeop_p, &vp);
-	if (error)
+	error = getnewvnode(VT_PUFFS, mp, puffs_vnodeop_p, NULL, &vp);
+	if (error) {
 		goto bad;
+	}
 	vp->v_type = type;
 
 	/*
@@ -154,6 +158,7 @@ puffs_getvnode(struct mount *mp, puffs_cookie_t ck, enum vtype type,
 		}
 		KASSERT(pnc != NULL);
 	}
+	mutex_init(&pnode->pn_sizemtx, MUTEX_DEFAULT, IPL_NONE);
 	mutex_exit(&pmp->pmp_lock);
 
 	vp->v_data = pnode;
@@ -226,6 +231,8 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 			return EPROTO;
 		}
 	}
+
+	KASSERT(curlwp != uvm.pagedaemon_lwp);
 	pnc = kmem_alloc(sizeof(struct puffs_newcookie), KM_SLEEP);
 	pnc->pnc_cookie = ck;
 	LIST_INSERT_HEAD(&pmp->pmp_newcookie, pnc, pnc_entries);
@@ -239,7 +246,7 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = vp;
 
-	if ((cnp->cn_flags & MAKEENTRY) && PUFFS_USE_NAMECACHE(pmp))
+	if (PUFFS_USE_NAMECACHE(pmp))
 		cache_enter(dvp, vp, cnp);
 
 	return 0;
@@ -313,10 +320,16 @@ puffs_makeroot(struct puffs_mount *pmp)
 	mutex_enter(&pmp->pmp_lock);
 	vp = pmp->pmp_root;
 	if (vp) {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		mutex_exit(&pmp->pmp_lock);
-		if (vget(vp, LK_INTERLOCK) == 0)
+		switch (vget(vp, 0)) {
+		case ENOENT:
+			goto retry;
+		case 0:
 			return 0;
+		default:
+			break;
+		}
 	} else
 		mutex_exit(&pmp->pmp_lock);
 
@@ -381,6 +394,7 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 		return 0;
 	}
 
+ retry:
 	mutex_enter(&pmp->pmp_lock);
 	pnode = puffs_cookie2pnode(pmp, ck);
 	if (pnode == NULL) {
@@ -394,14 +408,20 @@ puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,
 		return PUFFS_NOSUCHCOOKIE;
 	}
 	vp = pnode->pn_vp;
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	mutex_exit(&pmp->pmp_lock);
 
-	vgetflags = LK_INTERLOCK;
+	vgetflags = 0;
 	if (lock)
-		vgetflags |= LK_EXCLUSIVE | LK_RETRY;
-	if ((rv = vget(vp, vgetflags)))
+		vgetflags |= LK_EXCLUSIVE;
+	switch (rv = vget(vp, vgetflags)) {
+	case ENOENT:
+		goto retry;
+	case 0:
+		break;
+	default:
 		return rv;
+	}
 
 	*vpp = vp;
 	return 0;
@@ -462,7 +482,10 @@ puffs_releasenode(struct puffs_node *pn)
 	if (--pn->pn_refcount == 0) {
 		mutex_exit(&pn->pn_mtx);
 		mutex_destroy(&pn->pn_mtx);
+		mutex_destroy(&pn->pn_sizemtx);
 		seldestroy(&pn->pn_sel);
+		if (pn->pn_va_cache != NULL)
+			pool_put(&puffs_vapool, pn->pn_va_cache);
 		pool_put(&puffs_pnpool, pn);
 	} else {
 		mutex_exit(&pn->pn_mtx);

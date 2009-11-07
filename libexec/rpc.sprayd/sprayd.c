@@ -1,4 +1,4 @@
-/*	$NetBSD: sprayd.c,v 1.15 2009/10/21 01:07:46 snj Exp $	*/
+/*	$NetBSD: sprayd.c,v 1.18 2011/09/16 16:13:17 plunky Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sprayd.c,v 1.15 2009/10/21 01:07:46 snj Exp $");
+__RCSID("$NetBSD: sprayd.c,v 1.18 2011/09/16 16:13:17 plunky Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -40,11 +40,9 @@ __RCSID("$NetBSD: sprayd.c,v 1.15 2009/10/21 01:07:46 snj Exp $");
 #include <rpc/rpc.h>
 #include <rpcsvc/spray.h>
 
-static void cleanup(int);
-static void die(int);
+__dead static void cleanup(int);
+__dead static void die(int);
 static void spray_service(struct svc_req *, SVCXPRT *);
-
-int main(int, char *[]);
 
 static int from_inetd = 1;
 
@@ -133,7 +131,7 @@ spray_service(struct svc_req *rqstp, SVCXPRT *transp)
 		/*FALLTHROUGH*/
 
 	case NULLPROC:
-		(void)svc_sendreply(transp, xdr_void, (char *)NULL);
+		(void)svc_sendreply(transp, (xdrproc_t)xdr_void, NULL);
 		return;
 
 	case SPRAYPROC_SPRAY:
@@ -152,7 +150,7 @@ spray_service(struct svc_req *rqstp, SVCXPRT *transp)
 		return;
 	}
 
-	if (!svc_sendreply(transp, xdr_spraycumul, (caddr_t)&scum)) {
+	if (!svc_sendreply(transp, (xdrproc_t)xdr_spraycumul, (caddr_t)&scum)) {
 		svcerr_systemerr(transp);
 		syslog(LOG_WARNING, "bad svc_sendreply");
 	}

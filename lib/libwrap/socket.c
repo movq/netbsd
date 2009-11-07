@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.c,v 1.18 2006/05/09 20:18:06 mrg Exp $	*/
+/*	$NetBSD: socket.c,v 1.18.44.2 2012/04/23 23:40:41 riz Exp $	*/
 
  /*
   * This module determines the type of socket (datagram, stream), the client
@@ -22,7 +22,7 @@
 #if 0
 static char sccsid[] = "@(#) socket.c 1.15 97/03/21 19:27:24";
 #else
-__RCSID("$NetBSD: socket.c,v 1.18 2006/05/09 20:18:06 mrg Exp $");
+__RCSID("$NetBSD: socket.c,v 1.18.44.2 2012/04/23 23:40:41 riz Exp $");
 #endif
 #endif
 

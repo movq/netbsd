@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2009/10/01 02:27:59 mrg Exp $
+#	$NetBSD: Makefile,v 1.9 2011/08/11 23:15:35 joerg Exp $
 
 .include <bsd.own.mk>
 .include "Makefile.common"
@@ -9,21 +9,25 @@ SRCS=	xkbcomp.c xkbscan.c expr.c vmod.c indicators.c misc.c \
 	symbols.c geometry.c xkbpath.c listing.c \
 	xkbparse.y parseutils.c utils.c
 
-CPPFLAGS.xkbpath.c=	-DDFLT_XKB_CONFIG_ROOT=\"${XKBCOMPDIR}\"
+CPPFLAGS.xkbpath.c=	-DDFLT_XKB_CONFIG_ROOT=\"${XKBROOTDIR}\"
 
 CPPFLAGS+=		-I${X11SRCDIR.${PROG}} -I${X11SRCDIR.${PROG}}/../include -DHAVE_CONFIG_H
 CPPFLAGS.geometry.c=	-Wno-error	# XXX
+COPTS.xkbscan.c+=	-Wno-stack-protector
 
-FILESDIR=${X11LIBDIR}/xkb
-FILES=	README README.config README.enhancing
+FILESDIR=${XKBROOTDIR}
+FILES=	README
 
-SYMLINKS+=	${BINDIR}/xkbcomp ${X11LIBDIR}/xkb/xkbcomp
-SYMLINKS+=	${XKBCOMPDIR} ${X11LIBDIR}/xkb/compiled
+SYMLINKS+=	${BINDIR}/xkbcomp ${XKBROOTDIR}/xkbcomp
+SYMLINKS+=	${XKBDATADIR} ${XKBCOMPDIR}
 
 LDADD+=	-lxkbfile -lXext -lX11
 DPADD+=	${LIBXKBFILE} ${LIBXEXT} ${LIBX11}
 
 .PATH:	${X11SRCDIR.${PROG}}
+.PATH:	${X11SRCDIR.${PROG}}/man
+
+CWARNFLAGS.clang+=	-Wno-parentheses
 
 .include <bsd.x11.mk>
 .include <bsd.prog.mk>

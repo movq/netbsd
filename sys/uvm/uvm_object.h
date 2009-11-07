@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_object.h,v 1.26 2008/06/04 15:06:04 ad Exp $	*/
+/*	$NetBSD: uvm_object.h,v 1.32 2012/01/28 14:37:35 rmind Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,23 +30,34 @@
 #ifndef _UVM_UVM_OBJECT_H_
 #define _UVM_UVM_OBJECT_H_
 
-/*
- * uvm_object.h
- */
-
-#include <sys/rb.h>
+#include <sys/queue.h>
+#include <sys/rbtree.h>
+#include <uvm/uvm_pglist.h>
 
 /*
- * uvm_object: all that is left of mach objects.
+ * The UVM memory object interface.  Notes:
+ *
+ * A UVM memory object represents a list of pages, which are managed by
+ * the object's pager operations (uvm_object::pgops).  All pages belonging
+ * to an object are owned by it and thus protected by the object lock.
+ *
+ * The lock (uvm_object::vmobjlock) may be shared amongst the UVM objects.
+ * By default, the lock is allocated dynamically using mutex_obj(9) cache.
+ * Lock sharing is normally used when there is an underlying object.  For
+ * example, vnode representing a file may have an underlying node, which
+ * is the case for tmpfs and layered file systems.  In such case, vnode's
+ * UVM object and the underlying UVM object shares the lock (note that the
+ * vnode_t::v_interlock points to uvm_object::vmobjlock).
  */
 
 struct uvm_object {
-	kmutex_t		vmobjlock;	/* lock on memq */
+	kmutex_t *		vmobjlock;	/* lock on memq */
 	const struct uvm_pagerops *pgops;	/* pager ops */
 	struct pglist		memq;		/* pages in this object */
 	int			uo_npages;	/* # of pages in memq */
 	unsigned		uo_refs;	/* reference count */
 	struct rb_tree		rb_tree;	/* tree of pages */
+	LIST_HEAD(,ubc_map)	uo_ubc;		/* ubc mappings */
 };
 
 /*
@@ -105,33 +109,7 @@ extern const struct uvm_pagerops aobj_pager;
 #define	UVM_OBJ_IS_AOBJ(uobj)						\
 	((uobj)->pgops == &aobj_pager)
 
-extern const struct rb_tree_ops uvm_page_tree_ops;
-
-#define	UVM_OBJ_INIT(uobj, ops, refs)					\
-	do {								\
-		mutex_init(&(uobj)->vmobjlock, MUTEX_DEFAULT, IPL_NONE);\
-		(uobj)->pgops = (ops);					\
-		TAILQ_INIT(&(uobj)->memq);				\
-		(uobj)->uo_npages = 0;					\
-		(uobj)->uo_refs = (refs);				\
-		rb_tree_init(&(uobj)->rb_tree, &uvm_page_tree_ops);	\
-	} while (/* CONSTCOND */ 0)
-
-#ifdef DIAGNOSTIC
-#define	UVM_OBJ_DESTROY(uobj)						\
-	do {								\
-		voff_t _xo = 0;						\
-		void *_xn;						\
-		mutex_destroy(&(uobj)->vmobjlock);			\
-		_xn = rb_tree_find_node_geq(&(uobj)->rb_tree, &_xo);	\
-		KASSERT(_xn == NULL);					\
-	} while (/* CONSTCOND */ 0)
-#else
-#define	UVM_OBJ_DESTROY(uobj)						\
-	do {								\
-		mutex_destroy(&(uobj)->vmobjlock);			\
-	} while (/* CONSTCOND */ 0)
-#endif	/* DIAGNOSTIC */
+extern const rb_tree_ops_t uvm_page_tree_ops;
 
 #endif /* _KERNEL */
 

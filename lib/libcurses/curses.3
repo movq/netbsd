@@ -1,4 +1,4 @@
-.\"	$NetBSD: curses.3,v 1.60 2009/07/12 23:12:40 wiz Exp $
+.\"	$NetBSD: curses.3,v 1.62 2011/10/04 11:01:13 roy Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)curses.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd July 6, 2009
+.Dd October 4, 2011
 .Dt CURSES 3
 .Os
 .Sh NAME
@@ -130,7 +130,7 @@ must be called before any of the other routines that deal with color are used.
 .It getparyx Ta Xr curses_cursor 3
 .It getstr Ta Xr curses_input 3
 .It gettmode Ta Xr curses_tty 3
-.It getwin Ta Xr curses_fileo 3
+.It getwin Ta Xr curses_fileio 3
 .It getyx Ta Xr curses_cursor 3
 .It has_colors Ta Xr curses_color 3
 .It has_ic Ta Xr curses_tty 3
@@ -158,7 +158,6 @@ must be called before any of the other routines that deal with color are used.
 .It keypad Ta Xr curses_input 3
 .It killchar Ta Xr curses_tty 3
 .It leaveok Ta Xr curses_tty 3
-.It longname Ta Xr curses_termcap 3
 .It meta Ta Xr curses_tty 3
 .It move Ta Xr curses_cursor 3
 .It mvaddch Ta Xr curses_addch 3
@@ -209,7 +208,7 @@ must be called before any of the other routines that deal with color are used.
 .It pnoutrefresh Ta Xr curses_pad 3
 .It prefresh Ta Xr curses_pad 3
 .It printw Ta Xr curses_print 3
-.It putwin Ta Xr curses_fileo 3
+.It putwin Ta Xr curses_fileio 3
 .It qiflush Ta Xr curses_tty 3
 .It raw Ta Xr curses_tty 3
 .It redrawwin Ta Xr curses_touch 3

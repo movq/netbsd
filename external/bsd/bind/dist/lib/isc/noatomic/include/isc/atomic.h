@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic.h,v 1.2 2009/04/12 03:46:08 christos Exp $	*/
+/*	$NetBSD: atomic.h,v 1.4.6.1 2012/06/05 21:15:52 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -16,7 +16,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: atomic.h,v 1.4 2007/06/19 23:47:18 tbox Exp */
+/* Id: atomic.h,v 1.4 2007/06/19 23:47:18 tbox Exp  */
 
 #ifndef ISC_ATOMIC_H
 #define ISC_ATOMIC_H 1
@@ -31,7 +31,7 @@
  */
 static __inline isc_int32_t
 isc_atomic_xadd(isc_int32_t *p, isc_int32_t val) {
-	isc_int32_t prev = val;
+	isc_int32_t prev = *p;
 
 	*p += val;
 
@@ -53,11 +53,12 @@ isc_atomic_store(isc_int32_t *p, isc_int32_t val) {
  */
 static __inline isc_int32_t
 isc_atomic_cmpxchg(isc_int32_t *p, isc_int32_t cmpval, isc_int32_t val) {
+	isc_int32_t prev = *p;
 
 	if (*p == cmpval)
 		*p = val;
 
-	return cmpval;
+	return prev;
 }
 
 #endif /* ISC_ATOMIC_H */

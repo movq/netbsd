@@ -1,4 +1,4 @@
-/* $NetBSD: xlint.c,v 1.42 2009/04/15 01:20:57 christos Exp $ */
+/* $NetBSD: xlint.c,v 1.44 2011/09/18 09:07:35 njoly Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: xlint.c,v 1.42 2009/04/15 01:20:57 christos Exp $");
+__RCSID("$NetBSD: xlint.c,v 1.44 2011/09/18 09:07:35 njoly Exp $");
 #endif
 
 #include <sys/param.h>
@@ -479,7 +479,7 @@ main(int argc, char *argv[])
 				usage();
 			dflag = 1;
 			appcstrg(&cflags, "-nostdinc");
-			appcstrg(&cflags, "-idirafter");
+			appcstrg(&cflags, "-isystem");
 			appcstrg(&cflags, optarg);
 			break;
 
@@ -680,7 +680,7 @@ fname(const char *name)
 	appcstrg(&args, name);
 
 	/* we reuse the same tmp file for cpp output, so rewind and truncate */
-	if (lseek(cppoutfd, SEEK_SET, (off_t)0) != 0) {
+	if (lseek(cppoutfd, (off_t)0, SEEK_SET) != 0) {
 		warn("lseek");
 		terminate(-1);
 	}

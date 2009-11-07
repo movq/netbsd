@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vr.c,v 1.99 2009/09/26 19:58:53 jmcneill Exp $	*/
+/*	$NetBSD: if_vr.c,v 1.110 2012/02/02 19:43:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -97,9 +97,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.99 2009/09/26 19:58:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.110 2012/02/02 19:43:05 tls Exp $");
 
-#include "rnd.h"
+
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -111,11 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.99 2009/09/26 19:58:53 jmcneill Exp $");
 #include <sys/socket.h>
 #include <sys/device.h>
 
-#if NRND > 0
 #include <sys/rnd.h>
-#endif
-
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -123,10 +119,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.99 2009/09/26 19:58:53 jmcneill Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -238,9 +231,7 @@ struct vr_softc {
 	uint32_t	vr_save_membase;
 	uint32_t	vr_save_irq;
 
-#if NRND > 0
-	rndsource_element_t rnd_source;	/* random source */
-#endif
+	krndsource_t rnd_source;	/* random source */
 };
 
 #define	VR_CDTXADDR(sc, x)	((sc)->vr_cddma + VR_CDTXOFF((x)))
@@ -318,7 +309,7 @@ static void	vr_setmulti(struct vr_softc *);
 static void	vr_reset(struct vr_softc *);
 static int	vr_restore_state(pci_chipset_tag_t, pcitag_t, device_t,
     pcireg_t);
-static bool	vr_resume(device_t PMF_FN_PROTO);
+static bool	vr_resume(device_t, const pmf_qual_t *);
 
 int	vr_copy_small = 0;
 
@@ -761,16 +752,13 @@ vr_rxeof(struct vr_softc *sc)
 		ifp->if_ipackets++;
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = total_len;
-#if NBPFILTER > 0
 		/*
 		 * Handle BPF listeners. Let the BPF user see the packet, but
 		 * don't pass it up to the ether_input() layer unless it's
 		 * a broadcast packet, multicast packet, matches our ethernet
 		 * address or the interface is in promiscuous mode.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
 	}
@@ -916,10 +904,7 @@ vr_intr(void *arg)
 
 		handled = 1;
 
-#if NRND > 0
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, status);
-#endif
+		rnd_add_uint32(&sc->rnd_source, status);
 
 		if (status & VR_ISR_RX_OK)
 			vr_rxeof(sc);
@@ -1084,14 +1069,11 @@ vr_start(struct ifnet *ifp)
 		 */
 		ds->ds_mbuf = m0;
 
-#if NBPFILTER > 0
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		/*
 		 * Fill in the transmit descriptor.
@@ -1451,7 +1433,6 @@ vr_attach(device_t parent, device_t self, void *aux)
 	struct ifnet *ifp;
 	uint8_t eaddr[ETHER_ADDR_LEN], mac;
 	int i, rseg, error;
-	char devinfo[256];
 
 #define	PCI_CONF_WRITE(r, v)	pci_conf_write(sc->vr_pc, sc->vr_tag, (r), (v))
 #define	PCI_CONF_READ(r)	pci_conf_read(sc->vr_pc, sc->vr_tag, (r))
@@ -1462,10 +1443,7 @@ vr_attach(device_t parent, device_t self, void *aux)
 	sc->vr_id = pa->pa_id;
 	callout_init(&sc->vr_tick_ch, 0);
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_naive("\n");
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	/*
 	 * Handle power management nonsense.
@@ -1541,11 +1519,10 @@ vr_attach(device_t parent, device_t self, void *aux)
 		if (sc->vr_ih == NULL) {
 			aprint_error_dev(self, "couldn't establish interrupt");
 			if (intrstr != NULL)
-				printf(" at %s", intrstr);
-			printf("\n");
+				aprint_error(" at %s", intrstr);
+			aprint_error("\n");
 		}
-		printf("%s: interrupting at %s\n",
-			device_xname(self), intrstr);
+		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 	}
 
 	/*
@@ -1597,7 +1574,7 @@ vr_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * A Rhine chip was detected. Inform the world.
 	 */
-	printf("%s: Ethernet address: %s\n",
+	aprint_normal("%s: Ethernet address: %s\n",
 		device_xname(self), ether_sprintf(eaddr));
 
 	memcpy(sc->vr_enaddr, eaddr, ETHER_ADDR_LEN);
@@ -1698,15 +1675,16 @@ vr_attach(device_t parent, device_t self, void *aux)
 	} else
 		ifmedia_set(&sc->vr_mii.mii_media, IFM_ETHER|IFM_AUTO);
 
+	sc->vr_ec.ec_capabilities |= ETHERCAP_VLAN_MTU;
+
 	/*
 	 * Call MI attach routines.
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->vr_enaddr);
-#if NRND > 0
+
 	rnd_attach_source(&sc->rnd_source, device_xname(self),
 	    RND_TYPE_NET, 0);
-#endif
 
 	if (pmf_device_register1(self, NULL, vr_resume, vr_shutdown))
 		pmf_class_network_register(self, ifp);
@@ -1759,7 +1737,7 @@ vr_restore_state(pci_chipset_tag_t pc, pcitag_t tag, device_t self,
 }
 
 static bool
-vr_resume(device_t self PMF_FN_ARGS)
+vr_resume(device_t self, const pmf_qual_t *qual)
 {
 	struct vr_softc *sc = device_private(self);
 

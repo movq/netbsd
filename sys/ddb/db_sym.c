@@ -1,4 +1,4 @@
-/*	$NetBSD: db_sym.c,v 1.59 2009/03/07 22:02:17 ad Exp $	*/
+/*	$NetBSD: db_sym.c,v 1.64 2012/02/10 02:14:04 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_sym.c,v 1.59 2009/03/07 22:02:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_sym.c,v 1.64 2012/02/10 02:14:04 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddbparam.h"
@@ -43,10 +43,11 @@ __KERNEL_RCSID(0, "$NetBSD: db_sym.c,v 1.59 2009/03/07 22:02:17 ad Exp $");
 static void		db_symsplit(char *, char **, char **);
 
 
-#ifdef DB_AOUT_SYMBOLS
+#ifndef _KERNEL
 #define	TBLNAME	"netbsd"
 
-static int using_aout_symtab;
+#define use_ksyms 0
+
 const db_symformat_t *db_symformat;
 static db_forall_func_t db_sift;
 extern db_symformat_t db_symformat_aout;
@@ -63,20 +64,11 @@ void
 ddb_init(int symsize, void *vss, void *vse)
 {
 #ifdef _KERNEL
-# ifdef DB_AOUT_SYMBOLS
-	db_symformat = &db_symformat_aout;
-	if ((*db_symformat->sym_init)(symsize, vss, vse, TBLNAME) == true) {
-		using_aout_symtab = true;
-		return;
-	}
-# endif
 	ksyms_addsyms_elf(symsize, vss, vse);	/* Will complain if necessary */
 #else	/* _KERNEL */
 	db_symformat = &db_symformat_elf;
-	if ((*db_symformat->sym_init)(symsize, vss, vse, TBLNAME) == true) {
-		using_aout_symtab = true;
-		return;
-	}
+	if ((*db_symformat->sym_init)(symsize, vss, vse, TBLNAME) != true)
+		printf("sym_init failed");
 #endif	/* _KERNEL */
 }
 
@@ -101,10 +93,10 @@ db_value_of_name(const char *name, db_expr_t *valuep)
 	long val;
 #endif
 
-#ifdef DB_AOUT_SYMBOLS
-	db_sym_t	ssym;
+#ifndef _KERNEL
+	if (!use_ksyms) {
+		db_sym_t ssym;
 
-	if (using_aout_symtab) {
 		/*
 		 * Cannot load symtabs in a.out kernels, so the ':'
 		 * style of selecting modules is irrelevant.
@@ -116,6 +108,7 @@ db_value_of_name(const char *name, db_expr_t *valuep)
 		return (true);
 	}
 #endif
+
 	(void)strlcpy(symbol, name, sizeof(symbol));
 	db_symsplit(symbol, &mod, &sym);
 #ifdef _KERNEL
@@ -133,7 +126,7 @@ db_value_of_name(const char *name, db_expr_t *valuep)
 	return false;
 }
 
-#ifdef DB_AOUT_SYMBOLS
+#ifndef _KERNEL
 /* Private structure for passing args to db_sift() from db_sifting(). */
 struct db_sift_args {
 	char	*symstr;
@@ -193,10 +186,10 @@ db_sifting(char *symstr, int mode)
 	char *mod, *sym;
 #endif
 
-#ifdef DB_AOUT_SYMBOLS
+#ifndef _KERNEL
 	struct db_sift_args dsa;
 
-	if (using_aout_symtab) {
+	if (!use_ksyms) {
 		dsa.symstr = symstr;
 		dsa.mode = mode;
 		(*db_symformat->sym_forall)(NULL, db_sift, &dsa);
@@ -227,11 +220,11 @@ db_search_symbol(db_addr_t val, db_strategy_t strategy, db_expr_t *offp)
 	const char *sym;
 #endif
 
-#ifdef DB_AOUT_SYMBOLS
-	db_expr_t newdiff;
-	db_sym_t ssym;
+#ifndef _KERNEL
+	if (!use_ksyms) {
+		db_expr_t newdiff;
+		db_sym_t ssym;
 
-	if (using_aout_symtab) {
 		newdiff = diff = ~0;
 		ssym = (*db_symformat->sym_search)
 		    (NULL, val, strategy, &newdiff);
@@ -271,9 +264,10 @@ db_symbol_values(db_sym_t sym, const char **namep, db_expr_t *valuep)
 		return;
 	}
 
-#ifdef DB_AOUT_SYMBOLS
-	if (using_aout_symtab) {
+#ifndef _KERNEL
+	if (!use_ksyms) {
 		db_expr_t value;
+
 		(*db_symformat->sym_value)(NULL, sym, namep, &value);
 		if (valuep)
 			*valuep = value;
@@ -306,12 +300,7 @@ db_symbol_values(db_sym_t sym, const char **namep, db_expr_t *valuep)
  * bogus symbol associations, e.g. 3 might get some absolute
  * value like _INCLUDE_VERSION or something, therefore we do
  * not accept symbols whose value is zero (and use plain hex).
- * Also, avoid printing as "end+0x????" which is useless.
- * The variable db_lastsym is used instead of "end" in case we
- * add support for symbols in loadable driver modules.
  */
-extern char end[];
-unsigned long	db_lastsym = (unsigned long)end;
 unsigned int	db_maxoff = 0x100000;
 
 void
@@ -323,37 +312,32 @@ db_symstr(char *buf, size_t buflen, db_expr_t off, db_strategy_t strategy)
 	unsigned long val;
 #endif
 
-#ifdef DB_AOUT_SYMBOLS
-	if (using_aout_symtab) {
+#ifndef _KERNEL
+	if (!use_ksyms) {
 		db_expr_t	d;
 		char 		*filename;
 		db_expr_t	value;
 		int 		linenum;
 		db_sym_t	cursym;
 
-		if ((unsigned long) off <= db_lastsym) {
-			cursym = db_search_symbol(off, strategy, &d);
-			db_symbol_values(cursym, &name, &value);
-			if (name != NULL &&
-			    ((unsigned int) d < db_maxoff) &&
-			    value != 0) {
-				strlcpy(buf, name, buflen);
-				if (d) {
-					strlcat(buf, "+", buflen);
-					db_format_radix(buf+strlen(buf),
-					    24, d, true);
-				}
-				if (strategy == DB_STGY_PROC) {
-					if ((*db_symformat->sym_line_at_pc)
-					    (NULL, cursym, &filename,
-					    &linenum, off))
-						snprintf(buf + strlen(buf),
-						    buflen - strlen(buf),
-						    " [%s:%d]",
-						    filename, linenum);
-				}
-				return;
+		cursym = db_search_symbol(off, strategy, &d);
+		db_symbol_values(cursym, &name, &value);
+		if (name != NULL && ((unsigned int)d < db_maxoff) &&
+		    value != 0) {
+			strlcpy(buf, name, buflen);
+			if (d) {
+				strlcat(buf, "+", buflen);
+				db_format_radix(buf + strlen(buf), 24, d, true);
 			}
+			if (strategy == DB_STGY_PROC) {
+				if ((*db_symformat->sym_line_at_pc)
+				    (NULL, cursym, &filename, &linenum, off)) {
+					size_t len = strlen(buf);
+					snprintf(buf + len, buflen - len,
+					    " [%s:%d]", filename, linenum);
+				}
+			}
+			return;
 		}
 		strlcpy(buf, db_num_to_str(off), buflen);
 		return;
@@ -400,37 +384,33 @@ db_printsym(db_expr_t off, db_strategy_t strategy,
 	int  linenum;
 #endif
 
-#ifdef DB_AOUT_SYMBOLS
-	if (using_aout_symtab) {
+#ifndef _KERNEL
+	if (!use_ksyms) {
 		db_expr_t	d;
 		char 		*filename;
 		db_expr_t	value;
 		int 		linenum;
 		db_sym_t	cursym;
-		if ((unsigned long) off <= db_lastsym) {
-			cursym = db_search_symbol(off, strategy, &d);
-			db_symbol_values(cursym, &name, &value);
-			if (name != NULL &&
-			    ((unsigned int) d < db_maxoff) &&
-			    value != 0) {
-				(*pr)("%s", name);
-				if (d) {
-					char tbuf[24];
 
-					db_format_radix(tbuf, 24, d, true);
-					(*pr)("+%s", tbuf);
-				}
-				if (strategy == DB_STGY_PROC) {
-					if ((*db_symformat->sym_line_at_pc)
-					    (NULL, cursym, &filename,
-					    &linenum, off))
-						(*pr)(" [%s:%d]",
-						    filename, linenum);
-				}
-				return;
+		cursym = db_search_symbol(off, strategy, &d);
+		db_symbol_values(cursym, &name, &value);
+		if (name != NULL && ((unsigned int)d < db_maxoff) &&
+		    value != 0) {
+			(*pr)("%s", name);
+			if (d) {
+				char tbuf[24];
+
+				db_format_radix(tbuf, 24, d, true);
+				(*pr)("+%s", tbuf);
 			}
+			if (strategy == DB_STGY_PROC) {
+				if ((*db_symformat->sym_line_at_pc)
+				    (NULL, cursym, &filename, &linenum, off))
+					(*pr)(" [%s:%d]", filename, linenum);
+			}
+			return;
 		}
-		(*pr)(db_num_to_str(off));
+		(*pr)("%s", db_num_to_str(off));
 		return;
 	}
 #endif
@@ -457,7 +437,7 @@ db_printsym(db_expr_t off, db_strategy_t strategy,
 		}
 	}
 #endif
-	(*pr)(db_num_to_str(off));
+	(*pr)("%s", db_num_to_str(off));
 	return;
 }
 
@@ -482,8 +462,8 @@ db_symsplit(char *str, char **mod, char **sym)
 bool
 db_sym_numargs(db_sym_t cursym, int *nargp, char **argnamep)
 {
-#ifdef DB_AOUT_SYMBOLS
-	if (using_aout_symtab)
+#ifndef _KERNEL
+	if (!use_ksyms)
 		return ((*db_symformat->sym_numargs)(NULL, cursym, nargp,
 		    argnamep));
 #endif

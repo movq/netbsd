@@ -1,4 +1,4 @@
-/*	$NetBSD: cats_machdep.c,v 1.66 2009/08/18 09:22:47 he Exp $	*/
+/*	$NetBSD: cats_machdep.c,v 1.72 2012/02/06 17:51:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -33,14 +33,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup for EBSA285 core architecture
+ * Machine dependent functions for kernel setup for EBSA285 core architecture
  * using cyclone firmware
  *
  * Created      : 24/11/97
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.66 2009/08/18 09:22:47 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.72 2012/02/06 17:51:47 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_modular.h"
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.66 2009/08/18 09:22:47 he Exp $")
 
 #include <machine/bootconfig.h>
 #define	_ARM32_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <machine/intr.h>
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.66 2009/08/18 09:22:47 he Exp $")
 
 /*
  * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
+ * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
 
@@ -158,8 +158,6 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -387,7 +385,8 @@ initarm(void *arm_bootargs)
 
 	if (ebsabootinfo.bt_magic != BT_MAGIC_NUMBER_EBSA
 	    && ebsabootinfo.bt_magic != BT_MAGIC_NUMBER_CATS)
-		panic("Incompatible magic number passed in boot args");
+		panic("Incompatible magic number %#x passed in boot args",
+		    ebsabootinfo.bt_magic);
 
 #ifdef VERBOSE_INIT_ARM
 	/* output the incoming bootinfo */
@@ -583,8 +582,11 @@ initarm(void *arm_bootargs)
 #endif
 
 	/* Now we fill in the L2 pagetable for the kernel static code/data */
-#ifdef ABLEELF
-	{
+	struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
+	if (N_GETMAGIC(kernexec[0]) != ZMAGIC) {
+		/*
+		 * If it's not a.out, assume ELF.
+		 */
 		extern char etext[], _end[];
 		size_t textsize = (uintptr_t) etext - KERNEL_BASE;
 		size_t totalsize = (uintptr_t) _end - KERNEL_BASE;
@@ -600,35 +602,27 @@ initarm(void *arm_bootargs)
 		(void) pmap_map_chunk(l1pagetable, KERNEL_BASE + logical,
 		    physical_start + logical, totalsize - textsize,
 		    VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
-	}
-#else
-	{
-		struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
-		if (N_GETMAGIC(kernexec[0]) != ZMAGIC)
-			panic("Illegal kernel format");
-		else {
-			extern int end;
-			u_int logical;
+	} else {
+		extern int end;
+		u_int logical;
 			
-			logical = pmap_map_chunk(l1pagetable, KERNEL_TEXT_BASE,
-					physical_start, kernexec->a_text,
-					VM_PROT_READ, PTE_CACHE);
-			logical += pmap_map_chunk(l1pagetable,
-					KERNEL_TEXT_BASE + logical,
-					physical_start + logical, kernexec->a_data,
-					VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
-			logical += pmap_map_chunk(l1pagetable,
-					KERNEL_TEXT_BASE + logical,
-					physical_start + logical, kernexec->a_bss,
-					VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
-			logical += pmap_map_chunk(l1pagetable,
-					KERNEL_TEXT_BASE + logical,
-					physical_start + logical, kernexec->a_syms + sizeof(int)
-					+ *(u_int *)((int)&end + kernexec->a_syms + sizeof(int)),
-					VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
-		}
+		logical = pmap_map_chunk(l1pagetable, KERNEL_TEXT_BASE,
+			physical_start, kernexec->a_text,
+			VM_PROT_READ, PTE_CACHE);
+		logical += pmap_map_chunk(l1pagetable,
+			KERNEL_TEXT_BASE + logical,
+			physical_start + logical, kernexec->a_data,
+			VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
+		logical += pmap_map_chunk(l1pagetable,
+			KERNEL_TEXT_BASE + logical,
+			physical_start + logical, kernexec->a_bss,
+			VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
+		logical += pmap_map_chunk(l1pagetable,
+			KERNEL_TEXT_BASE + logical,
+			physical_start + logical, kernexec->a_syms + sizeof(int)
+			+ *(u_int *)((int)&end + kernexec->a_syms + sizeof(int)),
+			VM_PROT_READ|VM_PROT_WRITE, PTE_CACHE);
 	}
-#endif
 
 	/*
 	 * PATCH PATCH ...
@@ -697,7 +691,7 @@ initarm(void *arm_bootargs)
 	 */
 #ifdef VERBOSE_INIT_ARM
 	/* checking sttb address */
-	printf("setttb address = %p\n", cpufuncs.cf_setttb);
+	printf("cpu_setttb address = %p\n", cpufuncs.cf_setttb);
 
 	printf("kernel_l1pt=0x%08x old = 0x%08x, phys = 0x%08x\n",
 			((uint*)kernel_l1pt.pv_va)[0xf00],
@@ -734,15 +728,15 @@ initarm(void *arm_bootargs)
 	fcomcndetach();
 #endif
 	
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 	/*
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+
 	/*
 	 * XXX this should only be done in main() but it useful to
 	 * have output earlier ...

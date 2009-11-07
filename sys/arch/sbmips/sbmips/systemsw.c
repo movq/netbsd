@@ -1,4 +1,4 @@
-/* $NetBSD: systemsw.c,v 1.14 2008/01/08 14:38:48 simonb Exp $ */
+/* $NetBSD: systemsw.c,v 1.17 2011/07/09 16:59:40 matt Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,23 +33,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: systemsw.c,v 1.14 2008/01/08 14:38:48 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: systemsw.c,v 1.17 2011/07/09 16:59:40 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
 #include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/kernel.h>
+#include <sys/systm.h>
 
 #include <mips/locore.h>
 #include <mips/mips3_clock.h>
 
-#include <machine/intr.h>
-#include <machine/systemsw.h>
+#include <sbmips/systemsw.h>
 
 
 /* trivial functions for function switch */
 static void	clock_init_triv(void *);
-static void	cpu_intr_triv(uint32_t, uint32_t, uint32_t, uint32_t);
+static void	cpu_intr_triv(int, vaddr_t, uint32_t);
 
 /* system function switch */
 struct systemsw systemsw = {
@@ -65,29 +65,29 @@ struct systemsw systemsw = {
 	NULL,			/* intr_establish */
 };
 
-int
+bool
 system_set_clockfns(void *arg, void (*init)(void *))
 {
 
 	if (systemsw.s_clock_init != clock_init_triv)
-		return 1;
+		return true;
 	systemsw.s_clock_arg = arg;
 	systemsw.s_clock_init = init;
-	return 0;
+	return false;
 }
 
 static void
-cpu_intr_triv(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+cpu_intr_triv(int ppl, vaddr_t pc, uint32_t status)
 {
 
 	panic("cpu_intr_triv");
 }
 
 void
-cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+cpu_intr(int ppl, vaddr_t pc, uint32_t status)
 {
 
-	(*systemsw.s_cpu_intr)(status, cause, pc, ipending);
+	(*systemsw.s_cpu_intr)(ppl, pc, status);
 }
 
 static void
@@ -119,7 +119,7 @@ cpu_initclocks(void)
 	/*
 	 * Now we can enable all interrupts including hardclock(9).
 	 */
-	_splnone();
+	spl0();
 }
 
 void

@@ -1,4 +1,4 @@
-/* $NetBSD: setlocale.c,v 1.57 2009/03/09 02:22:25 tnozaki Exp $ */
+/* $NetBSD: setlocale.c,v 1.59 2012/01/20 16:31:30 joerg Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,14 +28,12 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: setlocale.c,v 1.57 2009/03/09 02:22:25 tnozaki Exp $");
+__RCSID("$NetBSD: setlocale.c,v 1.59 2012/01/20 16:31:30 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
-#include <sys/cdefs.h>
 #include <sys/types.h>
-#include <langinfo.h>
-#define __SETLOCALE_SOURCE__
 #include <locale.h>
+#include <limits.h>
 #include <paths.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,35 +47,19 @@ __link_set_decl(all_categories, _locale_category_t);
 
 extern const _locale_category_t _generic_LC_ALL_desc;
 extern const _locale_category_t _dummy_LC_COLLATE_desc;
-#ifdef WITH_RUNE
 extern const _locale_category_t _citrus_LC_CTYPE_desc;
 extern const _locale_category_t _citrus_LC_MONETARY_desc;
 extern const _locale_category_t _citrus_LC_NUMERIC_desc;
 extern const _locale_category_t _citrus_LC_TIME_desc;
 extern const _locale_category_t _citrus_LC_MESSAGES_desc;
-#else
-extern const _locale_category_t _localeio_LC_CTYPE_desc;
-extern const _locale_category_t _localeio_LC_MONETARY_desc;
-extern const _locale_category_t _localeio_LC_NUMERIC_desc;
-extern const _locale_category_t _localeio_LC_TIME_desc;
-extern const _locale_category_t _localeio_LC_MESSAGES_desc;
-#endif
 
 __link_set_add_data(all_categories, _generic_LC_ALL_desc);
 __link_set_add_data(all_categories, _dummy_LC_COLLATE_desc);
-#ifdef WITH_RUNE
 __link_set_add_data(all_categories, _citrus_LC_CTYPE_desc);
 __link_set_add_data(all_categories, _citrus_LC_MONETARY_desc);
 __link_set_add_data(all_categories, _citrus_LC_NUMERIC_desc);
 __link_set_add_data(all_categories, _citrus_LC_TIME_desc);
 __link_set_add_data(all_categories, _citrus_LC_MESSAGES_desc);
-#else
-__link_set_add_data(all_categories, _localeio_LC_CTYPE_desc);
-__link_set_add_data(all_categories, _localeio_LC_MONETARY_desc);
-__link_set_add_data(all_categories, _localeio_LC_NUMERIC_desc);
-__link_set_add_data(all_categories, _localeio_LC_TIME_desc);
-__link_set_add_data(all_categories, _localeio_LC_MESSAGES_desc);
-#endif
 
 _locale_category_t *
 _find_category(int category)
@@ -130,4 +112,14 @@ __setlocale(int category, const char *name)
 		}
 	}
 	return NULL;
+}
+
+char *
+setlocale(int category, const char *locale)
+{
+
+	/* locale may be NULL */
+
+	__mb_len_max_runtime = MB_LEN_MAX;
+	return __setlocale(category, locale);
 }

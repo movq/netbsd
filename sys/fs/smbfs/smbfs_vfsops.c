@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vfsops.c,v 1.90 2009/09/07 15:12:03 njoly Exp $	*/
+/*	$NetBSD: smbfs_vfsops.c,v 1.95 2011/10/07 09:35:05 hannken Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.90 2009/09/07 15:12:03 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.95 2011/10/07 09:35:05 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -300,7 +300,7 @@ smbfs_setroot(struct mount *mp)
 
 	/*
 	 * Someone might have already set sm_root while we slept
-	 * in smb_lookup or malloc/getnewvnode.
+	 * in smb_lookup or vnode allocation.
 	 */
 	if (smp->sm_root)
 		vput(vp);
@@ -309,7 +309,7 @@ smbfs_setroot(struct mount *mp)
 		smp->sm_root = VTOSMB(vp);
 
 		/* Keep reference, but unlock */
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 	}
 
 	return (0);
@@ -322,9 +322,10 @@ int
 smbfs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct smbmount *smp = VFSTOSMBFS(mp);
+	int error;
 
 	if (__predict_false(!smp->sm_root)) {
-		int error = smbfs_setroot(mp);
+		error = smbfs_setroot(mp);
 		if (error)
 			return (error);
 		/* fallthrough */
@@ -332,7 +333,11 @@ smbfs_root(struct mount *mp, struct vnode **vpp)
 
 	KASSERT(smp->sm_root != NULL && SMBTOV(smp->sm_root) != NULL);
 	*vpp = SMBTOV(smp->sm_root);
-	return vget(*vpp, LK_EXCLUSIVE | LK_RETRY);
+	vref(*vpp);
+	error = vn_lock(*vpp, LK_EXCLUSIVE | LK_RETRY);
+	if (error)
+		vrele(*vpp);
+	return error;
 }
 
 /*
@@ -413,8 +418,7 @@ smbfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 	int error, allerror = 0;
 
 	/* Allocate a marker vnode. */
-	if ((mvp = vnalloc(mp)) == NULL)
-		return ENOMEM;
+	mvp = vnalloc(mp);
 	/*
 	 * Force stale buffer cache information to be flushed.
 	 */
@@ -428,20 +432,20 @@ loop:
 		 */
 		if (vp->v_mount != mp || vismarker(vp))
 			continue;
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		np = VTOSMB(vp);
 		if (np == NULL) {
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 			continue;
 		}
 		if ((vp->v_type == VNON || (np->n_flag & NMODIFIED) == 0) &&
 		    LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     vp->v_uobj.uo_npages == 0) {
-			mutex_exit(&vp->v_interlock);
+			mutex_exit(vp->v_interlock);
 			continue;
 		}
 		mutex_exit(&mntvnode_lock);
-		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT | LK_INTERLOCK);
+		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
 		if (error) {
 			mutex_enter(&mntvnode_lock);
 			if (error == ENOENT) {

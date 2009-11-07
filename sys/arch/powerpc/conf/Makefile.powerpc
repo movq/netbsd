@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.powerpc,v 1.43 2009/02/15 01:58:01 cube Exp $
+#	$NetBSD: Makefile.powerpc,v 1.49.2.1 2012/05/17 18:22:27 riz Exp $
 #
 # Makefile for NetBSD
 #
@@ -27,10 +27,10 @@ NEED_OWN_INSTALL_TARGET?=no
 ##
 THISPPC=	$S/arch/${MACHINE}
 POWERPC=	$S/arch/powerpc
+GENASSYM_CONF=	${POWERPC}/powerpc/genassym.cf
+GENASSYM_CONF+=	${POWERPC}/${PPCDIR}/genassym.cf
 .if exists(${THISPPC}/${MACHINE}/genassym.cf)
-GENASSYM_CONF=	${THISPPC}/${MACHINE}/genassym.cf
-.else
-GENASSYM_CONF=	${POWERPC}/${PPCDIR}/genassym.cf
+GENASSYM_CONF+=	${THISPPC}/${MACHINE}/genassym.cf
 .endif
 .-include "${THISPPC}/conf/Makefile.${MACHINE}.inc"
 
@@ -41,9 +41,16 @@ CPPFLAGS+=	-D${MACHINE}=${MACHINE}
 CWARNFLAGS+=	-Wreturn-type
 .if ${PPCDIR} == "oea"
 CFLAGS+=	-mno-strict-align
+CFLAGS+=	-Wa,-maltivec
 .endif
-CFLAGS+=	-msoft-float ${CCPUOPTS} -Wa,-maltivec
-AFLAGS+=	${AOPTS}
+.if ${PPCDIR} == "booke"
+DEFCOPTS=	-O2
+CFLAGS+=	-fstack-protector
+CFLAGS+=	-mmultiple -misel
+.endif
+CFLAGS+=	-msdata=none
+CFLAGS+=	-msoft-float ${CCPUOPTS}
+AFLAGS+=	${AOPTS} -D_NOREGNAMES
 
 ##
 ## (3) libkern and compat
@@ -72,18 +79,51 @@ ${SYSTEM_FIRST_OBJ}: ${SYSTEM_FIRST_SFILE} assym.h
 ##
 ## (5) link settings
 ##
+KERNLDSCRIPT?=	${POWERPC}/conf/kern.ldscript
 TEXTADDR?=	0x100000
-LINKFORMAT=	-N
+LINKFORMAT=	-N -T ${KERNLDSCRIPT}
+
 ENTRYPOINT=	__start
 
-.if defined(NEED_SREC)
+.if defined(NEED_MDSETIMAGE) && $(NEED_MDSETIMAGE) != "no" \
+    && defined(RAMDISKDIR) && exists(${RAMDISKDIR}/ramdisk.fs)
 SYSTEM_LD_TAIL_EXTRA+=; \
-		${OBJCOPY} -v -O srec $@ $@.srec
+	echo ${TOOL_MDSETIMAGE} -s $@ ${RAMDISKDIR}/ramdisk.fs; \
+	${TOOL_MDSETIMAGE} -s $@ ${RAMDISKDIR}/ramdisk.fs
 .endif
 
-.if defined(NEED_BINARY)
+.if defined(NEED_SREC) && ${NEED_SREC} != "no"
 SYSTEM_LD_TAIL_EXTRA+=; \
-		${OBJCOPY} -v -O binary $@ $@.bin
+	echo ${OBJCOPY} -O srec $@ $@.srec; \
+	${OBJCOPY} -O srec $@ $@.srec
+.endif
+
+.if defined(NEED_BINARY) && ${NEED_BINARY} != "no"
+SYSTEM_LD_TAIL_EXTRA+=; \
+	echo ${OBJCOPY} -S -O binary $@ $@.bin; \
+	${OBJCOPY} -S -O binary $@ $@.bin
+
+EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.bin@}
+
+.if defined(NEED_UBOOTIMAGE) && ${NEED_UBOOTIMAGE} != "no"
+_OSRELEASE!=		${HOST_SH} $S/conf/osrelease.sh
+MKUBOOTIMAGEARGS=       -A powerpc -T kernel -C gz
+MKUBOOTIMAGEARGS+=      -a ${TEXTADDR:C/....$/0000/} -e $(TEXTADDR)
+MKUBOOTIMAGEARGS+=      -n "NetBSD/$(MACHINE) ${_OSRELEASE} ($(KERNEL_BUILD:T))"
+
+SYSTEM_LD_TAIL_EXTRA+=; \
+	echo ${TOOL_GZIP} -9cn $@.bin '>' $@.bin.gz; \
+	${TOOL_GZIP} -9cn $@.bin > $@.bin.gz; \
+	echo ${TOOL_MKUBOOTIMAGE} ${MKUBOOTIMAGEARGS} $@.bin.gz $@.ub; \
+	${TOOL_MKUBOOTIMAGE} ${MKUBOOTIMAGEARGS} $@.bin.gz $@.ub
+
+EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.bin.gz@}
+EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.ub@}
+.endif
+.endif
+
+.if !empty(SYSTEM_LD_TAIL_EXTRA_EXTRA)
+SYSTEM_LD_TAIL_EXTRA+= ${SYSTEM_LD_TAIL_EXTRA_EXTRA}
 .endif
 
 ##

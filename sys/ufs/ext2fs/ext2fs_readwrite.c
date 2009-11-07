@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_readwrite.c,v 1.55 2009/10/19 18:41:17 bouyer Exp $	*/
+/*	$NetBSD: ext2fs_readwrite.c,v 1.58.6.1 2012/05/07 03:01:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.55 2009/10/19 18:41:17 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.58.6.1 2012/05/07 03:01:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -224,7 +224,6 @@ ext2fs_write(void *v)
 	struct inode *ip;
 	struct m_ext2fs *fs;
 	struct buf *bp;
-	struct proc *p;
 	struct ufsmount *ump;
 	daddr_t lbn;
 	off_t osize;
@@ -270,19 +269,6 @@ ext2fs_write(void *v)
 	if (uio->uio_offset < 0 ||
 	    (uint64_t)uio->uio_offset + uio->uio_resid > ump->um_maxfilesize)
 		return (EFBIG);
-	/*
-	 * Maybe this should be above the vnode op call, but so long as
-	 * file servers have no limits, I don't think it matters.
-	 */
-	p = curproc;
-	if (vp->v_type == VREG && p &&
-	    uio->uio_offset + uio->uio_resid >
-	    p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
-		mutex_enter(proc_lock);
-		psignal(p, SIGXFSZ);
-		mutex_exit(proc_lock);
-		return (EFBIG);
-	}
 	if (uio->uio_resid == 0)
 		return (0);
 
@@ -325,13 +311,14 @@ ext2fs_write(void *v)
 			 */
 
 			if (!async && oldoff >> 16 != uio->uio_offset >> 16) {
-				mutex_enter(&vp->v_interlock);
+				mutex_enter(vp->v_interlock);
 				error = VOP_PUTPAGES(vp, (oldoff >> 16) << 16,
-				    (uio->uio_offset >> 16) << 16, PGO_CLEANIT);
+				    (uio->uio_offset >> 16) << 16,
+				    PGO_CLEANIT | PGO_LAZY);
 			}
 		}
 		if (error == 0 && ioflag & IO_SYNC) {
-			mutex_enter(&vp->v_interlock);
+			mutex_enter(vp->v_interlock);
 			error = VOP_PUTPAGES(vp, trunc_page(oldoff),
 			    round_page(blkroundup(fs, uio->uio_offset)),
 			    PGO_CLEANIT | PGO_SYNCIO);
@@ -388,6 +375,8 @@ ext2fs_write(void *v)
 
 out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
+	if (vp->v_mount->mnt_flag & MNT_RELATIME)
+		ip->i_flag |= IN_ACCESS;
 	if (resid > uio->uio_resid && ap->a_cred &&
 	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL))
 		ip->i_e2fs_mode &= ~(ISUID | ISGID);

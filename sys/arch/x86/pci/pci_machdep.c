@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.37 2009/08/18 16:41:03 jmcneill Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.54 2012/02/15 16:30:29 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2009/08/18 16:41:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.54 2012/02/15 16:30:29 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -82,6 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2009/08/18 16:41:03 jmcneill Ex
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/kmem.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -94,11 +96,36 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2009/08/18 16:41:03 jmcneill Ex
 #include <dev/isa/isavar.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
+#include <dev/pci/pccbbreg.h>
 #include <dev/pci/pcidevs.h>
+#include <dev/pci/genfb_pcivar.h>
+
+#include <dev/wsfb/genfbvar.h>
+#include <arch/x86/include/genfb_machdep.h>
+#include <dev/ic/vgareg.h>
 
 #include "acpica.h"
-#include "opt_mpbios.h"
+#include "genfb.h"
+#include "isa.h"
 #include "opt_acpi.h"
+#include "opt_ddb.h"
+#include "opt_mpbios.h"
+#include "opt_vga.h"
+#include "pci.h"
+#include "wsdisplay.h"
+
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_extern.h>
+#endif
+
+#ifdef VGA_POST
+#include <x86/vga_post.h>
+#endif
+
+#include <machine/autoconf.h>
+#include <machine/bootinfo.h>
 
 #ifdef MPBIOS
 #include <machine/mpbiosvar.h>
@@ -112,35 +139,33 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.37 2009/08/18 16:41:03 jmcneill Ex
 
 #include "opt_pci_conf_mode.h"
 
-#ifdef __i386__
-#include "opt_xbox.h"
-#ifdef XBOX
-#include <machine/xbox.h>
+#ifdef PCI_CONF_MODE
+#if (PCI_CONF_MODE == 1) || (PCI_CONF_MODE == 2)
+static int pci_mode = PCI_CONF_MODE;
+#else
+#error Invalid PCI configuration mode.
 #endif
+#else
+static int pci_mode = -1;
 #endif
 
-int pci_mode = -1;
+struct pci_conf_lock {
+	uint32_t cl_cpuno;	/* 0: unlocked
+				 * 1 + n: locked by CPU n (0 <= n)
+				 */
+	uint32_t cl_sel;	/* the address that's being read. */
+};
 
+static void pci_conf_unlock(struct pci_conf_lock *);
+static uint32_t pci_conf_selector(pcitag_t, int);
+static unsigned int pci_conf_port(pcitag_t, int);
+static void pci_conf_select(uint32_t);
+static void pci_conf_lock(struct pci_conf_lock *, uint32_t);
 static void pci_bridge_hook(pci_chipset_tag_t, pcitag_t, void *);
 struct pci_bridge_hook_arg {
 	void (*func)(pci_chipset_tag_t, pcitag_t, void *); 
 	void *arg; 
 }; 
-
-
-__cpu_simple_lock_t pci_conf_lock = __SIMPLELOCK_UNLOCKED;
-
-#define	PCI_CONF_LOCK(s)						\
-do {									\
-	(s) = splhigh();						\
-	__cpu_simple_lock(&pci_conf_lock);				\
-} while (0)
-
-#define	PCI_CONF_UNLOCK(s)						\
-do {									\
-	__cpu_simple_unlock(&pci_conf_lock);				\
-	splx((s));							\
-} while (0)
 
 #define	PCI_MODE1_ENABLE	0x80000000UL
 #define	PCI_MODE1_ADDRESS_REG	0x0cf8
@@ -172,6 +197,8 @@ struct {
 	_qe(0, 0, 0, PCI_VENDOR_SIS, PCI_PRODUCT_SIS_740),
 	/* SIS 741 */
 	_qe(0, 0, 0, PCI_VENDOR_SIS, PCI_PRODUCT_SIS_741),
+	/* VIA Technologies VX900 */
+	_qe(0, 0, 0, PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VX900_HB),
 	{0, 0xffffffff} /* patchable */
 };
 #undef _m1tag
@@ -183,58 +210,162 @@ struct {
  * of these functions.
  */
 struct x86_bus_dma_tag pci_bus_dma_tag = {
-	0,				/* tag_needs_free */
+	._tag_needs_free	= 0,
 #if defined(_LP64) || defined(PAE)
-	PCI32_DMA_BOUNCE_THRESHOLD,	/* bounce_thresh */
-	ISA_DMA_BOUNCE_THRESHOLD,	/* bounce_alloclo */
-	PCI32_DMA_BOUNCE_THRESHOLD,	/* bounce_allochi */
+	._bounce_thresh		= PCI32_DMA_BOUNCE_THRESHOLD,
+	._bounce_alloc_lo	= ISA_DMA_BOUNCE_THRESHOLD,
+	._bounce_alloc_hi	= PCI32_DMA_BOUNCE_THRESHOLD,
 #else
-	0,
-	0,
-	0,
+	._bounce_thresh		= 0,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= 0,
 #endif
-	NULL,			/* _may_bounce */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._may_bounce		= NULL,
 };
 
 #ifdef _LP64
 struct x86_bus_dma_tag pci_bus_dma64_tag = {
-	0,				/* tag_needs_free */
-	0,
-	0,
-	0,
-	NULL,			/* _may_bounce */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	NULL,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._tag_needs_free	= 0,
+	._bounce_thresh		= 0,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= 0,
+	._may_bounce		= NULL,
 };
 #endif
+
+static struct pci_conf_lock cl0 = {
+	  .cl_cpuno = 0UL
+	, .cl_sel = 0UL
+};
+
+static struct pci_conf_lock * const cl = &cl0;
+
+#if NGENFB > 0 && NACPICA > 0 && defined(VGA_POST)
+extern int acpi_md_vbios_reset;
+extern int acpi_md_vesa_modenum;
+#endif
+
+static struct genfb_colormap_callback gfb_cb;
+static struct genfb_pmf_callback pmf_cb;
+static struct genfb_mode_callback mode_cb;
+#ifdef VGA_POST
+static struct vga_post *vga_posth = NULL;
+#endif
+
+static void
+pci_conf_lock(struct pci_conf_lock *ocl, uint32_t sel)
+{
+	uint32_t cpuno;
+
+	KASSERT(sel != 0);
+
+	kpreempt_disable();
+	cpuno = cpu_number() + 1;
+	/* If the kernel enters pci_conf_lock() through an interrupt
+	 * handler, then the CPU may already hold the lock.
+	 *
+	 * If the CPU does not already hold the lock, spin until
+	 * we can acquire it.
+	 */
+	if (cpuno == cl->cl_cpuno) {
+		ocl->cl_cpuno = cpuno;
+	} else {
+		u_int spins;
+
+		ocl->cl_cpuno = 0;
+
+		spins = SPINLOCK_BACKOFF_MIN;
+		while (atomic_cas_32(&cl->cl_cpuno, 0, cpuno) != 0) {
+			SPINLOCK_BACKOFF(spins);
+#ifdef LOCKDEBUG
+			if (SPINLOCK_SPINOUT(spins)) {
+				panic("%s: cpu %" PRId32
+				    " spun out waiting for cpu %" PRId32,
+				    __func__, cpuno, cl->cl_cpuno);
+			}
+#endif	/* LOCKDEBUG */
+		}
+	}
+
+	/* Only one CPU can be here, so an interlocked atomic_swap(3)
+	 * is not necessary.
+	 *
+	 * Evaluating atomic_cas_32_ni()'s argument, cl->cl_sel,
+	 * and applying atomic_cas_32_ni() is not an atomic operation,
+	 * however, any interrupt that, in the middle of the
+	 * operation, modifies cl->cl_sel, will also restore
+	 * cl->cl_sel.  So cl->cl_sel will have the same value when
+	 * we apply atomic_cas_32_ni() as when we evaluated it,
+	 * before.
+	 */
+	ocl->cl_sel = atomic_cas_32_ni(&cl->cl_sel, cl->cl_sel, sel);
+	pci_conf_select(sel);
+}
+
+static void
+pci_conf_unlock(struct pci_conf_lock *ocl)
+{
+	uint32_t sel;
+
+	sel = atomic_cas_32_ni(&cl->cl_sel, cl->cl_sel, ocl->cl_sel);
+	pci_conf_select(ocl->cl_sel);
+	if (ocl->cl_cpuno != cl->cl_cpuno)
+		atomic_cas_32(&cl->cl_cpuno, cl->cl_cpuno, ocl->cl_cpuno);
+	kpreempt_enable();
+}
+
+static uint32_t
+pci_conf_selector(pcitag_t tag, int reg)
+{
+	static const pcitag_t mode2_mask = {
+		.mode2 = {
+			  .enable = 0xff
+			, .forward = 0xff
+		}
+	};
+
+	switch (pci_mode) {
+	case 1:
+		return tag.mode1 | reg;
+	case 2:
+		return tag.mode1 & mode2_mask.mode1;
+	default:
+		panic("%s: mode not configured", __func__);
+	}
+}
+
+static unsigned int
+pci_conf_port(pcitag_t tag, int reg)
+{
+	switch (pci_mode) {
+	case 1:
+		return PCI_MODE1_DATA_REG;
+	case 2:
+		return tag.mode2.port | reg;
+	default:
+		panic("%s: mode not configured", __func__);
+	}
+}
+
+static void
+pci_conf_select(uint32_t sel)
+{
+	pcitag_t tag;
+
+	switch (pci_mode) {
+	case 1:
+		outl(PCI_MODE1_ADDRESS_REG, sel);
+		return;
+	case 2:
+		tag.mode1 = sel;
+		outb(PCI_MODE2_ENABLE_REG, tag.mode2.enable);
+		if (tag.mode2.enable != 0)
+			outb(PCI_MODE2_FORWARD_REG, tag.mode2.forward);
+		return;
+	default:
+		panic("%s: mode not configured", __func__);
+	}
+}
 
 void
 pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
@@ -253,20 +384,6 @@ pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 int
 pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 {
-
-#if defined(__i386__) && defined(XBOX)
-	/*
-	 * Scanning above the first device is fatal on the Microsoft Xbox.
-	 * If busno=1, only allow for one device.
-	 */
-	if (arch_i386_is_xbox) {
-		if (busno == 1)
-			return 1;
-		else if (busno > 1)
-			return 0;
-	}
-#endif
-
 	/*
 	 * Bus number is irrelevant.  If Configuration Mechanism 2 is in
 	 * use, can only have devices 0-15 on any bus.  If Configuration
@@ -282,204 +399,126 @@ pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 pcitag_t
 pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
 {
+	pci_chipset_tag_t ipc;
 	pcitag_t tag;
 
-#ifndef PCI_CONF_MODE
+	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
+		if ((ipc->pc_present & PCI_OVERRIDE_MAKE_TAG) == 0)
+			continue;
+		return (*ipc->pc_ov->ov_make_tag)(ipc->pc_ctx,
+		    pc, bus, device, function);
+	}
+
 	switch (pci_mode) {
 	case 1:
-		goto mode1;
+		if (bus >= 256 || device >= 32 || function >= 8)
+			panic("%s: bad request", __func__);
+
+		tag.mode1 = PCI_MODE1_ENABLE |
+			    (bus << 16) | (device << 11) | (function << 8);
+		return tag;
 	case 2:
-		goto mode2;
+		if (bus >= 256 || device >= 16 || function >= 8)
+			panic("%s: bad request", __func__);
+
+		tag.mode2.port = 0xc000 | (device << 8);
+		tag.mode2.enable = 0xf0 | (function << 1);
+		tag.mode2.forward = bus;
+		return tag;
 	default:
-		panic("pci_make_tag: mode not configured");
+		panic("%s: mode not configured", __func__);
 	}
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	if (bus >= 256 || device >= 32 || function >= 8)
-		panic("pci_make_tag: bad request");
-
-	tag.mode1 = PCI_MODE1_ENABLE |
-		    (bus << 16) | (device << 11) | (function << 8);
-	return tag;
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	if (bus >= 256 || device >= 16 || function >= 8)
-		panic("pci_make_tag: bad request");
-
-	tag.mode2.port = 0xc000 | (device << 8);
-	tag.mode2.enable = 0xf0 | (function << 1);
-	tag.mode2.forward = bus;
-	return tag;
-#endif
 }
 
 void
 pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag,
     int *bp, int *dp, int *fp)
 {
+	pci_chipset_tag_t ipc;
 
-#ifndef PCI_CONF_MODE
+	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
+		if ((ipc->pc_present & PCI_OVERRIDE_DECOMPOSE_TAG) == 0)
+			continue;
+		(*ipc->pc_ov->ov_decompose_tag)(ipc->pc_ctx,
+		    pc, tag, bp, dp, fp);
+		return;
+	}
+
 	switch (pci_mode) {
 	case 1:
-		goto mode1;
+		if (bp != NULL)
+			*bp = (tag.mode1 >> 16) & 0xff;
+		if (dp != NULL)
+			*dp = (tag.mode1 >> 11) & 0x1f;
+		if (fp != NULL)
+			*fp = (tag.mode1 >> 8) & 0x7;
+		return;
 	case 2:
-		goto mode2;
+		if (bp != NULL)
+			*bp = tag.mode2.forward & 0xff;
+		if (dp != NULL)
+			*dp = (tag.mode2.port >> 8) & 0xf;
+		if (fp != NULL)
+			*fp = (tag.mode2.enable >> 1) & 0x7;
+		return;
 	default:
-		panic("pci_decompose_tag: mode not configured");
+		panic("%s: mode not configured", __func__);
 	}
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	if (bp != NULL)
-		*bp = (tag.mode1 >> 16) & 0xff;
-	if (dp != NULL)
-		*dp = (tag.mode1 >> 11) & 0x1f;
-	if (fp != NULL)
-		*fp = (tag.mode1 >> 8) & 0x7;
-	return;
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	if (bp != NULL)
-		*bp = tag.mode2.forward & 0xff;
-	if (dp != NULL)
-		*dp = (tag.mode2.port >> 8) & 0xf;
-	if (fp != NULL)
-		*fp = (tag.mode2.enable >> 1) & 0x7;
-#endif
 }
 
 pcireg_t
-pci_conf_read( pci_chipset_tag_t pc, pcitag_t tag,
-    int reg)
+pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 {
+	pci_chipset_tag_t ipc;
 	pcireg_t data;
-	int s;
+	struct pci_conf_lock ocl;
 
 	KASSERT((reg & 0x3) == 0);
-#if defined(__i386__) && defined(XBOX)
-	if (arch_i386_is_xbox) {
-		int bus, dev, fn;
-		pci_decompose_tag(pc, tag, &bus, &dev, &fn);
-		if (bus == 0 && dev == 0 && (fn == 1 || fn == 2))
-			return (pcireg_t)-1;
+
+	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
+		if ((ipc->pc_present & PCI_OVERRIDE_CONF_READ) == 0)
+			continue;
+		return (*ipc->pc_ov->ov_conf_read)(ipc->pc_ctx, pc, tag, reg);
 	}
-#endif
 
-#ifndef PCI_CONF_MODE
-	switch (pci_mode) {
-	case 1:
-		goto mode1;
-	case 2:
-		goto mode2;
-	default:
-		panic("pci_conf_read: mode not configured");
-	}
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	PCI_CONF_LOCK(s);
-	outl(PCI_MODE1_ADDRESS_REG, tag.mode1 | reg);
-	data = inl(PCI_MODE1_DATA_REG);
-	outl(PCI_MODE1_ADDRESS_REG, 0);
-	PCI_CONF_UNLOCK(s);
+	pci_conf_lock(&ocl, pci_conf_selector(tag, reg));
+	data = inl(pci_conf_port(tag, reg));
+	pci_conf_unlock(&ocl);
 	return data;
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	PCI_CONF_LOCK(s);
-	outb(PCI_MODE2_ENABLE_REG, tag.mode2.enable);
-	outb(PCI_MODE2_FORWARD_REG, tag.mode2.forward);
-	data = inl(tag.mode2.port | reg);
-	outb(PCI_MODE2_ENABLE_REG, 0);
-	PCI_CONF_UNLOCK(s);
-	return data;
-#endif
 }
 
 void
-pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg,
-    pcireg_t data)
+pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 {
-	int s;
+	pci_chipset_tag_t ipc;
+	struct pci_conf_lock ocl;
 
 	KASSERT((reg & 0x3) == 0);
-#if defined(__i386__) && defined(XBOX)
-	if (arch_i386_is_xbox) {
-		int bus, dev, fn;
-		pci_decompose_tag(pc, tag, &bus, &dev, &fn);
-		if (bus == 0 && dev == 0 && (fn == 1 || fn == 2))
-			return;
+
+	for (ipc = pc; ipc != NULL; ipc = ipc->pc_super) {
+		if ((ipc->pc_present & PCI_OVERRIDE_CONF_WRITE) == 0)
+			continue;
+		(*ipc->pc_ov->ov_conf_write)(ipc->pc_ctx, pc, tag, reg,
+		    data);
+		return;
 	}
-#endif
 
-#ifndef PCI_CONF_MODE
-	switch (pci_mode) {
-	case 1:
-		goto mode1;
-	case 2:
-		goto mode2;
-	default:
-		panic("pci_conf_write: mode not configured");
-	}
-#endif
+	pci_conf_lock(&ocl, pci_conf_selector(tag, reg));
+	outl(pci_conf_port(tag, reg), data);
+	pci_conf_unlock(&ocl);
+}
 
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	PCI_CONF_LOCK(s);
-	outl(PCI_MODE1_ADDRESS_REG, tag.mode1 | reg);
-	outl(PCI_MODE1_DATA_REG, data);
-	outl(PCI_MODE1_ADDRESS_REG, 0);
-	PCI_CONF_UNLOCK(s);
-	return;
-#endif
+void
+pci_mode_set(int mode)
+{
+	KASSERT(pci_mode == -1 || pci_mode == mode);
 
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	PCI_CONF_LOCK(s);
-	outb(PCI_MODE2_ENABLE_REG, tag.mode2.enable);
-	outb(PCI_MODE2_FORWARD_REG, tag.mode2.forward);
-	outl(tag.mode2.port | reg, data);
-	outb(PCI_MODE2_ENABLE_REG, 0);
-	PCI_CONF_UNLOCK(s);
-#endif
+	pci_mode = mode;
 }
 
 int
 pci_mode_detect(void)
 {
-
-#ifdef PCI_CONF_MODE
-#if (PCI_CONF_MODE == 1) || (PCI_CONF_MODE == 2)
-	return (pci_mode = PCI_CONF_MODE);
-#else
-#error Invalid PCI configuration mode.
-#endif
-#else
 	uint32_t sav, val;
 	int i;
 	pcireg_t idreg;
@@ -553,7 +592,6 @@ not1:
 not2:
 
 	return (pci_mode = 0);
-#endif
 }
 
 /*
@@ -564,7 +602,7 @@ not2:
 int
 pci_bus_flags(void)
 {
-	int rval = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	int rval = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	int device, maxndevs;
 	pcitag_t tag;
@@ -598,7 +636,7 @@ pci_bus_flags(void)
  disable_mem:
 	printf("Warning: broken PCI-Host bridge detected; "
 	    "disabling memory-mapped access\n");
-	rval &= ~(PCI_FLAGS_MEM_ENABLED|PCI_FLAGS_MRL_OKAY|PCI_FLAGS_MRM_OKAY|
+	rval &= ~(PCI_FLAGS_MEM_OKAY|PCI_FLAGS_MRL_OKAY|PCI_FLAGS_MRM_OKAY|
 	    PCI_FLAGS_MWI_OKAY);
 	return (rval);
 }
@@ -687,4 +725,276 @@ pci_bridge_hook(pci_chipset_tag_t pc, pcitag_t tag, void *ctx)
 		PCI_SUBCLASS(reg) == PCI_SUBCLASS_BRIDGE_CARDBUS)) {
 		(*bridge_hook->func)(pc, tag, bridge_hook->arg);
 	}
+}
+
+static const void *
+bit_to_function_pointer(const struct pci_overrides *ov, uint64_t bit)
+{
+	switch (bit) {
+	case PCI_OVERRIDE_CONF_READ:
+		return ov->ov_conf_read;
+	case PCI_OVERRIDE_CONF_WRITE:
+		return ov->ov_conf_write;
+	case PCI_OVERRIDE_INTR_MAP:
+		return ov->ov_intr_map;
+	case PCI_OVERRIDE_INTR_STRING:
+		return ov->ov_intr_string;
+	case PCI_OVERRIDE_INTR_EVCNT:
+		return ov->ov_intr_evcnt;
+	case PCI_OVERRIDE_INTR_ESTABLISH:
+		return ov->ov_intr_establish;
+	case PCI_OVERRIDE_INTR_DISESTABLISH:
+		return ov->ov_intr_disestablish;
+	case PCI_OVERRIDE_MAKE_TAG:
+		return ov->ov_make_tag;
+	case PCI_OVERRIDE_DECOMPOSE_TAG:
+		return ov->ov_decompose_tag;
+	default:
+		return NULL;
+	}
+}
+
+void
+pci_chipset_tag_destroy(pci_chipset_tag_t pc)
+{
+	kmem_free(pc, sizeof(struct pci_chipset_tag));
+}
+
+int
+pci_chipset_tag_create(pci_chipset_tag_t opc, const uint64_t present,
+    const struct pci_overrides *ov, void *ctx, pci_chipset_tag_t *pcp)
+{
+	uint64_t bit, bits, nbits;
+	pci_chipset_tag_t pc;
+	const void *fp;
+
+	if (ov == NULL || present == 0)
+		return EINVAL;
+
+	pc = kmem_alloc(sizeof(struct pci_chipset_tag), KM_SLEEP);
+
+	if (pc == NULL)
+		return ENOMEM;
+
+	pc->pc_super = opc;
+
+	for (bits = present; bits != 0; bits = nbits) {
+		nbits = bits & (bits - 1);
+		bit = nbits ^ bits;
+		if ((fp = bit_to_function_pointer(ov, bit)) == NULL) {
+#ifdef DEBUG
+			printf("%s: missing bit %" PRIx64 "\n", __func__, bit);
+#endif
+			goto einval;
+		}
+	}
+
+	pc->pc_ov = ov;
+	pc->pc_present = present;
+	pc->pc_ctx = ctx;
+
+	*pcp = pc;
+
+	return 0;
+einval:
+	kmem_free(pc, sizeof(struct pci_chipset_tag));
+	return EINVAL;
+}
+
+static void
+x86_genfb_set_mapreg(void *opaque, int index, int r, int g, int b)
+{
+	outb(0x3c0 + VGA_DAC_ADDRW, index);
+	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)r >> 2);
+	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)g >> 2);
+	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)b >> 2);
+}
+
+static bool
+x86_genfb_setmode(struct genfb_softc *sc, int newmode)
+{
+#if NGENFB > 0
+	static int curmode = WSDISPLAYIO_MODE_EMUL;
+
+	switch (newmode) {
+	case WSDISPLAYIO_MODE_EMUL:
+		x86_genfb_mtrr_init(sc->sc_fboffset,
+		    sc->sc_height * sc->sc_stride);
+#if NACPICA > 0 && defined(VGA_POST)
+		if (curmode != newmode) {
+			if (vga_posth != NULL && acpi_md_vesa_modenum != 0) {
+				vga_post_set_vbe(vga_posth,
+				    acpi_md_vesa_modenum);
+			}
+		}
+#endif
+		break;
+	}
+
+	curmode = newmode;
+#endif
+	return true;
+}
+
+static bool
+x86_genfb_suspend(device_t dev, const pmf_qual_t *qual)
+{
+	return true;
+}
+
+static bool
+x86_genfb_resume(device_t dev, const pmf_qual_t *qual)
+{
+#if NGENFB > 0
+	struct pci_genfb_softc *psc = device_private(dev);
+
+#if NACPICA > 0 && defined(VGA_POST)
+	if (vga_posth != NULL && acpi_md_vbios_reset == 2) {
+		vga_post_call(vga_posth);
+		if (acpi_md_vesa_modenum != 0)
+			vga_post_set_vbe(vga_posth, acpi_md_vesa_modenum);
+	}
+#endif
+	genfb_restore_palette(&psc->sc_gen);
+#endif
+
+	return true;
+}
+
+device_t
+device_pci_register(device_t dev, void *aux)
+{
+	static bool found_console = false;
+
+	device_pci_props_register(dev, aux);
+
+	/*
+	 * Handle network interfaces here, the attachment information is
+	 * not available driver-independently later.
+	 *
+	 * For disks, there is nothing useful available at attach time.
+	 */
+	if (device_class(dev) == DV_IFNET) {
+		struct btinfo_netif *bin = lookup_bootinfo(BTINFO_NETIF);
+		if (bin == NULL)
+			return NULL;
+
+		/*
+		 * We don't check the driver name against the device name
+		 * passed by the boot ROM.  The ROM should stay usable if
+		 * the driver becomes obsolete.  The physical attachment
+		 * information (checked below) must be sufficient to
+		 * idenfity the device.
+		 */
+		if (bin->bus == BI_BUS_PCI &&
+		    device_is_a(device_parent(dev), "pci")) {
+			struct pci_attach_args *paa = aux;
+			int b, d, f;
+
+			/*
+			 * Calculate BIOS representation of:
+			 *
+			 *	<bus,device,function>
+			 *
+			 * and compare.
+			 */
+			pci_decompose_tag(paa->pa_pc, paa->pa_tag, &b, &d, &f);
+			if (bin->addr.tag == ((b << 8) | (d << 3) | f))
+				return dev;
+		}
+	}
+	if (device_parent(dev) && device_is_a(device_parent(dev), "pci") &&
+	    found_console == false) {
+		struct btinfo_framebuffer *fbinfo;
+		struct pci_attach_args *pa = aux;
+		prop_dictionary_t dict;
+
+		if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY) {
+#if NWSDISPLAY > 0 && NGENFB > 0
+			extern struct vcons_screen x86_genfb_console_screen;
+			struct rasops_info *ri;
+
+			ri = &x86_genfb_console_screen.scr_ri;
+#endif
+
+			fbinfo = lookup_bootinfo(BTINFO_FRAMEBUFFER);
+			dict = device_properties(dev);
+			/*
+			 * framebuffer drivers other than genfb can work
+			 * without the address property
+			 */
+			if (fbinfo != NULL) {
+				if (fbinfo->physaddr != 0) {
+				prop_dictionary_set_uint32(dict, "width",
+				    fbinfo->width);
+				prop_dictionary_set_uint32(dict, "height",
+				    fbinfo->height);
+				prop_dictionary_set_uint8(dict, "depth",
+				    fbinfo->depth);
+				prop_dictionary_set_uint16(dict, "linebytes",
+				    fbinfo->stride);
+
+				prop_dictionary_set_uint64(dict, "address",
+				    fbinfo->physaddr);
+#if NWSDISPLAY > 0 && NGENFB > 0
+				if (ri->ri_bits != NULL) {
+					prop_dictionary_set_uint64(dict,
+					    "virtual_address",
+					    (vaddr_t)ri->ri_bits);
+				}
+#endif
+				}
+#if notyet
+				prop_dictionary_set_bool(dict, "splash",
+				    fbinfo->flags & BI_FB_SPLASH ?
+				     true : false);
+#endif
+				if (fbinfo->depth == 8) {
+					gfb_cb.gcc_cookie = NULL;
+					gfb_cb.gcc_set_mapreg = 
+					    x86_genfb_set_mapreg;
+					prop_dictionary_set_uint64(dict,
+					    "cmap_callback",
+					    (uint64_t)(uintptr_t)&gfb_cb);
+				}
+				if (fbinfo->physaddr != 0) {
+					mode_cb.gmc_setmode = x86_genfb_setmode;
+					prop_dictionary_set_uint64(dict,
+					    "mode_callback",
+					    (uint64_t)(uintptr_t)&mode_cb);
+				}
+
+#if NWSDISPLAY > 0 && NGENFB > 0
+				if (device_is_a(dev, "genfb")) {
+					x86_genfb_set_console_dev(dev);
+#ifdef DDB
+					db_trap_callback =
+					    x86_genfb_ddb_trap_callback;
+#endif
+				}
+#endif
+			}
+			prop_dictionary_set_bool(dict, "is_console", true);
+			prop_dictionary_set_bool(dict, "clear-screen", false);
+#if NWSDISPLAY > 0 && NGENFB > 0
+			prop_dictionary_set_uint16(dict, "cursor-row",
+			    x86_genfb_console_screen.scr_ri.ri_crow);
+#endif
+#if notyet
+			prop_dictionary_set_bool(dict, "splash",
+			    fbinfo->flags & BI_FB_SPLASH ? true : false);
+#endif
+			pmf_cb.gpc_suspend = x86_genfb_suspend;
+			pmf_cb.gpc_resume = x86_genfb_resume;
+			prop_dictionary_set_uint64(dict,
+			    "pmf_callback", (uint64_t)(uintptr_t)&pmf_cb);
+#ifdef VGA_POST
+			vga_posth = vga_post_init(pa->pa_bus, pa->pa_device,
+			    pa->pa_function);
+#endif
+			found_console = true;
+			return NULL;
+		}
+	}
+	return NULL;
 }

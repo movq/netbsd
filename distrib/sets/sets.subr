@@ -1,4 +1,4 @@
-#	$NetBSD: sets.subr,v 1.91 2009/11/05 17:34:25 dyoung Exp $
+#	$NetBSD: sets.subr,v 1.135.2.1 2012/02/17 00:08:37 riz Exp $
 #
 
 #
@@ -6,6 +6,7 @@
 #	setsdir			path to src/distrib/sets
 #	nlists			list of base sets
 #	xlists			list of x11 sets
+#	extlists		list of extsrc sets
 #	obsolete		controls if obsolete files are selected instead
 #	module			if != "no", enable MODULE sets
 #	shlib			shared library format (a.out, elf, or "")
@@ -18,63 +19,12 @@
 #	HAVE_BINUTILS
 #	HAVE_GCC
 #	HAVE_GDB
+#	HAS_SSP
 #	TOOLCHAIN_MISSING
 #	OBJECT_FMT
 # as well as:
 #
-MKVARS="\
-	MKBFD		\
-	MKBINUTILS	\
-	MKCATPAGES	\
-	MKCOMPAT	\
-	MKCRYPTO	\
-	MKCRYPTO_IDEA	\
-	MKCRYPTO_MDC2	\
-	MKCRYPTO_RC5	\
-	MKCVS		\
-	MKDEBUG		\
-	MKDEBUGLIB	\
-	MKDOC		\
-	MKDYNAMICROOT	\
-	MKGCC		\
-	MKGCCCMDS	\
-	MKGDB		\
-	MKHESIOD	\
-	MKHTML		\
-	MKINET6		\
-	MKINFO		\
-	MKIPFILTER	\
-	MKISCSI		\
-	MKKERBEROS	\
-	MKKMOD		\
-	MKLDAP		\
-	MKLINT		\
-	MKLVM		\
-	MKMAN		\
-	MKMANPAGES	\
-	MKMANZ		\
-	MKMDNS		\
-	MKNLS		\
-	MKNVI		\
-	MKPAM		\
-	MKPF		\
-	MKPIC		\
-	MKPOSTFIX	\
-	MKPROFILE	\
-	MKSHARE		\
-	MKSKEY		\
-	MKX11		\
-	MKX11FONTS	\
-	MKXORG		\
-	MKYP		\
-	MKZFS		\
-	USE_INET6	\
-	USE_KERBEROS	\
-	USE_LDAP	\
-	USE_YP		\
-	NETBSDSRCDIR	\
-	MAKEVERBOSE	\
-"
+
 #
 # The following variables refer to tools that are used when building sets:
 #
@@ -89,7 +39,7 @@ MKVARS="\
 : ${FIND:=find}
 : ${GREP:=grep}
 : ${GZIP_CMD:=gzip}     # ${GZIP} is special to gzip(1)
-: ${HOSTNAME:=hostname}
+: ${HOSTNAME_CMD:=hostname}	# ${HOSTNAME} is special to bash(1)
 : ${HOST_SH:=sh}
 : ${IDENT:=ident}
 : ${JOIN:=join}
@@ -99,7 +49,6 @@ MKVARS="\
 : ${MTREE:=mtree}
 : ${PASTE:=paste}
 : ${PAX:=pax}
-: ${PKG_CREATE:=pkg_create}
 : ${PRINTF:=printf}
 : ${SED:=sed}
 : ${SORT:=sort}
@@ -107,6 +56,7 @@ MKVARS="\
 : ${TSORT:=tsort}
 : ${UNAME:=uname}
 : ${WC:=wc}
+: ${XARGS:=xargs}
 
 #
 # If printf is a shell builtin command, then we can
@@ -164,46 +114,35 @@ case "$(type printf)" in
 	;;
 esac
 
+#####
+
 oIFS=$IFS
 IFS="
 "
-for x in $(
-${MAKE} -B -f- all <<EOMAKE
-.include <bsd.own.mk>
-.if (\${MKMAN} == "no" || empty(MANINSTALL:Mmaninstall))
-MKMANPAGES=no
-.else
-MKMANPAGES=yes
-.endif
-.if \${MKX11} != "no"
-. if \${X11FLAVOUR} == "Xorg"
-MKXORG:=yes
-MKX11:=no
-. else
-MKXORG:=no
-. endif
-.endif
-all:
-.for i in MACHINE MACHINE_ARCH MACHINE_CPU \
-		HAVE_BINUTILS HAVE_GCC HAVE_GDB OBJECT_FMT TOOLCHAIN_MISSING \
-		${MKVARS}
-	@echo "export \$i=\${\$i}"
-.endfor
 
-EOMAKE
-); do
-#	echo 1>&2 "DEBUG: read $x"
-	eval $x
+for x in $( ${MAKE} -B -f ${rundir}/mkvars.mk mkvars ); do
+	eval export $x
 done
+
 IFS=$oIFS
 
-setsdir=${0%/*}
+MKVARS="$( ${MAKE} -B -f ${rundir}/mkvars.mk mkvars | ${SED} -e 's,=.*,,' | ${XARGS} )"
+
+#####
+
+setsdir=${rundir}
 obsolete=0
-module=yes
 if [ "${MKKMOD}" = "no" ]; then
 	module=no			# MODULEs are off.
-elif [ "${MACHINE}" = "evbppc" ]; then
-	module=no			# Turn off MODULEs for some ports.
+	modset=""
+else
+	module=yes
+	modset="modules"
+fi
+if [ "${MKATF}" = "no" ]; then
+	testset=""
+else
+	testset="tests"
 fi
 # Determine lib type. Do this first so stlib also gets set.
 if [ "${OBJECT_FMT}" = "ELF" ]; then
@@ -216,17 +155,11 @@ stlib=$shlib
 if [ "${MKPIC}" = "no" ]; then
 	shlib=no
 fi
-if [ "${MACHINE_ARCH}" = "m68000" ]; then
-	shlib=no			# Turn off shlibs for some ports.
-fi
-if [ "$module" != "no" ]; then
-	nlists="base comp etc games man misc modules tests text"
-else
-	nlists="base comp etc games man misc tests text"
-fi
+nlists="base comp etc games man misc $modset $testset text"
 xlists="xbase xcomp xetc xfont xserver"
+extlists="extbase extcomp extetc"
 
-OSRELEASE=`${HOST_SH} ${NETBSDSRCDIR}/sys/conf/osrelease.sh`
+OSRELEASE=$(${HOST_SH} ${NETBSDSRCDIR}/sys/conf/osrelease.sh -k)
 MODULEDIR="stand/${MACHINE}/${OSRELEASE}/modules"
 SUBST="s#@MODULEDIR@#${MODULEDIR}#g"
 SUBST="${SUBST};s#@OSRELEASE@#${OSRELEASE}#g"
@@ -239,7 +172,7 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 # In each file, a record consists of a path and a System Package name,
 # separated by whitespace. E.g.,
 #
-# 	# $NetBSD: sets.subr,v 1.91 2009/11/05 17:34:25 dyoung Exp $
+# 	# $NetBSD: sets.subr,v 1.135.2.1 2012/02/17 00:08:37 riz Exp $
 # 	.			base-sys-root	[keyword[,...]]
 # 	./altroot		base-sys-root
 # 	./bin			base-sys-root
@@ -259,8 +192,10 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	obsolete		file is obsolete, and only printed if 
 #				${obsolete} != 0
 #
+#	atf			${MKATF} != no
 #	bfd			obsolete, use binutils.
 #	binutils		${MKBINUTILS} != no
+#	bsdgrep			${MKBSDGREP} != no
 #	catpages		${MKCATPAGES} != no
 #	compat			${MKCOMPAT} != no
 #	crypto			${MKCRYPTO} != no
@@ -271,7 +206,9 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	debug			${MKDEBUG} != no
 #	debuglib		${MKDEBUGLIB} != no
 #	doc			${MKDOC} != no
+#	dtrace			${MKDTRACE} != no
 #	dynamicroot		${MKDYNAMICROOT} != no
+#	extsrc			${MKEXTSRC} != no
 #	gcc			${MKGCC} != no
 #	gcccmds			${MKGCCCMDS} != no
 #	gdb			${MKGDB} != no
@@ -285,7 +222,9 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	kmod			${MKKMOD} != no
 #	ldap			${MKLDAP} != no
 #	lint			${MKLINT} != no
+#	llvm			${MKLLVM} != no
 #	lvm			${MKLVM} != no
+#	makemandb		${MKMAKEMANDB} != no
 #	man			${MKMAN} != no
 #	manpages		${MKMANPAGES} != no
 #	manz			${MKMANZ} != no
@@ -293,12 +232,16 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	nls			${MKNLS} != no
 #	nvi			${MKNVI} != no
 #	pam			${MKPAM} != no
+#	pcc			${MKPCC} != no
 #	pf			${MKPF} != no
 #	pic			${MKPIC} != no
 #	postfix			${MKPOSTFIX} != no
 #	profile			${MKPROFILE} != no
+#	perfuse			${MKPERFUSE} != no
 #	share			${MKSHARE} != no
 #	skey			${MKSKEY} != no
+#	solaris			${MKDTRACE} != no or ${MKZFS} != no
+#	ssp			${HAS_SSP} != no
 #	x11			${MKX11} != no && ${X11FLAVOUR} != "Xorg"
 #	xorg			${MKX11} != no && ${X11FLAVOUR} == "Xorg"
 #	yp			${MKYP} != no
@@ -325,15 +268,7 @@ list_set_files()
 	else
 		verbose=true
 	fi
-	for setname; do
-		list=`list_set_lists $setname`
-		for l in $list; do
-			echo $l
-			if $verbose; then
-				echo >&2 "DEBUG: list_set_files: $l"
-			fi
-		done
-	done | xargs cat | ${SED} ${SUBST} | \
+	print_set_lists "$@" | \
 	${AWK} -v obsolete=${obsolete} '
 		BEGIN {
 			if (obsolete)
@@ -344,6 +279,7 @@ list_set_files()
 				nv = needvars[vi]
 				kw = tolower(nv)
 				sub(/^mk/, "", kw)
+				sub(/^has_/, "", kw)
 				if (ENVIRON[nv] != "no")
 					wanted[kw] = 1 
 			}
@@ -366,7 +302,16 @@ list_set_files()
 			next;
 		}
 
+		/^-/ {
+			notwanted[substr($1, 2)] = 1;
+			delete list [substr($1, 2)];
+			next;
+		}
+				
+
 		NF > 2 && $3 != "-" {
+			if (notwanted[$1] != "")
+				next;
 			split($3, keywords, ",")
 			show = 1
 			haveobs = 0
@@ -375,9 +320,8 @@ list_set_files()
 				if (("manz" in wanted) &&
 				    (kw == ".cat" || kw == ".man"))
 					$1 = $1 ".gz"
-				negated = match(kw, "! *")
-				if (negated > 0) {
-					kw = substr(kw, RSTART + RLENGTH)
+				if (substr(kw, 1, 1) == "!") {
+					kw = substr(kw, 2)
 					if (kw in wanted)
 						show = 0
 				} else {
@@ -390,13 +334,21 @@ list_set_files()
 			if (obsolete && ! haveobs)
 				next
 			if (show)
-				print
+				list[$1] = $0
 			next
 		}
 
 		{
+			if (notwanted[$1] != "")
+				next;
 			if (! obsolete)
-				print
+				list[$1] = $0
+		}
+
+		END {
+			for (i in list) {
+				print list[i]
+			}
 		}'
 
 }
@@ -415,15 +367,18 @@ list_set_files()
 # For a given setname $set, the following files may be selected from
 # .../list/$set:
 #	mi
+#	mi.ext.*
 #	ad.${MACHINE_ARCH}
 # (or)	ad.${MACHINE_CPU}
 #	ad.${MACHINE_CPU}.shl
 #	md.${MACHINE}.${MACHINE_ARCH}
 # (or)	md.${MACHINE}
 #	stl.mi
-#	stl.stlib
+#	stl.${stlib}
 #	shl.mi
-#	shl.shlib
+#	shl.mi.ext.*
+#	shl.${shlib}
+#	shl.${shlib}.ext.*
 #	module.mi			if ${module} != no
 #	module.${MACHINE}		if ${module} != no
 #	module.ad.${MACHINE_ARCH}	if ${module} != no
@@ -442,82 +397,113 @@ list_set_lists()
 {
 	setname=$1
 
-	setdir=$setsdir/lists/$setname
-	echo $setdir/mi
-	if [ "${MACHINE}" != "${MACHINE_ARCH}" ]; then
-		# Prefer an ad.${MACHINE_ARCH} over an ad.${MACHINE_CPU},
-		# since the arch-specific one will be more specific than
-		# the cpu-specific one.
-		if [ -f $setdir/ad.${MACHINE_ARCH} ]; then
-			echo $setdir/ad.${MACHINE_ARCH}
-		elif [ -f $setdir/ad.${MACHINE_CPU} ]; then
-			echo $setdir/ad.${MACHINE_CPU}
-		fi
-		if [ "$shlib" != "no" -a \
-		     -f $setdir/ad.${MACHINE_CPU}.shl ]; then
-			echo $setdir/ad.${MACHINE_CPU}.shl
-		fi
-	fi
-	if [ -f $setdir/md.${MACHINE}.${MACHINE_ARCH} ]; then
-		echo $setdir/md.${MACHINE}.${MACHINE_ARCH}
-	elif [ -f $setdir/md.${MACHINE} ]; then
-		echo $setdir/md.${MACHINE}
-	fi
-	if [ -f $setdir/stl.mi ]; then
-		echo $setdir/stl.mi
-	fi
-	if [ -f $setdir/stl.${stlib} ]; then
-		echo $setdir/stl.${stlib}
-	fi
-	if [ "$shlib" != "no" ]; then
-		if [ -f $setdir/shl.mi ]; then
-			echo $setdir/shl.mi
-		fi
-		if [ -f $setdir/shl.${shlib} ]; then
-			echo $setdir/shl.${shlib}
-		fi
-	fi
-	if [ "$module" != "no" ]; then
-		if [ -f $setdir/module.mi ]; then
-			echo $setdir/module.mi
-		fi
-		if [ -f $setdir/module.${MACHINE} ]; then
-			echo $setdir/module.${MACHINE}
-		fi
-		if [ "${MACHINE}" != "${MACHINE_ARCH}" ]; then
-			# Prefer a module.ad.${MACHINE_ARCH} over a
-			# module.ad.${MACHINE_CPU}, since the arch-
-			# specific one will be more specific than the
-			# cpu-specific one.
-			if [ -f $setdir/module.ad.${MACHINE_ARCH} ]; then
-				echo $setdir/module.ad.${MACHINE_ARCH}
-			elif [ -f $setdir/module.ad.${MACHINE_CPU} ]; then
-				echo $setdir/module.ad.${MACHINE_CPU}
-			fi
-		fi
-	fi
+	list_set_lists_mi $setname
+	list_set_lists_ad $setname
+	list_set_lists_md $setname
+	list_set_lists_stl $setname
+	list_set_lists_shl $setname
+	list_set_lists_module $setname
+	list_set_lists_rescue $setname
+	return 0
+}
 
-	if [ -f $setdir/rescue.mi ]; then
-		echo $setdir/rescue.mi
-	fi
-	if [ -f $setdir/rescue.${MACHINE} ]; then
-		echo $setdir/rescue.${MACHINE}
-	fi
-	if [ "${MACHINE}" != "${MACHINE_ARCH}" ]; then
-		# Prefer a rescue.ad.${MACHINE_ARCH} over a
-		# rescue.ad.${MACHINE_CPU}, since the arch-
-		# specific one will be more specific than the
-		# cpu-specific one.
-		if [ -f $setdir/rescue.ad.${MACHINE_ARCH} ]; then
-			echo $setdir/rescue.ad.${MACHINE_ARCH}
-		elif [ -f $setdir/rescue.ad.${MACHINE_CPU} ]; then
-			echo $setdir/rescue.ad.${MACHINE_CPU}
-		fi
-		if [ "$shlib" != "no" -a \
-		     -f $setdir/rescue.ad.${MACHINE_CPU}.shl ]; then
-			echo $setdir/rescue.ad.${MACHINE_CPU}.shl
-		fi
-	fi
+list_set_lists_mi()
+{
+	setdir=$setsdir/lists/$1
+	# always exist!
+	echo $setdir/mi
+}
+
+list_set_lists_ad()
+{
+	setdir=$setsdir/lists/$1
+	[ "${MACHINE}" != "${MACHINE_ARCH}" ] && \
+	list_set_lists_common_ad $1
+}
+
+list_set_lists_md()
+{
+	setdir=$setsdir/lists/$1
+	echo_if_exist $setdir/md.${MACHINE}.${MACHINE_ARCH} || \
+	echo_if_exist $setdir/md.${MACHINE}
+}
+
+list_set_lists_stl()
+{
+	setdir=$setsdir/lists/$1
+	echo_if_exist $setdir/stl.mi
+	echo_if_exist $setdir/stl.${stlib}
+}
+
+list_set_lists_shl()
+{
+	setdir=$setsdir/lists/$1
+	[ "$shlib" != "no" ] || return
+	echo_if_exist $setdir/shl.mi
+	echo_if_exist $setdir/shl.${shlib}
+}
+
+list_set_lists_module()
+{
+	setdir=$setsdir/lists/$1
+	[ "$module" != "no" ] || return
+	echo_if_exist $setdir/module.mi
+	echo_if_exist $setdir/module.${MACHINE}
+	# XXX module never has .shl
+	[ "${MACHINE}" != "${MACHINE_ARCH}" ] && \
+	list_set_lists_common_ad $1 module
+}
+
+list_set_lists_rescue()
+{
+	setdir=$setsdir/lists/$1
+	echo_if_exist $setdir/rescue.mi
+	echo_if_exist $setdir/rescue.${MACHINE}
+	[ "${MACHINE}" != "${MACHINE_ARCH}" ] && \
+	list_set_lists_common_ad $1 rescue
+}
+
+list_set_lists_common_ad()
+{
+	setdir=$setsdir/lists/$1; _prefix=$2
+
+	[ -n "$_prefix" ] && prefix="$_prefix".
+
+	# Prefer a <prefix>.ad.${MACHINE_ARCH} over a
+	# <prefix>.ad.${MACHINE_CPU}, since the arch-
+	# specific one will be more specific than the
+	# cpu-specific one.
+	echo_if_exist $setdir/${prefix}ad.${MACHINE_ARCH} || \
+	echo_if_exist $setdir/${prefix}ad.${MACHINE_CPU}
+	[ "$shlib" != "no" ] && \
+	echo_if_exist $setdir/${prefix}ad.${MACHINE_CPU}.shl
+}
+
+echo_if_exist()
+{
+	[ -f $1 ] && echo $1
+	return $?
+}
+
+echo_if_exist_foreach()
+{
+	local _list=$1; shift
+	for _suffix in $@; do
+		echo_if_exist ${_list}.${_suffix}
+	done
+}
+
+print_set_lists()
+{
+	for setname; do
+		list=$(list_set_lists $setname)
+		for l in $list; do
+			echo $l
+			if $verbose; then
+				echo >&2 "DEBUG: list_set_files: $l"
+			fi
+		done
+	done | ${XARGS} ${SED} ${SUBST}
 }
 
 # arch_to_cpu mach
@@ -547,3 +533,27 @@ all:
 	@echo \${TARGET_ENDIANNESS}
 EOMAKE
 }
+
+#####
+
+# print_mkvars
+print_mkvars()
+{
+	for v in $MKVARS; do
+		eval echo $v=\$$v
+	done
+}
+
+# print_set_lists_{base,x,ext}
+# list_set_lists_{base,x,ext}
+# list_set_files_{base,x,ext}
+for func in print_set_lists list_set_lists list_set_files; do
+	for x in base x ext; do
+		if [ $x = base ]; then
+			list=nlists
+		else
+			list=${x}lists
+		fi
+		eval ${func}_${x} \(\) \{ $func \$$list \; \}
+	done
+done

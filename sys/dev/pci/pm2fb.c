@@ -1,4 +1,4 @@
-/*	$NetBSD: pm2fb.c,v 1.2 2009/10/28 04:25:13 macallan Exp $	*/
+/*	$NetBSD: pm2fb.c,v 1.12 2012/01/30 19:41:22 drochner Exp $	*/
 
 /*
  * Copyright (c) 2009 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pm2fb.c,v 1.2 2009/10/28 04:25:13 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pm2fb.c,v 1.12 2012/01/30 19:41:22 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: pm2fb.c,v 1.2 2009/10/28 04:25:13 macallan Exp $");
 #include <sys/malloc.h>
 #include <sys/lwp.h>
 #include <sys/kauth.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/videomode/videomode.h>
 
@@ -56,8 +54,22 @@ __KERNEL_RCSID(0, "$NetBSD: pm2fb.c,v 1.2 2009/10/28 04:25:13 macallan Exp $");
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
 #include <dev/wscons/wsdisplay_vconsvar.h>
+#include <dev/pci/wsdisplay_pci.h>
 
 #include <dev/i2c/i2cvar.h>
+#include <dev/i2c/i2c_bitbang.h>
+#include <dev/i2c/ddcvar.h>
+#include <dev/videomode/videomode.h>
+#include <dev/videomode/edidvar.h>
+#include <dev/videomode/edidreg.h>
+
+#include "opt_pm2fb.h"
+
+#ifdef PM2FB_DEBUG
+#define DPRINTF aprint_error
+#else
+#define DPRINTF while (0) printf
+#endif
 
 struct pm2fb_softc {
 	device_t sc_dev;
@@ -68,14 +80,12 @@ struct pm2fb_softc {
 	bus_space_tag_t sc_memt;
 	bus_space_tag_t sc_iot;
 
-	bus_space_handle_t sc_fbh;
 	bus_space_handle_t sc_regh;
 	bus_addr_t sc_fb, sc_reg;
 	bus_size_t sc_fbsize, sc_regsize;
 
 	int sc_width, sc_height, sc_depth, sc_stride;
 	int sc_locked;
-	void *sc_fbaddr;
 	struct vcons_screen sc_console_screen;
 	struct wsscreen_descr sc_defaultscreen_descr;
 	const struct wsscreen_descr *sc_screens[1];
@@ -86,7 +96,10 @@ struct pm2fb_softc {
 	u_char sc_cmap_green[256];
 	u_char sc_cmap_blue[256];
 	/* engine stuff */
-	uint32_t sc_master_cntl;
+	uint32_t sc_pprod;
+	/* i2c stuff */
+	struct i2c_controller sc_i2c;
+	uint8_t sc_edid_data[128];
 };
 
 static int	pm2fb_match(device_t, cfdata_t, void *);
@@ -116,9 +129,7 @@ static void	pm2fb_bitblt(struct pm2fb_softc *, int, int, int, int, int,
 			    int, int);
 
 static void	pm2fb_cursor(void *, int, int, int);
-#if 0
 static void	pm2fb_putchar(void *, int, int, u_int, long);
-#endif
 static void	pm2fb_copycols(void *, int, int, int, int);
 static void	pm2fb_erasecols(void *, int, int, int, long);
 static void	pm2fb_copyrows(void *, int, int, int);
@@ -133,6 +144,34 @@ struct wsdisplay_accessops pm2fb_accessops = {
 	NULL, 	/* load_font */
 	NULL,	/* pollc */
 	NULL	/* scroll */
+};
+
+/* I2C glue */
+static int pm2fb_i2c_acquire_bus(void *, int);
+static void pm2fb_i2c_release_bus(void *, int);
+static int pm2fb_i2c_send_start(void *, int);
+static int pm2fb_i2c_send_stop(void *, int);
+static int pm2fb_i2c_initiate_xfer(void *, i2c_addr_t, int);
+static int pm2fb_i2c_read_byte(void *, uint8_t *, int);
+static int pm2fb_i2c_write_byte(void *, uint8_t, int);
+
+/* I2C bitbang glue */
+static void pm2fb_i2cbb_set_bits(void *, uint32_t);
+static void pm2fb_i2cbb_set_dir(void *, uint32_t);
+static uint32_t pm2fb_i2cbb_read(void *);
+
+static void pm2_setup_i2c(struct pm2fb_softc *);
+
+static const struct i2c_bitbang_ops pm2fb_i2cbb_ops = {
+	pm2fb_i2cbb_set_bits,
+	pm2fb_i2cbb_set_dir,
+	pm2fb_i2cbb_read,
+	{
+		PM2_DD_SDA_IN,
+		PM2_DD_SCL_IN,
+		0,
+		0
+	}
 };
 
 static inline void
@@ -185,12 +224,12 @@ pm2fb_attach(device_t parent, device_t self, void *aux)
 	struct pm2fb_softc	*sc = device_private(self);
 	struct pci_attach_args	*pa = aux;
 	struct rasops_info	*ri;
-	char devinfo[256];
 	struct wsemuldisplaydev_attach_args aa;
 	prop_dictionary_t	dict;
 	unsigned long		defattr;
 	bool			is_console;
 	int i, j;
+	uint32_t flags;
 
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
@@ -198,8 +237,7 @@ pm2fb_attach(device_t parent, device_t self, void *aux)
 	sc->sc_iot = pa->pa_iot;
 	sc->sc_dev = self;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s\n", devinfo);
+	pci_aprint_devinfo(pa, NULL);
 
 	/* fill in parameters from properties */
 	dict = device_properties(self);
@@ -223,13 +261,8 @@ pm2fb_attach(device_t parent, device_t self, void *aux)
 
 	prop_dictionary_get_bool(dict, "is_console", &is_console);
 
-	if (pci_mapreg_map(pa, 0x14, PCI_MAPREG_TYPE_MEM,
-	    BUS_SPACE_MAP_LINEAR,
-	    &sc->sc_memt, &sc->sc_fbh, &sc->sc_fb, &sc->sc_fbsize)) {
-		aprint_error("%s: failed to map the frame buffer.\n",
-		    device_xname(sc->sc_dev));
-	}
-	sc->sc_fbaddr = bus_space_vaddr(sc->sc_memt, sc->sc_fbh);
+	pci_mapreg_info(pa->pa_pc, pa->pa_tag, 0x14, PCI_MAPREG_TYPE_MEM,
+	    &sc->sc_fb, &sc->sc_fbsize, &flags);
 
 	if (pci_mapreg_map(pa, 0x10, PCI_MAPREG_TYPE_MEM, 0,
 	    &sc->sc_memt, &sc->sc_regh, &sc->sc_reg, &sc->sc_regsize)) {
@@ -257,6 +290,8 @@ pm2fb_attach(device_t parent, device_t self, void *aux)
 	sc->sc_mode = WSDISPLAYIO_MODE_EMUL;
 	sc->sc_locked = 0;
 
+	pm2_setup_i2c(sc);
+
 	vcons_init(&sc->vd, sc, &sc->sc_defaultscreen_descr,
 	    &pm2fb_accessops);
 	sc->vd.init_screen = pm2fb_init_screen;
@@ -267,8 +302,7 @@ pm2fb_attach(device_t parent, device_t self, void *aux)
 	ri = &sc->sc_console_screen.scr_ri;
 
 	j = 0;
-	for (i = 0; i < (1 << sc->sc_depth); i++) {
-
+	for (i = 0; i < 256; i++) {
 		sc->sc_cmap_red[i] = rasops_cmap[j];
 		sc->sc_cmap_green[i] = rasops_cmap[j + 1];
 		sc->sc_cmap_blue[i] = rasops_cmap[j + 2];
@@ -304,11 +338,7 @@ pm2fb_attach(device_t parent, device_t self, void *aux)
 	aa.accessops = &pm2fb_accessops;
 	aa.accesscookie = &sc->vd;
 
-	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);
-	
-	printf("ap1 register: %08x\n", bus_space_read_4(sc->sc_memt, 
-	    sc->sc_regh, PM2_APERTURE1_CONTROL));
-	
+	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);	
 }
 
 static int
@@ -321,53 +351,61 @@ pm2fb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct vcons_screen *ms = vd->active;
 
 	switch (cmd) {
+	case WSDISPLAYIO_GTYPE:
+		*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;
+		return 0;
 
-		case WSDISPLAYIO_GTYPE:
-			*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;
-			return 0;
+	/* PCI config read/write passthrough. */
+	case PCI_IOC_CFGREAD:
+	case PCI_IOC_CFGWRITE:
+		return pci_devioctl(sc->sc_pc, sc->sc_pcitag,
+		    cmd, data, flag, l);
 
-		/* PCI config read/write passthrough. */
-		case PCI_IOC_CFGREAD:
-		case PCI_IOC_CFGWRITE:
-			return (pci_devioctl(sc->sc_pc, sc->sc_pcitag,
-			    cmd, data, flag, l));
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(sc->sc_dev, sc->sc_pc,
+		    sc->sc_pcitag, data);
 
-		case WSDISPLAYIO_GINFO:
-			if (ms == NULL)
-				return ENODEV;
-			wdf = (void *)data;
-			wdf->height = ms->scr_ri.ri_height;
-			wdf->width = ms->scr_ri.ri_width;
-			wdf->depth = ms->scr_ri.ri_depth;
-			wdf->cmsize = 256;
-			return 0;
+	case WSDISPLAYIO_GINFO:
+		if (ms == NULL)
+			return ENODEV;
+		wdf = (void *)data;
+		wdf->height = ms->scr_ri.ri_height;
+		wdf->width = ms->scr_ri.ri_width;
+		wdf->depth = ms->scr_ri.ri_depth;
+		wdf->cmsize = 256;
+		return 0;
 
-		case WSDISPLAYIO_GETCMAP:
-			return pm2fb_getcmap(sc,
-			    (struct wsdisplay_cmap *)data);
+	case WSDISPLAYIO_GETCMAP:
+		return pm2fb_getcmap(sc,
+		    (struct wsdisplay_cmap *)data);
 
-		case WSDISPLAYIO_PUTCMAP:
-			return pm2fb_putcmap(sc,
-			    (struct wsdisplay_cmap *)data);
+	case WSDISPLAYIO_PUTCMAP:
+		return pm2fb_putcmap(sc,
+		    (struct wsdisplay_cmap *)data);
 
-		case WSDISPLAYIO_LINEBYTES:
-			*(u_int *)data = sc->sc_stride;
-			return 0;
+	case WSDISPLAYIO_LINEBYTES:
+		*(u_int *)data = sc->sc_stride;
+		return 0;
 
-		case WSDISPLAYIO_SMODE:
-			{
-				int new_mode = *(int*)data;
-
-				/* notify the bus backend */
-				if (new_mode != sc->sc_mode) {
-					sc->sc_mode = new_mode;
-					if(new_mode == WSDISPLAYIO_MODE_EMUL) {
-						pm2fb_restore_palette(sc);
-						vcons_redraw_screen(ms);
-					}
-				}
-			}
-			return 0;
+	case WSDISPLAYIO_SMODE: {
+		int new_mode = *(int*)data;
+		if (new_mode != sc->sc_mode) {
+			sc->sc_mode = new_mode;
+			if(new_mode == WSDISPLAYIO_MODE_EMUL) {
+				pm2fb_restore_palette(sc);
+				vcons_redraw_screen(ms);
+			} else
+				pm2fb_flush_engine(sc);
+		}
+		}
+		return 0;
+	case WSDISPLAYIO_GET_EDID: {
+		struct wsdisplayio_edid_info *d = data;
+		d->data_size = 128;
+		if (d->buffer_size < 128)
+			return EAGAIN;
+		return copyout(sc->sc_edid_data, d->edid_data, 128);
+	}
 	}
 	return EPASSTHROUGH;
 }
@@ -420,13 +458,6 @@ pm2fb_mmap(void *v, void *vs, off_t offset, int prot)
 	}
 #endif
 
-#ifdef OFB_ALLOW_OTHERS
-	if (offset >= 0x80000000) {
-		pa = bus_space_mmap(sc->sc_memt, offset, 0, prot,
-		    BUS_SPACE_MAP_LINEAR);
-		return pa;
-	}
-#endif
 	return -1;
 }
 
@@ -441,15 +472,9 @@ pm2fb_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_width = sc->sc_width;
 	ri->ri_height = sc->sc_height;
 	ri->ri_stride = sc->sc_stride;
-	ri->ri_flg = RI_CENTER | RI_FULLCLEAR;
+	ri->ri_flg = RI_CENTER;
 
-	ri->ri_bits = (char *)sc->sc_fbaddr;
-
-	if (existing) {
-		ri->ri_flg |= RI_CLEAR;
-	}
-
-	rasops_init(ri, sc->sc_height / 8, sc->sc_width / 8);
+	rasops_init(ri, 0, 0);
 	ri->ri_caps = WSSCREEN_WSCOLORS;
 
 	rasops_reconfig(ri, sc->sc_height / ri->ri_font->fontheight,
@@ -461,9 +486,7 @@ pm2fb_init_screen(void *cookie, struct vcons_screen *scr,
 	ri->ri_ops.cursor = pm2fb_cursor;
 	ri->ri_ops.eraserows = pm2fb_eraserows;
 	ri->ri_ops.erasecols = pm2fb_erasecols;
-#if 0
 	ri->ri_ops.putchar = pm2fb_putchar;
-#endif
 }
 
 static int
@@ -555,42 +578,59 @@ pm2fb_putpalreg(struct pm2fb_softc *sc, uint8_t idx, uint8_t r, uint8_t g,
 static void
 pm2fb_init(struct pm2fb_softc *sc)
 {
-#if 0
-	uint32_t datatype;
-#endif
 	pm2fb_flush_engine(sc);
 
 	pm2fb_wait(sc, 8);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_SCREEN_BASE, 0);
 #if 0
-	switch (sc->sc_depth) {
-		case 8:
-			datatype = R128_GMC_DST_8BPP_CI;
-			break;
-		case 15:
-			datatype = R128_GMC_DST_15BPP;
-			break;
-		case 16:
-			datatype = R128_GMC_DST_16BPP;
-			break;
-		case 24:
-			datatype = R128_GMC_DST_24BPP;
-			break;
-		case 32:
-			datatype = R128_GMC_DST_32BPP;
-			break;
-		default:
-			aprint_error("%s: unsupported depth %d\n",
-			    device_xname(sc->sc_dev), sc->sc_depth);
-			return;
-	}
-	sc->sc_master_cntl = R128_GMC_CLR_CMP_CNTL_DIS |
-	    R128_GMC_AUX_CLIP_DIS | datatype;
-#endif
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_BYPASS_MASK, 
 		0xffffffff);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_FB_WRITE_MASK, 
 		0xffffffff);
+#endif
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_HW_WRITEMASK, 
+		0xffffffff);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_SW_WRITEMASK, 
+		0xffffffff);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_WRITE_MODE, 
+		PM2WM_WRITE_EN);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_SCREENSIZE,
+	    (sc->sc_height << 16) | sc->sc_width);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_SCISSOR_MODE, 
+	    PM2SC_SCREEN_EN);
+	pm2fb_wait(sc, 8);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DITHER_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_ALPHA_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DDA_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_TEX_COLOUR_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_TEX_ADDRESS_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_TEX_READ_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_TEX_LUT_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_YUV_MODE, 0);
+	pm2fb_wait(sc, 8);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DEPTH_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DEPTH, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_STENCIL_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_STIPPLE_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_ROP_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_WINDOW_ORIGIN, 0);
+	sc->sc_pprod = bus_space_read_4(sc->sc_memt, sc->sc_regh, 
+	    PM2_FB_READMODE) &
+	    (PM2FB_PP0_MASK | PM2FB_PP1_MASK | PM2FB_PP2_MASK);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_FB_READMODE, 
+	    sc->sc_pprod);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_TEXMAP_FORMAT, 
+	    sc->sc_pprod);
+	pm2fb_wait(sc, 8);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DY, 1 << 16);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DXDOM, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_STARTXDOM, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_STARTXSUB, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_STARTY, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_COUNT, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_SCISSOR_MINYX, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_SCISSOR_MAXYX,
+	    0x0fff0fff);
 	pm2fb_flush_engine(sc);
 }
 
@@ -599,9 +639,9 @@ pm2fb_rectfill(struct pm2fb_softc *sc, int x, int y, int wi, int he,
      uint32_t colour)
 {
 
-	pm2fb_wait(sc, 6);
-	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DDA_MODE, 
-	    0);
+	pm2fb_wait(sc, 7);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DDA_MODE, 0);
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_MODE, 0);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_CONFIG,
 	    PM2RECFG_WRITE_EN);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_BLOCK_COLOUR,
@@ -612,8 +652,6 @@ pm2fb_rectfill(struct pm2fb_softc *sc, int x, int y, int wi, int he,
 	    (he << 16) | wi);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_RENDER,
 	    PM2RE_RECTANGLE | PM2RE_INC_X | PM2RE_INC_Y | PM2RE_FASTFILL);
-	
-	pm2fb_flush_engine(sc);
 }
 
 static void
@@ -628,11 +666,18 @@ pm2fb_bitblt(struct pm2fb_softc *sc, int xs, int ys, int xd, int yd,
 	if (xd <= xs) {
 		dir |= PM2RE_INC_X;
 	}
-	pm2fb_wait(sc, 6);
+	pm2fb_wait(sc, 7);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_DDA_MODE, 0);
-	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_CONFIG,
-	    PM2RECFG_READ_SRC | PM2RECFG_WRITE_EN | PM2RECFG_ROP_EN |
-	    (rop << 6));
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_MODE, 0);
+	if (rop == 3) {
+		bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_CONFIG,
+		    PM2RECFG_READ_SRC | PM2RECFG_WRITE_EN | PM2RECFG_ROP_EN |
+		    PM2RECFG_PACKED | (rop << 6));
+	} else {
+		bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_CONFIG,
+		    PM2RECFG_READ_SRC | PM2RECFG_READ_DST | PM2RECFG_WRITE_EN |
+		    PM2RECFG_PACKED | PM2RECFG_ROP_EN | (rop << 6));
+	}
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_RECT_START,
 	    (yd << 16) | xd);
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_RECT_SIZE,
@@ -641,7 +686,6 @@ pm2fb_bitblt(struct pm2fb_softc *sc, int xs, int ys, int xd, int yd,
 	    (((ys - yd) & 0xfff) << 16) | ((xs - xd) & 0xfff));
 	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_RE_RENDER,
 	    PM2RE_RECTANGLE | dir);
-	pm2fb_flush_engine(sc);
 }
 
 static void
@@ -678,12 +722,99 @@ pm2fb_cursor(void *cookie, int on, int row, int col)
 
 }
 
-#if 0
 static void
 pm2fb_putchar(void *cookie, int row, int col, u_int c, long attr)
 {
+	struct rasops_info *ri = cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, c);
+	struct vcons_screen *scr = ri->ri_hw;
+	struct pm2fb_softc *sc = scr->scr_cookie;
+	uint32_t mode;
+
+	if (sc->sc_mode == WSDISPLAYIO_MODE_EMUL) {
+		void *data;
+		uint32_t fg, bg;
+		int uc, i;
+		int x, y, wi, he;
+
+		wi = font->fontwidth;
+		he = font->fontheight;
+
+		if (!CHAR_IN_FONT(c, font))
+			return;
+		bg = ri->ri_devcmap[(attr >> 16) & 0xf];
+		fg = ri->ri_devcmap[(attr >> 24) & 0xf];
+		x = ri->ri_xorigin + col * wi;
+		y = ri->ri_yorigin + row * he;
+		if (c == 0x20) {
+			pm2fb_rectfill(sc, x, y, wi, he, bg);
+		} else {
+			uc = c - font->firstchar;
+			data = (uint8_t *)font->data + uc * ri->ri_fontscale;
+
+			mode = PM2RM_MASK_MIRROR;
+			switch (ri->ri_font->stride) {
+				case 1:
+					mode |= 3 << 7;
+					break;
+				case 2:
+					mode |= 2 << 7;
+					break;
+			}
+
+			pm2fb_wait(sc, 8);
+
+			bus_space_write_4(sc->sc_memt, sc->sc_regh,
+			    PM2_RE_MODE, mode);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_CONFIG, PM2RECFG_WRITE_EN);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_BLOCK_COLOUR, bg);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_RECT_START, (y << 16) | x);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_RECT_SIZE, (he << 16) | wi);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_RENDER,
+			    PM2RE_RECTANGLE |
+			    PM2RE_INC_X | PM2RE_INC_Y | PM2RE_FASTFILL);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_BLOCK_COLOUR, fg);
+			bus_space_write_4(sc->sc_memt, sc->sc_regh, 
+			    PM2_RE_RENDER,
+			    PM2RE_RECTANGLE | PM2RE_SYNC_ON_MASK |
+			    PM2RE_INC_X | PM2RE_INC_Y | PM2RE_FASTFILL);
+
+			pm2fb_wait(sc, he);
+			switch (ri->ri_font->stride) {
+			case 1: {
+				uint8_t *data8 = data;
+				uint32_t reg;
+				for (i = 0; i < he; i++) {
+					reg = *data8;
+					bus_space_write_4(sc->sc_memt, 
+					    sc->sc_regh,
+					    PM2_RE_BITMASK, reg);
+					data8++;
+				}
+				break;
+				}
+			case 2: {
+				uint16_t *data16 = data;
+				uint32_t reg;
+				for (i = 0; i < he; i++) {
+					reg = *data16;
+					bus_space_write_4(sc->sc_memt, 
+					    sc->sc_regh,
+					    PM2_RE_BITMASK, reg);
+					data16++;
+				}
+				break;
+			}
+			}
+		}
+	}
 }
-#endif
 
 static void
 pm2fb_copycols(void *cookie, int row, int srccol, int dstcol, int ncols)
@@ -759,3 +890,114 @@ pm2fb_eraserows(void *cookie, int row, int nrows, long fillattr)
 	}
 }
 
+static void
+pm2_setup_i2c(struct pm2fb_softc *sc)
+{
+#ifdef PM2FB_DEBUG
+	struct edid_info ei;
+#endif
+	int i;
+
+	/* Fill in the i2c tag */
+	sc->sc_i2c.ic_cookie = sc;
+	sc->sc_i2c.ic_acquire_bus = pm2fb_i2c_acquire_bus;
+	sc->sc_i2c.ic_release_bus = pm2fb_i2c_release_bus;
+	sc->sc_i2c.ic_send_start = pm2fb_i2c_send_start;
+	sc->sc_i2c.ic_send_stop = pm2fb_i2c_send_stop;
+	sc->sc_i2c.ic_initiate_xfer = pm2fb_i2c_initiate_xfer;
+	sc->sc_i2c.ic_read_byte = pm2fb_i2c_read_byte;
+	sc->sc_i2c.ic_write_byte = pm2fb_i2c_write_byte;
+	sc->sc_i2c.ic_exec = NULL;
+
+	DPRINTF("data: %08x\n", bus_space_read_4(sc->sc_memt, sc->sc_regh,
+		PM2_DISPLAY_DATA));
+
+	/* make sure we're in i2c mode */
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_DISPLAY_DATA, 0);
+
+	/* zero out the EDID buffer */
+	memset(sc->sc_edid_data, 0, 128);
+
+	/* Some monitors don't respond first time */
+	i = 0;
+	while (sc->sc_edid_data[1] == 0 && i++ < 3)
+		ddc_read_edid(&sc->sc_i2c, sc->sc_edid_data, 128);
+#ifdef PM2FB_DEBUG
+	if (edid_parse(&sc->sc_edid_data[0], &ei) != -1) {
+		edid_print(&ei);
+	}
+#endif
+}
+
+/* I2C bitbanging */
+static void pm2fb_i2cbb_set_bits(void *cookie, uint32_t bits)
+{
+	struct pm2fb_softc *sc = cookie;
+	uint32_t out;
+
+	out = bits << 2;	/* bitmasks match the IN bits */
+
+	bus_space_write_4(sc->sc_memt, sc->sc_regh, PM2_DISPLAY_DATA, out);
+}
+
+static void pm2fb_i2cbb_set_dir(void *cookie, uint32_t dir)
+{
+	/* Nothing to do */
+}
+
+static uint32_t pm2fb_i2cbb_read(void *cookie)
+{
+	struct pm2fb_softc *sc = cookie;
+	uint32_t bits;
+
+	bits = bus_space_read_4(sc->sc_memt, sc->sc_regh, PM2_DISPLAY_DATA);
+
+	return bits;
+}
+
+/* higher level I2C stuff */
+static int
+pm2fb_i2c_acquire_bus(void *cookie, int flags)
+{
+	/* private bus */
+	return (0);
+}
+
+static void
+pm2fb_i2c_release_bus(void *cookie, int flags)
+{
+	/* private bus */
+}
+
+static int
+pm2fb_i2c_send_start(void *cookie, int flags)
+{
+	return (i2c_bitbang_send_start(cookie, flags, &pm2fb_i2cbb_ops));
+}
+
+static int
+pm2fb_i2c_send_stop(void *cookie, int flags)
+{
+
+	return (i2c_bitbang_send_stop(cookie, flags, &pm2fb_i2cbb_ops));
+}
+
+static int
+pm2fb_i2c_initiate_xfer(void *cookie, i2c_addr_t addr, int flags)
+{
+
+	return (i2c_bitbang_initiate_xfer(cookie, addr, flags, 
+	    &pm2fb_i2cbb_ops));
+}
+
+static int
+pm2fb_i2c_read_byte(void *cookie, uint8_t *valp, int flags)
+{
+	return (i2c_bitbang_read_byte(cookie, valp, flags, &pm2fb_i2cbb_ops));
+}
+
+static int
+pm2fb_i2c_write_byte(void *cookie, uint8_t val, int flags)
+{
+	return (i2c_bitbang_write_byte(cookie, val, flags, &pm2fb_i2cbb_ops));
+}

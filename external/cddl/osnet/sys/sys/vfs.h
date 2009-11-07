@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs.h,v 1.1 2009/08/07 20:57:58 haad Exp $	*/
+/*	$NetBSD: vfs.h,v 1.4 2010/02/28 14:45:47 haad Exp $	*/
 
 /*-
  * Copyright (c) 2007 Pawel Jakub Dawidek <pjd@FreeBSD.org>
@@ -45,7 +45,7 @@ typedef	struct mount	vfs_t;
 #define	vfs_flag	mnt_flag
 #define	vfs_data	mnt_data
 #define	vfs_count	mnt_refcnt
-#define	vfs_fsid	mnt_stat.f_fsid
+#define	vfs_fsid 	mnt_stat.f_fsid
 #define	vfs_bsize	mnt_stat.f_bsize
 
 #define	v_flag		v_vflag

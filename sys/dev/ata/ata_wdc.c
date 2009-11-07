@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_wdc.c,v 1.92 2009/10/19 18:41:12 bouyer Exp $	*/
+/*	$NetBSD: ata_wdc.c,v 1.96 2012/01/09 01:01:48 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2003 Manuel Bouyer.
@@ -54,9 +54,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_wdc.c,v 1.92 2009/10/19 18:41:12 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_wdc.c,v 1.96 2012/01/09 01:01:48 jakllsch Exp $");
 
 #include "opt_ata.h"
+#include "opt_wdc.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -178,8 +179,13 @@ wdc_ata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	struct wdc_regs *wdr = &wdc->regs[chp->ch_channel];
 	struct ata_bio *ata_bio = xfer->c_cmd;
 	struct ata_drive_datas *drvp = &chp->ch_drive[xfer->c_drive];
-	int wait_flags = (xfer->c_flags & C_POLL) ? AT_POLL : 0;
+	int wait_flags;
 	const char *errstring;
+#ifdef WDC_NO_IDS
+	wait_flags = AT_POLL;
+#else
+	wait_flags = (xfer->c_flags & C_POLL) ? AT_POLL : 0;
+#endif
 
 	ATADEBUG_PRINT(("wdc_ata_bio_start %s:%d:%d\n",
 	    device_xname(atac->atac_dev), chp->ch_channel, xfer->c_drive),
@@ -201,7 +207,7 @@ wdc_ata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		}
 		/*
 		 * disable interrupts, all commands here should be quick
-		 * enouth to be able to poll, and we don't go here that often
+		 * enough to be able to poll, and we don't go here that often
 		 */
 		bus_space_write_1(wdr->ctl_iot, wdr->ctl_ioh, wd_aux_ctlr,
 		    WDCTL_4BIT | WDCTL_IDS);
@@ -440,7 +446,7 @@ again:
 			}
 			if (ata_bio->flags & ATA_LBA48) {
 			    wdccommandext(chp, xfer->c_drive, atacmd_to48(cmd),
-				(u_int64_t)ata_bio->blkno, nblks);
+				(u_int64_t)ata_bio->blkno, nblks, 0);
 			} else {
 			    wdccommand(chp, xfer->c_drive, cmd, cyl,
 				head, sect, nblks, 0);
@@ -514,7 +520,7 @@ again:
 		}
 		if (ata_bio->flags & ATA_LBA48) {
 		    wdccommandext(chp, xfer->c_drive, atacmd_to48(cmd),
-			(u_int64_t) ata_bio->blkno, nblks);
+			(u_int64_t)ata_bio->blkno, nblks, 0);
 		} else {
 		    wdccommand(chp, xfer->c_drive, cmd, cyl,
 			head, sect, nblks,

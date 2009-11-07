@@ -1,21 +1,29 @@
-/*	$NetBSD: scheck.c,v 1.6 1997/09/05 02:11:58 jtc Exp $	*/
+/*	$NetBSD: scheck.c,v 1.8 2010/01/02 10:42:49 tsutsui Exp $	*/
+
+/*
+** This file is in the public domain, so clarified as of
+** 2006-07-17 by Arthur David Olson.
+*/
+
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
 #include <sys/cdefs.h>
+
 #ifndef lint
-#ifndef NOID
 #if 0
-static char	elsieid[] = "@(#)scheck.c	8.15";
+static char	elsieid[] = "@(#)scheck.c	8.19";
 #else
-__RCSID("$NetBSD: scheck.c,v 1.6 1997/09/05 02:11:58 jtc Exp $");
+__RCSID("$NetBSD: scheck.c,v 1.8 2010/01/02 10:42:49 tsutsui Exp $");
 #endif
 #endif /* !defined lint */
-#endif /* !defined NOID */
 
 /*LINTLIBRARY*/
 
 #include "private.h"
 
-char *
+const char *
 scheck(string, format)
 const char * const	string;
 const char * const	format;
@@ -24,11 +32,10 @@ const char * const	format;
 	register const char *	fp;
 	register char *		tp;
 	register int		c;
-	register char *		result;
+	register const char *	result;
 	char			dummy;
-	static char		nada;
 
-	result = &nada;
+	result = "";
 	if (string == NULL || format == NULL)
 		return result;
 	fbuf = imalloc((int) (2 * strlen(format) + 4));

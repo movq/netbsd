@@ -1,4 +1,4 @@
-/*	$NetBSD: biosmemps2.S,v 1.3 2008/04/28 20:23:25 martin Exp $	*/
+/*	$NetBSD: biosmemps2.S,v 1.6 2011/06/16 13:27:59 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -40,15 +40,9 @@
 */
 ENTRY(getextmemps2)
 	.code32
-	pushl	%ebp
-	movl	%esp,%ebp
-	pushl	%ebx
-	pushl	%ecx
-	pushl	%edx
-	push	%esi
-	push	%edi
-
-	movl	8(%ebp), %edx	# parameter
+	movl	%eax, %edx
+	xorl	%eax, %eax
+	pusha
 
 	call	_C_LABEL(prot_to_real)
 	.code16
@@ -56,7 +50,7 @@ ENTRY(getextmemps2)
 	# do int15, function 0xc0 call to discover if C7h is supported
 	movb	$0xc0, %ah
 	int	$0x15
-	setc	%bl
+	setc	%cl
 	jc	out		# 0xc0 not supported if carry set
 
 	# check feature byte 2, bit 4 to see if return memory map is supported
@@ -64,12 +58,13 @@ ENTRY(getextmemps2)
 	andb	$0x10, %al
 	jnz	getmem		# 0xc7 supported
 	
-	# set %bl to indicate failure, and exit
-	movb	$2, %bl
+	# set %cl to indicate failure, and exit
+	movb	$2, %cl
 	jmp	out
 
 getmem:
 	# move the parameter to right register
+	push	%ds
 	movl	%edx, %esi
 	andl	$0xf, %esi
 	shrl	$4, %edx
@@ -80,19 +75,13 @@ getmem:
 	# actually call int15, function 0xc7 now
 	movb	$0xc7, %ah
 	int	$0x15
-	setc	%bl		# save carry
+	setc	%cl		# save carry
+	pop	%ds
 
 out:
 	calll	_C_LABEL(real_to_prot)
 	.code32
 
-	xorl	%eax, %eax
-	movb	%bl, %al	# return value in %ax
-
-	pop	%edi
-	pop	%esi
-	popl	%edx
-	popl	%ecx
-	popl	%ebx
-	popl	%ebp
+	movb	%cl, 28(%esp)
+	popa
 	ret

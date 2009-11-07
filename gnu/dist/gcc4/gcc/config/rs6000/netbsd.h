@@ -44,6 +44,10 @@
       builtin_define ("__powerpc__");		\
       builtin_assert ("cpu=powerpc");		\
       builtin_assert ("machine=powerpc");	\
+      if (TARGET_SECURE_PLT)			\
+        builtin_define ("_SECURE_PLT");		\
+      if (TARGET_SOFT_FLOAT)			\
+        builtin_define ("_SOFT_FLOAT");		\
     }						\
   while (0)
 
@@ -111,6 +115,7 @@
 
 #undef  SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS					\
+  { "cc1_secure_plt_default",	CC1_SECURE_PLT_DEFAULT_SPEC },	\
   { "netbsd_link_spec",		NETBSD_LINK_SPEC_ELF },		\
   { "netbsd_entry_point",	NETBSD_ENTRY_POINT },		\
   { "netbsd_endfile_spec",	NETBSD_ENDFILE_SPEC },
@@ -120,6 +125,22 @@
  */
 #undef TARGET_DEFAULT
 #define TARGET_DEFAULT (MASK_POWERPC | MASK_NEW_MNEMONICS | MASK_STRICT_ALIGN)
+
+/*
+ * We know we have the right binutils for this (we shouldn't need to do this
+ * but until the cross build does the right thing...)
+ */
+#undef TARGET_SECURE_PLT
+#define TARGET_SECURE_PLT secure_plt
+#undef HAVE_AS_TLS
+#define HAVE_AS_TLS 1
+
+#undef TARGET_E500
+#undef TARGET_E500_SINGLE
+#undef TARGET_E500_DOUBLE
+#define TARGET_E500 (rs6000_cpu == PROCESSOR_PPC8540)
+#define TARGET_E500_SINGLE (TARGET_HARD_FLOAT && rs6000_float_gprs == 1)
+#define TARGET_E500_DOUBLE (TARGET_HARD_FLOAT && rs6000_float_gprs == 2)
 
 /* Attempt to enable execute permissions on the stack.  */
 #define TRANSFER_FROM_TRAMPOLINE NETBSD_ENABLE_EXECUTE_STACK

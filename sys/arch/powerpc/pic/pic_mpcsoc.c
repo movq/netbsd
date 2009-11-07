@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_mpcsoc.c,v 1.1 2009/08/19 06:22:54 nisimura Exp $ */
+/*	$NetBSD: pic_mpcsoc.c,v 1.5 2012/02/01 09:54:03 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,10 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_mpcsoc.c,v 1.1 2009/08/19 06:22:54 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_mpcsoc.c,v 1.5 2012/02/01 09:54:03 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/kernel.h>
 
 #include <uvm/uvm_extern.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: pic_mpcsoc.c,v 1.1 2009/08/19 06:22:54 nisimura Exp 
 #include <machine/pio.h>
 #include <powerpc/openpic.h>
 
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 
 #include "opt_interrupt.h"
 
@@ -89,7 +89,7 @@ setup_mpcpic(void *addr)
 	u_int x;
 
 	openpic_base = addr;
-	ops = malloc(sizeof(struct openpic_ops), M_DEVBUF, M_NOWAIT);
+	ops = kmem_alloc(sizeof(*ops), KM_SLEEP);
 	KASSERT(ops != NULL);
 	self = &ops->pic;
 
@@ -143,7 +143,7 @@ setup_mpcpic(void *addr)
 }
 
 void
-mpcpic_reserv16()
+mpcpic_reserv16(void)
 {
 	extern int max_base; /* intr.c */
 
@@ -161,9 +161,18 @@ mpcpic_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 
 	x = irq;
 	x |= OPENPIC_IMASK;
-	x |= (i8259iswired && irq == 0) ?
-	    OPENPIC_POLARITY_POSITIVE :	OPENPIC_POLARITY_NEGATIVE;
-	x |= (type == IST_EDGE) ? OPENPIC_SENSE_EDGE : OPENPIC_SENSE_LEVEL;
+
+	if ((i8259iswired && irq == 0) ||
+	    type == IST_EDGE_RISING || type == IST_LEVEL_HIGH)
+		x |= OPENPIC_POLARITY_POSITIVE;
+	else
+		x |= OPENPIC_POLARITY_NEGATIVE;
+
+	if (type == IST_EDGE_FALLING || type == IST_EDGE_RISING)
+		x |= OPENPIC_SENSE_EDGE;
+	else
+		x |= OPENPIC_SENSE_LEVEL;
+
 	x |= realpri << OPENPIC_PRIORITY_SHIFT;
 	openpic_write(MPCPIC_IVEC(irq), x);
 
