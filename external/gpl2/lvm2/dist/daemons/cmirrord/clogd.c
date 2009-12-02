@@ -1,4 +1,4 @@
-/*	$NetBSD: clogd.c,v 1.1 2009/12/02 00:27:06 haad Exp $	*/
+/*	$NetBSD: clogd.c,v 1.1.1.1 2009/12/02 00:27:06 haad Exp $	*/
 
 /*
  * Copyright (C) 2004-2009 Red Hat, Inc. All rights reserved.

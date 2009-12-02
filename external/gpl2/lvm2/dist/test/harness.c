@@ -1,4 +1,4 @@
-/*	$NetBSD: harness.c,v 1.1 2009/12/02 00:25:58 haad Exp $	*/
+/*	$NetBSD: harness.c,v 1.1.1.1 2009/12/02 00:25:58 haad Exp $	*/
 
 #include <fcntl.h>
 #include <string.h>

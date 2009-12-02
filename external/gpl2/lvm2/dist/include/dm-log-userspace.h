@@ -1,4 +1,4 @@
-/*	$NetBSD: dm-log-userspace.h,v 1.1 2009/12/02 00:25:40 haad Exp $	*/
+/*	$NetBSD: dm-log-userspace.h,v 1.1.1.1 2009/12/02 00:25:40 haad Exp $	*/
 
 /*
  * Copyright (C) 2006-2009 Red Hat, Inc.
