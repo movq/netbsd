@@ -1,4 +1,4 @@
-/*	$NetBSD: configure.h,v 1.1 2009/12/02 00:26:43 haad Exp $	*/
+/*	$NetBSD: configure.h,v 1.1.1.1 2009/12/02 00:26:43 haad Exp $	*/
 
 /* lib/misc/configure.h.  Generated from configure.h.in by configure.  */
 /* lib/misc/configure.h.in.  Generated from configure.in by autoheader.  */

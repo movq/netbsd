@@ -1,4 +1,4 @@
-/*	$NetBSD: lvm2app.h,v 1.1 2009/12/02 00:25:45 haad Exp $	*/
+/*	$NetBSD: lvm2app.h,v 1.1.1.1 2009/12/02 00:25:45 haad Exp $	*/
 
 /*
  * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.

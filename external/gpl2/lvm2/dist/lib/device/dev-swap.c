@@ -1,4 +1,4 @@
-/*	$NetBSD: dev-swap.c,v 1.1 2009/12/02 00:26:34 haad Exp $	*/
+/*	$NetBSD: dev-swap.c,v 1.1.1.1 2009/12/02 00:26:34 haad Exp $	*/
 
 /*
  * Copyright (C) 2009 Red Hat, Inc. All rights reserved.

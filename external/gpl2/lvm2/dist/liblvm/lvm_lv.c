@@ -1,4 +1,4 @@
-/*	$NetBSD: lvm_lv.c,v 1.1 2009/12/02 00:26:15 haad Exp $	*/
+/*	$NetBSD: lvm_lv.c,v 1.1.1.1 2009/12/02 00:26:15 haad Exp $	*/
 
 /*
  * Copyright (C) 2008,2009 Red Hat, Inc. All rights reserved.

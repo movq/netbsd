@@ -1,4 +1,4 @@
-/*	$NetBSD: vgtest.c,v 1.1 2009/12/02 00:26:03 haad Exp $	*/
+/*	$NetBSD: vgtest.c,v 1.1.1.1 2009/12/02 00:26:03 haad Exp $	*/
 
 /*
  * Copyright (C) 2009 Red Hat, Inc. All rights reserved.
