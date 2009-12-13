@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_args.c,v 1.1 2009/12/13 16:56:08 kardel Exp $	*/
+/*	$NetBSD: cmd_args.c,v 1.1.1.1 2009/12/13 16:56:08 kardel Exp $	*/
 
 /*
  * cmd_args.c = command-line argument processing

@@ -1,4 +1,4 @@
-/*	$NetBSD: emalloc.c,v 1.1 2009/12/13 16:55:02 kardel Exp $	*/
+/*	$NetBSD: emalloc.c,v 1.1.1.1 2009/12/13 16:55:02 kardel Exp $	*/
 
 /*
  * emalloc - return new memory obtained from the system.  Belch if none.

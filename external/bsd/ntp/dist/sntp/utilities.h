@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.h,v 1.1 2009/12/13 16:57:12 kardel Exp $	*/
+/*	$NetBSD: utilities.h,v 1.1.1.1 2009/12/13 16:57:12 kardel Exp $	*/
 
 #ifndef UTILITIES_H
 #define UTILITIES_H

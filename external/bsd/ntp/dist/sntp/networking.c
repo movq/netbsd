@@ -1,4 +1,4 @@
-/*	$NetBSD: networking.c,v 1.1 2009/12/13 16:57:11 kardel Exp $	*/
+/*	$NetBSD: networking.c,v 1.1.1.1 2009/12/13 16:57:11 kardel Exp $	*/
 
 #include "networking.h"
 

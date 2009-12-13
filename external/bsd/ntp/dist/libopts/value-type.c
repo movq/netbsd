@@ -1,4 +1,4 @@
-/*	$NetBSD: value-type.c,v 1.1 2009/12/13 16:55:15 kardel Exp $	*/
+/*	$NetBSD: value-type.c,v 1.1.1.1 2009/12/13 16:55:15 kardel Exp $	*/
 
 /* ANSI-C code produced by gperf version 3.0.2 */
 

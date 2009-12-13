@@ -1,4 +1,4 @@
-/*	$NetBSD: base32.c,v 1.1 2009/12/13 16:54:19 kardel Exp $	*/
+/*	$NetBSD: base32.c,v 1.1.1.1 2009/12/13 16:54:19 kardel Exp $	*/
 
 /*
  * Copyright (C) 2008, 2009  Internet Systems Consortium, Inc. ("ISC")

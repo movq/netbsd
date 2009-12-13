@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_parse.c,v 1.1 2009/12/13 16:56:00 kardel Exp $	*/
+/*	$NetBSD: refclock_parse.c,v 1.1.1.1 2009/12/13 16:56:00 kardel Exp $	*/
 
 /*
  * /src/NTP/REPOSITORY/ntp4-dev/ntpd/refclock_parse.c,v 4.81 2009/05/01 10:15:29 kardel RELEASE_20090105_A

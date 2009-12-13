@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_chu.c,v 1.1 2009/12/13 16:54:57 kardel Exp $	*/
+/*	$NetBSD: tty_chu.c,v 1.1.1.1 2009/12/13 16:54:57 kardel Exp $	*/
 
 /* tty_chu.c,v 3.1 1993/07/06 01:07:30 jbj Exp
  * tty_chu.c - CHU line driver

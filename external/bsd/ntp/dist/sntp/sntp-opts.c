@@ -1,4 +1,4 @@
-/*	$NetBSD: sntp-opts.c,v 1.1 2009/12/13 16:57:11 kardel Exp $	*/
+/*	$NetBSD: sntp-opts.c,v 1.1.1.1 2009/12/13 16:57:11 kardel Exp $	*/
 
 /*  
  *  EDIT THIS FILE WITH CAUTION  (sntp-opts.c)

@@ -1,4 +1,4 @@
-/*	$NetBSD: mktime.c,v 1.1 2009/12/13 16:55:03 kardel Exp $	*/
+/*	$NetBSD: mktime.c,v 1.1.1.1 2009/12/13 16:55:03 kardel Exp $	*/
 
 /*
  * Copyright (c) 1987, 1989 Regents of the University of California.

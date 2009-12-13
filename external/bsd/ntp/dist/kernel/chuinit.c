@@ -1,4 +1,4 @@
-/*	$NetBSD: chuinit.c,v 1.1 2009/12/13 16:54:57 kardel Exp $	*/
+/*	$NetBSD: chuinit.c,v 1.1.1.1 2009/12/13 16:54:57 kardel Exp $	*/
 
 /*
 **	dynamically loadable chu driver

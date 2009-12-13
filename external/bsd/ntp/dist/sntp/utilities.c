@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.1 2009/12/13 16:57:12 kardel Exp $	*/
+/*	$NetBSD: utilities.c,v 1.1.1.1 2009/12/13 16:57:12 kardel Exp $	*/
 
 #include "utilities.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tokenize.c,v 1.1 2009/12/13 16:57:23 kardel Exp $	*/
+/*	$NetBSD: tokenize.c,v 1.1.1.1 2009/12/13 16:57:23 kardel Exp $	*/
 
 /*
  *  This file defines the string_tokenize interface

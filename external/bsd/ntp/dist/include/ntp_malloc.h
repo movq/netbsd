@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_malloc.h,v 1.1 2009/12/13 16:54:52 kardel Exp $	*/
+/*	$NetBSD: ntp_malloc.h,v 1.1.1.1 2009/12/13 16:54:52 kardel Exp $	*/
 
 /*
  * Define malloc and friends.

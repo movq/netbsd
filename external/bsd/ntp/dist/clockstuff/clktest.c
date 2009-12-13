@@ -1,4 +1,4 @@
-/*	$NetBSD: clktest.c,v 1.1 2009/12/13 16:53:41 kardel Exp $	*/
+/*	$NetBSD: clktest.c,v 1.1.1.1 2009/12/13 16:53:41 kardel Exp $	*/
 
 /* clktest.c,v 3.1 1993/07/06 01:05:23 jbj Exp
  * clktest - test the clock line discipline

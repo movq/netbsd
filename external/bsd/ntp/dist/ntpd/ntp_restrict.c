@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_restrict.c,v 1.1 2009/12/13 16:55:41 kardel Exp $	*/
+/*	$NetBSD: ntp_restrict.c,v 1.1.1.1 2009/12/13 16:55:41 kardel Exp $	*/
 
 /*
  * ntp_restrict.c - determine host restrictions

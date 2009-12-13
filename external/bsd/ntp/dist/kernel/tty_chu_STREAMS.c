@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_chu_STREAMS.c,v 1.1 2009/12/13 16:54:56 kardel Exp $	*/
+/*	$NetBSD: tty_chu_STREAMS.c,v 1.1.1.1 2009/12/13 16:54:56 kardel Exp $	*/
 
 /*
  * CHU STREAMS module for SunOS

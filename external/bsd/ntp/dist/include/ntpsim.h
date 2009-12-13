@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpsim.h,v 1.1 2009/12/13 16:54:54 kardel Exp $	*/
+/*	$NetBSD: ntpsim.h,v 1.1.1.1 2009/12/13 16:54:54 kardel Exp $	*/
 
 /* ntpsim.h
  *

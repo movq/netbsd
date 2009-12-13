@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_clk.c,v 1.1 2009/12/13 16:54:57 kardel Exp $	*/
+/*	$NetBSD: tty_clk.c,v 1.1.1.1 2009/12/13 16:54:57 kardel Exp $	*/
 
 /* tty_clk.c,v 3.1 1993/07/06 01:07:33 jbj Exp
  * tty_clk.c - Generic line driver for receiving radio clock timecodes

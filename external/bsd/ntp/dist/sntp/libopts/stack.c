@@ -1,4 +1,4 @@
-/*	$NetBSD: stack.c,v 1.1 2009/12/13 16:57:21 kardel Exp $	*/
+/*	$NetBSD: stack.c,v 1.1.1.1 2009/12/13 16:57:21 kardel Exp $	*/
 
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: cook.c,v 1.1 2009/12/13 16:57:18 kardel Exp $	*/
+/*	$NetBSD: cook.c,v 1.1.1.1 2009/12/13 16:57:18 kardel Exp $	*/
 
 /*
  *  Id: 3da9a5fc88c904673b3b95d0c9667b2bcbccfc80

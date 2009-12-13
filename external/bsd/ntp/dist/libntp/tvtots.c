@@ -1,4 +1,4 @@
-/*	$NetBSD: tvtots.c,v 1.1 2009/12/13 16:55:05 kardel Exp $	*/
+/*	$NetBSD: tvtots.c,v 1.1.1.1 2009/12/13 16:55:05 kardel Exp $	*/
 
 /*
  * tvtots - tables for converting from Unix struct timeval's to

@@ -1,4 +1,4 @@
-/*	$NetBSD: strstr.c,v 1.1 2009/12/13 16:55:04 kardel Exp $	*/
+/*	$NetBSD: strstr.c,v 1.1.1.1 2009/12/13 16:55:04 kardel Exp $	*/
 
 #include <config.h>
 
@@ -31,7 +31,7 @@
  *			   University of Maryland at College Park
  */
 /*
- * $Id: strstr.c,v 1.1 2009/12/13 16:55:04 kardel Exp $
+ * $Id: strstr.c,v 1.1.1.1 2009/12/13 16:55:04 kardel Exp $
  *
  * replacement for missing ANSI-C strstr function
  */

@@ -1,4 +1,4 @@
-/*	$NetBSD: parsesolaris.c,v 1.1 2009/12/13 16:55:21 kardel Exp $	*/
+/*	$NetBSD: parsesolaris.c,v 1.1.1.1 2009/12/13 16:55:21 kardel Exp $	*/
 
 /*
  * /src/NTP/ntp4-dev/libparse/parsesolaris.c,v 4.11 2005/04/16 17:32:10 kardel RELEASE_20050508_A

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_monitor.c,v 1.1 2009/12/13 16:55:35 kardel Exp $	*/
+/*	$NetBSD: ntp_monitor.c,v 1.1.1.1 2009/12/13 16:55:35 kardel Exp $	*/
 
 /*
  * ntp_monitor - monitor ntpd statistics

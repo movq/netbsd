@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_proto.h,v 1.1 2009/12/13 16:54:52 kardel Exp $	*/
+/*	$NetBSD: ntp_proto.h,v 1.1.1.1 2009/12/13 16:54:52 kardel Exp $	*/
 
 #ifndef __ntp_proto_h
 #define __ntp_proto_h

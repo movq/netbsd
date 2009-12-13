@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_keyword.h,v 1.1 2009/12/13 16:56:18 kardel Exp $	*/
+/*	$NetBSD: ntp_keyword.h,v 1.1.1.1 2009/12/13 16:56:18 kardel Exp $	*/
 
 /*
  * ntp_keyword.h

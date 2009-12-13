@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 2009/12/13 16:57:10 kardel Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 2009/12/13 16:57:10 kardel Exp $	*/
 
 #include <l_stdlib.h>
 #include <ntp_fp.h>

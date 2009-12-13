@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_io.h,v 1.1 2009/12/13 16:54:51 kardel Exp $	*/
+/*	$NetBSD: ntp_io.h,v 1.1.1.1 2009/12/13 16:54:51 kardel Exp $	*/
 
 #ifndef NTP_IO_H
 #define NTP_IO_H

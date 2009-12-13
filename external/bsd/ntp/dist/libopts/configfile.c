@@ -1,4 +1,4 @@
-/*	$NetBSD: configfile.c,v 1.1 2009/12/13 16:55:10 kardel Exp $	*/
+/*	$NetBSD: configfile.c,v 1.1.1.1 2009/12/13 16:55:10 kardel Exp $	*/
 
 /*
  *  Id: f1650b45a91ec95af830ff76041cc4f0048e60f0

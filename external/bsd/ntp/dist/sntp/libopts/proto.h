@@ -1,4 +1,4 @@
-/*	$NetBSD: proto.h,v 1.1 2009/12/13 16:57:20 kardel Exp $	*/
+/*	$NetBSD: proto.h,v 1.1.1.1 2009/12/13 16:57:20 kardel Exp $	*/
 
 /* -*- buffer-read-only: t -*- vi: set ro:
  *

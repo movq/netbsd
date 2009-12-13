@@ -1,4 +1,4 @@
-/*	$NetBSD: numtoa.c,v 1.1 2009/12/13 16:55:04 kardel Exp $	*/
+/*	$NetBSD: numtoa.c,v 1.1.1.1 2009/12/13 16:55:04 kardel Exp $	*/
 
 /*
  * numtoa - return asciized network numbers store in local array space

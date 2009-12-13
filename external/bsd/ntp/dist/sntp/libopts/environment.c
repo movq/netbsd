@@ -1,4 +1,4 @@
-/*	$NetBSD: environment.c,v 1.1 2009/12/13 16:57:18 kardel Exp $	*/
+/*	$NetBSD: environment.c,v 1.1.1.1 2009/12/13 16:57:18 kardel Exp $	*/
 
 
 /*

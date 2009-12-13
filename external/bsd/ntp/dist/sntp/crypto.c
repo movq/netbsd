@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto.c,v 1.1 2009/12/13 16:57:10 kardel Exp $	*/
+/*	$NetBSD: crypto.c,v 1.1.1.1 2009/12/13 16:57:10 kardel Exp $	*/
 
 #include "crypto.h"
 

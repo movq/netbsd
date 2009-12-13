@@ -1,4 +1,4 @@
-/*	$NetBSD: jitter.c,v 1.1 2009/12/13 16:57:28 kardel Exp $	*/
+/*	$NetBSD: jitter.c,v 1.1.1.1 2009/12/13 16:57:28 kardel Exp $	*/
 
 /*
  * This program can be used to calibrate the clock reading jitter of a

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpd.c,v 1.1 2009/12/13 16:56:15 kardel Exp $	*/
+/*	$NetBSD: ntpd.c,v 1.1.1.1 2009/12/13 16:56:15 kardel Exp $	*/
 
 /*
  * ntpd.c - main program for the fixed point NTP daemon

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.1 2009/12/13 16:53:39 kardel Exp $	*/
+/*	$NetBSD: print.c,v 1.1.1.1 2009/12/13 16:53:39 kardel Exp $	*/
 
 #include "efence.h"
 #include <stdlib.h>

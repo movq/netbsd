@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpq-subs.c,v 1.1 2009/12/13 16:56:29 kardel Exp $	*/
+/*	$NetBSD: ntpq-subs.c,v 1.1.1.1 2009/12/13 16:56:29 kardel Exp $	*/
 
 /*
  * ntpq_ops.c - subroutines which are called to perform operations by ntpq

@@ -1,4 +1,4 @@
-/*	$NetBSD: usage-txt.h,v 1.1 2009/12/13 16:55:17 kardel Exp $	*/
+/*	$NetBSD: usage-txt.h,v 1.1.1.1 2009/12/13 16:55:17 kardel Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *  

@@ -1,7 +1,7 @@
-/*	$NetBSD: ntp_debug.h,v 1.1 2009/12/13 16:54:51 kardel Exp $	*/
+/*	$NetBSD: ntp_debug.h,v 1.1.1.1 2009/12/13 16:54:51 kardel Exp $	*/
 
 /*
- * $Header: /home/mike/src/cvs/netbsd/src/external/bsd/ntp/dist/include/ntp_debug.h,v 1.1 2009/12/13 16:54:51 kardel Exp $
+ * $Header: /home/mike/src/cvs/netbsd/src/external/bsd/ntp/dist/include/ntp_debug.h,v 1.1.1.1 2009/12/13 16:54:51 kardel Exp $
  *
  * Created: Sat Aug 20 14:23:01 2005
  *
@@ -27,7 +27,7 @@
 #endif
 /*
  * $Log: ntp_debug.h,v $
- * Revision 1.1  2009/12/13 16:54:51  kardel
- * Initial revision
+ * Revision 1.1.1.1  2009/12/13 16:54:51  kardel
+ * Import ntp 4.2.6
  *
  */

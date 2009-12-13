@@ -1,4 +1,4 @@
-/*	$NetBSD: iosignal.c,v 1.1 2009/12/13 16:55:03 kardel Exp $	*/
+/*	$NetBSD: iosignal.c,v 1.1.1.1 2009/12/13 16:55:03 kardel Exp $	*/
 
 /*
  * iosignal.c - input/output routines for ntpd.	The socket-opening code

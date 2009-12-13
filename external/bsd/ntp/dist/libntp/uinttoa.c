@@ -1,4 +1,4 @@
-/*	$NetBSD: uinttoa.c,v 1.1 2009/12/13 16:55:06 kardel Exp $	*/
+/*	$NetBSD: uinttoa.c,v 1.1.1.1 2009/12/13 16:55:06 kardel Exp $	*/
 
 /*
  * uinttoa - return an asciized unsigned integer

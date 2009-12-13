@@ -1,4 +1,4 @@
-/*	$NetBSD: humandate.c,v 1.1 2009/12/13 16:55:03 kardel Exp $	*/
+/*	$NetBSD: humandate.c,v 1.1.1.1 2009/12/13 16:55:03 kardel Exp $	*/
 
 /*
  * humandate - convert an NTP (or the current) time to something readable

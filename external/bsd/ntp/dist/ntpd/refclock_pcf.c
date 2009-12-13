@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_pcf.c,v 1.1 2009/12/13 16:56:00 kardel Exp $	*/
+/*	$NetBSD: refclock_pcf.c,v 1.1.1.1 2009/12/13 16:56:00 kardel Exp $	*/
 
 /*
  * refclock_pcf - clock driver for the Conrad parallel port radio clock

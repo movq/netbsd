@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpd-opts.c,v 1.1 2009/12/13 16:56:16 kardel Exp $	*/
+/*	$NetBSD: ntpd-opts.c,v 1.1.1.1 2009/12/13 16:56:16 kardel Exp $	*/
 
 /*  
  *  EDIT THIS FILE WITH CAUTION  (ntpd-opts.c)

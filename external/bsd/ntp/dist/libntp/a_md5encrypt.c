@@ -1,4 +1,4 @@
-/*	$NetBSD: a_md5encrypt.c,v 1.1 2009/12/13 16:54:59 kardel Exp $	*/
+/*	$NetBSD: a_md5encrypt.c,v 1.1.1.1 2009/12/13 16:54:59 kardel Exp $	*/
 
 /*
  *	digest support for NTP, MD5 and with OpenSSL more

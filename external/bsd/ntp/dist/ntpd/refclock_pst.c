@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_pst.c,v 1.1 2009/12/13 16:56:00 kardel Exp $	*/
+/*	$NetBSD: refclock_pst.c,v 1.1.1.1 2009/12/13 16:56:00 kardel Exp $	*/
 
 /*
  * refclock_pst - clock driver for PSTI/Traconex WWV/WWVH receivers

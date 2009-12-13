@@ -1,4 +1,4 @@
-/*	$NetBSD: propdelay.c,v 1.1 2009/12/13 16:53:41 kardel Exp $	*/
+/*	$NetBSD: propdelay.c,v 1.1.1.1 2009/12/13 16:53:41 kardel Exp $	*/
 
 /* propdelay.c,v 3.1 1993/07/06 01:05:24 jbj Exp
  * propdelay - compute propagation delays

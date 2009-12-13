@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_wwvb.c,v 1.1 2009/12/13 16:56:07 kardel Exp $	*/
+/*	$NetBSD: refclock_wwvb.c,v 1.1.1.1 2009/12/13 16:56:07 kardel Exp $	*/
 
 /*
  * refclock_wwvb - clock driver for Spectracom WWVB and GPS receivers

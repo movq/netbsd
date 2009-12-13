@@ -1,4 +1,4 @@
-/*	$NetBSD: netsnmp_daemonize.c,v 1.1 2009/12/13 16:56:32 kardel Exp $	*/
+/*	$NetBSD: netsnmp_daemonize.c,v 1.1.1.1 2009/12/13 16:56:32 kardel Exp $	*/
 
 /*
  * system.c

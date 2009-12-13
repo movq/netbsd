@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_ulink.c,v 1.1 2009/12/13 16:56:05 kardel Exp $	*/
+/*	$NetBSD: refclock_ulink.c,v 1.1.1.1 2009/12/13 16:56:05 kardel Exp $	*/
 
 /*
  * refclock_ulink - clock driver for Ultralink  WWVB receiver

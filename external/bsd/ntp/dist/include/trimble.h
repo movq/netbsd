@@ -1,4 +1,4 @@
-/*	$NetBSD: trimble.h,v 1.1 2009/12/13 16:54:55 kardel Exp $	*/
+/*	$NetBSD: trimble.h,v 1.1.1.1 2009/12/13 16:54:55 kardel Exp $	*/
 
 /*
  * /src/NTP/ntp4-dev/include/trimble.h,v 4.6 2005/04/16 17:32:10 kardel RELEASE_20050508_A

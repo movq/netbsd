@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.h,v 1.1 2009/12/13 16:57:25 kardel Exp $	*/
+/*	$NetBSD: compat.h,v 1.1.1.1 2009/12/13 16:57:25 kardel Exp $	*/
 
 /*  -*- Mode: C -*-  */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd_strerror.c,v 1.1 2009/12/13 16:55:01 kardel Exp $	*/
+/*	$NetBSD: bsd_strerror.c,v 1.1.1.1 2009/12/13 16:55:01 kardel Exp $	*/
 
 #include <config.h>
 

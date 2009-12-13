@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.c,v 1.1 2009/12/13 16:55:05 kardel Exp $	*/
+/*	$NetBSD: strdup.c,v 1.1.1.1 2009/12/13 16:55:05 kardel Exp $	*/
 
 #include "ntp_malloc.h"
 

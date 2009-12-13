@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpaths.c,v 1.1 2009/12/13 16:54:40 kardel Exp $	*/
+/*	$NetBSD: ntpaths.c,v 1.1.1.1 2009/12/13 16:54:40 kardel Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

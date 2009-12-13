@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_config.h,v 1.1 2009/12/13 16:54:50 kardel Exp $	*/
+/*	$NetBSD: ntp_config.h,v 1.1.1.1 2009/12/13 16:54:50 kardel Exp $	*/
 
 #ifndef NTP_CONFIG_H
 #define NTP_CONFIG_H
