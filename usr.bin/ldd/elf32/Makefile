@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 2009/02/14 13:56:41 abs Exp $
+#	$NetBSD: Makefile,v 1.7 2009/12/13 08:50:56 mrg Exp $
 
 .include <bsd.own.mk>
+.include <bsd.init.mk>
+
 CPPFLAGS+=	-DELFSIZE=32
 LIB=	ldd_elf32
 
@@ -10,12 +12,8 @@ SRCS=	dummy.c
 LIBISPRIVATE=	yes
 .PATH: ${.CURDIR}/..
 
-# XXX
-.include <bsd.own.mk>
-.if ${MACHINE_ARCH} == "sparc64"
-.include "${NETBSDSRCDIR}/libexec/ld.elf_so/arch/sparc/Makefile.ld32"
-.elif ${MACHINE_ARCH} == "x86_64"
-.include "${NETBSDSRCDIR}/libexec/ld.elf_so/arch/i386/Makefile.ld32"
+.ifdef MLIBDIR
+CPPFLAGS+=	-DRTLD_ARCH_SUBDIR=\"${MLIBDIR}\"
 .endif
 
 .if ${MACHINE_ARCH} != "alpha"
