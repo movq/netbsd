@@ -1,4 +1,4 @@
-/*	$NetBSD: platform.h,v 1.1 2009/12/13 16:54:28 kardel Exp $	*/
+/*	$NetBSD: platform.h,v 1.1.1.1 2009/12/13 16:54:28 kardel Exp $	*/
 
 /*
  * Copyright (C) 1999-2001  Internet Software Consortium.

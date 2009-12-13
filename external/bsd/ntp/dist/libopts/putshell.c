@@ -1,4 +1,4 @@
-/*	$NetBSD: putshell.c,v 1.1 2009/12/13 16:55:12 kardel Exp $	*/
+/*	$NetBSD: putshell.c,v 1.1.1.1 2009/12/13 16:55:12 kardel Exp $	*/
 
 
 /*

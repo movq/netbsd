@@ -1,4 +1,4 @@
-/*	$NetBSD: atouint.c,v 1.1 2009/12/13 16:55:01 kardel Exp $	*/
+/*	$NetBSD: atouint.c,v 1.1.1.1 2009/12/13 16:55:01 kardel Exp $	*/
 
 /*
  * atouint - convert an ascii string to an unsigned long, with error checking

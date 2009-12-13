@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_scanner.h,v 1.1 2009/12/13 16:56:14 kardel Exp $	*/
+/*	$NetBSD: ntp_scanner.h,v 1.1.1.1 2009/12/13 16:56:14 kardel Exp $	*/
 
 /* ntp_scanner.h
  *

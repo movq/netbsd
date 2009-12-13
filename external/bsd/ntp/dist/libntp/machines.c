@@ -1,4 +1,4 @@
-/*	$NetBSD: machines.c,v 1.1 2009/12/13 16:55:03 kardel Exp $	*/
+/*	$NetBSD: machines.c,v 1.1.1.1 2009/12/13 16:55:03 kardel Exp $	*/
 
 /* machines.c - provide special support for peculiar architectures
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_random.c,v 1.1 2009/12/13 16:55:05 kardel Exp $	*/
+/*	$NetBSD: ntp_random.c,v 1.1.1.1 2009/12/13 16:55:05 kardel Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993

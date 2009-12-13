@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_control.c,v 1.1 2009/12/13 16:55:26 kardel Exp $	*/
+/*	$NetBSD: ntp_control.c,v 1.1.1.1 2009/12/13 16:55:26 kardel Exp $	*/
 
 /*
  * ntp_control.c - respond to control messages and send async traps

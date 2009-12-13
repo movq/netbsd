@@ -1,4 +1,4 @@
-/*	$NetBSD: systime.c,v 1.1 2009/12/13 16:55:01 kardel Exp $	*/
+/*	$NetBSD: systime.c,v 1.1.1.1 2009/12/13 16:55:01 kardel Exp $	*/
 
 /*
  * systime -- routines to fiddle a UNIX clock.

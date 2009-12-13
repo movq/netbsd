@@ -1,4 +1,4 @@
-/*	$NetBSD: mfptoa.c,v 1.1 2009/12/13 16:55:03 kardel Exp $	*/
+/*	$NetBSD: mfptoa.c,v 1.1.1.1 2009/12/13 16:55:03 kardel Exp $	*/
 
 /*
  * mfptoa - Return an asciized representation of a signed long fp number

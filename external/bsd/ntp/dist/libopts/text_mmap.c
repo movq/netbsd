@@ -1,4 +1,4 @@
-/*	$NetBSD: text_mmap.c,v 1.1 2009/12/13 16:55:14 kardel Exp $	*/
+/*	$NetBSD: text_mmap.c,v 1.1.1.1 2009/12/13 16:55:14 kardel Exp $	*/
 
 /*
  * Id: 14e1f51d1a5a31d8395fdf1e93a07bace1c59e87

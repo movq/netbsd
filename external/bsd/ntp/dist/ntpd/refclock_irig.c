@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_irig.c,v 1.1 2009/12/13 16:55:50 kardel Exp $	*/
+/*	$NetBSD: refclock_irig.c,v 1.1.1.1 2009/12/13 16:55:50 kardel Exp $	*/
 
 /*
  * refclock_irig - audio IRIG-B/E demodulator/decoder

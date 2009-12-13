@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_filegen.c,v 1.1 2009/12/13 16:55:31 kardel Exp $	*/
+/*	$NetBSD: ntp_filegen.c,v 1.1.1.1 2009/12/13 16:55:31 kardel Exp $	*/
 
 /*
  * ntp_filegen.c,v 3.12 1994/01/25 19:06:11 kardel Exp

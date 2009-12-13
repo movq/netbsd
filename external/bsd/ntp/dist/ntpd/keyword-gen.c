@@ -1,4 +1,4 @@
-/*	$NetBSD: keyword-gen.c,v 1.1 2009/12/13 16:56:08 kardel Exp $	*/
+/*	$NetBSD: keyword-gen.c,v 1.1.1.1 2009/12/13 16:56:08 kardel Exp $	*/
 
 /*
  * keyword-gen.c -- generate keyword scanner finite state machine and

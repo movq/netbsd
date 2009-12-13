@@ -1,4 +1,4 @@
-/*	$NetBSD: efence.c,v 1.1 2009/12/13 16:53:39 kardel Exp $	*/
+/*	$NetBSD: efence.c,v 1.1.1.1 2009/12/13 16:53:39 kardel Exp $	*/
 
 /*
  * Electric Fence - Red-Zone memory allocator.

@@ -1,4 +1,4 @@
-/*	$NetBSD: sht.c,v 1.1 2009/12/13 16:57:31 kardel Exp $	*/
+/*	$NetBSD: sht.c,v 1.1.1.1 2009/12/13 16:57:31 kardel Exp $	*/
 
 /* 
  * sht.c - Testprogram for shared memory refclock

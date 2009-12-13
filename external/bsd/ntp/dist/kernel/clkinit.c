@@ -1,4 +1,4 @@
-/*	$NetBSD: clkinit.c,v 1.1 2009/12/13 16:54:57 kardel Exp $	*/
+/*	$NetBSD: clkinit.c,v 1.1.1.1 2009/12/13 16:54:57 kardel Exp $	*/
 
 /*
 **	dynamically loadable clk driver

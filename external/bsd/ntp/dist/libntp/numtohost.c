@@ -1,4 +1,4 @@
-/*	$NetBSD: numtohost.c,v 1.1 2009/12/13 16:55:04 kardel Exp $	*/
+/*	$NetBSD: numtohost.c,v 1.1.1.1 2009/12/13 16:55:04 kardel Exp $	*/
 
 /*
  * numtohost - convert network number to host name.

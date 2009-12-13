@@ -1,4 +1,4 @@
-/*	$NetBSD: arlib.c,v 1.1 2009/12/13 16:53:43 kardel Exp $	*/
+/*	$NetBSD: arlib.c,v 1.1.1.1 2009/12/13 16:53:43 kardel Exp $	*/
 
 /*
  * arlib.c (C)opyright 1993 Darren Reed. All rights reserved.

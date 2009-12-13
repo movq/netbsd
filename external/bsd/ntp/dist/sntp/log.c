@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.1 2009/12/13 16:57:10 kardel Exp $	*/
+/*	$NetBSD: log.c,v 1.1.1.1 2009/12/13 16:57:10 kardel Exp $	*/
 
 #include "log.h"
 #include "sntp-opts.h"

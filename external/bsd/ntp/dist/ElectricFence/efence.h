@@ -1,4 +1,4 @@
-/*	$NetBSD: efence.h,v 1.1 2009/12/13 16:53:37 kardel Exp $	*/
+/*	$NetBSD: efence.h,v 1.1.1.1 2009/12/13 16:53:37 kardel Exp $	*/
 
 #include <sys/types.h>
 #include <sys/param.h>

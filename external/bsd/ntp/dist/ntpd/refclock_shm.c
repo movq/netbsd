@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_shm.c,v 1.1 2009/12/13 16:56:03 kardel Exp $	*/
+/*	$NetBSD: refclock_shm.c,v 1.1.1.1 2009/12/13 16:56:03 kardel Exp $	*/
 
 /*
  * refclock_shm - clock driver for utc via shared memory 

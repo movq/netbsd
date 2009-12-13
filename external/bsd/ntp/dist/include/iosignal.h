@@ -1,4 +1,4 @@
-/*	$NetBSD: iosignal.h,v 1.1 2009/12/13 16:54:49 kardel Exp $	*/
+/*	$NetBSD: iosignal.h,v 1.1.1.1 2009/12/13 16:54:49 kardel Exp $	*/
 
 #if !defined _ntp_iosignaled_h
 #define _ntp_iosignaled_h

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_unixtime.h,v 1.1 2009/12/13 16:54:54 kardel Exp $	*/
+/*	$NetBSD: ntp_unixtime.h,v 1.1.1.1 2009/12/13 16:54:54 kardel Exp $	*/
 
 /*
  * ntp_unixtime.h - contains constants and macros for converting between

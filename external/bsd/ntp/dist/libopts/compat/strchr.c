@@ -1,4 +1,4 @@
-/*	$NetBSD: strchr.c,v 1.1 2009/12/13 16:55:17 kardel Exp $	*/
+/*	$NetBSD: strchr.c,v 1.1.1.1 2009/12/13 16:55:17 kardel Exp $	*/
 
 /*
    SYNOPSIS

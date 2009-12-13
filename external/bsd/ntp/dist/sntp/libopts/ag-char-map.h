@@ -1,4 +1,4 @@
-/*	$NetBSD: ag-char-map.h,v 1.1 2009/12/13 16:57:15 kardel Exp $	*/
+/*	$NetBSD: ag-char-map.h,v 1.1.1.1 2009/12/13 16:57:15 kardel Exp $	*/
 
 /*
  *   Character mapping generated 11/08/09 08:41:19

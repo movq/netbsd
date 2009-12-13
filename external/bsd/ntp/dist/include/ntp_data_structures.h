@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_data_structures.h,v 1.1 2009/12/13 16:54:50 kardel Exp $	*/
+/*	$NetBSD: ntp_data_structures.h,v 1.1.1.1 2009/12/13 16:54:50 kardel Exp $	*/
 
 /* ntp_data_structures.h
  *

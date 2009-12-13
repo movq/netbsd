@@ -1,4 +1,4 @@
-/*	$NetBSD: arlib.h,v 1.1 2009/12/13 16:53:41 kardel Exp $	*/
+/*	$NetBSD: arlib.h,v 1.1.1.1 2009/12/13 16:53:41 kardel Exp $	*/
 
 /*
  * arlib.h (C)opyright 1992 Darren Reed.

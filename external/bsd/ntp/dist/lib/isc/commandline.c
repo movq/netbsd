@@ -1,4 +1,4 @@
-/*	$NetBSD: commandline.c,v 1.1 2009/12/13 16:54:11 kardel Exp $	*/
+/*	$NetBSD: commandline.c,v 1.1.1.1 2009/12/13 16:54:11 kardel Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

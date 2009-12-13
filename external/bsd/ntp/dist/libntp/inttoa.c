@@ -1,4 +1,4 @@
-/*	$NetBSD: inttoa.c,v 1.1 2009/12/13 16:55:03 kardel Exp $	*/
+/*	$NetBSD: inttoa.c,v 1.1.1.1 2009/12/13 16:55:03 kardel Exp $	*/
 
 /*
  * inttoa - return an asciized signed integer

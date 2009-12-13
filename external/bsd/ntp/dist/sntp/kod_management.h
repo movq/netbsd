@@ -1,4 +1,4 @@
-/*	$NetBSD: kod_management.h,v 1.1 2009/12/13 16:57:10 kardel Exp $	*/
+/*	$NetBSD: kod_management.h,v 1.1.1.1 2009/12/13 16:57:10 kardel Exp $	*/
 
 #ifndef KOD_MANAGEMENT_H
 #define KOD_MANAGEMENT_H

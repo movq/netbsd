@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpq.c,v 1.1 2009/12/13 16:56:31 kardel Exp $	*/
+/*	$NetBSD: ntpq.c,v 1.1.1.1 2009/12/13 16:56:31 kardel Exp $	*/
 
 /*
  * ntpq - query an NTP server using mode 6 commands

@@ -1,4 +1,4 @@
-/*	$NetBSD: xat-attribute.h,v 1.1 2009/12/13 16:57:23 kardel Exp $	*/
+/*	$NetBSD: xat-attribute.h,v 1.1.1.1 2009/12/13 16:57:23 kardel Exp $	*/
 
 /*
  *  Generated header for gperf generated source Sun Nov  8 08:41:19 PST 2009

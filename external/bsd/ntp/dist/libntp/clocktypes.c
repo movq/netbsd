@@ -1,4 +1,4 @@
-/*	$NetBSD: clocktypes.c,v 1.1 2009/12/13 16:55:02 kardel Exp $	*/
+/*	$NetBSD: clocktypes.c,v 1.1.1.1 2009/12/13 16:55:02 kardel Exp $	*/
 
 /*
  * Data for pretty printing clock types

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpdate.c,v 1.1 2009/12/13 16:56:20 kardel Exp $	*/
+/*	$NetBSD: ntpdate.c,v 1.1.1.1 2009/12/13 16:56:20 kardel Exp $	*/
 
 /*
  * ntpdate - set the time of day by polling one or more NTP servers

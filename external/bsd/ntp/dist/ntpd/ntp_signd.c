@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_signd.c,v 1.1 2009/12/13 16:55:41 kardel Exp $	*/
+/*	$NetBSD: ntp_signd.c,v 1.1.1.1 2009/12/13 16:55:41 kardel Exp $	*/
 
 /* Copyright 2008, Red Hat, Inc.
    Copyright 2008, Andrew Tridgell.

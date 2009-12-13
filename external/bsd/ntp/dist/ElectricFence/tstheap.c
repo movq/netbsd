@@ -1,4 +1,4 @@
-/*	$NetBSD: tstheap.c,v 1.1 2009/12/13 16:53:39 kardel Exp $	*/
+/*	$NetBSD: tstheap.c,v 1.1.1.1 2009/12/13 16:53:39 kardel Exp $	*/
 
 #include <stdlib.h>
 #include <stdio.h>

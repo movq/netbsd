@@ -1,4 +1,4 @@
-/*	$NetBSD: header.h,v 1.1 2009/12/13 16:57:10 kardel Exp $	*/
+/*	$NetBSD: header.h,v 1.1.1.1 2009/12/13 16:57:10 kardel Exp $	*/
 
 /*  Copyright (C) 1996 N.M. Maclaren
     Copyright (C) 1996 The University of Cambridge

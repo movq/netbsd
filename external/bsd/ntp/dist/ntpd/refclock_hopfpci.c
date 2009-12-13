@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_hopfpci.c,v 1.1 2009/12/13 16:55:48 kardel Exp $	*/
+/*	$NetBSD: refclock_hopfpci.c,v 1.1.1.1 2009/12/13 16:55:48 kardel Exp $	*/
 
 /*
  * refclock_hopfpci.c

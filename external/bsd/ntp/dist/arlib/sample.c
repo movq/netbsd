@@ -1,4 +1,4 @@
-/*	$NetBSD: sample.c,v 1.1 2009/12/13 16:53:47 kardel Exp $	*/
+/*	$NetBSD: sample.c,v 1.1.1.1 2009/12/13 16:53:47 kardel Exp $	*/
 
 #include <stdio.h>
 #include <strings.h>

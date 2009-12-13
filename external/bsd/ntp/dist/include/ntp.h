@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp.h,v 1.1 2009/12/13 16:54:50 kardel Exp $	*/
+/*	$NetBSD: ntp.h,v 1.1.1.1 2009/12/13 16:54:50 kardel Exp $	*/
 
 /*
  * ntp.h - NTP definitions for the masses

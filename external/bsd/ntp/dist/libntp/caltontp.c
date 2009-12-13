@@ -1,4 +1,4 @@
-/*	$NetBSD: caltontp.c,v 1.1 2009/12/13 16:55:02 kardel Exp $	*/
+/*	$NetBSD: caltontp.c,v 1.1.1.1 2009/12/13 16:55:02 kardel Exp $	*/
 
 /*
  * caltontp - convert a date to an NTP time

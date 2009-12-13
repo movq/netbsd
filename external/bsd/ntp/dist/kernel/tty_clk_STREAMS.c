@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_clk_STREAMS.c,v 1.1 2009/12/13 16:54:56 kardel Exp $	*/
+/*	$NetBSD: tty_clk_STREAMS.c,v 1.1.1.1 2009/12/13 16:54:56 kardel Exp $	*/
 
 /* tty_clk_STREAMS.c,v 3.1 1993/07/06 01:07:34 jbj Exp
  * Timestamp STREAMS module for SunOS 4.1

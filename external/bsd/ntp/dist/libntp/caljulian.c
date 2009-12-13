@@ -1,4 +1,4 @@
-/*	$NetBSD: caljulian.c,v 1.1 2009/12/13 16:55:02 kardel Exp $	*/
+/*	$NetBSD: caljulian.c,v 1.1.1.1 2009/12/13 16:55:02 kardel Exp $	*/
 
 /*
  * caljulian - determine the Julian date from an NTP time.

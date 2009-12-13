@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee754io.h,v 1.1 2009/12/13 16:54:48 kardel Exp $	*/
+/*	$NetBSD: ieee754io.h,v 1.1.1.1 2009/12/13 16:54:48 kardel Exp $	*/
 
 /*
  * /src/NTP/ntp4-dev/include/ieee754io.h,v 4.3 2005/04/16 17:32:10 kardel RELEASE_20050508_A

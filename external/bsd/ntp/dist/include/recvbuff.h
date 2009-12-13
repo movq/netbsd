@@ -1,4 +1,4 @@
-/*	$NetBSD: recvbuff.h,v 1.1 2009/12/13 16:54:54 kardel Exp $	*/
+/*	$NetBSD: recvbuff.h,v 1.1.1.1 2009/12/13 16:54:54 kardel Exp $	*/
 
 #ifndef RECVBUFF_H
 #define RECVBUFF_H
