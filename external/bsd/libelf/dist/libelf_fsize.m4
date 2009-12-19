@@ -1,4 +1,4 @@
-/*	$NetBSD: libelf_fsize.m4,v 1.1 2009/12/19 05:43:41 thorpej Exp $	*/
+/*	$NetBSD: libelf_fsize.m4,v 1.1.1.1 2009/12/19 05:43:41 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2006 Joseph Koshy
