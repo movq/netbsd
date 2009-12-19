@@ -1,4 +1,4 @@
-/*	$NetBSD: _libelf.h,v 1.1 2009/12/19 05:43:39 thorpej Exp $	*/
+/*	$NetBSD: _libelf.h,v 1.1.1.1 2009/12/19 05:43:39 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2006 Joseph Koshy

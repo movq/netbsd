@@ -1,4 +1,4 @@
-/*	$NetBSD: gelf.h,v 1.1 2009/12/19 05:43:40 thorpej Exp $	*/
+/*	$NetBSD: gelf.h,v 1.1.1.1 2009/12/19 05:43:40 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2006 Joseph Koshy
