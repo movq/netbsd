@@ -1,7 +1,7 @@
 /*
  * Automated Testing Framework (atf)
  *
- * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,22 +27,21 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if !defined(ATF_C_TEXT_H)
-#define ATF_C_TEXT_H
-
-#include <stdarg.h>
-#include <stdbool.h>
+#if !defined(ATF_C_BUILD_H)
+#define ATF_C_BUILD_H
 
 #include <atf-c/error_fwd.h>
 #include <atf-c/list.h>
 
-atf_error_t atf_text_for_each_word(const char *, const char *,
-                                   atf_error_t (*)(const char *, void *),
-                                   void *);
-atf_error_t atf_text_format(char **, const char *, ...);
-atf_error_t atf_text_format_ap(char **, const char *, va_list);
-atf_error_t atf_text_split(const char *, const char *, atf_list_t *);
-atf_error_t atf_text_to_bool(const char *, bool *);
-atf_error_t atf_text_to_long(const char *, long *);
+/* ---------------------------------------------------------------------
+ * Free functions.
+ * --------------------------------------------------------------------- */
 
-#endif /* ATF_C_TEXT_H */
+atf_error_t atf_build_c_o(const char *, const char *, const char *const [],
+                          atf_list_t *);
+atf_error_t atf_build_cpp(const char *, const char *, const char *const [],
+                          atf_list_t *);
+atf_error_t atf_build_cxx_o(const char *, const char *, const char *const [],
+                            atf_list_t *);
+
+#endif /* ATF_C_BUILD_H */
