@@ -1,4 +1,4 @@
-/*	$NetBSD: dwarf_attr.c,v 1.1 2009/12/23 00:03:25 darran Exp $	*/
+/*	$NetBSD: dwarf_attr.c,v 1.1.1.1 2009/12/23 00:03:25 darran Exp $	*/
 
 /*-
  * Copyright (c) 2007 John Birrell (jb@freebsd.org)
