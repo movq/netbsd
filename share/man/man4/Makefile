@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.503 2010/02/06 20:11:33 pgoyette Exp $
+#	$NetBSD: Makefile,v 1.516 2010/04/10 17:55:25 jruoho Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/18/93
 
-MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
+MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 \
 	adbbt.4 adbkbd.4 adbms.4 \
 	adc.4 admtemp.4 adv.4 adw.4 age.4 agp.4 agr.4 ahb.4 ahc.4 \
 	ahcisata.4 ahd.4 \
-	aiboost.4 ale.4 alipm.4 altmem.4 amdpm.4 amdtemp.4 amhphy.4 \
+	aibs.4 ale.4 alipm.4 altmem.4 amdpm.4 amdtemp.4 amhphy.4 \
 	amr.4 aps.4 \
 	an.4 arcmsr.4 aria.4 artsata.4 ata.4 atalk.4 ataraid.4 \
 	ath.4 atphy.4 atppc.4 attimer.4 atw.4 \
@@ -57,10 +57,10 @@ MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
 	ti.4 tl.4 tlp.4 tlphy.4 \
 	tp.4 tr.4 tra.4 trm.4 tty.4 tun.4 tqphy.4 twa.4 twe.4 txp.4 \
 	ubsec.4 udp.4 uep.4 ug.4 uha.4 uk.4 ukphy.4 unix.4 userconf.4 \
-	veriexec.4 vga.4 vge.4 viaide.4 video.4 vlan.4 vmmon.4 vmnet.4 \
+	vald.4 veriexec.4 vga.4 vge.4 viaide.4 video.4 vlan.4 vmmon.4 vmnet.4 \
 	vnd.4 vr.4 \
-	wapbl.4 wb.4 wd.4 wdc.4 wi.4 wm.4 wpi.4 wscons.4 wsdisplay.4 wsfont.4 \
-	wskbd.4 wsmouse.4 wsmux.4 \
+	wapbl.4 wb.4 wbsio.4 wd.4 wdc.4 wi.4 wm.4 wpi.4 \
+	wscons.4 wsdisplay.4 wsfont.4 wskbd.4 wsmouse.4 wsmux.4 \
 	xbox.4 xge.4 \
 	yds.4 ym.4 \
 	zero.4 zstty.4 zyd.4
@@ -68,19 +68,19 @@ MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
 # USB devices
 MAN+=	stuirda.4 u3g.4 uaudio.4 uberry.4 ubsa.4 ubt.4 uchcom.4 ucom.4 ucycom.4 \
 	udsbr.4 uftdi.4 ugen.4 ugensa.4 uhid.4 \
-	uhidev.4 uhmodem.4 uipaq.4 uirda.4 ukbd.4 ukyopon.4 ulpt.4 \
+	uhidev.4 uhmodem.4 uhso.4 uipaq.4 uirda.4 ukbd.4 ukyopon.4 ulpt.4 \
 	umass.4 umct.4 umidi.4 umodem.4 ums.4 uplcom.4 urio.4 usb.4 \
 	uscanner.4 uslsa.4 usscanner.4 ustir.4 uvisor.4 uvscom.4 uyap.4 \
 	aue.4 atu.4 axe.4 cdce.4 cue.4 kue.4 upl.4 url.4 udav.4 \
-	ehci.4 ohci.4 slhci.4 uhci.4 uthum.4 utoppy.4 uvideo.4
+	ehci.4 ohci.4 slhci.4 uhci.4 uthum.4 utoppy.4 uvideo.4 uyurex.4
 
 # Ir devices
 MAN+=	irframe.4 cir.4 irframetty.4 oboe.4
 #	smccir.4
 
 # ACPI devices
-MAN+=	acpi.4 acpiacad.4 acpibat.4 acpibut.4 acpiec.4 acpilid.4 \
-	acpismbus.4 acpitz.4
+MAN+=	acpi.4 acpiacad.4 acpibat.4 acpibut.4 acpidalb.4 acpiec.4 acpilid.4 \
+	acpismbus.4 acpitz.4 acpiwmi.4
 
 # Radio devices
 MAN+=	radio.4 az.4 mr.4 rt.4 rtii.4 sf2r.4
@@ -114,7 +114,7 @@ MAN+=	sc.4 si.4
 MAN+=	fwohci.4 fwip.4 sbp.4
 
 # machine-independent I2C devices
-MAN+=	dbcool.4 lmtemp.4 sdtemp.4 spdmem.4
+MAN+=	dbcool.4 lmtemp.4 sdtemp.4 smscmon.4 spdmem.4
 
 # machine-independent SPI devices
 MAN +=	m25p.4 tm121temp.4
@@ -143,6 +143,9 @@ MLINKS+=drm.4 sisdrm.4
 MLINKS+=drm.4 tdfxdrm.4
 MLINKS+=drm.4 viadrm.4
 
+MLINKS+=acpiec.4 acpiecdt.4
+MLINKS+=acpiwmi.4 wmidell.4 acpiwmi.4 wmihp.4
+MLINKS+=aibs.4 aiboost.4
 MLINKS+=ata.4 atabus.4
 MLINKS+=audio.4 audioctl.4
 MLINKS+=audio.4 mixer.4

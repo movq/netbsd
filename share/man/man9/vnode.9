@@ -1,4 +1,4 @@
-.\"     $NetBSD: vnode.9,v 1.44 2010/01/08 13:15:46 pooka Exp $
+.\"     $NetBSD: vnode.9,v 1.47 2010/02/21 13:33:03 wiz Exp $
 .\"
 .\" Copyright (c) 2001, 2005, 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,13 +27,14 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 8, 2010
+.Dd February 11, 2010
 .Dt VNODE 9
 .Os
 .Sh NAME
 .Nm vnode ,
 .Nm vref ,
 .Nm vrele ,
+.Nm vrele_async ,
 .Nm vget ,
 .Nm vput ,
 .Nm vhold ,
@@ -62,6 +63,8 @@
 .Fn vref "struct vnode *vp"
 .Ft void
 .Fn vrele "struct vnode *vp"
+.Ft void
+.Fn vrele_async "struct vnode *vp"
 .Ft int
 .Fn vget "struct vnode *vp" "int lockflag"
 .Ft void
@@ -246,6 +249,7 @@ kernel to the vnode.
 This count is maintained by
 .Fn vref ,
 .Fn vrele ,
+.Fn vrele_async ,
 and
 .Fn vput .
 The second is the number of active references within the kernel to the
@@ -406,7 +410,7 @@ union file system
 .It VT_ADOSFS
 Amiga file system
 .It VT_EXT2FS
-Linux's EXT2 file system
+Linux's ext2 file system
 .It VT_CODA
 Coda file system
 .It VT_FILECORE
@@ -530,6 +534,9 @@ If both
 and
 .Em v_holdcnt
 are zero, the vnode is placed on the freelist.
+.It Fn vrele_async "vp"
+Will asychronously release the vnode in different context than the caller,
+sometime after the call.
 .It Fn vget "vp" "lockflags"
 Reclaim vnode
 .Fa vp

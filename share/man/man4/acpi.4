@@ -1,6 +1,6 @@
-.\" $NetBSD: acpi.4,v 1.38 2010/02/06 20:11:33 pgoyette Exp $
+.\" $NetBSD: acpi.4,v 1.50 2010/04/25 17:50:13 jruoho Exp $
 .\"
-.\" Copyright (c) 2002, 2004 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2002, 2004, 2010 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -24,44 +24,14 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 6, 2010
+.Dd April 25, 2010
 .Dt ACPI 4
 .Os
 .Sh NAME
 .Nm acpi
 .Nd Advanced Configuration and Power Interface
 .Sh SYNOPSIS
-.Cd "acpi0     at mainbus0"
-.Cd "acpiacad* at acpi?"
-.Cd "acpibat*  at acpi?"
-.Cd "acpibut*  at acpi?"
-.Cd "acpidalb* at acpi?"
-.Cd "acpiec*   at acpi?"
-.Cd "acpiecdt* at acpi?"
-.Cd "acpilid*  at acpi?"
-.Cd "acpismbus* at acpi?"
-.Cd "acpitz*   at acpi?"
-.Cd "aiboost*  at acpi?"
-.Cd "asus*     at acpi?"
-.Cd "attimer*  at acpi?"
-.Cd "com*      at acpi?"
-.Cd "fdc*      at acpi?"
-.Cd "hpet*     at acpi?"
-.Cd "hpqlb*    at acpi?"
-.Cd "joy*      at acpi?"
-.Cd "lpt*      at acpi?"
-.Cd "mpu*      at acpi?"
-.Cd "npx*      at acpi?"
-.Cd "pckbc*    at acpi?"
-.Cd "pcppi*    at acpi?"
-.Cd "sony*     at acpi?"
-.Cd "spic*     at acpi?"
-.Cd "thinkpad* at acpi?"
-.Cd "ug*       at acpi?"
-.Cd "vald*     at acpi?"
-.Cd "wb*       at acpi?"
-.Cd "wss*      at acpi?"
-.Cd "ym*       at acpi?"
+.Cd "acpi0	at mainbus0"
 .Pp
 .Cd "options   ACPI_DEBUG"
 .Cd "options   ACPIVERBOSE"
@@ -111,7 +81,8 @@ The default is off.
 .It Dv ACPI_DSDT_OVERRIDE
 Force a given Differentiated System Description Table
 .Pq Tn DSDT
-instead of the BIOS-supplied version.
+instead of the version supplied by the
+.Tn BIOS .
 Use
 .Dv ACPI_DSDT_FILE
 to specify a
@@ -127,19 +98,58 @@ in the build directory.
 Few
 .Xr sysctl 8
 variables are directly relevant for
-.Nm :
-.Bl -inset -width hw.acpi.supported_state -offset 3n
+.Tn ACPI .
+.Bl -tag -width "123456" -offset indent
 .It Ic hw.acpi.root
-is the
+The
 .Tn ACPI
 root pointer.
 .It Ic hw.acpi.supported_states
-is a list of the supported
+A list of the
 .Tn ACPI
-states (see
-.Xr sysctl 7 ) .
+sleep states that the machine supports.
+The possible values are:
+.Pp
+.Bl -tag -width XS1X -offset indent -compact
+.It S0
+fully running
+.It S1
+power on suspend (CPU and hard disks are off)
+.It S2
+similar to S3, usually not implemented
+.It S3
+suspend-to-RAM
+.It S4
+suspend-to-disk (not supported on
+.Nx )
+.It S5
+power off
+.El
+.It Ic hw.acpi.stat.gpe
+The number of dispatched General Purpose Events
+.Pq Tn GPEs .
+.It Ic hw.acpi.stat.sci
+The number of System Control Interrupts
+.Pq Tn SCIs .
+See
+.Xr acpiec 4
+for a brief description of both
+.Tn GPEs
+and
+.Tn SCIs .
+.It Ic hw.acpi.stat.fixed
+The number of
+.Dq fixed events .
+.It Ic hw.acpi.stat.method
+The number of
+.Tn ACPI
+methods executed by the interpreter.
+.It Ic machdep.acpi_beep_on_reset
+A boolean variable that controls whether the
+.Tn PC
+speaker beeps upon resume.
 .It Ic machdep.acpi_vbios_reset
-defines the handling of the graphics card.
+Defines the handling of the graphics card.
 The supported values are:
 .Bl -tag -width '2' -offset indent
 .It 0
@@ -199,8 +209,11 @@ SMBus via Control Method Interface.
 .It acpitz
 .Tn ACPI
 thermal zones.
-.It aiboost
-ASUS AI Booster Hardware monitor.
+.It acpiwmi
+.Tn ACPI
+support for Windows Management Instrumentation.
+.It aibs
+ASUSTeK AI Booster ACPI ATK0110 voltage, temperature and fan sensor.
 .It asus
 ASUS laptop hotkeys.
 .It attimer
@@ -225,6 +238,8 @@ AT-style speaker sound.
 IBM/Lenovo ThinkPad laptop device driver.
 .It ug
 Abit uGuru Hardware monitor.
+.It vald
+Toshiba Libretto device.
 .It wb
 Winbond W83L518D Integrated Media Reader.
 .It wss
@@ -242,39 +257,125 @@ PC keyboard controllers.
 Sony Miscellaneous Controller
 .It spic
 Sony programmable I/O controller.
-.It vald
-Toshiba Libretto device.
 .El
 .Sh DEBUGGING
-The
+Although the situation has become better over the years,
+.Tn ACPI
+is typically prone to various errors,
+ranging from blatant flaws in the firmware to bugs in the implementation.
+Before anything else, it is a good practice to upgrade the
+.Tn BIOS
+to the latest version available from the vendor.
+.Pp
+To ease the task of diagnosing and fixing different problems, the
 .Tn ACPICA
 reference implementation provides a rich
 facility of different debugging methods.
-To ease the use of these,
+In
 .Nx
-provides two
-.Xr sysctl 7
-variables that control the debug output at runtime.
-These are only available if the running kernel has been compiled with the
+these are generally only available if the kernel has been compiled with the
 .Tn ACPI_DEBUG
 option.
+.Ss CUSTOM DSDT
+.Tn ACPI
+interprets bytecode known as
+.Tn ACPI
+Machine Language
+.Pq Tn AML ,
+provided by the
+.Tn BIOS
+as a memory image during the system bootstrap.
+Most of the
+.Tn AML
+relevant to
+.Nm
+is implemented in the so-called
+Differentiated System Descriptor Table
+.Pq Tn DSDT .
+.Nx
+provides support for overriding the default
+.Tn DSDT
+supplied by the
+.Tn BIOS .
 .Pp
+The following steps can be used to override the
+.Tn DSDT :
+.Bl -enum -offset indent
+.It
+Dump the raw
+.Tn DSDT
+with
+.Xr acpidump 8 .
+.It
+Disassemble the table with
+.Xr iasl 8 .
+.It
+Modify the disassembled table.
+.It
+Compile the table with
+.Xr iasl 8
+using the option
+.Ar \-tc .
+.It
+Either copy the
+.Pq Pa *.hex
+file to
+.Bd -literal -offset indent
+src/sys/dev/acpi/acpica/Osd/custom_dsdt.hex
+.Ed
+.Pp
+or use the option
+.Bd -literal -offset indent
+ACPI_DSDT_FILE="/some/directory/custom_dsdt.hex"
+.Ed
+.Pp
+in the kernel configuration file.
+.It
+Define
+.Tn ACPI_DSDT_OVERRIDE
+in the kernel configuration file and rebuild.
+.El
+.Ss DEBUGGER
 The
-.Ic hw.acpi.debug_layer
+.Tn ACPICA
+interpreter provides its own debugger for low-level debugging.
+It can be used to display internal data structures and namespace objects,
+and to debug the execution of control methods.
+Single step and breakpoint functionality are available.
+In
+.Nx
+this is integrated to the in-kernel
+.Xr ddb 4 .
+In order to enter the
+.Tn ACPICA
+debugger from
+.Xr ddb 4 ,
+use the command
+.Ic call
+with the argument
+.Ic acpi_osd_debugger .
+.Ss DEBUG OUTPUT
+.Nx
+provides two
+.Xr sysctl 8
+variables that control the debug output at runtime.
+The
+.Ic hw.acpi.debug.layer
 limits the output to a specific
 .Tn ACPI
 layer and the
-.Ic hw.acpi.debug_level
+.Ic hw.acpi.debug.level
 controls the debug level.
 Both
-.Xr sysctl 7
+.Xr sysctl 8
 variables are string literals.
+.Pp
 The possible values are:
 .Bl -column -offset indent \
 "ACPI_RESOURCE_COMPONENT     " "ACPI_RESOURCE_COMPONENT     "
 .It Sy LAYER Ta Sy LEVEL
 .It Li ACPI_DEBUG_NONE Ta ACPI_DEBUG_NONE
-.It Li Ta
+.It Ta
 .It Li ACPI_UTILITIES Ta ACPI_LV_INIT
 .It Li ACPI_HARDWARE Ta ACPI_LV_DEBUG_OBJECT
 .It Li ACPI_EVENTS Ta ACPI_LV_INFO
@@ -292,7 +393,7 @@ The possible values are:
 .It Li ACPI_EXAMPLE Ta ACPI_LV_VALUES
 .It Li ACPI_DRIVER Ta ACPI_LV_OBJECTS
 .It Li ACPI_ALL_COMPONENTS * Ta ACPI_LV_RESOURCES
-.It Li Ta ACPI_LV_USER_REQUESTS
+.It Ta ACPI_LV_USER_REQUESTS
 .It Li ACPI_BUS_COMPONENT Ta ACPI_LV_PACKAGE
 .It Li ACPI_ACAD_COMPONENT Ta ACPI_LV_VERBOSITY1 *
 .It Li ACPI_BAT_COMPONENT Ta
@@ -302,16 +403,16 @@ The possible values are:
 .It Li ACPI_RESOURCE_COMPONENT Ta ACPI_LV_VERBOSITY2 *
 .It Li ACPI_TZ_COMPONENT Ta
 .It Li ACPI_ALL_DRIVERS * Ta ACPI_LV_MUTEX
-.It Li Ta ACPI_LV_THREADS
-.It Li Ta ACPI_LV_IO
-.It Li Ta ACPI_LV_AML_INTERRUPTS
+.It Ta ACPI_LV_THREADS
+.It Ta ACPI_LV_IO
+.It Ta ACPI_LV_AML_INTERRUPTS
 .It Li "* This is a compound" Ta ACPI_LV_VERBOSITY3 *
 .It Li "  constant, including" Ta
 .It Li "  all previous elements." Ta ACPI_LV_AML_DISASSEMBLE
-.It Li Ta ACPI_LV_VERBOSE_INFO
-.It Li Ta ACPI_LV_FULL_TABLES
-.It Li Ta ACPI_LV_EVENTS
-.It Li Ta ACPI_LV_VERBOSE *
+.It Ta ACPI_LV_VERBOSE_INFO
+.It Ta ACPI_LV_FULL_TABLES
+.It Ta ACPI_LV_EVENTS
+.It Ta ACPI_LV_VERBOSE *
 .El
 .Pp
 In addition, there is
@@ -347,7 +448,7 @@ specific parts are typically limited to
 and
 .Dv ACPI_LV_DEBUG_INFO .
 The debug output can be stopped by setting
-.Ic hw.acpi.debug_level
+.Ic hw.acpi.debug.level
 to
 .Dv ACPI_DEBUG_NONE .
 .Ss EXAMPLE
@@ -366,11 +467,11 @@ ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Failed to evaluate _STA\\n"));
 With these options the debug message from the
 .Dv ACPI_DEBUG_PRINT
 macro is only visible when
-.Ic hw.acpi.debug_layer
+.Ic hw.acpi.debug.layer
 is either
 .Dv ACPI_BUS_COMPONENT
 or a compound constant including it, and
-.Ic hw.acpi.debug_level
+.Ic hw.acpi.debug.level
 is
 .Dv ACPI_LV_INFO
 or some constant that includes it.
@@ -379,7 +480,7 @@ Finally, it can be noted that the
 implementation uses the prefix
 .Dv ACPI_DB ,
 whereas the debug level
-.Xr sysctl 7
+.Xr sysctl 8
 variable is always specified with the prefix
 .Dv ACPI_LV .
 .Sh SEE ALSO
@@ -391,7 +492,8 @@ variable is always specified with the prefix
 .Xr acpilid 4 ,
 .Xr acpismbus 4 ,
 .Xr acpitz 4 ,
-.Xr aiboost 4 ,
+.Xr acpiwmi 4 ,
+.Xr aibs 4 ,
 .Xr apm 4 ,
 .Xr attimer 4 ,
 .Xr com 4 ,
@@ -413,7 +515,8 @@ variable is always specified with the prefix
 .Xr wss 4 ,
 .Xr ym 4 ,
 .Xr acpidump 8 ,
-.Xr amldb 8
+.Xr amldb 8 ,
+.Xr iasl 8
 .Rs
 .%A Hewlett-Packard Corporation
 .%A Intel Corporation
