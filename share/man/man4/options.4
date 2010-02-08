@@ -1,4 +1,4 @@
-.\"	$NetBSD: options.4,v 1.382 2009/12/05 20:11:02 pooka Exp $
+.\"	$NetBSD: options.4,v 1.388 2010/02/22 20:13:01 wiz Exp $
 .\"
 .\" Copyright (c) 1996
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -30,7 +30,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd November 17, 2009
+.Dd February 22, 2010
 .Dt OPTIONS 4
 .Os
 .Sh NAME
@@ -688,18 +688,18 @@ Includes code implementing the Berkeley Fast File System
 Most machines need this if they are not running diskless.
 .It Cd file-system EXT2FS
 Includes code implementing the Second Extended File System
-.Po Em EXT2FS Pc ,
+.Po Em ext2 Pc ,
 revision 0 and revision 1 with the
-.Em filetype
-and
+.Em filetype ,
 .Em sparse_super
+and
+.Em large_file
 options.
 This is the most commonly used file system on the Linux operating system,
 and is provided here for compatibility.
 Some of the specific features of
-.Em EXT2FS
+.Em ext2
 like the "behavior on errors" are not implemented.
-This file system can't be used with UID or GID greater than 65535.
 See
 .Xr mount_ext2fs 8
 for details.
@@ -1008,7 +1008,7 @@ required.
 .It Cd options EXT2FS_SYSTEM_FLAGS
 This option changes the behavior of the APPEND and IMMUTABLE flags
 for a file on an
-.Em EXT2FS
+.Em ext2
 file system.
 Without this option, the superuser or owner of the file can
 set and clear them.
@@ -2310,6 +2310,11 @@ be done using
 See
 .Xr security 8
 for more details.
+.It Cd options USER_VA0_DISABLE_DEFAULT=value
+Sets the initial value of the flag which controls whether user programs
+can map virtual address 0.
+The flag can be changed at runtime by
+.Xr sysctl 3 .
 .El
 .Ss amiga-specific Options
 .Bl -ohang
@@ -2580,6 +2585,12 @@ a Multiboot-compliant boot manager such as GRUB.
 See
 .Xr multiboot 8
 for more information.
+.It Cd options SPLASHSCREEN
+Display a splash screen during boot.
+.It Cd options SPLASHSCREEN_PROGRESS
+Display a progress bar at the splash screen during boot.
+This option requires
+.Em SPLASHSCREEN .
 .El
 .Ss isa-specific Options
 Options specific to

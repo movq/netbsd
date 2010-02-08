@@ -1,4 +1,4 @@
-.\"	$NetBSD: envsys.4,v 1.45 2009/12/19 00:15:28 snj Exp $
+.\"	$NetBSD: envsys.4,v 1.48 2010/03/14 14:47:03 pgoyette Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 12, 2009
+.Dd March 14, 2010
 .Dt ENVSYS 4
 .Os
 .Sh NAME
@@ -109,10 +109,14 @@ dictionary (which contains specific properties for a device):
 		\&\*[Lt]integer\&\*[Gt]406000\&\*[Lt]\&/integer\&\*[Gt]
 		\&\*[Lt]key\&\*[Gt]description\&\*[Lt]\&/key\&\*[Gt]
 		\&\*[Lt]string\&\*[Gt]CPU Temp\&\*[Lt]\&/string\&\*[Gt]
+		\&\*[Lt]key\&\*[Gt]high-capacity\&\*[Lt]\&/key\&\*[Gt]
+		\&\*[Lt]integer\&\*[Gt]21417\&\*[Lt]\&/integer\&\*[Gt]
 		\&\*[Lt]string\&\*[Gt]index\&\*[Lt]\&/string\&\*[Gt]
 		\&\*[Lt]string\&\*[Gt]sensor0\&\*[Lt]\&/string\&\*[Gt]
 		\&\*[Lt]key\&\*[Gt]max-value\&\*[Lt]\&/key\&\*[Gt]
 		\&\*[Lt]integer\&\*[Gt]3894000\&\*[Lt]\&/integer\&\*[Gt]
+		\&\*[Lt]key\&\*[Gt]maximum-capacity\&\*[Lt]\&/key\&\*[Gt]
+		\&\*[Lt]integer\&\*[Gt]21417\&\*[Lt]\&/integer\&\*[Gt]
 		\&\*[Lt]key\&\*[Gt]min-value\&\*[Lt]\&/key\&\*[Gt]
 		\&\*[Lt]integer\&\*[Gt]2894000\&\*[Lt]\&/integer\&\*[Gt]
 		\&\*[Lt]key\&\*[Gt]monitoring-state-critical\&\*[Lt]\&/key\&\*[Gt]
@@ -182,10 +186,26 @@ Critical min limit set previously by the
 Current value in the sensor.
 .It Fa description
 Description of the sensor.
+.It Fa high-capacity
+High capacity set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
+Only available on sensors with the
+.Em want-percentage
+object enabled.
+Used to monitor possible over-charging of batteries.
 .It Fa index
 Index position of the sensor.
 .It Fa max-value
 Current max value in the sensor.
+.It Fa maximum-capacity
+Maximum capacity set previously by the
+.Dv ENVSYS_SETDICTIONARY
+.Xr ioctl 2 .
+Only available on sensors with the
+.Em want-percentage
+object enabled.
+Used to monitor possible over-charging of batteries.
 .It Fa min-value
 Current min value in the sensor.
 .It Fa monitoring-state-critical
@@ -267,6 +287,10 @@ a sensor understands:
 	\&\*[Lt]integer\&\*[Gt]3400\&\*[Lt]\&/integer\&\*[Gt]
 	\&\*[Lt]key\&\*[Gt]critical-min\&\*[Lt]\&/key\&\*[Gt]
 	\&\*[Lt]integer\&\*[Gt]2800\&\*[Lt]\&/integer\&\*[Gt]
+	\&\*[Lt]key\&\*[Gt]high-capacity\&\*[Lt]\&/key\&\*[Gt]
+	\&\*[Lt]integer\&\*[Gt]95\&\*[Lt]\&/integer\&\*[Gt]
+	\&\*[Lt]key\&\*[Gt]maximum-capacity\&\*[Lt]\&/key\&\*[Gt]
+	\&\*[Lt]integer\&\*[Gt]100\&\*[Lt]\&/integer\&\*[Gt]
 	\&\*[Lt]key\&\*[Gt]warning-capacity\&\*[Lt]\&/key\&\*[Gt]
 	\&\*[Lt]integer\&\*[Gt]15\&\*[Lt]\&/integer\&\*[Gt]
 	\&\*[Lt]key\&\*[Gt]warning-max\&\*[Lt]\&/key\&\*[Gt]
@@ -353,7 +377,7 @@ The following example shows how to change the description
 of
 .Ql sensor0
 in the
-.Ql aiboost0
+.Ql aibs0
 device with the
 .Dv ENVSYS_SETDICTIONARY
 .Xr ioctl 2 :
@@ -364,26 +388,26 @@ main(void)
 	prop_dictionary_t global_dict, sensor_dict;
 	prop_array_t array;
 	prop_object_t obj;
-	int fd;
+	int fd, error;
 
 	global_dict = prop_dictionary_create();
 	sensor_dict = prop_dictionary_create();
 	array = prop_array_create();
 
-	if (!prop_dictionary_set(global_dict, "aiboost0", array))
+	if (!prop_dictionary_set(global_dict, "aibs0", array))
 		err(EINVAL, "prop_dictionary_set global");
 
 	obj = prop_string_create_cstring_nocopy("sensor0");
 	if (obj == NULL ||
-	    !prop_dictionary_set(dict, "index", obj))
+	    !prop_dictionary_set(sensor_dict, "index", obj))
 		err(EINVAL, "sensor index");
 
 	prop_object_release(obj);
 
 	/* new description */
-	obj = prop_string_create_cstring_nocopy("CPU temp");
+	obj = prop_string_create_cstring_nocopy("CPU core voltage");
 	if (obj == NULL ||
-	    !prop_dictionary_set(dict, "description", obj))
+	    !prop_dictionary_set(sensor_dict, "description", obj))
 		err(EINVAL, "new description");
 
 	prop_object_release(obj);
@@ -392,7 +416,7 @@ main(void)
 		err(EINVAL, "prop_array_add");
 
 	if ((fd = open(_DEV_SYSMON, O_RDWR)) == \-1)
-		err(EXIT_FAILURE, "open")
+		err(EXIT_FAILURE, "open");
 
 	/* we are done, send the dictionary */
 	error = prop_dictionary_send_ioctl(global_dict,

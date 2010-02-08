@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.314 2010/02/06 22:32:08 dyoung Exp $
+#       $NetBSD: Makefile,v 1.329 2010/04/29 14:36:35 jruoho Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
@@ -12,8 +12,8 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	cpu_lwp_fork.9 \
 	cpu_idle.9 cpu_initclocks.9 cpu_need_resched.9 \
 	cpu_number.9 cpu_reboot.9 cpu_rootconf.9 \
-	cpu_startup.9 cpu_swapout.9 cpu_switchto.9 \
-	csf.9 \
+	cpu_startup.9 cpu_switchto.9 \
+	csf.9 ctod.9 \
 	curproc.9 \
 	delay.9 disk.9 ddc.9 disklabel.9 dofileread.9 \
 	dopowerhooks.9 do_setresuid.9 doshutdownhooks.9 driver.9 \
@@ -38,14 +38,14 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	mstohz.9 mutex.9 m_tag.9 namecache.9 \
 	namei.9 opencrypto.9 optstr.9 \
 	panic.9 pci.9 pci_configure_bus.9 pci_intr.9 pckbport.9 \
-	pcmcia.9 pcq.9 percpu.9 pfil.9 physio.9 pmap.9 pmatch.9 pmc.9 pmf.9 \
-	pool.9 pool_cache.9 powerhook_establish.9 ppsratecheck.9 \
+	pcmcia.9 pcq.9 percpu.9 pfil.9 pfind.9 physio.9 pmap.9 pmatch.9 \
+	pmc.9 pmf.9 pool.9 pool_cache.9 powerhook_establish.9 ppsratecheck.9 \
 	preempt.9 putter.9 \
-	radio.9 ras.9 rasops.9 ratecheck.9 resettodr.9 rnd.9 rssadapt.9 \
-	rt_timer.9 rwlock.9 RUN_ONCE.9 \
-	sched_4bsd.9 scsipi.9 \
+	radio.9 ras.9 rasops.9 ratecheck.9 resettodr.9 rnd.9 roundup.9 \
+	rssadapt.9 rt_timer.9 rwlock.9 RUN_ONCE.9 \
+	sched_4bsd.9 sched_m2.9 scsipi.9 \
 	secmodel.9 secmodel_bsd44.9 secmodel_overlay.9 secmodel_securelevel.9 \
-	secmodel_suser.9 setjmp.9 shutdownhook_establish.9 \
+	secmodel_suser.9 SET.9 setbit.9 setjmp.9 shutdownhook_establish.9 \
 	signal.9 sockopt.9 softintr.9 spl.9 splraiseipl.9 \
 	store.9 suspendsched.9 \
 	sysctl.9 sysmon_envsys.9 sysmon_pswitch.9 sysmon_taskq.9 tc.9 \
@@ -123,7 +123,9 @@ MLINKS+=bus_space.9 bus_space_alloc.9 bus_space.9 bus_space_barrier.9 \
 	bus_space.9 bus_space_copy_region_2.9 \
 	bus_space.9 bus_space_copy_region_4.9 \
 	bus_space.9 bus_space_copy_region_8.9 \
-	bus_space.9 bus_space_free.9 bus_space.9 bus_space_map.9 \
+	bus_space.9 bus_space_free.9 \
+	bus_space.9 bus_space_is_equal.9 \
+	bus_space.9 bus_space_map.9 \
 	bus_space.9 bus_space_mmap.9 \
 	bus_space.9 bus_space_read_1.9 bus_space.9 bus_space_read_2.9 \
 	bus_space.9 bus_space_read_4.9 bus_space.9 bus_space_read_8.9 \
@@ -222,8 +224,13 @@ MLINKS+=copy.9 copyin.9 copy.9 copyout.9 copy.9 copystr.9 \
 MLINKS+=cpu_dumpconf.9 cpu_dump.9 cpu_dumpconf.9 cpu_dumpsize.9 \
 	cpu_dumpconf.9 dumpsys.9
 MLINKS+=cpu_lwp_fork.9 child_return.9 cpu_lwp_fork.9 proc_trampoline.9
-MLINKS+=cpu_swapout.9 cpu_swapin.9
-MLINKS+=curproc.9 curcpu.9
+MLINKS+=cpu_rootconf.9 setroot.9
+MLINKS+=ctod.9 dtoc.9 \
+	ctod.9 ctob.9 \
+	ctod.9 btoc.9 \
+	ctod.9 dbtob.9 \
+	ctod.9 btodb.9
+MLINKS+=curproc.9 curcpu.9 curproc.9 curlwp.9
 MLINKS+=delay.9 DELAY.9
 MLINKS+=disk.9 disk_attach.9 disk.9 disk_detach.9 \
 	disk.9 disk_busy.9 disk.9 disk_unbusy.9 disk.9 disk_find.9 \
@@ -290,6 +297,10 @@ MLINKS+=getiobuf.9 putiobuf.9
 MLINKS+=hash.9 hash32_buf.9 hash.9 hash32_str.9 hash.9 hash32_strn.9
 MLINKS+=hashinit.9 hashdone.9
 MLINKS+=humanize_number.9 format_bytes.9
+MLINKS+=hz.9 profhz.9 \
+	hz.9 stathz.9 \
+	hz.9 tick.9 \
+	hz.9 tickadj.9
 MLINKS+=ieee80211.9 ieee80211_chan2ieee.9 \
 	ieee80211.9 ieee80211_chan2mode.9 \
 	ieee80211.9 ieee80211_ieee2mhz.9 \
@@ -345,7 +356,10 @@ MLINKS+=isapnp.9 isapnp_devmatch.9 \
 	isapnp.9 isapnp_unconfig.9
 MLINKS+=knote.9 KNOTE.9 \
 	kfilter_register.9 kfilter_unregister.9
-MLINKS+=kmem.9 kmem_alloc.9 kmem.9 kmem_free.9 kmem.9 kmem_zalloc.9
+MLINKS+=kmem.9 kmem_alloc.9 \
+	kmem.9 kmem_free.9 \
+	kmem.9 kmem_zalloc.9 \
+	kmem.9 kmem_asprintf.9
 MAN+=	kpreempt.9
 MLINKS+=kpreempt.9 kpreempt_disable.9 \
 	kpreempt.9 kpreempt_disabled.9 \
@@ -411,6 +425,7 @@ MLINKS+=microuptime.9 binuptime.9 \
 	microuptime.9 getmicrouptime.9 \
 	microuptime.9 nanouptime.9 \
 	microuptime.9 getnanouptime.9
+MLINKS+=mstohz.9 hztoms.9
 MLINKS+=mutex.9 mutex_init.9 mutex.9 mutex_destroy.9 mutex.9 mutex_enter.9 \
 	mutex.9 mutex_exit.9 mutex.9 mutex_tryenter.9 mutex.9 mutex_owned.9 \
 	mutex.9 mutex_spin_enter.9 mutex.9 mutex_spin_exit.9
@@ -518,6 +533,9 @@ MLINKS+=pfil.9 pfil_hook_get.9 \
 	pfil.9 pfil_head_unregister.9 \
 	pfil.9 pfil_head_get.9 \
 	pfil.9 pfil_run_hooks.9
+MLINKS+=pfind.9 p_find.9 \
+	pfind.9 pg_find.9 \
+	pfind.9 pgfind.9
 MLINKS+=pmc.9 pmc_get_num_counters.9 \
 	pmc.9 pmc_get_counter_type.9 \
 	pmc.9 pmc_save_context.9 \
@@ -573,6 +591,10 @@ MLINKS+=rasops.9 rasops_init.9 \
 	rasops.9 rasops_reconfig.9
 MLINKS+=rnd.9 rnd_attach_source.9 rnd.9 rnd_detach_source.9 \
 	rnd.9 rnd_add_data.9 rnd.9 rnd_add_uint32.9
+MLINKS+=roundup.9 howmany.9 \
+	roundup.9 rounddown.9 \
+	roundup.9 roundup2.9 \
+	roundup.9 powerof2.9
 MLINKS+=rssadapt.9 ieee80211_rssadapt_choose.9 \
 	rssadapt.9 ieee80211_rssadapt_input.9 \
 	rssadapt.9 ieee80211_rssadapt_lower_rate.9 \
@@ -591,6 +613,11 @@ MLINKS+=select.9 selinit.9 \
 	select.9 seldestroy.9 \
 	select.9 selrecord.9 \
 	select.9 selnotify.9
+MLINKS+=SET.9 CLR.9 \
+	SET.9 ISSET.9
+MLINKS+=setbit.9 clrbit.9 \
+	setbit.9 isset.9 \
+	setbit.9 isclr.9
 MLINKS+=setjmp.9 longjmp.9
 MLINKS+=shutdownhook_establish.9 shutdownhook_disestablish.9
 MLINKS+=signal.9 siginit.9 \
@@ -607,12 +634,10 @@ MLINKS+=signal.9 siginit.9 \
 	signal.9 pgsignal.9 \
 	signal.9 trapsignal.9 \
 	signal.9 psignal.9 \
-	signal.9 sched_psignal.9 \
 	signal.9 issignal.9 \
 	signal.9 postsig.9 \
 	signal.9 killproc.9 \
 	signal.9 sigexit.9 \
-	signal.9 sigmasked.9 \
 	signal.9 sendsig.9 \
 	signal.9 sigcode.9 \
 	signal.9 sigtramp.9
@@ -756,6 +781,7 @@ MLINKS+=vmem.9 vmem_alloc.9 \
 	vmem.9 vmem_xfree.9
 MLINKS+=vnode.9 vref.9 \
 	vnode.9 vrele.9 \
+	vnode.9 vrele_async.9 \
 	vnode.9 vget.9 \
 	vnode.9 vput.9 \
 	vnode.9 vhold.9 \
