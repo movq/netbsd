@@ -1,4 +1,4 @@
-/*	$NetBSD: sssvlv.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: sssvlv.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* sssvlv.c - server side sort / virtual list view */
 /* OpenLDAP: pkg/ldap/servers/slapd/overlays/sssvlv.c,v 1.9.2.4 2009/09/29 19:07:07 quanah Exp */

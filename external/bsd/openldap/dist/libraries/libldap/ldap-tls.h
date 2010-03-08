@@ -1,4 +1,4 @@
-/*	$NetBSD: ldap-tls.h,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: ldap-tls.h,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /*  ldap-tls.h - TLS defines & prototypes internal to the LDAP library */
 /* OpenLDAP: pkg/ldap/libraries/libldap/ldap-tls.h,v 1.3.2.2 2009/10/30 17:48:16 quanah Exp */

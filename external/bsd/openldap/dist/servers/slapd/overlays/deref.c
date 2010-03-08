@@ -1,4 +1,4 @@
-/*	$NetBSD: deref.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: deref.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* deref.c - dereference overlay */
 /* OpenLDAP: pkg/ldap/servers/slapd/overlays/deref.c,v 1.7.2.4 2009/04/29 01:55:18 quanah Exp */

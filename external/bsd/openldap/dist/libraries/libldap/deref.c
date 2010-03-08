@@ -1,4 +1,4 @@
-/*	$NetBSD: deref.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: deref.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* OpenLDAP: pkg/ldap/libraries/libldap/deref.c,v 1.2.2.2 2009/01/22 00:00:54 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.

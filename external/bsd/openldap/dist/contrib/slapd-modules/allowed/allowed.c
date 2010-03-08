@@ -1,4 +1,4 @@
-/*	$NetBSD: allowed.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: allowed.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* allowed.c - add allowed attributes based on ACL */
 /* OpenLDAP: pkg/ldap/contrib/slapd-modules/allowed/allowed.c,v 1.3.2.2 2009/08/25 19:59:12 quanah Exp */

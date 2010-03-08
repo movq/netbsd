@@ -1,4 +1,4 @@
-/*	$NetBSD: pam.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: pam.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /*
    pam.c - pam module functions

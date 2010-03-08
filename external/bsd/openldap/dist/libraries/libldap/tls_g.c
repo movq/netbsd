@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_g.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: tls_g.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* tls_g.c - Handle tls/ssl using GNUTLS. */
 /* OpenLDAP: pkg/ldap/libraries/libldap/tls_g.c,v 1.6.2.7 2009/10/30 17:48:17 quanah Exp */

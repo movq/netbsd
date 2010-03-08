@@ -1,4 +1,4 @@
-/*	$NetBSD: proto-ndb.h,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: proto-ndb.h,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* OpenLDAP: pkg/ldap/servers/slapd/back-ndb/proto-ndb.h,v 1.3.2.2 2009/01/22 00:01:09 kurt Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.

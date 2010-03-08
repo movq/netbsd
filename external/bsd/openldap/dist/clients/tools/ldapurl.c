@@ -1,4 +1,4 @@
-/*	$NetBSD: ldapurl.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: ldapurl.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* ldapurl -- a tool for generating LDAP URLs */
 /* OpenLDAP: pkg/ldap/clients/tools/ldapurl.c,v 1.1.2.2 2009/01/22 00:00:43 kurt Exp */
