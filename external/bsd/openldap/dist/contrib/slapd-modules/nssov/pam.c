@@ -1,4 +1,4 @@
-/*	$NetBSD: pam.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: pam.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* pam.c - pam processing routines */
 /* OpenLDAP: pkg/ldap/contrib/slapd-modules/nssov/pam.c,v 1.13.2.5 2009/10/03 19:40:03 hyc Exp */

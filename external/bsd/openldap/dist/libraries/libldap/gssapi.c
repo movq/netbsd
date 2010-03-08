@@ -1,4 +1,4 @@
-/*	$NetBSD: gssapi.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: gssapi.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* OpenLDAP: pkg/ldap/libraries/libldap/gssapi.c,v 1.1.2.4 2009/04/29 01:53:02 quanah Exp */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.

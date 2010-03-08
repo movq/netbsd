@@ -1,4 +1,4 @@
-/*	$NetBSD: cloak.c,v 1.1 2010/03/08 02:14:20 lukem Exp $	*/
+/*	$NetBSD: cloak.c,v 1.1.1.1 2010/03/08 02:14:20 lukem Exp $	*/
 
 /* cloak.c - Overlay to hide some attribute except if explicitely requested */
 /* OpenLDAP: pkg/ldap/contrib/slapd-modules/cloak/cloak.c,v 1.2.2.3 2009/08/17 21:48:57 quanah Exp */
