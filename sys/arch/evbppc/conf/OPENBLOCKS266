@@ -1,13 +1,13 @@
-#	$NetBSD: OPENBLOCKS266,v 1.47 2010/03/10 17:25:21 kiyohara Exp $
+#	$NetBSD: OPENBLOCKS266,v 1.48 2010/03/18 14:15:38 kiyohara Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
 
-include		"arch/evbppc/conf/std.obs405"
+include		"arch/evbppc/conf/std.obs266"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"OPENBLOCKS266-$Revision: 1.47 $"
+#ident 		"OPENBLOCKS266-$Revision: 1.48 $"
 
 maxusers	32
 

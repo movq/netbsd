@@ -1,4 +1,4 @@
-/*	$NetBSD: obs200_machdep.c,v 1.11 2010/03/18 13:47:04 kiyohara Exp $	*/
+/*	$NetBSD: obs200_machdep.c,v 1.12 2010/03/18 14:15:38 kiyohara Exp $	*/
 /*	Original: machdep.c,v 1.3 2005/01/17 17:24:09 shige Exp	*/
 
 /*
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.11 2010/03/18 13:47:04 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.12 2010/03/18 14:15:38 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -96,11 +96,27 @@ __KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.11 2010/03/18 13:47:04 kiyohara
 #include <powerpc/ibm4xx/ibm405gp.h>
 #include <powerpc/ibm4xx/dev/comopbvar.h>
 
+#include <dev/ic/comreg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciconf.h>
 
 #include "ksyms.h"
 
+#include "com.h"
+#if (NCOM > 0)
+#include <sys/termios.h>
+
+#ifndef CONADDR
+#define CONADDR		IBM405GP_UART0_BASE
+#endif
+#ifndef CONSPEED
+#define CONSPEED	B9600
+#endif
+#ifndef CONMODE
+			/* 8N1 */
+#define CONMODE		((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)
+#endif
+#endif	/* NCOM */
 
 #define	TLB_PG_SIZE 	(16*1024*1024)
 
@@ -141,8 +157,8 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 		ppc4xx_tlb_reserve(va, va, TLB_PG_SIZE, TLB_EX);
 
 	/* Map console after physmem (see pmap_tlbmiss()). */
-	ppc4xx_tlb_reserve(OBS405_CONADDR, roundup(memsize, TLB_PG_SIZE),
-	    TLB_PG_SIZE, TLB_I | TLB_G);
+	ppc4xx_tlb_reserve(CONADDR, roundup(memsize, TLB_PG_SIZE), TLB_PG_SIZE,
+	    TLB_I | TLB_G);
 
 	/* Initialize IBM405GPr CPU */
 	ibm40x_memsize_init(memsize, startkernel);
@@ -185,7 +201,9 @@ void
 consinit(void)
 {
 
-	obs405_consinit(OBS200_COM_FREQ);
+#if (NCOM > 0)
+	com_opb_cnattach(OBS200_COM_FREQ, CONADDR, CONSPEED, CONMODE);
+#endif
 }
 
 int
@@ -396,6 +414,6 @@ pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
 			return;
 		}
 		*iline = ilinemap[dev - 1];
-        } else
+	} else
 		*iline = 19 + ((swiz + dev + 1) & 3);
 }
