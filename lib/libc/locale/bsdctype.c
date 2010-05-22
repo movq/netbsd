@@ -1,4 +1,4 @@
-/* $NetBSD: bsdctype.c,v 1.2 2009/01/11 02:46:28 christos Exp $ */
+/* $NetBSD: bsdctype.c,v 1.3 2010/05/22 06:38:15 tnozaki Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,11 +28,10 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: bsdctype.c,v 1.2 2009/01/11 02:46:28 christos Exp $");
+__RCSID("$NetBSD: bsdctype.c,v 1.3 2010/05/22 06:38:15 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
-#define _CTYPE_PRIVATE
 #include <ctype.h>
 
 #include "bsdctype.h"
