@@ -1,4 +1,4 @@
-/*	$NetBSD: ctype_.c,v 1.17 2010/05/22 06:38:15 tnozaki Exp $	*/
+/*	$NetBSD: ctype_.c,v 1.18 2010/06/01 13:52:08 tnozaki Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -39,11 +39,11 @@
 #if 0
 /*static char *sccsid = "from: @(#)ctype_.c	5.6 (Berkeley) 6/1/90";*/
 #else
-__RCSID("$NetBSD: ctype_.c,v 1.17 2010/05/22 06:38:15 tnozaki Exp $");
+__RCSID("$NetBSD: ctype_.c,v 1.18 2010/06/01 13:52:08 tnozaki Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#include <ctype.h>
+#include <sys/ctype_bits.h>
 #include <stdio.h>
 #include "ctype_local.h"
 
