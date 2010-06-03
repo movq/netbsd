@@ -1,5 +1,5 @@
 /*	Id: builtins.c,v 1.5 2010/04/30 13:13:21 ragge Exp 	*/	
-/*	$NetBSD: builtins.c,v 1.1 2010/06/03 18:57:37 plunky Exp $	*/
+/*	$NetBSD: builtins.c,v 1.1.1.1 2010/06/03 18:57:37 plunky Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
