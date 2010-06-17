@@ -1,4 +1,4 @@
-/*	$NetBSD: bounce_workaround.c,v 1.1 2010/06/17 18:06:53 tron Exp $	*/
+/*	$NetBSD: bounce_workaround.c,v 1.1.1.1 2010/06/17 18:06:53 tron Exp $	*/
 
 /*++
 /* NAME
