@@ -1,4 +1,4 @@
-/*	$NetBSD: unix_pass_fd_fix.c,v 1.1 2010/06/17 18:07:15 tron Exp $	*/
+/*	$NetBSD: unix_pass_fd_fix.c,v 1.1.1.1 2010/06/17 18:07:15 tron Exp $	*/
 
 /*++
 /* NAME
