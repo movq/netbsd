@@ -1,4 +1,4 @@
-/*	$NetBSD: t_forward.c,v 1.2 2010/07/18 12:43:22 pooka Exp $	*/
+/*	$NetBSD: t_forward.c,v 1.3 2010/07/25 21:39:21 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: t_forward.c,v 1.2 2010/07/18 12:43:22 pooka Exp $");
+__RCSID("$NetBSD: t_forward.c,v 1.3 2010/07/25 21:39:21 pooka Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,6 +58,7 @@ __RCSID("$NetBSD: t_forward.c,v 1.2 2010/07/18 12:43:22 pooka Exp $");
 #include <unistd.h>
 
 #include "../../h_macros.h"
+#include "../config/netconfig.c"
 
 static void
 configure_interface(const char *busname, const char *addr, const char *mask,
@@ -173,12 +174,14 @@ sendttl(void)
 	extern int rumpns_ip_defttl;
 	struct sockaddr_in sin;
 	char payload[1024];
+	char ifname[IFNAMSIZ];
 	int mib[4] = { CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFTTL };
 	int nv;
 	int s;
 
-	configure_interface("bus1", "1.0.0.1", "255.255.255.0", "1.0.0.255");
-	configure_routing("0.0.0.0", "0.0.0.0", "1.0.0.2"); /* default router */
+	netcfg_rump_makeshmif("bus1", ifname);
+	netcfg_rump_if(ifname, "1.0.0.1", "255.255.255.0", "1.0.0.255");
+	netcfg_rump_route("0.0.0.0", "0.0.0.0", "1.0.0.2"); /* default router */
 
 	/* set global ttl to 1 */
 	nv = 1;
