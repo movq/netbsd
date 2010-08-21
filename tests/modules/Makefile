@@ -1,19 +1,14 @@
-# $NetBSD: Makefile,v 1.5 2010/07/13 21:13:28 jmmv Exp $
+#	$NetBSD: Makefile,v 1.6 2010/08/21 13:21:48 pgoyette Exp $
 
 .include <bsd.own.mk>
 
-TESTSDIR=	${TESTSBASE}/modules
+KMOD=   	k_helper2
+KMODULEDIR=	${DESTDIR}/${TESTSBASE}/modules/${KMOD}
 
-# Ideally this test could be in the parent Makefile, which could not descend
-# into this directory at all.  Unfortunately, the etc/mtree/NetBSD.dist file
-# creates the 'modules' subdirectory unconditionally, which if left empty
-# will confuse atf-run.  Therefore we must install, at the very least, the
-# Atffile into it.
-TESTS_C=	t_modctl
-LDADD=		-lprop
+SRCS=   	k_helper2.c
 
-TESTS_SH=	t_modload
-
-SUBDIR=		k_helper
+ATFFILE=	no
+NOMAN=		# defined
 
 .include <bsd.test.mk>
+.include <bsd.kmodule.mk>
