@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.1 2010/08/30 02:19:47 mrg Exp $ */
+/* $NetBSD: main.c,v 1.1.1.1 2010/08/30 02:19:47 mrg Exp $ */
 
 /*
  * Copyright (c) 2010 Jared D. McNeill <jmcneill@invisible.ca>
