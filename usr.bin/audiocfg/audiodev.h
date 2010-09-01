@@ -1,4 +1,4 @@
-/* $NetBSD: audiodev.h,v 1.1.1.1 2010/08/30 02:19:47 mrg Exp $ */
+/* $NetBSD: audiodev.h,v 1.2 2010/09/01 09:04:16 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2010 Jared D. McNeill <jmcneill@invisible.ca>
@@ -44,6 +44,8 @@ struct audiodev {
 	dev_t dev;
 	bool defaultdev;
 
+	int pchan;
+
 	audio_device_t audio_device;
 
 	TAILQ_ENTRY(audiodev) next;
@@ -53,5 +55,6 @@ int			audiodev_refresh(void);
 unsigned int		audiodev_count(void);
 struct audiodev *	audiodev_get(unsigned int);
 int			audiodev_set_default(struct audiodev *);
+int			audiodev_test(struct audiodev *, unsigned int);
 
 #endif /* !_HAVE_AUDIODEV_H */
