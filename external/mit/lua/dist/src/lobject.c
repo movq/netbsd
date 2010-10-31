@@ -1,4 +1,4 @@
-/*	$NetBSD: lobject.c,v 1.1 2010/10/31 11:16:57 mbalmer Exp $	*/
+/*	$NetBSD: lobject.c,v 1.1.1.1 2010/10/31 11:16:57 mbalmer Exp $	*/
 
 /*
 ** Id: lobject.c,v 2.22.1.1 2007/12/27 13:02:25 roberto Exp

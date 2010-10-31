@@ -1,4 +1,4 @@
-/*	$NetBSD: lstrlib.c,v 1.1 2010/10/31 11:16:59 mbalmer Exp $	*/
+/*	$NetBSD: lstrlib.c,v 1.1.1.1 2010/10/31 11:16:59 mbalmer Exp $	*/
 
 /*
 ** Id: lstrlib.c,v 1.132.1.4 2008/07/11 17:27:21 roberto Exp
