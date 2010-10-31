@@ -1,4 +1,4 @@
-/*	$NetBSD: lvm.h,v 1.1 2010/10/31 11:17:00 mbalmer Exp $	*/
+/*	$NetBSD: lvm.h,v 1.1.1.1 2010/10/31 11:17:00 mbalmer Exp $	*/
 
 /*
 ** Id: lvm.h,v 2.5.1.1 2007/12/27 13:02:25 roberto Exp

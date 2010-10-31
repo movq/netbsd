@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.1 2010/10/31 11:17:01 mbalmer Exp $	*/
+/*	$NetBSD: print.c,v 1.1.1.1 2010/10/31 11:17:01 mbalmer Exp $	*/
 
 /*
 ** Id: print.c,v 1.55a 2006/05/31 13:30:05 lhf Exp

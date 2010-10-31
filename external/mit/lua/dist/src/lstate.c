@@ -1,4 +1,4 @@
-/*	$NetBSD: lstate.c,v 1.1 2010/10/31 11:16:58 mbalmer Exp $	*/
+/*	$NetBSD: lstate.c,v 1.1.1.1 2010/10/31 11:16:58 mbalmer Exp $	*/
 
 /*
 ** Id: lstate.c,v 2.36.1.2 2008/01/03 15:20:39 roberto Exp

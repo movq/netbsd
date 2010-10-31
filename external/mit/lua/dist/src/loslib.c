@@ -1,4 +1,4 @@
-/*	$NetBSD: loslib.c,v 1.1 2010/10/31 11:16:58 mbalmer Exp $	*/
+/*	$NetBSD: loslib.c,v 1.1.1.1 2010/10/31 11:16:58 mbalmer Exp $	*/
 
 /*
 ** Id: loslib.c,v 1.19.1.3 2008/01/18 16:38:18 roberto Exp

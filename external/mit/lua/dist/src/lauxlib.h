@@ -1,4 +1,4 @@
-/*	$NetBSD: lauxlib.h,v 1.1 2010/10/31 11:16:55 mbalmer Exp $	*/
+/*	$NetBSD: lauxlib.h,v 1.1.1.1 2010/10/31 11:16:55 mbalmer Exp $	*/
 
 /*
 ** Id: lauxlib.h,v 1.88.1.1 2007/12/27 13:02:25 roberto Exp

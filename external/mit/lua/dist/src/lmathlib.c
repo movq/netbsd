@@ -1,4 +1,4 @@
-/*	$NetBSD: lmathlib.c,v 1.1 2010/10/31 11:16:57 mbalmer Exp $	*/
+/*	$NetBSD: lmathlib.c,v 1.1.1.1 2010/10/31 11:16:57 mbalmer Exp $	*/
 
 /*
 ** Id: lmathlib.c,v 1.67.1.1 2007/12/27 13:02:25 roberto Exp

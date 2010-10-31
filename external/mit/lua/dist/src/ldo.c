@@ -1,4 +1,4 @@
-/*	$NetBSD: ldo.c,v 1.1 2010/10/31 11:16:56 mbalmer Exp $	*/
+/*	$NetBSD: ldo.c,v 1.1.1.1 2010/10/31 11:16:56 mbalmer Exp $	*/
 
 /*
 ** Id: ldo.c,v 2.38.1.3 2008/01/18 22:31:22 roberto Exp
