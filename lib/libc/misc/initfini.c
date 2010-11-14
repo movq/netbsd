@@ -1,4 +1,4 @@
-/* 	$NetBSD: initfini.c,v 1.6 2010/06/28 21:58:02 joerg Exp $	 */
+/* 	$NetBSD: initfini.c,v 1.7 2010/11/14 18:11:42 tron Exp $	 */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: initfini.c,v 1.6 2010/06/28 21:58:02 joerg Exp $");
+__RCSID("$NetBSD: initfini.c,v 1.7 2010/11/14 18:11:42 tron Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
@@ -42,6 +42,7 @@ void	__guard_setup(void);
 void	__libc_thr_init(void);
 void	__libc_atomic_init(void);
 void	__libc_atexit_init(void);
+void	__libc_env_init(void);
 
 /* LINTED used */
 void
@@ -59,4 +60,7 @@ __libc_init(void)
 
 	/* Initialize the atexit mutexes */
 	__libc_atexit_init();
+
+	/* Initialize environment memory RB tree. */
+	__libc_env_init();
 }
