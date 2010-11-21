@@ -1,4 +1,4 @@
-/*	$NetBSD: roaming_serv.c,v 1.1 2010/11/21 17:05:53 adam Exp $	*/
+/*	$NetBSD: roaming_serv.c,v 1.1.1.1 2010/11/21 17:05:53 adam Exp $	*/
 /* $OpenBSD: roaming_serv.c,v 1.1 2009/10/24 11:18:23 andreas Exp $ */
 /*
  * Copyright (c) 2004-2009 AppGate Network Security AB
