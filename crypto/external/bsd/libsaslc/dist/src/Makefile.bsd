@@ -1,4 +1,4 @@
-# $Id: Makefile.bsd,v 1.1 2010/11/27 21:23:59 agc Exp $
+# $Id: Makefile.bsd,v 1.1.1.1 2010/11/27 21:23:59 agc Exp $
 WARNS?=4
 LIB=saslc
 CPPFLAGS+=-I${.CURDIR}/../include

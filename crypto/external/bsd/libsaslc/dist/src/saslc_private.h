@@ -1,4 +1,4 @@
-/* $Id: saslc_private.h,v 1.1 2010/11/27 21:23:59 agc Exp $ */
+/* $Id: saslc_private.h,v 1.1.1.1 2010/11/27 21:23:59 agc Exp $ */
 
 /* Copyright (c) 2010 The NetBSD Foundation, Inc.
  * All rights reserved.

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.1 2010/11/27 21:23:59 agc Exp $
+# $Id: Makefile,v 1.1.1.1 2010/11/27 21:23:59 agc Exp $
 CC=gcc
 CFLAGS=-I../include -Wall -pedantic -fPIC -ggdb
 LIBSASLC_OBJS=\
