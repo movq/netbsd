@@ -45,11 +45,6 @@
 #define	GPIO_ICR_EDGE_RISING	2
 #define	GPIO_ICR_EDGE_FALLING	3
 
-#define	GPIO_MODULE(pin)	((pin) / GPIO_NPINS)
-
-/*
- * GPIO number
- */
-#define	GPIO_NO(group, pin)	(((group) - 1) * GPIO_NPINS + (pin))
+#define	GPIO_NPINS		32
 
 #endif	/* _ARM_IMX_IMXGPIOREG_H */
