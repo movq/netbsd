@@ -1,6 +1,6 @@
 .\" @(#) Header: /tcpdump/master/tcpdump/tcpdump.1.in,v 1.2 2008-11-09 23:35:03 mcr Exp (LBL)
 .\"
-.\"	$NetBSD: tcpdump.1.in,v 1.1 2010/12/05 03:15:41 christos Exp $
+.\"	$NetBSD: tcpdump.1.in,v 1.1.1.1 2010/12/05 03:15:41 christos Exp $
 .\"
 .\" Copyright (c) 1987, 1988, 1989, 1990, 1991, 1992, 1994, 1995, 1996, 1997
 .\"	The Regents of the University of California.  All rights reserved.

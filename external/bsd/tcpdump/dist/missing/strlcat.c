@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcat.c,v 1.1 2010/12/05 03:15:43 christos Exp $	*/
+/*	$NetBSD: strlcat.c,v 1.1.1.1 2010/12/05 03:15:43 christos Exp $	*/
 /*	from OpenBSD: strlcat.c,v 1.2 1999/06/17 16:28:58 millert Exp 	*/
 
 /*
