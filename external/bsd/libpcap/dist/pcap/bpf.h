@@ -37,7 +37,7 @@
  *
  *      @(#)bpf.h       7.1 (Berkeley) 5/7/91
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/pcap/bpf.h,v 1.1 2010/12/05 01:20:56 christos Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/pcap/bpf.h,v 1.1.1.1 2010/12/05 01:20:56 christos Exp $ (LBL)
  */
 
 /*

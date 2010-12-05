@@ -30,7 +30,7 @@
  * Bluetooth sniffing API implementation for Linux platform
  * By Paolo Abeni <paolo.abeni@email.it>
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/pcap-bt-linux.h,v 1.1 2010/12/05 01:20:30 christos Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/pcap-bt-linux.h,v 1.1.1.1 2010/12/05 01:20:30 christos Exp $ (LBL)
  */
 
 /*

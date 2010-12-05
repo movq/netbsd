@@ -6,7 +6,7 @@
 #
 #  c:\net\pcap> make -f msdos/makefile.dj
 #
-# @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/msdos/makefile.dj,v 1.1 2010/12/05 01:20:57 christos Exp $ (LBL)
+# @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/msdos/makefile.dj,v 1.1.1.1 2010/12/05 01:20:57 christos Exp $ (LBL)
 
 VPATH = missing msdos
 

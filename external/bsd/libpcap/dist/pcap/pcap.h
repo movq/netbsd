@@ -31,7 +31,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/pcap/pcap.h,v 1.1 2010/12/05 01:20:55 christos Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/pcap/pcap.h,v 1.1.1.1 2010/12/05 01:20:55 christos Exp $ (LBL)
  */
 
 #ifndef lib_pcap_pcap_h

@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: snprintf.c,v 1.1 2010/12/05 01:20:53 christos Exp $ */
+/* $Id: snprintf.c,v 1.1.1.1 2010/12/05 01:20:53 christos Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -39,7 +39,7 @@
 
 #ifndef lint
 static const char rcsid[] _U_ =
-     "@(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/missing/Attic/snprintf.c,v 1.1 2010/12/05 01:20:53 christos Exp $";
+     "@(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/libpcap/dist/missing/Attic/snprintf.c,v 1.1.1.1 2010/12/05 01:20:53 christos Exp $";
 #endif
 
 #include <stdio.h>
