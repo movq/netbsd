@@ -16,7 +16,7 @@
 
 #ifndef lint
 static const char rcsid[] _U_ =
-    "@(#) $Header: /cvsroot/src/external/bsd/libpcap/dist/pcap-septel.c,v 1.1 2010/12/05 01:20:48 christos Exp $";
+    "@(#) $Header: /cvsroot/src/external/bsd/libpcap/dist/pcap-septel.c,v 1.1.1.1 2010/12/05 01:20:48 christos Exp $";
 #endif
 
 #ifdef HAVE_CONFIG_H
