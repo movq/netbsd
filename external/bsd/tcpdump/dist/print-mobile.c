@@ -1,4 +1,4 @@
-/*	$NetBSD: print-mobile.c,v 1.1 2010/12/05 03:15:24 christos Exp $ */
+/*	$NetBSD: print-mobile.c,v 1.1.1.1 2010/12/05 03:15:24 christos Exp $ */
 
 /*
  * (c) 1998 The NetBSD Foundation, Inc.
