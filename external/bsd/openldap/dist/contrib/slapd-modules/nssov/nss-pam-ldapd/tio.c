@@ -1,4 +1,4 @@
-/*	$NetBSD: tio.c,v 1.1 2010/12/12 15:19:12 adam Exp $	*/
+/*	$NetBSD: tio.c,v 1.1.1.1 2010/12/12 15:19:12 adam Exp $	*/
 
 /*
    tio.c - timed io functions

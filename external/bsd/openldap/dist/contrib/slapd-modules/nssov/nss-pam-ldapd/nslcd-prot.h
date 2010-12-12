@@ -1,4 +1,4 @@
-/*	$NetBSD: nslcd-prot.h,v 1.1 2010/12/12 15:19:11 adam Exp $	*/
+/*	$NetBSD: nslcd-prot.h,v 1.1.1.1 2010/12/12 15:19:11 adam Exp $	*/
 
 /*
    nslcd-prot.h - helper macros for reading and writing in protocol streams

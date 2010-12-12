@@ -1,4 +1,4 @@
-/*	$NetBSD: attrs.h,v 1.1 2010/12/12 15:19:11 adam Exp $	*/
+/*	$NetBSD: attrs.h,v 1.1.1.1 2010/12/12 15:19:11 adam Exp $	*/
 
 /*
    attrs.h - wrapper macros for the gcc __attribute__(()) directive

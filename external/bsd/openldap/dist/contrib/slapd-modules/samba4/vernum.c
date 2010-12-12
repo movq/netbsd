@@ -1,4 +1,4 @@
-/*	$NetBSD: vernum.c,v 1.1 2010/12/12 15:19:15 adam Exp $	*/
+/*	$NetBSD: vernum.c,v 1.1.1.1 2010/12/12 15:19:15 adam Exp $	*/
 
 /* vernum.c - RDN value overlay */
 /* OpenLDAP: pkg/ldap/contrib/slapd-modules/samba4/vernum.c,v 1.2.2.2 2010/06/10 17:44:02 quanah Exp */

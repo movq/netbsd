@@ -1,4 +1,4 @@
-/*	$NetBSD: pguid.c,v 1.1 2010/12/12 15:19:14 adam Exp $	*/
+/*	$NetBSD: pguid.c,v 1.1.1.1 2010/12/12 15:19:14 adam Exp $	*/
 
 /* pguid.c - Parent GUID value overlay */
 /* OpenLDAP: pkg/ldap/contrib/slapd-modules/samba4/pguid.c,v 1.1.2.2 2010/04/21 20:13:23 quanah Exp */

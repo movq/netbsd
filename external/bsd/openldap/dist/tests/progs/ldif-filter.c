@@ -1,4 +1,4 @@
-/*	$NetBSD: ldif-filter.c,v 1.1 2010/12/12 15:24:16 adam Exp $	*/
+/*	$NetBSD: ldif-filter.c,v 1.1.1.1 2010/12/12 15:24:16 adam Exp $	*/
 
 /* ldif-filter -- clean up LDIF testdata from stdin */
 /* OpenLDAP: pkg/ldap/tests/progs/ldif-filter.c,v 1.3.2.2 2010/04/19 19:14:31 quanah Exp */
