@@ -1,4 +1,4 @@
-/*	$NetBSD: pbind.c,v 1.1 2010/12/12 15:23:06 adam Exp $	*/
+/*	$NetBSD: pbind.c,v 1.1.1.1 2010/12/12 15:23:06 adam Exp $	*/
 
 /* pbind.c - passthru Bind overlay */
 /* OpenLDAP: pkg/ldap/servers/slapd/back-ldap/pbind.c,v 1.1.2.2 2010/04/14 22:31:48 quanah Exp */
