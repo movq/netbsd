@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.3 2010/12/06 23:42:48 jmcneill Exp $	*/
+/*	$NetBSD: main.c,v 1.4 2010/12/13 20:48:45 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.3 2010/12/06 23:42:48 jmcneill Exp $");
+__RCSID("$NetBSD: main.c,v 1.4 2010/12/13 20:48:45 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
@@ -38,6 +38,8 @@ __RCSID("$NetBSD: main.c,v 1.3 2010/12/06 23:42:48 jmcneill Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <err.h>
+
+#include "prog_ops.h"
 
 int	main(int, char **);
 static void	usage(void) __dead;
@@ -50,8 +52,11 @@ main(int argc, char **argv)
 	if (argc < 2)
 		usage();
 
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
+
 	for (i = 1; i < argc; i++) {
-		if (modctl(MODCTL_UNLOAD, argv[i])) {
+		if (prog_modctl(MODCTL_UNLOAD, argv[i])) {
 			err(EXIT_FAILURE, NULL);
 		}
 	}
