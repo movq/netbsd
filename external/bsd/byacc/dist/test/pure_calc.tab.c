@@ -1,4 +1,4 @@
-/*	$NetBSD: pure_calc.tab.c,v 1.1 2010/12/23 23:36:28 christos Exp $	*/
+/*	$NetBSD: pure_calc.tab.c,v 1.1.1.1 2010/12/23 23:36:28 christos Exp $	*/
 
 #ifndef lint
 static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";

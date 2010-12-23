@@ -1,4 +1,4 @@
-/*	$NetBSD: calc3.y,v 1.1 2010/12/23 23:36:30 christos Exp $	*/
+/*	$NetBSD: calc3.y,v 1.1.1.1 2010/12/23 23:36:30 christos Exp $	*/
 
 %pure-parser
 

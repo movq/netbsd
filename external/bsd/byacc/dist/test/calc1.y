@@ -1,4 +1,4 @@
-/*	$NetBSD: calc1.y,v 1.1 2010/12/23 23:36:29 christos Exp $	*/
+/*	$NetBSD: calc1.y,v 1.1.1.1 2010/12/23 23:36:29 christos Exp $	*/
 
 %{
 
