@@ -1,4 +1,4 @@
-/* $NetBSD: ldp.h,v 1.1 2010/12/08 07:20:14 kefren Exp $ */
+/* $NetBSD: ldp.h,v 1.2 2010/12/30 11:29:21 kefren Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -40,6 +40,8 @@
 #define	LDP_COMMAND_PORT	2626
 
 #define	LDPD_VER		"0.3.0"
+
+#define CONFFILE		"/etc/ldpd.conf"
 
 extern char     my_ldp_id[20];
 
