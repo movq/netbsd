@@ -1,4 +1,4 @@
-/*	$NetBSD: kernspace.h,v 1.2 2010/06/14 21:06:09 pooka Exp $	*/
+/*	$NetBSD: kernspace.h,v 1.3 2011/01/06 13:12:52 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -30,10 +30,15 @@
 #ifndef _TESTS_RUMP_KERNSPACE_KERNSPACE_H_
 #define _TESTS_RUMP_KERNSPACE_KERNSPACE_H_
 
+enum locktest { LOCKME_MTX, LOCKME_RWDOUBLEX, LOCKME_RWRX, LOCKME_RWXR,
+	LOCKME_DESTROYHELD, LOCKME_DOUBLEINIT, LOCKME_DOUBLEFREE,
+	LOCKME_MEMFREE };
+
 void rumptest_busypage(void);
 void rumptest_threadjoin(void);
 void rumptest_thread(void);
 void rumptest_tsleep(void);
 void rumptest_alloc(size_t);
+void rumptest_lockme(enum locktest);
 
 #endif /* _TESTS_RUMP_KERNSPACE_KERNSPACE_H_ */
