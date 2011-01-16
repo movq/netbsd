@@ -1,4 +1,4 @@
-/*	$NetBSD: isns_fileio.h,v 1.1 2011/01/16 01:22:50 agc Exp $	*/
+/*	$NetBSD: isns_fileio.h,v 1.1.1.1 2011/01/16 01:22:50 agc Exp $	*/
 
 /*-
  * Copyright (c) 2004,2009 The NetBSD Foundation, Inc.
