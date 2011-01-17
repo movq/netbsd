@@ -1,4 +1,4 @@
-/*      $NetBSD: locore.S,v 1.22 2011/01/17 08:23:54 matt Exp $   */
+/*      $NetBSD: locore.S,v 1.21 2010/03/05 17:55:42 phx Exp $   */
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -50,6 +50,7 @@
 #include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
+#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
