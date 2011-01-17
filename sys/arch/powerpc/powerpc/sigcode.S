@@ -1,4 +1,4 @@
-/*	$NetBSD: sigcode.S,v 1.7 2011/01/17 08:23:56 matt Exp $	*/
+/*	$NetBSD: sigcode.S,v 1.6 2005/12/11 12:18:46 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,6 +31,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _NOREGNAMES
 #include <machine/asm.h>
 #include <machine/signal.h>
 #include <sys/syscall.h>

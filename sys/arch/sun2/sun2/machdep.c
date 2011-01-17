@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.66 2011/01/17 14:36:33 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.65 2010/02/08 19:02:32 joerg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -153,7 +153,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.66 2011/01/17 14:36:33 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.65 2010/02/08 19:02:32 joerg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -199,7 +199,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.66 2011/01/17 14:36:33 tsutsui Exp $")
 #include <machine/idprom.h>
 #include <machine/kcore.h>
 #include <machine/reg.h>
-#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #define _SUN68K_BUS_DMA_PRIVATE
