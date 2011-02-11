@@ -1,4 +1,4 @@
-# $NetBSD: t_getquota.sh,v 1.1.2.7 2011/02/07 16:22:50 bouyer Exp $ 
+# $NetBSD: t_getquota.sh,v 1.1.2.8 2011/02/11 16:54:03 bouyer Exp $ 
 #
 #  Copyright (c) 2011 Manuel Bouyer
 #  All rights reserved.
@@ -83,4 +83,29 @@ get_quota()
 		    $(atf_get_srcdir)/rump_repquota -${q} /mnt
 	done
 	rump_shutdown
+}
+
+quota_walk_list()
+{
+	create_with_quotas_server $*
+	local q=$4
+	local expect
+
+	case ${q} in
+	user)
+		expect=u
+		fail=g
+		;;
+	group)
+		expect=g
+		fail=u
+		;;
+	both)
+		expect="u g"
+		fail=""
+		;;
+	*)
+		atf_fail "wrong quota type"
+		;;
+	esac
 }
