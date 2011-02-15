@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_minimal.h,v 1.1 2011/02/15 19:32:07 christos Exp $	*/
+/*	$NetBSD: dlz_minimal.h,v 1.1.1.1 2011/02/15 19:32:07 christos Exp $	*/
 
 /*
  * Copyright (C) 2010 Andrew Tridgell

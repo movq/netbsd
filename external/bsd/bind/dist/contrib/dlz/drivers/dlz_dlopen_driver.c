@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_dlopen_driver.c,v 1.1 2011/02/15 19:32:04 christos Exp $	*/
+/*	$NetBSD: dlz_dlopen_driver.c,v 1.1.1.1 2011/02/15 19:32:04 christos Exp $	*/
 
 /*
  * Copyright (C) 2010 Andrew Tridgell

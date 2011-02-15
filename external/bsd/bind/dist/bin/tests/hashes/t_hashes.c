@@ -1,4 +1,4 @@
-/*	$NetBSD: t_hashes.c,v 1.1 2011/02/15 19:31:03 christos Exp $	*/
+/*	$NetBSD: t_hashes.c,v 1.1.1.1 2011/02/15 19:31:03 christos Exp $	*/
 
 /*
  * Copyright (C) 2010  Internet Systems Consortium, Inc. ("ISC")
