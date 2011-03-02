@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sqlite.c,v 1.1 2011/03/02 19:32:14 tron Exp $	*/
+/*	$NetBSD: dict_sqlite.c,v 1.1.1.1 2011/03/02 19:32:14 tron Exp $	*/
 
 /*++
 /* NAME

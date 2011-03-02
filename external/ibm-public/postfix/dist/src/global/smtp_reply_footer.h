@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_reply_footer.h,v 1.1 2011/03/02 19:32:18 tron Exp $	*/
+/*	$NetBSD: smtp_reply_footer.h,v 1.1.1.1 2011/03/02 19:32:18 tron Exp $	*/
 
 #ifndef _SMTP_REPLY_FOOTER_H_INCLUDED_
 #define _SMTP_REPLY_FOOTER_H_INCLUDED_

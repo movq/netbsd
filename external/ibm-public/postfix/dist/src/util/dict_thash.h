@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_thash.h,v 1.1 2011/03/02 19:32:42 tron Exp $	*/
+/*	$NetBSD: dict_thash.h,v 1.1.1.1 2011/03/02 19:32:42 tron Exp $	*/
 
 #ifndef _DICT_THASH_H_INCLUDED_
 #define _DICT_THASH_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_proxy_clnt.c,v 1.1 2011/03/02 19:32:27 tron Exp $	*/
+/*	$NetBSD: tls_proxy_clnt.c,v 1.1.1.1 2011/03/02 19:32:27 tron Exp $	*/
 
 /*++
 /* NAME

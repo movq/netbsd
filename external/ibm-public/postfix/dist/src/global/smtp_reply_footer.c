@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_reply_footer.c,v 1.1 2011/03/02 19:32:18 tron Exp $	*/
+/*	$NetBSD: smtp_reply_footer.c,v 1.1.1.1 2011/03/02 19:32:18 tron Exp $	*/
 
 /*++
 /* NAME
