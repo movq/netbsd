@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_conf_nbool.c,v 1.1 2011/03/02 19:32:15 tron Exp $	*/
+/*	$NetBSD: mail_conf_nbool.c,v 1.1.1.1 2011/03/02 19:32:15 tron Exp $	*/
 
 /*++
 /* NAME

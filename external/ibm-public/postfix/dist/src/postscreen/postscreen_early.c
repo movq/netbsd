@@ -1,4 +1,4 @@
-/*	$NetBSD: postscreen_early.c,v 1.1 2011/03/02 19:32:26 tron Exp $	*/
+/*	$NetBSD: postscreen_early.c,v 1.1.1.1 2011/03/02 19:32:26 tron Exp $	*/
 
 /*++
 /* NAME

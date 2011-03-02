@@ -1,4 +1,4 @@
-/*	$NetBSD: stream_pass_connect.c,v 1.1 2011/03/02 19:32:45 tron Exp $	*/
+/*	$NetBSD: stream_pass_connect.c,v 1.1.1.1 2011/03/02 19:32:45 tron Exp $	*/
 
 /*++
 /* NAME

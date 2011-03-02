@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_thash.c,v 1.1 2011/03/02 19:32:42 tron Exp $	*/
+/*	$NetBSD: dict_thash.c,v 1.1.1.1 2011/03/02 19:32:42 tron Exp $	*/
 
 /*++
 /* NAME

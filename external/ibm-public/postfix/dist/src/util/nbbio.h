@@ -1,4 +1,4 @@
-/*	$NetBSD: nbbio.h,v 1.1 2011/03/02 19:32:44 tron Exp $	*/
+/*	$NetBSD: nbbio.h,v 1.1.1.1 2011/03/02 19:32:44 tron Exp $	*/
 
 #ifndef _NBBIO_H_INCLUDED_
 #define _NBBIO_H_INCLUDED_
