@@ -1,4 +1,4 @@
-/* $Id: cmd-show-window-options.c,v 1.1 2011/03/10 09:15:37 jmmv Exp $ */
+/* $Id: cmd-show-window-options.c,v 1.1.1.1 2011/03/10 09:15:37 jmmv Exp $ */
 
 /*
  * Copyright (c) 2008 Nicholas Marriott <nicm@users.sourceforge.net>

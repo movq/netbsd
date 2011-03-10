@@ -1,4 +1,4 @@
-/* $Id: strlcat.c,v 1.1 2011/03/10 09:15:41 jmmv Exp $ */
+/* $Id: strlcat.c,v 1.1.1.1 2011/03/10 09:15:41 jmmv Exp $ */
 /*	$OpenBSD: strlcat.c,v 1.13 2005/08/08 08:05:37 espie Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: array.h,v 1.1 2011/03/10 09:15:36 jmmv Exp $ */
+/* $Id: array.h,v 1.1.1.1 2011/03/10 09:15:36 jmmv Exp $ */
 
 /*
  * Copyright (c) 2006 Nicholas Marriott <nicm@users.sourceforge.net>

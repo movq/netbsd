@@ -1,4 +1,4 @@
-/* $Id: cmd-attach-session.c,v 1.1 2011/03/10 09:15:36 jmmv Exp $ */
+/* $Id: cmd-attach-session.c,v 1.1.1.1 2011/03/10 09:15:36 jmmv Exp $ */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>

@@ -1,4 +1,4 @@
-/* $Id: screen-write.c,v 1.1 2011/03/10 09:15:39 jmmv Exp $ */
+/* $Id: screen-write.c,v 1.1.1.1 2011/03/10 09:15:39 jmmv Exp $ */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
