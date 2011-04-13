@@ -1,4 +1,4 @@
-/*	$NetBSD: address_to_krb5addr.c,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
+/*	$NetBSD: address_to_krb5addr.c,v 1.1.1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2001 Kungliga Tekniska Högskolan

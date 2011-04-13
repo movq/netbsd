@@ -1,4 +1,4 @@
-/*	$NetBSD: resolve-test.c,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
+/*	$NetBSD: resolve-test.c,v 1.1.1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2004 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: bn_mp_xor.c,v 1.1 2011/04/13 18:14:55 elric Exp $	*/
+/*	$NetBSD: bn_mp_xor.c,v 1.1.1.1 2011/04/13 18:14:55 elric Exp $	*/
 
 #include <tommath.h>
 #ifdef BN_MP_XOR_C

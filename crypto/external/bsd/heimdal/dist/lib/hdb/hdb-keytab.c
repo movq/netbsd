@@ -1,4 +1,4 @@
-/*	$NetBSD: hdb-keytab.c,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: hdb-keytab.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 2009 Kungliga Tekniska Högskolan

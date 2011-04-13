@@ -1,4 +1,4 @@
-/*	$NetBSD: ent_setup.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: ent_setup.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: ent_setup.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: ent_setup.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 #define set_value(X, V) do { if((X) == NULL) (X) = malloc(sizeof(*(X))); *(X) = V; } while(0)
 #define set_null(X)     do { if((X) != NULL) free((X)); (X) = NULL; } while (0)

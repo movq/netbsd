@@ -1,4 +1,4 @@
-/*	$NetBSD: check-common.h,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
+/*	$NetBSD: check-common.h,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2005 Kungliga Tekniska Högskolan

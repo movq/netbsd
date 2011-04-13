@@ -1,4 +1,4 @@
-/*	$NetBSD: principal.c,v 1.1 2011/04/13 18:15:37 elric Exp $	*/
+/*	$NetBSD: principal.c,v 1.1.1.1 2011/04/13 18:15:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2007 Kungliga Tekniska Högskolan

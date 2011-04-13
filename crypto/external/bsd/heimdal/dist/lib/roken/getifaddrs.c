@@ -1,4 +1,4 @@
-/*	$NetBSD: getifaddrs.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: getifaddrs.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2002, 2005 Kungliga Tekniska Högskolan

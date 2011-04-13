@@ -1,4 +1,4 @@
-/*	$NetBSD: mech_locl.h,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
+/*	$NetBSD: mech_locl.h,v 1.1.1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: mech_locl.h,v 1.1 2011/04/13 18:14:47 elric Exp $ */
+/* $Id: mech_locl.h,v 1.1.1.1 2011/04/13 18:14:47 elric Exp $ */
 
 #include <config.h>
 

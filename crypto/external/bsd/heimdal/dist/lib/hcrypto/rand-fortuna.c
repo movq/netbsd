@@ -1,4 +1,4 @@
-/*	$NetBSD: rand-fortuna.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: rand-fortuna.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * fortuna.c

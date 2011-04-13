@@ -1,4 +1,4 @@
-/*	$NetBSD: ank.c,v 1.1 2011/04/13 18:14:34 elric Exp $	*/
+/*	$NetBSD: ank.c,v 1.1.1.1 2011/04/13 18:14:34 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2006 Kungliga Tekniska Högskolan

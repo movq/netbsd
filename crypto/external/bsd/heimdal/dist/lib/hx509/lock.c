@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.c,v 1.1 2011/04/13 18:15:11 elric Exp $	*/
+/*	$NetBSD: lock.c,v 1.1.1.1 2011/04/13 18:15:11 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 - 2006 Kungliga Tekniska Högskolan

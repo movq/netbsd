@@ -1,4 +1,4 @@
-/*	$NetBSD: init_c.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: init_c.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan
@@ -45,7 +45,7 @@
 #include <netdb.h>
 #endif
 
-__RCSID("$NetBSD: init_c.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: init_c.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 static void
 set_funcs(kadm5_client_context *c)

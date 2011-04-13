@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_oid.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
+/*	$NetBSD: gss_oid.c,v 1.1.1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /* Generated file */
 #include "mech_locl.h"

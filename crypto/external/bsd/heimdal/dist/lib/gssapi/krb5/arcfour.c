@@ -1,4 +1,4 @@
-/*	$NetBSD: arcfour.c,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
+/*	$NetBSD: arcfour.c,v 1.1.1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 - 2006 Kungliga Tekniska Högskolan

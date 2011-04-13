@@ -1,4 +1,4 @@
-/*	$NetBSD: get_for_creds.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
+/*	$NetBSD: get_for_creds.c,v 1.1.1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan

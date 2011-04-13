@@ -1,4 +1,4 @@
-/*	$NetBSD: send_to_kdc_plugin.h,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
+/*	$NetBSD: send_to_kdc_plugin.h,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: send_to_kdc_plugin.h,v 1.1 2011/04/13 18:15:38 elric Exp $ */
+/* $Id: send_to_kdc_plugin.h,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $ */
 
 #ifndef HEIMDAL_KRB5_SEND_TO_KDC_PLUGIN_H
 #define HEIMDAL_KRB5_SEND_TO_KDC_PLUGIN_H 1

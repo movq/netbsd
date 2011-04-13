@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.l,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: lex.l,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 %{
 /*
@@ -34,7 +34,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: lex.l,v 1.1 2011/04/13 18:14:41 elric Exp $ */
+/* $Id: lex.l,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $ */
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>

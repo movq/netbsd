@@ -1,4 +1,4 @@
-/*	$NetBSD: eai_to_heim_errno.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
+/*	$NetBSD: eai_to_heim_errno.c,v 1.1.1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2001 Kungliga Tekniska Högskolan

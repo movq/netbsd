@@ -1,4 +1,4 @@
-/*	$NetBSD: asn1_print.c,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
+/*	$NetBSD: asn1_print.c,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -43,7 +43,7 @@
 #include <err.h>
 #include <krb5/der.h>
 
-__RCSID("$NetBSD: asn1_print.c,v 1.1 2011/04/13 18:14:39 elric Exp $");
+__RCSID("$NetBSD: asn1_print.c,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $");
 
 static int indent_flag = 1;
 

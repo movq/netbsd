@@ -1,4 +1,4 @@
-/*	$NetBSD: ui.h,v 1.1 2011/04/13 18:14:51 elric Exp $	*/
+/*	$NetBSD: ui.h,v 1.1.1.1 2011/04/13 18:14:51 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: ui.h,v 1.1 2011/04/13 18:14:51 elric Exp $ */
+/* $Id: ui.h,v 1.1.1.1 2011/04/13 18:14:51 elric Exp $ */
 
 #ifndef _HEIM_UI_H
 #define _HEIM_UI_H 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: stash.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
+/*	$NetBSD: stash.c,v 1.1.1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan

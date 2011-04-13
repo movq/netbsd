@@ -1,4 +1,4 @@
-/*	$NetBSD: parse_units.h,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
+/*	$NetBSD: parse_units.h,v 1.1.1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: parse_units.h,v 1.1 2011/04/13 18:15:42 elric Exp $ */
+/* $Id: parse_units.h,v 1.1.1.1 2011/04/13 18:15:42 elric Exp $ */
 
 #ifndef __PARSE_UNITS_H__
 #define __PARSE_UNITS_H__

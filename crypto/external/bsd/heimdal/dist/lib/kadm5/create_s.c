@@ -1,4 +1,4 @@
-/*	$NetBSD: create_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: create_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2001 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: create_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: create_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 static kadm5_ret_t
 get_default(kadm5_server_context *context, krb5_principal princ,

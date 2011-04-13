@@ -1,4 +1,4 @@
-/*	$NetBSD: acache.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
+/*	$NetBSD: acache.c,v 1.1.1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan

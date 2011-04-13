@@ -1,4 +1,4 @@
-/*	$NetBSD: test_dh.c,v 1.1 2011/04/13 18:14:51 elric Exp $	*/
+/*	$NetBSD: test_dh.c,v 1.1.1.1 2011/04/13 18:14:51 elric Exp $	*/
 
 /*
 * Copyright (c) 2007, Novell, Inc.

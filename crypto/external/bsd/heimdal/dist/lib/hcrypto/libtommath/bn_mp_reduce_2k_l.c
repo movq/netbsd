@@ -1,4 +1,4 @@
-/*	$NetBSD: bn_mp_reduce_2k_l.c,v 1.1 2011/04/13 18:14:54 elric Exp $	*/
+/*	$NetBSD: bn_mp_reduce_2k_l.c,v 1.1.1.1 2011/04/13 18:14:54 elric Exp $	*/
 
 #include <tommath.h>
 #ifdef BN_MP_REDUCE_2K_L_C

@@ -1,4 +1,4 @@
-/*	$NetBSD: asn1_glue.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
+/*	$NetBSD: asn1_glue.c,v 1.1.1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 Kungliga Tekniska Högskolan

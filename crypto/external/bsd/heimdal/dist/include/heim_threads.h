@@ -1,4 +1,4 @@
-/*	$NetBSD: heim_threads.h,v 1.1 2011/04/13 18:14:34 elric Exp $	*/
+/*	$NetBSD: heim_threads.h,v 1.1.1.1 2011/04/13 18:14:34 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: heim_threads.h,v 1.1 2011/04/13 18:14:34 elric Exp $ */
+/* $Id: heim_threads.h,v 1.1.1.1 2011/04/13 18:14:34 elric Exp $ */
 
 /*
  * Provide wrapper macros for thread synchronization primitives so we

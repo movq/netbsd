@@ -1,4 +1,4 @@
-/*	$NetBSD: parse_units.c,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
+/*	$NetBSD: parse_units.c,v 1.1.1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001 Kungliga Tekniska Högskolan

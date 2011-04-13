@@ -1,4 +1,4 @@
-/*	$NetBSD: check.c,v 1.1 2011/04/13 18:14:34 elric Exp $	*/
+/*	$NetBSD: check.c,v 1.1.1.1 2011/04/13 18:14:34 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan

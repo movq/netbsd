@@ -1,4 +1,4 @@
-/*	$NetBSD: hstrerror.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: hstrerror.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 1999 Kungliga Tekniska Högskolan

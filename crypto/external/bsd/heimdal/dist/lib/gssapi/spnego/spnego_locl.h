@@ -1,4 +1,4 @@
-/*	$NetBSD: spnego_locl.h,v 1.1 2011/04/13 18:14:48 elric Exp $	*/
+/*	$NetBSD: spnego_locl.h,v 1.1.1.1 2011/04/13 18:14:48 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.
@@ -32,7 +32,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: spnego_locl.h,v 1.1 2011/04/13 18:14:48 elric Exp $ */
+/* $Id: spnego_locl.h,v 1.1.1.1 2011/04/13 18:14:48 elric Exp $ */
 
 #ifndef SPNEGO_LOCL_H
 #define SPNEGO_LOCL_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: hex.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: hex.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 2004-2005 Kungliga Tekniska Högskolan

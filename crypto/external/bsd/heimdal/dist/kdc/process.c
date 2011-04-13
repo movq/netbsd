@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.1 2011/04/13 18:14:37 elric Exp $	*/
+/*	$NetBSD: process.c,v 1.1.1.1 2011/04/13 18:14:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan

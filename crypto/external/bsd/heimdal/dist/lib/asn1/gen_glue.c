@@ -1,4 +1,4 @@
-/*	$NetBSD: gen_glue.c,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: gen_glue.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999, 2000, 2003 - 2005 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
 
 #include "gen_locl.h"
 
-__RCSID("$NetBSD: gen_glue.c,v 1.1 2011/04/13 18:14:41 elric Exp $");
+__RCSID("$NetBSD: gen_glue.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $");
 
 static void
 generate_2int (const Type *t, const char *gen_name)

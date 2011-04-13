@@ -1,4 +1,4 @@
-/*	$NetBSD: gsstool.c,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
+/*	$NetBSD: gsstool.c,v 1.1.1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan

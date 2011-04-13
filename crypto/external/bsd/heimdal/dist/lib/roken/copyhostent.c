@@ -1,4 +1,4 @@
-/*	$NetBSD: copyhostent.c,v 1.1 2011/04/13 18:15:40 elric Exp $	*/
+/*	$NetBSD: copyhostent.c,v 1.1.1.1 2011/04/13 18:15:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 Kungliga Tekniska Högskolan

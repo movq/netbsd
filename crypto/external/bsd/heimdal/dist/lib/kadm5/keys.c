@@ -1,4 +1,4 @@
-/*	$NetBSD: keys.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: keys.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: keys.c,v 1.1 2011/04/13 18:15:30 elric Exp $");
+__RCSID("$NetBSD: keys.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $");
 
 /*
  * free all the memory used by (len, keys)

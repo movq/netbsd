@@ -1,4 +1,4 @@
-/*	$NetBSD: export_sec_context.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
+/*	$NetBSD: export_sec_context.c,v 1.1.1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2003 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: check-common.c,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
+/*	$NetBSD: check-common.c,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2006 Kungliga Tekniska Högskolan
@@ -49,7 +49,7 @@
 #include <krb5/asn1-common.h>
 #include "check-common.h"
 
-__RCSID("$NetBSD: check-common.c,v 1.1 2011/04/13 18:14:39 elric Exp $");
+__RCSID("$NetBSD: check-common.c,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $");
 
 struct map_page {
     void *start;

@@ -1,4 +1,4 @@
-/*	$NetBSD: list.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
+/*	$NetBSD: list.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "ktutil_locl.h"
 #include <krb5/rtbl.h>
 
-__RCSID("$NetBSD: list.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
+__RCSID("$NetBSD: list.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $");
 
 static int
 do_list(struct list_options *opt, const char *keytab_str)

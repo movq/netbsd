@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
+/*	$NetBSD: cache.c,v 1.1.1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan

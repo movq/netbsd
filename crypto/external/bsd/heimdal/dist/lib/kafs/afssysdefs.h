@@ -1,4 +1,4 @@
-/*	$NetBSD: afssysdefs.h,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: afssysdefs.h,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2003 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: afssysdefs.h,v 1.1 2011/04/13 18:15:30 elric Exp $ */
+/* $Id: afssysdefs.h,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $ */
 
 /*
  * This section is for machines using single entry point AFS syscalls!

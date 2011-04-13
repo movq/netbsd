@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.1 2011/04/13 18:15:35 elric Exp $	*/
+/*	$NetBSD: log.c,v 1.1.1.1 2011/04/13 18:15:35 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2006 Kungliga Tekniska Högskolan

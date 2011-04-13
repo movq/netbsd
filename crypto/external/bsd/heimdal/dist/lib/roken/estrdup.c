@@ -1,4 +1,4 @@
-/*	$NetBSD: estrdup.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: estrdup.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2001 Kungliga Tekniska Högskolan

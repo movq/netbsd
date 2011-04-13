@@ -1,4 +1,4 @@
-/*	$NetBSD: pprime.c,v 1.1 2011/04/13 18:15:06 elric Exp $	*/
+/*	$NetBSD: pprime.c,v 1.1.1.1 2011/04/13 18:15:06 elric Exp $	*/
 
 /* Generates provable primes
  *

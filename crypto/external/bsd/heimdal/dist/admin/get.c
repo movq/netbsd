@@ -1,4 +1,4 @@
-/*	$NetBSD: get.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
+/*	$NetBSD: get.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "ktutil_locl.h"
 
-__RCSID("$NetBSD: get.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
+__RCSID("$NetBSD: get.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $");
 
 static void*
 open_kadmin_connection(char *principal,

@@ -1,4 +1,4 @@
-/*	$NetBSD: derived-key-test.c,v 1.1 2011/04/13 18:15:32 elric Exp $	*/
+/*	$NetBSD: derived-key-test.c,v 1.1.1.1 2011/04/13 18:15:32 elric Exp $	*/
 
 /*
  * Copyright (c) 2001 Kungliga Tekniska Högskolan

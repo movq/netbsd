@@ -1,4 +1,4 @@
-/*	$NetBSD: default_keys.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: default_keys.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "kadm5_locl.h"
 #include <err.h>
 
-__RCSID("$NetBSD: default_keys.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: default_keys.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 static void
 print_keys(krb5_context context, Key *keys, size_t nkeys)

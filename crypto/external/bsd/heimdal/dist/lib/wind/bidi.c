@@ -1,4 +1,4 @@
-/*	$NetBSD: bidi.c,v 1.1 2011/04/13 18:15:45 elric Exp $	*/
+/*	$NetBSD: bidi.c,v 1.1.1.1 2011/04/13 18:15:45 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan

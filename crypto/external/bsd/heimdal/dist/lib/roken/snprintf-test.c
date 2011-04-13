@@ -1,4 +1,4 @@
-/*	$NetBSD: snprintf-test.c,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
+/*	$NetBSD: snprintf-test.c,v 1.1.1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2001 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: marshall.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: marshall.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 1999 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: marshall.c,v 1.1 2011/04/13 18:15:30 elric Exp $");
+__RCSID("$NetBSD: marshall.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $");
 
 kadm5_ret_t
 kadm5_store_key_data(krb5_storage *sp,

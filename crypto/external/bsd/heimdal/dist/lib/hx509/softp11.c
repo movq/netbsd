@@ -1,4 +1,4 @@
-/*	$NetBSD: softp11.c,v 1.1 2011/04/13 18:15:12 elric Exp $	*/
+/*	$NetBSD: softp11.c,v 1.1.1.1 2011/04/13 18:15:12 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2008 Kungliga Tekniska Högskolan

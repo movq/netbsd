@@ -1,4 +1,4 @@
-/*	$NetBSD: indicate_mechs.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
+/*	$NetBSD: indicate_mechs.c,v 1.1.1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001, 2003 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: bn_error.c,v 1.1 2011/04/13 18:14:52 elric Exp $	*/
+/*	$NetBSD: bn_error.c,v 1.1.1.1 2011/04/13 18:14:52 elric Exp $	*/
 
 #include <tommath.h>
 #ifdef BN_ERROR_C

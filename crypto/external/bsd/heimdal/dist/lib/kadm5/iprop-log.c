@@ -1,4 +1,4 @@
-/*	$NetBSD: iprop-log.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: iprop-log.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan
@@ -38,7 +38,7 @@
 #include <krb5/parse_time.h>
 #include "iprop-commands.h"
 
-__RCSID("$NetBSD: iprop-log.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: iprop-log.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 static krb5_context context;
 

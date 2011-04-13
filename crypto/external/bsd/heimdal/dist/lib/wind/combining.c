@@ -1,4 +1,4 @@
-/*	$NetBSD: combining.c,v 1.1 2011/04/13 18:15:45 elric Exp $	*/
+/*	$NetBSD: combining.c,v 1.1.1.1 2011/04/13 18:15:45 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan

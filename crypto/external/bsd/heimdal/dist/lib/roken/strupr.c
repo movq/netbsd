@@ -1,4 +1,4 @@
-/*	$NetBSD: strupr.c,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
+/*	$NetBSD: strupr.c,v 1.1.1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Kungliga Tekniska Högskolan

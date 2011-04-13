@@ -1,4 +1,4 @@
-/*	$NetBSD: hx_locl.h,v 1.1 2011/04/13 18:15:11 elric Exp $	*/
+/*	$NetBSD: hx_locl.h,v 1.1.1.1 2011/04/13 18:15:11 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2006 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: hx_locl.h,v 1.1 2011/04/13 18:15:11 elric Exp $ */
+/* $Id: hx_locl.h,v 1.1.1.1 2011/04/13 18:15:11 elric Exp $ */
 
 #include <config.h>
 

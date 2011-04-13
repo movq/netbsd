@@ -1,4 +1,4 @@
-/*	$NetBSD: sleep.c,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
+/*	$NetBSD: sleep.c,v 1.1.1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2009, Secure Endpoints Inc.

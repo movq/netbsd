@@ -1,4 +1,4 @@
-/*	$NetBSD: gssapi_mech.h,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
+/*	$NetBSD: gssapi_mech.h,v 1.1.1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 /*-
  * Copyright (c) 2005 Doug Rabson

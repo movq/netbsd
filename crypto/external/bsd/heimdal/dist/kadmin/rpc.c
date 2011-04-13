@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
+/*	$NetBSD: rpc.c,v 1.1.1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan

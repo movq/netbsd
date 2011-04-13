@@ -1,4 +1,4 @@
-/*	$NetBSD: hdb.h,v 1.1 2011/04/13 18:14:42 elric Exp $	*/
+/*	$NetBSD: hdb.h,v 1.1.1.1 2011/04/13 18:14:42 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2007 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: hdb.h,v 1.1 2011/04/13 18:14:42 elric Exp $ */
+/* $Id: hdb.h,v 1.1.1.1 2011/04/13 18:14:42 elric Exp $ */
 
 #ifndef __HDB_H__
 #define __HDB_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: kadm5-pwcheck.h,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: kadm5-pwcheck.h,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: kadm5-pwcheck.h,v 1.1 2011/04/13 18:15:30 elric Exp $ */
+/* $Id: kadm5-pwcheck.h,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $ */
 
 #ifndef KADM5_PWCHECK_H
 #define KADM5_PWCHECK_H 1

@@ -1,4 +1,4 @@
-dnl $Id: wflags.m4,v 1.1 2011/04/13 18:14:33 elric Exp $
+dnl $Id: wflags.m4,v 1.1.1.1 2011/04/13 18:14:33 elric Exp $
 dnl
 dnl set WFLAGS
 

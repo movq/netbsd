@@ -1,4 +1,4 @@
-/*	$NetBSD: des.h,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
+/*	$NetBSD: des.h,v 1.1.1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: des.h,v 1.1 2011/04/13 18:14:49 elric Exp $ */
+/* $Id: des.h,v 1.1.1.1 2011/04/13 18:14:49 elric Exp $ */
 
 #ifndef _DESperate_H
 #define _DESperate_H 1

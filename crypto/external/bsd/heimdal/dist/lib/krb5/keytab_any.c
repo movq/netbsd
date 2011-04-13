@@ -1,4 +1,4 @@
-/*	$NetBSD: keytab_any.c,v 1.1 2011/04/13 18:15:34 elric Exp $	*/
+/*	$NetBSD: keytab_any.c,v 1.1.1.1 2011/04/13 18:15:34 elric Exp $	*/
 
 /*
  * Copyright (c) 2001-2002 Kungliga Tekniska Högskolan

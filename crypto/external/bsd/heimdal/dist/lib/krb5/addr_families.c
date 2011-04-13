@@ -1,4 +1,4 @@
-/*	$NetBSD: addr_families.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
+/*	$NetBSD: addr_families.c,v 1.1.1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2007 Kungliga Tekniska Högskolan

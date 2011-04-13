@@ -1,4 +1,4 @@
-/*	$NetBSD: pkinit.c,v 1.1 2011/04/13 18:15:37 elric Exp $	*/
+/*	$NetBSD: pkinit.c,v 1.1.1.1 2011/04/13 18:15:37 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 - 2007 Kungliga Tekniska Högskolan

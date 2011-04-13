@@ -1,4 +1,4 @@
-/*	$NetBSD: get_princs_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: get_princs_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: get_princs_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: get_princs_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 struct foreach_data {
     const char *exp;

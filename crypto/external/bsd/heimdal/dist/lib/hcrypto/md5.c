@@ -1,4 +1,4 @@
-/*	$NetBSD: md5.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: md5.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2001 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: camellia-ntt.c,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
+/*	$NetBSD: camellia-ntt.c,v 1.1.1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /* camellia.c ver 1.2.0
  *

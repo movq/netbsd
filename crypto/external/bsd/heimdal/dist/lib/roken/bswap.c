@@ -1,4 +1,4 @@
-/*	$NetBSD: bswap.c,v 1.1 2011/04/13 18:15:40 elric Exp $	*/
+/*	$NetBSD: bswap.c,v 1.1.1.1 2011/04/13 18:15:40 elric Exp $	*/
 
 /*
  * Copyright (c) 2001 Kungliga Tekniska Högskolan

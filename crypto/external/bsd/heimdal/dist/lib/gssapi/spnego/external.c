@@ -1,4 +1,4 @@
-/*	$NetBSD: external.c,v 1.1 2011/04/13 18:14:48 elric Exp $	*/
+/*	$NetBSD: external.c,v 1.1.1.1 2011/04/13 18:14:48 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.

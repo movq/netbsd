@@ -1,4 +1,4 @@
-/*	$NetBSD: ipropd_slave.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: ipropd_slave.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "iprop.h"
 
-__RCSID("$NetBSD: ipropd_slave.c,v 1.1 2011/04/13 18:15:30 elric Exp $");
+__RCSID("$NetBSD: ipropd_slave.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $");
 
 static const char *config_name = "ipropd-slave";
 

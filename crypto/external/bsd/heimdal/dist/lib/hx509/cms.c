@@ -1,4 +1,4 @@
-/*	$NetBSD: cms.c,v 1.1 2011/04/13 18:15:10 elric Exp $	*/
+/*	$NetBSD: cms.c,v 1.1.1.1 2011/04/13 18:15:10 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 - 2007 Kungliga Tekniska Högskolan

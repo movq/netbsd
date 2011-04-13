@@ -1,4 +1,4 @@
-/*	$NetBSD: init_creds.c,v 1.1 2011/04/13 18:15:34 elric Exp $	*/
+/*	$NetBSD: init_creds.c,v 1.1.1.1 2011/04/13 18:15:34 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2004 Kungliga Tekniska Högskolan

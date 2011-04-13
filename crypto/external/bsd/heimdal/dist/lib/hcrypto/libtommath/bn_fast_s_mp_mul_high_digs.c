@@ -1,4 +1,4 @@
-/*	$NetBSD: bn_fast_s_mp_mul_high_digs.c,v 1.1 2011/04/13 18:14:54 elric Exp $	*/
+/*	$NetBSD: bn_fast_s_mp_mul_high_digs.c,v 1.1.1.1 2011/04/13 18:14:54 elric Exp $	*/
 
 #include <tommath.h>
 #ifdef BN_FAST_S_MP_MUL_HIGH_DIGS_C
