@@ -1,4 +1,4 @@
-/*	$NetBSD: compile_et.c,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
+/*	$NetBSD: compile_et.c,v 1.1.1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1998-2002 Kungliga Tekniska Högskolan

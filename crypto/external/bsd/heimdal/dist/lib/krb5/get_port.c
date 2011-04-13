@@ -1,4 +1,4 @@
-/*	$NetBSD: get_port.c,v 1.1 2011/04/13 18:15:34 elric Exp $	*/
+/*	$NetBSD: get_port.c,v 1.1.1.1 2011/04/13 18:15:34 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2001 Kungliga Tekniska Högskolan

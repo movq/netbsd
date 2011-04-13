@@ -1,4 +1,4 @@
-/*	$NetBSD: inquire_cred_by_oid.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
+/*	$NetBSD: inquire_cred_by_oid.c,v 1.1.1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.

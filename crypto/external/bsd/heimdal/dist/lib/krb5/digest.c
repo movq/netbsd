@@ -1,4 +1,4 @@
-/*	$NetBSD: digest.c,v 1.1 2011/04/13 18:15:33 elric Exp $	*/
+/*	$NetBSD: digest.c,v 1.1.1.1 2011/04/13 18:15:33 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan

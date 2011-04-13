@@ -1,4 +1,4 @@
-/*	$NetBSD: windlocl.h,v 1.1 2011/04/13 18:16:00 elric Exp $	*/
+/*	$NetBSD: windlocl.h,v 1.1.1.1 2011/04/13 18:16:00 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: windlocl.h,v 1.1 2011/04/13 18:16:00 elric Exp $ */
+/* $Id: windlocl.h,v 1.1.1.1 2011/04/13 18:16:00 elric Exp $ */
 
 #ifndef _WINDLOCL_H_
 #define _WINDLOCL_H_

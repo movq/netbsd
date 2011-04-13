@@ -1,7 +1,7 @@
-/*	$NetBSD: asn1_queue.h,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
+/*	$NetBSD: asn1_queue.h,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*	NetBSD: queue.h,v 1.38 2004/04/18 14:12:05 lukem Exp	*/
-/*	$Id: asn1_queue.h,v 1.1 2011/04/13 18:14:39 elric Exp $ */
+/*	$Id: asn1_queue.h,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $ */
 
 /*
  * Copyright (c) 1991, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipropd_master.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: ipropd_master.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan

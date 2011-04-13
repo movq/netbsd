@@ -1,4 +1,4 @@
-/*	$NetBSD: kverify.c,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
+/*	$NetBSD: kverify.c,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005, 2007 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: der_cmp.c,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
+/*	$NetBSD: der_cmp.c,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 2003-2005 Kungliga Tekniska Högskolan

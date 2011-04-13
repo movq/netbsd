@@ -1,4 +1,4 @@
-/*	$NetBSD: sendauth.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
+/*	$NetBSD: sendauth.c,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan

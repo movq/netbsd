@@ -1,4 +1,4 @@
-/*	$NetBSD: ldap.c,v 1.1 2011/04/13 18:15:58 elric Exp $	*/
+/*	$NetBSD: ldap.c,v 1.1.1.1 2011/04/13 18:15:58 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan

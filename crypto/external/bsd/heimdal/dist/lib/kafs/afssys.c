@@ -1,4 +1,4 @@
-/*	$NetBSD: afssys.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: afssys.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2000, 2002, 2004, 2005 Kungliga Tekniska Högskolan

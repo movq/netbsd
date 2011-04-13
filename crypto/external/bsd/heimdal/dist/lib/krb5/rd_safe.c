@@ -1,4 +1,4 @@
-/*	$NetBSD: rd_safe.c,v 1.1 2011/04/13 18:15:37 elric Exp $	*/
+/*	$NetBSD: rd_safe.c,v 1.1.1.1 2011/04/13 18:15:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan

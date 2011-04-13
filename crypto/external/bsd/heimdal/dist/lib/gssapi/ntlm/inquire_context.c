@@ -1,4 +1,4 @@
-/*	$NetBSD: inquire_context.c,v 1.1 2011/04/13 18:14:48 elric Exp $	*/
+/*	$NetBSD: inquire_context.c,v 1.1.1.1 2011/04/13 18:14:48 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan

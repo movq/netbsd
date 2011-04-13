@@ -1,4 +1,4 @@
-/*	$NetBSD: example_evp_cipher.c,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
+/*	$NetBSD: example_evp_cipher.c,v 1.1.1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan

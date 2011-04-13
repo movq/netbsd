@@ -1,4 +1,4 @@
-/*	$NetBSD: passwd_dlg.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: passwd_dlg.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 1998 Kungliga Tekniska Högskolan

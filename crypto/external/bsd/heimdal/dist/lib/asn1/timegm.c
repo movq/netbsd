@@ -1,4 +1,4 @@
-/*	$NetBSD: timegm.c,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: timegm.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "der_locl.h"
 
-__RCSID("$NetBSD: timegm.c,v 1.1 2011/04/13 18:14:41 elric Exp $");
+__RCSID("$NetBSD: timegm.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $");
 
 static int
 is_leap(unsigned y)

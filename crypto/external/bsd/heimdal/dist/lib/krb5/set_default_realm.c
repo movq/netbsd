@@ -1,4 +1,4 @@
-/*	$NetBSD: set_default_realm.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
+/*	$NetBSD: set_default_realm.c,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: check-gen.c,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
+/*	$NetBSD: check-gen.c,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2005 Kungliga Tekniska Högskolan
@@ -53,7 +53,7 @@
 
 #include "check-common.h"
 
-__RCSID("$NetBSD: check-gen.c,v 1.1 2011/04/13 18:14:40 elric Exp $");
+__RCSID("$NetBSD: check-gen.c,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $");
 
 static char *lha_principal[] = { "lha" };
 static char *lharoot_princ[] = { "lha", "root" };

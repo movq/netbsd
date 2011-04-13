@@ -1,4 +1,4 @@
-/*	$NetBSD: parse-name-test.c,v 1.1 2011/04/13 18:15:36 elric Exp $	*/
+/*	$NetBSD: parse-name-test.c,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /*
  * Copyright (c) 2002 Kungliga Tekniska Högskolan

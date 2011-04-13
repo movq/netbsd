@@ -1,4 +1,4 @@
-/*	$NetBSD: krb5tgs.c,v 1.1 2011/04/13 18:14:37 elric Exp $	*/
+/*	$NetBSD: krb5tgs.c,v 1.1.1.1 2011/04/13 18:14:37 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2008 Kungliga Tekniska Högskolan

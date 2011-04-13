@@ -1,4 +1,4 @@
-/*	$NetBSD: acquire_cred.c,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
+/*	$NetBSD: acquire_cred.c,v 1.1.1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2005 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: getifaddrs_w32.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: getifaddrs_w32.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2009, Secure Endpoints Inc.

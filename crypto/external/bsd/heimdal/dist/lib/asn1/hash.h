@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.h,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: hash.h,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
  * hash.h. Header file for hash table functions
  */
 
-/* $Id: hash.h,v 1.1 2011/04/13 18:14:41 elric Exp $ */
+/* $Id: hash.h,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $ */
 
 struct hashentry {		/* Entry in bucket */
      struct hashentry **prev;

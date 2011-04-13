@@ -1,4 +1,4 @@
-/*	$NetBSD: context_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: context_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2002 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: context_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: context_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 static void
 set_funcs(kadm5_server_context *c)

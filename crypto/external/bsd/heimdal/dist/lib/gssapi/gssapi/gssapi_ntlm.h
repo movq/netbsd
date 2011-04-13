@@ -1,4 +1,4 @@
-/*	$NetBSD: gssapi_ntlm.h,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
+/*	$NetBSD: gssapi_ntlm.h,v 1.1.1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2009 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: gssapi_ntlm.h,v 1.1 2011/04/13 18:14:44 elric Exp $ */
+/* $Id: gssapi_ntlm.h,v 1.1.1.1 2011/04/13 18:14:44 elric Exp $ */
 
 #ifndef GSSAPI_NTLM_H_
 #define GSSAPI_NTLM_H_

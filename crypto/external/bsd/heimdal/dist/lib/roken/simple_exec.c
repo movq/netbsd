@@ -1,4 +1,4 @@
-/*	$NetBSD: simple_exec.c,v 1.1 2011/04/13 18:15:43 elric Exp $	*/
+/*	$NetBSD: simple_exec.c,v 1.1.1.1 2011/04/13 18:15:43 elric Exp $	*/
 
 /*
  * Copyright (c) 1998 - 2001, 2004 Kungliga Tekniska Högskolan

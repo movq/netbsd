@@ -1,4 +1,4 @@
-/*	$NetBSD: rc2.h,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: rc2.h,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: rc2.h,v 1.1 2011/04/13 18:14:50 elric Exp $ */
+/* $Id: rc2.h,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $ */
 
 /* symbol renaming */
 #define RC2_set_key hc_RC2_set_key

@@ -1,4 +1,4 @@
-/*	$NetBSD: locate_plugin.h,v 1.1 2011/04/13 18:15:36 elric Exp $	*/
+/*	$NetBSD: locate_plugin.h,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: locate_plugin.h,v 1.1 2011/04/13 18:15:36 elric Exp $ */
+/* $Id: locate_plugin.h,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $ */
 
 #ifndef HEIMDAL_KRB5_LOCATE_PLUGIN_H
 #define HEIMDAL_KRB5_LOCATE_PLUGIN_H 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: 2kprime.c,v 1.1 2011/04/13 18:15:06 elric Exp $	*/
+/*	$NetBSD: 2kprime.c,v 1.1.1.1 2011/04/13 18:15:06 elric Exp $	*/
 
 /* Makes safe primes of a 2k nature */
 #include <tommath.h>

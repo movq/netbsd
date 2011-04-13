@@ -1,4 +1,4 @@
-/*	$NetBSD: mit_dump.c,v 1.1 2011/04/13 18:14:37 elric Exp $	*/
+/*	$NetBSD: mit_dump.c,v 1.1.1.1 2011/04/13 18:14:37 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 Kungliga Tekniska Högskolan

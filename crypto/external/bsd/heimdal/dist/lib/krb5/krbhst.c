@@ -1,4 +1,4 @@
-/*	$NetBSD: krbhst.c,v 1.1 2011/04/13 18:15:36 elric Exp $	*/
+/*	$NetBSD: krbhst.c,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /*
  * Copyright (c) 2001 - 2003 Kungliga Tekniska Högskolan

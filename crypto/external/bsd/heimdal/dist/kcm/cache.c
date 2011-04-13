@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.c,v 1.1 2011/04/13 18:14:35 elric Exp $	*/
+/*	$NetBSD: cache.c,v 1.1.1.1 2011/04/13 18:14:35 elric Exp $	*/
 
 /*
  * Copyright (c) 2005, PADL Software Pty Ltd.

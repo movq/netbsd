@@ -1,4 +1,4 @@
-/*	$NetBSD: rand-egd.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: rand-egd.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 2007 Kungliga Tekniska Högskolan

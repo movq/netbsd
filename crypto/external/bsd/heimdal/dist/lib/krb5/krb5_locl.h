@@ -1,4 +1,4 @@
-/*	$NetBSD: krb5_locl.h,v 1.1 2011/04/13 18:15:35 elric Exp $	*/
+/*	$NetBSD: krb5_locl.h,v 1.1.1.1 2011/04/13 18:15:35 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2006 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: krb5_locl.h,v 1.1 2011/04/13 18:15:35 elric Exp $ */
+/* $Id: krb5_locl.h,v 1.1.1.1 2011/04/13 18:15:35 elric Exp $ */
 
 #ifndef __KRB5_LOCL_H__
 #define __KRB5_LOCL_H__

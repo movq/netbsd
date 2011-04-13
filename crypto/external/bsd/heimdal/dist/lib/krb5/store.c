@@ -1,4 +1,4 @@
-/*	$NetBSD: store.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
+/*	$NetBSD: store.c,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2008 Kungliga Tekniska Högskolan

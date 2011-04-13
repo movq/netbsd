@@ -1,4 +1,4 @@
-/*	$NetBSD: test_pkinit_dh2key.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
+/*	$NetBSD: test_pkinit_dh2key.c,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan

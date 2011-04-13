@@ -1,4 +1,4 @@
-/*	$NetBSD: sha512.c,v 1.1 2011/04/13 18:14:51 elric Exp $	*/
+/*	$NetBSD: sha512.c,v 1.1.1.1 2011/04/13 18:14:51 elric Exp $	*/
 
 /*
  * Copyright (c) 2006, 2010 Kungliga Tekniska Högskolan

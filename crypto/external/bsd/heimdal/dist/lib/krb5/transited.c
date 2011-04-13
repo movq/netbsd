@@ -1,4 +1,4 @@
-/*	$NetBSD: transited.c,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
+/*	$NetBSD: transited.c,v 1.1.1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001, 2003 Kungliga Tekniska Högskolan

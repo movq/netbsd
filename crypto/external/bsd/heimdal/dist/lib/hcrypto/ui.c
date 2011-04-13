@@ -1,4 +1,4 @@
-/*	$NetBSD: ui.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: ui.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000, 2005 Kungliga Tekniska Högskolan

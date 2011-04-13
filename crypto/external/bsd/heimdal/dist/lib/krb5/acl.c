@@ -1,4 +1,4 @@
-/*	$NetBSD: acl.c,v 1.1 2011/04/13 18:15:31 elric Exp $	*/
+/*	$NetBSD: acl.c,v 1.1.1.1 2011/04/13 18:15:31 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2002, 2004 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: test_commonauth.c,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
+/*	$NetBSD: test_commonauth.c,v 1.1.1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2008 Kungliga Tekniska Högskolan

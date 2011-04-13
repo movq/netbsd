@@ -1,5 +1,5 @@
 dnl Process this file with autoconf to produce a configure script.
-AC_REVISION($Revision: 1.1 $)
+AC_REVISION($Revision: 1.1.1.1 $)
 AC_PREREQ(2.62)
 test -z "$CFLAGS" && CFLAGS="-g"
 AC_INIT([Heimdal],[1.5pre1],[heimdal-bugs@h5l.org])

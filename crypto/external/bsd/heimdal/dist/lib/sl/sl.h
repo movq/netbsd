@@ -1,4 +1,4 @@
-/*	$NetBSD: sl.h,v 1.1 2011/04/13 18:15:44 elric Exp $	*/
+/*	$NetBSD: sl.h,v 1.1.1.1 2011/04/13 18:15:44 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2004 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: sl.h,v 1.1 2011/04/13 18:15:44 elric Exp $ */
+/* $Id: sl.h,v 1.1.1.1 2011/04/13 18:15:44 elric Exp $ */
 
 #ifndef _SL_H
 #define _SL_H

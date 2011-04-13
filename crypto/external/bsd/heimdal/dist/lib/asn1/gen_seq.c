@@ -1,4 +1,4 @@
-/*	$NetBSD: gen_seq.c,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: gen_seq.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "gen_locl.h"
 
-__RCSID("$NetBSD: gen_seq.c,v 1.1 2011/04/13 18:14:41 elric Exp $");
+__RCSID("$NetBSD: gen_seq.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $");
 
 void
 generate_type_seq (const Symbol *s)

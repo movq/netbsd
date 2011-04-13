@@ -1,4 +1,4 @@
-/*	$NetBSD: copy_host_realm.c,v 1.1 2011/04/13 18:15:32 elric Exp $	*/
+/*	$NetBSD: copy_host_realm.c,v 1.1.1.1 2011/04/13 18:15:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 - 2001 Kungliga Tekniska Högskolan

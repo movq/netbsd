@@ -1,4 +1,4 @@
-/*	$NetBSD: mkey.c,v 1.1 2011/04/13 18:14:42 elric Exp $	*/
+/*	$NetBSD: mkey.c,v 1.1.1.1 2011/04/13 18:14:42 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2004 Kungliga Tekniska Högskolan

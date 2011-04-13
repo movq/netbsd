@@ -1,4 +1,4 @@
-/*	$NetBSD: otp.h,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
+/*	$NetBSD: otp.h,v 1.1.1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: otp.h,v 1.1 2011/04/13 18:15:39 elric Exp $ */
+/* $Id: otp.h,v 1.1.1.1 2011/04/13 18:15:39 elric Exp $ */
 
 #ifndef _OTP_H
 #define _OTP_H

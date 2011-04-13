@@ -1,4 +1,4 @@
-/*	$NetBSD: der_get.c,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
+/*	$NetBSD: der_get.c,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2007 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: heim_asn1.h,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: heim_asn1.h,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 2003-2005 Kungliga Tekniska Högskolan

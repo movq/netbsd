@@ -1,4 +1,4 @@
-/*	$NetBSD: password_quality.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: password_quality.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2000, 2003-2005 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "kadm5_locl.h"
 #include "kadm5-pwcheck.h"
 
-__RCSID("$NetBSD: password_quality.c,v 1.1 2011/04/13 18:15:30 elric Exp $");
+__RCSID("$NetBSD: password_quality.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $");
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: der_put.c,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
+/*	$NetBSD: der_put.c,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "der_locl.h"
 
-__RCSID("$NetBSD: der_put.c,v 1.1 2011/04/13 18:14:40 elric Exp $");
+__RCSID("$NetBSD: der_put.c,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $");
 
 /*
  * All encoding functions take a pointer `p' to first position in

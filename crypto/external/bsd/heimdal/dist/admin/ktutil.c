@@ -1,4 +1,4 @@
-/*	$NetBSD: ktutil.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
+/*	$NetBSD: ktutil.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2004 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "ktutil_locl.h"
 #include <err.h>
 
-__RCSID("$NetBSD: ktutil.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
+__RCSID("$NetBSD: ktutil.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $");
 
 static int help_flag;
 static int version_flag;

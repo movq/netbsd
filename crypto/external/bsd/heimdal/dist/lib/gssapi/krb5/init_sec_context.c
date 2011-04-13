@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sec_context.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
+/*	$NetBSD: init_sec_context.c,v 1.1.1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan

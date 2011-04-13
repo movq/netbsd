@@ -1,4 +1,4 @@
-/*	$NetBSD: demo.c,v 1.1 2011/04/13 18:15:06 elric Exp $	*/
+/*	$NetBSD: demo.c,v 1.1.1.1 2011/04/13 18:15:06 elric Exp $	*/
 
 #include <time.h>
 

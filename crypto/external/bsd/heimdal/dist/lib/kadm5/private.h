@@ -1,4 +1,4 @@
-/*	$NetBSD: private.h,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: private.h,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: private.h,v 1.1 2011/04/13 18:15:30 elric Exp $ */
+/* $Id: private.h,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $ */
 
 #ifndef __kadm5_privatex_h__
 #define __kadm5_privatex_h__

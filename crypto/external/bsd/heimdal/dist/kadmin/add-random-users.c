@@ -1,4 +1,4 @@
-/*	$NetBSD: add-random-users.c,v 1.1 2011/04/13 18:14:34 elric Exp $	*/
+/*	$NetBSD: add-random-users.c,v 1.1.1.1 2011/04/13 18:14:34 elric Exp $	*/
 
 /*
  * Copyright (c) 2000 - 2001 Kungliga Tekniska Högskolan

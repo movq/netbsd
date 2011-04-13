@@ -1,4 +1,4 @@
-/*	$NetBSD: mtest.c,v 1.1 2011/04/13 18:15:07 elric Exp $	*/
+/*	$NetBSD: mtest.c,v 1.1.1.1 2011/04/13 18:15:07 elric Exp $	*/
 
 /* makes a bignum test harness with NUM tests per operation
  *

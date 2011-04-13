@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_inquire_name.c,v 1.1 2011/04/13 18:14:46 elric Exp $	*/
+/*	$NetBSD: gss_inquire_name.c,v 1.1.1.1 2011/04/13 18:14:46 elric Exp $	*/
 
 /*
  * Copyright (c) 2010, PADL Software Pty Ltd.

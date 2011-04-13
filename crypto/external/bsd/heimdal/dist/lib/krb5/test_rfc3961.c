@@ -1,4 +1,4 @@
-/*	$NetBSD: test_rfc3961.c,v 1.1 2011/04/13 18:15:38 elric Exp $	*/
+/*	$NetBSD: test_rfc3961.c,v 1.1.1.1 2011/04/13 18:15:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2003-2005 Kungliga Tekniska Högskolan

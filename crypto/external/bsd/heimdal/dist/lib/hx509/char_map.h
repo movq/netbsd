@@ -1,4 +1,4 @@
-/*	$NetBSD: char_map.h,v 1.1 2011/04/13 18:15:10 elric Exp $	*/
+/*	$NetBSD: char_map.h,v 1.1.1.1 2011/04/13 18:15:10 elric Exp $	*/
 
 #define Q_CONTROL_CHAR		1
 #define Q_PRINTABLE		2

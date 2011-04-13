@@ -1,4 +1,4 @@
-/*	$NetBSD: req.c,v 1.1 2011/04/13 18:15:12 elric Exp $	*/
+/*	$NetBSD: req.c,v 1.1.1.1 2011/04/13 18:15:12 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan

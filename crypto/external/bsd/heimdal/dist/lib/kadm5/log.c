@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.1 2011/04/13 18:15:30 elric Exp $	*/
+/*	$NetBSD: log.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2007 Kungliga Tekniska Högskolan
@@ -36,7 +36,7 @@
 #include "kadm5_locl.h"
 #include "heim_threads.h"
 
-__RCSID("$NetBSD: log.c,v 1.1 2011/04/13 18:15:30 elric Exp $");
+__RCSID("$NetBSD: log.c,v 1.1.1.1 2011/04/13 18:15:30 elric Exp $");
 
 /*
  * A log record consists of:

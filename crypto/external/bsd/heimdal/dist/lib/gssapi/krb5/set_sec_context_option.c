@@ -1,4 +1,4 @@
-/*	$NetBSD: set_sec_context_option.c,v 1.1 2011/04/13 18:14:45 elric Exp $	*/
+/*	$NetBSD: set_sec_context_option.c,v 1.1.1.1 2011/04/13 18:14:45 elric Exp $	*/
 
 /*
  * Copyright (c) 2004, PADL Software Pty Ltd.

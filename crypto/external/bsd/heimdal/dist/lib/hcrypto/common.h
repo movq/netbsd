@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.1 2011/04/13 18:14:49 elric Exp $	*/
+/*	$NetBSD: common.h,v 1.1.1.1 2011/04/13 18:14:49 elric Exp $	*/
 
 /*
  * Copyright (c) 2010 Kungliga Tekniska Högskolan

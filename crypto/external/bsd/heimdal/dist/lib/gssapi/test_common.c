@@ -1,4 +1,4 @@
-/*	$NetBSD: test_common.c,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
+/*	$NetBSD: test_common.c,v 1.1.1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2008 Kungliga Tekniska Högskolan

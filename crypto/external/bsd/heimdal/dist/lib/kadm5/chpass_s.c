@@ -1,4 +1,4 @@
-/*	$NetBSD: chpass_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $	*/
+/*	$NetBSD: chpass_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2006 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "kadm5_locl.h"
 
-__RCSID("$NetBSD: chpass_s.c,v 1.1 2011/04/13 18:15:29 elric Exp $");
+__RCSID("$NetBSD: chpass_s.c,v 1.1.1.1 2011/04/13 18:15:29 elric Exp $");
 
 static kadm5_ret_t
 change(void *server_handle,

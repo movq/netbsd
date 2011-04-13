@@ -1,4 +1,4 @@
-/*	$NetBSD: hprop.h,v 1.1 2011/04/13 18:14:36 elric Exp $	*/
+/*	$NetBSD: hprop.h,v 1.1.1.1 2011/04/13 18:14:36 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: hprop.h,v 1.1 2011/04/13 18:14:36 elric Exp $ */
+/* $Id: hprop.h,v 1.1.1.1 2011/04/13 18:14:36 elric Exp $ */
 
 #ifndef __HPROP_H__
 #define __HPROP_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: add_cred.c,v 1.1 2011/04/13 18:14:44 elric Exp $	*/
+/*	$NetBSD: add_cred.c,v 1.1.1.1 2011/04/13 18:14:44 elric Exp $	*/
 
 /*
  * Copyright (c) 2003 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: add.c,v 1.1 2011/04/13 18:14:32 elric Exp $	*/
+/*	$NetBSD: add.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan
@@ -35,7 +35,7 @@
 
 #include "ktutil_locl.h"
 
-__RCSID("$NetBSD: add.c,v 1.1 2011/04/13 18:14:32 elric Exp $");
+__RCSID("$NetBSD: add.c,v 1.1.1.1 2011/04/13 18:14:32 elric Exp $");
 
 static char *
 readstring(const char *prompt, char *buf, size_t len)

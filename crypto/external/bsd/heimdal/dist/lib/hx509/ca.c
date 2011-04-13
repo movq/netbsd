@@ -1,4 +1,4 @@
-/*	$NetBSD: ca.c,v 1.1 2011/04/13 18:15:09 elric Exp $	*/
+/*	$NetBSD: ca.c,v 1.1.1.1 2011/04/13 18:15:09 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 - 2010 Kungliga Tekniska Högskolan

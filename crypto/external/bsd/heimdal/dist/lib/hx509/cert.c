@@ -1,4 +1,4 @@
-/*	$NetBSD: cert.c,v 1.1 2011/04/13 18:15:10 elric Exp $	*/
+/*	$NetBSD: cert.c,v 1.1.1.1 2011/04/13 18:15:10 elric Exp $	*/
 
 /*
  * Copyright (c) 2004 - 2007 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: windc_plugin.h,v 1.1 2011/04/13 18:14:38 elric Exp $	*/
+/*	$NetBSD: windc_plugin.h,v 1.1.1.1 2011/04/13 18:14:38 elric Exp $	*/
 
 /*
  * Copyright (c) 2006 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: windc_plugin.h,v 1.1 2011/04/13 18:14:38 elric Exp $ */
+/* $Id: windc_plugin.h,v 1.1.1.1 2011/04/13 18:14:38 elric Exp $ */
 
 #ifndef HEIMDAL_KRB5_PAC_PLUGIN_H
 #define HEIMDAL_KRB5_PAC_PLUGIN_H 1

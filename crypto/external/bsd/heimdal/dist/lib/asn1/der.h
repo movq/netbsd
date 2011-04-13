@@ -1,4 +1,4 @@
-/*	$NetBSD: der.h,v 1.1 2011/04/13 18:14:40 elric Exp $	*/
+/*	$NetBSD: der.h,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2006 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: der.h,v 1.1 2011/04/13 18:14:40 elric Exp $ */
+/* $Id: der.h,v 1.1.1.1 2011/04/13 18:14:40 elric Exp $ */
 
 #ifndef __DER_H__
 #define __DER_H__

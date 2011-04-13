@@ -1,4 +1,4 @@
-/*	$NetBSD: env.c,v 1.1 2011/04/13 18:15:10 elric Exp $	*/
+/*	$NetBSD: env.c,v 1.1.1.1 2011/04/13 18:15:10 elric Exp $	*/
 
 /*
  * Copyright (c) 2007 - 2008 Kungliga Tekniska Högskolan

@@ -1,4 +1,4 @@
-/*	$NetBSD: n-fold.c,v 1.1 2011/04/13 18:15:36 elric Exp $	*/
+/*	$NetBSD: n-fold.c,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /*
  * Copyright (c) 1999 Kungliga Tekniska Högskolan

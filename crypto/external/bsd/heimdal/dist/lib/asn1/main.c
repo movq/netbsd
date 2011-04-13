@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Kungliga Tekniska Högskolan
@@ -37,7 +37,7 @@
 #include <krb5/getarg.h>
 #include "lex.h"
 
-__RCSID("$NetBSD: main.c,v 1.1 2011/04/13 18:14:41 elric Exp $");
+__RCSID("$NetBSD: main.c,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $");
 
 extern FILE *yyin;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kuser_locl.h,v 1.1 2011/04/13 18:14:39 elric Exp $	*/
+/*	$NetBSD: kuser_locl.h,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 1999 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: kuser_locl.h,v 1.1 2011/04/13 18:14:39 elric Exp $ */
+/* $Id: kuser_locl.h,v 1.1.1.1 2011/04/13 18:14:39 elric Exp $ */
 
 #ifndef __KUSER_LOCL_H__
 #define __KUSER_LOCL_H__

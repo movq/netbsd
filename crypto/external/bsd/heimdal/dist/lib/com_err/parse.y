@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.y,v 1.1 2011/04/13 18:14:43 elric Exp $	*/
+/*	$NetBSD: parse.y,v 1.1.1.1 2011/04/13 18:14:43 elric Exp $	*/
 
 %{
 /*

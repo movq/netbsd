@@ -1,4 +1,4 @@
-/*	$NetBSD: kcm_locl.h,v 1.1 2011/04/13 18:14:36 elric Exp $	*/
+/*	$NetBSD: kcm_locl.h,v 1.1.1.1 2011/04/13 18:14:36 elric Exp $	*/
 
 /*
  * Copyright (c) 2005, PADL Software Pty Ltd.
@@ -35,7 +35,7 @@
  */
 
 /*
- * $Id: kcm_locl.h,v 1.1 2011/04/13 18:14:36 elric Exp $
+ * $Id: kcm_locl.h,v 1.1.1.1 2011/04/13 18:14:36 elric Exp $
  */
 
 #ifndef __KCM_LOCL_H__

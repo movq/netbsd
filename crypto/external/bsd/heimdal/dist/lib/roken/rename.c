@@ -1,4 +1,4 @@
-/*	$NetBSD: rename.c,v 1.1 2011/04/13 18:15:42 elric Exp $	*/
+/*	$NetBSD: rename.c,v 1.1.1.1 2011/04/13 18:15:42 elric Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2010, Secure Endpoints Inc.

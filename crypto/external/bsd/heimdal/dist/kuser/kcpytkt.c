@@ -1,4 +1,4 @@
-/*	$NetBSD: kcpytkt.c,v 1.1 2011/04/13 18:14:38 elric Exp $	*/
+/*	$NetBSD: kcpytkt.c,v 1.1.1.1 2011/04/13 18:14:38 elric Exp $	*/
 
 
 #include "kuser_locl.h"

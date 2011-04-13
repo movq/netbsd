@@ -1,4 +1,4 @@
-/*	$NetBSD: dllmain.c,v 1.1 2011/04/13 18:15:09 elric Exp $	*/
+/*	$NetBSD: dllmain.c,v 1.1.1.1 2011/04/13 18:15:09 elric Exp $	*/
 
 /***********************************************************************
  * Copyright (c) 2009, Secure Endpoints Inc.

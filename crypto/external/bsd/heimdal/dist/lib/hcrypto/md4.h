@@ -1,4 +1,4 @@
-/*	$NetBSD: md4.h,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: md4.h,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2001 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: md4.h,v 1.1 2011/04/13 18:14:50 elric Exp $ */
+/* $Id: md4.h,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $ */
 
 #ifndef HEIM_MD4_H
 #define HEIM_MD4_H 1

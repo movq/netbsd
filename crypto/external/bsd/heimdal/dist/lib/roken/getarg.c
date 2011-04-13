@@ -1,4 +1,4 @@
-/*	$NetBSD: getarg.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: getarg.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2002 Kungliga Tekniska Högskolan

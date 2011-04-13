@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.h,v 1.1 2011/04/13 18:14:41 elric Exp $	*/
+/*	$NetBSD: lex.h,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: lex.h,v 1.1 2011/04/13 18:14:41 elric Exp $ */
+/* $Id: lex.h,v 1.1.1.1 2011/04/13 18:14:41 elric Exp $ */
 
 #include <krb5/roken.h>
 

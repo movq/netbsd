@@ -1,4 +1,4 @@
-/*	$NetBSD: warn.c,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
+/*	$NetBSD: warn.c,v 1.1.1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2001 Kungliga Tekniska Högskolan

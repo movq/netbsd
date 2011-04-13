@@ -1,4 +1,4 @@
-/*	$NetBSD: vers.h,v 1.1 2011/04/13 18:15:44 elric Exp $	*/
+/*	$NetBSD: vers.h,v 1.1.1.1 2011/04/13 18:15:44 elric Exp $	*/
 
 /*
  * Copyright (c) 1995 - 2000 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: vers.h,v 1.1 2011/04/13 18:15:44 elric Exp $ */
+/* $Id: vers.h,v 1.1.1.1 2011/04/13 18:15:44 elric Exp $ */
 
 #ifndef __VERS_H__
 #define __VERS_H__

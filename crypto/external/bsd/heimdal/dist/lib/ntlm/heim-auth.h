@@ -1,4 +1,4 @@
-/*	$NetBSD: heim-auth.h,v 1.1 2011/04/13 18:15:39 elric Exp $	*/
+/*	$NetBSD: heim-auth.h,v 1.1.1.1 2011/04/13 18:15:39 elric Exp $	*/
 
 /*
  * Generate challange for APOP and CRAM-MD5

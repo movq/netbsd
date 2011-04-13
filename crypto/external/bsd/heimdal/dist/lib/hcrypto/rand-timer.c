@@ -1,4 +1,4 @@
-/*	$NetBSD: rand-timer.c,v 1.1 2011/04/13 18:14:50 elric Exp $	*/
+/*	$NetBSD: rand-timer.c,v 1.1.1.1 2011/04/13 18:14:50 elric Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 1999, 2007 Kungliga Tekniska Högskolan

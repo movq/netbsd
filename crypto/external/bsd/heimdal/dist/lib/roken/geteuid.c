@@ -1,4 +1,4 @@
-/*	$NetBSD: geteuid.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: geteuid.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997 Kungliga Tekniska Högskolan

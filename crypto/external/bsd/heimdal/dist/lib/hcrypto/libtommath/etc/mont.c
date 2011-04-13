@@ -1,4 +1,4 @@
-/*	$NetBSD: mont.c,v 1.1 2011/04/13 18:15:06 elric Exp $	*/
+/*	$NetBSD: mont.c,v 1.1.1.1 2011/04/13 18:15:06 elric Exp $	*/
 
 /* tests the montgomery routines */
 #include <tommath.h>

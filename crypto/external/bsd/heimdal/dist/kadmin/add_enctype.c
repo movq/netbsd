@@ -1,4 +1,4 @@
-/*	$NetBSD: add_enctype.c,v 1.1 2011/04/13 18:14:34 elric Exp $	*/
+/*	$NetBSD: add_enctype.c,v 1.1.1.1 2011/04/13 18:14:34 elric Exp $	*/
 
 /*
  * Copyright (c) 1999-2006 Kungliga Tekniska Högskolan

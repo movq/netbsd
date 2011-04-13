@@ -1,4 +1,4 @@
-/*	$NetBSD: display_status.c,v 1.1 2011/04/13 18:14:47 elric Exp $	*/
+/*	$NetBSD: display_status.c,v 1.1.1.1 2011/04/13 18:14:47 elric Exp $	*/
 
 /*
  * Copyright (c) 1998 - 2005 Kungliga Tekniska Högskolan

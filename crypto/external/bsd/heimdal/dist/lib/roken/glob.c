@@ -1,4 +1,4 @@
-/*	$NetBSD: glob.c,v 1.1 2011/04/13 18:15:41 elric Exp $	*/
+/*	$NetBSD: glob.c,v 1.1.1.1 2011/04/13 18:15:41 elric Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

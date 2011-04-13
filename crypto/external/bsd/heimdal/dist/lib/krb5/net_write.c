@@ -1,4 +1,4 @@
-/*	$NetBSD: net_write.c,v 1.1 2011/04/13 18:15:36 elric Exp $	*/
+/*	$NetBSD: net_write.c,v 1.1.1.1 2011/04/13 18:15:36 elric Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 Kungliga Tekniska Högskolan

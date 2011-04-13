@@ -1,4 +1,4 @@
-/*	$NetBSD: sel.h,v 1.1 2011/04/13 18:15:12 elric Exp $	*/
+/*	$NetBSD: sel.h,v 1.1.1.1 2011/04/13 18:15:12 elric Exp $	*/
 
 /*
  * Copyright (c) 2008 Kungliga Tekniska Högskolan

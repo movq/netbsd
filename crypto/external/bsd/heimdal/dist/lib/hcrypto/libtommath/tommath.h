@@ -1,4 +1,4 @@
-/*	$NetBSD: tommath.h,v 1.1 2011/04/13 18:14:57 elric Exp $	*/
+/*	$NetBSD: tommath.h,v 1.1.1.1 2011/04/13 18:14:57 elric Exp $	*/
 
 /* LibTomMath, multiple-precision integer library -- Tom St Denis
  *

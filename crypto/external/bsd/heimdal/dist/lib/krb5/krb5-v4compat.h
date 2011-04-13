@@ -1,4 +1,4 @@
-/*	$NetBSD: krb5-v4compat.h,v 1.1 2011/04/13 18:15:34 elric Exp $	*/
+/*	$NetBSD: krb5-v4compat.h,v 1.1.1.1 2011/04/13 18:15:34 elric Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2003 Kungliga Tekniska Högskolan
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 
-/* $Id: krb5-v4compat.h,v 1.1 2011/04/13 18:15:34 elric Exp $ */
+/* $Id: krb5-v4compat.h,v 1.1.1.1 2011/04/13 18:15:34 elric Exp $ */
 
 #ifndef __KRB5_V4COMPAT_H__
 #define __KRB5_V4COMPAT_H__
