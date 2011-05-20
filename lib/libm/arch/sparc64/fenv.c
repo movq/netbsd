@@ -1,4 +1,4 @@
-/*	$NetBSD: fenv.c,v 1.1 2011/01/31 00:19:33 christos Exp $	*/
+/*	$NetBSD: fenv.c,v 1.2 2011/05/20 21:42:49 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 2004-2005 David Schultz <das@FreeBSD.ORG>
@@ -24,10 +24,12 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.1 2011/01/31 00:19:33 christos Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.2 2011/05/20 21:42:49 nakayama Exp $");
 
 #include <assert.h>
 #include <fenv.h>
+
+#ifdef __arch64__
 
 /* Load floating-point state register (all 64bits) */
 #define	__ldxfsr(__r)	__asm__	__volatile__		\
@@ -36,6 +38,18 @@ __RCSID("$NetBSD: fenv.c,v 1.1 2011/01/31 00:19:33 christos Exp $");
 /* Save floating-point state register (all 64bits) */
 #define	__stxfsr(__r)	__asm__	__volatile__		\
 	("stx %%fsr, %0" : "=m" (*(__r)))
+
+#else /* !__arch64__ */
+
+/* Load floating-point state register (32bits) */
+#define	__ldxfsr(__r)	__asm__	__volatile__		\
+	("ld %0, %%fsr" : : "m" (__r))
+
+/* Save floating-point state register (32bits) */
+#define	__stxfsr(__r)	__asm__	__volatile__		\
+	("st %%fsr, %0" : "=m" (*(__r)))
+
+#endif /* __arch64__ */
 
 /*
  * The feclearexcept() function clears the supported floating-point exceptions
