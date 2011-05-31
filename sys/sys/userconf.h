@@ -1,4 +1,4 @@
-/*	$NetBSD: userconf.h,v 1.6 2011/05/26 04:25:27 uebayasi Exp $	*/
+/*	$NetBSD: userconf.h,v 1.7 2011/05/31 23:28:53 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2009 The NetBSD Foundation, Inc.
@@ -31,12 +31,9 @@
 
 #include <sys/cpu.h>
 
+void userconf_bootinfo(void);
 void userconf_init(void);
 void userconf_prompt(void);
 int userconf_parse(char *);
-
-#ifdef __HAVE_USERCONF_BOOTINFO
-void userconf_bootinfo(void);
-#endif
 
 #endif /* !_SYS_USERCONF_H_ */
