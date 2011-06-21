@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.common,v 1.1 2011/06/21 02:48:27 mrg Exp $
+#	$NetBSD: Makefile.common,v 1.1.1.1 2011/06/21 02:48:27 mrg Exp $
 
 DIST=		${NETBSDSRCDIR}/gnu/dist/gcc4
 GNUHOSTDIST=	${DIST}
