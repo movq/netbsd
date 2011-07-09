@@ -1,4 +1,4 @@
-/* $NetBSD: xc5kvar.h,v 1.1 2010/12/27 15:42:11 jmcneill Exp $ */
+/* $NetBSD: xc5kvar.h,v 1.2 2011/07/09 15:00:44 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2010 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,6 +30,7 @@
 #define _XC5KVAR_H
 
 #include <dev/i2c/i2cvar.h>
+#include <dev/dtv/dtvio.h>
 #include <dev/video_if.h>
 
 typedef int (*xc5k_reset_cb)(void *);
@@ -41,6 +42,9 @@ struct xc5k {
 
 	xc5k_reset_cb	reset;
 	void		*reset_priv;
+
+	unsigned int	if_freq;
+	fe_type_t	fe_type;
 };
 
 struct xc5k_params {
@@ -50,8 +54,10 @@ struct xc5k_params {
 };
 
 struct xc5k *	xc5k_open(device_t, i2c_tag_t, i2c_addr_t,
-			  xc5k_reset_cb, void *);
+			  xc5k_reset_cb, void *, unsigned int, fe_type_t);
 void		xc5k_close(struct xc5k *);
-int		xc5k_tune(struct xc5k *, struct xc5k_params *);
+int		xc5k_tune_video(struct xc5k *, struct xc5k_params *);
+int		xc5k_tune_dtv(struct xc5k *, const struct dvb_frontend_parameters *);
+fe_status_t	xc5k_get_status(struct xc5k *);
 
 #endif /* !_XC5KVAR_H */
