@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.h,v 1.4 2011/08/11 23:04:44 jmcneill Exp $ */
+/* $NetBSD: cpu.h,v 1.5 2011/08/12 00:57:24 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -33,6 +33,7 @@
 #include <sys/cpu_data.h>
 
 #include <machine/intrdefs.h>
+#include <machine/thunk.h>
 
 extern void	cpu_signotify(struct lwp *);
 extern void	cpu_need_proftick(struct lwp *);
@@ -61,9 +62,7 @@ usermode_curcpu(void)
 __inline static void
 usermode_delay(unsigned int ms)
 {
-	extern int usleep(useconds_t);
-
-	usleep(ms);
+	thunk_usleep(ms);
 }
 
 #define	curcpu()	usermode_curcpu()
