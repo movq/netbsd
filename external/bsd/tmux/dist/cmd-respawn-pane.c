@@ -1,4 +1,4 @@
-/* $Id: cmd-respawn-pane.c,v 1.1 2011/08/17 18:40:04 jmmv Exp $ */
+/* $Id: cmd-respawn-pane.c,v 1.1.1.1 2011/08/17 18:40:04 jmmv Exp $ */
 
 /*
  * Copyright (c) 2008 Nicholas Marriott <nicm@users.sourceforge.net>
