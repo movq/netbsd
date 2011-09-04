@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.2 2009/10/21 16:06:59 snj Exp $ */
+/* $NetBSD: intr.h,v 1.3 2011/09/04 21:08:18 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,29 +31,13 @@
 
 #include <machine/intrdefs.h>
 
-__inline static int
-splraise(int x)
-{
-	extern int usermode_x;
-	int oldx = usermode_x;
-
-	usermode_x = x;
-
-	return oldx;
-}
-
-__inline static void
-spllower(int x)
-{
-	extern int usermode_x;
-
-	usermode_x = x;
-}
+int	splraise(int);
+void	spllower(int);
 
 #define	spl0()		spllower(IPL_NONE)
 #define splx(x)		spllower(x)
 
-typedef uint8_t	ipl_t;
+typedef uint8_t ipl_t;
 typedef struct {
 	ipl_t _ipl;
 } ipl_cookie_t;
