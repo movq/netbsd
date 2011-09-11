@@ -1,4 +1,4 @@
-/*	$NetBSD: dnstest.h,v 1.1 2011/09/11 17:19:03 christos Exp $	*/
+/*	$NetBSD: dnstest.h,v 1.1.1.1 2011/09/11 17:19:03 christos Exp $	*/
 
 /*
  * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")

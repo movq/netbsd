@@ -1,4 +1,4 @@
-/*	$NetBSD: check_test.c,v 1.1 2011/09/11 17:20:27 christos Exp $	*/
+/*	$NetBSD: check_test.c,v 1.1.1.1 2011/09/11 17:20:27 christos Exp $	*/
 
 /*
  * Automated Testing Framework (atf)
