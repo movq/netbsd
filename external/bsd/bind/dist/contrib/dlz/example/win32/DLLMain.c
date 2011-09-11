@@ -1,4 +1,4 @@
-/*	$NetBSD: DLLMain.c,v 1.1 2011/09/11 17:13:53 christos Exp $	*/
+/*	$NetBSD: DLLMain.c,v 1.1.1.1 2011/09/11 17:13:53 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

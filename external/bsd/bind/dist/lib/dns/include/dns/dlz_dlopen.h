@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_dlopen.h,v 1.1 2011/09/11 17:18:43 christos Exp $	*/
+/*	$NetBSD: dlz_dlopen.h,v 1.1.1.1 2011/09/11 17:18:43 christos Exp $	*/
 
 /*
  * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")
