@@ -1,4 +1,4 @@
-/* $NetBSD: elfstructs.h,v 1.1 2011/12/07 13:15:45 cegger Exp $ */
+/* $NetBSD: elfstructs.h,v 1.1.1.1 2011/12/07 13:15:45 cegger Exp $ */
 #ifndef __XEN_PUBLIC_ELFSTRUCTS_H__
 #define __XEN_PUBLIC_ELFSTRUCTS_H__ 1
 /*
