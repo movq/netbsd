@@ -1,4 +1,4 @@
-/* $NetBSD: xs_wire.h,v 1.1 2011/12/07 13:15:46 cegger Exp $ */
+/* $NetBSD: xs_wire.h,v 1.1.1.1 2011/12/07 13:15:46 cegger Exp $ */
 /*
  * Details of the "wire" protocol between Xen Store Daemon and client
  * library or guest kernel.

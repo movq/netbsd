@@ -1,4 +1,4 @@
-/* $NetBSD: vmx_assist.h,v 1.1 2011/12/07 13:15:46 cegger Exp $ */
+/* $NetBSD: vmx_assist.h,v 1.1.1.1 2011/12/07 13:15:46 cegger Exp $ */
 /*
  * vmx_assist.h: Context definitions for the VMXASSIST world switch.
  *
