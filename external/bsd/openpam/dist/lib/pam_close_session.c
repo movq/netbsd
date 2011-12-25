@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_close_session.c,v 1.1 2011/12/25 21:42:50 christos Exp $	*/
+/*	$NetBSD: pam_close_session.c,v 1.1.1.1 2011/12/25 21:42:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002-2003 Networks Associates Technology, Inc.

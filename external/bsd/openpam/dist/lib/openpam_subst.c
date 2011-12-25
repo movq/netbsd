@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_subst.c,v 1.1 2011/12/25 21:42:50 christos Exp $	*/
+/*	$NetBSD: openpam_subst.c,v 1.1.1.1 2011/12/25 21:42:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2011 Dag-Erling Smørgrav

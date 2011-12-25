@@ -1,4 +1,4 @@
-/*	$NetBSD: pamtest.c,v 1.1 2011/12/25 21:42:53 christos Exp $	*/
+/*	$NetBSD: pamtest.c,v 1.1.1.1 2011/12/25 21:42:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 2011 Dag-Erling Smørgrav

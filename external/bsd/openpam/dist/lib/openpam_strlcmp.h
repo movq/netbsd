@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_strlcmp.h,v 1.1 2011/12/25 21:42:48 christos Exp $	*/
+/*	$NetBSD: openpam_strlcmp.h,v 1.1.1.1 2011/12/25 21:42:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 2011 Dag-Erling Smørgrav

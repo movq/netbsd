@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_debug.h,v 1.1 2011/12/25 21:42:48 christos Exp $	*/
+/*	$NetBSD: openpam_debug.h,v 1.1.1.1 2011/12/25 21:42:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001-2003 Networks Associates Technology, Inc.

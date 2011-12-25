@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_readline.c,v 1.1 2011/12/25 21:42:50 christos Exp $	*/
+/*	$NetBSD: openpam_readline.c,v 1.1.1.1 2011/12/25 21:42:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 Networks Associates Technology, Inc.
