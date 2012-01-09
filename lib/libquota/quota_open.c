@@ -1,4 +1,4 @@
-/*	$NetBSD: quota_open.c,v 1.1 2012/01/09 15:22:38 dholland Exp $	*/
+/*	$NetBSD: quota_open.c,v 1.2 2012/01/09 15:27:04 dholland Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,26 +29,39 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: quota_open.c,v 1.1 2012/01/09 15:22:38 dholland Exp $");
+__RCSID("$NetBSD: quota_open.c,v 1.2 2012/01/09 15:27:04 dholland Exp $");
 
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
 #include <quota.h>
+#include "quotapvt.h"
 
-/* ARGSUSED */
 struct quotahandle *
 quota_open(const char *path)
 {
-	errno = ENOSYS;
-	return NULL;
+	struct quotahandle *qh;
+	int serrno;
+
+	qh = malloc(sizeof(*qh));
+	if (qh == NULL) {
+		return NULL;
+	}
+	qh->qh_mountpoint = strdup(path);
+	if (qh->qh_mountpoint == NULL) {
+		serrno = errno;
+		free(qh);
+		errno = serrno;
+		return NULL;
+	}
+	return qh;
 }
 
 const char *
 quota_getmountpoint(struct quotahandle *qh)
 {
-	errno = ENOSYS;
-	return NULL;
+	return qh->qh_mountpoint;
 }
 
 const char *
@@ -58,8 +71,9 @@ quota_getmountdevice(struct quotahandle *qh)
 	return NULL;
 }
 
-/* ARGSUSED */
 void
 quota_close(struct quotahandle *qh)
 {
+	free(qh->qh_mountpoint);
+	free(qh);
 }
