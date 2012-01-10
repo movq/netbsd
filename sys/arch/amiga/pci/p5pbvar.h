@@ -1,4 +1,4 @@
-/*	$NetBSD: p5pbvar.h,v 1.1 2011/10/07 08:44:21 rkujawa Exp $ */
+/*	$NetBSD: p5pbvar.h,v 1.2 2012/01/10 20:29:50 rkujawa Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -36,23 +36,26 @@
 #include <dev/pci/pciconf.h>
 #include <machine/pci_machdep.h>
 
-struct p5pb_bridge_type {
-	const char	*name;		/* descriptive name */
-	bool		configure_bus;	/* should we configure the bus? */
-	bool		set_genfb_props;/* should we set props for genfb(4)? */
-	int		maxdevs;	/* max number of devices on the bus */
+struct p5pb_autoconf_entry {
+	volatile char	*base;
+	uint32_t	size;
+	TAILQ_ENTRY(p5pb_autoconf_entry) entries;
 };
 
 struct p5pb_softc {
-	device_t sc_dev;
-	volatile char *ba;
-	struct bus_space_tag pci_conf_area;
-	struct bus_space_tag pci_mem_area;
-	struct bus_space_tag pci_io_area;
-	struct amiga_pci_chipset apc;
-	struct p5pb_bridge_type bridge_type;
-	bool	(*p5pb_bus_map)(struct p5pb_softc *);
-};
+	device_t				sc_dev;
 
+	volatile char				*ba;
+	struct bus_space_tag			pci_conf_area;
+	struct bus_space_tag			pci_mem_area;
+	struct bus_space_tag			pci_io_area;
+	struct amiga_pci_chipset		apc;
+
+	/* list of preconfigured BARs */
+	TAILQ_HEAD(, p5pb_autoconf_entry)	auto_bars;
+
+	bool(*p5pb_bus_map)(struct p5pb_softc *);
+
+};
 
 #endif /* _AMIGA_P5PBVAR_H_ */
