@@ -1,5 +1,5 @@
 /*	Id: optim.c,v 1.1 2012/01/01 16:20:55 ragge Exp 	*/	
-/*	$NetBSD: optim.c,v 1.1 2012/01/11 20:33:19 plunky Exp $	*/
+/*	$NetBSD: optim.c,v 1.1.1.1 2012/01/11 20:33:19 plunky Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *

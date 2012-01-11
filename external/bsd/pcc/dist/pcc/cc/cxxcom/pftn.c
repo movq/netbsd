@@ -1,5 +1,5 @@
 /*	Id: pftn.c,v 1.1 2012/01/01 16:20:55 ragge Exp 	*/	
-/*	$NetBSD: pftn.c,v 1.1 2012/01/11 20:33:21 plunky Exp $	*/
+/*	$NetBSD: pftn.c,v 1.1.1.1 2012/01/11 20:33:21 plunky Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

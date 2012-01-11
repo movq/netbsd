@@ -1,5 +1,5 @@
 /*	Id: init.c,v 1.1 2012/01/01 16:20:54 ragge Exp 	*/	
-/*	$NetBSD: init.c,v 1.1 2012/01/11 20:33:18 plunky Exp $	*/
+/*	$NetBSD: init.c,v 1.1.1.1 2012/01/11 20:33:18 plunky Exp $	*/
 
 /*
  * Copyright (c) 2004, 2007 Anders Magnusson (ragge@ludd.ltu.se).
