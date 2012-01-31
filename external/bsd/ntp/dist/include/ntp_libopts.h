@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_libopts.h,v 1.1 2012/01/31 21:23:26 kardel Exp $	*/
+/*	$NetBSD: ntp_libopts.h,v 1.1.1.1 2012/01/31 21:23:26 kardel Exp $	*/
 
 /*
  * ntp_libopts.h

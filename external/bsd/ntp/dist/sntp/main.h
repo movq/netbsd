@@ -1,4 +1,4 @@
-/*	$NetBSD: main.h,v 1.1 2012/01/31 21:27:42 kardel Exp $	*/
+/*	$NetBSD: main.h,v 1.1.1.1 2012/01/31 21:27:42 kardel Exp $	*/
 
 #ifndef MAIN_H
 #define MAIN_H

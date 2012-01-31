@@ -1,4 +1,4 @@
-/*	$NetBSD: project.h,v 1.1 2012/01/31 21:27:58 kardel Exp $	*/
+/*	$NetBSD: project.h,v 1.1.1.1 2012/01/31 21:27:58 kardel Exp $	*/
 
 
 #ifndef AUTOGEN_PROJECT_H
