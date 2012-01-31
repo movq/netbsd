@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_intres.h,v 1.1 2012/01/31 21:23:13 kardel Exp $	*/
+/*	$NetBSD: ntp_intres.h,v 1.1.1.1 2012/01/31 21:23:13 kardel Exp $	*/
 
 #ifndef NTP_INTRES_H
 #define NTP_INTRES_H
