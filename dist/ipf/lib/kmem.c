@@ -1,7 +1,7 @@
-/*	$NetBSD: kmem.c,v 1.6 2012/01/30 16:12:04 darrenr Exp $	*/
+/*	$NetBSD: kmem.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
@@ -18,7 +18,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/file.h>
-#if !defined(__sgi) && !defined(__hpux) && !defined(__osf__) && !defined(linux) && !defined(_AIX51)
+#if !defined(__sgi) && !defined(__hpux) && !defined(__osf__) && !defined(linux)
 #include <kvm.h>
 #endif
 #include <fcntl.h>
@@ -44,13 +44,12 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)kmem.c	1.4 1/12/96 (C) 1992 Darren Reed";
-static const char rcsid[] = "@(#)Id: kmem.c,v 1.21.2.1 2012/01/26 05:29:16 darrenr Exp";
+static const char rcsid[] = "@(#)Id: kmem.c,v 1.16 2004/01/08 13:34:32 darrenr Exp";
 #endif
 
 
 
-#if !defined(__sgi) && !defined(__hpux) && !defined(__osf__) && \
-    !defined(linux) && !defined(_AIX51)
+#if !defined(__sgi) && !defined(__hpux) && !defined(__osf__) && !defined(linux)
 /*
  * For all platforms where there is a libkvm and a kvm_t, we use that...
  */
@@ -70,9 +69,9 @@ kvm_t kvm_open __P((char *, char *, char *, int, char *));
 int kvm_read __P((kvm_t, u_long, char *, size_t));
 
 kvm_t kvm_open(kernel, core, swap, mode, errstr)
-	char *kernel, *core, *swap;
-	int mode;
-	char *errstr;
+char *kernel, *core, *swap;
+int mode;
+char *errstr;
 {
 	kvm_t k;
 	int fd;
@@ -93,10 +92,10 @@ kvm_t kvm_open(kernel, core, swap, mode, errstr)
 }
 
 int kvm_read(kvm, pos, buffer, size)
-	kvm_t kvm;
-	u_long pos;
-	char *buffer;
-	size_t size;
+kvm_t kvm;
+u_long pos;
+char *buffer;
+size_t size;
 {
 	int r = 0, left;
 	char *bufp;
@@ -127,7 +126,7 @@ int kvm_read(kvm, pos, buffer, size)
 #endif /* !defined(__sgi) && !defined(__hpux) && !defined(__osf__) */
 
 int	openkmem(kern, core)
-	char	*kern, *core;
+char	*kern, *core;
 {
 	kvm_f = kvm_open(kern, core, NULL, O_RDONLY, NULL);
 	if (kvm_f == NULL)
@@ -135,13 +134,13 @@ int	openkmem(kern, core)
 		perror("openkmem:open");
 		return -1;
 	    }
-	return kvm_f != NULL;
+	return (int)kvm_f;
 }
 
 int	kmemcpy(buf, pos, n)
-	register char	*buf;
-	long	pos;
-	register int	n;
+register char	*buf;
+long	pos;
+register int	n;
 {
 	register int	r;
 
@@ -169,9 +168,9 @@ int	kmemcpy(buf, pos, n)
 }
 
 int	kstrncpy(buf, pos, n)
-	register char	*buf;
-	long	pos;
-	register int	n;
+register char	*buf;
+long	pos;
+register int	n;
 {
 	register int	r;
 

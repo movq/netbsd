@@ -1,9 +1,14 @@
-/*	$NetBSD: ipsdr.c,v 1.4 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: ipsdr.c,v 1.1 1999/12/11 22:24:07 veego Exp $	*/
 
 /*
  * (C)opyright 1995-1998 Darren Reed.
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
+ *
+ *   The author of this software makes no garuntee about the
+ * performance of this package or its suitability to fulfill any purpose.
  *
  */
 #include <stdio.h>
@@ -35,7 +40,7 @@
 
 #ifndef	lint
 static const char sccsid[] = "@(#)ipsdr.c	1.3 12/3/95 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipsdr.c,v 2.3 2007/12/20 09:34:54 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipsdr.c,v 2.1 1999/08/04 17:30:57 darrenr Exp";
 #endif
 
 extern	char	*optarg;
@@ -57,21 +62,21 @@ int	pkts;
 
 
 int	ipcmp(sh1, sh2)
-	sdhit_t	*sh1, *sh2;
+sdhit_t	*sh1, *sh2;
 {
 	return sh1->sh_ip.s_addr - sh2->sh_ip.s_addr;
 }
 
 
 int	ssipcmp(sh1, sh2)
-	ipss_t	*sh1, *sh2;
+ipss_t	*sh1, *sh2;
 {
 	return sh1->ss_ip.s_addr - sh2->ss_ip.s_addr;
 }
 
 
 int countpbits(num)
-	u_long	num;
+u_long	num;
 {
 	int	i, j;
 
@@ -87,9 +92,9 @@ int countpbits(num)
  * port.
  */
 int	findhit(ihp, src, dport)
-	ipsd_t	*ihp;
-	struct	in_addr	src;
-	u_short	dport;
+ipsd_t	*ihp;
+struct	in_addr	src;
+u_short	dport;
 {
 	int	i, j, k;
 	sdhit_t	*sh;
@@ -120,9 +125,9 @@ int	findhit(ihp, src, dport)
  * interested in.
  */
 int	detect(srcip, dport, date)
-	struct	in_addr	srcip;
-	u_short	dport;
-	time_t	date;
+struct	in_addr	srcip;
+u_short	dport;
+time_t	date;
 {
 	ipsd_t	*ihp;
 	sdhit_t	*sh;
@@ -181,7 +186,7 @@ setuphits()
  * Write statistics out to a file
  */
 addfile(file)
-	char	*file;
+char	*file;
 {
 	ipsd_t	ipsd, *ips = &ipsd;
 	sdhit_t	hit, *hp;
@@ -209,7 +214,7 @@ addfile(file)
 
 
 readfiles(dir)
-	char *dir;
+char *dir;
 {
 	struct	direct	**d;
 	int	i, j;
@@ -226,8 +231,8 @@ readfiles(dir)
 
 
 void printreport(ss, num)
-	ipss_t	*ss;
-	int	num;
+ipss_t	*ss;
+int	num;
 {
 	struct	in_addr	ip;
 	ipss_t	*sp;
@@ -301,8 +306,8 @@ collectips()
 
 
 main(argc, argv)
-	int	argc;
-	char	*argv[];
+int	argc;
+char	*argv[];
 {
 	char	c, *name =  argv[0], *dir = NULL;
 	int	fd;

@@ -1,22 +1,21 @@
-/*	$NetBSD: portname.c,v 1.1.1.3 2012/01/30 16:03:25 darrenr Exp $	*/
+/*	$NetBSD: portname.c,v 1.1 2004/03/28 08:56:20 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: portname.c,v 1.11.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: portname.c,v 1.7 2003/08/14 14:27:43 darrenr Exp
  */
 #include "ipf.h"
 
 
-char *portname(pr, port)
-	int pr, port;
+char	*portname(pr, port)
+int	pr, port;
 {
-	static char buf[32];
-	struct protoent *p = NULL;
-	struct servent *sv = NULL;
-	struct servent *sv1 = NULL;
+	static	char	buf[32];
+	struct	protoent	*p = NULL;
+	struct	servent	*sv = NULL, *sv1 = NULL;
 
 	if ((opts & OPT_NORESOLVE) == 0) {
 		if (pr == -1) {

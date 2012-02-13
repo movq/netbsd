@@ -1,10 +1,5 @@
-/*	$NetBSD: lex_var.h,v 1.1.1.3 2012/01/30 16:03:48 darrenr Exp $	*/
+/*	$NetBSD: lex_var.h,v 1.1 2004/03/28 08:56:35 martti Exp $	*/
 
-/*
- * Copyright (C) 2008 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- */
 
 extern	long		string_start;
 extern	long		string_end;

@@ -1,25 +1,25 @@
-/*	$NetBSD: larp.c,v 1.4 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: larp.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * larp.c (C) 1995-1998 Darren Reed
  *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)larp.c	1.1 8/19/95 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: larp.c,v 2.5 2007/12/20 09:35:09 darrenr Exp";
+static const char rcsid[] = "@(#)Id: larp.c,v 2.1 1999/08/04 17:31:10 darrenr Exp";
 #endif
-#include <sys/param.h>
+#include <stdio.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <net/if.h>
 #include <net/if_arp.h>
-#include <stdio.h>
-#include <netdb.h>
-#include <errno.h>
 
 #include "ip_compat.h"
 #include "iplang/iplang.h"
@@ -29,8 +29,8 @@ static const char rcsid[] = "@(#)Id: larp.c,v 2.5 2007/12/20 09:35:09 darrenr Ex
  * its IP address in address
  * (4 bytes)
  */
-int	resolve(host, address)
-	char	*host, *address;
+int	resolve(host, address) 
+char	*host, *address;
 {
         struct	hostent	*hp;
         u_long	add;
@@ -56,8 +56,8 @@ int	resolve(host, address)
  * some BSD program, I cant remember which.
  */
 int	arp(ip, ether)
-	char	*ip;
-	char	*ether;
+char	*ip;
+char	*ether;
 {
 	static	int	s = -1;
 	struct	arpreq	ar;

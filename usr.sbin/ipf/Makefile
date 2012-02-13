@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile,v 1.8 2004/03/28 09:01:27 martti Exp $
+#	$NetBSD: Makefile,v 1.1 1997/01/05 13:09:04 mrg Exp $
 
-SUBDIR=		libipf .WAIT
-SUBDIR+=	ipf ipfs ipfstat ipftest ipmon ipnat ippool ipresend
-SUBDIR+=	ipsend iptest rules
+SUBDIR=		ipfstat ipmon ipnat
+#SUBDIR+=	ipftest ipsend ipresend iptest
 
 .include <bsd.subdir.mk>

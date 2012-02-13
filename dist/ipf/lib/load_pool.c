@@ -1,11 +1,11 @@
-/*	$NetBSD: load_pool.c,v 1.1.1.5 2012/01/30 16:03:24 darrenr Exp $	*/
+/*	$NetBSD: load_pool.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
- * Copyright (C) 2010 by Darren Reed.
+ * Copyright (C) 2002 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: load_pool.c,v 1.22.2.2 2012/01/26 05:29:16 darrenr Exp
+ * Id: load_pool.c,v 1.14.2.1 2004/03/06 14:33:29 darrenr Exp
  */
 
 #include <fcntl.h>
@@ -14,17 +14,20 @@
 #include "netinet/ip_lookup.h"
 #include "netinet/ip_pool.h"
 
+static int poolfd = -1;
 
-int
-load_pool(plp, iocfunc)
-	ip_pool_t *plp;
-	ioctlfunc_t iocfunc;
+
+int load_pool(plp, iocfunc)
+ip_pool_t *plp;
+ioctlfunc_t iocfunc;
 {
 	iplookupop_t op;
 	ip_pool_node_t *a;
 	ip_pool_t pool;
 
-	if (pool_open() == -1)
+	if ((poolfd == -1) && ((opts & OPT_DONOTHING) == 0))
+		poolfd = open(IPLOOKUP_NAME, O_RDWR);
+	if ((poolfd == -1) && ((opts & OPT_DONOTHING) == 0))
 		return -1;
 
 	op.iplo_unit = plp->ipo_unit;
@@ -35,32 +38,28 @@ load_pool(plp, iocfunc)
 	op.iplo_struct = &pool;
 	bzero((char *)&pool, sizeof(pool));
 	strncpy(pool.ipo_name, plp->ipo_name, sizeof(pool.ipo_name));
-	if (plp->ipo_name[0] == '\0')
+	if (*plp->ipo_name == '\0')
 		op.iplo_arg |= IPOOL_ANON;
 
 	if ((opts & OPT_REMOVE) == 0) {
-		if (pool_ioctl(iocfunc, SIOCLOOKUPADDTABLE, &op))
+		if ((*iocfunc)(poolfd, SIOCLOOKUPADDTABLE, &op))
 			if ((opts & OPT_DONOTHING) == 0) {
 				perror("load_pool:SIOCLOOKUPADDTABLE");
 				return -1;
 			}
 	}
 
-	if (op.iplo_arg & IPOOL_ANON)
-		strncpy(pool.ipo_name, op.iplo_name, sizeof(pool.ipo_name));
-
 	if ((opts & OPT_VERBOSE) != 0) {
 		pool.ipo_list = plp->ipo_list;
-		(void) printpool(&pool, bcopywrap, pool.ipo_name, opts, NULL);
+		printpool(&pool, bcopywrap, opts);
 		pool.ipo_list = NULL;
 	}
 
 	for (a = plp->ipo_list; a != NULL; a = a->ipn_next)
-		load_poolnode(plp->ipo_unit, pool.ipo_name,
-				     a, 0, iocfunc);
+		load_poolnode(plp->ipo_unit, plp->ipo_name, a, iocfunc);
 
 	if ((opts & OPT_REMOVE) != 0) {
-		if (pool_ioctl(iocfunc, SIOCLOOKUPDELTABLE, &op))
+		if ((*iocfunc)(poolfd, SIOCLOOKUPDELTABLE, &op))
 			if ((opts & OPT_DONOTHING) == 0) {
 				perror("load_pool:SIOCLOOKUPDELTABLE");
 				return -1;

@@ -1,13 +1,13 @@
-/*	$NetBSD: ipft_hx.c,v 1.8 2012/01/30 16:12:04 darrenr Exp $	*/
+/*	$NetBSD: ipft_hx.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 /*
- * Copyright (C) 2011 by Darren Reed.
+ * Copyright (C) 1995-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)ipft_hx.c	1.1 3/9/96 (C) 1996 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipft_hx.c,v 1.18.2.2 2012/01/26 05:29:15 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipft_hx.c,v 1.11 2003/02/16 02:32:35 darrenr Exp";
 #endif
 
 #include <ctype.h>
@@ -20,7 +20,7 @@ extern	int	opts;
 
 static	int	hex_open __P((char *));
 static	int	hex_close __P((void));
-static	int	hex_readip __P((mb_t *, char **, int *));
+static	int	hex_readip __P((char *, int, char **, int *));
 static	char	*readhex __P((char *, char *));
 
 struct	ipread	iphex = { hex_open, hex_close, hex_readip, 0 };
@@ -28,7 +28,7 @@ static	FILE	*tfp = NULL;
 static	int	tfd = -1;
 
 static	int	hex_open(fname)
-	char	*fname;
+char	*fname;
 {
 	if (tfp && tfd != -1) {
 		rewind(tfp);
@@ -56,19 +56,14 @@ static	int	hex_close()
 }
 
 
-static	int	hex_readip(mb, ifn, dir)
-	mb_t	*mb;
-	char	**ifn;
-	int	*dir;
+static	int	hex_readip(buf, cnt, ifn, dir)
+char	*buf, **ifn;
+int	cnt, *dir;
 {
 	register char *s, *t, *u;
 	char	line[513];
 	ip_t	*ip;
-	char	*buf;
-	int	cnt;
 
-	buf = (char *)mb->mb_buf;
-	cnt = sizeof(mb->mb_buf);
 	/*
 	 * interpret start of line as possibly "[ifname]" or
 	 * "[in/out,ifname]".
@@ -80,17 +75,15 @@ static	int	hex_readip(mb, ifn, dir)
  	ip = (ip_t *)buf;
 	while (fgets(line, sizeof(line)-1, tfp)) {
 		if ((s = strchr(line, '\n'))) {
-			if (s == line) {
-				mb->mb_len = (char *)ip - buf;
-				return mb->mb_len;
-			}
+			if (s == line)
+				return (char *)ip - buf;
 			*s = '\0';
 		}
 		if ((s = strchr(line, '#')))
 			*s = '\0';
 		if (!*line)
 			continue;
-		if ((opts & OPT_DEBUG) != 0) {
+		if (!(opts & OPT_BRIEF)) {
 			printf("input: %s", line);
 		}
 
@@ -111,33 +104,16 @@ static	int	hex_readip(mb, ifn, dir)
 				} else if (ifn)
 					*ifn = t;
 			}
-
-			while (*s++ == '+') {
-				if (!strncasecmp(s, "mcast", 5)) {
-					mb->mb_flags |= M_MCAST;
-					s += 5;
-				}
-				if (!strncasecmp(s, "bcast", 5)) {
-					mb->mb_flags |= M_BCAST;
-					s += 5;
-				}
-				if (!strncasecmp(s, "mbcast", 6)) {
-					mb->mb_flags |= M_MBCAST;
-					s += 6;
-				}
-			}
-			while (ISSPACE(*s))
-				s++;
 		} else
 			s = line;
 		t = (char *)ip;
 		ip = (ip_t *)readhex(s, (char *)ip);
-		if ((opts & OPT_DEBUG) != 0) {
+		if (!(opts & OPT_BRIEF)) {
 			if (opts & OPT_ASCII) {
 				if (t < (char *)ip)
 					putchar('\t');
 				while (t < (char *)ip) {
-					if (ISPRINT(*t) && ISASCII(*t))
+					if (isprint(*t) && isascii(*t))
 						putchar(*t);
 					else
 						putchar('.');
@@ -148,8 +124,6 @@ static	int	hex_readip(mb, ifn, dir)
 			fflush(stdout);
 		}
 	}
-	if (feof(tfp))
-		return 0;
 	return -1;
 }
 
@@ -161,7 +135,7 @@ register char	*src, *dst;
 	char	c;
 
 	while ((c = *src++)) {
-		if (ISSPACE(c)) {
+		if (isspace(c)) {
 			if (state) {
 				dst++;
 				state = 0;
@@ -169,7 +143,7 @@ register char	*src, *dst;
 			continue;
 		} else if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
 			   (c >= 'A' && c <= 'F')) {
-			c = ISDIGIT(c) ? (c - '0') : (TOUPPER(c) - 55);
+			c = isdigit(c) ? (c - '0') : (toupper(c) - 55);
 			if (state == 0) {
 				*dst = (c << 4);
 				state++;

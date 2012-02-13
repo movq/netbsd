@@ -1,30 +1,30 @@
-/*	$NetBSD: printmask.c,v 1.1.1.3 2012/01/30 16:03:26 darrenr Exp $	*/
+/*	$NetBSD: printmask.c,v 1.1 2004/03/28 08:56:20 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: printmask.c,v 1.11.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: printmask.c,v 1.5 2002/06/15 04:48:33 darrenr Exp
  */
 
 #include "ipf.h"
 
 
-void
-printmask(family, mask)
-	int	family;
-	u_32_t	*mask;
+void	printmask(mask)
+u_32_t	*mask;
 {
 	struct in_addr ipa;
 	int ones;
 
-	if (use_inet6 || (family == AF_INET6)) {
-		PRINTF("/%d", count6bits(mask));
-	} else if ((ones = count4bits(*mask)) == -1) {
+#ifdef  USE_INET6
+	if (use_inet6)
+		printf("/%d", count6bits(mask));
+	else
+#endif
+	if ((ones = count4bits(*mask)) == -1) {
 		ipa.s_addr = *mask;
-		PRINTF("/%s", inet_ntoa(ipa));
-	} else {
-		PRINTF("/%d", ones);
-	}
+		printf("/%s", inet_ntoa(ipa));
+	} else
+		printf("/%d", ones);
 }

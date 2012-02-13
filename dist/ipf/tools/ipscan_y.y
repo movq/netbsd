@@ -1,10 +1,5 @@
-/*	$NetBSD: ipscan_y.y,v 1.5 2012/01/30 16:12:05 darrenr Exp $	*/
+/*	$NetBSD: ipscan_y.y,v 1.1 2004/03/28 08:56:35 martti Exp $	*/
 
-/*
- * Copyright (C) 2009 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- */
 %{
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -13,7 +8,6 @@
 #include "kmem.h"
 #include "ipscan_l.h"
 #include "netinet/ip_scan.h"
-#include <ctype.h>
 
 #define	YYDEBUG	1
 
@@ -61,7 +55,7 @@ int		fd = -1;
 
 %token  <num>   YY_NUMBER YY_HEX
 %token  <str>   YY_STR
-%token          YY_COMMENT
+%token          YY_COMMENT 
 %token          YY_CMP_EQ YY_CMP_NE YY_CMP_LE YY_CMP_GE YY_CMP_LT YY_CMP_GT
 %token          YY_RANGE_OUT YY_RANGE_IN
 %token  <ip6>   YY_IPV6
@@ -100,7 +94,6 @@ assign:	YY_STR assigning YY_STR
 						  resetlexer();
 						  free($1);
 						  free($3);
-						  yyvarnext = 0;
 						}
 	;
 
@@ -216,7 +209,7 @@ char *src;
 			j = k = 0;
 			do {
 				c = *s++;
-				if (j && (!ISDIGIT(c) || (c > '7') ||
+				if (j && (!isdigit(c) || (c > '7') ||
 				     (k >= 248))) {
 					*u++ = k, i++;
 					j = k = 0;
@@ -225,7 +218,7 @@ char *src;
 				}
 				i++;
 
-				if (ISALPHA(c) || (c > '7')) {
+				if (isalpha(c) || (c > '7')) {
 					switch (c)
 					{
 					case 'n' :
@@ -241,7 +234,7 @@ char *src;
 						*u++ = c;
 						break;
 					}
-				} else if (ISDIGIT(c)) {
+				} else if (isdigit(c)) {
 					j = 1;
 					k <<= 3;
 					k |= (c - '0');

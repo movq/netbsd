@@ -1,28 +1,25 @@
-/*	$NetBSD: ip_irc_pxy.c,v 1.14 2012/02/01 16:46:28 christos Exp $	*/
+/*	$NetBSD: ip_irc_pxy.c,v 1.1 2004/10/01 15:26:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2008 by Darren Reed.
+ * Copyright (C) 2000-2003 Darren Reed
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ip_irc_pxy.c,v 2.56.2.1 2012/01/26 05:29:11 darrenr Exp
+ * Id: ip_irc_pxy.c,v 2.39.2.2 2004/05/24 14:01:48 darrenr Exp
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ip_irc_pxy.c,v 1.14 2012/02/01 16:46:28 christos Exp $");
 
 #define	IPF_IRC_PROXY
 
 #define	IPF_IRCBUFSZ	96	/* This *MUST* be >= 64! */
 
 
-void ipf_p_irc_main_load(void);
-void ipf_p_irc_main_unload(void);
-int ipf_p_irc_new(void *, fr_info_t *, ap_session_t *, nat_t *);
-int ipf_p_irc_out(void *, fr_info_t *, ap_session_t *, nat_t *);
-int ipf_p_irc_send(fr_info_t *, nat_t *);
-int ipf_p_irc_complete(ircinfo_t *, char *, size_t);
-u_short ipf_irc_atoi(char **);
+int ippr_irc_init __P((void));
+void ippr_irc_fini __P((void));
+int ippr_irc_new __P((fr_info_t *, ap_session_t *, nat_t *));
+int ippr_irc_out __P((fr_info_t *, ap_session_t *, nat_t *));
+int ippr_irc_send __P((fr_info_t *, nat_t *));
+int ippr_irc_complete __P((ircinfo_t *, char *, size_t));
+u_short ipf_irc_atoi __P((char **));
 
 static	frentry_t	ircnatfr;
 
@@ -32,19 +29,19 @@ int	irc_proxy_init = 0;
 /*
  * Initialize local structures.
  */
-void
-ipf_p_irc_main_load(void)
+int ippr_irc_init()
 {
 	bzero((char *)&ircnatfr, sizeof(ircnatfr));
 	ircnatfr.fr_ref = 1;
 	ircnatfr.fr_flags = FR_INQUE|FR_PASS|FR_QUICK|FR_KEEPSTATE;
 	MUTEX_INIT(&ircnatfr.fr_lock, "IRC proxy rule lock");
 	irc_proxy_init = 1;
+
+	return 0;
 }
 
 
-void
-ipf_p_irc_main_unload(void)
+void ippr_irc_fini()
 {
 	if (irc_proxy_init == 1) {
 		MUTEX_DESTROY(&ircnatfr.fr_lock);
@@ -53,7 +50,7 @@ ipf_p_irc_main_unload(void)
 }
 
 
-const char *ipf_p_irc_dcctypes[] = {
+char *ippr_irc_dcctypes[] = {
 	"CHAT ",	/* CHAT chat ipnumber portnumber */
 	"SEND ",	/* SEND filename ipnumber portnumber */
 	"MOVE ",
@@ -69,8 +66,10 @@ const char *ipf_p_irc_dcctypes[] = {
  */
 
 
-int
-ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
+int ippr_irc_complete(ircp, buf, len)
+ircinfo_t *ircp;
+char *buf;
+size_t len;
 {
 	register char *s, c;
 	register size_t i;
@@ -96,10 +95,10 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 		s++;
 		c = *s;
 		ircp->irc_snick = s;
-		if (!ISALPHA(c))
+		if (!isalpha(c))
 			return 0;
 		i--;
-		for (c = *s; !ISSPACE(c) && (i > 0); i--)
+		for (c = *s; !isspace(c) && (i > 0); i--)
 			c = *s++;
 		if (i < 31)
 			return 0;
@@ -121,9 +120,9 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 	/*
 	 * Loosely check that the destination is a nickname of some sort
 	 */
-	if (!ISALPHA(c))
+	if (!isalpha(c))
 		return 0;
-	for (; !ISSPACE(c) && (i > 0); i--)
+	for (; !isspace(c) && (i > 0); i--)
 		c = *s++;
 	if (i < 20)
 		return 0;
@@ -148,12 +147,12 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 	/*
 	 * Check for a recognised DCC command
 	 */
-	for (j = 0, k = 0; ipf_p_irc_dcctypes[j]; j++) {
-		k = MIN(strlen(ipf_p_irc_dcctypes[j]), i);
-		if (!strncmp(ipf_p_irc_dcctypes[j], s, k))
+	for (j = 0, k = 0; ippr_irc_dcctypes[j]; j++) {
+		k = MIN(strlen(ippr_irc_dcctypes[j]), i);
+		if (!strncmp(ippr_irc_dcctypes[j], s, k))
 			break;
 	}
-	if (!ipf_p_irc_dcctypes[j])
+	if (!ippr_irc_dcctypes[j])
 		return 0;
 
 	ircp->irc_type = s;
@@ -167,7 +166,7 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 	 * Check for the arg
 	 */
 	c = *s;
-	if (ISSPACE(c))
+	if (isspace(c))
 		return 0;
 	ircp->irc_arg = s;
 	for (; (c != ' ') && (c != '\001') && (i > 0); i--)
@@ -182,13 +181,13 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 	s++;
 	i--;
 	c = *s;
-	if (!ISDIGIT(c))
+	if (!isdigit(c))
 		return 0;
 	ircp->irc_addr = s;
 	/*
 	 * Get the IP#
 	 */
-	for (l = 0; ISDIGIT(c) && (i > 0); i--) {
+	for (l = 0; isdigit(c) && (i > 0); i--) {
 		l *= 10;
 		l += c - '0';
 		c = *s++;
@@ -204,12 +203,12 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 	s++;
 	i--;
 	c = *s;
-	if (!ISDIGIT(c))
+	if (!isdigit(c))
 		return 0;
 	/*
 	 * Get the port#
 	 */
-	for (l = 0; ISDIGIT(c) && (i > 0); i--) {
+	for (l = 0; isdigit(c) && (i > 0); i--) {
 		l *= 10;
 		l += c - '0';
 		c = *s++;
@@ -225,8 +224,10 @@ ipf_p_irc_complete(ircinfo_t *ircp, char *buf, size_t len)
 }
 
 
-int
-ipf_p_irc_new(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
+int ippr_irc_new(fin, aps, nat)
+fr_info_t *fin;
+ap_session_t *aps;
+nat_t *nat;
 {
 	ircinfo_t *irc;
 
@@ -245,13 +246,13 @@ ipf_p_irc_new(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 }
 
 
-int
-ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
+int ippr_irc_send(fin, nat)
+fr_info_t *fin;
+nat_t *nat;
 {
 	char ctcpbuf[IPF_IRCBUFSZ], newbuf[IPF_IRCBUFSZ];
 	tcphdr_t *tcp, tcph, *tcp2 = &tcph;
 	int off, inc = 0, i, dlen;
-	ipf_main_softc_t *softc;
 	size_t nlen = 0, olen;
 	struct in_addr swip;
 	u_short a5, sp;
@@ -264,7 +265,6 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 #ifdef	MENTAT
 	mb_t *m1;
 #endif
-	softc = fin->fin_main_soft;
 
 	m = fin->fin_m;
 	ip = fin->fin_ip;
@@ -287,14 +287,14 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 	*newbuf = '\0';
 
 	irc = nat->nat_aps->aps_data;
-	if (ipf_p_irc_complete(irc, ctcpbuf, dlen) == 0)
+	if (ippr_irc_complete(irc, ctcpbuf, dlen) == 0)
 		return 0;
 
 	/*
-	 * check that IP address in the DCC reply is the same as the
-	 * sender of the command - prevents use for port scanning.
+	 * check that IP address in the PORT/PASV reply is the same as the
+	 * sender of the command - prevents using PORT for port scanning.
 	 */
-	if (irc->irc_ipnum != ntohl(nat->nat_osrcaddr))
+	if (irc->irc_ipnum != ntohl(nat->nat_inip.s_addr))
 		return 0;
 
 	a5 = irc->irc_port;
@@ -317,7 +317,7 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 	nlen = strlen(newbuf);
 	inc = nlen - olen;
 
-	if ((inc + fin->fin_plen) > 65535)
+	if ((inc + ip->ip_len) > 65535)
 		return 0;
 
 #ifdef	MENTAT
@@ -328,14 +328,14 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 
 		/* alloc enough to keep same trailer space for lower driver */
 		nm = allocb(nlen, BPRI_MED);
-		PANIC((!nm),("ipf_p_irc_out: allocb failed"));
+		PANIC((!nm),("ippr_irc_out: allocb failed"));
 
 		nm->b_band = m1->b_band;
 		nm->b_wptr += nlen;
 
 		m1->b_wptr -= olen;
 		PANIC((m1->b_wptr < m1->b_rptr),
-		      ("ipf_p_irc_out: cannot handle fragmented data block"));
+		      ("ippr_irc_out: cannot handle fragmented data block"));
 
 		linkb(m1, nm);
 	} else {
@@ -357,8 +357,8 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 #if defined(MENTAT) || defined(__sgi)
 		register u_32_t	sum1, sum2;
 
-		sum1 = fin->fin_plen;
-		sum2 = fin->fin_plen + inc;
+		sum1 = ip->ip_len;
+		sum2 = ip->ip_len + inc;
 
 		/* Because ~1 == -2, We really need ~1 == -1 */
 		if (sum1 > sum2)
@@ -366,11 +366,9 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 		sum2 -= sum1;
 		sum2 = (sum2 & 0xffff) + (sum2 >> 16);
 
-		ipf_fix_outcksum(fin, &ip->ip_sum, sum2);
+		fix_outcksum(fin, &ip->ip_sum, sum2);
 #endif
-		fin->fin_plen += inc;
-		ip->ip_len = htons(fin->fin_plen);
-		fin->fin_dlen += inc;
+		ip->ip_len += inc;
 	}
 
 	/*
@@ -390,17 +388,13 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 	 * it is the most likely so use it here to check for a conflicting
 	 * mapping.
 	 */
-	bcopy((void *)fin, (void *)&fi, sizeof(fi));
+	bcopy((caddr_t)fin, (caddr_t)&fi, sizeof(fi));
 	fi.fin_data[0] = sp;
 	fi.fin_data[1] = fin->fin_data[1];
-	nat2 = ipf_nat_outlookup(fin, IPN_TCP, nat->nat_pr[1], nat->nat_nsrcip,
+	nat2 = nat_outlookup(fin, IPN_TCP, nat->nat_p, nat->nat_inip,
 			     ip->ip_dst);
 	if (nat2 == NULL) {
-#ifdef USE_MUTEXES
-		ipf_nat_softc_t *softn = softc->ipf_nat_soft;
-#endif
-
-		bcopy((void *)fin, (void *)&fi, sizeof(fi));
+		bcopy((caddr_t)fin, (caddr_t)&fi, sizeof(fi));
 		bzero((char *)tcp2, sizeof(*tcp2));
 		tcp2->th_win = htons(8192);
 		tcp2->th_sport = sp;
@@ -412,18 +406,14 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 		fi.fin_dlen = sizeof(*tcp2);
 		fi.fin_plen = fi.fin_hlen + sizeof(*tcp2);
 		swip = ip->ip_src;
-		ip->ip_src = nat->nat_nsrcip;
-		MUTEX_ENTER(&softn->ipf_nat_new);
-		nat2 = ipf_nat_add(&fi, nat->nat_ptr, NULL,
+		ip->ip_src = nat->nat_inip;
+		nat2 = nat_new(&fi, nat->nat_ptr, NULL,
 			       NAT_SLAVE|IPN_TCP|SI_W_DPORT, NAT_OUTBOUND);
-		MUTEX_EXIT(&softn->ipf_nat_new);
 		if (nat2 != NULL) {
-			(void) ipf_nat_proto(&fi, nat2, 0);
-			MUTEX_ENTER(&nat2->nat_lock);
-			ipf_nat_update(&fi, nat2);
-			MUTEX_EXIT(&nat2->nat_lock);
+			(void) nat_proto(&fi, nat2, 0);
+			nat_update(&fi, nat2, nat2->nat_ptr);
 
-			(void) ipf_state_add(softc, &fi, NULL, SI_W_DPORT);
+			(void) fr_addstate(&fi, NULL, SI_W_DPORT);
 		}
 		ip->ip_src = swip;
 	}
@@ -431,9 +421,11 @@ ipf_p_irc_send(fr_info_t *fin, nat_t *nat)
 }
 
 
-int
-ipf_p_irc_out(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
+int ippr_irc_out(fin, aps, nat)
+fr_info_t *fin;
+ap_session_t *aps;
+nat_t *nat;
 {
 	aps = aps;	/* LINT */
-	return ipf_p_irc_send(fin, nat);
+	return ippr_irc_send(fin, nat);
 }

@@ -1,12 +1,4 @@
-/*	$NetBSD: kvatoname.c,v 1.1.1.4 2012/01/30 16:03:22 darrenr Exp $	*/
-
-/*
- * Copyright (C) 2009 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
- * Id: kvatoname.c,v 1.6.2.1 2012/01/26 05:29:16 darrenr Exp
- */
+/*	$NetBSD: kvatoname.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 #include "ipf.h"
 
@@ -14,8 +6,8 @@
 #include <sys/ioctl.h>
 
 char *kvatoname(func, iocfunc)
-	ipfunc_t func;
-	ioctlfunc_t iocfunc;
+ipfunc_t func;
+ioctlfunc_t iocfunc;
 {
 	static char funcname[40];
 	ipfunc_resolve_t res;
@@ -25,7 +17,7 @@ char *kvatoname(func, iocfunc)
 	res.ipfu_name[0] = '\0';
 	fd = -1;
 
-	if ((opts & OPT_DONTOPEN) == 0) {
+	if ((opts & OPT_DONOTHING) == 0) {
 		fd = open(IPL_NAME, O_RDONLY);
 		if (fd == -1)
 			return NULL;

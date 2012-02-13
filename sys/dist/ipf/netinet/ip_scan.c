@@ -1,7 +1,7 @@
-/*	$NetBSD: ip_scan.c,v 1.15 2012/01/30 16:12:50 darrenr Exp $	*/
+/*	$NetBSD: ip_scan.c,v 1.1 2004/10/01 15:26:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1995-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
@@ -34,7 +34,7 @@ struct file;
 # endif
 #endif
 #include <sys/socket.h>
-#if !defined(__hpux) && !defined(__osf__) && !defined(linux) && !defined(AIX)
+#if !defined(__hpux) && !defined(__osf__) && !defined(linux)
 # include <sys/ioccom.h>
 #endif
 #ifdef __FreeBSD__
@@ -59,23 +59,18 @@ struct file;
 /* END OF INCLUDES */
 
 #if !defined(lint)
-#if defined(__NetBSD__)
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_scan.c,v 1.15 2012/01/30 16:12:50 darrenr Exp $");
-#else
 static const char sccsid[] = "@(#)ip_state.c	1.8 6/5/96 (C) 1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)Id: ip_scan.c,v 2.53.2.2 2012/01/29 03:08:31 darrenr Exp";
-#endif
+static const char rcsid[] = "@(#)Id: ip_scan.c,v 2.40 2004/01/27 00:24:56 darrenr Exp";
 #endif
 
 #ifdef	IPFILTER_SCAN	/* endif at bottom of file */
 
 
-ipscan_t	*ipf_scan_list = NULL,
-		*ipf_scan_tail = NULL;
-ipscanstat_t	ipf_scan_stat;
+ipscan_t	*ipsc_list = NULL,
+		*ipsc_tail = NULL;
+ipscanstat_t	ipsc_stat;
 # ifdef USE_MUTEXES
-ipfrwlock_t	ipf_scan_rwlock;
+ipfrwlock_t	ipsc_rwlock;
 # endif
 
 # ifndef isalpha
@@ -84,72 +79,59 @@ ipfrwlock_t	ipf_scan_rwlock;
 # endif
 
 
-int ipf_scan_add(void *);
-int ipf_scan_remove(void *);
-struct ipscan *ipf_scan_lookup(char *);
-int ipf_scan_matchstr(sinfo_t *, char *, int);
-int ipf_scan_matchisc(ipscan_t *, ipstate_t *, int, int, int *);
-int ipf_scan_match(ipstate_t *);
-
-static int	ipf_scan_inited = 0;
+int ipsc_add __P((caddr_t));
+int ipsc_delete __P((caddr_t));
+struct ipscan *ipsc_lookup __P((char *));
+int ipsc_matchstr __P((sinfo_t *, char *, int));
+int ipsc_matchisc __P((ipscan_t *, ipstate_t *, int, int, int *));
+int ipsc_match __P((ipstate_t *));
 
 
-int
-ipf_scan_init()
+
+int ipsc_init()
 {
-	RWLOCK_INIT(&ipf_scan_rwlock, "ip scan rwlock");
-	ipf_scan_inited = 1;
+	RWLOCK_INIT(&ipsc_rwlock, "ip scan rwlock");
 	return 0;
 }
 
 
-void
-ipf_scan_unload(void *arg)
+void fr_scanunload()
 {
-	if (ipf_scan_inited == 1) {
-		RW_DESTROY(&ipf_scan_rwlock);
-		ipf_scan_inited = 0;
-	}
+	RW_DESTROY(&ipsc_rwlock);
 }
 
 
-int
-ipf_scan_add(data)
-	void *data;
+int ipsc_add(data)
+caddr_t data;
 {
 	ipscan_t *i, *isc;
 	int err;
 
 	KMALLOC(isc, ipscan_t *);
-	if (!isc) {
-		ipf_interror = 90001;
+	if (!isc)
 		return ENOMEM;
-	}
 
 	err = copyinptr(data, isc, sizeof(*isc));
-	if (err) {
-		KFREE(isc);
+	if (err)
 		return err;
-	}
 
-	WRITE_ENTER(&ipf_scan_rwlock);
+	WRITE_ENTER(&ipsc_rwlock);
 
-	i = ipf_scan_lookup(isc->ipsc_tag);
-	if (i != NULL) {
-		RWLOCK_EXIT(&ipf_scan_rwlock);
+	i = ipsc_lookup(isc->ipsc_tag);
+	if (i) {
+		RWLOCK_EXIT(&ipsc_rwlock);
 		KFREE(isc);
-		ipf_interror = 90002;
 		return EEXIST;
 	}
 
-	if (ipf_scan_tail) {
-		ipf_scan_tail->ipsc_next = isc;
-		isc->ipsc_pnext = &ipf_scan_tail->ipsc_next;
-		ipf_scan_tail = isc;
+	if (ipsc_tail) {
+		ipsc_tail->ipsc_next = isc;
+		isc->ipsc_pnext = &ipsc_tail->ipsc_next;
+		ipsc_tail = isc;
 	} else {
-		ipf_scan_list = isc;
-		ipf_scan_tail = isc;
-		isc->ipsc_pnext = &ipf_scan_list;
+		ipsc_list = isc;
+		ipsc_tail = isc;
+		isc->ipsc_pnext = &ipsc_list;
 	}
 	isc->ipsc_next = NULL;
 
@@ -158,15 +140,14 @@ ipf_scan_add(data)
 	isc->ipsc_sref = 0;
 	isc->ipsc_active = 0;
 
-	ipf_scan_stat.iscs_entries++;
-	RWLOCK_EXIT(&ipf_scan_rwlock);
+	ipsc_stat.iscs_entries++;
+	RWLOCK_EXIT(&ipsc_rwlock);
 	return 0;
 }
 
 
-int
-ipf_scan_remove(data)
-	void *data;
+int ipsc_delete(data)
+caddr_t data;
 {
 	ipscan_t isc, *i;
 	int err;
@@ -175,15 +156,14 @@ ipf_scan_remove(data)
 	if (err)
 		return err;
 
-	WRITE_ENTER(&ipf_scan_rwlock);
+	WRITE_ENTER(&ipsc_rwlock);
 
-	i = ipf_scan_lookup(isc.ipsc_tag);
+	i = ipsc_lookup(isc.ipsc_tag);
 	if (i == NULL)
 		err = ENOENT;
 	else {
 		if (i->ipsc_fref) {
-			RWLOCK_EXIT(&ipf_scan_rwlock);
-			ipf_interror = 90003;
+			RWLOCK_EXIT(&ipsc_rwlock);
 			return EBUSY;
 		}
 
@@ -191,88 +171,85 @@ ipf_scan_remove(data)
 		if (i->ipsc_next)
 			i->ipsc_next->ipsc_pnext = i->ipsc_pnext;
 		else {
-			if (i->ipsc_pnext == &ipf_scan_list)
-				ipf_scan_tail = NULL;
+			if (i->ipsc_pnext == &ipsc_list)
+				ipsc_tail = NULL;
 			else
-				ipf_scan_tail = *(*i->ipsc_pnext)->ipsc_pnext;
+				ipsc_tail = *(*i->ipsc_pnext)->ipsc_pnext;
 		}
 
-		ipf_scan_stat.iscs_entries--;
+		ipsc_stat.iscs_entries--;
 		KFREE(i);
 	}
-	RWLOCK_EXIT(&ipf_scan_rwlock);
+	RWLOCK_EXIT(&ipsc_rwlock);
 	return err;
 }
 
 
-struct ipscan *
-ipf_scan_lookup(tag)
-	char *tag;
+struct ipscan *ipsc_lookup(tag)
+char *tag;
 {
 	ipscan_t *i;
 
-	for (i = ipf_scan_list; i; i = i->ipsc_next)
+	for (i = ipsc_list; i; i = i->ipsc_next)
 		if (!strcmp(i->ipsc_tag, tag))
 			return i;
 	return NULL;
 }
 
 
-int
-ipf_scan_attachfr(fr)
-	struct frentry *fr;
+int ipsc_attachfr(fr)
+struct frentry *fr;
 {
 	ipscan_t *i;
 
-	if (fr->fr_isctag != -1) {
-		READ_ENTER(&ipf_scan_rwlock);
-		i = ipf_scan_lookup(fr->fr_isctag + fr->fr_names);
+	if (fr->fr_isctag[0]) {
+		READ_ENTER(&ipsc_rwlock);
+		i = ipsc_lookup(fr->fr_isctag);
 		if (i != NULL) {
 			ATOMIC_INC32(i->ipsc_fref);
 		}
-		RWLOCK_EXIT(&ipf_scan_rwlock);
-		if (i == NULL) {
-			ipf_interror = 90004;
+		RWLOCK_EXIT(&ipsc_rwlock);
+		if (i == NULL)
 			return ENOENT;
-		}
 		fr->fr_isc = i;
 	}
 	return 0;
 }
 
 
-int
-ipf_scan_attachis(is)
-	struct ipstate *is;
+int ipsc_attachis(is)
+struct ipstate *is;
 {
 	frentry_t *fr;
 	ipscan_t *i;
 
-	READ_ENTER(&ipf_scan_rwlock);
+	READ_ENTER(&ipsc_rwlock);
 	fr = is->is_rule;
-	if (fr != NULL) {
+	if (fr) {
 		i = fr->fr_isc;
-		if ((i != NULL) && (i != (ipscan_t *)-1)) {
+		if (!i || (i != (ipscan_t *)-1)) {
 			is->is_isc = i;
-			ATOMIC_INC32(i->ipsc_sref);
-			if (i->ipsc_clen)
-				is->is_flags |= IS_SC_CLIENT;
-			else
-				is->is_flags |= IS_SC_MATCHC;
-			if (i->ipsc_slen)
-				is->is_flags |= IS_SC_SERVER;
-			else
-				is->is_flags |= IS_SC_MATCHS;
+			if (i) {
+				ATOMIC_INC32(i->ipsc_sref);
+				if (i->ipsc_clen)
+					is->is_flags |= IS_SC_CLIENT;
+				else
+					is->is_flags |= IS_SC_MATCHC;
+				if (i->ipsc_slen)
+					is->is_flags |= IS_SC_SERVER;
+				else
+					is->is_flags |= IS_SC_MATCHS;
+			} else
+				is->is_flags |= (IS_SC_CLIENT|IS_SC_SERVER);
 		}
 	}
-	RWLOCK_EXIT(&ipf_scan_rwlock);
+	RWLOCK_EXIT(&ipsc_rwlock);
 	return 0;
 }
 
 
-int
-ipf_scan_detachfr(fr)
-	struct frentry *fr;
+int ipsc_detachfr(fr)
+struct frentry *fr;
 {
 	ipscan_t *i;
 
@@ -284,19 +261,18 @@ ipf_scan_detachfr(fr)
 }
 
 
-int
-ipf_scan_detachis(is)
-	struct ipstate *is;
+int ipsc_detachis(is)
+struct ipstate *is;
 {
 	ipscan_t *i;
 
-	READ_ENTER(&ipf_scan_rwlock);
+	READ_ENTER(&ipsc_rwlock);
 	if ((i = is->is_isc) && (i != (ipscan_t *)-1)) {
 		ATOMIC_DEC32(i->ipsc_sref);
 		is->is_isc = NULL;
 		is->is_flags &= ~(IS_SC_CLIENT|IS_SC_SERVER);
 	}
-	RWLOCK_EXIT(&ipf_scan_rwlock);
+	RWLOCK_EXIT(&ipsc_rwlock);
 	return 0;
 }
 
@@ -304,11 +280,10 @@ ipf_scan_detachis(is)
 /*
  * 'string' compare for scanning
  */
-int
-ipf_scan_matchstr(sp, str, n)
-	sinfo_t *sp;
-	char *str;
-	int n;
+int ipsc_matchstr(sp, str, n)
+sinfo_t *sp;
+char *str;
+int n;
 {
 	char *s, *t, *up;
 	int i = n;
@@ -325,7 +300,7 @@ ipf_scan_matchstr(sp, str, n)
 				return 1;
 			break;
 		case '?' :
-			if (!ISALPHA(*up) || ((*s & 0x5f) != (*up & 0x5f)))
+			if (!isalpha(*up) || ((*s & 0x5f) != (*up & 0x5f)))
 				return 1;
 			break;
 		case '*' :
@@ -339,11 +314,10 @@ ipf_scan_matchstr(sp, str, n)
  * Returns 3 if both server and client match, 2 if just server,
  * 1 if just client
  */
-int
-ipf_scan_matchisc(isc, is, cl, sl, maxm)
-	ipscan_t *isc;
-	ipstate_t *is;
-	int cl, sl, maxm[2];
+int ipsc_matchisc(isc, is, cl, sl, maxm)
+ipscan_t *isc;
+ipstate_t *is;
+int cl, sl, maxm[2];
 {
 	int i, j, k, n, ret = 0, flags;
 
@@ -372,8 +346,7 @@ ipf_scan_matchisc(isc, is, cl, sl, maxm)
 		i = 0;
 		n = MIN(cl, isc->ipsc_clen);
 		if ((n > 0) && (!maxm || (n >= maxm[1]))) {
-			if (!ipf_scan_matchstr(&isc->ipsc_cl,
-					       is->is_sbuf[0], n)) {
+			if (!ipsc_matchstr(&isc->ipsc_cl, is->is_sbuf[0], n)) {
 				i++;
 				ret |= 1;
 				if (n > j)
@@ -389,8 +362,7 @@ ipf_scan_matchisc(isc, is, cl, sl, maxm)
 		i = 0;
 		n = MIN(cl, isc->ipsc_slen);
 		if ((n > 0) && (!maxm || (n >= maxm[1]))) {
-			if (!ipf_scan_matchstr(&isc->ipsc_sl,
-					       is->is_sbuf[1], n)) {
+			if (!ipsc_matchstr(&isc->ipsc_sl, is->is_sbuf[1], n)) {
 				i++;
 				ret |= 2;
 				if (n > k)
@@ -407,9 +379,8 @@ ipf_scan_matchisc(isc, is, cl, sl, maxm)
 }
 
 
-int
-ipf_scan_match(is)
-	ipstate_t *is;
+int ipsc_match(is)
+ipstate_t *is;
 {
 	int i, j, k, n, cl, sl, maxm[2];
 	ipscan_t *isc, *lm;
@@ -426,7 +397,7 @@ ipf_scan_match(is)
 		/*
 		 * Known object to scan for.
 		 */
-		i = ipf_scan_matchisc(isc, is, cl, sl, NULL);
+		i = ipsc_matchisc(isc, is, cl, sl, NULL);
 		if (i & 1) {
 			is->is_flags |= IS_SC_MATCHC;
 			is->is_flags &= ~IS_SC_CLIENT;
@@ -442,8 +413,8 @@ ipf_scan_match(is)
 		lm = NULL;
 		maxm[0] = 0;
 		maxm[1] = 0;
-		for (k = 0, isc = ipf_scan_list; isc; isc = isc->ipsc_next) {
-			i = ipf_scan_matchisc(isc, is, cl, sl, maxm);
+		for (k = 0, isc = ipsc_list; isc; isc = isc->ipsc_next) {
+			i = ipsc_matchisc(isc, is, cl, sl, maxm);
 			if (i) {
 				/*
 				 * We only want to remember the best match
@@ -462,8 +433,6 @@ ipf_scan_match(is)
 		}
 		if (k == 1)
 			isc = lm;
-		if (isc == NULL)
-			return 0;
 
 		/*
 		 * No matches or partial matches, so reset the respective
@@ -502,7 +471,7 @@ ipf_scan_match(is)
 	j = ISC_A_NONE;
 	if ((is->is_flags & IS_SC_MATCHALL) == IS_SC_MATCHALL) {
 		j = isc->ipsc_action;
-		ipf_scan_stat.iscs_acted++;
+		ipsc_stat.iscs_acted++;
 	} else if ((is->is_isc != NULL) &&
 		   ((is->is_flags & IS_SC_MATCHALL) != IS_SC_MATCHALL) &&
 		   !(is->is_flags & (IS_SC_CLIENT|IS_SC_SERVER))) {
@@ -510,7 +479,7 @@ ipf_scan_match(is)
 		 * Matching failed...
 		 */
 		j = isc->ipsc_else;
-		ipf_scan_stat.iscs_else++;
+		ipsc_stat.iscs_else++;
 	}
 
 	switch (j)
@@ -535,10 +504,9 @@ ipf_scan_match(is)
 /*
  * check if a packet matches what we're scanning for
  */
-int
-ipf_scan_packet(fin, is)
-	fr_info_t *fin;
-	ipstate_t *is;
+int ipsc_packet(fin, is)
+fr_info_t *fin;
+ipstate_t *is;
 {
 	int i, j, rv, dlen, off, thoff;
 	u_32_t seq, s0;
@@ -557,22 +525,21 @@ ipf_scan_packet(fin, is)
 	 */
 	s0 = is->is_s0[rv];
 	off = seq - s0;
-	if ((off > 15) || (off < 0))
+	if ((seq > s0 + 15) || (off < 0))
 		return 1;
 	thoff = TCP_OFF(tcp) << 2;
 	dlen = fin->fin_dlen - thoff;
 	if (dlen <= 0)
 		return 1;
-	if (dlen > 16)
-		dlen = 16;
-	if (off + dlen > 16)
-		dlen = 16 - off;
+	seq += dlen;
+	if (seq > s0 + 15)
+		dlen -= (seq - (s0 + 15));
 
 	j = 0xffff >> (16 - dlen);
 	i = (0xffff & j) << off;
 #ifdef _KERNEL
-	COPYDATA(*(mb_t **)fin->fin_mp, fin->fin_plen - fin->fin_dlen + thoff,
-		 dlen, (void *)is->is_sbuf[rv] + off);
+	COPYDATA(*(mb_t **)fin->fin_mp, fin->fin_hlen + thoff, dlen,
+		 (caddr_t)is->is_sbuf[rv] + off);
 #endif
 	is->is_smsk[rv] |= i;
 	for (j = 0, i = is->is_smsk[rv]; i & 1; i >>= 1)
@@ -580,7 +547,7 @@ ipf_scan_packet(fin, is)
 	if (j == 0)
 		return 1;
 
-	(void) ipf_scan_match(is);
+	(void) ipsc_match(is);
 #if 0
 	/*
 	 * There is the potential here for plain text passwords to get
@@ -595,12 +562,10 @@ ipf_scan_packet(fin, is)
 }
 
 
-int
-ipf_scan_ioctl(data, cmd, mode, uid, ctx)
-	void *data;
-	ioctlcmd_t cmd;
-	int mode, uid;
-	void *ctx;
+int fr_scan_ioctl(data, cmd, mode)
+caddr_t data;
+ioctlcmd_t cmd;
+int mode;
 {
 	ipscanstat_t ipscs;
 	int err = 0;
@@ -608,19 +573,15 @@ ipf_scan_ioctl(data, cmd, mode, uid, ctx)
 	switch (cmd)
 	{
 	case SIOCADSCA :
-		err = ipf_scan_add(data);
+		err = ipsc_add(data);
 		break;
 	case SIOCRMSCA :
-		err = ipf_scan_remove(data);
+		err = ipsc_delete(data);
 		break;
 	case SIOCGSCST :
-		bcopy((char *)&ipf_scan_stat, (char *)&ipscs, sizeof(ipscs));
-		ipscs.iscs_list = ipf_scan_list;
-		err = BCOPYOUT(&ipscs, data, sizeof(ipscs));
-		if (err != 0) {
-			ipf_interror = 90005;
-			err = EFAULT;
-		}
+		bcopy((char *)&ipsc_stat, (char *)&ipscs, sizeof(ipscs));
+		ipscs.iscs_list = ipsc_list;
+		BCOPYOUT(&ipscs, data, sizeof(ipscs));
 		break;
 	default :
 		err = EINVAL;

@@ -1,12 +1,14 @@
-/*	$NetBSD: iplang_l.l,v 1.6 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: iplang_l.l,v 1.1 1999/12/11 22:24:06 veego Exp $	*/
 
 %{
 /*
- * Copyright (C) 2003 by Darren Reed.
+ * Copyright (C) 1997-1998 by Darren Reed.
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  *
- * Id: iplang_l.l,v 2.8.4.1 2012/01/26 05:29:15 darrenr Exp
+ * Id: iplang_l.l,v 2.1 1999/08/04 17:30:53 darrenr Exp
  */
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +19,8 @@
 #include <sys/types.h>
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
-#include "iplang_y.h"
+#include "y.tab.h"
+#include "ip_compat.h"
 #include "ipf.h"
 
 #ifndef	__P
@@ -30,7 +33,7 @@
 
 extern int opts;
 
-int lineNum = 0, ipproto = 0, oldipproto = 0, next = -1, laststate = 0;
+int lineNum = 0, proto = 0, oldproto = 0, next = -1, laststate = 0;
 int *prstack = NULL, numpr = 0, state = 0, token = 0;
 
 void    yyerror __P((char *));
@@ -42,13 +45,13 @@ int	save_token __P((void));
 void	swallow __P((void));
 int	yylex __P((void));
 
-struct	lwordtab	{
+struct	wordtab	{
 	char	*word;
 	int	state;
 	int	next;
 };
 
-struct	lwordtab	words[] = {
+struct	wordtab	words[] = {
 	{ "interface",	IL_INTERFACE,		-1 },
 	{ "iface",	IL_INTERFACE,		-1 },
 	{ "name",	IL_IFNAME,		IL_TOKEN },
@@ -196,14 +199,14 @@ void push_proto()
 		prstack = (int *)malloc(sizeof(int));
 	else
 		prstack = (int *)realloc((char *)prstack, numpr * sizeof(int));
-	prstack[numpr - 1] = oldipproto;
+	prstack[numpr - 1] = oldproto;
 }
 
 
 void pop_proto()
 {
 	numpr--;
-	ipproto = prstack[numpr];
+	proto = prstack[numpr];
 	if (!numpr) {
 		free(prstack);
 		prstack = NULL;
@@ -216,7 +219,7 @@ void pop_proto()
 int save_token()
 {
 
-	yylval.str = strdup((char *)yytext);
+	yylval.str = strdup(yytext);
 	return IL_TOKEN;
 }
 
@@ -224,7 +227,7 @@ int save_token()
 int next_item(nstate)
 int nstate;
 {
-	struct	lwordtab	*wt;
+	struct	wordtab	*wt;
 
 	if (opts & OPT_DEBUG)
 		printf("text=[%s] id=%d next=%d\n", yytext, nstate, next);
@@ -235,13 +238,13 @@ int nstate;
 	token++;
 
 	for (wt = words; wt->word; wt++)
-		if (!strcasecmp(wt->word, (char *)yytext))
+		if (!strcasecmp(wt->word, yytext))
 			return next_state(wt->state, wt->next);
 	if (opts & OPT_DEBUG)
 		printf("unknown keyword=[%s]\n", yytext);
 	next = -1;
 	if (nstate == IL_NUMBER)
-		yylval.num = atoi((char *)yytext);
+		yylval.num = atoi(yytext);
 	token++;
 	return nstate;
 }
@@ -261,45 +264,45 @@ int nstate, fornext;
 	case IL_DATA :
 	case IL_INTERFACE :
 	case IL_ARP :
-		oldipproto = ipproto;
-		ipproto = nstate;
+		oldproto = proto;
+		proto = nstate;
 		break;
 	case IL_SUM :
-		if (ipproto == IL_IPV4)
+		if (proto == IL_IPV4)
 			nstate = IL_V4SUM;
-		else if (ipproto == IL_TCP)
+		else if (proto == IL_TCP)
 			nstate = IL_TCPSUM;
-		else if (ipproto == IL_UDP)
+		else if (proto == IL_UDP)
 			nstate = IL_UDPSUM;
 		break;
 	case IL_OPT :
-		if (ipproto == IL_IPV4)
+		if (proto == IL_IPV4)
 			nstate = IL_V4OPT;
-		else if (ipproto == IL_TCP)
+		else if (proto == IL_TCP)
 			nstate = IL_TCPOPT;
 		break;
 	case IL_IPO_NOP :
-		if (ipproto == IL_TCP)
+		if (proto == IL_TCP)
 			nstate = IL_TCPO_NOP;
 		break;
 	case IL_IPO_EOL :
-		if (ipproto == IL_TCP)
+		if (proto == IL_TCP)
 			nstate = IL_TCPO_EOL;
 		break;
 	case IL_IPO_TS :
-		if (ipproto == IL_TCP)
+		if (proto == IL_TCP)
 			nstate = IL_TCPO_TS;
 		break;
 	case IL_OFF :
-		if (ipproto == IL_IPV4)
+		if (proto == IL_IPV4)
 			nstate = IL_V4OFF;
-		else if (ipproto == IL_TCP)
+		else if (proto == IL_TCP)
 			nstate = IL_TCPOFF;
 		break;
 	case IL_LEN :
-		if (ipproto == IL_IPV4)
+		if (proto == IL_IPV4)
 			nstate = IL_V4LEN;
-		else if (ipproto == IL_UDP)
+		else if (proto == IL_UDP)
 			nstate = IL_UDPLEN;
 		break;
 	}
@@ -317,6 +320,5 @@ void swallow()
 		while ((c != '\n') && (c != EOF))
 			c = input();
 	}
-	if (c != EOF)
-		unput(c);
+	unput(c);
 }

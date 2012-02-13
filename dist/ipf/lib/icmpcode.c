@@ -1,11 +1,11 @@
-/*	$NetBSD: icmpcode.c,v 1.8 2012/01/30 16:12:04 darrenr Exp $	*/
+/*	$NetBSD: icmpcode.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 /*
- * Copyright (C) 2006 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: icmpcode.c,v 1.10.2.1 2012/01/26 05:29:15 darrenr Exp
+ * Id: icmpcode.c,v 1.7 2003/12/01 01:59:07 darrenr Exp
  */
 
 #include <ctype.h>
@@ -22,3 +22,28 @@ char	*icmpcodes[MAX_ICMPCODE + 1] = {
 	"net-unk", "host-unk", "isolate", "net-prohib", "host-prohib",
 	"net-tos", "host-tos", "filter-prohib", "host-preced", "preced-cutoff",
 	NULL };
+
+/*
+ * Return the number for the associated ICMP unreachable code.
+ */
+int icmpcode(str)
+char *str;
+{
+	char	*s;
+	int	i, len;
+
+	if ((s = strrchr(str, ')')))
+		*s = '\0';
+	if (isdigit(*str)) {
+		if (!ratoi(str, &i, 0, 255))
+			return -1;
+		else
+			return i;
+	}
+	len = strlen(str);
+	for (i = 0; icmpcodes[i]; i++)
+		if (!strncasecmp(str, icmpcodes[i], MIN(len,
+				 strlen(icmpcodes[i])) ))
+			return i;
+	return -1;
+}

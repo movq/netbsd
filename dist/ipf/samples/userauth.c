@@ -1,4 +1,4 @@
-/*	$NetBSD: userauth.c,v 1.4 2004/03/28 09:00:56 martti Exp $	*/
+/*	$NetBSD: userauth.c,v 1.1 1999/12/11 22:24:12 veego Exp $	*/
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -17,26 +17,23 @@ extern	int	errno;
 main()
 {
 	struct frauth fra;
-	struct frauth *frap = &fra;
 	fr_info_t *fin = &fra.fra_info;
 	fr_ip_t	*fi = &fin->fin_fi;
 	char yn[16];
 	int fd;
 
 	fd = open(IPL_NAME, O_RDWR);
-	fra.fra_len = 0;
-	fra.fra_buf = NULL;
-	while (ioctl(fd, SIOCAUTHW, &frap) == 0) {
+	while (ioctl(fd, SIOCAUTHW, &fra) == 0) {
 		if (fra.fra_info.fin_out)
 			fra.fra_pass = FR_OUTQUE;
 		else
 			fra.fra_pass = FR_INQUE;
 
 		printf("%s ", inet_ntoa(fi->fi_src));
-		if (fi->fi_flx & FI_TCPUDP)
+		if (fi->fi_fl & FI_TCPUDP)
 			printf("port %d ", fin->fin_data[0]);
 		printf("-> %s ", inet_ntoa(fi->fi_dst));
-		if (fi->fi_flx & FI_TCPUDP)
+		if (fi->fi_fl & FI_TCPUDP)
 			printf("port %d ", fin->fin_data[1]);
 		printf("\n");
 		printf("Allow packet through ? [y/n]");
@@ -48,13 +45,13 @@ main()
 			fra.fra_pass |= FR_BLOCK;
 		else if (yn[0] == 'y' || yn[0] == 'Y') {
 			fra.fra_pass |= FR_PASS;
-			if (fra.fra_info.fin_fi.fi_flx & FI_TCPUDP)
+			if (fra.fra_info.fin_fi.fi_fl & FI_TCPUDP)
 				fra.fra_pass |= FR_KEEPSTATE;
 		} else
 			fra.fra_pass |= FR_NOMATCH;
 		printf("answer = %c (%x), id %d idx %d\n", yn[0],
 			fra.fra_pass, fra.fra_info.fin_id, fra.fra_index);
-		if (ioctl(fd, SIOCAUTHR, &frap) != 0)
+		if (ioctl(fd, SIOCAUTHR, &fra) != 0)
 			perror("SIOCAUTHR");
 	}
 	fprintf(stderr, "errno=%d \n", errno);

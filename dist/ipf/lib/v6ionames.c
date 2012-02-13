@@ -1,11 +1,11 @@
-/*	$NetBSD: v6ionames.c,v 1.8 2012/01/30 16:12:04 darrenr Exp $	*/
+/*	$NetBSD: v6ionames.c,v 1.1 2004/03/28 08:56:21 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: v6ionames.c,v 1.6.2.1 2012/01/26 05:29:17 darrenr Exp
+ * Id: v6ionames.c,v 1.1 2003/04/26 04:55:58 darrenr Exp
  */
 #include "ipf.h"
 
@@ -14,14 +14,13 @@
 
 struct	ipopt_names	v6ionames[] ={
 	{ IPPROTO_HOPOPTS,	0x000001,	0,	"hopopts" },
-	{ IPPROTO_IPV6,		0x000002,	0,	"ipv6" },
-	{ IPPROTO_ROUTING,	0x000004,	0,	"routing" },
-	{ IPPROTO_FRAGMENT,	0x000008,	0,	"frag" },
-	{ IPPROTO_ESP,		0x000010,	0,	"esp" },
-	{ IPPROTO_AH,		0x000020,	0,	"ah" },
-	{ IPPROTO_NONE,		0x000040,	0,	"none" },
-	{ IPPROTO_DSTOPTS,	0x000080,	0,	"dstopts" },
-	{ IPPROTO_MOBILITY,	0x000100,	0,	"mobility" },
+	{ IPPROTO_DSTOPTS,	0x000002,	0,	"dstopts" },
+	{ IPPROTO_ESP,		0x000004,	0,	"esp" },
+	{ IPPROTO_AH,		0x000008,	0,	"ah" },
+	{ IPPROTO_ROUTING,	0x000010,	0,	"routing" },
+	{ IPPROTO_IPV6,		0x000020,	0,	"ipv6" },
+	{ IPPROTO_FRAGMENT,	0x000040,	0,	"frag" },	
+	{ IPPROTO_NONE,		0x000080,	0,	"none" },	
 	{ 0, 			0,		0,	(char *)NULL }
 };
 

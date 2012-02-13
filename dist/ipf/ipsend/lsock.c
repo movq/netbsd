@@ -1,14 +1,15 @@
-/*	$NetBSD: lsock.c,v 1.6 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: lsock.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * lsock.c (C) 1995-1998 Darren Reed
  *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)lsock.c	1.2 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: lsock.c,v 2.5 2007/12/20 09:35:09 darrenr Exp";
+static const char rcsid[] = "@(#)Id: lsock.c,v 2.1 1999/08/04 17:31:11 darrenr Exp";
 #endif
 #include <stdio.h>
 #include <unistd.h>
@@ -66,9 +67,9 @@ struct	task_struct	*proc;
 #endif
 
 int	kmemcpy(buf, pos, n)
-	char	*buf;
-	void	*pos;
-	int	n;
+char	*buf;
+void	*pos;
+int	n;
 {
 	static	int	kfd = -1;
 
@@ -150,8 +151,8 @@ struct	task_struct	*getproc()
 
 
 struct	sock	*find_tcp(fd, ti)
-	int	fd;
-	struct	tcpiphdr *ti;
+int	fd;
+struct	tcpiphdr *ti;
 {
 	struct	sock	*s;
 	struct	inode	*i;
@@ -189,10 +190,10 @@ struct	sock	*find_tcp(fd, ti)
 }
 
 int	do_socket(dev, mtu, ti, gwip)
-	char	*dev;
-	int	mtu;
-	struct	tcpiphdr *ti;
-	struct	in_addr	gwip;
+char	*dev;
+int	mtu;
+struct	tcpiphdr *ti;
+struct	in_addr	gwip;
 {
 	struct	sockaddr_in	rsin, lsin;
 	struct	sock	*s, sk;
@@ -226,9 +227,7 @@ int	do_socket(dev, mtu, ti, gwip)
 	(void) getsockname(fd, (struct sockaddr *)&lsin, &len);
 	ti->ti_sport = lsin.sin_port;
 	printf("sport %d\n", ntohs(lsin.sin_port));
-	nfd = initdevice(dev, 0);
-	if (nfd == -1)
-		return -1;
+	nfd = initdevice(dev, ntohs(lsin.sin_port), 0);
 
 	if (!(s = find_tcp(fd, ti)))
 		return -1;

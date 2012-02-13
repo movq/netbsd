@@ -1,11 +1,11 @@
-/*	$NetBSD: tcpoptnames.c,v 1.3 2012/01/30 16:12:04 darrenr Exp $	*/
+/*	$NetBSD: tcpoptnames.c,v 1.1 2004/03/28 08:56:21 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: tcpoptnames.c,v 1.7.2.1 2012/01/26 05:29:17 darrenr Exp
+ * Id: tcpoptnames.c,v 1.5 2002/01/28 06:50:48 darrenr Exp
  */
 
 #include "ipf.h"

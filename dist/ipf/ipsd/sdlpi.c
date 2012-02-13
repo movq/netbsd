@@ -1,9 +1,11 @@
-/*	$NetBSD: sdlpi.c,v 1.4 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: sdlpi.c,v 1.1 1999/12/11 22:24:07 veego Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed. (from tcplog)
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  *
  */
 
@@ -60,7 +62,7 @@ void	nullbell()
 
 
 int	ack_recv(ep)
-	char	*ep;
+char	*ep;
 {
 	struct	tcpiphdr	tip;
 	tcphdr_t	*tcp;
@@ -80,8 +82,8 @@ int	ack_recv(ep)
 
 
 int	readloop(fd, port, dst)
-	int 	fd, port;
-	struct	in_addr dst;
+int 	fd, port;
+struct	in_addr dst;
 {
 	static	u_char	buf[BUFSPACE];
 	register u_char	*bp, *cp, *bufend;
@@ -145,8 +147,8 @@ int	readloop(fd, port, dst)
 }
 
 int	initdevice(device, tout)
-	char	*device;
-	int	tout;
+char	*device;
+int	tout;
 {
 	struct	strioctl si;
 	struct	timeval to;
@@ -160,7 +162,7 @@ int	initdevice(device, tout)
 	(void) sprintf(devname, "/dev/%s", device);
 
 	s = devname + 5;
-	while (*s && !ISDIGIT(*s))
+	while (*s && !isdigit(*s))
 		s++;
 	if (!*s)
 	    {

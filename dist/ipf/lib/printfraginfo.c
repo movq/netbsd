@@ -1,42 +1,29 @@
-/*	$NetBSD: printfraginfo.c,v 1.1.1.3 2012/01/30 16:03:23 darrenr Exp $	*/
+/*	$NetBSD: printfraginfo.c,v 1.1 2004/03/28 08:56:20 martti Exp $	*/
 
 /*
- * Copyright (C) 2011 by Darren Reed.
+ * Copyright (C) 2004 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: printfraginfo.c,v 1.10.2.2 2012/01/26 05:29:16 darrenr Exp
+ * Id: printfraginfo.c,v 1.1.2.2 2004/03/23 15:15:45 darrenr Exp
  */
 #include "ipf.h"
 #include "kmem.h"
 
-
-void
-printfraginfo(prefix, ifr)
-	char *prefix;
-	struct ipfr *ifr;
+void printfraginfo(prefix, ifr)
+char *prefix;
+struct ipfr *ifr;
 {
 	frentry_t fr;
-	int family;
 
-	PRINTF("%s", prefix);
-	if (ifr->ipfr_v == 6) {
-		PRINTF("inet6");
-		family = AF_INET6;
-	} else {
-		PRINTF("inet");
-		family = AF_INET;
-	}
 	fr.fr_flags = 0xffffffff;
 
-	PRINTF(" %s -> ", hostname(family, &ifr->ipfr_src));
-/*
+	printf("%s%s -> ", prefix, hostname(4, &ifr->ipfr_src));
 	if (kmemcpy((char *)&fr, (u_long)ifr->ipfr_rule,
 		    sizeof(fr)) == -1)
 		return;
- */
-	PRINTF("%s id %x ttl %lu pr %d pkts %u bytes %u seen0 %d ref %d\n",
-		hostname(family, &ifr->ipfr_dst), ifr->ipfr_id,
-		ifr->ipfr_ttl, ifr->ipfr_p, ifr->ipfr_pkts, ifr->ipfr_bytes,
-		ifr->ipfr_seen0, ifr->ipfr_ref);
+	printf("%s id %d ttl %d pr %d seen0 %d ifp %p tos %#02x = %#x\n",
+		hostname(4, &ifr->ipfr_dst), ifr->ipfr_id, ifr->ipfr_seen0,
+		ifr->ipfr_ttl, ifr->ipfr_p, ifr->ipfr_ifp, ifr->ipfr_tos,
+		fr.fr_flags);
 }

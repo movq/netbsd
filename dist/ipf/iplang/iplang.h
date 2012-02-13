@@ -1,9 +1,11 @@
-/*	$NetBSD: iplang.h,v 1.3 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: iplang.h,v 1.1 1999/12/11 22:24:06 veego Exp $	*/
 
 /*
- * Copyright (C) 2001 by Darren Reed.
+ * Copyright (C) 1997-1998 by Darren Reed.
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  */
 typedef	struct iface {
 	int	if_MTU;

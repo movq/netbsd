@@ -1,28 +1,14 @@
-/*	$NetBSD: load_http.c,v 1.6 2012/02/03 04:28:55 joerg Exp $	*/
+/*	$NetBSD: load_http.c,v 1.1 2007/04/14 20:17:31 martin Exp $	*/
 
 /*
- * Copyright (C) 2010 by Darren Reed.
+ * Copyright (C) 2006 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: load_http.c,v 1.5.2.3 2012/01/26 05:29:16 darrenr Exp
+ * Id: load_http.c,v 1.1.2.1 2006/08/25 21:13:04 darrenr Exp
  */
 
 #include "ipf.h"
-#include <ctype.h>
-
-/*
- * Because the URL can be included twice into the buffer, once as the
- * full path for the "GET" and once as the "Host:", the buffer it is
- * put in needs to be larger than 512*2 to make room for the supporting
- * text. Why not just use snprintf and truncate? The warning about the
- * URL being too long tells you something is wrong and does not fetch
- * any data - just truncating the URL (with snprintf, etc) and sending
- * that to the server is allowing an unknown and unintentioned action
- * to happen.
- */
-#define	MAX_URL_LEN	512
-#define	LOAD_BUFSIZE	(MAX_URL_LEN * 2 + 128)
 
 /*
  * Format expected is one addres per line, at the start of each line.
@@ -30,17 +16,17 @@
 alist_t *
 load_http(char *url)
 {
-	int fd, len, left, port, endhdr, removed, linenum = 0;
-	char *s, *t, *u, buffer[LOAD_BUFSIZE], *myurl;
+	int fd, len, left, port, endhdr, removed;
+	char *s, *t, *u, buffer[1024], *myurl;
 	alist_t *a, *rtop, *rbot;
-	int rem;
+	struct sockaddr_in sin;
+	struct hostent *host;
 
 	/*
 	 * More than this would just be absurd.
 	 */
-	if (strlen(url) > MAX_URL_LEN) {
-		fprintf(stderr, "load_http has a URL > %d bytes?!\n",
-			MAX_URL_LEN);
+	if (strlen(url) > 512) {
+		fprintf(stderr, "load_http has a URL > 512 bytes?!\n");
 		return NULL;
 	}
 
@@ -48,41 +34,26 @@ load_http(char *url)
 	rtop = NULL;
 	rbot = NULL;
 
+	sprintf(buffer, "GET %s HTTP/1.0\r\n", url);
+
 	myurl = strdup(url);
 	if (myurl == NULL)
 		goto done;
-
-	rem = sizeof(buffer);
-	left = snprintf(buffer, rem, "GET %s HTTP/1.0\r\n", url);
-	if (left < 0 || left > rem)
-		goto done;
-	rem -= left;
 
 	s = myurl + 7;			/* http:// */
 	t = strchr(s, '/');
 	if (t == NULL) {
 		fprintf(stderr, "load_http has a malformed URL '%s'\n", url);
-		goto done;
-	}
-	*t++ = '\0';
-
-	/*
-	 * 10 is the length of 'Host: \r\n\r\n' below.
-	 */
-	if (strlen(s) + strlen(buffer) + 10 > sizeof(buffer)) {
-		fprintf(stderr, "load_http has a malformed URL '%s'\n", url);
 		free(myurl);
 		return NULL;
 	}
+	*t++ = '\0';
 
 	u = strchr(s, '@');
 	if (u != NULL)
 		s = u + 1;		/* AUTH */
 
-	left = snprintf(buffer + left, rem, "Host: %s\r\n\r\n", s);
-	if (left < 0 || left > rem)
-		goto done;
-	rem -= left;
+	sprintf(buffer + strlen(buffer), "Host: %s\r\n\r\n", s);
 
 	u = strchr(s, ':');
 	if (u != NULL) {
@@ -94,14 +65,36 @@ load_http(char *url)
 		port = 80;
 	}
 
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
 
-	fd = connecttcp(s, port);
+	if (isdigit(*s)) {
+		if (inet_aton(s, &sin.sin_addr) == -1) {
+			goto done;
+		}
+	} else {
+		host = gethostbyname(s);
+		if (host == NULL)
+			goto done;
+		memcpy(&sin.sin_addr, host->h_addr_list[0],
+		       sizeof(sin.sin_addr));
+	}
+
+	fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd == -1)
 		goto done;
 
-	len = strlen(buffer);
-	if (write(fd, buffer, len) != len)
+	if (connect(fd, (struct sockaddr *)&sin, sizeof(sin)) == -1) {
+		close(fd);
 		goto done;
+	}
+
+	len = strlen(buffer);
+	if (write(fd, buffer, len) != len) {
+		close(fd);
+		goto done;
+	}
 
 	s = buffer;
 	endhdr = 0;
@@ -150,54 +143,30 @@ load_http(char *url)
 			if (t == NULL)
 				break;
 
-			linenum++;
-			*t = '\0';
-
-			for (u = buffer; isdigit((unsigned char)*u) ||
-			    (*u == '.'); u++)
-				continue;
+			*t++ = '\0';
+			for (u = buffer; isdigit(*u) || (*u == '.'); u++)
+				;
 			if (*u == '/') {
 				char *slash;
 
 				slash = u;
 				u++;
-				while (isdigit((unsigned char)*u))
+				while (isdigit(*u))
 					u++;
-				if (!isspace((unsigned char)*u) && *u)
+				if (!isspace(*u) && *u)
 					u = slash;
 			}
+			*u = '\0';
 
-			/*
-			 * Remove comment and continue to the next line if
-			 * the comment is at the start of the line.
-			 */
-			u = strchr(buffer, '#');
-			if (u != NULL) {
-				*u = '\0';
-				if (u == buffer)
-					continue;
-			}
-
-			/*
-			 * Trim off tailing white spaces, will include \r
-			 */
-			for (u = t - 1; (u >= buffer) && ISSPACE(*u); u--)
-				*u = '\0';
-
-			a = alist_new(AF_UNSPEC, buffer);
+			a = alist_new(4, buffer);
 			if (a != NULL) {
 				if (rbot != NULL)
 					rbot->al_next = a;
 				else
 					rtop = a;
 				rbot = a;
-			} else {
-				fprintf(stderr,
-					"%s:%d unrecognised content:%s\n",
-					url, linenum, buffer);
 			}
 
-			t++;
 			removed = t - buffer;
 			memmove(buffer, t, sizeof(buffer) - left - removed);
 			s -= removed;

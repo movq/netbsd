@@ -1,4 +1,4 @@
-.\"	$NetBSD: ipf.4,v 1.12 2010/04/17 21:00:09 darrenr Exp $
+.\"	$NetBSD: ipf.4,v 1.1 1999/12/11 22:24:10 veego Exp $
 .\"
 .TH IPF 4
 .SH NAME
@@ -13,33 +13,33 @@ To add and delete rules to the filter list, three 'basic' ioctls are provided
 for use.  The ioctl's are called as:
 .LP
 .nf
-	ioctl(fd, SIOCADDFR, struct frentry **)
-	ioctl(fd, SIOCDELFR, struct frentry **)
+	ioctl(fd, SIOCADDFR, struct frentry *)
+	ioctl(fd, SIOCDELFR, struct frentry *)
 	ioctl(fd, SIOCIPFFL, int *)
 .fi
 .PP
 However, the full complement is as follows:
 .LP
 .nf
-	ioctl(fd, SIOCADAFR, struct frentry **) (same as SIOCADDFR)
-	ioctl(fd, SIOCRMAFR, struct frentry **) (same as SIOCDELFR)
-	ioctl(fd, SIOCADIFR, struct frentry **)
-	ioctl(fd, SIOCRMIFR, struct frentry **)
-	ioctl(fd, SIOCINAFR, struct frentry **)
-	ioctl(fd, SIOCINIFR, struct frentry **)
+	ioctl(fd, SIOCADAFR, struct frentry *) (same as SUICADDFR)
+	ioctl(fd, SIOCRMAFR, struct frentry *) (same as SUICDELFR)
+	ioctl(fd, SIOCADIFR, struct frentry *)
+	ioctl(fd, SIOCRMIFR, struct frentry *)
+	ioctl(fd, SIOCINAFR, struct frentry *)
+	ioctl(fd, SIOCINIFR, struct frentry *)
 	ioctl(fd, SIOCSETFF, u_int *)
 	ioctl(fd, SIOGGETFF, u_int *)
-	ioctl(fd, SIOCGETFS, struct friostat **)
+	ioctl(fd, SIOCGETFS, struct friostat *)
 	ioctl(fd, SIOCIPFFL, int *)
 	ioctl(fd, SIOCIPFFB, int *)
 	ioctl(fd, SIOCSWAPA, u_int *)
 	ioctl(fd, SIOCFRENB, u_int *)
 	ioctl(fd, SIOCFRSYN, u_int *)
-	ioctl(fd, SIOCFRZST, struct friostat **)
-	ioctl(fd, SIOCZRLST, struct frentry **)
-	ioctl(fd, SIOCAUTHW, struct fr_info **)
-	ioctl(fd, SIOCAUTHR, struct fr_info **)
-	ioctl(fd, SIOCATHST, struct fr_authstat **)
+	ioctl(fd, SIOCFRZST, struct friostat *)
+	ioctl(fd, SIOCZRLST, struct frentry *)
+	ioctl(fd, SIOCAUTHW, struct fr_info *)
+	ioctl(fd, SIOCAUTHR, struct fr_info *)
+	ioctl(fd, SIOCATHST, struct fr_authstat *)
 .fi
 .PP
 The variations, SIOCADAFR vs. SIOCADIFR, allow operation on the two lists,
@@ -84,10 +84,10 @@ typedef struct  frentry {
         u_short fr_icmp;
 
         u_char  fr_scmp;        /* data for port comparisons */
-        u_char  fr_dcmp;
+        u_char  fr_dcmp; 
         u_short fr_dport;
         u_short fr_sport;
-        u_short fr_stop;        /* top port for <> and >< */
+        u_short fr_stop;        /* top port for <> and >< */ 
         u_short fr_dtop;        /* top port for <> and >< */
         u_32_t  fr_flags;       /* per-rule flags && options (see below) */
         u_short fr_skip;        /* # of rules to skip */
@@ -97,7 +97,7 @@ typedef struct  frentry {
         char    fr_ifname[IFNAMSIZ];
 #if BSD > 199306
         char    fr_oifname[IFNAMSIZ];
-#endif
+#endif  
         struct  frdest  fr_tif; /* "to" interface */
         struct  frdest  fr_dif; /* duplicate packet interfaces */
 } frentry_t;
@@ -109,7 +109,7 @@ filter list, the number of the rule which it is to be inserted before must
 be put in the "fr_hits" field (the first rule is number 0).
 .LP
 .PP
-Flags which are recognised in fr_flags:
+Flags which are recognised in fr_pass:
 .nf
 
      FR_BLOCK        0x000001   /* do not allow packet to pass */
@@ -138,7 +138,7 @@ Flags which are recognised in fr_flags:
      FR_NOTDSTIP     0x100000   /* not the dst IP# */
      FR_AUTH         0x200000   /* use authentication */
      FR_PREAUTH      0x400000   /* require preauthentication */
-
+	
 .fi
 .PP
 Values for fr_scomp and fr_dcomp (source and destination port value
@@ -164,7 +164,7 @@ and FR_OUTQUE (see above).  This ioctl is also implemented for
 or just all those which are not established if passed 1.
 
 .IP "\fBGeneral Logging Flags\fP" 0
-There are two flags which can be set to log packets independently of the
+There are two flags which can be set to log packets independantly of the
 rules used.  These allow for packets which are either passed or blocked
 to be logged.  To set (and clear)/get these flags, two ioctls are
 provided:
@@ -255,14 +255,3 @@ value returned is that of the list which is now inactive.
 /dev/ipstate
 .SH SEE ALSO
 ipl(4), ipnat(4), ipf(5), ipf(8), ipfstat(8)
-.SH BUGS
-When a packet encapsulated by ipsec(4) tunnel comes in, ipf(4) looks at
-wire-format packet on inbound and outbound.
-ipf(4) will not look at decapsulated packets on inbound,
-nor packets prior to encapsulation on outbound.
-.PP
-When tunneled packets arrive at the node and are handled by a
-tunneling pseudo interface like gif(4),
-the packets may go through ipf(4) twice, before and after decapsulation.
-In some cases it may be necessary to check, in the ipf(4) rules,
-if the inbound interface is a tunneling pseudo interface or not.

@@ -1,7 +1,7 @@
-/*	$NetBSD: ipfs.c,v 1.10 2012/01/30 16:12:05 darrenr Exp $	*/
+/*	$NetBSD: ipfs.c,v 1.1 2004/03/28 08:56:32 martti Exp $	*/
 
 /*
- * Copyright (C) 2008 by Darren Reed.
+ * Copyright (C) 1999-2001, 2003 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
@@ -41,10 +41,9 @@
 #include <arpa/nameser.h>
 #include <resolv.h>
 #include "ipf.h"
-#include "netinet/ipl.h"
 
 #if !defined(lint)
-static const char rcsid[] = "@(#)Id: ipfs.c,v 1.25.2.1 2012/01/26 05:29:18 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipfs.c,v 1.12 2003/12/01 01:56:53 darrenr Exp";
 #endif
 
 #ifndef	IPF_SAVEDIR
@@ -100,7 +99,7 @@ void usage()
  * Change interface names in state information saved out to disk.
  */
 int changestateif(ifs, fname)
-	char *ifs, *fname;
+char *ifs, *fname;
 {
 	int fd, olen, nlen, rw;
 	ipstate_save_t ips;
@@ -133,14 +132,6 @@ int changestateif(ifs, fname)
 			strcpy(ips.ips_is.is_ifname[1], s);
 			rw = 1;
 		}
-		if (!strncmp(ips.ips_is.is_ifname[2], ifs, olen + 1)) {
-			strcpy(ips.ips_is.is_ifname[2], s);
-			rw = 1;
-		}
-		if (!strncmp(ips.ips_is.is_ifname[3], ifs, olen + 1)) {
-			strcpy(ips.ips_is.is_ifname[3], s);
-			rw = 1;
-		}
 		if (rw == 1) {
 			if (lseek(fd, pos, SEEK_SET) != pos) {
 				perror("lseek");
@@ -163,7 +154,7 @@ int changestateif(ifs, fname)
  * Change interface names in NAT information saved out to disk.
  */
 int changenatif(ifs, fname)
-	char *ifs, *fname;
+char *ifs, *fname;
 {
 	int fd, olen, nlen, rw;
 	nat_save_t ipn;
@@ -217,14 +208,14 @@ int changenatif(ifs, fname)
 
 
 int main(argc,argv)
-	int argc;
-	char *argv[];
+int argc;
+char *argv[];
 {
 	int c, lock = -1, devfd = -1, err = 0, rw = -1, ns = -1, set = 0;
 	char *dirname = NULL, *filename = NULL, *ifs = NULL;
 
 	progname = argv[0];
-	while ((c = getopt(argc, argv, "d:f:i:lNnSRruvWw")) != -1)
+	while ((c = getopt(argc, argv, "d:f:lNnSRruvWw")) != -1)
 		switch (c)
 		{
 		case 'd' :
@@ -234,7 +225,7 @@ int main(argc,argv)
 				usage();
 			break;
 		case 'f' :
-			if ((set != 0) && !dirname && !filename)
+			if ((set == 0) && !dirname && !filename)
 				filename = optarg;
 			else
 				usage();
@@ -259,7 +250,7 @@ int main(argc,argv)
 			set = 1;
 			break;
 		case 'r' :
-			if (dirname || (rw != -1) || (ns == -1))
+			if ((ns >= 0) || dirname || (rw != -1))
 				usage();
 			rw = 0;
 			set = 1;
@@ -348,7 +339,7 @@ int main(argc,argv)
 
 
 int opendevice(ipfdev)
-	char *ipfdev;
+char *ipfdev;
 {
 	int fd = -1;
 
@@ -366,14 +357,14 @@ int opendevice(ipfdev)
 
 
 void closedevice(fd)
-	int fd;
+int fd;
 {
 	close(fd);
 }
 
 
 int setlock(fd, lock)
-	int fd, lock;
+int fd, lock;
 {
 	if (opts & OPT_VERBOSE)
 		printf("Turn lock %s\n", lock ? "on" : "off");
@@ -390,11 +381,10 @@ int setlock(fd, lock)
 
 
 int writestate(fd, file)
-	int fd;
-	char *file;
+int fd;
+char *file;
 {
 	ipstate_save_t ips, *ipsp;
-	ipfobj_t obj;
 	int wfd = -1;
 
 	if (!file)
@@ -408,19 +398,12 @@ int writestate(fd, file)
 	}
 
 	ipsp = &ips;
-	bzero((char *)&obj, sizeof(obj));
 	bzero((char *)ipsp, sizeof(ips));
 
-	obj.ipfo_rev = IPFILTER_VERSION;
-	obj.ipfo_size = sizeof(*ipsp);
-	obj.ipfo_type = IPFOBJ_STATESAVE;
-	obj.ipfo_ptr = ipsp;
-
 	do {
-
 		if (opts & OPT_VERBOSE)
 			printf("Getting state from addr %p\n", ips.ips_next);
-		if (ioctl(fd, SIOCSTGET, &obj)) {
+		if (ioctl(fd, SIOCSTGET, &ipsp)) {
 			if (errno == ENOENT)
 				break;
 			perror("state:SIOCSTGET");
@@ -442,12 +425,11 @@ int writestate(fd, file)
 
 
 int readstate(fd, file)
-	int fd;
-	char *file;
+int fd;
+char *file;
 {
 	ipstate_save_t ips, *is, *ipshead = NULL, *is1, *ipstail = NULL;
 	int sfd = -1, i;
-	ipfobj_t obj;
 
 	if (!file)
 		file = IPF_STATEFILE;
@@ -468,19 +450,21 @@ int readstate(fd, file)
 		i = read(sfd, &ips, sizeof(ips));
 		if (i == -1) {
 			perror("read");
-			goto freeipshead;
+			close(sfd);
+			return 1;
 		}
 		if (i == 0)
 			break;
 		if (i != sizeof(ips)) {
-			fprintf(stderr, "state:incomplete read: %d != %d\n",
-				i, (int)sizeof(ips));
-			goto freeipshead;
+			fprintf(stderr, "incomplete read: %d != %d\n", i,
+				(int)sizeof(ips));
+			close(sfd);
+			return 1;
 		}
 		is = (ipstate_save_t *)malloc(sizeof(*is));
-		if (is == NULL) {
+		if(!is) {
 			fprintf(stderr, "malloc failed\n");
-			goto freeipshead;
+			return 1;
 		}
 
 		bcopy((char *)&ips, (char *)is, sizeof(ips));
@@ -514,23 +498,17 @@ int readstate(fd, file)
 
 	close(sfd);
 
-	obj.ipfo_rev = IPFILTER_VERSION;
-	obj.ipfo_size = sizeof(*is);
-	obj.ipfo_type = IPFOBJ_STATESAVE;
-
-	while ((is = ipshead) != NULL) {
+	for (is = ipshead; is; is = is->ips_next) {
 		if (opts & OPT_VERBOSE)
 			printf("Loading new state table entry\n");
 		if (is->ips_is.is_flags & SI_NEWFR) {
 			if (opts & OPT_VERBOSE)
 				printf("Loading new filter rule\n");
 		}
-
-		obj.ipfo_ptr = is;
 		if (!(opts & OPT_DONOTHING))
-			if (ioctl(fd, SIOCSTPUT, &obj)) {
+			if (ioctl(fd, SIOCSTPUT, &is)) {
 				perror("SIOCSTPUT");
-				goto freeipshead;
+				return 1;
 			}
 
 		if (is->ips_is.is_flags & SI_NEWFR) {
@@ -540,34 +518,19 @@ int readstate(fd, file)
 				if (is1->ips_rule == (frentry_t *)&is->ips_rule)
 					is1->ips_rule = is->ips_rule;
 		}
-
-		ipshead = is->ips_next;
-		free(is);
 	}
 
 	return 0;
-
-freeipshead:
-	while ((is = ipshead) != NULL) {
-		ipshead = is->ips_next;
-		free(is);
-	}
-	if (sfd != -1)
-		close(sfd);
-	return 1;
 }
 
 
 int readnat(fd, file)
-	int fd;
-	char *file;
+int fd;
+char *file;
 {
-	nat_save_t ipn, *in, *ipnhead = NULL, *in1, *ipntail = NULL;
-	ipfobj_t obj;
+	nat_save_t ipn, *in, *ipnhead, *in1, *ipntail, *ipnp;
 	int nfd, i;
 	nat_t *nat;
-	char *s;
-	int n;
 
 	nfd = -1;
 	in = NULL;
@@ -585,6 +548,7 @@ int readnat(fd, file)
 	}
 
 	bzero((char *)&ipn, sizeof(ipn));
+	ipnp = &ipn;
 
 	/*
 	 * 1. Read all state information in.
@@ -593,41 +557,46 @@ int readnat(fd, file)
 		i = read(nfd, &ipn, sizeof(ipn));
 		if (i == -1) {
 			perror("read");
-			goto freenathead;
+			close(nfd);
+			return 1;
 		}
 		if (i == 0)
 			break;
 		if (i != sizeof(ipn)) {
-			fprintf(stderr, "nat:incomplete read: %d != %d\n",
-				i, (int)sizeof(ipn));
-			goto freenathead;
+			fprintf(stderr, "incomplete read: %d != %d\n", i,
+				(int)sizeof(ipn));
+			close(nfd);
+			return 1;
 		}
 
-		in = (nat_save_t *)malloc(ipn.ipn_dsize);
-		if (in == NULL) {
-			fprintf(stderr, "nat:cannot malloc nat save atruct\n");
-			goto freenathead;
-		}
+		if (ipn.ipn_dsize > 0) {
+			char *s = ipnp->ipn_data;
+			int n = ipnp->ipn_dsize;
 
-		if (ipn.ipn_dsize > sizeof(ipn)) {
-			n = ipn.ipn_dsize - sizeof(ipn);
-			if (n > 0) {
-				s = in->ipn_data + sizeof(in->ipn_data);
- 				i = read(nfd, s, n);
-				if (i == 0)
-					break;
-				if (i != n) {
-					fprintf(stderr,
-					    "nat:incomplete read: %d != %d\n",
-					    i, n);
-					goto freenathead;
-				}
+			n -= sizeof(ipnp->ipn_data);
+			in = malloc(sizeof(*in) + n);
+			if (!in)
+				break;
+
+			s += sizeof(ipnp->ipn_data);
+			i = read(nfd, s, n);
+			if (i == 0)
+				break;
+			if (i != n) {
+				fprintf(stderr, "incomplete read: %d != %d\n",
+					i, n);
+				close(nfd);
+				free(in);
+				return 1;
 			}
+		} else {
+			ipn.ipn_dsize = 0;
+			in = (nat_save_t *)malloc(sizeof(*in));
 		}
-		bcopy((char *)&ipn, (char *)in, sizeof(ipn));
+		bcopy((char *)ipnp, (char *)in, sizeof(ipn));
 
 		/*
-		 * Check to see if this is the first NAT entry that will
+		 * Check to see if this is the first state entry that will
 		 * reference a particular rule and if so, flag it as such
 		 * else just adjust the rule pointer to become a pointer to
 		 * the other.  We do this so we have a means later for tracking
@@ -657,12 +626,8 @@ int readnat(fd, file)
 	} while (1);
 
 	close(nfd);
-	nfd = -1;
 
-	obj.ipfo_rev = IPFILTER_VERSION;
-	obj.ipfo_type = IPFOBJ_NATSAVE;
-
-	while ((in = ipnhead) != NULL) {
+	for (in = ipnhead; in; in = in->ipn_next) {
 		if (opts & OPT_VERBOSE)
 			printf("Loading new NAT table entry\n");
 		nat = &in->ipn_nat;
@@ -670,12 +635,8 @@ int readnat(fd, file)
 			if (opts & OPT_VERBOSE)
 				printf("Loading new filter rule\n");
 		}
-
-		obj.ipfo_ptr = in;
-		obj.ipfo_size = in->ipn_dsize;
 		if (!(opts & OPT_DONOTHING))
-			if (ioctl(fd, SIOCSTPUT, &obj)) {
-				fprintf(stderr, "in=%p:", in);
+			if (ioctl(fd, SIOCSTPUT, &in)) {
 				perror("SIOCSTPUT");
 				return 1;
 			}
@@ -687,30 +648,17 @@ int readnat(fd, file)
 				if (in1->ipn_rule == &in->ipn_fr)
 					in1->ipn_rule = nat->nat_fr;
 		}
-
-		ipnhead = in->ipn_next;
-		free(in);
 	}
 
 	return 0;
-
-freenathead:
-	while ((in = ipnhead) != NULL) {
-		ipnhead = in->ipn_next;
-		free(in);
-	}
-	if (nfd != -1)
-		close(nfd);
-	return 1;
 }
 
 
 int writenat(fd, file)
-	int fd;
-	char *file;
+int fd;
+char *file;
 {
 	nat_save_t *ipnp = NULL, *next = NULL;
-	ipfobj_t obj;
 	int nfd = -1;
 	natget_t ng;
 
@@ -724,8 +672,6 @@ int writenat(fd, file)
 		return 1;
 	}
 
-	obj.ipfo_rev = IPFILTER_VERSION;
-	obj.ipfo_type = IPFOBJ_NATSAVE;
 
 	do {
 		if (opts & OPT_VERBOSE)
@@ -757,11 +703,8 @@ int writenat(fd, file)
 		}
 
 		bzero((char *)ipnp, ng.ng_sz);
-		obj.ipfo_size = ng.ng_sz;
-		obj.ipfo_ptr = ipnp;
-		ipnp->ipn_dsize = ng.ng_sz;
 		ipnp->ipn_next = next;
-		if (ioctl(fd, SIOCSTGET, &obj)) {
+		if (ioctl(fd, SIOCSTGET, &ipnp)) {
 			if (errno == ENOENT)
 				break;
 			perror("nat:SIOCSTGET");
@@ -771,9 +714,8 @@ int writenat(fd, file)
 		}
 
 		if (opts & OPT_VERBOSE)
-			printf("Got nat next %p ipn_dsize %d ng_sz %d\n",
-				ipnp->ipn_next, ipnp->ipn_dsize, ng.ng_sz);
-		if (write(nfd, ipnp, ipnp->ipn_dsize) != ipnp->ipn_dsize) {
+			printf("Got nat next %p\n", ipnp->ipn_next);
+		if (write(nfd, ipnp, ng.ng_sz) != ng.ng_sz) {
 			perror("nat:write");
 			close(nfd);
 			free(ipnp);
@@ -790,7 +732,7 @@ int writenat(fd, file)
 
 
 int writeall(dirname)
-	char *dirname;
+char *dirname;
 {
 	int fd, devfd;
 
@@ -798,7 +740,6 @@ int writeall(dirname)
 		dirname = IPF_SAVEDIR;
 
 	if (chdir(dirname)) {
-		fprintf(stderr, "IPF_SAVEDIR=%s: ", dirname);
 		perror("chdir(IPF_SAVEDIR)");
 		return 1;
 	}
@@ -841,7 +782,7 @@ bad:
 
 
 int readall(dirname)
-	char *dirname;
+char *dirname;
 {
 	int fd, devfd;
 

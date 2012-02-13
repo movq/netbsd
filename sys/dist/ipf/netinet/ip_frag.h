@@ -1,12 +1,12 @@
-/*	$NetBSD: ip_frag.h,v 1.8 2012/02/01 02:21:19 christos Exp $	*/
+/*	$NetBSD: ip_frag.h,v 1.1 2004/10/01 15:26:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2011 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
  * @(#)ip_frag.h	1.5 3/24/96
- * Id: ip_frag.h,v 2.34.2.2 2012/01/26 05:29:11 darrenr Exp
+ * Id: ip_frag.h,v 2.23.2.1 2004/03/29 16:21:56 darrenr Exp
  */
 
 #ifndef _NETINET_IP_FRAG_H_
@@ -18,34 +18,21 @@ typedef	struct	ipfr	{
 	struct	ipfr	*ipfr_hnext, **ipfr_hprev;
 	struct	ipfr	*ipfr_next, **ipfr_prev;
 	void	*ipfr_data;
-	frentry_t *ipfr_rule;
-	u_long	ipfr_ttl;
-	u_int	ipfr_pkts;
-	u_int	ipfr_bytes;
-	u_int	ipfr_badorder;
-	int	ipfr_ref;
-	u_short	ipfr_off;
-	u_short	ipfr_firstend;
-	u_char	ipfr_p;
-	u_char	ipfr_seen0;
-	/*
-	 * All of the fields, from ipfr_ifp to ipfr_pass, are compared
-	 * using bcmp to see if an identical entry is present.  It is
-	 * therefore important for this set to remain together.
-	 */
 	void	*ipfr_ifp;
-	i6addr_t	ipfr_source;
-	i6addr_t	ipfr_dest;
+	struct	in_addr	ipfr_src;
+	struct	in_addr	ipfr_dst;
 	u_32_t	ipfr_optmsk;
 	u_short	ipfr_secmsk;
 	u_short	ipfr_auth;
-	u_32_t	ipfr_id;
+	u_short	ipfr_id;
+	u_char	ipfr_p;
+	u_char	ipfr_tos;
 	u_32_t	ipfr_pass;
-	int	ipfr_v;
+	u_short	ipfr_off;
+	u_char	ipfr_ttl;
+	u_char	ipfr_seen0;
+	frentry_t *ipfr_rule;
 } ipfr_t;
-
-#define	ipfr_src	ipfr_source.in4
-#define	ipfr_dst	ipfr_dest.in4
 
 
 typedef	struct	ipfrstat {
@@ -57,14 +44,6 @@ typedef	struct	ipfrstat {
 	u_long	ifs_inuse;
 	u_long	ifs_retrans0;
 	u_long	ifs_short;
-	u_long	ifs_bad;
-	u_long	ifs_overlap;
-	u_long	ifs_unordered;
-	u_long	ifs_strict;
-	u_long	ifs_miss;
-	u_long	ifs_maximum;
-	u_long	ifs_newbad;
-	u_long	ifs_newrestrictnot0;
 	struct	ipfr	**ifs_table;
 	struct	ipfr	**ifs_nattab;
 } ipfrstat_t;
@@ -72,32 +51,36 @@ typedef	struct	ipfrstat {
 #define	IPFR_CMPSZ	(offsetof(ipfr_t, ipfr_pass) - \
 			 offsetof(ipfr_t, ipfr_ifp))
 
-extern	void	*ipf_frag_soft_create(ipf_main_softc_t *);
-extern	int	ipf_frag_soft_init(ipf_main_softc_t *, void *);
-extern	int	ipf_frag_soft_fini(ipf_main_softc_t *, void *);
-extern	void	ipf_frag_soft_destroy(ipf_main_softc_t *, void *);
-extern	int	ipf_frag_main_load(void);
-extern	int	ipf_frag_main_unload(void);
-extern	int	ipf_frag_load(void);
-extern	void	ipf_frag_clear(ipf_main_softc_t *);
-extern	void	ipf_frag_expire(ipf_main_softc_t *);
-extern	void	ipf_frag_forget(void *);
-extern	int	ipf_frag_init(void);
-extern	u_32_t	ipf_frag_ipidknown(fr_info_t *);
-extern	int	ipf_frag_ipidnew(fr_info_t *, u_32_t);
-extern	frentry_t *ipf_frag_known(fr_info_t *, u_32_t *);
-extern	void	ipf_frag_natforget(ipf_main_softc_t *, void *);
-extern	int	ipf_frag_natnew(ipf_main_softc_t *, fr_info_t *, u_32_t, struct nat *);
-extern	nat_t	*ipf_frag_natknown(fr_info_t *);
-extern	int	ipf_frag_new(ipf_main_softc_t *, fr_info_t *, u_32_t);
-extern	ipfrstat_t	*ipf_frag_stats(void *);
-extern	void	ipf_frag_setlock(void *, int);
-extern	void	ipf_frag_pkt_deref(ipf_main_softc_t *, void *);
-extern	int	ipf_frag_pkt_next(ipf_main_softc_t *, ipftoken_t *,
-				       ipfgeniter_t *);
-extern	void	ipf_frag_nat_deref(ipf_main_softc_t *, void *);
-extern	int	ipf_frag_nat_next(ipf_main_softc_t *, ipftoken_t *,
-				       ipfgeniter_t *);
-extern	void	ipf_slowtimer(ipf_main_softc_t *);
+extern	int	ipfr_size;
+extern	int	fr_ipfrttl;
+extern	int	fr_frag_lock;
+extern	int	fr_fraginit __P((void));
+extern	void	fr_fragunload __P((void));
+extern	ipfrstat_t	*fr_fragstats __P((void));
+
+extern	int	fr_newfrag __P((fr_info_t *, u_32_t));
+extern	frentry_t *fr_knownfrag __P((fr_info_t *, u_32_t *));
+
+extern	int	fr_nat_newfrag __P((fr_info_t *, u_32_t, struct nat *));
+extern	nat_t	*fr_nat_knownfrag __P((fr_info_t *));
+
+extern	int	fr_ipid_newfrag __P((fr_info_t *, u_32_t));
+extern	u_32_t	fr_ipid_knownfrag __P((fr_info_t *));
+
+extern	void	fr_forget __P((void *));
+extern	void	fr_forgetnat __P((void *));
+extern	void	fr_fragclear __P((void));
+extern	void	fr_fragexpire __P((void));
+
+#if     defined(_KERNEL) && ((BSD >= 199306) || SOLARIS || defined(__sgi) \
+	        || defined(__osf__) || (defined(__sgi) && (IRIX >= 60500)))
+# if defined(SOLARIS2) && (SOLARIS2 < 7)
+extern	void	fr_slowtimer __P((void));
+# else
+extern	void	fr_slowtimer __P((void *));
+# endif
+#else
+extern	int	fr_slowtimer __P((void));
+#endif
 
 #endif /* _NETINET_IP_FRAG_H_ */

@@ -1,9 +1,11 @@
-/*	$NetBSD: sbpf.c,v 1.5 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: sbpf.c,v 1.1 1999/12/11 22:24:07 veego Exp $	*/
 
 /*
  * (C)opyright 1995-1998 Darren Reed. (from tcplog)
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  *
  */
 #include <stdio.h>
@@ -11,9 +13,6 @@
 #include <ctype.h>
 #include <signal.h>
 #include <errno.h>
-#ifdef __NetBSD__
-# include <paths.h>
-#endif
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -68,7 +67,7 @@ static	u_int	bufsize = 32768, timeout = 1;
 
 
 int	ack_recv(ep)
-	char	*ep;
+char	*ep;
 {
 	struct	tcpiphdr	tip;
 	tcphdr_t	*tcp;
@@ -89,8 +88,8 @@ int	ack_recv(ep)
 
 
 int	readloop(fd, port, dst)
-	int 	fd, port;
-	struct	in_addr dst;
+int 	fd, port;
+struct	in_addr dst;
 {
 	register u_char	*bp, *cp, *bufend;
 	register struct	bpf_hdr	*bh;
@@ -119,25 +118,15 @@ int	readloop(fd, port, dst)
 }
 
 int	initdevice(device, tout)
-	char	*device;
-	int	tout;
+char	*device;
+int	tout;
 {
 	struct	bpf_program prog;
 	struct	bpf_version bv;
 	struct	timeval to;
 	struct	ifreq ifr;
-#ifdef _PATH_BPF
-	char 	*bpfname = _PATH_BPF;
-	int	fd;
-
-	if ((fd = open(bpfname, O_RDWR)) < 0)
-	    {
-		fprintf(stderr, "no bpf devices available as /dev/bpfxx\n");
-		return -1;
-	    }
-#else
 	char	bpfname[16];
-	int	fd = -1, i;
+	int	fd, i;
 
 	for (i = 0; i < 16; i++)
 	    {
@@ -150,7 +139,6 @@ int	initdevice(device, tout)
 		fprintf(stderr, "no bpf devices available as /dev/bpfxx\n");
 		return -1;
 	    }
-#endif
 
 	if (ioctl(fd, BIOCVERSION, (caddr_t)&bv) < 0)
 	    {

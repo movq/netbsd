@@ -1,7 +1,7 @@
-/*	$NetBSD: mln_rule.c,v 1.1.1.2 2012/01/30 16:03:04 darrenr Exp $	*/
+/*	$NetBSD: mln_rule.c,v 1.1 2004/03/28 08:55:48 martti Exp $	*/
 
 /*
- * Copyright (C) 2007 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
@@ -47,15 +47,15 @@ int ipfrule_lkmentry(lkmtp, cmd, ver)
 # else
 int xxxinit(lkmtp, cmd, ver)
 # endif
-	struct lkm_table *lkmtp;
-	int cmd, ver;
+struct lkm_table *lkmtp;
+int cmd, ver;
 {
 	DISPATCH(lkmtp, cmd, ver, ipfruleaction, ipfruleaction, ipfruleaction);
 }
 
 static int ipfruleaction(lkmtp, cmd)
-	struct lkm_table *lkmtp;
-	int cmd;
+struct lkm_table *lkmtp;
+int cmd;
 {
 	int err = 0;
 
@@ -67,12 +67,12 @@ static int ipfruleaction(lkmtp, cmd)
 
 		err = ipfrule_add();
 		if (!err)
-			ipf_refcnt++;
+			fr_refcnt++;
 		break;
 	case LKM_E_UNLOAD :
 		err = ipfrule_remove();
 		if (!err)
-			ipf_refcnt--;
+			fr_refcnt--;
 		break;
 	case LKM_E_STAT :
 		break;

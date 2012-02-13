@@ -1,9 +1,9 @@
-/*	$NetBSD: ip_netbios_pxy.c,v 1.7 2012/02/01 16:46:28 christos Exp $	*/
+/*	$NetBSD: ip_netbios_pxy.c,v 1.1 2004/10/02 07:51:53 christos Exp $	*/
 
 /*
  * Simple netbios-dgm transparent proxy for in-kernel use.
  * For use with the NAT code.
- * Id: ip_netbios_pxy.c,v 2.11 2008/08/10 05:51:12 darrenr Exp
+ * Id: ip_netbios_pxy.c,v 2.8 2003/12/01 02:52:16 darrenr Exp
  */
 
 /*-
@@ -31,17 +31,16 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Id: ip_netbios_pxy.c,v 2.11 2008/08/10 05:51:12 darrenr Exp
+ * Id: ip_netbios_pxy.c,v 2.8 2003/12/01 02:52:16 darrenr Exp
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ip_netbios_pxy.c,v 1.7 2012/02/01 16:46:28 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ip_netbios_pxy.c,v 1.1 2004/10/02 07:51:53 christos Exp $");
 
 #define	IPF_NETBIOS_PROXY
 
-void ipf_p_netbios_main_load(void);
-void ipf_p_netbios_main_unload(void);
-int ipf_p_netbios_out(void *, fr_info_t *, ap_session_t *, nat_t *);
+int ippr_netbios_init __P((void));
+void ippr_netbios_fini __P((void));
+int ippr_netbios_out __P((fr_info_t *, ap_session_t *, nat_t *));
 
 static	frentry_t	netbiosfr;
 
@@ -50,19 +49,19 @@ int	netbios_proxy_init = 0;
 /*
  * Initialize local structures.
  */
-void
-ipf_p_netbios_main_load(void)
+int ippr_netbios_init()
 {
 	bzero((char *)&netbiosfr, sizeof(netbiosfr));
 	netbiosfr.fr_ref = 1;
 	netbiosfr.fr_flags = FR_INQUE|FR_PASS|FR_QUICK|FR_KEEPSTATE;
 	MUTEX_INIT(&netbiosfr.fr_lock, "NETBIOS proxy rule lock");
 	netbios_proxy_init = 1;
+
+	return 0;
 }
 
 
-void
-ipf_p_netbios_main_unload(void)
+void ippr_netbios_fini()
 {
 	if (netbios_proxy_init == 1) {
 		MUTEX_DESTROY(&netbiosfr.fr_lock);
@@ -71,8 +70,10 @@ ipf_p_netbios_main_unload(void)
 }
 
 
-int
-ipf_p_netbios_out(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
+int ippr_netbios_out(fin, aps, nat)
+fr_info_t *fin;
+ap_session_t *aps;
+nat_t *nat;
 {
 	char dgmbuf[6];
 	int off, dlen;
@@ -83,17 +84,19 @@ ipf_p_netbios_out(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 	aps = aps;	/* LINT */
 	nat = nat;	/* LINT */
 
-	m = fin->fin_m;
-	dlen = fin->fin_dlen - sizeof(*udp);
+	ip = fin->fin_ip;
+	m = *(mb_t **)fin->fin_mp;
+	off = fin->fin_hlen + sizeof(udphdr_t);
+	dlen = M_LEN(m);
+	dlen -= off;
+
 	/*
 	 * no net bios datagram could possibly be shorter than this
 	 */
 	if (dlen < 11)
 		return 0;
 
-	ip = fin->fin_ip;
 	udp = (udphdr_t *)fin->fin_dp;
-	off = (char *)udp - (char *)ip + sizeof(*udp) + fin->fin_ipoff;
 
 	/*
 	 * move past the
