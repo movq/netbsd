@@ -1,4 +1,4 @@
-/*	$NetBSD: tcpip.h,v 1.5 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: tcpip.h,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -12,7 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -29,7 +33,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)tcpip.h	8.1 (Berkeley) 6/10/93
- * Id: tcpip.h,v 2.5 2004/05/26 15:45:48 darrenr Exp
+ * Id: tcpip.h,v 2.1 1999/08/04 17:31:16 darrenr Exp
  */
 
 #ifndef _NETINET_TCPIP_H_
@@ -52,9 +56,12 @@ struct ipovly {
  */
 struct tcpiphdr {
 	struct 	ipovly ti_i;		/* overlaid ip structure */
+#ifdef	linux
+	tcphdr_t	ti_t;
+#else
 	struct	tcphdr ti_t;		/* tcp header */
+#endif
 };
-
 #ifdef notyet
 /*
  * Tcp+ip header, after ip options removed but including TCP options.

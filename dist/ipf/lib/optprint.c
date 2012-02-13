@@ -1,18 +1,18 @@
-/*	$NetBSD: optprint.c,v 1.1.1.4 2012/01/30 16:03:23 darrenr Exp $	*/
+/*	$NetBSD: optprint.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: optprint.c,v 1.10.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: optprint.c,v 1.6 2002/07/13 15:59:49 darrenr Exp
  */
 #include "ipf.h"
 
 
 void optprint(sec, optmsk, optbits)
-	u_short *sec;
-	u_long optmsk, optbits;
+u_short *sec;
+u_long optmsk, optbits;
 {
 	u_short secmsk = sec[0], secbits = sec[1];
 	struct ipopt_names *io, *so;
@@ -25,10 +25,6 @@ void optprint(sec, optmsk, optbits)
 			if ((io->on_value != IPOPT_SECURITY) ||
 			    (!secmsk && !secbits)) {
 				printf("%s%s", s, io->on_name);
-				/*
-				 * Because the ionames table has this entry
-				 * twice.
-				 */
 				if (io->on_value == IPOPT_SECURITY)
 					io++;
 				s = ",";

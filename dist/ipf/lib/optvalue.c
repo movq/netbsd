@@ -1,17 +1,17 @@
-/*	$NetBSD: optvalue.c,v 1.1.1.3 2012/01/30 16:03:25 darrenr Exp $	*/
+/*	$NetBSD: optvalue.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: optvalue.c,v 1.5.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: optvalue.c,v 1.2 2002/01/28 06:50:47 darrenr Exp
  */
 #include "ipf.h"
 
 
 u_32_t getoptbyname(optname)
-	char *optname;
+char *optname;
 {
 	struct ipopt_names *io;
 
@@ -23,7 +23,7 @@ u_32_t getoptbyname(optname)
 
 
 u_32_t getoptbyvalue(optval)
-	int optval;
+int optval;
 {
 	struct ipopt_names *io;
 

@@ -228,7 +228,7 @@ qmtp            209/tcp	# The Quick Mail Transfer Protocol
 qmtp            209/udp	# The Quick Mail Transfer Protocol
 anet            212/tcp	# ATEXSSTR
 anet            212/udp	# ATEXSSTR
-ipx             213/tcp	# IPX
+ipx             213/tcp	# IPX         
 ipx             213/udp	# IPX
 vmpwscs         214/tcp	# VM PWSCS
 vmpwscs         214/udp	# VM PWSCS
@@ -1104,8 +1104,8 @@ shockwave	1626/tcp	# Shockwave
 shockwave	1626/udp	# Shockwave
 oraclenet8cman	1630/tcp	# Oracle Net8 Cman
 oraclenet8cman	1630/udp	# Oracle Net8 Cman
-visitview	1631/tcp	# Visit view
-visitview	1631/udp	# Visit view
+visitview	1631/tcp	# Visit view 
+visitview	1631/udp	# Visit view 
 pammratc	1632/tcp	# PAMMRATC
 pammratc	1632/udp	# PAMMRATC
 pammrpc		1633/tcp	# PAMMRPC
@@ -2359,7 +2359,6 @@ dpserve		7020/tcp	# DP Serve
 dpserve		7020/udp	# DP Serve
 dpserveadmin	7021/tcp	# DP Serve Admin
 dpserveadmin	7021/udp	# DP Serve Admin
-raudio		7070/tcp	@ Real Audio
 arcp		7070/tcp	# ARCP
 arcp		7070/udp	# ARCP
 clutild		7174/tcp	# Clutild

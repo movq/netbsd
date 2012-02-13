@@ -1,21 +1,13 @@
-/*	$NetBSD: rwlock_emul.c,v 1.1.1.4 2012/01/30 16:03:22 darrenr Exp $	*/
-
-/*
- * Copyright (C) 2012 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
- * Id: rwlock_emul.c,v 1.6.2.2 2012/01/26 05:29:17 darrenr Exp
- */
+/*	$NetBSD: rwlock_emul.c,v 1.1 2004/03/28 08:56:21 martti Exp $	*/
 
 #include "ipf.h"
 
 #define	EMM_MAGIC	0x97dd8b3a
 
 void eMrwlock_read_enter(rw, file, line)
-	eMrwlock_t *rw;
-	char *file;
-	int line;
+eMrwlock_t *rw;
+char *file;
+int line;
 {
 	if (rw->eMrw_magic != EMM_MAGIC) {
 		fprintf(stderr, "%s:eMrwlock_read_enter(%p): bad magic: %#x\n",
@@ -35,9 +27,9 @@ void eMrwlock_read_enter(rw, file, line)
 
 
 void eMrwlock_write_enter(rw, file, line)
-	eMrwlock_t *rw;
-	char *file;
-	int line;
+eMrwlock_t *rw;
+char *file;
+int line;
 {
 	if (rw->eMrw_magic != EMM_MAGIC) {
 		fprintf(stderr, "%s:eMrwlock_write_enter(%p): bad magic: %#x\n",
@@ -57,9 +49,9 @@ void eMrwlock_write_enter(rw, file, line)
 
 
 void eMrwlock_downgrade(rw, file, line)
-	eMrwlock_t *rw;
-	char *file;
-	int line;
+eMrwlock_t *rw;
+char *file;
+int line;
 {
 	if (rw->eMrw_magic != EMM_MAGIC) {
 		fprintf(stderr, "%s:eMrwlock_write_enter(%p): bad magic: %#x\n",
@@ -80,7 +72,7 @@ void eMrwlock_downgrade(rw, file, line)
 
 
 void eMrwlock_exit(rw)
-	eMrwlock_t *rw;
+eMrwlock_t *rw;
 {
 	if (rw->eMrw_magic != EMM_MAGIC) {
 		fprintf(stderr, "%s:eMrwlock_exit(%p): bad magic: %#x\n",
@@ -101,11 +93,9 @@ void eMrwlock_exit(rw)
 }
 
 
-static int initcount = 0;
-
 void eMrwlock_init(rw, who)
-	eMrwlock_t *rw;
-	char *who;
+eMrwlock_t *rw;
+char *who;
 {
 	if (rw->eMrw_magic == EMM_MAGIC) {	/* safe bet ? */
 		fprintf(stderr,
@@ -120,26 +110,16 @@ void eMrwlock_init(rw, who)
 		rw->eMrw_owner = strdup(who);
 	else
 		rw->eMrw_owner = NULL;
-	initcount++;
 }
 
 
 void eMrwlock_destroy(rw)
-	eMrwlock_t *rw;
+eMrwlock_t *rw;
 {
 	if (rw->eMrw_magic != EMM_MAGIC) {
 		fprintf(stderr, "%s:eMrwlock_destroy(%p): bad magic: %#x\n",
 			rw->eMrw_owner, rw, rw->eMrw_magic);
 		abort();
 	}
-	if (rw->eMrw_owner != NULL)
-		free(rw->eMrw_owner);
 	memset(rw, 0xa5, sizeof(*rw));
-	initcount--;
-}
-
-void ipf_rwlock_clean()
-{
-	if (initcount != 0)
-		abort();
 }

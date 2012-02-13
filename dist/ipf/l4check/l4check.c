@@ -1,7 +1,7 @@
-/*	$NetBSD: l4check.c,v 1.4 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: l4check.c,v 1.1 2000/05/03 10:57:06 veego Exp $	*/
 
 /*
- * (C)Copyright (C) 2007 by Darren Reed.
+ * (C)Copyright March, 2000 - Darren Reed.
  */
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -67,7 +67,7 @@ int opts = 0;
 
 
 char *copystr(dst, src)
-	char *dst, *src;
+char *dst, *src;
 {
 	register char *s, *t, c;
 	register int esc = 0;
@@ -96,7 +96,7 @@ char *copystr(dst, src)
 }
 
 void addnat(l4)
-	l4cfg_t *l4;
+l4cfg_t *l4;
 {
 	ipnat_t *ipn = &l4->l4_nat;
 
@@ -111,7 +111,7 @@ void addnat(l4)
 
 
 void delnat(l4)
-	l4cfg_t *l4;
+l4cfg_t *l4;
 {
 	ipnat_t *ipn = &l4->l4_nat;
 
@@ -126,7 +126,7 @@ void delnat(l4)
 
 
 void connectl4(l4)
-	l4cfg_t *l4;
+l4cfg_t *l4;
 {
 	l4->l4_rw = 1;
 	l4->l4_rlen = 0;
@@ -140,8 +140,8 @@ void connectl4(l4)
 
 
 void closel4(l4, dead)
-	l4cfg_t *l4;
-	int dead;
+l4cfg_t *l4;
+int dead;
 {
 	close(l4->l4_fd);
 	l4->l4_fd = -1;
@@ -154,7 +154,7 @@ void closel4(l4, dead)
 
 
 void connectfd(l4)
-	l4cfg_t *l4;
+l4cfg_t *l4;
 {
 	if (connect(l4->l4_fd, (struct sockaddr *)&l4->l4_sin,
 		    sizeof(l4->l4_sin)) == -1) {
@@ -176,7 +176,7 @@ void connectfd(l4)
 
 
 void writefd(l4)
-	l4cfg_t *l4;
+l4cfg_t *l4;
 {
 	char buf[80], *ptr;
 	int n, i, fd;
@@ -208,7 +208,7 @@ void writefd(l4)
 
 
 void readfd(l4)
-	l4cfg_t *l4;
+l4cfg_t *l4;
 {
 	char buf[80], *ptr;
 	int n, i, fd;
@@ -402,10 +402,10 @@ int runconfig()
 
 
 int gethostport(str, lnum, ipp, portp)
-	char *str;
-	int lnum;
-	u_32_t *ipp;
-	u_short *portp;
+char *str;
+int lnum;
+u_32_t *ipp;
+u_short *portp;
 {
 	struct servent *sp;
 	struct hostent *hp;
@@ -418,10 +418,10 @@ int gethostport(str, lnum, ipp, portp)
 		*port++ = '\0';
 
 #ifdef	HAVE_INET_ATON
-	if (ISDIGIT(*host) && inet_aton(host, &ip))
+	if (isdigit(*host) && inet_aton(host, &ip))
 		*ipp = ip.s_addr;
 #else
-	if (ISDIGIT(*host))
+	if (isdigit(*host))
 		*ipp = inet_addr(host);
 #endif
 	else {
@@ -434,7 +434,7 @@ int gethostport(str, lnum, ipp, portp)
 	}
 
 	if (port) {
-		if (ISDIGIT(*port))
+		if (isdigit(*port))
 			*portp = htons(atoi(port));
 		else {
 			sp = getservbyname(port, "tcp");
@@ -453,8 +453,8 @@ int gethostport(str, lnum, ipp, portp)
 
 
 char *mapfile(file, sizep)
-	char *file;
-	size_t *sizep;
+char *file;
+size_t *sizep;
 {
 	struct stat sb;
 	caddr_t addr;
@@ -485,7 +485,7 @@ char *mapfile(file, sizep)
 
 
 int readconfig(filename)
-	char *filename;
+char *filename;
 {
 	char c, buf[512], *s, *t, *errtxt = NULL, *line;
 	int num, err = 0;
@@ -527,7 +527,7 @@ int readconfig(filename)
 		/*
 		 * Skip leading whitespace
 		 */
-		for (line = buf; (c = *line) && ISSPACE(c); line++)
+		for (line = buf; (c = *line) && isspace(c); line++)
 			;
 		if (!*line)
 			continue;
@@ -607,14 +607,14 @@ int readconfig(filename)
 			}
 			bcopy((char *)&template, (char *)l4, sizeof(*l4));
 			l4->l4_sin.sin_addr = ipn->in_in[0];
-			l4->l4_sin.sin_port = ipn->in_pnext;
+			l4->l4_sin.sin_port = ipn->in_pnext; 
 			l4->l4_next = l4list;
 			l4list = l4;
 		} else if (!strcasecmp(t, "connect")) {
 			s = strtok(NULL, " \t");
 			if (s)
 				t = strtok(NULL, "\t");
-			if (!s || !t) {
+			if (!s || !t) { 
 				errtxt = line;
 				err = -1;
 				break;
@@ -636,7 +636,7 @@ int readconfig(filename)
 			}
 		} else if (!strcasecmp(t, "probe")) {
 			s = strtok(NULL, " \t");
-			if (!s) {
+			if (!s) { 
 				errtxt = line;
 				err = -1;
 				break;
@@ -684,13 +684,13 @@ int readconfig(filename)
 			}
 		} else if (!strcasecmp(t, "response")) {
 			s = strtok(NULL, " \t");
-			if (!s) {
+			if (!s) { 
 				errtxt = line;
 				err = -1;
 				break;
 			} else if (!strcasecmp(s, "timeout")) {
 				t = strtok(NULL, " \t");
-				if (!t) {
+				if (!t) { 
 					errtxt = line;
 					err = -1;
 					break;
@@ -753,7 +753,7 @@ int readconfig(filename)
 
 
 void usage(prog)
-	char *prog;
+char *prog;
 {
 	fprintf(stderr, "Usage: %s -f <configfile>\n", prog);
 	exit(1);
@@ -761,8 +761,8 @@ void usage(prog)
 
 
 int main(argc, argv)
-	int argc;
-	char *argv[];
+int argc;
+char *argv[];
 {
 	char *config = NULL;
 	int c;

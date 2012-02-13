@@ -1,10 +1,11 @@
-/*	$NetBSD: slinux.c,v 1.4 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: slinux.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed. (from tcplog)
  *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  */
 
 #include <stdio.h>
@@ -30,7 +31,7 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)slinux.c	1.2 8/25/95";
-static const char rcsid[] = "@(#)Id: slinux.c,v 2.4 2007/12/20 09:35:09 darrenr Exp";
+static const char rcsid[] = "@(#)Id: slinux.c,v 2.1 1999/08/04 17:31:14 darrenr Exp";
 #endif
 
 #define	CHUNKSIZE	8192
@@ -45,9 +46,9 @@ static	int	timeout;
 static	char	*eth_dev = NULL;
 
 
-int	initdevice(dev, spare)
-	char	*dev;
-	int	spare;
+int	initdevice(dev, sport, spare)
+char	*dev;
+int	sport, spare;
 {
 	int fd;
 
@@ -66,8 +67,8 @@ int	initdevice(dev, spare)
  * output an IP packet onto a fd opened for /dev/nit
  */
 int	sendip(fd, pkt, len)
-	int	fd, len;
-	char	*pkt;
+int	fd, len;
+char	*pkt;
 {
 	struct	sockaddr	s;
 	struct	ifreq	ifr;

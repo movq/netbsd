@@ -1,7 +1,7 @@
-/*	$NetBSD: lexer.c,v 1.15 2012/01/30 16:12:05 darrenr Exp $	*/
+/*	$NetBSD: lexer.c,v 1.1 2004/03/28 08:56:35 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 2003 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
@@ -26,7 +26,7 @@ union	{
 
 FILE *yyin;
 
-#define	ishex(c)	(ISDIGIT(c) || ((c) >= 'a' && (c) <= 'f') || \
+#define	ishex(c)	(isdigit(c) || ((c) >= 'a' && (c) <= 'f') || \
 			 ((c) >= 'A' && (c) <= 'F'))
 #define	TOOLONG		-3
 
@@ -34,41 +34,32 @@ extern int	string_start;
 extern int	string_end;
 extern char	*string_val;
 extern int	pos;
-extern int	yydebug;
 
 char		*yystr = NULL;
 int		yytext[YYBUFSIZ+1];
-char		yychars[YYBUFSIZ+1];
 int		yylineNum = 1;
 int		yypos = 0;
 int		yylast = -1;
-int		yydictfixed = 0;
 int		yyexpectaddr = 0;
 int		yybreakondot = 0;
 int		yyvarnext = 0;
 int		yytokentype = 0;
 wordtab_t	*yywordtab = NULL;
-int		yysavedepth = 0;
-wordtab_t	*yysavewords[30];
-
 
 static	wordtab_t	*yyfindkey __P((char *));
-static	int		yygetc __P((int));
+static	int		yygetc __P((void));
 static	void		yyunputc __P((int));
 static	int		yyswallow __P((int));
 static	char		*yytexttostr __P((int, int));
 static	void		yystrtotext __P((char *));
-static	char		*yytexttochar __P((void));
 
-static int yygetc(docont)
-	int docont;
+
+static int yygetc()
 {
 	int c;
 
 	if (yypos < yylast) {
 		c = yytext[yypos++];
-		if (c == '\n')
-			yylineNum++;
 		return c;
 	}
 
@@ -80,16 +71,7 @@ static int yygetc(docont)
 		yypos++;
 	} else {
 		c = fgetc(yyin);
-		if (docont && (c == '\\')) {
-			c = fgetc(yyin);
-			if (c == '\n') {
-				yylineNum++;
-				c = fgetc(yyin);
-			}
-		}
 	}
-	if (c == '\n')
-		yylineNum++;
 	yytext[yypos++] = c;
 	yylast = yypos;
 	yytext[yypos] = '\0';
@@ -99,7 +81,7 @@ static int yygetc(docont)
 
 
 static void yyunputc(c)
-	int c;
+int c;
 {
 	if (c == '\n')
 		yylineNum--;
@@ -108,11 +90,11 @@ static void yyunputc(c)
 
 
 static int yyswallow(last)
-	int last;
+int last;
 {
 	int c;
 
-	while (((c = yygetc(0)) > '\0') && (c != last))
+	while (((c = yygetc()) > '\0') && (c != last))
 		;
 
 	if (c != EOF)
@@ -123,19 +105,8 @@ static int yyswallow(last)
 }
 
 
-static char *yytexttochar()
-{
-	int i;
-
-	for (i = 0; i < yypos; i++)
-		yychars[i] = (char)(yytext[i] & 0xff);
-	yychars[i] = '\0';
-	return yychars;
-}
-
-
 static void yystrtotext(str)
-	char *str;
+char *str;
 {
 	int len;
 	char *s;
@@ -151,7 +122,7 @@ static void yystrtotext(str)
 
 
 static char *yytexttostr(offset, max)
-	int offset, max;
+int offset, max;
 {
 	char *str;
 	int i;
@@ -176,11 +147,8 @@ static char *yytexttostr(offset, max)
 
 int yylex()
 {
-	static int prior = 0;
-	static int priornum = 0;
-	int c, n, isbuilding, rval, lnext, nokey = 0;
+	int c, n, isbuilding, rval, lnext;
 	char *name;
-	int triedv6 = 0;
 
 	isbuilding = 0;
 	lnext = 0;
@@ -192,15 +160,12 @@ int yylex()
 	}
 
 nextchar:
-	c = yygetc(0);
-	if (yydebug > 1)
-		printf("yygetc = (%x) %c [%*.*s]\n", c, c, yypos, yypos, yytexttochar());
+	c = yygetc();
 
 	switch (c)
 	{
 	case '\n' :
-		lnext = 0;
-		nokey = 0;
+		yylineNum++;
 	case '\t' :
 	case '\r' :
 	case ' ' :
@@ -214,8 +179,6 @@ nextchar:
 		}
 		yylast -= yypos;
 		yypos = 0;
-		lnext = 0;
-		nokey = 0;
 		goto nextchar;
 
 	case '\\' :
@@ -226,8 +189,6 @@ nextchar:
 				yypos--;
 			} else
 				yypos--;
-			if (yypos == 0)
-				nokey = 1;
 			goto nextchar;
 		}
 		break;
@@ -235,10 +196,6 @@ nextchar:
 
 	if (lnext == 1) {
 		lnext = 0;
-		if ((isbuilding == 0) && !ISALNUM(c)) {
-			prior = c;
-			return c;
-		}
 		goto nextchar;
 	}
 
@@ -258,21 +215,21 @@ nextchar:
 			yyunputc(c);
 			goto done;
 		}
-		n = yygetc(0);
+		n = yygetc();
 		if (n == '{') {
 			if (yyswallow('}') == -1) {
 				rval = -2;
 				goto done;
 			}
-			(void) yygetc(0);
+			(void) yygetc();
 		} else {
-			if (!ISALPHA(n)) {
+			if (!isalpha(n)) {
 				yyunputc(n);
 				break;
 			}
 			do {
-				n = yygetc(1);
-			} while (ISALPHA(n) || ISDIGIT(n) || n == '_');
+				n = yygetc();
+			} while (isalpha(n) || isdigit(n) || n == '_');
 			yyunputc(n);
 		}
 
@@ -303,7 +260,7 @@ nextchar:
 			goto done;
 		}
 		do {
-			n = yygetc(1);
+			n = yygetc();
 			if (n == EOF || n == TOOLONG) {
 				rval = -2;
 				goto done;
@@ -313,21 +270,10 @@ nextchar:
 				yypos++;
 			}
 		} while (n != c);
-		rval = YY_STR;
-		goto done;
-		/* NOTREACHED */
+		yyunputc(n);
+		break;
 
 	case EOF :
-		yylineNum = 1;
-		yypos = 0;
-		yylast = -1;
-		yyexpectaddr = 0;
-		yybreakondot = 0;
-		yyvarnext = 0;
-		yytokentype = 0;
-		if (yydebug)
-			fprintf(stderr, "reset at EOF\n");
-		prior = 0;
 		return 0;
 	}
 
@@ -352,21 +298,14 @@ nextchar:
 	switch (c)
 	{
 	case '-' :
-		n = yygetc(0);
+		if (isbuilding == 1)
+			break;
+		n = yygetc();
 		if (n == '>') {
 			isbuilding = 1;
 			goto done;
 		}
 		yyunputc(n);
-		if (yyexpectaddr) {
-			if (isbuilding == 1)
-				yyunputc(c);
-			else
-				rval = '-';
-			goto done;
-		}
-		if (isbuilding == 1)
-			break;
 		rval = '-';
 		goto done;
 
@@ -375,7 +314,7 @@ nextchar:
 			yyunputc(c);
 			goto done;
 		}
-		n = yygetc(0);
+		n = yygetc();
 		if (n == '=') {
 			rval = YY_CMP_NE;
 			goto done;
@@ -385,13 +324,11 @@ nextchar:
 		goto done;
 
 	case '<' :
-		if (yyexpectaddr)
-			break;
 		if (isbuilding == 1) {
 			yyunputc(c);
 			goto done;
 		}
-		n = yygetc(0);
+		n = yygetc();
 		if (n == '=') {
 			rval = YY_CMP_LE;
 			goto done;
@@ -405,13 +342,11 @@ nextchar:
 		goto done;
 
 	case '>' :
-		if (yyexpectaddr)
-			break;
 		if (isbuilding == 1) {
 			yyunputc(c);
 			goto done;
 		}
-		n = yygetc(0);
+		n = yygetc();
 		if (n == '=') {
 			rval = YY_CMP_GE;
 			goto done;
@@ -433,19 +368,13 @@ nextchar:
 	 * 0000:0000:0000:0000:0000:0000:0000:0000
 	 */
 #ifdef	USE_INET6
-	if (yyexpectaddr == 1 && isbuilding == 0 && (ishex(c) || isdigit(c) || c == ':')) {
+	if (yyexpectaddr == 1 && isbuilding == 0 && (ishex(c) || c == ':')) {
 		char ipv6buf[45 + 1], *s, oc;
 		int start;
 
-buildipv6:
 		start = yypos;
 		s = ipv6buf;
 		oc = c;
-
-		if (prior == YY_NUMBER && c == ':') {
-			sprintf(s, "%d", priornum);
-			s += strlen(s);
-		}
 
 		/*
 		 * Perhaps we should implement stricter controls on what we
@@ -454,7 +383,7 @@ buildipv6:
 		 */
 		do {
 			*s++ = c;
-			c = yygetc(1);
+			c = yygetc();
 		} while ((ishex(c) || c == ':' || c == '.') &&
 			 (s - ipv6buf < 46));
 		yyunputc(c);
@@ -470,25 +399,7 @@ buildipv6:
 	}
 #endif
 
-	if ((c == ':') && (rval != YY_IPV6) && (triedv6 == 0)) {
-#ifdef	USE_INET6
-		yystr = yytexttostr(0, yypos - 1);
-		if (yystr != NULL) {
-			char *s;
-
-			for (s = yystr; *s && ishex(*s); s++)
-				;
-			if (!*s && *yystr) {
-				isbuilding = 0;
-				c = *yystr;
-				free(yystr);
-				triedv6 = 1;
-				yypos = 1;
-				goto buildipv6;
-			}
-			free(yystr);
-		}
-#endif
+	if (c == ':') {
 		if (isbuilding == 1) {
 			yyunputc(c);
 			goto done;
@@ -498,10 +409,10 @@ buildipv6:
 	}
 
 	if (isbuilding == 0 && c == '0') {
-		n = yygetc(0);
+		n = yygetc();
 		if (n == 'x') {
 			do {
-				n = yygetc(1);
+				n = yygetc();
 			} while (ishex(n));
 			yyunputc(n);
 			rval = YY_HEX;
@@ -513,10 +424,10 @@ buildipv6:
 	/*
 	 * No negative numbers with leading - sign..
 	 */
-	if (isbuilding == 0 && ISDIGIT(c)) {
+	if (isbuilding == 0 && isdigit(c)) {
 		do {
-			n = yygetc(1);
-		} while (ISDIGIT(n));
+			n = yygetc();
+		} while (isdigit(n));
 		yyunputc(n);
 		rval = YY_NUMBER;
 		goto done;
@@ -528,46 +439,27 @@ buildipv6:
 done:
 	yystr = yytexttostr(0, yypos);
 
-	if (yydebug)
-		printf("isbuilding %d yyvarnext %d nokey %d fixed %d addr %d\n",
-		       isbuilding, yyvarnext, nokey, yydictfixed, yyexpectaddr);
 	if (isbuilding == 1) {
 		wordtab_t *w;
 
 		w = NULL;
 		isbuilding = 0;
 
-		if ((yyvarnext == 0) && (nokey == 0)) {
+		if (yyvarnext == 0)
 			w = yyfindkey(yystr);
-			if (w == NULL && yywordtab != NULL && !yydictfixed) {
-				yyresetdict();
-				w = yyfindkey(yystr);
-			}
-		} else
+		else
 			yyvarnext = 0;
 		if (w != NULL)
 			rval = w->w_value;
 		else
 			rval = YY_STR;
 	}
-
-	if (rval == YY_STR) {
-		if (yysavedepth > 0 && !yydictfixed)
-			yyresetdict();
-		if (yyexpectaddr == 1)
-			yyexpectaddr = 0;
-	}
-
 	yytokentype = rval;
-
-	if (yydebug)
-		printf("lexed(%s) [%d,%d,%d] => %d @%d\n", yystr, string_start,
-			string_end, pos, rval, yysavedepth);
 
 	switch (rval)
 	{
 	case YY_NUMBER :
-		sscanf(yystr, "%u", &yylval.num);
+		yylval.num = atoi(yystr);
 		break;
 
 	case YY_HEX :
@@ -589,15 +481,12 @@ done:
 		yypos = 0;
 	}
 
-	if (rval == YY_NUMBER)
-		priornum = yylval.num;
-	prior = rval;
 	return rval;
 }
 
 
 static wordtab_t *yyfindkey(key)
-	char *key;
+char *key;
 {
 	wordtab_t *w;
 
@@ -612,7 +501,7 @@ static wordtab_t *yyfindkey(key)
 
 
 char *yykeytostr(num)
-	int num;
+int num;
 {
 	wordtab_t *w;
 
@@ -627,7 +516,7 @@ char *yykeytostr(num)
 
 
 wordtab_t *yysettab(words)
-	wordtab_t *words;
+wordtab_t *words;
 {
 	wordtab_t *save;
 
@@ -638,7 +527,7 @@ wordtab_t *yysettab(words)
 
 
 void yyerror(msg)
-	char *msg;
+char *msg;
 {
 	char *txt, letter[2];
 	int freetxt = 0;
@@ -664,60 +553,10 @@ void yyerror(msg)
 }
 
 
-void yysetfixeddict(newdict)
-	wordtab_t *newdict;
-{
-	if (yydebug)
-		printf("yysetfixeddict(%lx)\n", (u_long)newdict);
-
-	if (yysavedepth == sizeof(yysavewords)/sizeof(yysavewords[0])) {
-		fprintf(stderr, "%d: at maximum dictionary depth\n",
-			yylineNum);
-		return;
-	}
-
-	yysavewords[yysavedepth++] = yysettab(newdict);
-	if (yydebug)
-		printf("yysavedepth++ => %d\n", yysavedepth);
-	yydictfixed = 1;
-}
-
-
-void yysetdict(newdict)
-	wordtab_t *newdict;
-{
-	if (yydebug)
-		printf("yysetdict(%lx)\n", (u_long)newdict);
-
-	if (yysavedepth == sizeof(yysavewords)/sizeof(yysavewords[0])) {
-		fprintf(stderr, "%d: at maximum dictionary depth\n",
-			yylineNum);
-		return;
-	}
-
-	yysavewords[yysavedepth++] = yysettab(newdict);
-	if (yydebug)
-		printf("yysavedepth++ => %d\n", yysavedepth);
-}
-
-void yyresetdict()
-{
-	if (yydebug)
-		printf("yyresetdict(%d)\n", yysavedepth);
-	if (yysavedepth > 0) {
-		yysettab(yysavewords[--yysavedepth]);
-		if (yydebug)
-			printf("yysavedepth-- => %d\n", yysavedepth);
-	}
-	yydictfixed = 0;
-}
-
-
-
 #ifdef	TEST_LEXER
 int main(argc, argv)
-	int argc;
-	char *argv[];
+int argc;
+char *argv[];
 {
 	int n;
 

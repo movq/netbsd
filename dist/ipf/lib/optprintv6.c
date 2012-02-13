@@ -1,11 +1,11 @@
-/*	$NetBSD: optprintv6.c,v 1.1.1.3 2012/01/30 16:03:25 darrenr Exp $	*/
+/*	$NetBSD: optprintv6.c,v 1.1 2004/03/28 08:56:19 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: optprintv6.c,v 1.5.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: optprintv6.c,v 1.2 2003/04/30 00:39:39 darrenr Exp
  */
 #include "ipf.h"
 
@@ -13,8 +13,8 @@
 #ifdef	USE_INET6
 
 void optprintv6(sec, optmsk, optbits)
-	u_short *sec;
-	u_long optmsk, optbits;
+u_short *sec;
+u_long optmsk, optbits;
 {
 	u_short secmsk = sec[0], secbits = sec[1];
 	struct ipopt_names *io;

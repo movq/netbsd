@@ -1,15 +1,26 @@
-/*	$NetBSD: iptest.c,v 1.7 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: iptest.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
  * ipsend.c (C) 1995-1998 Darren Reed
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * This was written to test what size TCP fragments would get through
+ * various TCP/IP packet filters, as used in IP firewalls.  In certain
+ * conditions, enough of the TCP header is missing for unpredictable
+ * results unless the filter is aware that this can happen.
  *
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  */
 #if !defined(lint)
 static const char sccsid[] = "%W% %G% (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: iptest.c,v 2.7 2007/12/20 09:35:09 darrenr Exp";
+static const char rcsid[] = "@(#)Id: iptest.c,v 2.1.2.2 1999/11/28 03:43:45 darrenr Exp";
 #endif
+#include <stdio.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -18,17 +29,15 @@ static const char rcsid[] = "@(#)Id: iptest.c,v 2.7 2007/12/20 09:35:09 darrenr 
 #include <arpa/inet.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <netinet/ip_icmp.h>
 #ifndef	linux
 #include <netinet/ip_var.h>
 #endif
 #ifdef	linux
 #include <linux/sockios.h>
 #endif
-#include <stdio.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
 #include "ipsend.h"
 
 
@@ -63,7 +72,7 @@ int	main __P((int, char **));
 
 
 static void usage(prog)
-	char *prog;
+char *prog;
 {
 	fprintf(stderr, "Usage: %s [options] dest\n\
 \toptions:\n\
@@ -85,8 +94,8 @@ static void usage(prog)
 
 
 int main(argc, argv)
-	int argc;
-	char **argv;
+int argc;
+char **argv;
 {
 	struct	tcpiphdr *ti;
 	struct	in_addr	gwip;
@@ -102,7 +111,7 @@ int main(argc, argv)
 	ip = (ip_t *)calloc(1, 65536);
 	ti = (struct tcpiphdr *)ip;
 	ip->ip_len = sizeof(*ip);
-	IP_HL_A(ip, sizeof(*ip) >> 2);
+	ip->ip_hl = sizeof(*ip) >> 2;
 
 	while ((c = getopt(argc, argv, "1234567d:g:m:p:s:")) != -1)
 		switch (c)

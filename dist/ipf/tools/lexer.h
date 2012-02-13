@@ -1,10 +1,10 @@
-/*	$NetBSD: lexer.h,v 1.5 2012/01/30 16:12:05 darrenr Exp $	*/
+/*	$NetBSD: lexer.h,v 1.1 2004/03/28 08:56:35 martti Exp $	*/
 
-/*
- * Copyright (C) 2008 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- */
+
+typedef	struct	wordtab	{
+	char	*w_word;
+	int	w_value;
+} wordtab_t;
 
 #ifdef	NO_YACC
 #define	YY_COMMENT	1000
@@ -23,12 +23,9 @@
 #define	YYBUFSIZ	8192
 
 extern	wordtab_t	*yysettab __P((wordtab_t *));
-extern	void		yysetdict __P((wordtab_t *));
-extern	void		yysetfixeddict __P((wordtab_t *));
 extern	int		yylex __P((void));
 extern	void		yyerror __P((char *));
 extern	char		*yykeytostr __P((int));
-extern	void		yyresetdict __P((void));
 
 extern	FILE	*yyin;
 extern	int	yylineNum;

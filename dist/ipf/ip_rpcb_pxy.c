@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_rpcb_pxy.c,v 1.1.1.8 2012/01/30 16:03:05 darrenr Exp $	*/
+/*	$NetBSD: ip_rpcb_pxy.c,v 1.1 2004/03/28 08:55:43 martti Exp $	*/
 
 /*
  * Copyright (C) 2002-2003 by Ryan Beasley <ryanb@goddamnbastard.org>
@@ -39,43 +39,44 @@
  *   o The enclosed hack of STREAMS support is pretty sick and most likely
  *     broken.
  *
- *	Id: ip_rpcb_pxy.c,v 2.47 2009/03/01 12:41:26 darrenr Exp
+ *	Id: ip_rpcb_pxy.c,v 2.25 2004/01/31 14:48:46 darrenr Exp
  */
+
 #define	IPF_RPCB_PROXY
 
 /*
  * Function prototypes
  */
-void	ipf_p_rpcb_main_load __P((void));
-void	ipf_p_rpcb_main_unload __P((void));
-int	ipf_p_rpcb_new __P((void *, fr_info_t *, ap_session_t *, nat_t *));
-void	ipf_p_rpcb_del __P((ipf_main_softc_t *, ap_session_t *));
-int	ipf_p_rpcb_in __P((void *, fr_info_t *, ap_session_t *, nat_t *));
-int	ipf_p_rpcb_out __P((void *, fr_info_t *, ap_session_t *, nat_t *));
+int	ippr_rpcb_init __P((void));
+void	ippr_rpcb_fini __P((void));
+int	ippr_rpcb_new __P((fr_info_t *, ap_session_t *, nat_t *));
+void	ippr_rpcb_del __P((ap_session_t *));
+int	ippr_rpcb_in __P((fr_info_t *, ap_session_t *, nat_t *));
+int	ippr_rpcb_out __P((fr_info_t *, ap_session_t *, nat_t *));
 
-static void	ipf_p_rpcb_flush __P((rpcb_session_t *));
-static int	ipf_p_rpcb_decodereq __P((fr_info_t *, nat_t *,
+static void	ippr_rpcb_flush __P((rpcb_session_t *));
+static int	ippr_rpcb_decodereq __P((fr_info_t *, nat_t *,
 	rpcb_session_t *, rpc_msg_t *));
-static int	ipf_p_rpcb_skipauth __P((rpc_msg_t *, xdr_auth_t *, u_32_t **));
-static int	ipf_p_rpcb_insert __P((rpcb_session_t *, rpcb_xact_t *));
-static int	ipf_p_rpcb_xdrrpcb __P((rpc_msg_t *, u_32_t *, rpcb_args_t *));
-static int	ipf_p_rpcb_getuaddr __P((rpc_msg_t *, xdr_uaddr_t *,
+static int	ippr_rpcb_skipauth __P((rpc_msg_t *, xdr_auth_t *, u_32_t **));
+static int	ippr_rpcb_insert __P((rpcb_session_t *, rpcb_xact_t *));
+static int	ippr_rpcb_xdrrpcb __P((rpc_msg_t *, u_32_t *, rpcb_args_t *));
+static int	ippr_rpcb_getuaddr __P((rpc_msg_t *, xdr_uaddr_t *,
 	u_32_t **));
-static u_int	ipf_p_rpcb_atoi __P((char *));
-static int	ipf_p_rpcb_modreq __P((fr_info_t *, nat_t *, rpc_msg_t *,
+static u_int	ippr_rpcb_atoi __P((char *));
+static int	ippr_rpcb_modreq __P((fr_info_t *, nat_t *, rpc_msg_t *,
 	mb_t *, u_int));
-static int	ipf_p_rpcb_decoderep __P((fr_info_t *, nat_t *,
+static int	ippr_rpcb_decoderep __P((fr_info_t *, nat_t *,
 	rpcb_session_t *, rpc_msg_t *, rpcb_xact_t **));
-static rpcb_xact_t *	ipf_p_rpcb_lookup __P((rpcb_session_t *, u_32_t));
-static void	ipf_p_rpcb_deref __P((rpcb_session_t *, rpcb_xact_t *));
-static int	ipf_p_rpcb_getproto __P((rpc_msg_t *, xdr_proto_t *,
+static rpcb_xact_t *	ippr_rpcb_lookup __P((rpcb_session_t *, u_32_t));
+static void	ippr_rpcb_deref __P((rpcb_session_t *, rpcb_xact_t *));
+static int	ippr_rpcb_getproto __P((rpc_msg_t *, xdr_proto_t *,
 	u_32_t **));
-static int	ipf_p_rpcb_getnat __P((fr_info_t *, nat_t *, u_int, u_int));
-static int	ipf_p_rpcb_modv3 __P((fr_info_t *, nat_t *, rpc_msg_t *,
+static int	ippr_rpcb_getnat __P((fr_info_t *, nat_t *, u_int, u_int));
+static int	ippr_rpcb_modv3 __P((fr_info_t *, nat_t *, rpc_msg_t *,
 	mb_t *, u_int));
-static int	ipf_p_rpcb_modv4 __P((fr_info_t *, nat_t *, rpc_msg_t *,
+static int	ippr_rpcb_modv4 __P((fr_info_t *, nat_t *, rpc_msg_t *,
 	mb_t *, u_int));
-static void     ipf_p_rpcb_fixlen __P((fr_info_t *, int));
+static void     ippr_rpcb_fixlen __P((fr_info_t *, int));
 
 /*
  * Global variables
@@ -85,7 +86,7 @@ static	frentry_t	rpcbfr;	/* Skeleton rule for reference by entities
 static	int	rpcbcnt;	/* Upper bound of allocated RPCB sessions. */
 				/* XXX rpcbcnt still requires locking. */
 
-static	int	rpcb_proxy_init = 0;
+int	rpcb_proxy_init = 0;
 
 
 /*
@@ -99,15 +100,15 @@ static	int	rpcb_proxy_init = 0;
  * Public subroutines
  */
 
-/* -------------------------------------------------------------------- */
-/* Function:    ipf_p_rpcb_main_load                                    */
-/* Returns:     void                                                    */
-/* Parameters:  (void)                                                  */
-/*                                                                      */
-/* Initialize the filter rule entry and session limiter.                */
-/* -------------------------------------------------------------------- */
-void
-ipf_p_rpcb_main_load()
+/* --------------------------------------------------------------------	*/
+/* Function:	ippr_rpcb_init						*/
+/* Returns:	int - 0 == success					*/
+/* Parameters:	(void)							*/
+/*									*/
+/* Initialize the filter rule entry and session limiter.		*/
+/* --------------------------------------------------------------------	*/
+int
+ippr_rpcb_init()
 {
 	rpcbcnt = 0;
 
@@ -116,17 +117,19 @@ ipf_p_rpcb_main_load()
 	rpcbfr.fr_flags = FR_PASS|FR_QUICK|FR_KEEPSTATE;
 	MUTEX_INIT(&rpcbfr.fr_lock, "ipf Sun RPCB proxy rule lock");
 	rpcb_proxy_init = 1;
+
+	return(0);
 }
 
-/* -------------------------------------------------------------------- */
-/* Function:    ipf_p_rpcb_main_unload                                  */
-/* Returns:     void                                                    */
-/* Parameters:  (void)                                                  */
-/*                                                                      */
-/* Destroy rpcbfr's mutex to avoid a lock leak.                         */
-/* -------------------------------------------------------------------- */
+/* --------------------------------------------------------------------	*/
+/* Function:	ippr_rpcb_fini						*/
+/* Returns:	void							*/
+/* Parameters:	(void)							*/
+/*									*/
+/* Destroy rpcbfr's mutex to avoid a lock leak.				*/
+/* --------------------------------------------------------------------	*/
 void
-ipf_p_rpcb_main_unload()
+ippr_rpcb_fini()
 {
 	if (rpcb_proxy_init == 1) {
 		MUTEX_DESTROY(&rpcbfr.fr_lock);
@@ -135,7 +138,7 @@ ipf_p_rpcb_main_unload()
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_new						*/
+/* Function:	ippr_rpcb_new						*/
 /* Returns:	int - -1 == failure, 0 == success			*/
 /* Parameters:	fin(I)	- pointer to packet information			*/
 /*		aps(I)	- pointer to proxy session structure		*/
@@ -144,8 +147,7 @@ ipf_p_rpcb_main_unload()
 /* Allocate resources for per-session proxy structures.			*/
 /* --------------------------------------------------------------------	*/
 int
-ipf_p_rpcb_new(arg, fin, aps, nat)
-	void *arg;
+ippr_rpcb_new(fin, aps, nat)
 	fr_info_t *fin;
 	ap_session_t *aps;
 	nat_t *nat;
@@ -168,28 +170,27 @@ ipf_p_rpcb_new(arg, fin, aps, nat)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_del						*/
+/* Function:	ippr_rpcb_del						*/
 /* Returns:	void							*/
 /* Parameters:	aps(I)	- pointer to proxy session structure		*/
 /*									*/
 /* Free up a session's list of RPCB requests.				*/
 /* --------------------------------------------------------------------	*/
 void
-ipf_p_rpcb_del(softc, aps)
-	ipf_main_softc_t *softc;
+ippr_rpcb_del(aps)
 	ap_session_t *aps;
 {
 	rpcb_session_t *rs;
 	rs = (rpcb_session_t *)aps->aps_data;
 
 	MUTEX_ENTER(&rs->rs_rxlock);
-	ipf_p_rpcb_flush(rs);
+	ippr_rpcb_flush(rs);
 	MUTEX_EXIT(&rs->rs_rxlock);
 	MUTEX_DESTROY(&rs->rs_rxlock);
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_in						*/
+/* Function:	ippr_rpcb_in						*/
 /* Returns:	int - APR_ERR(1) == drop the packet, 			*/
 /*		      APR_ERR(2) == kill the proxy session,		*/
 /*		      else change in packet length (in bytes)		*/
@@ -202,8 +203,7 @@ ipf_p_rpcb_del(softc, aps)
 /* for decoding.  Also pass packet off for a rewrite if necessary.	*/
 /* --------------------------------------------------------------------	*/
 int
-ipf_p_rpcb_in(arg, fin, aps, nat)
-	void *arg;
+ippr_rpcb_in(fin, aps, nat)
 	fr_info_t *fin;
 	ap_session_t *aps;
 	nat_t *nat;
@@ -222,8 +222,7 @@ ipf_p_rpcb_in(arg, fin, aps, nat)
 	rs = (rpcb_session_t *)aps->aps_data;
 
 	m = fin->fin_m;
-	off = (char *)fin->fin_dp - (char *)fin->fin_ip;
-	off += sizeof(udphdr_t) + fin->fin_ipoff;
+	off = (char *)fin->fin_dp - MTOD(m, char *) + sizeof(udphdr_t);
 	dlen = fin->fin_dlen - sizeof(udphdr_t);
 
 	/* Disallow packets outside legal range for supported requests. */
@@ -237,7 +236,7 @@ ipf_p_rpcb_in(arg, fin, aps, nat)
 	rm->rm_buflen = dlen;
 
 	/* Send off to decode request. */
-	rv = ipf_p_rpcb_decodereq(fin, nat, rs, rm);
+	rv = ippr_rpcb_decodereq(fin, nat, rs, rm);
 
 	switch(rv)
 	{
@@ -248,18 +247,18 @@ ipf_p_rpcb_in(arg, fin, aps, nat)
 	case 0:
 		break;
 	case 1:
-		rv = ipf_p_rpcb_modreq(fin, nat, rm, m, off);
+		rv = ippr_rpcb_modreq(fin, nat, rm, m, off);
 		break;
 	default:
 		/*CONSTANTCONDITION*/
-		IPF_PANIC(1, ("illegal rv %d (ipf_p_rpcb_req)", rv));
+		IPF_PANIC(1, ("illegal rv %d (ippr_rpcb_req)", rv));
 	}
 
 	return(rv);
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_out						*/
+/* Function:	ippr_rpcb_out						*/
 /* Returns:	int - APR_ERR(1) == drop the packet, 			*/
 /*		      APR_ERR(2) == kill the proxy session,		*/
 /*		      else change in packet length (in bytes)		*/
@@ -274,8 +273,7 @@ ipf_p_rpcb_in(arg, fin, aps, nat)
 /* allow direct communication between RPC client and server.		*/
 /* --------------------------------------------------------------------	*/
 int
-ipf_p_rpcb_out(arg, fin, aps, nat)
-	void *arg;
+ippr_rpcb_out(fin, aps, nat)
 	fr_info_t *fin;
 	ap_session_t *aps;
 	nat_t *nat;
@@ -293,11 +291,9 @@ ipf_p_rpcb_out(arg, fin, aps, nat)
 
 	/* Perform basic variable initialization. */
 	rs = (rpcb_session_t *)aps->aps_data;
-	rx = NULL;
 
 	m = fin->fin_m;
-	off = (char *)fin->fin_dp - (char *)fin->fin_ip;
-	off += sizeof(udphdr_t) + fin->fin_ipoff;
+	off = (char *)fin->fin_dp - MTOD(m, char *) + sizeof(udphdr_t);
 	dlen = fin->fin_dlen - sizeof(udphdr_t);
 	diff = 0;
 
@@ -311,17 +307,15 @@ ipf_p_rpcb_out(arg, fin, aps, nat)
 	COPYDATA(m, off, dlen, (caddr_t)&rm->rm_msgbuf);
 	rm->rm_buflen = dlen;
 
-	rx = NULL;		/* XXX gcc */
-
 	/* Send off to decode reply. */
-	rv = ipf_p_rpcb_decoderep(fin, nat, rs, rm, &rx);
+	rv = ippr_rpcb_decoderep(fin, nat, rs, rm, &rx);
 
 	switch(rv)
 	{
 	case -1: /* Bad packet */
                 if (rx != NULL) {
                         MUTEX_ENTER(&rs->rs_rxlock);
-                        ipf_p_rpcb_deref(rs, rx);
+                        ippr_rpcb_deref(rs, rx);
                         MUTEX_EXIT(&rs->rs_rxlock);
                 }
 		return(APR_ERR(1));
@@ -337,16 +331,16 @@ ipf_p_rpcb_out(arg, fin, aps, nat)
 		 * same.  (i.e., this box is either a router or rpcbind
 		 * only listens on loopback.)
 		 */
-		if (nat->nat_odstaddr != nat->nat_ndstaddr) {
+		if (nat->nat_inip.s_addr != nat->nat_outip.s_addr) {
 			if (rx->rx_type == RPCB_RES_STRING)
-				diff = ipf_p_rpcb_modv3(fin, nat, rm, m, off);
+				diff = ippr_rpcb_modv3(fin, nat, rm, m, off);
 			else if (rx->rx_type == RPCB_RES_LIST)
-				diff = ipf_p_rpcb_modv4(fin, nat, rm, m, off);
+				diff = ippr_rpcb_modv4(fin, nat, rm, m, off);
 		}
 		break;
 	default:
 		/*CONSTANTCONDITION*/
-		IPF_PANIC(1, ("illegal rv %d (ipf_p_rpcb_decoderep)", rv));
+		IPF_PANIC(1, ("illegal rv %d (ippr_rpcb_decoderep)", rv));
 	}
 
 	if (rx != NULL) {
@@ -357,8 +351,8 @@ ipf_p_rpcb_out(arg, fin, aps, nat)
                  * finished with rx, and the other signals that we've
                  * processed its reply.
                  */
-                ipf_p_rpcb_deref(rs, rx);
-                ipf_p_rpcb_deref(rs, rx);
+                ippr_rpcb_deref(rs, rx);
+                ippr_rpcb_deref(rs, rx);
                 MUTEX_EXIT(&rs->rs_rxlock);
 	}
 
@@ -370,14 +364,14 @@ ipf_p_rpcb_out(arg, fin, aps, nat)
  */
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_flush						*/
+/* Function:	ippr_rpcb_flush						*/
 /* Returns:	void							*/
 /* Parameters:	rs(I)	- pointer to RPCB session structure		*/
 /*									*/
 /* Simply flushes the list of outstanding transactions, if any.		*/
 /* --------------------------------------------------------------------	*/
 static void
-ipf_p_rpcb_flush(rs)
+ippr_rpcb_flush(rs)
 	rpcb_session_t *rs;
 {
 	rpcb_xact_t *r1, *r2;
@@ -394,7 +388,7 @@ ipf_p_rpcb_flush(rs)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_decodereq					*/
+/* Function:	ippr_rpcb_decodereq					*/
 /* Returns:	int - -1 == bad request or critical failure,		*/
 /*		       0 == request successfully decoded,		*/
 /*		       1 == request successfully decoded; requires	*/
@@ -411,7 +405,7 @@ ipf_p_rpcb_flush(rs)
 /* is enough room in rs_buf for the basic RPC message "preamble".	*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_decodereq(fin, nat, rs, rm)
+ippr_rpcb_decodereq(fin, nat, rs, rm)
 	fr_info_t *fin;
 	nat_t *nat;
 	rpcb_session_t *rs;
@@ -443,9 +437,9 @@ ipf_p_rpcb_decodereq(fin, nat, rs, rm)
 	rc->rc_proc = p++;
 
 	/* Bypass RPC authentication stuff. */
-	if (ipf_p_rpcb_skipauth(rm, &rc->rc_authcred, &p) != 0)
+	if (ippr_rpcb_skipauth(rm, &rc->rc_authcred, &p) != 0)
 		return(-1);
-	if (ipf_p_rpcb_skipauth(rm, &rc->rc_authverf, &p) != 0)
+	if (ippr_rpcb_skipauth(rm, &rc->rc_authverf, &p) != 0)
 		return(-1);
 
 	/* Compare RPCB version and procedure numbers. */
@@ -491,17 +485,17 @@ ipf_p_rpcb_decodereq(fin, nat, rs, rm)
 		ra = &rc->rc_rpcbargs;
 
 		/* Decode the 'struct rpcb' request. */
-		if (ipf_p_rpcb_xdrrpcb(rm, p, ra) != 0)
+		if (ippr_rpcb_xdrrpcb(rm, p, ra) != 0)
 			return(-1);
 
 		/* Are the target address & port valid? */
-		if ((ra->ra_maddr.xu_ip != nat->nat_ndstaddr) ||
-		    (ra->ra_maddr.xu_port != nat->nat_ndport))
+		if ((ra->ra_maddr.xu_ip != nat->nat_outip.s_addr) ||
+		    (ra->ra_maddr.xu_port != nat->nat_outport))
 		    	return(-1);
 
 		/* Do we need to rewrite this packet? */
-		if ((nat->nat_ndstaddr != nat->nat_odstaddr) ||
-		    (nat->nat_ndport != nat->nat_odport))
+		if ((nat->nat_outip.s_addr != nat->nat_inip.s_addr) ||
+		    (nat->nat_outport != nat->nat_inport))
 		    	mod = 1;
 		break;
 	default:
@@ -509,7 +503,7 @@ ipf_p_rpcb_decodereq(fin, nat, rs, rm)
 	}
 
         MUTEX_ENTER(&rs->rs_rxlock);
-	if (ipf_p_rpcb_insert(rs, &rx) != 0) {
+	if (ippr_rpcb_insert(rs, &rx) != 0) {
                 MUTEX_EXIT(&rs->rs_rxlock);
 		return(-1);
 	}
@@ -519,7 +513,7 @@ ipf_p_rpcb_decodereq(fin, nat, rs, rm)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_skipauth					*/
+/* Function:	ippr_rpcb_skipauth					*/
 /* Returns:	int -- -1 == illegal auth parameters (lengths)		*/
 /*			0 == valid parameters, pointer advanced		*/
 /* Parameters:	rm(I)	- pointer to RPC message structure		*/
@@ -530,7 +524,7 @@ ipf_p_rpcb_decodereq(fin, nat, rs, rm)
 /* it.									*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_skipauth(rm, auth, buf)
+ippr_rpcb_skipauth(rm, auth, buf)
 	rpc_msg_t *rm;
 	xdr_auth_t *auth;
 	u_32_t **buf;
@@ -562,20 +556,20 @@ ipf_p_rpcb_skipauth(rm, auth, buf)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_insert					*/
+/* Function:	ippr_rpcb_insert					*/
 /* Returns:	int -- -1 == list insertion failed,			*/
 /*			0 == item successfully added			*/
 /* Parameters:	rs(I)	- pointer to RPCB session structure		*/
 /*		rx(I)	- pointer to RPCB transaction structure		*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_insert(rs, rx)
+ippr_rpcb_insert(rs, rx)
 	rpcb_session_t *rs;
 	rpcb_xact_t *rx;
 {
 	rpcb_xact_t *rxp;
 
-	rxp = ipf_p_rpcb_lookup(rs, rx->rx_xid);
+	rxp = ippr_rpcb_lookup(rs, rx->rx_xid);
 	if (rxp != NULL) {
                 ++rxp->rx_ref;
 		return(0);
@@ -605,7 +599,7 @@ ipf_p_rpcb_insert(rs, rx)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_xdrrpcb					*/
+/* Function:	ippr_rpcb_xdrrpcb					*/
 /* Returns:	int -- -1 == failure to properly decode the request	*/
 /*			0 == rpcb successfully decoded			*/
 /* Parameters:	rs(I)	- pointer to RPCB session structure		*/
@@ -616,7 +610,7 @@ ipf_p_rpcb_insert(rs, rx)
 /* within only the context of TCP/UDP over IP networks.			*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_xdrrpcb(rm, p, ra)
+ippr_rpcb_xdrrpcb(rm, p, ra)
 	rpc_msg_t *rm;
 	u_32_t *p;
 	rpcb_args_t *ra;
@@ -628,11 +622,11 @@ ipf_p_rpcb_xdrrpcb(rm, p, ra)
 	p += 2;
 
 	/* Decode r_netid.  Must be "tcp" or "udp". */
-	if (ipf_p_rpcb_getproto(rm, &ra->ra_netid, &p) != 0)
+	if (ippr_rpcb_getproto(rm, &ra->ra_netid, &p) != 0)
 		return(-1);
 
 	/* Decode r_maddr. */
-	if (ipf_p_rpcb_getuaddr(rm, &ra->ra_maddr, &p) != 0)
+	if (ippr_rpcb_getuaddr(rm, &ra->ra_maddr, &p) != 0)
 		return(-1);
 
 	/* Advance to r_owner and make sure it's empty. */
@@ -643,7 +637,7 @@ ipf_p_rpcb_xdrrpcb(rm, p, ra)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_getuaddr					*/
+/* Function:	ippr_rpcb_getuaddr					*/
 /* Returns:	int -- -1 == illegal string,				*/
 /*			0 == string parsed; contents recorded		*/
 /* Parameters:	rm(I)	- pointer to RPC message structure		*/
@@ -653,7 +647,7 @@ ipf_p_rpcb_xdrrpcb(rm, p, ra)
 /* Decode the IP address / port at p and record them in xu.		*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_getuaddr(rm, xu, p)
+ippr_rpcb_getuaddr(rm, xu, p)
 	rpc_msg_t *rm;
 	xdr_uaddr_t *xu;
 	u_32_t **p;
@@ -688,11 +682,11 @@ ipf_p_rpcb_getuaddr(rm, xu, p)
 	 * Expected format: a.b.c.d.e.f where [a-d] correspond to bytes of
 	 * an IP address and [ef] are the bytes of a L4 port.
 	 */
-	if (!(ISDIGIT(uastr[0]) && ISDIGIT(uastr[l-1])))
+	if (!(isdigit(uastr[0]) && isdigit(uastr[l-1])))
 		return(-1);
 	b = uastr;
 	for (c = &uastr[1], d = 0, dd = 0; c < &uastr[l-1]; c++) {
-		if (ISDIGIT(*c)) {
+		if (isdigit(*c)) {
 			dd = 0;
 			continue;
 		}
@@ -702,7 +696,7 @@ ipf_p_rpcb_getuaddr(rm, xu, p)
 
 			/* Check for ASCII byte. */
 			*c = '\0';
-			t = ipf_p_rpcb_atoi(b);
+			t = ippr_rpcb_atoi(b);
 			if (t > 255)
 				return(-1);
 
@@ -724,7 +718,7 @@ ipf_p_rpcb_getuaddr(rm, xu, p)
 		return(-1);
 
 	/* Handle the last byte (port low byte) */
-	t = ipf_p_rpcb_atoi(b);
+	t = ippr_rpcb_atoi(b);
 	if (t > 255)
 		return(-1);
 	pp[d - 4] = t & 0xff;
@@ -733,20 +727,20 @@ ipf_p_rpcb_getuaddr(rm, xu, p)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_atoi (XXX should be generic for all proxies)	*/
+/* Function:	ippr_rpcb_atoi (XXX should be generic for all proxies)	*/
 /* Returns:	int -- integer representation of supplied string	*/
 /* Parameters:	ptr(I)	- input string					*/
 /*									*/
 /* Simple version of atoi(3) ripped from ip_rcmd_pxy.c.			*/
 /* --------------------------------------------------------------------	*/
 static u_int
-ipf_p_rpcb_atoi(ptr)
+ippr_rpcb_atoi(ptr)
 	char *ptr;
 {
 	register char *s = ptr, c;
 	register u_int i = 0;
 
-	while (((c = *s++) != '\0') && ISDIGIT(c)) {
+	while (((c = *s++) != '\0') && isdigit(c)) {
 		i *= 10;
 		i += c - '0';
 	}
@@ -754,7 +748,7 @@ ipf_p_rpcb_atoi(ptr)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_modreq					*/
+/* Function:	ippr_rpcb_modreq					*/
 /* Returns:	int -- change in datagram length			*/
 /*			APR_ERR(2) - critical failure			*/
 /* Parameters:	fin(I)	- pointer to packet information			*/
@@ -767,7 +761,7 @@ ipf_p_rpcb_atoi(ptr)
 /* with the latter.  (This is exclusive to protocol versions 3 & 4).	*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_modreq(fin, nat, rm, m, off)
+ippr_rpcb_modreq(fin, nat, rm, m, off)
 	fr_info_t *fin;
 	nat_t *nat;
 	rpc_msg_t *rm;
@@ -782,8 +776,8 @@ ipf_p_rpcb_modreq(fin, nat, rm, m, off)
 	int diff;
 
 	ra = &rm->rm_call.rc_rpcbargs;
-	i = (char *)&nat->nat_odstaddr;
-	p = (char *)&nat->nat_odport;
+	i = (char *)&nat->nat_inip.s_addr;
+	p = (char *)&nat->nat_inport;
 
 	/* Form new string. */
 	bzero(uaddr, sizeof(uaddr)); /* Just in case we need padding. */
@@ -824,9 +818,9 @@ ipf_p_rpcb_modreq(fin, nat, rm, m, off)
 	if (diff != 0) {
 		udp = fin->fin_dp;
 		udp->uh_ulen = htons(ntohs(udp->uh_ulen) + diff);
-		fin->fin_plen += diff;
-		fin->fin_ip->ip_len = htons(fin->fin_plen);
+		fin->fin_ip->ip_len += diff;
 		fin->fin_dlen += diff;
+		fin->fin_plen += diff;
 		/* XXX Storage lengths. */
 	}
 
@@ -834,7 +828,7 @@ ipf_p_rpcb_modreq(fin, nat, rm, m, off)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_decoderep					*/
+/* Function:	ippr_rpcb_decoderep					*/
 /* Returns:	int - -1 == bad request or critical failure,		*/
 /*		       0 == valid, negative reply			*/
 /*		       1 == vaddlid, positive reply; needs no changes	*/
@@ -854,7 +848,7 @@ ipf_p_rpcb_modreq(fin, nat, rm, m, off)
 /* is enough room in rs_buf for the basic RPC message "preamble".	*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
+ippr_rpcb_decoderep(fin, nat, rs, rm, rxp)
 	fr_info_t *fin;
 	nat_t *nat;
 	rpcb_session_t *rs;
@@ -878,7 +872,7 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 
 	/* Lookup XID */
         MUTEX_ENTER(&rs->rs_rxlock);
-	if ((rx = ipf_p_rpcb_lookup(rs, xdr)) == NULL) {
+	if ((rx = ippr_rpcb_lookup(rs, xdr)) == NULL) {
                 MUTEX_EXIT(&rs->rs_rxlock);
 		return(-1);
         }
@@ -903,7 +897,7 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 	}
 
 	/* Bypass RPC authentication stuff. */
-	if (ipf_p_rpcb_skipauth(rm, &rr->rr_authverf, &p) != 0)
+	if (ippr_rpcb_skipauth(rm, &rr->rr_authverf, &p) != 0)
 		return(-1);
 
 	/* Test accept status */
@@ -919,20 +913,20 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 		/* There must be only one 4 byte argument. */
 		if (!RPCB_BUF_EQ(rm, p, 4))
 			return(-1);
-
+		
 		rr->rr_v2 = p;
 		xdr = B(rr->rr_v2);
-
+		
 		/* Reply w/ a 0 port indicates service isn't registered */
 		if (xdr == 0)
 			return(0);
-
+		
 		/* Is the value sane? */
 		if (xdr > 65535)
 			return(-1);
 
 		/* Create NAT & state table entries. */
-		if (ipf_p_rpcb_getnat(fin, nat, rx->rx_proto, (u_int)xdr) != 0)
+		if (ippr_rpcb_getnat(fin, nat, rx->rx_proto, (u_int)xdr) != 0)
 			return(-1);
 		break;
 	case RPCB_RES_STRING:
@@ -950,15 +944,15 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 			return(0);
 
 		/* Decode the target IP address / port. */
-		if (ipf_p_rpcb_getuaddr(rm, &rr->rr_v3, &p) != 0)
+		if (ippr_rpcb_getuaddr(rm, &rr->rr_v3, &p) != 0)
 			return(-1);
 
 		/* Validate the IP address and port contained. */
-		if (nat->nat_odstaddr != rr->rr_v3.xu_ip)
+		if (nat->nat_inip.s_addr != rr->rr_v3.xu_ip)
 			return(-1);
 
 		/* Create NAT & state table entries. */
-		if (ipf_p_rpcb_getnat(fin, nat, rx->rx_proto,
+		if (ippr_rpcb_getnat(fin, nat, rx->rx_proto,
 				     (u_int)rr->rr_v3.xu_port) != 0)
 			return(-1);
 		break;
@@ -983,9 +977,9 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 
 		for(;;) {
 			re = &rl->rl_entries[rl->rl_cnt];
-			if (ipf_p_rpcb_getuaddr(rm, &re->re_maddr, &p) != 0)
+			if (ippr_rpcb_getuaddr(rm, &re->re_maddr, &p) != 0)
 				return(-1);
-			if (ipf_p_rpcb_getproto(rm, &re->re_netid, &p) != 0)
+			if (ippr_rpcb_getproto(rm, &re->re_netid, &p) != 0)
 				return(-1);
 			/* re_semantics & re_pfamily length */
 			if (!RPCB_BUF_GEQ(rm, p, 12))
@@ -995,7 +989,7 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 			if ((xdr != 4) || strncmp((char *)p, "inet", 4))
 				return(-1);
 			p++;
-			if (ipf_p_rpcb_getproto(rm, &re->re_proto, &p) != 0)
+			if (ippr_rpcb_getproto(rm, &re->re_proto, &p) != 0)
 				return(-1);
 			if (!RPCB_BUF_GEQ(rm, p, 4))
 				return(-1);
@@ -1014,7 +1008,7 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 
 		for(rl->rl_cnt = 0; rl->rl_cnt < cnt; rl->rl_cnt++) {
 			re = &rl->rl_entries[rl->rl_cnt];
-			rv = ipf_p_rpcb_getnat(fin, nat,
+			rv = ippr_rpcb_getnat(fin, nat,
 			                      re->re_proto.xp_proto,
 				              (u_int)re->re_maddr.xu_port);
 			if (rv != 0)
@@ -1030,14 +1024,14 @@ ipf_p_rpcb_decoderep(fin, nat, rs, rm, rxp)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_lookup					*/
+/* Function:	ippr_rpcb_lookup					*/
 /* Returns:	rpcb_xact_t * 	- NULL == no matching record,		*/
 /*				  else pointer to relevant entry	*/
 /* Parameters:	rs(I)	- pointer to RPCB session			*/
 /*		xid(I)	- XID to look for				*/
 /* --------------------------------------------------------------------	*/
 static rpcb_xact_t *
-ipf_p_rpcb_lookup(rs, xid)
+ippr_rpcb_lookup(rs, xid)
 	rpcb_session_t *rs;
 	u_32_t xid;
 {
@@ -1054,7 +1048,7 @@ ipf_p_rpcb_lookup(rs, xid)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_deref					        */
+/* Function:	ippr_rpcb_deref					        */
 /* Returns:	(void)							*/
 /* Parameters:	rs(I)	- pointer to RPCB session			*/
 /*		rx(I)	- pointer to RPC transaction struct to remove	*/
@@ -1065,7 +1059,7 @@ ipf_p_rpcb_lookup(rs, xid)
 /* Free the RPCB transaction record rx from the chain of entries.	*/
 /* --------------------------------------------------------------------	*/
 static void
-ipf_p_rpcb_deref(rs, rx)
+ippr_rpcb_deref(rs, rx)
 	rpcb_session_t *rs;
 	rpcb_xact_t *rx;
 {
@@ -1088,7 +1082,7 @@ ipf_p_rpcb_deref(rs, rx)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_getproto					*/
+/* Function:	ippr_rpcb_getproto					*/
 /* Returns:	int - -1 == illegal protocol/netid,			*/
 /*		       0 == legal protocol/netid			*/
 /* Parameters:	rm(I)	- pointer to RPC message structure		*/
@@ -1098,7 +1092,7 @@ ipf_p_rpcb_deref(rs, rx)
 /* Decode netid/proto stored at p and record its numeric value.	 	*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_getproto(rm, xp, p)
+ippr_rpcb_getproto(rm, xp, p)
 	rpc_msg_t *rm;
 	xdr_proto_t *xp;
 	u_32_t **p;
@@ -1125,7 +1119,7 @@ ipf_p_rpcb_getproto(rm, xp, p)
 	else {
 		return(-1);
 	}
-
+	
 	/* Advance past the string. */
 	(*p)++;
 
@@ -1133,7 +1127,7 @@ ipf_p_rpcb_getproto(rm, xp, p)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_getnat					*/
+/* Function:	ippr_rpcb_getnat					*/
 /* Returns:	int -- -1 == failed to create table entries,		*/
 /*			0 == success					*/
 /* Parameters:	fin(I)	- pointer to packet information			*/
@@ -1145,13 +1139,12 @@ ipf_p_rpcb_getproto(rm, xp, p)
 /* attempt between RPC client and server.				*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_getnat(fin, nat, proto, port)
+ippr_rpcb_getnat(fin, nat, proto, port)
 	fr_info_t *fin;
 	nat_t *nat;
 	u_int proto;
 	u_int port;
 {
-	ipf_main_softc_t *softc = fin->fin_main_soft;
 	ipnat_t *ipn, ipnat;
 	tcphdr_t tcp;
 	ipstate_t *is;
@@ -1164,12 +1157,12 @@ ipf_p_rpcb_getnat(fin, nat, proto, port)
 	/* Generate dummy fr_info */
 	bcopy((char *)fin, (char *)&fi, sizeof(fi));
 	fi.fin_out = 0;
+	fi.fin_src = fin->fin_dst;
+	fi.fin_dst = nat->nat_outip;
 	fi.fin_p = proto;
 	fi.fin_sport = 0;
 	fi.fin_dport = port & 0xffff;
 	fi.fin_flx |= FI_IGNORE;
-	fi.fin_saddr = nat->nat_osrcaddr;
-	fi.fin_daddr = nat->nat_odstaddr;
 
 	bzero((char *)&tcp, sizeof(tcp));
 	tcp.th_dport = htons(port);
@@ -1197,18 +1190,17 @@ ipf_p_rpcb_getnat(fin, nat, proto, port)
 	 * If successful, fr_stlookup returns with ipf_state locked.  We have
 	 * no use for this lock, so simply unlock it if necessary.
 	 */
-	is = ipf_state_lookup(&fi, &tcp, NULL);
-	if (is != NULL) {
-		RWLOCK_EXIT(&softc->ipf_state);
-	}
+	is = fr_stlookup(&fi, &tcp, NULL);
+	if (is != NULL)
+		RWLOCK_EXIT(&ipf_state);
 
-	RWLOCK_EXIT(&softc->ipf_nat);
+	RWLOCK_EXIT(&ipf_nat);
 
-	WRITE_ENTER(&softc->ipf_nat);
-	natl = ipf_nat_inlookup(&fi, nflags, proto, fi.fin_src, fi.fin_dst);
+	WRITE_ENTER(&ipf_nat);
+	natl = nat_inlookup(&fi, nflags, proto, fi.fin_src, fi.fin_dst);
 
 	if ((natl != NULL) && (is != NULL)) {
-		MUTEX_DOWNGRADE(&softc->ipf_nat);
+		MUTEX_DOWNGRADE(&ipf_nat);
 		return(0);
 	}
 
@@ -1222,10 +1214,6 @@ ipf_p_rpcb_getnat(fin, nat, proto, port)
 	nflags &= ~NAT_SEARCH;
 
 	if (natl == NULL) {
-#ifdef USE_MUTEXES
-		ipf_nat_softc_t *softn = softc->ipf_nat_soft;
-#endif
-
 		/* XXX Since we're just copying the original ipn contents
 		 * back, would we be better off just sending a pointer to
 		 * the 'temp' copy off to nat_new instead?
@@ -1234,50 +1222,46 @@ ipf_p_rpcb_getnat(fin, nat, proto, port)
 		bcopy((char *)ipn, (char *)&ipnat, sizeof(ipnat));
 		ipn->in_flags = nflags & IPN_TCPUDP;
 		ipn->in_apr = NULL;
-		ipn->in_pr[0] = proto;
-		ipn->in_pr[1] = proto;
-		ipn->in_dpmin = fi.fin_dport;
-		ipn->in_dpmax = fi.fin_dport;
-		ipn->in_dpnext = fi.fin_dport;
+		ipn->in_p = proto;
+		ipn->in_pmin = htons(fi.fin_dport);
+		ipn->in_pmax = htons(fi.fin_dport);
+		ipn->in_pnext = htons(fi.fin_dport);
 		ipn->in_space = 1;
 		ipn->in_ippip = 1;
 		if (ipn->in_flags & IPN_FILTER) {
 			ipn->in_scmp = 0;
 			ipn->in_dcmp = 0;
 		}
-		ipn->in_plabel = -1;
+		*ipn->in_plabel = '\0';
 
 		/* Create NAT entry.  return NULL if this fails. */
-		MUTEX_ENTER(&softn->ipf_nat_new);
-		natl = ipf_nat_add(&fi, ipn, NULL, nflags|SI_CLONE|NAT_SLAVE,
+		natl = nat_new(&fi, ipn, NULL, nflags|SI_CLONE|NAT_SLAVE,
 			       NAT_INBOUND);
-		MUTEX_EXIT(&softn->ipf_nat_new);
 
 		bcopy((char *)&ipnat, (char *)ipn, sizeof(ipnat));
 
 		if (natl == NULL) {
-			MUTEX_DOWNGRADE(&softc->ipf_nat);
+			MUTEX_DOWNGRADE(&ipf_nat);
 			return(-1);
 		}
 
-		fi.fin_saddr = natl->nat_nsrcaddr;
-		fi.fin_daddr = natl->nat_ndstaddr;
 		ipn->in_use++;
-		(void) ipf_nat_proto(&fi, natl, nflags);
-		MUTEX_ENTER(&natl->nat_lock);
-		ipf_nat_update(&fi, natl);
-		MUTEX_EXIT(&natl->nat_lock);
+		(void) nat_proto(&fi, natl, nflags);
+		nat_update(&fi, natl, natl->nat_ptr);
 	}
-	MUTEX_DOWNGRADE(&softc->ipf_nat);
+	MUTEX_DOWNGRADE(&ipf_nat);
 
 	if (is == NULL) {
 		/* Create state entry.  Return NULL if this fails. */
+		fi.fin_dst = nat->nat_inip;
+		fi.fin_nat = (void *)natl;
 		fi.fin_flx |= FI_NATED;
 		fi.fin_flx &= ~FI_STATE;
 		nflags &= NAT_TCPUDP;
 		nflags |= SI_W_SPORT|SI_CLONE;
 
-		if (ipf_state_add(softc, &fi, NULL, nflags) != 0) {
+		is = fr_addstate(&fi, NULL, nflags);
+		if (is == NULL) {
 			/*
 			 * XXX nat_delete is private to ip_nat.c.  Should
 			 * check w/ Darren about this one.
@@ -1292,7 +1276,7 @@ ipf_p_rpcb_getnat(fin, nat, proto, port)
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_modv3						*/
+/* Function:	ippr_rpcb_modv3						*/
 /* Returns:	int -- change in packet length				*/
 /* Parameters:	fin(I)	- pointer to packet information			*/
 /*		nat(I)	- pointer to NAT session			*/
@@ -1304,7 +1288,7 @@ ipf_p_rpcb_getnat(fin, nat, proto, port)
 /* lengths as necessary.						*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_modv3(fin, nat, rm, m, off)
+ippr_rpcb_modv3(fin, nat, rm, m, off)
 	fr_info_t *fin;
 	nat_t *nat;
 	rpc_msg_t *rm;
@@ -1318,7 +1302,7 @@ ipf_p_rpcb_modv3(fin, nat, rm, m, off)
 	int diff;
 
 	rr = &rm->rm_resp;
-	i = (char *)&nat->nat_ndstaddr;
+	i = (char *)&nat->nat_outip.s_addr;
 	p = (char *)&rr->rr_v3.xu_port;
 
 	/* Form new string. */
@@ -1344,7 +1328,7 @@ ipf_p_rpcb_modv3(fin, nat, rm, m, off)
 
 	/* Write new string. */
 	COPYBACK(m, off, xlen, uaddr);
-
+	
 	/* Determine difference in data lengths. */
 	diff = xlen - XDRALIGN(B(rr->rr_v3.xu_xslen));
 
@@ -1353,13 +1337,13 @@ ipf_p_rpcb_modv3(fin, nat, rm, m, off)
 	 * adjustments.
 	 */
 	if (diff != 0)
-		ipf_p_rpcb_fixlen(fin, diff);
+		ippr_rpcb_fixlen(fin, diff);
 
 	return(diff);
 }
 
 /* --------------------------------------------------------------------	*/
-/* Function:	ipf_p_rpcb_modv4						*/
+/* Function:	ippr_rpcb_modv4						*/
 /* Returns:	int -- change in packet length				*/
 /* Parameters:	fin(I)	- pointer to packet information			*/
 /*		nat(I)	- pointer to NAT session			*/
@@ -1370,7 +1354,7 @@ ipf_p_rpcb_modv3(fin, nat, rm, m, off)
 /* Write new rpcb_entry list, adjusting	lengths as necessary.		*/
 /* --------------------------------------------------------------------	*/
 static int
-ipf_p_rpcb_modv4(fin, nat, rm, m, off)
+ippr_rpcb_modv4(fin, nat, rm, m, off)
 	fr_info_t *fin;
 	nat_t *nat;
 	rpc_msg_t *rm;
@@ -1389,7 +1373,7 @@ ipf_p_rpcb_modv4(fin, nat, rm, m, off)
 	rr = &rm->rm_resp;
 	rl = &rr->rr_v4;
 
-	i = (char *)&nat->nat_ndstaddr;
+	i = (char *)&nat->nat_outip.s_addr;
 
 	/* Determine mbuf offset to write to. */
 	re = &rl->rl_entries[0];
@@ -1440,14 +1424,14 @@ ipf_p_rpcb_modv4(fin, nat, rm, m, off)
 	 * adjustments.
 	 */
 	if (diff != 0)
-		ipf_p_rpcb_fixlen(fin, diff);
+		ippr_rpcb_fixlen(fin, diff);
 
 	return(diff);
 }
 
 
 /* --------------------------------------------------------------------	*/
-/* Function:    ipf_p_rpcb_fixlen                                        */
+/* Function:    ippr_rpcb_fixlen                                        */
 /* Returns:     (void)                                                  */
 /* Parameters:  fin(I)  - pointer to packet information                 */
 /*              len(I)  - change in packet length                       */
@@ -1456,7 +1440,7 @@ ipf_p_rpcb_modv4(fin, nat, rm, m, off)
 /* header fields.                                                       */
 /* --------------------------------------------------------------------	*/
 static void
-ipf_p_rpcb_fixlen(fin, len)
+ippr_rpcb_fixlen(fin, len)
         fr_info_t *fin;
         int len;
 {
@@ -1464,9 +1448,9 @@ ipf_p_rpcb_fixlen(fin, len)
 
         udp = fin->fin_dp;
         udp->uh_ulen = htons(ntohs(udp->uh_ulen) + len);
-        fin->fin_plen += len;
-        fin->fin_ip->ip_len = htons(fin->fin_plen);
+        fin->fin_ip->ip_len += len;
         fin->fin_dlen += len;
+        fin->fin_plen += len;
 }
 
 #undef B

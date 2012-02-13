@@ -1,11 +1,11 @@
-/*	$NetBSD: load_url.c,v 1.1.1.3 2012/01/30 16:03:25 darrenr Exp $	*/
+/*	$NetBSD: load_url.c,v 1.1 2007/04/14 20:17:31 martin Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 2006 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: load_url.c,v 1.3.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: load_url.c,v 1.1.2.1 2006/08/25 21:13:04 darrenr Exp
  */
 
 #include "ipf.h"
@@ -15,11 +15,11 @@ load_url(char *url)
 {
 	alist_t *hosts = NULL;
 
-	if (strncmp(url, "file://", 7) == 0) {
-		/*
+	if (strncmp(url, "file://", 7) == 0) { 
+		/*      
 		 * file:///etc/passwd
 		 *        ^------------s
-		 */
+		 */     
 		hosts = load_file(url);
 
 	} else if (*url == '/' || *url == '.') {
@@ -29,5 +29,5 @@ load_url(char *url)
 		hosts = load_http(url);
 	}
 
-	return hosts;
+	return hosts;  
 }

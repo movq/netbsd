@@ -1,23 +1,24 @@
-/*	$NetBSD: printpool_live.c,v 1.1.1.3 2012/01/30 16:03:25 darrenr Exp $	*/
+/*	$NetBSD: printpool_live.c,v 1.1 2007/04/14 20:17:31 martin Exp $	*/
 
 /*
- * Copyright (C) 2011 by Darren Reed.
+ * Copyright (C) 2002 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
 
 #include <sys/ioctl.h>
 #include "ipf.h"
-#include "netinet/ipl.h"
+#include "ipl.h"
+
+#define	PRINTF	(void)printf
+#define	FPRINTF	(void)fprintf
 
 
-ip_pool_t *
-printpool_live(pool, fd, name, opts, fields)
-	ip_pool_t *pool;
-	int fd;
-	char *name;
-	int opts;
-	wordtab_t *fields;
+ip_pool_t *printpool_live(pool, fd, name, opts)
+ip_pool_t *pool;
+int fd;
+char *name;
+int opts;
 {
 	ip_pool_node_t entry, *top, *node;
 	ipflookupiter_t iter;
@@ -27,8 +28,7 @@ printpool_live(pool, fd, name, opts, fields)
 	if ((name != NULL) && strncmp(name, pool->ipo_name, FR_GROUPLEN))
 		return pool->ipo_next;
 
-	if (fields == NULL)
-		printpooldata(pool, opts);
+	printpooldata(pool, opts);
 
 	if ((pool->ipo_flags & IPOOL_DELETE) != 0)
 		PRINTF("# ");
@@ -51,22 +51,19 @@ printpool_live(pool, fd, name, opts, fields)
 	top = NULL;
 	printed = 0;
 
-	if (pool->ipo_list != NULL) {
-		while (!last && (ioctl(fd, SIOCLOOKUPITER, &obj) == 0)) {
-			if (entry.ipn_next == NULL)
-				last = 1;
-			node = malloc(sizeof(*top));
-			if (node == NULL)
-				break;
-			bcopy(&entry, node, sizeof(entry));
-			node->ipn_next = top;
-			top = node;
-		}
+	while (!last && (ioctl(fd, SIOCLOOKUPITER, &obj) == 0)) {
+		if (entry.ipn_next == NULL)
+			last = 1;
+		entry.ipn_next = top;
+		top = malloc(sizeof(*top));
+		if (top == NULL)
+			break;
+		bcopy(&entry, top, sizeof(entry));
 	}
 
 	while (top != NULL) {
 		node = top;
-		(void) printpoolnode(node, opts, fields);
+		(void) printpoolnode(node, opts);
 		if ((opts & OPT_DEBUG) == 0)
 			putchar(';');
 		top = node->ipn_next;
@@ -79,8 +76,5 @@ printpool_live(pool, fd, name, opts, fields)
 
 	if ((opts & OPT_DEBUG) == 0)
 		PRINTF(" };\n");
-
-	(void) ioctl(fd,SIOCIPFDELTOK, &iter.ili_key);
-
 	return pool->ipo_next;
 }

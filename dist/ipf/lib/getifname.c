@@ -1,12 +1,4 @@
-/*	$NetBSD: getifname.c,v 1.1.1.4 2012/01/30 16:03:24 darrenr Exp $	*/
-
-/*
- * Copyright (C) 2011 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
- * Id: getifname.c,v 1.11.2.2 2012/01/26 05:29:15 darrenr Exp
- */
+/*	$NetBSD: getifname.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 #include "ipf.h"
 
@@ -16,9 +8,8 @@
  * Given a pointer to an interface in the kernel, return a pointer to a
  * string which is the interface name.
  */
-#if 0
 char *getifname(ptr)
-	struct ifnet *ptr;
+struct ifnet *ptr;
 {
 #if SOLARIS || defined(__hpux)
 # if SOLARIS
@@ -50,7 +41,7 @@ char *getifname(ptr)
     defined(__OpenBSD__) || \
     (defined(__FreeBSD__) && (__FreeBSD_version >= 501113))
 #else
-	char buf[LIFNAMSIZ];
+	char buf[32];
 	int len;
 # endif
 	struct ifnet netif;
@@ -83,10 +74,3 @@ char *getifname(ptr)
 # endif
 #endif
 }
-#else
-char *getifname(ptr)
-	struct ifnet *ptr;
-{
-	return "X";
-}
-#endif

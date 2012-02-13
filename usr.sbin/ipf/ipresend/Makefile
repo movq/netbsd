@@ -1,11 +1,9 @@
-#	$NetBSD: Makefile,v 1.17 2004/03/29 04:40:05 lukem Exp $
+#	$NetBSD: Makefile,v 1.1 1997/01/05 13:09:05 mrg Exp $
 
-.include <bsd.own.mk>
+PROG=	ipsend
+SRCS=	ipresend.c ip.c resend.c opt.c ipft_ef.c ipft_hx.c ipft_sn.c ipft_td.c ipft_tx.c
+NOMAN=	yes
+CFLAGS+=	-I${.CURDIR}/../../../sbin/ipf -I${.CURDIR}/../ipfstat -I${.CURDIR}/../ipsend -I${.CURDIR}/../ipftest
 
-PROG=		ipresend
-SRCS=		ipresend.c ip.c resend.c sbpf.c sock.c 44arp.c
-MAN=		ipresend.1
-
-.PATH:		${NETBSDSRCDIR}/dist/ipf/ipsend
-
+.PATH: ${.CURDIR}/../../../sbin/ipf ${.CURDIR}/../ipfstat ${.CURDIR}/../ipsend ${.CURDIR}/../ipftest
 .include <bsd.prog.mk>

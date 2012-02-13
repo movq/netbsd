@@ -1,25 +1,25 @@
-/*	$NetBSD: ipsopt.c,v 1.6 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: ipsopt.c,v 1.1 1999/12/11 22:24:10 veego Exp $	*/
 
 /*
- * Copyright (C) 2007 by Darren Reed.
+ * Copyright (C) 1995-1998 by Darren Reed.
  *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)ipsopt.c	1.2 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipsopt.c,v 2.6.2.1 2012/01/26 05:29:15 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipsopt.c,v 2.1 1999/08/04 17:31:07 darrenr Exp";
 #endif
-#include <sys/param.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #ifndef	linux
 #include <netinet/ip_var.h>
 #endif
@@ -61,8 +61,8 @@ struct	ipopt_names secnames[] = {
 };
 
 
-u_short ipseclevel(slevel)
-	char *slevel;
+u_short seclevel(slevel)
+char *slevel;
 {
 	struct ipopt_names *so;
 
@@ -79,10 +79,10 @@ u_short ipseclevel(slevel)
 
 
 int addipopt(op, io, len, class)
-	char *op;
-	struct ipopt_names *io;
-	int len;
-	char *class;
+char *op;
+struct ipopt_names *io;
+int len;
+char *class;
 {
 	struct in_addr ipadr;
 	int olen = len, srr = 0;
@@ -106,17 +106,14 @@ int addipopt(op, io, len, class)
 			len += val;
 		} else
 			*op++ = io->on_siz;
-		if (io->on_value == IPOPT_TS)
-			*op++ = IPOPT_MINOFF + 1;
-		else
-			*op++ = IPOPT_MINOFF;
+		*op++ = IPOPT_MINOFF;
 
 		while (class && *class) {
 			t = NULL;
 			switch (io->on_value)
 			{
 			case IPOPT_SECURITY :
-				lvl = ipseclevel(class);
+				lvl = seclevel(class);
 				*(op - 1) = lvl;
 				break;
 			case IPOPT_LSRR :
@@ -150,8 +147,8 @@ int addipopt(op, io, len, class)
 
 
 u_32_t buildopts(cp, op, len)
-	char *cp, *op;
-	int len;
+char *cp, *op;
+int len;
 {
 	struct ipopt_names *io;
 	u_32_t msk = 0;

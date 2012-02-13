@@ -1,11 +1,11 @@
-/*	$NetBSD: ip_proxy.h,v 1.12 2012/02/01 02:21:20 christos Exp $	*/
+/*	$NetBSD: ip_proxy.h,v 1.1 2004/10/01 15:26:00 christos Exp $	*/
 
 /*
- * Copyright (C) 2011 by Darren Reed.
+ * Copyright (C) 1997-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ip_proxy.h,v 2.46.2.3 2012/01/26 05:29:12 darrenr Exp
+ * Id: ip_proxy.h,v 2.31 2003/07/25 12:29:59 darrenr Exp
  */
 
 #ifndef _NETINET_IP_PROXY_H_
@@ -15,12 +15,6 @@
 #define SOLARIS (defined(sun) && (defined(__svr4__) || defined(__SVR4)))
 #endif
 
-#if defined(__STDC__) || defined(__GNUC__) || defined(_AIX51)
-#define	SIOCPROXY	_IOWR('r', 64, struct ap_control)
-#else
-#define	SIOCPROXY	_IOWR(r, 64, struct ap_control)
-#endif
-
 #ifndef	APR_LABELLEN
 #define	APR_LABELLEN	16
 #endif
@@ -28,16 +22,15 @@
 
 struct	nat;
 struct	ipnat;
-struct	ipstate;
 
 typedef	struct	ap_tcp {
 	u_short	apt_sport;	/* source port */
 	u_short	apt_dport;	/* destination port */
 	short	apt_sel[2];	/* {seq,ack}{off,min} set selector */
 	short	apt_seqoff[2];	/* sequence # difference */
-	u_32_t	apt_seqmin[2];	/* don't change seq-off until after this */
+	tcp_seq	apt_seqmin[2];	/* don't change seq-off until after this */
 	short	apt_ackoff[2];	/* sequence # difference */
-	u_32_t	apt_ackmin[2];	/* don't change seq-off until after this */
+	tcp_seq	apt_ackmin[2];	/* don't change seq-off until after this */
 	u_char	apt_state[2];	/* connection state */
 } ap_tcp_t;
 
@@ -52,11 +45,14 @@ typedef	struct ap_session {
 		struct	ap_tcp	apu_tcp;
 		struct	ap_udp	apu_udp;
 	} aps_un;
+	u_int	aps_flags;
 	U_QUAD_T aps_bytes;	/* bytes sent */
 	U_QUAD_T aps_pkts;	/* packets sent */
 	void	*aps_nat;	/* pointer back to nat struct */
 	void	*aps_data;	/* private data */
+	int	aps_p;		/* protocol */
 	int	aps_psiz;	/* size of private data */
+	struct	ap_session	*aps_hnext;
 	struct	ap_session	*aps_next;
 } ap_session_t;
 
@@ -72,7 +68,6 @@ typedef	struct ap_session {
 
 typedef	struct	ap_control {
 	char	apc_label[APR_LABELLEN];
-	char	apc_config[APR_LABELLEN];
 	u_char	apc_p;
 	/*
 	 * The following fields are upto the proxy's apr_ctl routine to deal
@@ -90,36 +85,21 @@ typedef	struct	ap_control {
 	size_t	apc_dsize;
 } ap_ctl_t;
 
-#define	APC_CMD_ADD	0
-#define	APC_CMD_DEL	1
-
 
 typedef	struct	aproxy	{
 	struct	aproxy	*apr_next;
-	struct	aproxy	*apr_parent;
 	char	apr_label[APR_LABELLEN];	/* Proxy label # */
-	u_char	apr_p;				/* protocol */
+	u_char	apr_p;		/* protocol */
+	int	apr_ref;	/* +1 per rule referencing it */
 	int	apr_flags;
-	int	apr_ref;
-	int	apr_clones;
-	void	(* apr_load)(void);
-	void	(* apr_unload)(void);
-	void	*(* apr_create)(ipf_main_softc_t *);
-	void	(* apr_destroy)(ipf_main_softc_t *, void *);
-	int	(* apr_init)(ipf_main_softc_t *, void *);
-	void	(* apr_fini)(ipf_main_softc_t *, void *);
-	int	(* apr_new)(void *, fr_info_t *, ap_session_t *,
-				 struct nat *);
-	void	(* apr_del)(ipf_main_softc_t *, ap_session_t *);
-	int	(* apr_inpkt)(void *, fr_info_t *, ap_session_t *,
-				   struct nat *);
-	int	(* apr_outpkt)(void *, fr_info_t *, ap_session_t *,
-				    struct nat *);
-	int	(* apr_match)(fr_info_t *, ap_session_t *, struct nat *);
-	int	(* apr_ctl)(ipf_main_softc_t *, void *, ap_ctl_t *);
-	int	(* apr_clear)(struct aproxy *);
-	int	(* apr_flush)(struct aproxy *, int);
-	void	*apr_soft;
+	int	(* apr_init) __P((void));
+	void	(* apr_fini) __P((void));
+	int	(* apr_new) __P((fr_info_t *, ap_session_t *, struct nat *));
+	void	(* apr_del) __P((ap_session_t *));
+	int	(* apr_inpkt) __P((fr_info_t *, ap_session_t *, struct nat *));
+	int	(* apr_outpkt) __P((fr_info_t *, ap_session_t *, struct nat *));
+	int	(* apr_match) __P((fr_info_t *, ap_session_t *, struct nat *));
+	int	(* apr_ctl) __P((struct aproxy *, struct ap_control *));
 } aproxy_t;
 
 #define	APR_DELETE	1
@@ -128,37 +108,33 @@ typedef	struct	aproxy	{
 #define	APR_EXIT(x)	(((x) >> 16) & 0xffff)
 #define	APR_INC(x)	((x) & 0xffff)
 
-
-#ifdef _KERNEL
 /*
  * Generic #define's to cover missing things in the kernel
  */
-# ifndef isdigit
-#  define isdigit(x)	((x) >= '0' && (x) <= '9')
-# endif
-# ifndef isupper
-#  define isupper(x)	(((unsigned)(x) >= 'A') && ((unsigned)(x) <= 'Z'))
-# endif
-# ifndef islower
-#  define islower(x)	(((unsigned)(x) >= 'a') && ((unsigned)(x) <= 'z'))
-# endif
-# ifndef isalpha
-#  define isalpha(x)	(isupper(x) || islower(x))
-# endif
-# ifndef toupper
-#  define toupper(x)	(isupper(x) ? (x) : (x) - 'a' + 'A')
-# endif
-# ifndef isspace
-#  define isspace(x)	(((x) == ' ') || ((x) == '\r') || ((x) == '\n') || \
+#ifndef isdigit
+#define isdigit(x)	((x) >= '0' && (x) <= '9')
+#endif
+#ifndef isupper
+#define isupper(x)	(((unsigned)(x) >= 'A') && ((unsigned)(x) <= 'Z'))
+#endif
+#ifndef islower
+#define islower(x)	(((unsigned)(x) >= 'a') && ((unsigned)(x) <= 'z'))
+#endif
+#ifndef isalpha
+#define isalpha(x)	(isupper(x) || islower(x))
+#endif
+#ifndef toupper
+#define toupper(x)	(isupper(x) ? (x) : (x) - 'a' + 'A')
+#endif
+#ifndef isspace
+#define isspace(x)	(((x) == ' ') || ((x) == '\r') || ((x) == '\n') || \
 			 ((x) == '\t') || ((x) == '\b'))
-# endif
-#endif /* _KERNEL */
+#endif
 
 /*
  * For the ftp proxy.
  */
 #define	FTP_BUFSZ	160
-#define	IPF_FTPBUFSZ	160
 
 typedef struct  ftpside {
 	char	*ftps_rptr;
@@ -168,15 +144,12 @@ typedef struct  ftpside {
 	u_32_t	ftps_len;
 	int	ftps_junk;
 	int	ftps_cmds;
-	int	ftps_cmd;
 	char	ftps_buf[FTP_BUFSZ];
 } ftpside_t;
 
 typedef struct  ftpinfo {
 	int 	  	ftp_passok;
 	int		ftp_incok;
-	void		*ftp_pendstate;
-	nat_t		*ftp_pendnat;
 	ftpside_t	ftp_side[2];
 } ftpinfo_t;
 
@@ -194,25 +167,6 @@ typedef	struct	ircinfo {
 	u_32_t	irc_ipnum;
 	u_short	irc_port;
 } ircinfo_t;
-
-
-/*
- * For the rcmd proxy. rcmd_rule must be last for names in ipnat_t
- */
-typedef	struct rcmdinfo	{
-	u_32_t	rcmd_port;	/* Port number seen */
-	u_32_t	rcmd_portseq;	/* Sequence number where port is first seen */
-	ipnat_t	rcmd_rule;	/* Template rule for back connection */
-} rcmdinfo_t;
-
-/*
- * For the DNS "proxy"
- */
-typedef struct dnsinfo {
-        ipfmutex_t	dnsi_lock;
-	u_short		dnsi_id;
-	char		dnsi_buffer[512];
-} dnsinfo_t;
 
 
 /*
@@ -234,7 +188,7 @@ typedef	struct	raudio_s {
 	u_32_t	rap_sbf;	/* flag to indicate which of the 19 bytes have
 				 * been filled
 				 */
-	u_32_t	rap_sseq;
+	tcp_seq	rap_sseq;
 } raudio_t;
 
 #define	RA_ID_END	0
@@ -247,9 +201,6 @@ typedef	struct	raudio_s {
 #define	RAP_M_UDP_ROBUST	(RAP_M_UDP|RAP_M_ROBUST)
 
 
-/*
- * MSN RPC proxy
- */
 typedef	struct	msnrpcinfo	{
 	u_int		mri_flags;
 	int		mri_cmd[2];
@@ -260,7 +211,7 @@ typedef	struct	msnrpcinfo	{
 
 
 /*
- * IPSec proxy. ipsc_rule must be last for names in ipnat_t
+ * IPSec proxy
  */
 typedef	u_32_t	ipsec_cookie_t[2];
 
@@ -268,33 +219,10 @@ typedef struct ipsec_pxy {
 	ipsec_cookie_t	ipsc_icookie;
 	ipsec_cookie_t	ipsc_rcookie;
 	int		ipsc_rckset;
-	nat_t		*ipsc_nat;
-	struct ipstate	*ipsc_state;
 	ipnat_t		ipsc_rule;
+	nat_t		*ipsc_nat;
+	ipstate_t	*ipsc_state;
 } ipsec_pxy_t;
-
-/*
- * PPTP proxy. pptp_rule must be last for names in ipnat_t
- */
-typedef	struct pptp_side {
-	u_32_t		pptps_nexthdr;
-	u_32_t		pptps_next;
-	int		pptps_state;
-	int		pptps_gothdr;
-	int		pptps_len;
-	int		pptps_bytes;
-	char		*pptps_wptr;
-	char		pptps_buffer[512];
-} pptp_side_t;
-
-typedef	struct pptp_pxy {
-	nat_t		*pptp_nat;
-	struct ipstate 	*pptp_state;
-	u_short		pptp_call[2];
-	pptp_side_t	pptp_side[2];
-	ipnat_t		pptp_rule;
-} pptp_pxy_t;
-
 
 /*
  * Sun RPCBIND proxy
@@ -468,24 +396,23 @@ typedef struct rpcb_session {
  */
 #define XDRALIGN(x)	((((x) % 4) != 0) ? ((((x) + 3) / 4) * 4) : (x))
 
-extern	int	ipf_proxy_add(void *, aproxy_t *);
-extern	int	ipf_proxy_check(fr_info_t *, struct nat *);
-extern	int	ipf_proxy_ctl(ipf_main_softc_t *, void *, ap_ctl_t *);
-extern	int	ipf_proxy_del(aproxy_t *);
-extern	void	ipf_proxy_flush(void *, int);
-extern	void	ipf_proxy_free(aproxy_t *);
-extern	int	ipf_proxy_init(void);
-extern	int	ipf_proxy_ioctl(ipf_main_softc_t *, void *, ioctlcmd_t, int, void *);
-extern	aproxy_t	*ipf_proxy_lookup(void *, u_int, char *);
-extern	int	ipf_proxy_match(fr_info_t *, struct nat *);
-extern	int	ipf_proxy_new(fr_info_t *, struct nat *);
-extern	int	ipf_proxy_ok(fr_info_t *, tcphdr_t *, struct ipnat *);
-extern	void	aps_free(ipf_main_softc_t *, void *, ap_session_t *);
-extern	int	ipf_proxy_main_load(void);
-extern	int	ipf_proxy_main_unload(void);
-extern	void	*ipf_proxy_soft_create(ipf_main_softc_t *);
-extern	void	ipf_proxy_soft_destroy(ipf_main_softc_t *, void *);
-extern	int	ipf_proxy_soft_init(ipf_main_softc_t *, void *);
-extern	int	ipf_proxy_soft_fini(ipf_main_softc_t *, void *);
+extern	ap_session_t	*ap_sess_tab[AP_SESS_SIZE];
+extern	ap_session_t	*ap_sess_list;
+extern	aproxy_t	ap_proxies[];
+extern	int		ippr_ftp_pasvonly;
+
+extern	int	appr_add __P((aproxy_t *));
+extern	int	appr_ctl __P((ap_ctl_t *));
+extern	int	appr_del __P((aproxy_t *));
+extern	int	appr_init __P((void));
+extern	void	appr_unload __P((void));
+extern	int	appr_ok __P((fr_info_t *, tcphdr_t *, struct ipnat *));
+extern	int	appr_match __P((fr_info_t *, struct nat *));
+extern	void	appr_free __P((aproxy_t *));
+extern	void	aps_free __P((ap_session_t *));
+extern	int	appr_check __P((fr_info_t *, struct nat *));
+extern	aproxy_t	*appr_lookup __P((u_int, char *));
+extern	int	appr_new __P((fr_info_t *, struct nat *));
+extern	int	appr_ioctl __P((caddr_t, ioctlcmd_t, int));
 
 #endif /* _NETINET_IP_PROXY_H_ */

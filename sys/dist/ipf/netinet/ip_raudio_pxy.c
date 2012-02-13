@@ -1,24 +1,24 @@
-/*	$NetBSD: ip_raudio_pxy.c,v 1.9 2012/02/01 16:46:28 christos Exp $	*/
+/*	$NetBSD: ip_raudio_pxy.c,v 1.1 2004/10/01 15:26:00 christos Exp $	*/
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(1, "$NetBSD: ip_raudio_pxy.c,v 1.1 2004/10/01 15:26:00 christos Exp $");
 
 /*
- * Copyright (C) 2008 by Darren Reed.
+ * Copyright (C) 1998-2003 by Darren Reed
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ip_raudio_pxy.c,v 1.53.2.1 2012/01/26 05:29:12 darrenr Exp
+ * Id: ip_raudio_pxy.c,v 1.40.2.2 2004/05/24 14:01:48 darrenr Exp
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ip_raudio_pxy.c,v 1.9 2012/02/01 16:46:28 christos Exp $");
 
 #define	IPF_RAUDIO_PROXY
 
 
-void ipf_p_raudio_main_load(void);
-void ipf_p_raudio_main_unload(void);
-int ipf_p_raudio_new(void *, fr_info_t *, ap_session_t *, nat_t *);
-int ipf_p_raudio_in(void *, fr_info_t *, ap_session_t *, nat_t *);
-int ipf_p_raudio_out(void *, fr_info_t *, ap_session_t *, nat_t *);
+int ippr_raudio_init __P((void));
+void ippr_raudio_fini __P((void));
+int ippr_raudio_new __P((fr_info_t *, ap_session_t *, nat_t *));
+int ippr_raudio_in __P((fr_info_t *, ap_session_t *, nat_t *));
+int ippr_raudio_out __P((fr_info_t *, ap_session_t *, nat_t *));
 
 static	frentry_t	raudiofr;
 
@@ -28,19 +28,19 @@ int	raudio_proxy_init = 0;
 /*
  * Real Audio application proxy initialization.
  */
-void
-ipf_p_raudio_main_load(void)
+int ippr_raudio_init()
 {
 	bzero((char *)&raudiofr, sizeof(raudiofr));
 	raudiofr.fr_ref = 1;
 	raudiofr.fr_flags = FR_INQUE|FR_PASS|FR_QUICK|FR_KEEPSTATE;
 	MUTEX_INIT(&raudiofr.fr_lock, "Real Audio proxy rule lock");
 	raudio_proxy_init = 1;
+
+	return 0;
 }
 
 
-void
-ipf_p_raudio_main_unload(void)
+void ippr_raudio_fini()
 {
 	if (raudio_proxy_init == 1) {
 		MUTEX_DESTROY(&raudiofr.fr_lock);
@@ -52,8 +52,10 @@ ipf_p_raudio_main_unload(void)
 /*
  * Setup for a new proxy to handle Real Audio.
  */
-int
-ipf_p_raudio_new(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
+int ippr_raudio_new(fin, aps, nat)
+fr_info_t *fin;
+ap_session_t *aps;
+nat_t *nat;
 {
 	raudio_t *rap;
 
@@ -73,8 +75,10 @@ ipf_p_raudio_new(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 
 
 
-int
-ipf_p_raudio_out(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
+int ippr_raudio_out(fin, aps, nat)
+fr_info_t *fin;
+ap_session_t *aps;
+nat_t *nat;
 {
 	raudio_t *rap = aps->aps_data;
 	unsigned char membuf[512 + 1], *s;
@@ -177,14 +181,14 @@ ipf_p_raudio_out(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 }
 
 
-int
-ipf_p_raudio_in(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
+int ippr_raudio_in(fin, aps, nat)
+fr_info_t *fin;
+ap_session_t *aps;
+nat_t *nat;
 {
 	unsigned char membuf[IPF_MAXPORTLEN + 1], *s;
 	tcphdr_t *tcp, tcph, *tcp2 = &tcph;
 	raudio_t *rap = aps->aps_data;
-	ipf_main_softc_t *softc;
-	ipf_nat_softc_t *softn;
 	struct in_addr swa, swb;
 	int off, dlen, slen;
 	int a1, a2, a3, a4;
@@ -196,8 +200,6 @@ ipf_p_raudio_in(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 	ip_t *ip;
 	mb_t *m;
 
-	softc = fin->fin_main_soft;
-	softn = softc->ipf_nat_soft;
 	/*
 	 * Wait until we've seen the end of the start messages and even then
 	 * only proceed further if we're using UDP.  If they want to use TCP
@@ -272,8 +274,8 @@ ipf_p_raudio_in(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 	swb = ip->ip_dst;
 
 	ip->ip_p = IPPROTO_UDP;
-	ip->ip_src = nat->nat_ndstip;
-	ip->ip_dst = nat->nat_odstip;
+	ip->ip_src = nat->nat_inip;
+	ip->ip_dst = nat->nat_oip;
 
 	bcopy((char *)fin, (char *)&fi, sizeof(fi));
 	bzero((char *)tcp2, sizeof(*tcp2));
@@ -285,7 +287,7 @@ ipf_p_raudio_in(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 	fi.fin_plen = fi.fin_hlen + sizeof(*tcp2);
 	tcp2->th_win = htons(8192);
 	slen = ip->ip_len;
-	ip->ip_len = htons(fin->fin_hlen + sizeof(*tcp));
+	ip->ip_len = fin->fin_hlen + sizeof(*tcp);
 
 	if (((rap->rap_mode & RAP_M_UDP_ROBUST) == RAP_M_UDP_ROBUST) &&
 	    (rap->rap_srport != 0)) {
@@ -296,19 +298,14 @@ ipf_p_raudio_in(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 		fi.fin_data[0] = dp;
 		fi.fin_data[1] = sp;
 		fi.fin_out = 0;
-		MUTEX_ENTER(&softn->ipf_nat_new);
-		nat2 = ipf_nat_add(&fi, nat->nat_ptr, NULL,
+		nat2 = nat_new(&fi, nat->nat_ptr, NULL,
 			       NAT_SLAVE|IPN_UDP | (sp ? 0 : SI_W_SPORT),
 			       NAT_OUTBOUND);
-		MUTEX_EXIT(&softn->ipf_nat_new);
 		if (nat2 != NULL) {
-			(void) ipf_nat_proto(&fi, nat2, IPN_UDP);
-			MUTEX_ENTER(&nat2->nat_lock);
-			ipf_nat_update(&fi, nat2);
-			MUTEX_EXIT(&nat2->nat_lock);
+			(void) nat_proto(&fi, nat2, IPN_UDP);
+			nat_update(&fi, nat2, nat2->nat_ptr);
 
-			(void) ipf_state_add(softc, &fi, NULL,
-					     (sp ? 0 : SI_W_SPORT));
+			(void) fr_addstate(&fi, NULL, (sp ? 0 : SI_W_SPORT));
 		}
 	}
 
@@ -319,18 +316,14 @@ ipf_p_raudio_in(void *arg, fr_info_t *fin, ap_session_t *aps, nat_t *nat)
 		fi.fin_data[0] = sp;
 		fi.fin_data[1] = 0;
 		fi.fin_out = 1;
-		MUTEX_ENTER(&softn->ipf_nat_new);
-		nat2 = ipf_nat_add(&fi, nat->nat_ptr, NULL,
+		nat2 = nat_new(&fi, nat->nat_ptr, NULL,
 			       NAT_SLAVE|IPN_UDP|SI_W_DPORT,
 			       NAT_OUTBOUND);
-		MUTEX_EXIT(&softn->ipf_nat_new);
 		if (nat2 != NULL) {
-			(void) ipf_nat_proto(&fi, nat2, IPN_UDP);
-			MUTEX_ENTER(&nat2->nat_lock);
-			ipf_nat_update(&fi, nat2);
-			MUTEX_EXIT(&nat2->nat_lock);
+			(void) nat_proto(&fi, nat2, IPN_UDP);
+			nat_update(&fi, nat2, nat2->nat_ptr);
 
-			(void) ipf_state_add(softc, &fi, NULL, SI_W_DPORT);
+			(void) fr_addstate(&fi, NULL, SI_W_DPORT);
 		}
 	}
 

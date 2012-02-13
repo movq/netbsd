@@ -1,47 +1,32 @@
-/*	$NetBSD: print_toif.c,v 1.1.1.3 2012/01/30 16:03:25 darrenr Exp $	*/
+/*	$NetBSD: print_toif.c,v 1.1 2004/03/28 08:56:20 martti Exp $	*/
 
 /*
- * Copyright (C) 2010 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: print_toif.c,v 1.13.2.2 2012/01/26 05:29:16 darrenr Exp
+ * Id: print_toif.c,v 1.8 2002/01/28 06:50:47 darrenr Exp
  */
 
 #include "ipf.h"
 
 
-void
-print_toif(tag, base, fdp)
-	char *tag;
-	char *base;
-	frdest_t *fdp;
+void print_toif(tag, fdp)
+char *tag;
+frdest_t *fdp;
 {
-	switch (fdp->fd_type)
-	{
-	case FRD_NORMAL :
-		PRINTF("%s %s%s", tag, base + fdp->fd_name,
-		       (fdp->fd_ptr || (long)fdp->fd_ptr == -1) ? "" : "(!)");
+	printf("%s %s%s", tag, fdp->fd_ifname,
+		     (fdp->fd_ifp || (long)fdp->fd_ifp == -1) ? "" : "(!)");
 #ifdef	USE_INET6
-		if (use_inet6 && IP6_NOTZERO(&fdp->fd_ip6.in6)) {
-			char ipv6addr[80];
+	if (use_inet6 && IP6_NOTZERO(&fdp->fd_ip6.in6)) {
+		char ipv6addr[80];
 
-			inet_ntop(AF_INET6, &fdp->fd_ip6, ipv6addr,
-				  sizeof(fdp->fd_ip6));
-			PRINTF(":%s", ipv6addr);
-		} else
+		inet_ntop(AF_INET6, &fdp->fd_ip6, ipv6addr,
+			  sizeof(fdp->fd_ip6));
+		printf(":%s", ipv6addr);
+	} else
 #endif
-			if (fdp->fd_ip.s_addr)
-				PRINTF(":%s", inet_ntoa(fdp->fd_ip));
-		putchar(' ');
-		break;
-
-	case FRD_DSTLIST :
-		PRINTF("%s dstlist/%s ", tag, base + fdp->fd_name);
-		break;
-
-	default :
-		PRINTF("%s <%d>", tag, fdp->fd_type);
-		break;
-	}
+		if (fdp->fd_ip.s_addr)
+			printf(":%s", inet_ntoa(fdp->fd_ip));
+	putchar(' ');
 }

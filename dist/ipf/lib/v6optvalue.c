@@ -1,18 +1,18 @@
-/*	$NetBSD: v6optvalue.c,v 1.1.1.3 2012/01/30 16:03:22 darrenr Exp $	*/
+/*	$NetBSD: v6optvalue.c,v 1.1 2004/03/28 08:56:21 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: v6optvalue.c,v 1.4.2.1 2012/01/26 05:29:17 darrenr Exp
+ * Id: v6optvalue.c,v 1.1 2003/04/26 04:55:58 darrenr Exp
  */
 #include "ipf.h"
 
 
 
 u_32_t getv6optbyname(optname)
-	char *optname;
+char *optname;
 {
 #ifdef	USE_INET6
 	struct ipopt_names *io;
@@ -26,7 +26,7 @@ u_32_t getv6optbyname(optname)
 
 
 u_32_t getv6optbyvalue(optval)
-	int optval;
+int optval;
 {
 #ifdef	USE_INET6
 	struct ipopt_names *io;

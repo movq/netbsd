@@ -1,12 +1,4 @@
-/*	$NetBSD: var.c,v 1.7 2012/01/30 16:12:04 darrenr Exp $	*/
-
-/*
- * Copyright (C) 2009 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
- * Id: var.c,v 1.10.2.1 2012/01/26 05:29:17 darrenr Exp
- */
+/*	$NetBSD: var.c,v 1.1 2004/03/28 08:56:21 martti Exp $	*/
 
 #include <ctype.h>
 
@@ -25,7 +17,7 @@ static char *expand_string __P((char *, int));
 
 
 static variable_t *find_var(name)
-	char *name;
+char *name;
 {
 	variable_t *v;
 
@@ -37,8 +29,8 @@ static variable_t *find_var(name)
 
 
 char *get_variable(string, after, line)
-	char *string, **after;
-	int line;
+char *string, **after;
+int line;
 {
 	char c, *s, *t, *value;
 	variable_t *v;
@@ -54,9 +46,9 @@ char *get_variable(string, after, line)
 			fprintf(stderr, "%d: { without }\n", line);
 			return NULL;
 		}
-	} else if (ISALPHA(*s)) {
+	} else if (isalpha(*s)) {
 		for (t = s + 1; *t != '\0'; t++)
-			if (!ISALPHA(*t) && !ISDIGIT(*t) && (*t != '_'))
+			if (!isalpha(*t) && !isdigit(*t))
 				break;
 	} else {
 		fprintf(stderr, "%d: variables cannot start with '%c'\n",
@@ -84,8 +76,8 @@ char *get_variable(string, after, line)
 
 
 static char *expand_string(oldstring, line)
-	char *oldstring;
-	int line;
+char *oldstring;
+int line;
 {
 	char c, *s, *p1, *p2, *p3, *newstring, *value;
 	int len;
@@ -144,8 +136,8 @@ static char *expand_string(oldstring, line)
 
 
 void set_variable(name, value)
-	char *name;
-	char *value;
+char *name;
+char *value;
 {
 	variable_t *v;
 	int len;

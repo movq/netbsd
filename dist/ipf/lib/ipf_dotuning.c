@@ -1,21 +1,13 @@
-/*	$NetBSD: ipf_dotuning.c,v 1.6 2012/01/30 16:12:04 darrenr Exp $	*/
-
-/*
- * Copyright (C) 2009 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- *
- * Id: ipf_dotuning.c,v 1.8.2.1 2012/01/26 05:29:15 darrenr Exp
- */
+/*	$NetBSD: ipf_dotuning.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 #include "ipf.h"
-#include "netinet/ipl.h"
+#include "ipl.h"
 #include <sys/ioctl.h>
 
 void ipf_dotuning(fd, tuneargs, iocfn)
-	int fd;
-	char *tuneargs;
-	ioctlfunc_t iocfn;
+int fd;
+char *tuneargs;
+ioctlfunc_t iocfn;
 {
 	ipfobj_t obj;
 	ipftune_t tu;
@@ -41,7 +33,6 @@ void ipf_dotuning(fd, tuneargs, iocfn)
 				printtunable(&tu);
 			}
 		} else if ((t = strchr(s, '=')) != NULL) {
-			tu.ipft_cookie = NULL;
 			*t++ = '\0';
 			strncpy(tu.ipft_name, s, sizeof(tu.ipft_name));
 			if (sscanf(t, "%lu", &tu.ipft_vlong) == 1) {
@@ -54,16 +45,13 @@ void ipf_dotuning(fd, tuneargs, iocfn)
 				return;
 			}
 		} else {
-			tu.ipft_cookie = NULL;
 			strncpy(tu.ipft_name, s, sizeof(tu.ipft_name));
 			if ((*iocfn)(fd, SIOCIPFGET, &obj) == -1) {
 				perror("ioctl(SIOCIPFGET)");
 				return;
 			}
-			if (tu.ipft_cookie == NULL) {
-				fprintf(stderr, "Null cookie for %s\n", s);
+			if (tu.ipft_cookie == NULL)
 				return;
-			}
 
 			tu.ipft_name[sizeof(tu.ipft_name) - 1] = '\0';
 			printtunable(&tu);

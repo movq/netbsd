@@ -1,17 +1,11 @@
-/*	$NetBSD: ipf_y.y,v 1.25 2012/01/30 16:12:05 darrenr Exp $	*/
+/*	$NetBSD: ipf_y.y,v 1.1 2004/03/28 08:56:31 martti Exp $	*/
 
-/*
- * Copyright (C) 2011 by Darren Reed.
- *
- * See the IPFILTER.LICENCE file for details on licencing.
- */
 %{
 #include "ipf.h"
 #include <sys/ioctl.h>
 #include <syslog.h>
 #ifdef IPFILTER_BPF
-# include "pcap-bpf.h"
-# define _NET_BPF_H_
+# include <pcap-bpf.h>
 # include <pcap.h>
 #endif
 #include "netinet/ip_pool.h"
@@ -30,27 +24,18 @@ extern	int	yydebug;
 extern	FILE	*yyin;
 extern	int	yylineNum;
 
-static	int	addname __P((frentry_t **, char *));
-static	frentry_t *addrule __P((void));
-static frentry_t *allocfr __P((void));
-static	void	dobpf __P((int, char *));
-static	void	doipfexpr __P((char *));
-static	void	do_tuneint __P((char *, int));
-static	void	do_tunestr __P((char *, char *));
-static	void	fillgroup __P((frentry_t *));
+static	void	newrule __P((void));
+static	void	setipftype __P((void));
 static	u_32_t	lookuphost __P((char *));
+static	void	dobpf __P((int, char *));
+static	void	resetaddr __P((void));
+static	struct	alist_s	*newalist __P((struct alist_s *));
 static	u_int	makehash __P((struct alist_s *));
 static	int	makepool __P((struct alist_s *));
-static	struct	alist_s	*newalist __P((struct alist_s *));
-static	void	newrule __P((void));
-static	void	resetaddr __P((void));
-static	void	setgroup __P((frentry_t **, char *));
-static	void	setgrhead __P((frentry_t **, char *));
-static	void	seticmphead __P((frentry_t **, char *));
-static	void	setifname __P((frentry_t **, int, char *));
-static	void	setipftype __P((void));
+static	frentry_t *addrule __P((void));
 static	void	setsyslog __P((void));
 static	void	unsetsyslog __P((void));
+static	void	fillgroup __P((frentry_t *));
 
 frentry_t	*fr = NULL, *frc = NULL, *frtop = NULL, *frold = NULL;
 
@@ -63,57 +48,38 @@ static	int		nrules = 0;
 static	int		newlist = 0;
 static	int		added = 0;
 static	int		ipffd = -1;
-static	int		*yycont = NULL;
-static	ioctlfunc_t	ipfioctls[IPL_LOGSIZE];
+static	ioctlfunc_t	ipfioctl[IPL_LOGSIZE];
 static	addfunc_t	ipfaddfunc = NULL;
+static	wordtab_t	*savewords;
 
 %}
 %union	{
 	char	*str;
 	u_32_t	num;
+	struct	in_addr	ipa;
 	frentry_t	fr;
 	frtuc_t	*frt;
 	struct	alist_s	*alist;
-	u_short	port;
-	struct	in_addr	ip4;
 	struct	{
 		u_short	p1;
 		u_short	p2;
 		int	pc;
 	} pc;
 	struct	{
-		int		type;
-		int		ifpos;
-		int		f;
-		int		v;
-		int		lif;
 		union	i6addr	a;
 		union	i6addr	m;
-		char		*name;
 	} ipp;
-	struct	{
-		i6addr_t	adr;
-		int		f;
-	} adr;
-	i6addr_t	ip6;
-	struct	{
-		char	*if1;
-		char	*if2;
-	} ifs;
-	char	gname[FR_GROUPLEN];
+	union	i6addr	ip6;
 };
 
-%type	<port>	portnum
-%type	<num>	facility priority icmpcode seclevel secname icmptype
+%type	<num>	portnum facility priority icmpcode seclevel secname icmptype
 %type	<num>	opt compare range opttype flagset optlist ipv6hdrlist ipv6hdr
-%type	<num>	portc porteq ipmask
-%type	<ip4>	ipv4 ipv4_16 ipv4_24
-%type	<adr>	hostname
-%type	<ipp>	addr ipaddr
-%type	<str>	servicename name interfacename groupname
+%type	<ipa>	hostname ipv4 ipv4mask
+%type	<ip6>	ipv6mask
+%type	<ipp>	addr
+%type	<str>	servicename name interfacename
 %type	<pc>	portrange portcomp
 %type	<alist>	addrlist poollist
-%type	<ifs>	onname
 
 %token	<num>	YY_NUMBER YY_HEX
 %token	<str>	YY_STR
@@ -122,32 +88,29 @@ static	addfunc_t	ipfaddfunc = NULL;
 %token		YY_RANGE_OUT YY_RANGE_IN
 %token	<ip6>	YY_IPV6
 
-%token	IPFY_SET
-%token	IPFY_PASS IPFY_BLOCK IPFY_COUNT IPFY_CALL IPFY_NOMATCH
+%token	IPFY_PASS IPFY_BLOCK IPFY_COUNT IPFY_CALL
 %token	IPFY_RETICMP IPFY_RETRST IPFY_RETICMPASDST
 %token	IPFY_IN IPFY_OUT
 %token	IPFY_QUICK IPFY_ON IPFY_OUTVIA IPFY_INVIA
 %token	IPFY_DUPTO IPFY_TO IPFY_FROUTE IPFY_REPLY_TO IPFY_ROUTETO
-%token	IPFY_TOS IPFY_TTL IPFY_PROTO IPFY_INET IPFY_INET6
+%token	IPFY_TOS IPFY_TTL IPFY_PROTO
 %token	IPFY_HEAD IPFY_GROUP
-%token	IPFY_AUTH IPFY_PREAUTH
-%token	IPFY_LOG IPFY_BODY IPFY_FIRST IPFY_LEVEL IPFY_ORBLOCK IPFY_L5AS
-%token	IPFY_LOGTAG IPFY_MATCHTAG IPFY_SETTAG IPFY_SKIP IPFY_DECAPS
+%token	IPFY_AUTH IPFY_PREAUTH IPFY_DIVERT
+%token	IPFY_LOG IPFY_BODY IPFY_FIRST IPFY_LEVEL IPFY_ORBLOCK
+%token	IPFY_LOGTAG IPFY_MATCHTAG IPFY_SETTAG IPFY_SKIP
 %token	IPFY_FROM IPFY_ALL IPFY_ANY IPFY_BPFV4 IPFY_BPFV6 IPFY_POOL IPFY_HASH
-%token	IPFY_IPFEXPR IPFY_PPS IPFY_FAMILY IPFY_DSTLIST
+%token	IPFY_PPS
 %token	IPFY_ESP IPFY_AH
 %token	IPFY_WITH IPFY_AND IPFY_NOT IPFY_NO IPFY_OPT
 %token	IPFY_TCPUDP IPFY_TCP IPFY_UDP
 %token	IPFY_FLAGS IPFY_MULTICAST
 %token	IPFY_MASK IPFY_BROADCAST IPFY_NETWORK IPFY_NETMASKED IPFY_PEER
 %token	IPFY_PORT
-%token	IPFY_NOW IPFY_COMMENT IPFY_RULETTL
+%token	IPFY_NOW
 %token	IPFY_ICMP IPFY_ICMPTYPE IPFY_ICMPCODE
 %token	IPFY_IPOPTS IPFY_SHORT IPFY_NAT IPFY_BADSRC IPFY_LOWTTL IPFY_FRAG
 %token	IPFY_MBCAST IPFY_BAD IPFY_BADNAT IPFY_OOW IPFY_NEWISN IPFY_NOICMPERR
 %token	IPFY_KEEP IPFY_STATE IPFY_FRAGS IPFY_LIMIT IPFY_STRICT IPFY_AGE
-%token	IPFY_SYNC IPFY_FRAGBODY IPFY_ICMPHEAD IPFY_NOLOG IPFY_LOOSE
-%token	IPFY_MAX_SRCS IPFY_MAX_PER_SRC
 %token	IPFY_IPOPT_NOP IPFY_IPOPT_RR IPFY_IPOPT_ZSU IPFY_IPOPT_MTUP
 %token	IPFY_IPOPT_MTUR IPFY_IPOPT_ENCODE IPFY_IPOPT_TS IPFY_IPOPT_TR
 %token	IPFY_IPOPT_SEC IPFY_IPOPT_LSRR IPFY_IPOPT_ESEC IPFY_IPOPT_CIPSO
@@ -155,11 +118,10 @@ static	addfunc_t	ipfaddfunc = NULL;
 %token	IPFY_IPOPT_IMITD IPFY_IPOPT_EIP IPFY_IPOPT_FINN IPFY_IPOPT_DPS
 %token	IPFY_IPOPT_SDB IPFY_IPOPT_NSAPA IPFY_IPOPT_RTRALRT IPFY_IPOPT_UMP
 %token	IPFY_SECCLASS IPFY_SEC_UNC IPFY_SEC_CONF IPFY_SEC_RSV1 IPFY_SEC_RSV2
-%token	IPFY_SEC_RSV4 IPFY_SEC_SEC IPFY_SEC_TS IPFY_SEC_RSV3 IPFY_DOI
+%token	IPFY_SEC_RSV4 IPFY_SEC_SEC IPFY_SEC_TS IPFY_SEC_RSV3
 
 %token	IPF6_V6HDRS IPFY_IPV6OPT IPFY_IPV6OPT_DSTOPTS IPFY_IPV6OPT_HOPOPTS
 %token	IPFY_IPV6OPT_IPV6 IPFY_IPV6OPT_NONE IPFY_IPV6OPT_ROUTING
-%token	IPFY_IPV6OPT_MOBILITY IPFY_IPV6OPT_ESP IPFY_IPV6OPT_FRAG
 
 %token	IPFY_ICMPT_UNR IPFY_ICMPT_ECHO IPFY_ICMPT_ECHOR IPFY_ICMPT_SQUENCH
 %token	IPFY_ICMPT_REDIR IPFY_ICMPT_TIMEX IPFY_ICMPT_PARAMP IPFY_ICMPT_TIMEST
@@ -183,39 +145,17 @@ static	addfunc_t	ipfaddfunc = NULL;
 %token	IPFY_PRI_EMERG IPFY_PRI_ALERT IPFY_PRI_CRIT IPFY_PRI_ERR IPFY_PRI_WARN
 %token	IPFY_PRI_NOTICE IPFY_PRI_INFO IPFY_PRI_DEBUG
 %%
-file:	settings rules
-	| rules
-	;
-
-settings:
-	YY_COMMENT
-	| setting
-	| settings setting
-	;
-
-rules:	line
+file:	line
 	| assign
-	| rules line
-	| rules assign
+	| file line
+	| file assign
 	;
 
-setting:
-	IPFY_SET YY_STR YY_NUMBER ';'	{ do_tuneint($2, $3); }
-	| IPFY_SET YY_STR YY_HEX ';'	{ do_tuneint($2, $3); }
-	| IPFY_SET YY_STR YY_STR ';'	{ do_tunestr($2, $3); }
-	;
-
-line:	rule		{ while ((fr = frtop) != NULL) {
+line:	xx rule		{ while ((fr = frtop) != NULL) {
 				frtop = fr->fr_next;
 				fr->fr_next = NULL;
-				if ((fr->fr_type == FR_T_IPF) &&
-				    (fr->fr_ip.fi_v == 0))
-					fr->fr_mip.fi_v = 0;
-				/* XXX validate ? */
-				(*ipfaddfunc)(ipffd, ipfioctls[IPL_LOGIPF], fr);
+				(*ipfaddfunc)(ipffd, ipfioctl[IPL_LOGIPF], fr);
 				fr->fr_next = frold;
-				if (frold && frold->fr_data)
-					free(frold->fr_data);
 				frold = fr;
 			  }
 			  resetlexer();
@@ -223,14 +163,13 @@ line:	rule		{ while ((fr = frtop) != NULL) {
 	| YY_COMMENT
 	;
 
-xx:					{ newrule(); }
+xx:	{ newrule(); }
 	;
 
 assign:	YY_STR assigning YY_STR ';'	{ set_variable($1, $3);
 					  resetlexer();
 					  free($1);
 					  free($3);
-					  yyvarnext = 0;
 					}
 	;
 
@@ -238,11 +177,8 @@ assigning:
 	'='				{ yyvarnext = 1; }
 	;
 
-rule:	inrule eol
-	| outrule eol
-	;
-
-eol:	| ';'
+rule:	inrule
+	| outrule
 	;
 
 inrule:
@@ -254,8 +190,8 @@ outrule:
 	;
 
 rulehead:
-	xx collection action
-	| xx insert collection action
+	collection action
+	| insert collection action
 	;
 
 markin:	IPFY_IN				{ fr->fr_flags |= FR_INQUE; }
@@ -268,27 +204,10 @@ markout:
 rulemain:
 	ipfrule
 	| bpfrule
-	| exprrule
 	;
 
 ipfrule:
-	family tos ttl proto ip
-	;
-
-family:	| IPFY_FAMILY IPFY_INET		{ if (use_inet6 == 1) {
-						YYERROR;
-					  } else {
-						setipftype();
-						frc->fr_family = AF_INET;
-					  }
-					}
-	| IPFY_FAMILY IPFY_INET6	{ if (use_inet6 == -1) {
-						YYERROR;
-					  } else {
-						setipftype();
-						frc->fr_family = AF_INET6;
-					  }
-					}
+	tos ttl proto ip
 	;
 
 bpfrule:
@@ -296,16 +215,12 @@ bpfrule:
 	| IPFY_BPFV6 '{' YY_STR '}' 	{ dobpf(6, $3); free($3); }
 	;
 
-exprrule:
-	IPFY_IPFEXPR '{' YY_STR '}'	{ doipfexpr($3); }
-	;
-
 ruletail:
 	with keep head group
 	;
 
 ruletail2:
-	pps age new rulettl comment
+	pps age new
 	;
 
 intag:	settagin matchtagin
@@ -324,10 +239,10 @@ collection:
 
 action:	block
 	| IPFY_PASS			{ fr->fr_flags |= FR_PASS; }
-	| IPFY_NOMATCH			{ fr->fr_flags |= FR_NOMATCH; }
+	| IPFY_DIVERT YY_NUMBER		{ fr->fr_flags |= FR_DIVERT;
+					  fr->fr_arg = $2; }
 	| log
 	| IPFY_COUNT			{ fr->fr_flags |= FR_ACCOUNT; }
-	| decaps			{ fr->fr_flags |= FR_DECAPSULATE; }
 	| auth
 	| IPFY_SKIP YY_NUMBER		{ fr->fr_flags |= FR_SKIP;
 					  fr->fr_arg = $2; }
@@ -346,13 +261,7 @@ blockreturn:
 	IPFY_RETICMP			{ fr->fr_flags |= FR_RETICMP; }
 	| IPFY_RETICMP returncode	{ fr->fr_flags |= FR_RETICMP; }
 	| IPFY_RETICMPASDST		{ fr->fr_flags |= FR_FAKEICMP; }
-	| IPFY_RETICMPASDST returncode	{ fr->fr_flags |= FR_FAKEICMP; }
 	| IPFY_RETRST			{ fr->fr_flags |= FR_RETRST; }
-	;
-
-decaps:	IPFY_DECAPS
-	| IPFY_DECAPS IPFY_L5AS '(' YY_STR ')'
-					{ fr->fr_icode = atoi($4); }
 	;
 
 log:	IPFY_LOG			{ fr->fr_flags |= FR_LOG; }
@@ -360,15 +269,14 @@ log:	IPFY_LOG			{ fr->fr_flags |= FR_LOG; }
 	;
 
 auth:	IPFY_AUTH			{ fr->fr_flags |= FR_AUTH; }
-	| IPFY_AUTH blockreturn		{ fr->fr_flags |= FR_AUTH;}
+	| IPFY_AUTH IPFY_RETRST		{ fr->fr_flags |= (FR_AUTH|FR_RETRST);}
 	| IPFY_PREAUTH			{ fr->fr_flags |= FR_PREAUTH; }
 	;
 
-func:	YY_STR '/' YY_NUMBER
-			{ fr->fr_func = nametokva($1, ipfioctls[IPL_LOGIPF]);
-			  fr->fr_arg = $3;
-			  free($1);
-			}
+func:	YY_STR '/' YY_NUMBER	{ fr->fr_func = nametokva($1,
+							  ipfioctl[IPL_LOGIPF]);
+				  fr->fr_arg = $3;
+				  free($1); }
 	;
 
 inopts:
@@ -395,7 +303,6 @@ outopt:
 	| on
 	| dup
 	| proute
-	| froute
 	| replyto
 	;
 
@@ -412,7 +319,7 @@ toslist:
 	| YY_HEX	{ DOREM(fr->fr_tos = $1; fr->fr_mtos = 0xff;) }
 	| toslist lmore YY_NUMBER
 			{ DOREM(fr->fr_tos = $3; fr->fr_mtos = 0xff;) }
-	| toslist lmore YY_HEX
+	| toslist lmore YY_HEX	
 			{ DOREM(fr->fr_tos = $3; fr->fr_mtos = 0xff;) }
 	;
 
@@ -421,18 +328,16 @@ ttl:	| setttl YY_NUMBER
 	| setttl lstart ttllist lend
 	;
 
-lstart:	'{'				{ newlist = 1; fr = frc; added = 0; }
+lstart:	'('				{ newlist = 1; fr = frc; added = 0; }
 	;
 
-lend:	'}'				{ nrules += added; }
+lend:	')'				{ nrules += added; }
 	;
 
 lmore:	lanother			{ if (newlist == 1) {
 						newlist = 0;
 					  }
 					  fr = addrule();
-					  if (yycont != NULL)
-						*yycont = 1;
 					}
 	;
 
@@ -449,41 +354,33 @@ ttllist:
 			{ DOREM(fr->fr_ttl = $3; fr->fr_mttl = 0xff;) }
 	;
 
-proto:	| protox protocol		{ yyresetdict(); }
+proto:	| protox protocol
 	;
 
-protox:	IPFY_PROTO			{ setipftype();
-					  fr = frc;
-					  yysetdict(NULL); }
+protox:	IPFY_PROTO			{ setipftype(); fr = frc; }
 	;
 
 ip:	srcdst flags icmp
 	;
 
-group:	| IPFY_GROUP groupname		{ DOALL(setgroup(&fr, $2); \
-						fillgroup(fr););
-					  free($2);
-					}
+group:	| IPFY_GROUP YY_STR		{ DOALL(strncpy(fr->fr_group, $2, \
+							FR_GROUPLEN); \
+							fillgroup(fr););
+					  free($2); }
+	| IPFY_GROUP YY_NUMBER		{ DOALL(sprintf(fr->fr_group, "%d", \
+							$2); \
+							fillgroup(fr);) }
 	;
 
-head:	| IPFY_HEAD groupname		{ DOALL(setgrhead(&fr, $2););
-					  free($2);
-					}
-	;
-
-groupname:
-	YY_STR				{ $$ = $1;
-					  if (strlen($$) >= FR_GROUPLEN)
-						$$[FR_GROUPLEN - 1] = '\0';
-					}
-	| YY_NUMBER			{ $$ = malloc(16);
-					  sprintf($$, "%d", $1);
-					}
+head:	| IPFY_HEAD YY_STR		{ DOALL(strncpy(fr->fr_grhead, $2, \
+							FR_GROUPLEN););
+					  free($2); }
+	| IPFY_HEAD YY_NUMBER		{ DOALL(sprintf(fr->fr_grhead, "%d", \
+							$2);) }
 	;
 
 settagin:
 	| IPFY_SETTAG '(' taginlist ')'
-	;
 
 taginlist:
 	taginspec
@@ -495,10 +392,10 @@ taginspec:
 	;
 
 nattag:	IPFY_NAT '=' YY_STR		{ DOALL(strncpy(fr->fr_nattag.ipt_tag,\
-						$3, IPFTAG_LEN););
+						$3, 16););
 					  free($3); }
 	| IPFY_NAT '=' YY_NUMBER	{ DOALL(sprintf(fr->fr_nattag.ipt_tag,\
-						"%d", $3 & 0xffffffff);) }
+						"%15d", $3);) }
 	;
 
 logtag:	IPFY_LOG '=' YY_NUMBER		{ DOALL(fr->fr_logtag = $3;) }
@@ -506,7 +403,6 @@ logtag:	IPFY_LOG '=' YY_NUMBER		{ DOALL(fr->fr_logtag = $3;) }
 
 settagout:
 	| IPFY_SETTAG '(' tagoutlist ')'
-	;
 
 tagoutlist:
 	tagoutspec
@@ -520,7 +416,6 @@ tagoutspec:
 
 matchtagin:
 	| IPFY_MATCHTAG '(' tagoutlist ')'
-	;
 
 matchtagout:
 	| IPFY_MATCHTAG '(' taginlist ')'
@@ -530,15 +425,6 @@ pps:	| IPFY_PPS YY_NUMBER		{ DOALL(fr->fr_pps = $2;) }
 	;
 
 new:	| savegroup file restoregroup
-	;
-
-rulettl:
-	| IPFY_RULETTL YY_NUMBER	{ DOALL(fr->fr_die = $2;) }
-	;
-
-comment:
-	| IPFY_COMMENT YY_STR		{ DOALL(fr->fr_comment = addname(&fr, \
-						$2);) }
 	;
 
 savegroup:
@@ -552,121 +438,61 @@ restoregroup:
 logopt:	log
 	;
 
-quick:	IPFY_QUICK			{ fr->fr_flags |= FR_QUICK; }
+quick:
+	IPFY_QUICK			{ fr->fr_flags |= FR_QUICK; }
 	;
 
-on:	IPFY_ON onname				{ setifname(&fr, 0, $2.if1);
-						  free($2.if1);
-						  if ($2.if2 != NULL) {
-							setifname(&fr, 1,
-								  $2.if2);
-							free($2.if2);
-						  }
-						}
-	| IPFY_ON lstart onlist lend
-	| IPFY_ON onname IPFY_INVIA vianame	{ setifname(&fr, 0, $2.if1);
-						  free($2.if1);
-						  if ($2.if2 != NULL) {
-							setifname(&fr, 1,
-								  $2.if2);
-							free($2.if2);
-						  }
-						}
-	| IPFY_ON onname IPFY_OUTVIA vianame	{ setifname(&fr, 0, $2.if1);
-						  free($2.if1);
-						  if ($2.if2 != NULL) {
-							setifname(&fr, 1,
-								  $2.if2);
-							free($2.if2);
-						  }
-						}
+on:	IPFY_ON onname
+	| IPFY_ON onname IPFY_INVIA vianame
+	| IPFY_ON onname IPFY_OUTVIA vianame
 	;
 
-onlist:	onname			{ DOREM(setifname(&fr, 0, $1.if1);	   \
-					if ($1.if2 != NULL)		   \
-						setifname(&fr, 1, $1.if2);  \
-					)
-				  free($1.if1);
-				  if ($1.if2 != NULL)
-					free($1.if2);
-				}
-	| onlist lmore onname	{ DOREM(setifname(&fr, 0, $3.if1); \
-					if ($3.if2 != NULL)		   \
-						setifname(&fr, 1, $3.if2);  \
-					)
-				  free($3.if1);
-				  if ($3.if2 != NULL)
-					free($3.if2);
-				}
-	;
-
-onname:	interfacename		{ $$.if1 = $1;
-				  $$.if2 = NULL;
-				}
+onname:	interfacename
+		{ strncpy(fr->fr_ifnames[0], $1, sizeof(fr->fr_ifnames[0]));
+		  free($1);
+		}
 	| interfacename ',' interfacename
-				{ $$.if1 = $1;
-				  $$.if2 = $3;
-				}
+		{ strncpy(fr->fr_ifnames[0], $1, sizeof(fr->fr_ifnames[0]));
+		  free($1);
+		  strncpy(fr->fr_ifnames[1], $3, sizeof(fr->fr_ifnames[1]));
+		  free($3);
+		}
 	;
 
 vianame:
-	name			{ setifname(&fr, 2, $1);
-				  free($1);
-				}
-	| name ',' name		{ setifname(&fr, 2, $1);
-				  free($1);
-				  setifname(&fr, 3, $3);
-				  free($3);
-				}
+	name
+		{ strncpy(fr->fr_ifnames[2], $1, sizeof(fr->fr_ifnames[2]));
+		  free($1);
+		}
+	| name ',' name
+		{ strncpy(fr->fr_ifnames[2], $1, sizeof(fr->fr_ifnames[2]));
+		  free($1);
+		  strncpy(fr->fr_ifnames[3], $3, sizeof(fr->fr_ifnames[3]));
+		  free($3);
+		}
 	;
 
 dup:	IPFY_DUPTO name
-	{ int idx = addname(&fr, $2);
-	  fr->fr_dif.fd_name = idx;
+	{ strncpy(fr->fr_dif.fd_ifname, $2, sizeof(fr->fr_dif.fd_ifname));
 	  free($2);
 	}
-	| IPFY_DUPTO IPFY_DSTLIST '/' name
-	{ int idx = addname(&fr, $4);
-	  fr->fr_dif.fd_name = idx;
-	  fr->fr_dif.fd_type = FRD_DSTLIST;
-	  free($4);
-	}
-	| IPFY_DUPTO name duptoseparator hostname
-	{ int idx = addname(&fr, $2);
-	  fr->fr_dif.fd_name = idx;
-	  fr->fr_dif.fd_ip6 = $4.adr;
-	  if (fr->fr_family == AF_UNSPEC && $4.f != AF_UNSPEC)
-		fr->fr_family = $4.f;
-	  yyexpectaddr = 0;
+	| IPFY_DUPTO name ':' hostname
+	{ strncpy(fr->fr_dif.fd_ifname, $2, sizeof(fr->fr_dif.fd_ifname));
+	  fr->fr_dif.fd_ip = $4;
 	  free($2);
 	}
-	;
-
-duptoseparator:
-	':'	{ yyexpectaddr = 1; yycont = &yyexpectaddr; resetaddr(); }
 	;
 
 froute:	IPFY_FROUTE			{ fr->fr_flags |= FR_FASTROUTE; }
 	;
 
 proute:	routeto name
-	{ int idx = addname(&fr, $2);
-	  fr->fr_tif.fd_name = idx;
+	{ strncpy(fr->fr_tif.fd_ifname, $2, sizeof(fr->fr_tif.fd_ifname));
 	  free($2);
 	}
-	| routeto IPFY_DSTLIST '/' name
-	{ int idx = addname(&fr, $4);
-	  fr->fr_tif.fd_name = idx;
-	  fr->fr_tif.fd_type = FRD_DSTLIST;
-	  free($4);
-	}
-	| routeto name duptoseparator hostname
-	{ int idx = addname(&fr, $2);
-	  fr->fr_tif.fd_name = idx;
-	  fr->fr_tif.fd_ip6 = $4.adr;
-	  if (fr->fr_family == AF_UNSPEC && $4.f != AF_UNSPEC)
-		fr->fr_family = $4.f;
-	  yyexpectaddr = 0;
+	| routeto name ':' hostname
+	{ strncpy(fr->fr_tif.fd_ifname, $2, sizeof(fr->fr_tif.fd_ifname));
+	  fr->fr_tif.fd_ip = $4;
 	  free($2);
 	}
 	;
@@ -678,21 +504,12 @@ routeto:
 
 replyto:
 	IPFY_REPLY_TO name
-	{ int idx = addname(&fr, $2);
-	  fr->fr_rif.fd_name = idx;
+	{ strncpy(fr->fr_rif.fd_ifname, $2, sizeof(fr->fr_rif.fd_ifname));
 	  free($2);
 	}
-	| IPFY_REPLY_TO IPFY_DSTLIST '/' name
-	{ fr->fr_rif.fd_name = addname(&fr, $4);
-	  fr->fr_rif.fd_type = FRD_DSTLIST;
-	  free($4);
-	}
-	| IPFY_REPLY_TO name duptoseparator hostname
-	{ int idx = addname(&fr, $2);
-	  fr->fr_rif.fd_name = idx;
-	  fr->fr_rif.fd_ip6 = $4.adr;
-	  if (fr->fr_family == AF_UNSPEC && $4.f != AF_UNSPEC)
-		fr->fr_family = $4.f;
+	| IPFY_REPLY_TO name ':' hostname
+	{ strncpy(fr->fr_rif.fd_ifname, $2, sizeof(fr->fr_rif.fd_ifname));
+	  fr->fr_rif.fd_ip = $4;
 	  free($2);
 	}
 	;
@@ -710,91 +527,52 @@ logoption:
 	;
 
 returncode:
-	starticmpcode icmpcode ')'	{ fr->fr_icode = $2; yyresetdict(); }
+	'(' icmpcode ')'		{ fr->fr_icode = $2; }
 	;
 
-starticmpcode:
-	'('				{ yysetdict(icmpcodewords); }
-	;
-
-srcdst:	| IPFY_ALL
+srcdst:	IPFY_ALL
 	| fromto
 	;
 
 protocol:
-	YY_NUMBER		{ DOALL(fr->fr_proto = $1; \
-					fr->fr_mproto = 0xff;)
-				  if ($1 == IPPROTO_ICMP) {
-					/*
-					 * This forces IPv4 for ICMP
-					 * packets so that type keyword
-					 * lookup functions properly.
-					 */
-					DOALL(fr->fr_family = AF_INET;)
-				  }
-				}
-	| YY_STR		{ if (!strcmp($1, "tcp-udp")) {
-					DOALL(fr->fr_flx |= FI_TCPUDP; \
-					      fr->fr_mflx |= FI_TCPUDP;)
-				  } else {
-					int p = getproto($1);
-					if (p == -1)
-						yyerror("protocol unknown");
-					if (p == IPPROTO_ICMP) {
-						/*
-						 * This forces IPv4 for ICMP
-						 * packets so that type keyword
-						 * lookup functions properly.
-						 */
-						DOALL(fr->fr_family = AF_INET;)
-					}
-					DOALL(fr->fr_proto = p; \
+	IPFY_TCPUDP			{ DOREM(fr->fr_flx |= FI_TCPUDP; \
+						fr->fr_mflx |= FI_TCPUDP;) }
+	| IPFY_TCP '/' IPFY_UDP		{ DOREM(fr->fr_flx |= FI_TCPUDP; \
+						fr->fr_mflx |= FI_TCPUDP;) }
+	| IPFY_TCP			{ DOREM(fr->fr_proto = IPPROTO_TCP; \
+						fr->fr_mproto = 0xff;) }
+	| IPFY_UDP			{ DOREM(fr->fr_proto = IPPROTO_UDP; \
+						fr->fr_mproto = 0xff;) }
+	| IPFY_ICMP			{ DOREM(fr->fr_proto = IPPROTO_ICMP; \
+						fr->fr_mproto = 0xff;) }
+	| IPFY_ESP			{ DOREM(fr->fr_proto = IPPROTO_ESP; \
+						fr->fr_mproto = 0xff;) }
+	| IPFY_AH			{ DOREM(fr->fr_proto = IPPROTO_AH; \
+						fr->fr_mproto = 0xff;) }
+	| YY_NUMBER			{ DOREM(fr->fr_proto = $1; \
+						fr->fr_mproto = 0xff;) }
+	| YY_STR			{ DOREM(fr->fr_proto = getproto($1); \
 						fr->fr_mproto = 0xff;)
-				  }
-				  free($1);
-				}
-	| YY_STR nextstring YY_STR
-				{ if (!strcmp($1, "tcp") &&
-				      !strcmp($3, "udp")) {
-					DOREM(fr->fr_flx |= FI_TCPUDP; \
-					      fr->fr_mflx |= FI_TCPUDP;)
-				  } else {
-					YYERROR;
-				  }
-				  free($1);
-				  free($3);
-				}
+					  free($1);
+					}
 	;
 
-nextstring:
-	'/'			{ yysetdict(NULL); }
-	;
-
-fromto:	from srcobject to dstobject	{ yyexpectaddr = 0; yycont = NULL; }
-	| to dstobject			{ yyexpectaddr = 0; yycont = NULL; }
-	| from srcobject		{ yyexpectaddr = 0; yycont = NULL; }
+fromto:	from srcobject to dstobject	{ yyexpectaddr = 0; }
+	| to dstobject			{ yyexpectaddr = 0; }
+	| from srcobject		{ yyexpectaddr = 0; }
 	;
 
 from:	IPFY_FROM			{ setipftype();
 					  if (fr == NULL)
 						fr = frc;
 					  yyexpectaddr = 1;
-					  if (yydebug)
-						printf("set yyexpectaddr\n");
-					  yycont = &yyexpectaddr;
-					  yysetdict(addrwords);
 					  resetaddr(); }
 	;
 
 to:	IPFY_TO				{ if (fr == NULL)
 						fr = frc;
 					  yyexpectaddr = 1;
-					  if (yydebug)
-						printf("set yyexpectaddr\n");
-					  yycont = &yyexpectaddr;
-					  yysetdict(addrwords);
-					  resetaddr();
-					}
+					  resetaddr(); }
 	;
 
 with:	| andwith withlist
@@ -805,30 +583,22 @@ andwith:
 	| IPFY_AND			{ nowith = 0; setipftype(); }
 	;
 
-flags:	| startflags flagset
+flags:	| IPFY_FLAGS flagset	
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = FR_TCPFMAX;) }
-	| startflags flagset '/' flagset
+	| IPFY_FLAGS flagset '/' flagset
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = $4;) }
-	| startflags '/' flagset
+	| IPFY_FLAGS '/' flagset
 		{ DOALL(fr->fr_tcpf = 0; fr->fr_tcpfm = $3;) }
-	| startflags YY_NUMBER
+	| IPFY_FLAGS YY_NUMBER
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = FR_TCPFMAX;) }
-	| startflags '/' YY_NUMBER
+	| IPFY_FLAGS '/' YY_NUMBER
 		{ DOALL(fr->fr_tcpf = 0; fr->fr_tcpfm = $3;) }
-	| startflags YY_NUMBER '/' YY_NUMBER
+	| IPFY_FLAGS YY_NUMBER '/' YY_NUMBER
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = $4;) }
-	| startflags flagset '/' YY_NUMBER
+	| IPFY_FLAGS flagset '/' YY_NUMBER
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = $4;) }
-	| startflags YY_NUMBER '/' flagset
+	| IPFY_FLAGS YY_NUMBER '/' flagset
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = $4;) }
-	;
-
-startflags:
-	IPFY_FLAGS	{ if (frc->fr_type != FR_T_IPF)
-				yyerror("flags with non-ipf type rule");
-			  if (frc->fr_proto != IPPROTO_TCP)
-				yyerror("flags with non-TCP rule");
-			}
 	;
 
 flagset:
@@ -837,47 +607,41 @@ flagset:
 	;
 
 srcobject:
-	{ yyresetdict(); } fromport
-	| srcaddr srcport
+	srcaddr srcport
 	| '!' srcaddr srcport
 		{ DOALL(fr->fr_flags |= FR_NOTSRCIP;) }
+	| fromport
 	;
 
 srcaddr:
-	addr	{ DOREM(fr->fr_ip.fi_src = $1.a; \
-			fr->fr_mip.fi_src = $1.m; \
-			fr->fr_family = $1.f; \
-			fr->fr_ip.fi_v = $1.v; \
-			fr->fr_mip.fi_v = 0xf; \
-			fr->fr_satype = $1.type; \
-			if ($1.ifpos != -1) { \
-				fr->fr_ipf->fri_sifpidx = $1.ifpos; \
-			})
+	addr	{ DOREM(bcopy(&($1.a), &fr->fr_ip.fi_src, sizeof($1.a)); \
+			bcopy(&($1.m), &fr->fr_mip.fi_src, sizeof($1.m)); \
+			if (dynamic != -1) { \
+				fr->fr_satype = ifpflag; \
+				fr->fr_ipf->fri_sifpidx = dynamic; \
+			} else if (pooled || hashed) \
+				fr->fr_satype = FRI_LOOKUP;)
 		}
 	| lstart srcaddrlist lend
 	;
 
 srcaddrlist:
-	addr	{ DOREM(fr->fr_ip.fi_src = $1.a; \
-			fr->fr_mip.fi_src = $1.m; \
-			fr->fr_family = $1.f; \
-			fr->fr_ip.fi_v = $1.v; \
-			fr->fr_mip.fi_v = 0xf; \
-			fr->fr_satype = $1.type; \
-			if ($1.ifpos != -1) { \
-				fr->fr_ipf->fri_sifpidx = $1.ifpos; \
-			})
+	addr	{ DOREM(bcopy(&($1.a), &fr->fr_ip.fi_src, sizeof($1.a)); \
+			bcopy(&($1.m), &fr->fr_mip.fi_src, sizeof($1.m)); \
+			if (dynamic != -1) { \
+				fr->fr_satype = ifpflag; \
+				fr->fr_ipf->fri_sifpidx = dynamic; \
+			} else if (pooled || hashed) \
+				fr->fr_satype = FRI_LOOKUP;)
 		}
 	| srcaddrlist lmore addr
-		{ DOREM(fr->fr_ip.fi_src = $3.a; \
-			fr->fr_mip.fi_src = $3.m; \
-			fr->fr_family = $3.f; \
-			fr->fr_ip.fi_v = $3.v; \
-			fr->fr_mip.fi_v = 0xf; \
-			fr->fr_satype = $3.type; \
-			if ($3.ifpos != -1) { \
-				fr->fr_ipf->fri_sifpidx = $3.ifpos; \
-			})
+		{ DOREM(bcopy(&($3.a), &fr->fr_ip.fi_src, sizeof($3.a)); \
+			bcopy(&($3.m), &fr->fr_mip.fi_src, sizeof($3.m)); \
+			if (dynamic != -1) { \
+				fr->fr_satype = ifpflag; \
+				fr->fr_ipf->fri_sifpidx = dynamic; \
+			} else if (pooled || hashed) \
+				fr->fr_satype = FRI_LOOKUP;)
 		}
 	;
 
@@ -887,8 +651,7 @@ srcport:
 	| portrange
 		{ DOALL(fr->fr_scmp = $1.pc; fr->fr_sport = $1.p1; \
 			fr->fr_stop = $1.p2;) }
-	| porteq lstart srcportlist lend
-		{ yyresetdict(); }
+	| port '=' lstart srcportlist lend
 	;
 
 fromport:
@@ -897,91 +660,51 @@ fromport:
 	| portrange
 		{ DOALL(fr->fr_scmp = $1.pc; fr->fr_sport = $1.p1; \
 			fr->fr_stop = $1.p2;) }
-	| porteq lstart srcportlist lend
-		{ yyresetdict(); }
+	| port '=' lstart srcportlist lend
 	;
 
 srcportlist:
 	portnum		{ DOREM(fr->fr_scmp = FR_EQUAL; fr->fr_sport = $1;) }
-	| portnum ':' portnum
-			{ DOREM(fr->fr_scmp = FR_INCRANGE; fr->fr_sport = $1; \
-				fr->fr_stop = $3;) }
-	| portnum YY_RANGE_IN portnum
-			{ DOREM(fr->fr_scmp = FR_INRANGE; fr->fr_sport = $1; \
-				fr->fr_stop = $3;) }
 	| srcportlist lmore portnum
 			{ DOREM(fr->fr_scmp = FR_EQUAL; fr->fr_sport = $3;) }
-	| srcportlist lmore portnum ':' portnum
-			{ DOREM(fr->fr_scmp = FR_INCRANGE; fr->fr_sport = $3; \
-				fr->fr_stop = $5;) }
-	| srcportlist lmore portnum YY_RANGE_IN portnum
-			{ DOREM(fr->fr_scmp = FR_INRANGE; fr->fr_sport = $3; \
-				fr->fr_stop = $5;) }
 	;
 
 dstobject:
-	{ yyresetdict(); } toport
+	toport
 	| dstaddr dstport
 	| '!' dstaddr dstport
 			{ DOALL(fr->fr_flags |= FR_NOTDSTIP;) }
 	;
 
 dstaddr:
-	addr	{ if (($1.f != AF_UNSPEC) && (frc->fr_family != AF_UNSPEC) &&
-		      ($1.f != frc->fr_family))
-			yyerror("src/dst address family mismatch");
-		  if (frc->fr_family != AF_UNSPEC && $1.f == AF_UNSPEC) {
-			$1.f = frc->fr_family;
-			$1.v = frc->fr_ip.fi_v;
-		  }
-		  DOREM(fr->fr_ip.fi_dst = $1.a; \
-			fr->fr_mip.fi_dst = $1.m; \
-			fr->fr_family = $1.f; \
-			fr->fr_ip.fi_v = $1.v; \
-			fr->fr_mip.fi_v = 0xf; \
-			fr->fr_datype = $1.type; \
-			if ($1.ifpos != -1) { \
-				fr->fr_ipf->fri_difpidx = $1.ifpos; \
-			})
+	addr	{ DOREM(bcopy(&($1.a), &fr->fr_ip.fi_dst, sizeof($1.a)); \
+			bcopy(&($1.m), &fr->fr_mip.fi_dst, sizeof($1.m)); \
+			if (dynamic != -1) { \
+				fr->fr_datype = ifpflag; \
+				fr->fr_ipf->fri_difpidx = dynamic; \
+			  } else if (pooled || hashed) \
+				fr->fr_datype = FRI_LOOKUP;)
 		}
 	| lstart dstaddrlist lend
 	;
 
 dstaddrlist:
-	addr	{ if (($1.f != AF_UNSPEC) && (frc->fr_family != AF_UNSPEC) &&
-		      ($1.f != frc->fr_family))
-			yyerror("src/dst address family mismatch");
-		  if (frc->fr_family != AF_UNSPEC && $1.f == AF_UNSPEC) {
-			$1.f = frc->fr_family;
-			$1.v = frc->fr_family;
-		  }
-		  DOREM(fr->fr_ip.fi_dst = $1.a; \
-			fr->fr_mip.fi_dst = $1.m; \
-			fr->fr_family = $1.f; \
-			fr->fr_ip.fi_v = $1.v; \
-			fr->fr_mip.fi_v = 0xf; \
-			fr->fr_datype = $1.type; \
-			if ($1.ifpos != -1) { \
-				fr->fr_ipf->fri_difpidx = $1.ifpos; \
-			})
+	addr	{ DOREM(bcopy(&($1.a), &fr->fr_ip.fi_dst, sizeof($1.a)); \
+			bcopy(&($1.m), &fr->fr_mip.fi_dst, sizeof($1.m)); \
+			if (dynamic != -1) { \
+				fr->fr_datype = ifpflag; \
+				fr->fr_ipf->fri_difpidx = dynamic; \
+			} else if (pooled || hashed) \
+				fr->fr_datype = FRI_LOOKUP;)
 		}
 	| dstaddrlist lmore addr
-		{ if (($3.f != AF_UNSPEC) && (frc->fr_family != AF_UNSPEC) &&
-		      ($3.f != frc->fr_family))
-			yyerror("src/dst address family mismatch");
-		  if (frc->fr_family != AF_UNSPEC && $3.f == AF_UNSPEC) {
-			$3.f = frc->fr_family;
-			$3.v = frc->fr_family;
-		  }
-		  DOREM(fr->fr_ip.fi_dst = $3.a; \
-			fr->fr_mip.fi_dst = $3.m; \
-			fr->fr_family = $3.f; \
-			fr->fr_ip.fi_v = $3.v; \
-			fr->fr_mip.fi_v = 0xf; \
-			fr->fr_datype = $3.type; \
-			if ($3.ifpos != -1) { \
-				fr->fr_ipf->fri_difpidx = $3.ifpos; \
-			})
+		{ DOREM(bcopy(&($3.a), &fr->fr_ip.fi_dst, sizeof($3.a)); \
+			bcopy(&($3.m), &fr->fr_mip.fi_dst, sizeof($3.m)); \
+			if (dynamic != -1) { \
+				fr->fr_datype = ifpflag; \
+				fr->fr_ipf->fri_difpidx = dynamic; \
+			} else if (pooled || hashed) \
+				fr->fr_datype = FRI_LOOKUP;)
 		}
 	;
 
@@ -992,8 +715,7 @@ dstport:
 	| portrange
 		{ DOALL(fr->fr_dcmp = $1.pc; fr->fr_dport = $1.p1; \
 			fr->fr_dtop = $1.p2;) }
-	| porteq lstart dstportlist lend
-		{ yyresetdict(); }
+	| port '=' lstart dstportlist lend
 	;
 
 toport:
@@ -1002,304 +724,167 @@ toport:
 	| portrange
 		{ DOALL(fr->fr_dcmp = $1.pc; fr->fr_dport = $1.p1; \
 			fr->fr_dtop = $1.p2;) }
-	| porteq lstart dstportlist lend
-		{ yyresetdict(); }
+	| port '=' lstart dstportlist lend
 	;
 
 dstportlist:
 	portnum		{ DOREM(fr->fr_dcmp = FR_EQUAL; fr->fr_dport = $1;) }
-	| portnum ':' portnum
-			{ DOREM(fr->fr_dcmp = FR_INCRANGE; fr->fr_dport = $1; \
-				fr->fr_dtop = $3;) }
-	| portnum YY_RANGE_IN portnum
-			{ DOREM(fr->fr_dcmp = FR_INRANGE; fr->fr_dport = $1; \
-				fr->fr_dtop = $3;) }
 	| dstportlist lmore portnum
 			{ DOREM(fr->fr_dcmp = FR_EQUAL; fr->fr_dport = $3;) }
-	| dstportlist lmore portnum ':' portnum
-			{ DOREM(fr->fr_dcmp = FR_INCRANGE; fr->fr_dport = $3; \
-				fr->fr_dtop = $5;) }
-	| dstportlist lmore portnum YY_RANGE_IN portnum
-			{ DOREM(fr->fr_dcmp = FR_INRANGE; fr->fr_dport = $3; \
-				fr->fr_dtop = $5;) }
 	;
 
-addr:	pool '/' YY_NUMBER		{ pooled = 1;
-					  yyexpectaddr = 0;
-					  $$.type = FRI_LOOKUP;
-					  $$.v = 0;
-					  $$.f = AF_UNSPEC;
+addr:	IPFY_ANY			{ bzero(&($$), sizeof($$)); }
+	| pool '/' YY_NUMBER		{ pooled = 1;
 					  $$.a.iplookuptype = IPLT_POOL;
-					  $$.a.iplookupsubtype = 0;
 					  $$.a.iplookupnum = $3; }
-	| pool '/' YY_STR		{ pooled = 1;
-					  $$.type = FRI_LOOKUP;
+	| pool '=' '(' poollist ')'	{ pooled = 1;
 					  $$.a.iplookuptype = IPLT_POOL;
-					  $$.a.iplookupsubtype = 1;
-					  $$.a.iplookupname = addname(&fr, $3);
-					}
-	| pool '=' '('			{ yyexpectaddr = 1;
-					  pooled = 1;
-					}
-			poollist ')'	{ yyexpectaddr = 0;
-					  $$.v = 0;
-					  $$.f = AF_UNSPEC;
-					  $$.type = FRI_LOOKUP;
-					  $$.a.iplookuptype = IPLT_POOL;
-					  $$.a.iplookupsubtype = 0;
-					  $$.a.iplookupnum = makepool($5);
-					}
+					  $$.a.iplookupnum = makepool($4); }
 	| hash '/' YY_NUMBER		{ hashed = 1;
-					  yyexpectaddr = 0;
-					  $$.v = 0;
-					  $$.f = AF_UNSPEC;
-					  $$.type = FRI_LOOKUP;
 					  $$.a.iplookuptype = IPLT_HASH;
-					  $$.a.iplookupsubtype = 0;
-					  $$.a.iplookupnum = $3;
-					}
-	| hash '/' YY_STR		{ hashed = 1;
-					  $$.type = FRI_LOOKUP;
-					  $$.v = 0;
-					  $$.f = AF_UNSPEC;
+					  $$.a.iplookupnum = $3; }
+	| hash '=' '(' addrlist ')'	{ hashed = 1;
 					  $$.a.iplookuptype = IPLT_HASH;
-					  $$.a.iplookupsubtype = 1;
-					  $$.a.iplookupname = addname(&fr, $3);
-					}
-	| hash '=' '(' 			{ hashed = 1;
-					  yyexpectaddr = 1;
-					}
-			addrlist ')'	{ yyexpectaddr = 0;
-					  $$.v = 0;
-					  $$.f = AF_UNSPEC;
-					  $$.type = FRI_LOOKUP;
-					  $$.a.iplookuptype = IPLT_HASH;
-					  $$.a.iplookupsubtype = 0;
-					  $$.a.iplookupnum = makehash($5);
-					}
-	| ipaddr			{ $$ = $1;
-					  yyexpectaddr = 0; }
-	;
-
-ipaddr:	IPFY_ANY			{ bzero(&($$), sizeof($$));
-					  $$.type = FRI_NORMAL;
-					  yyresetdict();
-					  yyexpectaddr = 0;
-					}
-	| hostname			{ $$.a = $1.adr;
-					  $$.f = $1.f;
-					  if ($1.f == AF_INET6)
-						  fill6bits(128, $$.m.i6);
-					  else if ($1.f == AF_INET)
-						  fill6bits(32, $$.m.i6);
-					  $$.v = ftov($1.f);
-					  $$.type = FRI_NORMAL;
-					  yyexpectaddr = 0;
-					}
-	| hostname			{ yyresetdict(); }
-		maskspace		{ yysetdict(maskwords); }
-		ipmask			{ ntomask($1.f, $5, $$.m.i6);
-					  $$.a = $1.adr;
-					  $$.a.i6[0] &= $$.m.i6[0];
-					  $$.a.i6[1] &= $$.m.i6[1];
-					  $$.a.i6[2] &= $$.m.i6[2];
-					  $$.a.i6[3] &= $$.m.i6[3];
-					  $$.f = $1.f;
-					  $$.v = ftov($1.f);
-					  $$.type = ifpflag;
-					  yyresetdict();
-					  yyexpectaddr = 0;
-					}
-	| '(' YY_STR ')'		{ $$.type = FRI_DYNAMIC;
-					  ifpflag = FRI_DYNAMIC;
-					  $$.ifpos = addname(&fr, $2);
-					  $$.lif = 0;
-					}
-	| '(' YY_STR ')' '/' { ifpflag = FRI_DYNAMIC; } maskopts
-					{ $$.type = ifpflag;
-					  $$.ifpos = addname(&fr, $2);
-					  $$.lif = 0;
-					}
-	| '(' YY_STR ':' YY_NUMBER ')' '/' { ifpflag = FRI_DYNAMIC; } maskopts
-					{ $$.type = ifpflag;
-					  $$.ifpos = addname(&fr, $2);
-					  $$.lif = $4;
-					}
-	;
+					  $$.a.iplookupnum = makehash($4); }
+	| hostname			{ $$.a.in4 = $1;
+					  $$.m.in4_addr = 0xffffffff; }
+	| hostname maskspace ipv4mask	{ $$.a.in4 = $1;
+					  $$.m.in4_addr = $3.s_addr;
+					  $$.a.in4_addr &= $3.s_addr; }
+	| YY_IPV6			{ bcopy(&$1, &$$.a, sizeof($$.a));
+					  fill6bits(128, (u_32_t *)&$$.m); }
+	| YY_IPV6 maskspace ipv6mask	{ bcopy(&$1, &$$.a, sizeof($$.a));
+					  bcopy(&$3, &$$.m, sizeof($$.m)); }
 
 maskspace:
 	'/'
 	| IPFY_MASK
 	;
 
-ipmask:	ipv4				{ $$ = count4bits($1.s_addr); }
-	| YY_HEX			{ $$ = count4bits(htonl($1)); }
-	| YY_NUMBER			{ $$ = $1; }
-	| YY_IPV6			{ $$ = count6bits($1.i6); }
-	| maskopts			{ $$ = 0; }
-	;
-
-maskopts:
-	IPFY_BROADCAST			{ if (ifpflag == FRI_DYNAMIC) {
+ipv4mask:
+	ipv4				{ $$ = $1; }
+	| YY_HEX			{ $$.s_addr = htonl($1); }
+	| YY_NUMBER			{ ntomask(4, $1, (u_32_t *)&$$); }
+	| IPFY_BROADCAST		{ if (ifpflag == FRI_DYNAMIC) {
+						$$.s_addr = 0;
 						ifpflag = FRI_BROADCAST;
-					  } else {
+					  } else
 						YYERROR;
-					  }
 					}
 	| IPFY_NETWORK			{ if (ifpflag == FRI_DYNAMIC) {
+						$$.s_addr = 0;
 						ifpflag = FRI_NETWORK;
-					  } else {
+					  } else
 						YYERROR;
-					  }
 					}
 	| IPFY_NETMASKED		{ if (ifpflag == FRI_DYNAMIC) {
+						$$.s_addr = 0;
 						ifpflag = FRI_NETMASKED;
-					  } else {
+					  } else
 						YYERROR;
-					  }
 					}
 	| IPFY_PEER			{ if (ifpflag == FRI_DYNAMIC) {
+						$$.s_addr = 0;
 						ifpflag = FRI_PEERADDR;
-					  } else {
+					  } else
 						YYERROR;
-					  }
+					}
+	;
+
+ipv6mask:
+	YY_NUMBER			{ ntomask(6, $1, $$.i6); }
+	| IPFY_BROADCAST		{ if (ifpflag == FRI_DYNAMIC) {
+						bzero(&$$, sizeof($$));
+						ifpflag = FRI_BROADCAST;
+					  } else
+						YYERROR;
+					}
+	| IPFY_NETWORK			{ if (ifpflag == FRI_DYNAMIC) {
+						bzero(&$$, sizeof($$));
+						ifpflag = FRI_BROADCAST;
+					  } else
+						YYERROR;
+					}
+	| IPFY_NETMASKED		{ if (ifpflag == FRI_DYNAMIC) {
+						bzero(&$$, sizeof($$));
+						ifpflag = FRI_BROADCAST;
+					  } else
+						YYERROR;
+					}
+	| IPFY_PEER			{ if (ifpflag == FRI_DYNAMIC) {
+						bzero(&$$, sizeof($$));
+						ifpflag = FRI_BROADCAST;
+					  } else
+						YYERROR;
 					}
 	;
 
 hostname:
-	ipv4				{ $$.adr.in4 = $1;
-					  $$.f = AF_INET;
-					}
-	| YY_NUMBER			{ $$.adr.in4_addr = $1;
-					  $$.f = AF_INET;
-					}
-	| YY_HEX			{ $$.adr.in4_addr = $1;
-					  $$.f = AF_INET;
-					}
-	| YY_STR			{ $$.adr.in4_addr = lookuphost($1);
-					  $$.f = AF_INET;
+	ipv4				{ $$ = $1; }
+	| YY_NUMBER			{ $$.s_addr = $1; }
+	| YY_HEX			{ $$.s_addr = $1; }
+	| YY_STR			{ $$.s_addr = lookuphost($1);
 					  free($1);
-					}
-	| YY_IPV6			{ $$.adr = $1;
-					  $$.f = AF_INET6;
 					}
 	;
 
 addrlist:
-	ipaddr		{ $$ = newalist(NULL);
-			  $$->al_family = $1.f;
-			  $$->al_i6addr = $1.a;
-			  $$->al_i6mask = $1.m;
-			}
-	| addrlist ',' { yyexpectaddr = 1; } ipaddr
+	addr		{ $$ = newalist(NULL);
+			  bcopy(&($1.a), &($$->al_i6addr), sizeof($1.a));
+			  bcopy(&($1.m), &($$->al_i6mask), sizeof($1.m)); }
+	| addrlist ',' addr
 			{ $$ = newalist($1);
-			  $$->al_family = $4.f;
-			  $$->al_i6addr = $4.a;
-			  $$->al_i6mask = $4.m;
-			}
+			  bcopy(&($3.a), &($$->al_i6addr), sizeof($3.a));
+			  bcopy(&($3.m), &($$->al_i6mask), sizeof($3.m)); }
 	;
 
-pool:	IPFY_POOL	{ yyexpectaddr = 0; yycont = NULL; yyresetdict(); }
+pool:	IPFY_POOL	{ yyexpectaddr = 0; }
 	;
 
-hash:	IPFY_HASH	{ yyexpectaddr = 0; yycont = NULL; yyresetdict(); }
+hash:	IPFY_HASH	{ yyexpectaddr = 0; }
 	;
 
 poollist:
-	ipaddr		{ $$ = newalist(NULL);
-			  $$->al_family = $1.f;
-			  $$->al_i6addr = $1.a;
-			  $$->al_i6mask = $1.m;
-			}
-	| '!' ipaddr	{ $$ = newalist(NULL);
+	addr		{ $$ = newalist(NULL);
+			  bcopy(&($1.a), &($$->al_i6addr), sizeof($1.a));
+			  bcopy(&($1.m), &($$->al_i6mask), sizeof($1.m)); }
+	| '!' addr	{ $$ = newalist(NULL);
 			  $$->al_not = 1;
-			  $$->al_family = $2.f;
-			  $$->al_i6addr = $2.a;
-			  $$->al_i6mask = $2.m;
-			}
-	| poollist ',' ipaddr
+			  bcopy(&($2.a), &($$->al_i6addr), sizeof($2.a));
+			  bcopy(&($2.m), &($$->al_i6mask), sizeof($2.m)); }
+	| addrlist ',' addr
 			{ $$ = newalist($1);
-			  $$->al_family = $3.f;
-			  $$->al_i6addr = $3.a;
-			  $$->al_i6mask = $3.m;
-			}
-	| poollist ',' '!' ipaddr
+			  bcopy(&($3.a), &($$->al_i6addr), sizeof($3.a));
+			  bcopy(&($3.m), &($$->al_i6mask), sizeof($3.m)); }
+	| addrlist ',' '!' addr
 			{ $$ = newalist($1);
 			  $$->al_not = 1;
-			  $$->al_family = $4.f;
-			  $$->al_i6addr = $4.a;
-			  $$->al_i6mask = $4.m;
-			}
+			  bcopy(&($4.a), &($$->al_i6addr), sizeof($4.a));
+			  bcopy(&($4.m), &($$->al_i6mask), sizeof($4.m)); }
 	;
 
-port:	IPFY_PORT			{ yyexpectaddr = 0;
-					  yycont = NULL;
-					  if (frc->fr_proto != 0 &&
-					      frc->fr_proto != IPPROTO_UDP &&
-					      frc->fr_proto != IPPROTO_TCP)
-						yyerror("port use incorrect");
-					}
-	;
-
-portc:	port compare			{ $$ = $2;
-					  yysetdict(NULL);
-					}
-	| porteq			{ $$ = $1; }
-	;
-
-porteq:	port '='			{ $$ = FR_EQUAL;
-					  yysetdict(NULL);
-					}
-	;
-
-portr:	IPFY_PORT			{ yyexpectaddr = 0;
-					  yycont = NULL;
-					  yysetdict(NULL);
-					}
+port:	IPFY_PORT			{ yyexpectaddr = 0; }
 	;
 
 portcomp:
-	portc portnum			{ $$.pc = $1;
-					  $$.p1 = $2;
-					  yyresetdict();
-					}
+	port compare portnum		{ $$.pc = $2; $$.p1 = $3; }
 	;
 
 portrange:
-	portr portnum range portnum	{ $$.p1 = $2;
-					  $$.pc = $3;
-					  $$.p2 = $4;
-					  yyresetdict();
-					}
+	port portnum range portnum	{ $$.p1 = $2; $$.pc = $3; $$.p2 = $4; }
 	;
 
 icmp:	| itype icode
 	;
 
-itype:	seticmptype icmptype
-	{ DOALL(fr->fr_icmp = htons($2 << 8); fr->fr_icmpm = htons(0xff00););
-	  yyresetdict();
-	}
-	| seticmptype lstart typelist lend	{ yyresetdict(); }
+itype:	IPFY_ICMPTYPE icmptype
+	{ DOALL(fr->fr_icmp = htons($2 << 8); fr->fr_icmpm = htons(0xff00);) }
+	| IPFY_ICMPTYPE lstart typelist lend
 	;
 
-seticmptype:
-	IPFY_ICMPTYPE			{ setipftype();
-					  if (frc->fr_family == AF_UNSPEC)
-					      frc->fr_family = AF_INET;
-					  yysetdict(NULL);
-					}
-	;
-
-icode:	| seticmpcode icmpcode
-	{ DOALL(fr->fr_icmp |= htons($2); fr->fr_icmpm |= htons(0xff););
-	  yyresetdict();
-	}
-	| seticmpcode lstart codelist lend	{ yyresetdict(); }
-	;
-
-seticmpcode:
-	IPFY_ICMPCODE				{ yysetdict(icmpcodewords); }
+icode:	| IPFY_ICMPCODE icmpcode
+	{ DOALL(fr->fr_icmp |= htons($2); fr->fr_icmpm |= htons(0xff);) }
+	| IPFY_ICMPCODE lstart codelist lend
 	;
 
 typelist:
@@ -1313,8 +898,7 @@ codelist:
 	icmpcode
 	{ DOREM(fr->fr_icmp |= htons($1); fr->fr_icmpm |= htons(0xff);) }
 	| codelist lmore icmpcode
-	{ DOREM(fr->fr_icmp &= htons(0xff00); fr->fr_icmp |= htons($3); \
-		fr->fr_icmpm |= htons(0xff);) }
+	{ DOREM(fr->fr_icmp |= htons($3); fr->fr_icmpm |= htons(0xff);) }
 	;
 
 age:	| IPFY_AGE YY_NUMBER		{ DOALL(fr->fr_age[0] = $2; \
@@ -1324,8 +908,9 @@ age:	| IPFY_AGE YY_NUMBER		{ DOALL(fr->fr_age[0] = $2; \
 						fr->fr_age[1] = $4;) }
 	;
 
-keep:	| IPFY_KEEP keepstate keep
-	| IPFY_KEEP keepfrag keep
+keep:	| IPFY_KEEP keepstate
+	| IPFY_KEEP keepfrag
+	| IPFY_KEEP keepstate IPFY_KEEP keepfrag
 	;
 
 keepstate:
@@ -1334,7 +919,6 @@ keepstate:
 
 keepfrag:
 	IPFY_FRAGS fragoptlist		{ DOALL(fr->fr_flags |= FR_KEEPFRAG;) }
-	| IPFY_FRAG fragoptlist		{ DOALL(fr->fr_flags |= FR_KEEPFRAG;) }
 	;
 
 fragoptlist:
@@ -1363,17 +947,8 @@ stateopt:
 	IPFY_LIMIT YY_NUMBER	{ DOALL(fr->fr_statemax = $2;) }
 	| IPFY_STRICT		{ DOALL(if (fr->fr_proto != IPPROTO_TCP) { \
 						YYERROR; \
-					} else if (fr->fr_flags & FR_STLOOSE) {\
-						YYERROR; \
-					} else \
+					  } else \
 						fr->fr_flags |= FR_STSTRICT;)
-				}
-	| IPFY_LOOSE		{ DOALL(if (fr->fr_proto != IPPROTO_TCP) { \
-						YYERROR; \
-					} else if (fr->fr_flags & FR_STSTRICT){\
-						YYERROR; \
-					} else \
-						fr->fr_flags |= FR_STLOOSE;)
 				}
 	| IPFY_NEWISN		{ DOALL(if (fr->fr_proto != IPPROTO_TCP) { \
 						YYERROR; \
@@ -1381,67 +956,33 @@ stateopt:
 						fr->fr_flags |= FR_NEWISN;)
 				}
 	| IPFY_NOICMPERR	{ DOALL(fr->fr_flags |= FR_NOICMPERR;) }
-
-	| IPFY_SYNC		{ DOALL(fr->fr_flags |= FR_STATESYNC;) }
-	| IPFY_AGE YY_NUMBER		{ DOALL(fr->fr_age[0] = $2; \
-						fr->fr_age[1] = $2;) }
-	| IPFY_AGE YY_NUMBER '/' YY_NUMBER
-					{ DOALL(fr->fr_age[0] = $2; \
-						fr->fr_age[1] = $4;) }
-	| IPFY_ICMPHEAD groupname
-				{ DOALL(seticmphead(&fr, $2);)
-				  free($2);
-				}
-	| IPFY_NOLOG
-				{ DOALL(fr->fr_nostatelog = 1;) }
-	| IPFY_MAX_SRCS YY_NUMBER
-				{ DOALL(fr->fr_srctrack.ht_max_nodes = $2;) }
-	| IPFY_MAX_PER_SRC YY_NUMBER
-				{ DOALL(fr->fr_srctrack.ht_max_per_node = $2; \
-					fr->fr_srctrack.ht_netmask = \
-					fr->fr_family == AF_INET ? 32: 128;)
-				}
-	| IPFY_MAX_PER_SRC YY_NUMBER '/' YY_NUMBER
-				{ DOALL(fr->fr_srctrack.ht_max_per_node = $2; \
-					fr->fr_srctrack.ht_netmask = $4;)
-				}
 	;
 
 portnum:
-	servicename			{ if (getport(frc, $1,
-						      &($$), NULL) == -1)
-						yyerror("service unknown");
-					  $$ = ntohs($$);
+	servicename			{ $$ = ntohs(getport($1));
 					  free($1);
 					}
-	| YY_NUMBER			{ if ($1 > 65535)	/* Unsigned */
-						yyerror("invalid port number");
-					  else
-						$$ = $1;
-					}
+	| YY_NUMBER			{ $$ = $1; }
 	;
 
 withlist:
-	withopt				{ nowith = 0; }
-	| withlist withopt		{ nowith = 0; }
-	| withlist ',' withopt		{ nowith = 0; }
+	withopt
+	| withlist withopt
+	| withlist ',' withopt
 	;
 
 withopt:
 	opttype		{ DOALL(fr->fr_flx |= $1; fr->fr_mflx |= $1;) }
-	| notwith opttype		{ DOALL(fr->fr_mflx |= $2;) }
-	| ipopt ipopts			{ yyresetdict(); }
-	| notwith ipopt ipopts		{ yyresetdict(); }
-	| startv6hdrs ipv6hdrs		{ yyresetdict(); }
-	;
-
-ipopt:	IPFY_OPT			{ yysetdict(ipv4optwords); }
+	| notwith opttype
+			{ DOALL(fr->fr_mflx |= $2;) }
+	| IPFY_OPT ipopts
+	| notwith IPFY_OPT ipopts
+	| startv6hdrs ipv6hdrs
 	;
 
 startv6hdrs:
-	IPF6_V6HDRS	{ if (frc->fr_family != AF_INET6)
+	IPF6_V6HDRS	{ if (use_inet6 == 0)
 				yyerror("only available with IPv6");
-			  yysetdict(ipv6optwords);
 			}
 	;
 
@@ -1459,23 +1000,15 @@ opttype:
 	| IPFY_BADSRC			{ $$ = FI_BADSRC; }
 	| IPFY_LOWTTL			{ $$ = FI_LOWTTL; }
 	| IPFY_FRAG			{ $$ = FI_FRAG; }
-	| IPFY_FRAGBODY			{ $$ = FI_FRAGBODY; }
-	| IPFY_FRAGS			{ $$ = FI_FRAG; }
 	| IPFY_MBCAST			{ $$ = FI_MBCAST; }
 	| IPFY_MULTICAST		{ $$ = FI_MULTICAST; }
 	| IPFY_BROADCAST		{ $$ = FI_BROADCAST; }
 	| IPFY_STATE			{ $$ = FI_STATE; }
 	| IPFY_OOW			{ $$ = FI_OOW; }
-	| IPFY_AH			{ $$ = FI_AH; }
 	;
 
-ipopts:	optlist		{ DOALL(fr->fr_mip.fi_optmsk |= $1; \
-				if (fr->fr_family == 0) { \
-					fr->fr_family = AF_INET; \
-				} else if (fr->fr_family != AF_INET) { \
-					YYERROR; \
-				} \
-				if (!nowith) \
+ipopts:	optlist		{ DOALL(fr->fr_mip.fi_optmsk |= $1;
+				if (!nowith)
 					fr->fr_ip.fi_optmsk |= $1;)
 			}
 	;
@@ -1514,11 +1047,22 @@ seclevel:
 	;
 
 icmptype:
-	YY_NUMBER		{ $$ = $1; }
-	| YY_STR		{ $$ = geticmptype(frc->fr_family, $1);
-				  if ($$ == -1)
-					yyerror("unrecognised icmp type");
-				}
+	YY_NUMBER			{ $$ = $1; }
+	| IPFY_ICMPT_UNR		{ $$ = ICMP_UNREACH; }
+	| IPFY_ICMPT_ECHO		{ $$ = ICMP_ECHO; }
+	| IPFY_ICMPT_ECHOR		{ $$ = ICMP_ECHOREPLY; }
+	| IPFY_ICMPT_SQUENCH		{ $$ = ICMP_SOURCEQUENCH; }
+	| IPFY_ICMPT_REDIR		{ $$ = ICMP_REDIRECT; }
+	| IPFY_ICMPT_TIMEX		{ $$ = ICMP_TIMXCEED; }
+	| IPFY_ICMPT_PARAMP		{ $$ = ICMP_PARAMPROB; }
+	| IPFY_ICMPT_TIMEST		{ $$ = ICMP_TSTAMP; }
+	| IPFY_ICMPT_TIMESTREP		{ $$ = ICMP_TSTAMPREPLY; }
+	| IPFY_ICMPT_INFOREQ		{ $$ = ICMP_IREQ; }
+	| IPFY_ICMPT_INFOREP		{ $$ = ICMP_IREQREPLY; }
+	| IPFY_ICMPT_MASKREQ		{ $$ = ICMP_MASKREQ; }
+	| IPFY_ICMPT_MASKREP		{ $$ = ICMP_MASKREPLY; }
+	| IPFY_ICMPT_ROUTERAD		{ $$ = ICMP_ROUTERADVERT; }
+	| IPFY_ICMPT_ROUTERSOL		{ $$ = ICMP_ROUTERSOLICIT; }
 	;
 
 icmpcode:
@@ -1553,8 +1097,7 @@ opt:
 	| IPFY_IPOPT_SEC		{ $$ = getoptbyvalue(IPOPT_SECURITY); }
 	| IPFY_IPOPT_LSRR		{ $$ = getoptbyvalue(IPOPT_LSRR); }
 	| IPFY_IPOPT_ESEC		{ $$ = getoptbyvalue(IPOPT_E_SEC); }
-	| IPFY_IPOPT_CIPSO 		{ $$ = getoptbyvalue(IPOPT_CIPSO); }
-	| IPFY_IPOPT_CIPSO doi		{ $$ = getoptbyvalue(IPOPT_CIPSO); }
+	| IPFY_IPOPT_CIPSO		{ $$ = getoptbyvalue(IPOPT_CIPSO); }
 	| IPFY_IPOPT_SATID		{ $$ = getoptbyvalue(IPOPT_SATID); }
 	| IPFY_IPOPT_SSRR		{ $$ = getoptbyvalue(IPOPT_SSRR); }
 	| IPFY_IPOPT_ADDEXT		{ $$ = getoptbyvalue(IPOPT_ADDEXT); }
@@ -1567,42 +1110,23 @@ opt:
 	| IPFY_IPOPT_NSAPA		{ $$ = getoptbyvalue(IPOPT_NSAPA); }
 	| IPFY_IPOPT_RTRALRT		{ $$ = getoptbyvalue(IPOPT_RTRALRT); }
 	| IPFY_IPOPT_UMP		{ $$ = getoptbyvalue(IPOPT_UMP); }
-	| setsecclass secname
-			{ DOALL(fr->fr_mip.fi_secmsk |= $2; \
-				if (fr->fr_family == 0) { \
-					fr->fr_family = AF_INET; \
-				} else if (fr->fr_family != AF_INET) { \
-					YYERROR; \
-				} \
-				if (!nowith) \
+	| IPFY_SECCLASS secname
+			{ DOALL(fr->fr_mip.fi_secmsk |= $2;
+				if (!nowith)
 					fr->fr_ip.fi_secmsk |= $2;)
 			  $$ = 0;
-			  yyresetdict();
 			}
-	;
-
-setsecclass:
-	IPFY_SECCLASS			{ yysetdict(ipv4secwords); }
-	;
-
-doi:	IPFY_DOI YY_NUMBER		{ DOALL(fr->fr_doimask = 0xffffffff; \
-						if (!nowith) \
-							fr->fr_doi = $2;) }
-	| IPFY_DOI YY_HEX		{ DOALL(fr->fr_doimask = 0xffffffff; \
-						if (!nowith) \
-							fr->fr_doi = $2;) }
 	;
 
 ipv6hdr:
 	IPFY_AH			{ $$ = getv6optbyvalue(IPPROTO_AH); }
 	| IPFY_IPV6OPT_DSTOPTS	{ $$ = getv6optbyvalue(IPPROTO_DSTOPTS); }
-	| IPFY_IPV6OPT_ESP	{ $$ = getv6optbyvalue(IPPROTO_ESP); }
+	| IPFY_ESP		{ $$ = getv6optbyvalue(IPPROTO_ESP); }
 	| IPFY_IPV6OPT_HOPOPTS	{ $$ = getv6optbyvalue(IPPROTO_HOPOPTS); }
 	| IPFY_IPV6OPT_IPV6	{ $$ = getv6optbyvalue(IPPROTO_IPV6); }
 	| IPFY_IPV6OPT_NONE	{ $$ = getv6optbyvalue(IPPROTO_NONE); }
 	| IPFY_IPV6OPT_ROUTING	{ $$ = getv6optbyvalue(IPPROTO_ROUTING); }
-	| IPFY_IPV6OPT_FRAG	{ $$ = getv6optbyvalue(IPPROTO_FRAGMENT); }
-	| IPFY_IPV6OPT_MOBILITY	{ $$ = getv6optbyvalue(IPPROTO_MOBILITY); }
+	| IPFY_FRAG		{ $$ = getv6optbyvalue(IPPROTO_FRAGMENT); }
 	;
 
 level:	IPFY_LEVEL			{ setsyslog(); }
@@ -1651,7 +1175,8 @@ priority:
 	;
 
 compare:
-	YY_CMP_EQ			{ $$ = FR_EQUAL; }
+	'='				{ $$ = FR_EQUAL; }
+	| YY_CMP_EQ			{ $$ = FR_EQUAL; }
 	| YY_CMP_NE			{ $$ = FR_NEQUAL; }
 	| YY_CMP_LT			{ $$ = FR_LESST; }
 	| YY_CMP_LE			{ $$ = FR_LESSTE; }
@@ -1668,8 +1193,8 @@ servicename:
 	YY_STR				{ $$ = $1; }
 	;
 
-interfacename:	name				{ $$ = $1; }
-	| name ':' YY_NUMBER
+interfacename:	YY_STR				{ $$ = $1; }
+	| YY_STR ':' YY_NUMBER
 		{ $$ = $1;
 		  fprintf(stderr, "%d: Logical interface %s:%d unsupported, "
 			  "use the physical interface %s instead.\n",
@@ -1678,49 +1203,27 @@ interfacename:	name				{ $$ = $1; }
 	;
 
 name:	YY_STR				{ $$ = $1; }
-	| '-'				{ $$ = strdup("-"); }
 	;
 
-ipv4_16:
-	YY_NUMBER '.' YY_NUMBER
-		{ if ($1 > 255 || $3 > 255) {
+ipv4:	YY_NUMBER '.' YY_NUMBER '.' YY_NUMBER '.' YY_NUMBER
+		{ if ($1 > 255 || $3 > 255 || $5 > 255 || $7 > 255) {
 			yyerror("Invalid octet string for IP address");
 			return 0;
 		  }
-		  $$.s_addr = ($1 << 24) | ($3 << 16);
+		  $$.s_addr = ($1 << 24) | ($3 << 16) | ($5 << 8) | $7;
 		  $$.s_addr = htonl($$.s_addr);
 		}
 	;
-
-ipv4_24:
-	ipv4_16 '.' YY_NUMBER
-		{ if ($3 > 255) {
-			yyerror("Invalid octet string for IP address");
-			return 0;
-		  }
-		  $$.s_addr |= htonl($3 << 8);
-		}
-	;
-
-ipv4:	ipv4_24 '.' YY_NUMBER
-		{ if ($3 > 255) {
-			yyerror("Invalid octet string for IP address");
-			return 0;
-		  }
-		  $$.s_addr |= htonl($3);
-		}
-	| ipv4_24
-	| ipv4_16
-	;
-
 %%
 
 
 static	struct	wordtab ipfwords[] = {
+	{ "addext",			IPFY_IPOPT_ADDEXT },
 	{ "age",			IPFY_AGE },
 	{ "ah",				IPFY_AH },
 	{ "all",			IPFY_ALL },
 	{ "and",			IPFY_AND },
+	{ "any",			IPFY_ANY },
 	{ "auth",			IPFY_AUTH },
 	{ "bad",			IPFY_BAD },
 	{ "bad-nat",			IPFY_BADNAT },
@@ -1732,188 +1235,155 @@ static	struct	wordtab ipfwords[] = {
 #ifdef USE_INET6
 	{ "bpf-v6",			IPFY_BPFV6 },
 #endif
+	{ "broadcast",			IPFY_BROADCAST },
 	{ "call",			IPFY_CALL },
+	{ "cipso",			IPFY_IPOPT_CIPSO },
 	{ "code",			IPFY_ICMPCODE },
-	{ "comment",			IPFY_COMMENT },
+	{ "confid",			IPFY_SEC_CONF },
 	{ "count",			IPFY_COUNT },
-	{ "decapsulate",		IPFY_DECAPS },
-	{ "dstlist",			IPFY_DSTLIST },
-	{ "doi",			IPFY_DOI },
+	{ "cutoff-preced",		IPFY_ICMPC_CUTPRE },
+	{ "divert",			IPFY_DIVERT },
+	{ "dps",			IPFY_IPOPT_DPS },
+	{ "dstopts",			IPFY_IPV6OPT_DSTOPTS },
 	{ "dup-to",			IPFY_DUPTO },
+	{ "e-sec",			IPFY_IPOPT_ESEC },
+	{ "echo",			IPFY_ICMPT_ECHO },
+	{ "echorep",			IPFY_ICMPT_ECHOR },
+	{ "eip",			IPFY_IPOPT_EIP },
+	{ "encode",			IPFY_IPOPT_ENCODE },
 	{ "eq",				YY_CMP_EQ },
 	{ "esp",			IPFY_ESP },
-	{ "exp",			IPFY_IPFEXPR },
-	{ "family",			IPFY_FAMILY },
 	{ "fastroute",			IPFY_FROUTE },
+	{ "filter-prohib",		IPFY_ICMPC_FLTPRO },
 	{ "first",			IPFY_FIRST },
-	{ "flags",			IPFY_FLAGS },
+	{ "finn",			IPFY_IPOPT_FINN },
 	{ "frag",			IPFY_FRAG },
-	{ "frag-body",			IPFY_FRAGBODY },
+	{ "flags",			IPFY_FLAGS },
 	{ "frags",			IPFY_FRAGS },
 	{ "from",			IPFY_FROM },
 	{ "ge",				YY_CMP_GE },
 	{ "group",			IPFY_GROUP },
 	{ "gt",				YY_CMP_GT },
+	{ "hash",			IPFY_HASH },
 	{ "head",			IPFY_HEAD },
+	{ "hopopts",			IPFY_IPV6OPT_HOPOPTS },
+	{ "host-preced",		IPFY_ICMPC_HSTPRE },
+	{ "host-prohib",		IPFY_ICMPC_HSTPRO },
+	{ "host-tos",			IPFY_ICMPC_HSTTOS },
+	{ "host-unk",			IPFY_ICMPC_HSTUNK },
+	{ "host-unr",			IPFY_ICMPC_HSTUNR },
 	{ "icmp",			IPFY_ICMP },
-	{ "icmp-head",			IPFY_ICMPHEAD },
 	{ "icmp-type",			IPFY_ICMPTYPE },
+	{ "imitd",			IPFY_IPOPT_IMITD },
 	{ "in",				IPFY_IN },
 	{ "in-via",			IPFY_INVIA },
-	{ "inet",			IPFY_INET },
-	{ "inet6",			IPFY_INET6 },
+	{ "inforeq",			IPFY_ICMPT_INFOREQ },
+	{ "inforep",			IPFY_ICMPT_INFOREP },
 	{ "ipopt",			IPFY_IPOPTS },
 	{ "ipopts",			IPFY_IPOPTS },
+	{ "ipv6",			IPFY_IPV6OPT_IPV6 },
+	{ "isolate",			IPFY_ICMPC_ISOLATE },
 	{ "keep",			IPFY_KEEP },
-	{ "l5-as",			IPFY_L5AS },
 	{ "le",				YY_CMP_LE },
 	{ "level",			IPFY_LEVEL },
 	{ "limit",			IPFY_LIMIT },
 	{ "log",			IPFY_LOG },
-	{ "loose",			IPFY_LOOSE },
 	{ "lowttl",			IPFY_LOWTTL },
+	{ "lsrr",			IPFY_IPOPT_LSRR },
 	{ "lt",				YY_CMP_LT },
 	{ "mask",			IPFY_MASK },
+	{ "maskrep",			IPFY_ICMPT_MASKREP },
+	{ "maskreq",			IPFY_ICMPT_MASKREQ },
 	{ "match-tag",			IPFY_MATCHTAG },
-	{ "max-per-src",		IPFY_MAX_PER_SRC },
-	{ "max-srcs",			IPFY_MAX_SRCS },
 	{ "mbcast",			IPFY_MBCAST },
-	{ "mcast",			IPFY_MULTICAST },
+	{ "mtup",			IPFY_IPOPT_MTUP },
+	{ "mtur",			IPFY_IPOPT_MTUR },
 	{ "multicast",			IPFY_MULTICAST },
 	{ "nat",			IPFY_NAT },
 	{ "ne",				YY_CMP_NE },
+	{ "needfrag",			IPFY_ICMPC_NEEDF },
 	{ "net",			IPFY_NETWORK },
+	{ "net-prohib",			IPFY_ICMPC_NETPRO },
+	{ "net-tos",			IPFY_ICMPC_NETTOS },
+	{ "net-unk",			IPFY_ICMPC_NETUNK },
+	{ "net-unr",			IPFY_ICMPC_NETUNR },
+	{ "netmasked",			IPFY_NETMASKED },
+	{ "network",			IPFY_NETWORK },
 	{ "newisn",			IPFY_NEWISN },
 	{ "no",				IPFY_NO },
 	{ "no-icmp-err",		IPFY_NOICMPERR },
-	{ "nolog",			IPFY_NOLOG },
-	{ "nomatch",			IPFY_NOMATCH },
+	{ "none",			IPFY_IPV6OPT_NONE },
+	{ "nop",			IPFY_IPOPT_NOP },
 	{ "now",			IPFY_NOW },
 	{ "not",			IPFY_NOT },
+	{ "nsapa",			IPFY_IPOPT_NSAPA },
 	{ "oow",			IPFY_OOW },
 	{ "on",				IPFY_ON },
 	{ "opt",			IPFY_OPT },
 	{ "or-block",			IPFY_ORBLOCK },
 	{ "out",			IPFY_OUT },
 	{ "out-via",			IPFY_OUTVIA },
+	{ "paramprob",			IPFY_ICMPT_PARAMP },
 	{ "pass",			IPFY_PASS },
+	{ "peer",			IPFY_PEER },
+	{ "pool",			IPFY_POOL },
 	{ "port",			IPFY_PORT },
+	{ "port-unr",			IPFY_ICMPC_PORUNR },
 	{ "pps",			IPFY_PPS },
 	{ "preauth",			IPFY_PREAUTH },
 	{ "proto",			IPFY_PROTO },
+	{ "proto-unr",			IPFY_ICMPC_PROUNR },
 	{ "quick",			IPFY_QUICK },
+	{ "redir",			IPFY_ICMPT_REDIR },
 	{ "reply-to",			IPFY_REPLY_TO },
+	{ "reserv-1",			IPFY_SEC_RSV1 },
+	{ "reserv-2",			IPFY_SEC_RSV2 },
+	{ "reserv-3",			IPFY_SEC_RSV3 },
+	{ "reserv-4",			IPFY_SEC_RSV4 },
 	{ "return-icmp",		IPFY_RETICMP },
 	{ "return-icmp-as-dest",	IPFY_RETICMPASDST },
 	{ "return-rst",			IPFY_RETRST },
 	{ "route-to",			IPFY_ROUTETO },
-	{ "rule-ttl",			IPFY_RULETTL },
-	{ "sec-class",			IPFY_SECCLASS },
-	{ "set",			IPFY_SET },
-	{ "set-tag",			IPFY_SETTAG },
-	{ "skip",			IPFY_SKIP },
-	{ "short",			IPFY_SHORT },
-	{ "state",			IPFY_STATE },
-	{ "state-age",			IPFY_AGE },
-	{ "strict",			IPFY_STRICT },
-	{ "sync",			IPFY_SYNC },
-	{ "tcp",			IPFY_TCP },
-	{ "tcp-udp",			IPFY_TCPUDP },
-	{ "tos",			IPFY_TOS },
-	{ "to",				IPFY_TO },
-	{ "ttl",			IPFY_TTL },
-	{ "udp",			IPFY_UDP },
-	{ "v6hdrs",			IPF6_V6HDRS },
-	{ "with",			IPFY_WITH },
-	{ NULL,				0 }
-};
-
-static	struct	wordtab	addrwords[] = {
-	{ "any",			IPFY_ANY },
-	{ "hash",			IPFY_HASH },
-	{ "pool",			IPFY_POOL },
-	{ NULL,				0 }
-};
-
-static	struct	wordtab	maskwords[] = {
-	{ "broadcast",			IPFY_BROADCAST },
-	{ "netmasked",			IPFY_NETMASKED },
-	{ "network",			IPFY_NETWORK },
-	{ "peer",			IPFY_PEER },
-	{ NULL,				0 }
-};
-
-static	struct	wordtab icmpcodewords[] = {
-	{ "cutoff-preced",		IPFY_ICMPC_CUTPRE },
-	{ "filter-prohib",		IPFY_ICMPC_FLTPRO },
-	{ "isolate",			IPFY_ICMPC_ISOLATE },
-	{ "needfrag",			IPFY_ICMPC_NEEDF },
-	{ "net-prohib",			IPFY_ICMPC_NETPRO },
-	{ "net-tos",			IPFY_ICMPC_NETTOS },
-	{ "host-preced",		IPFY_ICMPC_HSTPRE },
-	{ "host-prohib",		IPFY_ICMPC_HSTPRO },
-	{ "host-tos",			IPFY_ICMPC_HSTTOS },
-	{ "host-unk",			IPFY_ICMPC_HSTUNK },
-	{ "host-unr",			IPFY_ICMPC_HSTUNR },
-	{ "net-unk",			IPFY_ICMPC_NETUNK },
-	{ "net-unr",			IPFY_ICMPC_NETUNR },
-	{ "port-unr",			IPFY_ICMPC_PORUNR },
-	{ "proto-unr",			IPFY_ICMPC_PROUNR },
-	{ "srcfail",			IPFY_ICMPC_SRCFAIL },
-	{ NULL,				0 },
-};
-
-static	struct	wordtab ipv4optwords[] = {
-	{ "addext",			IPFY_IPOPT_ADDEXT },
-	{ "cipso",			IPFY_IPOPT_CIPSO },
-	{ "dps",			IPFY_IPOPT_DPS },
-	{ "e-sec",			IPFY_IPOPT_ESEC },
-	{ "eip",			IPFY_IPOPT_EIP },
-	{ "encode",			IPFY_IPOPT_ENCODE },
-	{ "finn",			IPFY_IPOPT_FINN },
-	{ "imitd",			IPFY_IPOPT_IMITD },
-	{ "lsrr",			IPFY_IPOPT_LSRR },
-	{ "mtup",			IPFY_IPOPT_MTUP },
-	{ "mtur",			IPFY_IPOPT_MTUR },
-	{ "nop",			IPFY_IPOPT_NOP },
-	{ "nsapa",			IPFY_IPOPT_NSAPA },
+	{ "routerad",			IPFY_ICMPT_ROUTERAD },
+	{ "routersol",			IPFY_ICMPT_ROUTERSOL },
+	{ "routing",			IPFY_IPV6OPT_ROUTING },
 	{ "rr",				IPFY_IPOPT_RR },
 	{ "rtralrt",			IPFY_IPOPT_RTRALRT },
 	{ "satid",			IPFY_IPOPT_SATID },
 	{ "sdb",			IPFY_IPOPT_SDB },
 	{ "sec",			IPFY_IPOPT_SEC },
+	{ "sec-class",			IPFY_SECCLASS },
+	{ "secret",			IPFY_SEC_SEC },
+	{ "set-tag",			IPFY_SETTAG },
+	{ "skip",			IPFY_SKIP },
+	{ "squench",			IPFY_ICMPT_SQUENCH },
+	{ "short",			IPFY_SHORT },
+	{ "srcfail",			IPFY_ICMPC_SRCFAIL },
 	{ "ssrr",			IPFY_IPOPT_SSRR },
+	{ "state",			IPFY_STATE },
+	{ "strict",			IPFY_STRICT },
+	{ "tcp",			IPFY_TCP },
+	{ "tcp-udp",			IPFY_TCPUDP },
+	{ "timest",			IPFY_ICMPT_TIMEST },
+	{ "timestrep",			IPFY_ICMPT_TIMESTREP },
+	{ "timex",			IPFY_ICMPT_TIMEX },
+	{ "tos",			IPFY_TOS },
+	{ "topsecret",			IPFY_SEC_TS },
+	{ "to",				IPFY_TO },
 	{ "tr",				IPFY_IPOPT_TR },
 	{ "ts",				IPFY_IPOPT_TS },
+	{ "ttl",			IPFY_TTL },
+	{ "udp",			IPFY_UDP },
 	{ "ump",			IPFY_IPOPT_UMP },
-	{ "visa",			IPFY_IPOPT_VISA },
-	{ "zsu",			IPFY_IPOPT_ZSU },
-	{ NULL,				0 },
-};
-
-static	struct	wordtab ipv4secwords[] = {
-	{ "confid",			IPFY_SEC_CONF },
-	{ "reserv-1",			IPFY_SEC_RSV1 },
-	{ "reserv-2",			IPFY_SEC_RSV2 },
-	{ "reserv-3",			IPFY_SEC_RSV3 },
-	{ "reserv-4",			IPFY_SEC_RSV4 },
-	{ "secret",			IPFY_SEC_SEC },
-	{ "topsecret",			IPFY_SEC_TS },
 	{ "unclass",			IPFY_SEC_UNC },
-	{ NULL,				0 },
+	{ "unreach",			IPFY_ICMPT_UNR },
+	{ "v6hdrs",			IPF6_V6HDRS },
+	{ "visa",			IPFY_IPOPT_VISA },
+	{ "with",			IPFY_WITH },
+	{ "zsu",			IPFY_IPOPT_ZSU },
+	{ NULL,				0 }
 };
 
-static	struct	wordtab ipv6optwords[] = {
-	{ "dstopts",			IPFY_IPV6OPT_DSTOPTS },
-	{ "esp",			IPFY_IPV6OPT_ESP },
-	{ "frag",			IPFY_IPV6OPT_FRAG },
-	{ "hopopts",			IPFY_IPV6OPT_HOPOPTS },
-	{ "ipv6",			IPFY_IPV6OPT_IPV6 },
-	{ "mobility",			IPFY_IPV6OPT_MOBILITY },
-	{ "none",			IPFY_IPV6OPT_NONE },
-	{ "routing",			IPFY_IPV6OPT_ROUTING },
-	{ NULL,				0 },
-};
 
 static	struct	wordtab logwords[] = {
 	{ "kern",			IPFY_FAC_KERN },
@@ -2001,7 +1471,7 @@ FILE *fp;
 
 	ipffd = fd;
 	for (i = 0; i <= IPL_LOGMAX; i++)
-		ipfioctls[i] = iocfuncs[i];
+		ipfioctl[i] = iocfuncs[i];
 	ipfaddfunc = addfunc;
 
 	if (feof(fp))
@@ -2029,28 +1499,23 @@ static void newrule()
 {
 	frentry_t *frn;
 
-	frn = allocfr();
+	frn = (frentry_t *)calloc(1, sizeof(frentry_t));
 	for (fr = frtop; fr != NULL && fr->fr_next != NULL; fr = fr->fr_next)
 		;
-	if (fr != NULL) {
+	if (fr != NULL)
 		fr->fr_next = frn;
-		frn->fr_pnext = &fr->fr_next;
-	}
-	if (frtop == NULL) {
+	if (frtop == NULL)
 		frtop = frn;
-		frn->fr_pnext = &frtop;
-	}
 	fr = frn;
 	frc = frn;
 	fr->fr_loglevel = 0xffff;
 	fr->fr_isc = (void *)-1;
 	fr->fr_logtag = FR_NOLOGTAG;
 	fr->fr_type = FR_T_NONE;
-
-	if (use_inet6 == 1)
-		fr->fr_family = AF_INET6;
-	else if (use_inet6 == -1)
-		fr->fr_family = AF_INET;
+	if (use_inet6 != 0)
+		fr->fr_v = 6;
+	else
+		fr->fr_v = 4;
 
 	nrules = 1;
 }
@@ -2063,8 +1528,7 @@ static void setipftype()
 			fr->fr_type = FR_T_IPF;
 			fr->fr_data = (void *)calloc(sizeof(fripf_t), 1);
 			fr->fr_dsize = sizeof(fripf_t);
-			fr->fr_family = frc->fr_family;
-			fr->fr_ip.fi_v = frc->fr_ip.fi_v;
+			fr->fr_ip.fi_v = frc->fr_v;
 			fr->fr_mip.fi_v = 0xf;
 			fr->fr_ipf->fri_sifpidx = -1;
 			fr->fr_ipf->fri_difpidx = -1;
@@ -2085,15 +1549,24 @@ static frentry_t *addrule()
 		;
 
 	count = nrules;
+	if (count == 0) {
+		f = (frentry_t *)calloc(sizeof(*f), 1);
+		added++;
+		f2->fr_next = f;
+		bcopy(f2, f, sizeof(*f));
+		if (f2->fr_caddr != NULL) {
+			f->fr_caddr = malloc(f->fr_dsize);
+			bcopy(f2->fr_caddr, f->fr_caddr, f->fr_dsize);
+		}
+		f->fr_next = NULL;
+		return f;
+	}
 	f = f2;
 	for (f1 = frc; count > 0; count--, f1 = f1->fr_next) {
-		f->fr_next = allocfr();
-		if (f->fr_next == NULL)
-			return NULL;
-		f->fr_next->fr_pnext = &f->fr_next;
+		f->fr_next = (frentry_t *)calloc(sizeof(*f), 1);
 		added++;
 		f = f->fr_next;
-		*f = *f1;
+		bcopy(f1, f, sizeof(*f));
 		f->fr_next = NULL;
 		if (f->fr_caddr != NULL) {
 			f->fr_caddr = malloc(f->fr_dsize);
@@ -2108,7 +1581,7 @@ static frentry_t *addrule()
 static u_32_t lookuphost(name)
 char *name;
 {
-	i6addr_t addr;
+	u_32_t addr;
 	int i;
 
 	hashed = 0;
@@ -2116,20 +1589,19 @@ char *name;
 	dynamic = -1;
 
 	for (i = 0; i < 4; i++) {
-		if (fr->fr_ifnames[i] == -1)
-			continue;
-		if (strcmp(name, fr->fr_names + fr->fr_ifnames[i]) == 0) {
+		if (strncmp(name, frc->fr_ifnames[i],
+			    sizeof(frc->fr_ifnames[i])) == 0) {
 			ifpflag = FRI_DYNAMIC;
-			dynamic = addname(&fr, name);
+			dynamic = i;
 			return 0;
 		}
 	}
 
-	if (gethost(AF_INET, name, &addr) == -1) {
+	if (gethost(name, &addr) == -1) {
 		fprintf(stderr, "unknown name \"%s\"\n", name);
 		return 0;
 	}
-	return addr.in4.s_addr;
+	return addr;
 }
 
 
@@ -2151,10 +1623,11 @@ char *phrase;
 			fprintf(stderr, "cannot mix IPF and BPF matching\n");
 			return;
 		}
-		fr->fr_family = vtof(v);
+		fr->fr_v = v;
 		fr->fr_type = FR_T_BPFOPC;
 
-		if (!strncmp(phrase, "0x", 2)) {
+		if (!strncmp(phrase, "\"0x", 2)) {
+			phrase++;
 			fb = malloc(sizeof(fakebpf_t));
 
 			for (i = 0, s = strtok(phrase, " \r\n\t"); s != NULL;
@@ -2246,9 +1719,8 @@ alist_t *ptr;
 }
 
 
-static int
-makepool(list)
-	alist_t *list;
+static int makepool(list)
+alist_t *list;
 {
 	ip_pool_node_t *n, *top;
 	ip_pool_t pool;
@@ -2260,30 +1732,10 @@ makepool(list)
 	top = calloc(1, sizeof(*top));
 	if (top == NULL)
 		return 0;
-
+	
 	for (n = top, a = list; (n != NULL) && (a != NULL); a = a->al_next) {
-		if (use_inet6 == 1) {
-#ifdef AF_INET6
-			n->ipn_addr.adf_family = AF_INET6;
-			n->ipn_addr.adf_addr = a->al_i6addr;
-			n->ipn_addr.adf_len = offsetof(addrfamily_t,
-						       adf_addr) + 16;
-			n->ipn_mask.adf_family = AF_INET6;
-			n->ipn_mask.adf_addr = a->al_i6mask;
-			n->ipn_mask.adf_len = offsetof(addrfamily_t,
-						       adf_addr) + 16;
-
-#endif
-		} else {
-			n->ipn_addr.adf_family = AF_INET;
-			n->ipn_addr.adf_addr.in4.s_addr = a->al_1;
-			n->ipn_addr.adf_len = offsetof(addrfamily_t,
-						       adf_addr) + 4;
-			n->ipn_mask.adf_family = AF_INET;
-			n->ipn_mask.adf_addr.in4.s_addr = a->al_2;
-			n->ipn_mask.adf_len = offsetof(addrfamily_t,
-						       adf_addr) + 4;
-		}
+		n->ipn_addr.adf_addr.in4.s_addr = a->al_1;
+		n->ipn_mask.adf_addr.in4.s_addr = a->al_2;
 		n->ipn_info = a->al_not;
 		if (a->al_next != NULL) {
 			n->ipn_next = calloc(1, sizeof(*n));
@@ -2294,7 +1746,7 @@ makepool(list)
 	bzero((char *)&pool, sizeof(pool));
 	pool.ipo_unit = IPL_LOGIPF;
 	pool.ipo_list = top;
-	num = load_pool(&pool, ipfioctls[IPL_LOGLOOKUP]);
+	num = load_pool(&pool, ipfioctl[IPL_LOGLOOKUP]);
 
 	while ((n = top) != NULL) {
 		top = n->ipn_next;
@@ -2317,17 +1769,10 @@ alist_t *list;
 	top = calloc(1, sizeof(*top));
 	if (top == NULL)
 		return 0;
-
+	
 	for (n = top, a = list; (n != NULL) && (a != NULL); a = a->al_next) {
-		if (a->al_family == AF_INET6) {
-			n->ipe_family = AF_INET6;
-			n->ipe_addr = a->al_i6addr;
-			n->ipe_mask = a->al_i6mask;
-		} else {
-			n->ipe_family = AF_INET;
-			n->ipe_addr.in4_addr = a->al_1;
-			n->ipe_mask.in4_addr = a->al_2;
-		}
+		n->ipe_addr.in4_addr = a->al_1;
+		n->ipe_mask.in4_addr = a->al_2;
 		n->ipe_value = 0;
 		if (a->al_next != NULL) {
 			n->ipe_next = calloc(1, sizeof(*n));
@@ -2340,7 +1785,7 @@ alist_t *list;
 	iph.iph_type = IPHASH_LOOKUP;
 	*iph.iph_name = '\0';
 
-	if (load_hash(&iph, top, ipfioctls[IPL_LOGLOOKUP]) == 0)
+	if (load_hash(&iph, top, ipfioctl[IPL_LOGLOOKUP]) == 0)
 		sscanf(iph.iph_name, "%u", &num);
 	else
 		num = 0;
@@ -2358,13 +1803,9 @@ int fd;
 ioctlfunc_t ioctlfunc;
 void *ptr;
 {
-	ioctlcmd_t add, del;
-	int save, realerr;
+	u_int add, del;
 	frentry_t *fr;
 	ipfobj_t obj;
-
-	if (ptr == NULL)
-		return;
 
 	fr = ptr;
 	add = 0;
@@ -2372,7 +1813,7 @@ void *ptr;
 
 	bzero((char *)&obj, sizeof(obj));
 	obj.ipfo_rev = IPFILTER_VERSION;
-	obj.ipfo_size = fr->fr_size;
+	obj.ipfo_size = sizeof(*fr);
 	obj.ipfo_type = IPFOBJ_FRENTRY;
 	obj.ipfo_ptr = ptr;
 
@@ -2391,14 +1832,14 @@ void *ptr;
 		del = SIOCRMAFR;
 	}
 
-	if ((opts & OPT_OUTQUE) != 0)
+	if (fr && (opts & OPT_OUTQUE))
 		fr->fr_flags |= FR_OUTQUE;
 	if (fr->fr_hits)
 		fr->fr_hits--;
-	if ((opts & OPT_VERBOSE) != 0)
+	if (fr && (opts & OPT_VERBOSE))
 		printfr(fr, ioctlfunc);
 
-	if ((opts & OPT_DEBUG) != 0) {
+	if (opts & OPT_DEBUG) {
 		binprint(fr, sizeof(*fr));
 		if (fr->fr_data != NULL)
 			binprint(fr->fr_data, fr->fr_dsize);
@@ -2406,14 +1847,9 @@ void *ptr;
 
 	if ((opts & OPT_ZERORULEST) != 0) {
 		if ((*ioctlfunc)(fd, add, (void *)&obj) == -1) {
-			save = errno;
-
-			if ((*ioctlfunc)(fd, SIOCIPFINTERROR, &realerr) == -1)
-				realerr = 0;
-
-			if ((opts & OPT_DONOTHING) == 0) {
-				fprintf(stderr, "%d:%d:", realerr, yylineNum);
-				ipf_perror(realerr, "ioctl(SIOCZRLST)");
+			if ((opts & OPT_DONOTHING) != 0) {
+				fprintf(stderr, "%d:", yylineNum);
+				perror("ioctl(SIOCZRLST)");
 			}
 		} else {
 #ifdef	USE_QUAD_T
@@ -2428,42 +1864,32 @@ void *ptr;
 		}
 	} else if ((opts & OPT_REMOVE) != 0) {
 		if ((*ioctlfunc)(fd, del, (void *)&obj) == -1) {
-			save = errno;
-
-			if ((*ioctlfunc)(fd, SIOCIPFINTERROR, &realerr) == -1)
-				realerr = 0;
-
-			if ((opts & OPT_DONOTHING) == 0) {
-				fprintf(stderr, "%d:%d:", realerr, yylineNum);
-				ipf_perror(realerr, "ioctl(delete rule)");
+			if ((opts & OPT_DONOTHING) != 0) {
+				fprintf(stderr, "%d:", yylineNum);
+				perror("ioctl(delete rule)");
 			}
 		}
 	} else {
 		if ((*ioctlfunc)(fd, add, (void *)&obj) == -1) {
-			save = errno;
-
-			if ((*ioctlfunc)(fd, SIOCIPFINTERROR, &realerr) == -1)
-				realerr = 0;
-
-			if ((opts & OPT_DONOTHING) == 0) {
-				errno = save;
-				fprintf(stderr, "%d:%d:", realerr, yylineNum);
-				ipf_perror(realerr, "ioctl(add/insert rule)");
+			if (!(opts & OPT_DONOTHING)) {
+				fprintf(stderr, "%d:", yylineNum);
+				perror("ioctl(add/insert rule)");
 			}
 		}
 	}
 }
 
+
 static void setsyslog()
 {
-	yysetdict(logwords);
+	savewords = yysettab(logwords);
 	yybreakondot = 1;
 }
 
 
 static void unsetsyslog()
 {
-	yyresetdict();
+	yysettab(savewords);
 	yybreakondot = 0;
 }
 
@@ -2473,16 +1899,9 @@ frentry_t *fr;
 {
 	frentry_t *f;
 
-	for (f = frold; f != NULL; f = f->fr_next) {
-		if (f->fr_grhead == -1 && fr->fr_group == -1)
+	for (f = frold; f != NULL; f = f->fr_next)
+		if (strncmp(f->fr_grhead, fr->fr_group, FR_GROUPLEN) == 0)
 			break;
-		if (f->fr_grhead == -1 || fr->fr_group == -1)
-			continue;
-		if (strcmp(f->fr_names + f->fr_grhead,
-			   fr->fr_names + fr->fr_group) == 0)
-			break;
-	}
-
 	if (f == NULL)
 		return;
 
@@ -2495,164 +1914,14 @@ frentry_t *fr;
 	if (f->fr_type != fr->fr_type || f->fr_type != FR_T_IPF)
 		return;
 
-	if (fr->fr_family == 0 && f->fr_family != 0)
-		fr->fr_family = f->fr_family;
+	if (fr->fr_v == 0 && f->fr_v != 0)
+		fr->fr_v = f->fr_v;
 
 	if (fr->fr_mproto == 0 && f->fr_mproto != 0)
 		fr->fr_mproto = f->fr_mproto;
 	if (fr->fr_proto == 0 && f->fr_proto != 0)
 		fr->fr_proto = f->fr_proto;
 
-	if ((fr->fr_mproto == 0) && ((fr->fr_flx & FI_TCPUDP) == 0) &&
-	    ((f->fr_flx & FI_TCPUDP) != 0))
+	if (((fr->fr_flx & FI_TCPUDP) == 0) && ((f->fr_flx & FI_TCPUDP) != 0))
 		fr->fr_flx |= FI_TCPUDP;
-}
-
-
-static void doipfexpr(line)
-char *line;
-{
-	int *array;
-	char *error;
-
-	array = parseipfexpr(line, &error);
-	if (array == NULL) {
-		fprintf(stderr, "%s:", error);
-		yyerror("error parsing ipf matching expression");
-		return;
-	}
-
-	fr->fr_type = FR_T_IPFEXPR;
-	fr->fr_data = array;
-	fr->fr_dsize = array[0] * sizeof(*array);
-}
-
-
-static void do_tuneint(varname, value)
-char *varname;
-int value;
-{
-	char buffer[80];
-
-	strncpy(buffer, varname, 60);
-	buffer[59] = '\0';
-	strcat(buffer, "=");
-	sprintf(buffer, "%u", value);
-	ipf_dotuning(ipffd, buffer, ioctl);
-}
-
-
-static void do_tunestr(varname, value)
-char *varname, *value;
-{
-
-	if (!strcasecmp(value, "true")) {
-		do_tuneint(varname, 1);
-	} else if (!strcasecmp(value, "false")) {
-		do_tuneint(varname, 0);
-	} else {
-		yyerror("did not find true/false where expected");
-	}
-}
-
-
-static void setifname(frp, idx, name)
-frentry_t **frp;
-int idx;
-char *name;
-{
-	int pos;
-
-	pos = addname(frp, name);
-	if (pos == -1)
-		return;
-	(*frp)->fr_ifnames[idx] = pos;
-}
-
-
-static int addname(frp, name)
-frentry_t **frp;
-char *name;
-{
-	frentry_t *f;
-	int nlen;
-	int pos;
-
-	nlen = strlen(name) + 1;
-	f = realloc(*frp, (*frp)->fr_size + nlen);
-	if (*frp == frc)
-		frc = f;
-	*frp = f;
-	if (f == NULL)
-		return -1;
-	if (f->fr_pnext != NULL)
-		*f->fr_pnext = f;
-	f->fr_size += nlen;
-	pos = f->fr_namelen;
-	f->fr_namelen += nlen;
-	strcpy(f->fr_names + pos, name);
-	f->fr_names[f->fr_namelen] = '\0';
-	return pos;
-}
-
-
-static frentry_t *allocfr()
-{
-	frentry_t *fr;
-
-	fr = calloc(1, sizeof(*fr));
-	if (fr != NULL) {
-		fr->fr_size = sizeof(*fr);
-		fr->fr_comment = -1;
-		fr->fr_group = -1;
-		fr->fr_grhead = -1;
-		fr->fr_icmphead = -1;
-		fr->fr_ifnames[0] = -1;
-		fr->fr_ifnames[1] = -1;
-		fr->fr_ifnames[2] = -1;
-		fr->fr_ifnames[3] = -1;
-		fr->fr_tif.fd_name = -1;
-		fr->fr_rif.fd_name = -1;
-		fr->fr_dif.fd_name = -1;
-	}
-	return fr;
-}
-
-
-static void setgroup(frp, name)
-frentry_t **frp;
-char *name;
-{
-	int pos;
-
-	pos = addname(frp, name);
-	if (pos == -1)
-		return;
-	(*frp)->fr_group = pos;
-}
-
-
-static void setgrhead(frp, name)
-frentry_t **frp;
-char *name;
-{
-	int pos;
-
-	pos = addname(frp, name);
-	if (pos == -1)
-		return;
-	(*frp)->fr_grhead = pos;
-}
-
-
-static void seticmphead(frp, name)
-frentry_t **frp;
-char *name;
-{
-	int pos;
-
-	pos = addname(frp, name);
-	if (pos == -1)
-		return;
-	(*frp)->fr_icmphead = pos;
 }

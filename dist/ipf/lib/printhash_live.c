@@ -1,23 +1,24 @@
-/*	$NetBSD: printhash_live.c,v 1.1.1.3 2012/01/30 16:03:22 darrenr Exp $	*/
+/*	$NetBSD: printhash_live.c,v 1.1 2007/04/14 20:17:31 martin Exp $	*/
 
 /*
- * Copyright (C) 2010 by Darren Reed.
+ * Copyright (C) 2002 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  */
 
 #include <sys/ioctl.h>
 #include "ipf.h"
-#include "netinet/ipl.h"
+#include "ipl.h"
+
+#define	PRINTF	(void)printf
+#define	FPRINTF	(void)fprintf
 
 
-iphtable_t *
-printhash_live(hp, fd, name, opts, fields)
-	iphtable_t *hp;
-	int fd;
-	char *name;
-	int opts;
-	wordtab_t *fields;
+iphtable_t *printhash_live(hp, fd, name, opts)
+iphtable_t *hp;
+int fd;
+char *name;
+int opts;
 {
 	iphtent_t entry, *top, *node;
 	ipflookupiter_t iter;
@@ -27,8 +28,7 @@ printhash_live(hp, fd, name, opts, fields)
 	if ((name != NULL) && strncmp(name, hp->iph_name, FR_GROUPLEN))
 		return hp->iph_next;
 
-	if (fields == NULL)
-		printhashdata(hp, opts);
+	printhashdata(hp, opts);
 
 	if ((hp->iph_flags & IPHASH_DELETE) != 0)
 		PRINTF("# ");
@@ -52,21 +52,19 @@ printhash_live(hp, fd, name, opts, fields)
 	top = NULL;
 	printed = 0;
 
-	if (hp->iph_list != NULL) {
-		while (!last && (ioctl(fd, SIOCLOOKUPITER, &obj) == 0)) {
-			if (entry.ipe_next == NULL)
-				last = 1;
-			entry.ipe_next = top;
-			top = malloc(sizeof(*top));
-			if (top == NULL)
-				break;
-			bcopy(&entry, top, sizeof(entry));
-		}
+	while (!last && (ioctl(fd, SIOCLOOKUPITER, &obj) == 0)) {
+		if (entry.ipe_next == NULL)
+			last = 1;
+		entry.ipe_next = top;
+		top = malloc(sizeof(*top));
+		if (top == NULL)
+			break;
+		bcopy(&entry, top, sizeof(entry));
 	}
 
 	while (top != NULL) {
 		node = top;
-		(void) printhashnode(hp, node, bcopywrap, opts, fields);
+		(void) printhashnode(hp, node, bcopywrap, opts);
 		top = node->ipe_next;
 		free(node);
 		printed++;

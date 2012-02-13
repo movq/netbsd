@@ -1,4 +1,4 @@
-/*	$NetBSD: sockraw.c,v 1.1.1.1 2004/03/28 08:56:15 martti Exp $	*/
+/*	$NetBSD: sockraw.c,v 1.1 2004/03/28 08:56:15 martti Exp $	*/
 
 /*
  * (C)opyright 2000 Darren Reed.

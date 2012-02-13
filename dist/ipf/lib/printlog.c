@@ -1,11 +1,11 @@
-/*	$NetBSD: printlog.c,v 1.1.1.4 2012/01/30 16:03:23 darrenr Exp $	*/
+/*	$NetBSD: printlog.c,v 1.1 2004/03/28 08:56:20 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: printlog.c,v 1.12.2.1 2012/01/26 05:29:16 darrenr Exp
+ * Id: printlog.c,v 1.6 2002/01/28 06:50:47 darrenr Exp
  */
 
 #include "ipf.h"
@@ -13,27 +13,32 @@
 #include <syslog.h>
 
 
-void
-printlog(fp)
-	frentry_t *fp;
+void printlog(fp)
+frentry_t *fp;
 {
 	char *s, *u;
 
-	PRINTF("log");
+	printf("log");
 	if (fp->fr_flags & FR_LOGBODY)
-		PRINTF(" body");
+		printf(" body");
 	if (fp->fr_flags & FR_LOGFIRST)
-		PRINTF(" first");
+		printf(" first");
 	if (fp->fr_flags & FR_LOGORBLOCK)
-		PRINTF(" or-block");
+		printf(" or-block");
 	if (fp->fr_loglevel != 0xffff) {
-		PRINTF(" level ");
-		s = fac_toname(fp->fr_loglevel);
-		if (s == NULL || *s == '\0')
-			s = "!!!";
+		printf(" level ");
+		if (fp->fr_loglevel & LOG_FACMASK) {
+			s = fac_toname(fp->fr_loglevel);
+			if (s == NULL)
+				s = "!!!";
+		} else
+			s = "";
 		u = pri_toname(fp->fr_loglevel);
-		if (u == NULL || *u == '\0')
+		if (u == NULL)
 			u = "!!!";
-		PRINTF("%s.%s", s, u);
+		if (*s)
+			printf("%s.%s", s, u);
+		else
+			printf("%s", u);
 	}
 }

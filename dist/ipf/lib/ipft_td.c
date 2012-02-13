@@ -1,11 +1,11 @@
-/*	$NetBSD: ipft_td.c,v 1.5 2012/01/30 16:12:04 darrenr Exp $	*/
+/*	$NetBSD: ipft_td.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 /*
- * Copyright (C) 2011 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ipft_td.c,v 1.22.2.2 2012/01/26 05:29:16 darrenr Exp
+ * Id: ipft_td.c,v 1.15 2004/01/08 13:34:31 darrenr Exp
  */
 
 /*
@@ -34,15 +34,20 @@ tcpdump -nqte
 #include "ipf.h"
 #include "ipt.h"
 
+#ifndef linux
+#include <netinet/ip_var.h>
+#endif
+#include <netinet/tcpip.h>
+
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)ipft_td.c	1.8 2/4/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipft_td.c,v 1.22.2.2 2012/01/26 05:29:16 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipft_td.c,v 1.15 2004/01/08 13:34:31 darrenr Exp";
 #endif
 
 static	int	tcpd_open __P((char *));
 static	int	tcpd_close __P((void));
-static	int	tcpd_readip __P((mb_t *, char **, int *));
+static	int	tcpd_readip __P((char *, int, char **, int *));
 static	int	count_dots __P((char *));
 
 struct	ipread	tcpd = { tcpd_open, tcpd_close, tcpd_readip, 0 };
@@ -52,7 +57,7 @@ static	int	tfd = -1;
 
 
 static	int	tcpd_open(fname)
-	char	*fname;
+char	*fname;
 {
 	if (tfd != -1)
 		return tfd;
@@ -76,7 +81,7 @@ static	int	tcpd_close()
 
 
 static	int	count_dots(str)
-	char	*str;
+char	*str;
 {
 	int	i = 0;
 
@@ -87,25 +92,15 @@ static	int	count_dots(str)
 }
 
 
-static	int	tcpd_readip(mb, ifn, dir)
-	mb_t	*mb;
-	char	**ifn;
-	int	*dir;
+static	int	tcpd_readip(buf, cnt, ifn, dir)
+char	*buf, **ifn;
+int	cnt, *dir;
 {
-	u_char	pkt[40];
-	tcphdr_t *tcp;
-	ip_t	*ip;
+	struct	tcpiphdr pkt;
+	ip_t	*ip = (ip_t *)&pkt;
 	char	src[32], dst[32], misc[256], time[32], link1[32], link2[32];
 	char	lbuf[160], *s;
 	int	n, slen, extra = 0;
-	char	*buf;
-	int	cnt;
-
-	ip = (ip_t *)&pkt;
-	tcp = (tcphdr_t *)(ip + 1);
-
-	buf = (char *)mb->mb_buf;
-	cnt = sizeof(mb->mb_buf);
 
 	if (!fgets(lbuf, sizeof(lbuf) - 1, tfp))
 		return 0;
@@ -132,15 +127,15 @@ static	int	tcpd_readip(mb, ifn, dir)
 		s = strrchr(src, '.');
 		*s++ = '\0';
 		(void) inet_aton(src, &ip->ip_src);
-		tcp->th_sport = htons(atoi(s));
+		pkt.ti_sport = htons(atoi(s));
 		*--s = '.';
 		s = strrchr(dst, '.');
-
+	
 		*s++ = '\0';
 		(void) inet_aton(src, &ip->ip_dst);
-		tcp->th_dport = htons(atoi(s));
+		pkt.ti_dport = htons(atoi(s));
 		*--s = '.';
-
+	
 	} else {
 		(void) inet_aton(src, &ip->ip_src);
 		(void) inet_aton(src, &ip->ip_dst);
@@ -149,8 +144,6 @@ static	int	tcpd_readip(mb, ifn, dir)
 	IP_HL_A(ip, sizeof(ip_t));
 
 	s = strtok(misc, " :");
-	if (s == NULL)
-		return 0;
 	ip->ip_p = getproto(s);
 
 	switch (ip->ip_p)
@@ -158,8 +151,6 @@ static	int	tcpd_readip(mb, ifn, dir)
 	case IPPROTO_TCP :
 	case IPPROTO_UDP :
 		s = strtok(NULL, " :");
-		if (s == NULL)
-			return 0;
 		ip->ip_len += atoi(s);
 		if (ip->ip_p == IPPROTO_TCP)
 			extra = sizeof(struct tcphdr);
@@ -179,6 +170,5 @@ static	int	tcpd_readip(mb, ifn, dir)
 	}
 
 	slen = IP_HL(ip) + extra + ip->ip_len;
-	mb->mb_len = slen;
 	return slen;
 }

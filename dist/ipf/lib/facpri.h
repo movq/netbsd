@@ -1,11 +1,11 @@
-/*	$NetBSD: facpri.h,v 1.1.1.3 2012/01/30 16:03:23 darrenr Exp $	*/
+/*	$NetBSD: facpri.h,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1999-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: facpri.h,v 1.6.2.1 2012/01/26 05:29:15 darrenr Exp
+ * Id: facpri.h,v 1.3 2001/06/09 17:19:50 darrenr Exp
  */
 
 #ifndef	__FACPRI_H__

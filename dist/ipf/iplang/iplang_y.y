@@ -1,21 +1,23 @@
-/*	$NetBSD: iplang_y.y,v 1.12 2012/01/30 16:12:03 darrenr Exp $	*/
+/*	$NetBSD: iplang_y.y,v 1.1 1999/12/11 22:24:07 veego Exp $	*/
 
 %{
 /*
- * Copyright (C) 2008 by Darren Reed.
+ * Copyright (C) 1997-1998 by Darren Reed.
  *
- * See the IPFILTER.LICENCE file for details on licencing.
+ * Redistribution and use in source and binary forms are permitted
+ * provided that this notice is preserved and due credit is given
+ * to the original author and the contributors.
  *
- * Id: iplang_y.y,v 2.16.2.1 2012/01/26 05:29:15 darrenr Exp
+ * Id: iplang_y.y,v 2.1.2.1 1999/11/21 11:05:09 darrenr Exp
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
 #if !defined(__SVR4) && !defined(__svr4__)
-# include <strings.h>
+#include <strings.h>
 #else
-# include <sys/byteorder.h>
+#include <sys/byteorder.h>
 #endif
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -25,14 +27,18 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <sys/socket.h>
-#include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
 #ifndef	linux
-# include <netinet/ip_var.h>
-# include <net/route.h>
-# include <netinet/if_ether.h>
+#include <netinet/ip_var.h>
+#endif
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
+#include <net/if.h>
+#ifndef	linux
+#include <netinet/if_ether.h>
 #endif
 #include <netdb.h>
 #include <arpa/nameser.h>
@@ -44,8 +50,7 @@
 #include "ipf.h"
 #include "iplang.h"
 
-#if !defined(__NetBSD__) && (!defined(__FreeBSD_version) && \
-    __FreeBSD_version < 400020) && (!SOLARIS || SOLARIS2 < 10)
+#ifndef __NetBSD__
 extern	struct ether_addr *ether_aton __P((char *));
 #endif
 
@@ -600,7 +605,7 @@ struct	statetoopt	tosecopts[] = {
 #ifdef	bsdi
 struct ether_addr *
 ether_aton(s)
-	char *s;
+	char *s;   
 {
 	static struct ether_addr n;
 	u_int i[6];
@@ -766,7 +771,7 @@ char **arg;
 
 	while ((c = *s++)) {
 		if (todo) {
-			if (ISDIGIT(c)) {
+			if (isdigit(c)) {
 				todo--;
 				if (c > '7') {
 					fprintf(stderr, "octal with %c!\n", c);
@@ -775,7 +780,7 @@ char **arg;
 				val <<= 3;
 				val |= (c - '0');
 			}
-			if (!ISDIGIT(c) || !todo) {
+			if (!isdigit(c) || !todo) {
 				*t++ = (u_char)(val & 0xff);
 				todo = 0;
 			}
@@ -783,7 +788,7 @@ char **arg;
 				continue;
 		}
 		if (quote) {
-			if (ISDIGIT(c)) {
+			if (isdigit(c)) {
 				todo = 2;
 				if (c > '7') {
 					fprintf(stderr, "octal with %c!\n", c);
@@ -1287,16 +1292,10 @@ void prep_packet()
 		return;
 	}
 	if (ifp->if_fd == -1)
-		ifp->if_fd = initdevice(ifp->if_name, 5);
+		ifp->if_fd = initdevice(ifp->if_name, 0, 5);
 	gwip = sending.snd_gw;
-	if (!gwip.s_addr) {
-		if (aniphead == NULL) {
-			fprintf(stderr,
-				"no destination address defined for sending\n");
-			return;
-		}
+	if (!gwip.s_addr)
 		gwip = aniphead->ah_ip->ip_dst;
-	}
 	(void) send_ip(ifp->if_fd, ifp->if_MTU, (ip_t *)ipbuffer, gwip, 2);
 }
 
@@ -1325,7 +1324,7 @@ void packet_done()
 				sprintf((char *)t, "	");
 				t += 8;
 				for (k = 16; k; k--, s++)
-					*t++ = (ISPRINT(*s) ? *s : '.');
+					*t++ = (isprint(*s) ? *s : '.');
 				s--;
 			}
 
@@ -1343,7 +1342,7 @@ void packet_done()
 			t += 7;
 			s -= j & 0xf;
 			for (k = j & 0xf; k; k--, s++)
-				*t++ = (ISPRINT(*s) ? *s : '.');
+				*t++ = (isprint(*s) ? *s : '.');
 			*t++ = '\n';
 			*t = '\0';
 		}
@@ -1517,6 +1516,11 @@ int type;
 }
 
 
+static	char	*icmpcodes[] = {
+	"net-unr", "host-unr", "proto-unr", "port-unr", "needfrag", "srcfail",
+	"net-unk", "host-unk", "isolate", "net-prohib", "host-prohib",
+	"net-tos", "host-tos", NULL };
+
 void set_icmpcodetok(code)
 char **code;
 {
@@ -1534,6 +1538,13 @@ char **code;
 	*code = NULL;
 }
 
+
+static	char	*icmptypes[] = {
+	"echorep", (char *)NULL, (char *)NULL, "unreach", "squench",
+	"redir", (char *)NULL, (char *)NULL, "echo", (char *)NULL,
+	(char *)NULL, "timex", "paramprob", "timest", "timestrep",
+	"inforeq", "inforep", "maskreq", "maskrep", "END"
+};
 
 void set_icmptypetok(type)
 char **type;
@@ -1647,7 +1658,7 @@ void *ptr;
 	for (sto = toipopts; sto->sto_st; sto++)
 		if (sto->sto_st == state)
 			break;
-	if (!sto->sto_st) {
+	if (!sto || !sto->sto_st) {
 		fprintf(stderr, "No mapping for state %d to IP option\n",
 			state);
 		return;
@@ -1835,7 +1846,7 @@ u_long	init;
 {
 	u_long	sum = init;
 	int	nwords = len >> 1;
-
+ 
 	for(; nwords > 0; nwords--)
 		sum += *buf++;
 	sum = (sum>>16) + (sum & 0xffff);
@@ -1850,7 +1861,7 @@ u_int	len;
 {
 	u_long	sum = 0;
 	int	nwords = len >> 1;
-
+ 
 	for(; nwords > 0; nwords--)
 		sum += *buf++;
 	return sum;

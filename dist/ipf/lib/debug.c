@@ -1,11 +1,11 @@
-/*	$NetBSD: debug.c,v 1.1.1.3 2012/01/30 16:03:23 darrenr Exp $	*/
+/*	$NetBSD: debug.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: debug.c,v 1.11.2.1 2012/01/26 05:29:15 darrenr Exp
+ * Id: debug.c,v 1.6 2001/06/09 17:09:24 darrenr Exp
  */
 
 #if defined(__STDC__)
@@ -15,37 +15,16 @@
 #endif
 #include <stdio.h>
 
-#include "ipf.h"
+#include "ipt.h"
 #include "opts.h"
 
-int	debuglevel = 0;
-
 
 #ifdef	__STDC__
-void	debug(int level, char *fmt, ...)
+void	debug(char *fmt, ...)
 #else
-void	debug(level, fmt, va_alist)
-	int level;
-	char *fmt;
-	va_dcl
-#endif
-{
-	va_list pvar;
-
-	va_start(pvar, fmt);
-
-	if ((debuglevel > 0) && (level <= debuglevel))
-		vfprintf(stderr, fmt, pvar);
-	va_end(pvar);
-}
-
-
-#ifdef	__STDC__
-void	ipfkdebug(char *fmt, ...)
-#else
-void	ipfkdebug(fmt, va_alist)
-	char *fmt;
-	va_dcl
+void	debug(fmt, va_alist)
+char *fmt;
+va_dcl
 #endif
 {
 	va_list pvar;
@@ -53,6 +32,6 @@ void	ipfkdebug(fmt, va_alist)
 	va_start(pvar, fmt);
 
 	if (opts & OPT_DEBUG)
-		debug(0x1fffffff, fmt, pvar);
+		vprintf(fmt, pvar);
 	va_end(pvar);
 }

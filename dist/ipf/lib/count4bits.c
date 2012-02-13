@@ -1,11 +1,11 @@
-/*	$NetBSD: count4bits.c,v 1.1.1.3 2012/01/30 16:03:23 darrenr Exp $	*/
+/*	$NetBSD: count4bits.c,v 1.1 2004/03/28 08:56:18 martti Exp $	*/
 
 /*
- * Copyright (C) 2009 by Darren Reed.
+ * Copyright (C) 1993-2001 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: count4bits.c,v 1.4.2.1 2012/01/26 05:29:15 darrenr Exp
+ * Id: count4bits.c,v 1.1 2002/06/15 04:46:39 darrenr Exp
  */
 
 #include "ipf.h"
@@ -17,7 +17,7 @@
  * of bits.
  */
 int	count4bits(ip)
-	u_int	ip;
+u_int	ip;
 {
 	int cnt = 0, i, j;
 	u_int ipn;
