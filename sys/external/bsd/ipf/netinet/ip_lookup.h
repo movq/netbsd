@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_lookup.h,v 1.1 2012/03/23 20:36:57 christos Exp $	*/
+/*	$NetBSD: ip_lookup.h,v 1.1.1.1 2012/03/23 20:36:57 christos Exp $	*/
 
 /*
  * Copyright (C) 2010 by Darren Reed.

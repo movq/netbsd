@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_htable.h,v 1.1 2012/03/23 20:36:57 christos Exp $	*/
+/*	$NetBSD: ip_htable.h,v 1.1.1.1 2012/03/23 20:36:57 christos Exp $	*/
 
 #ifndef __IP_HTABLE_H__
 #define __IP_HTABLE_H__

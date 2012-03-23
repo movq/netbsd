@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_netbios_pxy.c,v 1.1 2012/03/23 20:37:01 christos Exp $	*/
+/*	$NetBSD: ip_netbios_pxy.c,v 1.1.1.1 2012/03/23 20:37:01 christos Exp $	*/
 
 /*
  * Simple netbios-dgm transparent proxy for in-kernel use.
