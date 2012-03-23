@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_auth.h,v 1.1 2012/03/23 20:36:52 christos Exp $	*/
+/*	$NetBSD: ip_auth.h,v 1.1.1.1 2012/03/23 20:36:52 christos Exp $	*/
 
 /*
  * Copyright (C) 2008 by Darren Reed.
