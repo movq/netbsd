@@ -1,4 +1,4 @@
-/*	$NetBSD: dlcommon.c,v 1.1 2012/03/23 21:20:06 christos Exp $	*/
+/*	$NetBSD: dlcommon.c,v 1.1.1.1 2012/03/23 21:20:06 christos Exp $	*/
 
 /*
  * Common (shared) DLPI test routines.

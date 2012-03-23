@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsyncm.c,v 1.1 2012/03/23 21:20:25 christos Exp $	*/
+/*	$NetBSD: ipsyncm.c,v 1.1.1.1 2012/03/23 21:20:25 christos Exp $	*/
 
 /*
  * Copyright (C) 2009 by Darren Reed.

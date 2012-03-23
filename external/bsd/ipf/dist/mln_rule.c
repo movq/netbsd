@@ -1,4 +1,4 @@
-/*	$NetBSD: mln_rule.c,v 1.1 2012/03/23 21:20:01 christos Exp $	*/
+/*	$NetBSD: mln_rule.c,v 1.1.1.1 2012/03/23 21:20:01 christos Exp $	*/
 
 /*
  * Copyright (C) 2007 by Darren Reed.

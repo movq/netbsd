@@ -1,4 +1,4 @@
-#	$NetBSD: example.12,v 1.1 2012/03/23 21:20:15 christos Exp $
+#	$NetBSD: example.12,v 1.1.1.1 2012/03/23 21:20:15 christos Exp $
 #
 # get rid of all short IP fragments (too small for valid comparison)
 #

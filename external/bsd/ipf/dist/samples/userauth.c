@@ -1,4 +1,4 @@
-/*	$NetBSD: userauth.c,v 1.1 2012/03/23 21:20:15 christos Exp $	*/
+/*	$NetBSD: userauth.c,v 1.1.1.1 2012/03/23 21:20:15 christos Exp $	*/
 
 #include <sys/types.h>
 #include <sys/socket.h>
