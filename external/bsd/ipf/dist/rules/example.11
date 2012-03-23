@@ -1,4 +1,4 @@
-#	$NetBSD: example.11,v 1.1 2012/03/23 21:20:15 christos Exp $
+#	$NetBSD: example.11,v 1.1.1.1 2012/03/23 21:20:15 christos Exp $
 #
 # allow any TCP packets from the same subnet as foo is on through to host
 # 10.1.1.2 if they are destined for port 6667.

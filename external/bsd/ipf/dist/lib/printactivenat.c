@@ -1,4 +1,4 @@
-/*	$NetBSD: printactivenat.c,v 1.1 2012/03/23 21:20:09 christos Exp $	*/
+/*	$NetBSD: printactivenat.c,v 1.1.1.1 2012/03/23 21:20:09 christos Exp $	*/
 
 /*
  * Copyright (C) 2012 by Darren Reed.

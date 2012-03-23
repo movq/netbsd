@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsd.c,v 1.1 2012/03/23 21:20:05 christos Exp $	*/
+/*	$NetBSD: ipsd.c,v 1.1.1.1 2012/03/23 21:20:05 christos Exp $	*/
 
 /*
  * (C)opyright 1995-1998 Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: lsock.c,v 1.1 2012/03/23 21:20:06 christos Exp $	*/
+/*	$NetBSD: lsock.c,v 1.1.1.1 2012/03/23 21:20:06 christos Exp $	*/
 
 /*
  * lsock.c (C) 1995-1998 Darren Reed

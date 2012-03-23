@@ -1,4 +1,4 @@
-/*	$NetBSD: snoop.h,v 1.1 2012/03/23 21:20:01 christos Exp $	*/
+/*	$NetBSD: snoop.h,v 1.1.1.1 2012/03/23 21:20:01 christos Exp $	*/
 
 /*
  * Copyright (C) 2001 by Darren Reed.

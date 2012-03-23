@@ -1,4 +1,4 @@
-/*	$NetBSD: sirix.c,v 1.1 2012/03/23 21:20:07 christos Exp $	*/
+/*	$NetBSD: sirix.c,v 1.1.1.1 2012/03/23 21:20:07 christos Exp $	*/
 
 /*
  * (C)opyright 1992-1998 Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_compat.h,v 1.1 2012/03/23 21:20:06 christos Exp $	*/
+/*	$NetBSD: ip_compat.h,v 1.1.1.1 2012/03/23 21:20:06 christos Exp $	*/
 
 /*
  * (C)opyright 1995 by Darren Reed.

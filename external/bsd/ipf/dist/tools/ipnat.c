@@ -1,4 +1,4 @@
-/*	$NetBSD: ipnat.c,v 1.1 2012/03/23 21:20:25 christos Exp $	*/
+/*	$NetBSD: ipnat.c,v 1.1.1.1 2012/03/23 21:20:25 christos Exp $	*/
 
 /*
  * Copyright (C) 2011 by Darren Reed.

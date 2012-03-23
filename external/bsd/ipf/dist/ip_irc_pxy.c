@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_irc_pxy.c,v 1.1 2012/03/23 21:19:56 christos Exp $	*/
+/*	$NetBSD: ip_irc_pxy.c,v 1.1.1.1 2012/03/23 21:19:56 christos Exp $	*/
 
 /*
  * Copyright (C) 2008 by Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: printpoolnode.c,v 1.1 2012/03/23 21:20:10 christos Exp $	*/
+/*	$NetBSD: printpoolnode.c,v 1.1.1.1 2012/03/23 21:20:10 christos Exp $	*/
 
 /*
  * Copyright (C) 2012 by Darren Reed.

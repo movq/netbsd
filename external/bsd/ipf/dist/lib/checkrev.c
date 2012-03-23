@@ -1,4 +1,4 @@
-/*	$NetBSD: checkrev.c,v 1.1 2012/03/23 21:20:08 christos Exp $	*/
+/*	$NetBSD: checkrev.c,v 1.1.1.1 2012/03/23 21:20:08 christos Exp $	*/
 
 /*
  * Copyright (C) 2009 by Darren Reed.

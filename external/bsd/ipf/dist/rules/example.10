@@ -1,4 +1,4 @@
-#	$NetBSD: example.10,v 1.1 2012/03/23 21:20:15 christos Exp $
+#	$NetBSD: example.10,v 1.1.1.1 2012/03/23 21:20:15 christos Exp $
 #
 # pass ack packets (ie established connection)
 #

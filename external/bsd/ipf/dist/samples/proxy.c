@@ -1,4 +1,4 @@
-/*	$NetBSD: proxy.c,v 1.1 2012/03/23 21:20:15 christos Exp $	*/
+/*	$NetBSD: proxy.c,v 1.1.1.1 2012/03/23 21:20:15 christos Exp $	*/
 
 /*
  * Sample transparent proxy program.
