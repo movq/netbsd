@@ -1,4 +1,4 @@
-/*      $NetBSD: clockportvar.h,v 1.1 2012/04/17 09:59:03 rkujawa Exp $ */
+/*      $NetBSD: clockportvar.h,v 1.2 2012/05/15 17:35:43 rkujawa Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,10 +31,18 @@
 
 #include <sys/types.h>
 
-struct clockportbus_softc {
+struct gencp_softc {
+	device_t	sc_dev;
+
 	struct clockportbus_attach_args *cpb_aa;
 };
 
+struct clockportbus_softc {
+
+	struct clockportbus_attach_args *cpb_aa;
+};
+
+/* Struct passed down to clockportbus. */
 struct clockportbus_attach_args {
 
 	bus_space_tag_t cp_iot;
@@ -42,6 +50,10 @@ struct clockportbus_attach_args {
 	void *(*cp_intr_establish)(int (*)(void *), void *);
 };
 
+/*
+ * Struct passed down to devices attached to clockportbus, currently
+ * has the same data as above. 
+ */
 struct clockport_attach_args {
 
 	bus_space_tag_t cp_iot;
@@ -50,4 +62,6 @@ struct clockport_attach_args {
 };
 
 void *clockport_generic_intr_establish(int (*)(void *), void *);
+
+void gencp_attach(struct gencp_softc *gsc);
 
