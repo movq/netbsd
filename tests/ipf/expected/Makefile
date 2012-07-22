@@ -1,110 +1,41 @@
-# $NetBSD: Makefile,v 1.1 2009/02/20 21:42:59 jmmv Exp $
+#
+# (C)opyright 2007 by Darren Reed.
+#
+# See the IPFILTER.LICENCE file for details on licencing.
+#
+all: i19
 
-TESTSDIR=	${TESTSBASE}/ipf
+i19: i19.dist Makefile
+	-if [ "`grep LOG_SECURITY /usr/include/sys/syslog.h 2>&1`" = "" ] ; then \
+		if [ "`grep LOG_AUDIT /usr/include/sys/syslog.h 2>&1`" = "" ] ; then \
+				sed -e 's/security/!!!/g' i19.dist > i19.p1; \
+		else \
+				sed -e 's/security/audit/g' i19.dist > i19.p1; \
+		fi \
+	else \
+		/bin/cp i19.dist i19.p1; \
+	fi
+	-if [ "`grep LOG_AUTHPRIV /usr/include/sys/syslog.h 2>&1`" = "" ] ; then \
+		sed -e 's/authpriv/!!!/g' i19.p1 > i19.p2; \
+	else \
+		/bin/cp i19.p1 i19.p2; \
+	fi
+	-if [ "`grep LOG_LOGALERT /usr/include/sys/syslog.h 2>&1`" = "" ] ; then \
+		sed -e 's/logalert/!!!/g' i19.p2 > i19.p1; \
+	else \
+		/bin/cp i19.p2 i19.p1; \
+	fi
+	-if [ "`grep LOG_FTP /usr/include/sys/syslog.h 2>&1`" = "" ] ; then \
+		sed -e 's/ftp/!!!/g' i19.p1 > i19.p2; \
+	else \
+		/bin/cp i19.p1 i19.p2; \
+	fi
+	-if [ "`egrep 'LOG_CRON.*15' /usr/include/sys/syslog.h 2>&1`" != "" ] ; then \
+		sed -e 's/cron/cron2/g' i19.p2 > i19; \
+	else \
+		/bin/cp i19.p2 i19; \
+	fi
+	/bin/rm i19.p?
 
-NOATFFILE=	yes
-
-FILESDIR=	${TESTSDIR}/expected
-FILES=		bpf-f1
-FILES+=		bpf1
-FILES+=		f1
-FILES+=		f10
-FILES+=		f11
-FILES+=		f12
-FILES+=		f13
-FILES+=		f14
-FILES+=		f15
-FILES+=		f16
-FILES+=		f17
-FILES+=		f18
-FILES+=		f19
-FILES+=		f2
-FILES+=		f20
-FILES+=		f24
-FILES+=		f3
-FILES+=		f4
-FILES+=		f5
-FILES+=		f6
-FILES+=		f7
-FILES+=		f8
-FILES+=		f9
-FILES+=		i1
-FILES+=		i10
-FILES+=		i11
-FILES+=		i12
-FILES+=		i13
-FILES+=		i14
-FILES+=		i15
-FILES+=		i16
-FILES+=		i17
-FILES+=		i18
-FILES+=		i19.dist
-FILES+=		i2
-FILES+=		i20
-FILES+=		i21
-FILES+=		i3
-FILES+=		i4
-FILES+=		i5
-FILES+=		i6
-FILES+=		i7
-FILES+=		i8
-FILES+=		i9
-FILES+=		in1
-FILES+=		in2
-FILES+=		in3
-FILES+=		in4
-FILES+=		in5
-FILES+=		in6
-FILES+=		ip1
-FILES+=		ip2
-FILES+=		ipv6.1
-FILES+=		ipv6.2
-FILES+=		ipv6.3
-FILES+=		ipv6.5
-FILES+=		ipv6.6
-FILES+=		l1
-FILES+=		l1.b
-FILES+=		n1
-FILES+=		n10
-FILES+=		n11
-FILES+=		n12
-FILES+=		n13
-FILES+=		n14
-FILES+=		n16
-FILES+=		n17
-FILES+=		n2
-FILES+=		n3
-FILES+=		n4
-FILES+=		n5
-FILES+=		n6
-FILES+=		n7
-FILES+=		n8
-FILES+=		n9
-FILES+=		ni1
-FILES+=		ni10
-FILES+=		ni11
-FILES+=		ni12
-FILES+=		ni13
-FILES+=		ni14
-FILES+=		ni15
-FILES+=		ni16
-FILES+=		ni19
-FILES+=		ni2
-FILES+=		ni20
-FILES+=		ni21
-FILES+=		ni23
-FILES+=		ni3
-FILES+=		ni4
-FILES+=		ni5
-FILES+=		ni6
-FILES+=		ni7
-FILES+=		ni8
-FILES+=		ni9
-FILES+=		p1
-FILES+=		p2
-FILES+=		p3
-FILES+=		p5
-
-.include <bsd.test.mk>
-.include <bsd.files.mk>
-.include <bsd.prog.mk>
+clean:
+	/bin/rm -f i19
