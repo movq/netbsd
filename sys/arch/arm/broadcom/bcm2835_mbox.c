@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_mbox.c,v 1.1 2012/08/20 07:45:24 skrll Exp $	*/
+/*	$NetBSD: bcm2835_mbox.c,v 1.2 2012/08/22 13:19:47 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_mbox.c,v 1.1 2012/08/20 07:45:24 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_mbox.c,v 1.2 2012/08/22 13:19:47 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,32 +97,10 @@ void
 bcmmbox_read(uint8_t chan, uint32_t *data)
 {
 	struct bcm2835mbox_softc *sc = bcm2835mbox_sc;
-	uint32_t mbox;
 
 	KASSERT(sc != NULL);
 
-	for (;;) {
-		uint8_t rchan;
-		uint32_t rdata;
-
-		bus_space_barrier(sc->sc_iot, sc->sc_ioh, 0,
-		    BCM2835_MBOX_SIZE, BUS_SPACE_BARRIER_READ);
-
-		if ((bus_space_read_4(sc->sc_iot, sc->sc_ioh,
-		    BCM2835_MBOX0_STATUS) & BCM2835_MBOX_STATUS_EMPTY) != 0)
-			continue;
-
-		mbox = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
-		    BCM2835_MBOX0_READ);
-
-		rchan = BCM2835_MBOX_CHAN(mbox);
-		rdata = BCM2835_MBOX_DATA(mbox);
-
-		if (rchan == chan) {
-			*data = rdata;
-			return;
-		}
-	}
+	return bcm2835_mbox_read(sc->sc_iot, sc->sc_ioh, chan, data);
 }
 
 void
@@ -131,21 +109,6 @@ bcmmbox_write(uint8_t chan, uint32_t data)
 	struct bcm2835mbox_softc *sc = bcm2835mbox_sc;
 
 	KASSERT(sc != NULL);
-	uint32_t rdata;
 
-	for (;;) {
-
-		bus_space_barrier(sc->sc_iot, sc->sc_ioh, 0,
-		    BCM2835_MBOX_SIZE, BUS_SPACE_BARRIER_READ);
-
-		if ((rdata = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
-		    BCM2835_MBOX0_STATUS) & BCM2835_MBOX_STATUS_FULL) == 0)
-			break;
-	}
-
-	bus_space_write_4(sc->sc_iot, sc->sc_ioh,
-	    BCM2835_MBOX1_WRITE, BCM2835_MBOX_MSG(chan, data));
-
-	bus_space_barrier(sc->sc_iot, sc->sc_ioh, 0,
-	    BCM2835_MBOX_SIZE, BUS_SPACE_BARRIER_WRITE);
+	return bcm2835_mbox_write(sc->sc_iot, sc->sc_ioh, chan, data);
 }
