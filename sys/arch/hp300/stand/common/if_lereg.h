@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lereg.h,v 1.6 2012/07/26 17:15:22 tsutsui Exp $	*/
+/*	$NetBSD: if_lereg.h,v 1.5.118.1 2012/08/08 15:55:43 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.

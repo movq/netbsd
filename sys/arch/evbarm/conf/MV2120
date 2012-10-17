@@ -1,11 +1,11 @@
-#	$NetBSD: MV2120,v 1.10 2012/09/03 17:12:50 msaitoh Exp $
+#	$NetBSD: MV2120,v 1.6 2012/02/15 01:38:46 jakllsch Exp $
 #
 #  This configuration supports for HP MV2120/MV5140/MV5150.
 
 include 	"arch/evbarm/conf/std.mv2120"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
-options 	SYMTAB_SPACE="(1024 * 1000)"
+options 	SYMTAB_SPACE="(1024 * 912)"
 
 makeoptions	DEBUG="-g"
 
@@ -124,7 +124,13 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 #options 	SYSVSHM		# System V-like memory sharing
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -321,7 +327,7 @@ pseudo-device	wsmux			# mouse & keyboard multiplexor
 pseudo-device	wsfont
 
 # data mover pseudo-devices
-#pseudo-device	swdmover		# software dmover(9) back-end
+#pseudo-device	swdmover		# softare dmover(9) back-end
 #pseudo-device	dmoverio		# /dev/dmover dmover(9) interface
 
 pseudo-device	dm

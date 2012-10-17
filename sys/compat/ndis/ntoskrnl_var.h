@@ -302,7 +302,7 @@ typedef struct nt_dispatch_header nt_dispatch_header;
 
 /* TODO: What is the best way to do this? */
 
-extern int win_irql;
+int win_irql;
 #define AT_DISPATCH_LEVEL(useless) \
 	(win_irql == DISPATCH_LEVEL)
 

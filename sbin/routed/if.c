@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.30 2012/06/24 16:24:34 kardel Exp $	*/
+/*	$NetBSD: if.c,v 1.29.8.1 2012/07/02 21:28:08 jdc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -37,7 +37,7 @@
 #include "pathnames.h"
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: if.c,v 1.30 2012/06/24 16:24:34 kardel Exp $");
+__RCSID("$NetBSD: if.c,v 1.29.8.1 2012/07/02 21:28:08 jdc Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else

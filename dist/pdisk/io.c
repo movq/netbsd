@@ -96,7 +96,7 @@ void my_ungetch(int c);
 // Routines
 //
 int
-my_getch(void)
+my_getch()
 {
     if (unget_count > 0) {
 	return (unget_buf[--unget_count]);
@@ -369,12 +369,12 @@ get_string(int eos)
 }
 
 
-uint32_t
+unsigned long
 get_multiplier(long divisor)
 {
     int c;
-    uint32_t result;
-    uint32_t extra;
+    unsigned long result;
+    unsigned long extra;
 
     c = my_getch();
 
@@ -433,7 +433,7 @@ get_partition_modifier(void)
 
 
 int
-number_of_digits(uint32_t value)
+number_of_digits(unsigned long value)
 {
     int j;
 

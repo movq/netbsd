@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_dynamic.c,v 1.4 2012/08/15 06:16:41 christos Exp $	*/
+/*	$NetBSD: openpam_dynamic.c,v 1.3.2.1 2012/08/16 02:41:05 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002-2003 Networks Associates Technology, Inc.

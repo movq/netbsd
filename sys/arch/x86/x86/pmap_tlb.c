@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_tlb.c,v 1.6 2012/04/21 22:22:48 rmind Exp $	*/
+/*	$NetBSD: pmap_tlb.c,v 1.4.4.1 2012/05/09 03:22:53 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008-2012 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_tlb.c,v 1.6 2012/04/21 22:22:48 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_tlb.c,v 1.4.4.1 2012/05/09 03:22:53 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

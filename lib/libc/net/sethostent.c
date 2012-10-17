@@ -1,4 +1,4 @@
-/*	$NetBSD: sethostent.c,v 1.17 2012/03/20 17:44:18 matt Exp $	*/
+/*	$NetBSD: sethostent.c,v 1.16 2007/01/27 22:27:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -35,7 +35,7 @@
 static char sccsid[] = "@(#)sethostent.c	8.1 (Berkeley) 6/4/93";
 static char rcsid[] = "Id: sethostent.c,v 8.5 1996/09/28 06:51:07 vixie Exp ";
 #else
-__RCSID("$NetBSD: sethostent.c,v 1.17 2012/03/20 17:44:18 matt Exp $");
+__RCSID("$NetBSD: sethostent.c,v 1.16 2007/01/27 22:27:35 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,15 +51,16 @@ __weak_alias(sethostent,_sethostent)
 __weak_alias(endhostent,_endhostent)
 #endif
 
-void	_endhtent(void);
+void	_endhtent __P((void));
 #ifndef _REENTRANT
-void	res_close(void);
+void	res_close __P((void));
 #endif
-void	_sethtent(int);
+void	_sethtent __P((int));
 
 void
 /*ARGSUSED*/
-sethostent(int stayopen)
+sethostent(stayopen)
+	int stayopen;
 {
 #ifndef _REENTRANT
 	if ((_res.options & RES_INIT) == 0 && res_init() == -1)
@@ -71,7 +72,7 @@ sethostent(int stayopen)
 }
 
 void
-endhostent(void)
+endhostent()
 {
 #ifndef _REENTRANT
 	_res.options &= ~(RES_STAYOPEN | RES_USEVC);

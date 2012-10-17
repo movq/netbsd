@@ -1,4 +1,4 @@
-#	$NetBSD: engine.inc,v 1.7 2012/07/27 18:10:40 christos Exp $
+#	$NetBSD: engine.inc,v 1.3.4.1 2012/08/14 07:57:02 riz Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

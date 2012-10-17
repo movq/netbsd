@@ -1,4 +1,4 @@
-/*	$NetBSD: uhub.c,v 1.118 2012/09/09 20:23:38 gsutre Exp $	*/
+/*	$NetBSD: uhub.c,v 1.114.10.1 2012/03/19 23:13:59 riz Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/uhub.c,v 1.18 1999/11/17 22:33:43 n_hibma Exp $	*/
 
 /*
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhub.c,v 1.118 2012/09/09 20:23:38 gsutre Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhub.c,v 1.114.10.1 2012/03/19 23:13:59 riz Exp $");
 
 #include "opt_usb.h"
 
@@ -464,12 +464,8 @@ uhub_explore(usbd_device_handle dev)
 
 		/* XXX handle overcurrent and resume events! */
 
-		if (!reconnect && !(change & UPS_C_CONNECT_STATUS)) {
-			/* No status change, just do recursive explore. */
-			if (up->device != NULL && up->device->hub != NULL)
-				up->device->hub->explore(up->device);
+		if (!(change & UPS_C_CONNECT_STATUS))
 			continue;
-		}
 
 		/* We have a connect status change, handle it. */
 
@@ -534,7 +530,7 @@ uhub_explore(usbd_device_handle dev)
 		if (!(status & UPS_PORT_ENABLED)) {
 			/* Not allowed send/receive packet. */
 #ifdef DIAGNOSTIC
-			printf("%s: port %d, device not enabled\n",
+			printf("%s: port %d, device not enable\n",
 			       device_xname(sc->sc_dev), port);
 #endif
 			continue;
@@ -671,7 +667,7 @@ uhub_childdet(device_t self, device_t child)
 	nports = devhub->hub->hubdesc.bNbrPorts;
 	for (port = 0; port < nports; port++) {
 		dev = devhub->hub->ports[port].device;
-		if (!dev || dev->subdevlen == 0)
+		if (!dev)
 			continue;
 		for (i = 0; i < dev->subdevlen; i++) {
 			if (dev->subdevs[i] == child) {

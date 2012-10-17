@@ -1,4 +1,4 @@
-/*	$NetBSD: ubt.c,v 1.49 2012/10/06 14:37:41 christos Exp $	*/
+/*	$NetBSD: ubt.c,v 1.44.2.1 2012/05/07 16:25:42 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.49 2012/10/06 14:37:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.44.2.1 2012/05/07 16:25:42 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -305,34 +305,26 @@ static int ubt_sysctl_config(SYSCTLFN_PROTO);
 static void ubt_abortdealloc(struct ubt_softc *);
 
 /*
- * To match or ignore forcibly, add
+ * Match against the whole device, since we want to take
+ * both interfaces. If a device should be ignored then add
  *
- *	{ { VendorID, ProductID } , UMATCH_VENDOR_PRODUCT|UMATCH_NONE }
+ *	{ VendorID, ProductID }
  *
- * to the ubt_dev list.
+ * to the ubt_ignore list.
  */
-const struct ubt_devno {
-	struct usb_devno	devno;
-	int			match;
-} ubt_dev[] = {
-	{ { USB_VENDOR_BROADCOM, USB_PRODUCT_BROADCOM_BCM2033NF },
-	  UMATCH_NONE },
-	{ { USB_VENDOR_APPLE, USB_PRODUCT_APPLE_BLUETOOTH_HOST_C },
-	  UMATCH_VENDOR_PRODUCT },
+static const struct usb_devno ubt_ignore[] = {
+	{ USB_VENDOR_BROADCOM, USB_PRODUCT_BROADCOM_BCM2033NF },
 };
-#define ubt_lookup(vendor, product) \
-	((const struct ubt_devno *)usb_lookup(ubt_dev, vendor, product))
 
 int 
 ubt_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct usb_attach_arg *uaa = aux;
-	const struct ubt_devno *dev;
 
 	DPRINTFN(50, "ubt_match\n");
 
-	if ((dev = ubt_lookup(uaa->vendor, uaa->product)) != NULL)
-		return dev->match;
+	if (usb_lookup(ubt_ignore, uaa->vendor, uaa->product))
+		return UMATCH_NONE;
 
 	if (uaa->class == UDCLASS_WIRELESS
 	    && uaa->subclass == UDSUBCLASS_RF
@@ -508,7 +500,7 @@ ubt_attach(device_t parent, device_t self, void *aux)
 			CTLTYPE_INT, "config",
 			SYSCTL_DESCR("configuration number"),
 			ubt_sysctl_config, 0,
-			(void *)sc, 0,
+			sc, 0,
 			CTL_HW, node->sysctl_num,
 			CTL_CREATE, CTL_EOL);
 
@@ -541,10 +533,8 @@ ubt_attach(device_t parent, device_t self, void *aux)
 	}
 
 	sc->sc_ok = 1;
-
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
-
 	return;
 }
 
@@ -556,7 +546,8 @@ ubt_detach(device_t self, int flags)
 
 	DPRINTF("sc=%p flags=%d\n", sc, flags);
 
-	pmf_device_deregister(self);
+	if (device_pmf_is_registered(self))
+		pmf_device_deregister(self);
 
 	sc->sc_dying = 1;
 
@@ -584,7 +575,7 @@ ubt_detach(device_t self, int flags)
 	/* wait for all processes to finish */
 	s = splusb();
 	if (sc->sc_refcnt-- > 0)
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(sc->sc_dev);
 
 	splx(s);
 
@@ -1098,7 +1089,7 @@ ubt_xmit_cmd_complete(usbd_xfer_handle xfer,
 
 	if (--sc->sc_refcnt < 0) {
 		DPRINTF("sc_refcnt=%d\n", sc->sc_refcnt);
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1209,7 +1200,7 @@ ubt_xmit_acl_complete(usbd_xfer_handle xfer,
 	sc->sc_aclwr_busy = 0;
 
 	if (--sc->sc_refcnt < 0) {
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1374,7 +1365,7 @@ ubt_xmit_sco_complete(usbd_xfer_handle xfer,
 	}
 
 	if (--sc->sc_refcnt < 0) {
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1509,7 +1500,7 @@ ubt_recv_acl_complete(usbd_xfer_handle xfer,
 
 	if (--sc->sc_refcnt < 0) {
 		DPRINTF("refcnt = %d\n", sc->sc_refcnt);
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 
@@ -1600,7 +1591,7 @@ ubt_recv_sco_complete(usbd_xfer_handle xfer,
 
 	if (--sc->sc_refcnt < 0) {
 		DPRINTF("refcnt=%d\n", sc->sc_refcnt);
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 		return;
 	}
 

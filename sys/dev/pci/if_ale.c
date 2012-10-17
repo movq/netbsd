@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ale.c,v 1.14 2012/07/22 14:33:01 matt Exp $	*/
+/*	$NetBSD: if_ale.c,v 1.13 2011/01/22 08:13:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2008, Pyun YongHyeon <yongari@FreeBSD.org>
@@ -32,7 +32,7 @@
 /* Driver for Atheros AR8121/AR8113/AR8114 PCIe Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.14 2012/07/22 14:33:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.13 2011/01/22 08:13:47 cegger Exp $");
 
 #include "vlan.h"
 
@@ -86,7 +86,7 @@ static int	ale_detach(device_t, int);
 
 static int	ale_miibus_readreg(device_t, int, int);
 static void	ale_miibus_writereg(device_t, int, int, int);
-static void	ale_miibus_statchg(struct ifnet *);
+static void	ale_miibus_statchg(device_t);
 
 static int	ale_init(struct ifnet *);
 static void	ale_start(struct ifnet *);
@@ -205,14 +205,17 @@ ale_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 static void
-ale_miibus_statchg(struct ifnet *ifp)
+ale_miibus_statchg(device_t dev)
 {
-	struct ale_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_miibus;
+	struct ale_softc *sc = device_private(dev);
+	struct ifnet *ifp = &sc->sc_ec.ec_if;
+	struct mii_data *mii;
 	uint32_t reg;
 
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
 		return;
+
+	mii = &sc->sc_miibus;
 
 	sc->ale_flags &= ~ALE_FLAG_LINK;
 	if ((mii->mii_media_status & (IFM_ACTIVE | IFM_AVALID)) ==

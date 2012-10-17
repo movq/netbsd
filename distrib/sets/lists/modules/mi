@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.48 2012/09/16 13:47:43 rmind Exp $
+# $NetBSD: mi,v 1.39 2011/12/05 02:04:34 jym Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -35,8 +35,6 @@
 ./@MODULEDIR@/compat_ossaudio/compat_ossaudio.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/coredump				base-kernel-modules	kmod
 ./@MODULEDIR@/coredump/coredump.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/dbcool				base-kernel-modules	kmod
-./@MODULEDIR@/dbcool/dbcool.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/dirhash				base-obsolete	obsolete
 ./@MODULEDIR@/dirhash/dirhash.kmod		base-obsolete	obsolete
 ./@MODULEDIR@/dm				base-kernel-modules	lvm,kmod
@@ -77,16 +75,14 @@
 ./@MODULEDIR@/gpiosim/gpiosim.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/hfs				base-kernel-modules	kmod
 ./@MODULEDIR@/hfs/hfs.kmod			base-kernel-modules	kmod
-./@MODULEDIR@/if_axe				base-kernel-modules	kmod
-./@MODULEDIR@/if_axe/if_axe.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/iic				base-kernel-modules	kmod
 ./@MODULEDIR@/iic/iic.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/iscsi				base-kernel-modules	kmod,iscsi
 ./@MODULEDIR@/iscsi/iscsi.kmod			base-kernel-modules	kmod,iscsi
 ./@MODULEDIR@/kernfs				base-kernel-modules	kmod
 ./@MODULEDIR@/kernfs/kernfs.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/ksem				base-obsolete		obsolete
-./@MODULEDIR@/ksem/ksem.kmod			base-obsolete		obsolete
+./@MODULEDIR@/ksem				base-kernel-modules	kmod
+./@MODULEDIR@/ksem/ksem.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/layerfs				base-kernel-modules	kmod
 ./@MODULEDIR@/layerfs/layerfs.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/lfs				base-kernel-modules	kmod
@@ -115,10 +111,6 @@
 ./@MODULEDIR@/npf/npf.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/npf_alg_icmp			base-kernel-modules	kmod
 ./@MODULEDIR@/npf_alg_icmp/npf_alg_icmp.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/npf_ext_log			base-kernel-modules	kmod
-./@MODULEDIR@/npf_ext_log/npf_ext_log.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/npf_ext_normalise			base-kernel-modules	kmod
-./@MODULEDIR@/npf_ext_normalise/npf_ext_normalise.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/ntfs				base-kernel-modules	kmod
 ./@MODULEDIR@/ntfs/ntfs.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/null				base-kernel-modules	kmod
@@ -149,8 +141,6 @@
 ./@MODULEDIR@/scsiverbose/scsiverbose.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/sdt				base-kernel-modules	kmod,dtrace
 ./@MODULEDIR@/sdt/sdt.kmod			base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/sdtemp				base-kernel-modules	kmod
-./@MODULEDIR@/sdtemp/sdtemp.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/secmodel_bsd44			base-kernel-modules	kmod
 ./@MODULEDIR@/secmodel_bsd44/secmodel_bsd44.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/secmodel_extensions		base-kernel-modules	kmod
@@ -175,8 +165,6 @@
 ./@MODULEDIR@/tmpfs/tmpfs.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/tprof				base-kernel-modules	kmod
 ./@MODULEDIR@/tprof/tprof.kmod			base-kernel-modules	kmod
-./@MODULEDIR@/uatp				base-kernel-modules	kmod
-./@MODULEDIR@/uatp/uatp.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/udf				base-kernel-modules	kmod
 ./@MODULEDIR@/udf/udf.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/umap				base-kernel-modules	kmod
@@ -185,8 +173,6 @@
 ./@MODULEDIR@/union/union.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/usbverbose			base-kernel-modules	kmod
 ./@MODULEDIR@/usbverbose/usbverbose.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/vcoda				base-kernel-modules	kmod
-./@MODULEDIR@/vcoda/vcoda.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/v7fs				base-kernel-modules	kmod
 ./@MODULEDIR@/v7fs/v7fs.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/vnd 				base-kernel-modules	kmod

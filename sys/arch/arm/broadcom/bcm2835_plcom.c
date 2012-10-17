@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_plcom.c,v 1.1 2012/07/26 06:21:57 skrll Exp $	*/
+/*	$NetBSD: bcm2835_plcom.c,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 /* Interface to plcom (PL011) serial driver. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_plcom.c,v 1.1 2012/07/26 06:21:57 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_plcom.c,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $");
 
 #include <sys/types.h>
 #include <sys/device.h>

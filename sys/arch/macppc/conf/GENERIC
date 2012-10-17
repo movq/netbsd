@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.303 2012/09/01 18:17:51 jakllsch Exp $
+# $NetBSD: GENERIC,v 1.297.2.1 2012/09/03 18:51:36 riz Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.303 $"
+#ident 		"GENERIC-$Revision: 1.297.2.1 $"
 
 maxusers	32
 
@@ -38,6 +38,7 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 options 	MODULAR		# new style module(7) framework
 
@@ -80,13 +81,6 @@ options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_LINUX	# Linux binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
-
-# Wedge support
-options         DKWEDGE_AUTODISCOVER    # Automatically add dk(4) instances
-options         DKWEDGE_METHOD_GPT      # Supports GPT partitions as wedges
-# The following two options can break /etc/fstab, so handle with care
-#options        DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
-#options        DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -171,7 +165,6 @@ options 	USBVERBOSE	# verbose USB device autoconfig messages
 # wscons options
 #options 	WSEMUL_SUN			# sun terminal emulation
 options 	WSEMUL_VT100			# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 options 	WS_DEFAULT_FG=WSCOL_BLACK
 options 	WS_DEFAULT_BG=WSCOL_LIGHT_WHITE
@@ -290,11 +283,10 @@ trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
 chipsfb*	at pci?	function ?	# C&T 65550
 machfb*		at pci? function ?	# ATI Mach 64, Rage, Rage Pro
 
-radeonfb*	at pci? function ?	# ATI Radeon. R3xx is problematic
-options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
+#radeonfb*	at pci? function ?	# ATI Radeon. R3xx is problematic
+#options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
 
 voodoofb*	at pci? function ?	# 3Dfx Voodoo3 
-tdvfb*		at pci? function ?	# 3Dfx Voodoo2
 r128fb*		at pci? function ?	# ATI Rage 128
 genfb*		at pci? function ?
 
@@ -530,7 +522,7 @@ ugen*	at uhub? port ? configuration ? interface ?	# USB Generic driver
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel at76c50x 802.11b
 otus*	at uhub? port ?		# Atheros AR9001U
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 #zyd*	at uhub? port ?		# Zydas ZD1211
 
@@ -621,9 +613,6 @@ pseudo-device	nsmb			# SMB requester
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
 pseudo-device	putter			# for puffs and pud
-
-# userland interface to drivers, including autoconf and properties retrieval
-pseudo-device   drvctl
 
 # Veriexec
 #

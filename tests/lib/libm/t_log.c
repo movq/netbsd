@@ -1,4 +1,4 @@
-/* $NetBSD: t_log.c,v 1.8 2012/04/08 09:36:04 jruoho Exp $ */
+/* $NetBSD: t_log.c,v 1.6 2012/02/05 17:52:55 matt Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,14 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_log.c,v 1.8 2012/04/08 09:36:04 jruoho Exp $");
+__RCSID("$NetBSD: t_log.c,v 1.6 2012/02/05 17:52:55 matt Exp $");
 
 #include <atf-c.h>
-#include <atf-c/config.h>
-
-#include <math.h>
 #include <stdio.h>
-#include <string.h>
+#include <math.h>
 
 /*
  * log10(3)
@@ -203,9 +200,6 @@ ATF_TC_BODY(log10f_inf_pos, tc)
 {
 #ifndef __vax__
 	const float x = 1.0L / 0.0L;
-
-	if (strcmp(atf_config_get("atf_arch"), "alpha") == 0)
-		atf_tc_expect_fail("PR port-alpha/46301");
 
 	ATF_CHECK(log10f(x) == x);
 #endif
@@ -627,9 +621,6 @@ ATF_TC_BODY(log2f_inf_pos, tc)
 #ifndef __vax__
 	const float x = 1.0L / 0.0L;
 
-	if (strcmp(atf_config_get("atf_arch"), "alpha") == 0)
-		atf_tc_expect_fail("PR port-alpha/46301");
-
 	ATF_CHECK(log2f(x) == x);
 #endif
 }
@@ -853,9 +844,6 @@ ATF_TC_BODY(logf_inf_pos, tc)
 {
 #ifndef __vax__
 	const float x = 1.0L / 0.0L;
-
-	if (strcmp(atf_config_get("atf_arch"), "alpha") == 0)
-		atf_tc_expect_fail("PR port-alpha/46301");
 
 	ATF_CHECK(logf(x) == x);
 #endif

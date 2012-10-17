@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd.c,v 1.8 2012/06/09 11:32:20 tron Exp $	*/
+/*	$NetBSD: smtpd.c,v 1.7.4.1 2012/06/13 19:29:04 riz Exp $	*/
 
 /*++
 /* NAME

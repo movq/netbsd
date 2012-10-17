@@ -58,7 +58,7 @@
 
 #if defined(__NetBSD__)
 __COPYRIGHT("@(#) Copyright (c) 2009 The NetBSD Foundation, Inc. All rights reserved.");
-__RCSID("$NetBSD: packet-parse.c,v 1.51 2012/03/05 02:20:18 christos Exp $");
+__RCSID("$NetBSD: packet-parse.c,v 1.50 2010/11/15 08:56:30 agc Exp $");
 #endif
 
 #include <sys/types.h>
@@ -406,17 +406,16 @@ pgp_limited_read(pgp_stream_t *stream, uint8_t *dest,
 
 	if (!region->indeterminate &&
 	    region->readc + length > region->length) {
-		PGP_ERROR_1(errors, PGP_E_P_NOT_ENOUGH_DATA, "%s",
-		    "Not enough data");
+		PGP_ERROR(errors, PGP_E_P_NOT_ENOUGH_DATA, "Not enough data");
 		return 0;
 	}
 	r = full_read(stream, dest, length, &lr, errors, readinfo, cbinfo);
 	if (lr < 0) {
-		PGP_ERROR_1(errors, PGP_E_R_READ_FAILED, "%s", "Read failed");
+		PGP_ERROR(errors, PGP_E_R_READ_FAILED, "Read failed");
 		return 0;
 	}
 	if (!region->indeterminate && r != length) {
-		PGP_ERROR_1(errors, PGP_E_R_READ_FAILED, "%s", "Read failed");
+		PGP_ERROR(errors, PGP_E_R_READ_FAILED, "Read failed");
 		return 0;
 	}
 	region->last_read = (unsigned)r;
@@ -684,8 +683,7 @@ limread_mpi(BIGNUM **pbn, pgp_region_t *region, pgp_stream_t *stream)
 	}
 	if (((unsigned)buf[0] >> nonzero) != 0 ||
 	    !((unsigned)buf[0] & (1U << (nonzero - 1U)))) {
-		PGP_ERROR_1(&stream->errors, PGP_E_P_MPI_FORMAT_ERROR,
-		    "%s", "MPI Format error");
+		PGP_ERROR(&stream->errors, PGP_E_P_MPI_FORMAT_ERROR, "MPI Format error");
 		/* XXX: Ben, one part of
 		 * this constraint does
 		 * not apply to
@@ -2323,14 +2321,14 @@ consume_packet(pgp_region_t *region, pgp_stream_t *stream, unsigned warn)
 		/* now throw it away */
 		pgp_data_free(&remainder);
 		if (warn) {
-			PGP_ERROR_1(&stream->errors, PGP_E_P_PACKET_CONSUMED,
-			    "%s", "Warning: packet consumer");
+			PGP_ERROR(&stream->errors, PGP_E_P_PACKET_CONSUMED,
+				"Warning: packet consumer");
 		}
 		return 1;
 	}
-	PGP_ERROR_1(&stream->errors, PGP_E_P_PACKET_NOT_CONSUMED,
-	    "%s", (warn) ? "Warning: Packet was not consumed" :
-	    "Packet was not consumed");
+	PGP_ERROR(&stream->errors, PGP_E_P_PACKET_NOT_CONSUMED,
+			(warn) ? "Warning: Packet was not consumed" :
+				"Packet was not consumed");
 	return warn;
 }
 

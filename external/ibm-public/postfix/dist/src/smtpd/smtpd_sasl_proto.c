@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_sasl_proto.c,v 1.1.1.4 2012/08/10 12:35:55 tron Exp $	*/
+/*	$NetBSD: smtpd_sasl_proto.c,v 1.1.1.3.6.1 2012/08/12 19:25:23 martin Exp $	*/
 
 /*++
 /* NAME

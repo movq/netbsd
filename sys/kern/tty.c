@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.255 2012/10/02 23:10:34 mlelstv Exp $	*/
+/*	$NetBSD: tty.c,v 1.249.8.2 2012/08/20 19:15:36 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.255 2012/10/02 23:10:34 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.249.8.2 2012/08/20 19:15:36 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1928,6 +1928,7 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		goto loop;
 	}
  read:
+	mutex_spin_exit(&tty_lock);
 
 	/*
 	 * Input present, check for input mapping and processing.
@@ -1939,14 +1940,16 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		 */
 		if (CCEQ(cc[VDSUSP], c) &&
 		    ISSET(lflag, IEXTEN|ISIG) == (IEXTEN|ISIG)) {
+			mutex_spin_enter(&tty_lock);
 			ttysig(tp, TTYSIG_PG1, SIGTSTP);
 			if (first) {
 				error = ttypause(tp, hz);
+				mutex_spin_exit(&tty_lock);
 				if (error)
 					break;
-				mutex_spin_exit(&tty_lock);
 				goto loop;
-			}
+			} else
+				mutex_spin_exit(&tty_lock);
 			break;
 		}
 		/*
@@ -1957,9 +1960,7 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 		/*
 		 * Give user character.
 		 */
-		mutex_spin_exit(&tty_lock);
  		error = ureadc(c, uio);
-		mutex_spin_enter(&tty_lock);
 		if (error)
 			break;
  		if (uio->uio_resid == 0)
@@ -1972,11 +1973,11 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 			break;
 		first = 0;
 	}
-
 	/*
 	 * Look to unblock output now that (presumably)
 	 * the input queue has gone down.
 	 */
+	mutex_spin_enter(&tty_lock);
 	if (ISSET(tp->t_state, TS_TBLOCK) && tp->t_rawq.c_cc < TTYHOG / 5) {
 		if (ISSET(tp->t_iflag, IXOFF) &&
 		    cc[VSTART] != _POSIX_VDISABLE &&

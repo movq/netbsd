@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohcivar.h,v 1.34 2012/08/04 03:55:43 riastradh Exp $	*/
+/*	$NetBSD: fwohcivar.h,v 1.32 2010/05/23 18:56:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 Hidetoshi SHimokawa
@@ -39,6 +39,8 @@
 #ifndef _FWOHCIVAR_H_
 #define _FWOHCIVAR_H_
 
+MALLOC_DECLARE(M_FW);
+
 struct fwohci_softc {
 	struct firewire_comm fc;
 	bus_space_tag_t bst;
@@ -77,8 +79,7 @@ struct fwohci_softc {
 #define OWRITE(sc, r, x) bus_space_write_4((sc)->bst, (sc)->bsh, (r), (x))
 #define OREAD(sc, r)	bus_space_read_4((sc)->bst, (sc)->bsh, (r))
 
-void fwohci_init(struct fwohci_softc *);
-int fwohci_attach(struct fwohci_softc *);
+int fwohci_init(struct fwohci_softc *);
 int fwohci_detach(struct fwohci_softc *, int);
 int fwohci_intr(void *arg);
 int fwohci_resume(struct fwohci_softc *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.341 2012/03/17 22:19:53 mrg Exp $	*/
+/*	$NetBSD: locore.s,v 1.338.8.2 2012/03/21 16:10:21 riz Exp $	*/
 
 /*
  * Copyright (c) 2006-2010 Matthew R. Green
@@ -5378,6 +5378,16 @@ ENTRY(lwp_trampoline)
 	/*
 	 * Here we finish up as in syscall, but simplified.
 	 */
+	ba,a,pt	%icc, return_from_trap
+	 nop
+
+	/*
+	 * Like lwp_trampoline, but for cpu_setfunc(), i.e. without newlwp
+	 * arguement and will not call lwp_startup.
+	 */
+ENTRY(setfunc_trampoline)
+	call	%l0			! re-use current frame
+	 mov	%l1, %o0
 	ba,a,pt	%icc, return_from_trap
 	 nop
 

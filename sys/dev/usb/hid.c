@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.c,v 1.35 2012/02/24 06:48:23 mrg Exp $	*/
+/*	$NetBSD: hid.c,v 1.34 2011/12/23 00:51:43 jakllsch Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.c,v 1.11 1999/11/17 22:33:39 n_hibma Exp $ */
 
 /*
@@ -32,11 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.35 2012/02/24 06:48:23 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.34 2011/12/23 00:51:43 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#if defined(__NetBSD__)
 #include <sys/kernel.h>
+#endif
 #include <sys/malloc.h>
 
 #include <dev/usb/usb.h>

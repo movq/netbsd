@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.143 2012/07/29 18:05:48 mlelstv Exp $	*/
+/*	$NetBSD: conf.h,v 1.141.2.1 2012/08/08 15:51:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -152,7 +152,6 @@ dev_type_close(bdev_close);
 dev_type_strategy(bdev_strategy);
 dev_type_ioctl(bdev_ioctl);
 dev_type_dump(bdev_dump);
-dev_type_size(bdev_size);
 
 dev_type_open(cdev_open);
 dev_type_close(cdev_close);
@@ -167,6 +166,7 @@ dev_type_kqfilter(cdev_kqfilter);
 
 int	cdev_type(dev_t);
 int	bdev_type(dev_t);
+int	bdev_size(dev_t);
 
 /* symbolic sleep message strings */
 extern	const char devopn[], devio[], devwait[], devin[], devout[];

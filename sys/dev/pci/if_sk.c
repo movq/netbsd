@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sk.c,v 1.72 2012/07/22 14:33:03 matt Exp $	*/
+/*	$NetBSD: if_sk.c,v 1.70 2012/02/02 19:43:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -115,7 +115,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.72 2012/07/22 14:33:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.70 2012/02/02 19:43:05 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -191,11 +191,11 @@ void sk_update_int_mod(struct sk_softc *);
 
 int sk_xmac_miibus_readreg(device_t, int, int);
 void sk_xmac_miibus_writereg(device_t, int, int, int);
-void sk_xmac_miibus_statchg(struct ifnet *);
+void sk_xmac_miibus_statchg(device_t);
 
 int sk_marv_miibus_readreg(device_t, int, int);
 void sk_marv_miibus_writereg(device_t, int, int, int);
-void sk_marv_miibus_statchg(struct ifnet *);
+void sk_marv_miibus_statchg(device_t);
 
 u_int32_t sk_xmac_hash(void *);
 u_int32_t sk_yukon_hash(void *);
@@ -460,9 +460,9 @@ sk_xmac_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 void
-sk_xmac_miibus_statchg(struct ifnet *ifp)
+sk_xmac_miibus_statchg(device_t dev)
 {
-	struct sk_if_softc *sc_if = ifp->if_softc;
+	struct sk_if_softc *sc_if = device_private(dev);
 	struct mii_data *mii = &sc_if->sk_mii;
 
 	DPRINTFN(9, ("sk_xmac_miibus_statchg\n"));
@@ -545,10 +545,10 @@ sk_marv_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 void
-sk_marv_miibus_statchg(struct ifnet *ifp)
+sk_marv_miibus_statchg(device_t dev)
 {
 	DPRINTFN(9, ("sk_marv_miibus_statchg: gpcr=%x\n",
-		     SK_YU_READ_2(((struct sk_if_softc *)ifp->if_softc),
+		     SK_YU_READ_2(((struct sk_if_softc *)device_private(dev)),
 		     YUKON_GPCR)));
 }
 
@@ -1829,7 +1829,7 @@ skc_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_mod",
 	    SYSCTL_DESCR("sk interrupt moderation timer"),
-	    sk_sysctl_handler, 0, (void *)sc,
+	    sk_sysctl_handler, 0, sc,
 	    0, CTL_HW, sk_root_num, sk_nodenum, CTL_CREATE,
 	    CTL_EOL)) != 0) {
 		aprint_normal_dev(sc->sk_dev, "couldn't create int_mod sysctl node\n");

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2012/09/23 17:22:22 joerg Exp $
+#	$NetBSD: Makefile,v 1.4 2011/09/11 18:55:24 christos Exp $
 
 .include <bsd.own.mk>
 
@@ -13,13 +13,11 @@ DIST=${IDIST}/bin/named
 CPPFLAGS+=-I${DIST}/include -I${DIST}/unix/include -DCONFIGARGS=\"defaults\"
 CPPFLAGS+=-DNO_VERSION_DATE
 
-.if defined(HAVE_GCC) || defined(HAVE_LLVM)
+.if defined(HAVE_GCC)
 .for f in client
 COPTS.${f}.c+=  -fno-strict-aliasing
 .endfor
 .endif
-
-CWARNFLAGS.clang+=	-Wno-tautological-constant-out-of-range-compare
 
 .PATH: ${DIST}/unix ${DIST}
 

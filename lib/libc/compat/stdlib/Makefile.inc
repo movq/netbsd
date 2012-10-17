@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2012/04/20 17:31:30 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.2.46.1 2012/05/07 16:47:22 riz Exp $
 
 .PATH: ${COMPATDIR}/stdlib
 CPPFLAGS+=-I${COMPATDIR}/stdlib -I${COMPATDIR}/../stdlib

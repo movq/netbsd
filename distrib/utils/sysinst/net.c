@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.133 2012/09/23 17:37:51 jdf Exp $	*/
+/*	$NetBSD: net.c,v 1.130.2.2 2012/10/01 17:43:00 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

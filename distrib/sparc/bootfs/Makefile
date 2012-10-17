@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.40 2012/03/14 13:26:43 martin Exp $
+#	$NetBSD: Makefile,v 1.39.58.1 2012/03/24 16:55:30 bouyer Exp $
 #
 # boot.fs is the image for disk 1 of the two-set floppy based installation
 # method.

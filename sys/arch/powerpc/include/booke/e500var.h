@@ -1,4 +1,4 @@
-/*	$NetBSD: e500var.h,v 1.6 2012/07/27 22:24:13 matt Exp $	*/
+/*	$NetBSD: e500var.h,v 1.4.8.1 2012/05/09 22:42:31 riz Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -49,8 +49,8 @@
 #define	E500_CLOCK_TIMER	0	/* could be 0..3 */
 
 extern const struct intrsw e500_intrsw;
-extern struct extent *pcimem_ex;
-extern struct extent *pciio_ex;
+struct extent *pcimem_ex;
+struct extent *pciio_ex;
 void	e500_device_register(device_t, void *);
 int	e500_clock_intr(void *);
 void	e500_cpu_start(void);

@@ -1,4 +1,4 @@
-/* $NetBSD: term.c,v 1.16 2012/06/06 13:36:58 joerg Exp $ */
+/* $NetBSD: term.c,v 1.13.4.1 2012/06/23 22:54:57 riz Exp $ */
 
 /*
  * Copyright (c) 2009, 2010, 2011 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: term.c,v 1.16 2012/06/06 13:36:58 joerg Exp $");
+__RCSID("$NetBSD: term.c,v 1.13.4.1 2012/06/23 22:54:57 riz Exp $");
 
 #include <sys/stat.h>
 

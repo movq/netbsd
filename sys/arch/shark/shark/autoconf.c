@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.19 2012/09/01 12:15:39 matt Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.17.18.1 2012/08/08 15:51:14 martin Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2012/09/01 12:15:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17.18.1 2012/08/08 15:51:14 martin Exp $");
 
 #include "opt_md.h"
 
@@ -53,15 +53,11 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2012/09/01 12:15:39 matt Exp $");
 #include <sys/disklabel.h>
 #include <sys/device.h>
 #include <sys/conf.h>
-#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
-
 #include <arm/arm32/machdep.h>
-
 #include <machine/bootconfig.h>
+#include <machine/intr.h>
 #include <machine/irqhandler.h>
 
 #include "isa.h"

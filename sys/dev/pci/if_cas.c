@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cas.c,v 1.18 2012/07/22 14:33:02 matt Exp $	*/
+/*	$NetBSD: if_cas.c,v 1.17 2012/02/03 10:11:07 martin Exp $	*/
 /*	$OpenBSD: if_cas.c,v 1.29 2009/11/29 16:19:38 kettenis Exp $	*/
 
 /*
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cas.c,v 1.18 2012/07/22 14:33:02 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cas.c,v 1.17 2012/02/03 10:11:07 martin Exp $");
 
 #ifndef _MODULE
 #include "opt_inet.h"
@@ -143,7 +143,7 @@ int		cas_encap(struct cas_softc *, struct mbuf *, u_int32_t *);
 /* MII methods & callbacks */
 int		cas_mii_readreg(device_t, int, int);
 void		cas_mii_writereg(device_t, int, int, int);
-void		cas_mii_statchg(struct ifnet *);
+void		cas_mii_statchg(device_t);
 int		cas_pcs_readreg(device_t, int, int);
 void		cas_pcs_writereg(device_t, int, int, int);
 
@@ -1605,9 +1605,9 @@ cas_mii_writereg(device_t self, int phy, int reg, int val)
 }
 
 void
-cas_mii_statchg(struct ifnet *ifp)
+cas_mii_statchg(device_t self)
 {
-	struct cas_softc *sc = ifp->if_softc;
+	struct cas_softc *sc = device_private(self);
 #ifdef CAS_DEBUG
 	int instance = IFM_INST(sc->sc_media.ifm_cur->ifm_media);
 #endif

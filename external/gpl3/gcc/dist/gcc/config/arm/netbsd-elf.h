@@ -40,7 +40,6 @@
 #undef ARM_DEFAULT_ABI
 #define ARM_DEFAULT_ABI ARM_ABI_ATPCS
 
-#undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS()	\
   do					\
     {					\
@@ -53,7 +52,7 @@
 
 #undef SUBTARGET_EXTRA_ASM_SPEC
 #define SUBTARGET_EXTRA_ASM_SPEC	\
-  "-matpcs %{mabi=aapcs*:-meabi=4} %{fpic|fpie:-k} %{fPIC|fPIE:-k}"
+  "-matpcs %{fpic|fpie:-k} %{fPIC|fPIE:-k}"
 
 /* Default to full VFP if -mhard-float is specified.  */
 #undef SUBTARGET_ASM_FLOAT_SPEC

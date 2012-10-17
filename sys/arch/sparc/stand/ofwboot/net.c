@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.8 2012/07/16 11:26:27 tsutsui Exp $	*/
+/*	$NetBSD: net.c,v 1.7.10.1 2012/07/21 00:04:56 riz Exp $	*/
 
 /*
  * Copyright (C) 1995 Wolfgang Solfrank.

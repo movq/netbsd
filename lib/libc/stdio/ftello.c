@@ -1,4 +1,4 @@
-/*	$NetBSD: ftello.c,v 1.7 2012/03/27 15:05:42 christos Exp $	*/
+/*	$NetBSD: ftello.c,v 1.5 2012/01/22 18:36:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: ftello.c,v 1.7 2012/03/27 15:05:42 christos Exp $");
+__RCSID("$NetBSD: ftello.c,v 1.5 2012/01/22 18:36:17 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -52,7 +52,8 @@ __weak_alias(ftello, _ftello)
  * ftell: return current offset.
  */
 off_t
-ftello(FILE *fp)
+ftello(fp)
+	FILE *fp;
 {
 	off_t pos;
 
@@ -62,21 +63,21 @@ ftello(FILE *fp)
 	if (fp->_seek == NULL) {
 		FUNLOCKFILE(fp);
 		errno = ESPIPE;			/* historic practice */
-		return (off_t)-1;
+		return ((off_t)-1);
 	}
 
 	/*
 	 * Find offset of underlying I/O object, then
 	 * adjust for buffered bytes.
 	 */
-	(void)__sflush(fp); /* may adjust seek offset on append stream */
+	__sflush(fp);		/* may adjust seek offset on append stream */
 	if (fp->_flags & __SOFF)
 		pos = fp->_offset;
 	else {
 		pos = (*fp->_seek)(fp->_cookie, (off_t)0, SEEK_CUR);
 		if (pos == (off_t)-1) {
 			FUNLOCKFILE(fp);
-			return pos;
+			return (pos);
 		}
 	}
 	if (fp->_flags & __SRD) {
@@ -97,5 +98,5 @@ ftello(FILE *fp)
 		pos += fp->_p - fp->_bf._base;
 	}
 	FUNLOCKFILE(fp);
-	return pos;
+	return (pos);
 }

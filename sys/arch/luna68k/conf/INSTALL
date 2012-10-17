@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.7 2012/08/17 20:11:40 abs Exp $
+# $NetBSD: INSTALL,v 1.4.2.1 2012/07/25 21:30:34 martin Exp $
 #
 # config for installation ramdisk kernel
 # 
@@ -24,6 +24,7 @@ options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 #options 	SYSVMSG			# System V message queues
 #options 	SYSVSEM			# System V semaphores
 #options 	SYSVSHM			# System V shared memory
+#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 #options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -123,8 +124,6 @@ options 	NFS_BOOT_DHCP	# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
-options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_OMRON12x20
 
 config		netbsd root on ? type ?

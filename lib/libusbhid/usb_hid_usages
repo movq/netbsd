@@ -1,4 +1,4 @@
-# $NetBSD: usb_hid_usages,v 1.6 2012/05/09 16:21:06 khorben Exp $
+# $NetBSD: usb_hid_usages,v 1.5.2.1 2012/05/17 18:20:26 riz Exp $
 #
 # USB HID usage table
 # Syntax:

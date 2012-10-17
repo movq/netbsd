@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pager.h,v 1.43 2012/04/29 22:54:01 chs Exp $	*/
+/*	$NetBSD: uvm_pager.h,v 1.42.8.1 2012/05/07 03:01:13 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.

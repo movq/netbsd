@@ -1,4 +1,4 @@
-/*	$NetBSD: swapctl.c,v 1.37 2012/04/07 04:52:20 christos Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.36 2011/08/27 18:57:50 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1999 Matthew R. Green
@@ -64,7 +64,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swapctl.c,v 1.37 2012/04/07 04:52:20 christos Exp $");
+__RCSID("$NetBSD: swapctl.c,v 1.36 2011/08/27 18:57:50 joerg Exp $");
 #endif
 
 
@@ -695,14 +695,9 @@ do_fstab(int add)
 #define PRIORITYEQ	"priority="
 #define NFSMNTPT	"nfsmntpt="
 	while ((fp = getfsent()) != NULL) {
-		char buf[MAXPATHLEN];
-		char *spec, *fsspec;
+		char *spec;
 
-		if (getfsspecname(buf, sizeof(buf), fp->fs_spec) == NULL) {
-			warn("%s", buf);
-			continue;
-		}
-		fsspec = spec = buf;
+		spec = fp->fs_spec;
 		cmd[0] = '\0';
 
 		if (strcmp(fp->fs_type, "dp") == 0 && add) {
@@ -752,14 +747,14 @@ do_fstab(int add)
 			}
 			if (add) {
 				snprintf(cmd, sizeof(cmd), "%s %s %s",
-					PATH_MOUNT, fsspec, spec);
+					PATH_MOUNT, fp->fs_spec, spec);
 				if (system(cmd) != 0) {
-					warnx("%s: mount failed", fsspec);
+					warnx("%s: mount failed", fp->fs_spec);
 					continue;
 				}
 			} else {
 				snprintf(cmd, sizeof(cmd), "%s %s",
-					PATH_UMOUNT, fsspec);
+					PATH_UMOUNT, fp->fs_spec);
 			}
 		} else {
 			/*
@@ -788,35 +783,35 @@ do_fstab(int add)
 				success = 1;
 				printf(
 			    	"%s: adding %s as swap device at priority %d\n",
-				    getprogname(), fsspec, (int)priority);
+				    getprogname(), fp->fs_spec, (int)priority);
 			} else {
 				error = 1;
 				fprintf(stderr,
 				    "%s: failed to add %s as swap device\n",
-				    getprogname(), fsspec);
+				    getprogname(), fp->fs_spec);
 			}
 		} else {
 			if (delete_swap(spec)) {
 				success = 1;
 				printf(
 				    "%s: removing %s as swap device\n",
-				    getprogname(), fsspec);
+				    getprogname(), fp->fs_spec);
 			} else {
 				error = 1;
 				fprintf(stderr,
 				    "%s: failed to remove %s as swap device\n",
-				    getprogname(), fsspec);
+				    getprogname(), fp->fs_spec);
 			}
 			if (cmd[0]) {
 				if (system(cmd) != 0) {
-					warnx("%s: umount failed", fsspec);
+					warnx("%s: umount failed", fp->fs_spec);
 					error = 1;
 					continue;
 				}
 			}
 		}
 
-		if (spec != fsspec)
+		if (spec != fp->fs_spec)
 			free(spec);
 	}
 	if (error)

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.93 2012/08/10 12:48:14 tsutsui Exp $ */
+/* $NetBSD: machdep.c,v 1.89.2.1 2012/07/31 08:22:06 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.93 2012/08/10 12:48:14 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.89.2.1 2012/07/31 08:22:06 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -103,6 +103,12 @@ struct cpu_info cpu_info_store;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
+int	physmem;		/* set by locore */
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int	safepri = PSL_LOWIPL;
 
 extern	u_int lowram;
 
@@ -153,13 +159,6 @@ luna68k_init(void)
 	extern char bootarg[64];
 
 	extern paddr_t avail_start, avail_end;
-
-	/* initialize cn_tab for early console */
-#if 1
-	cn_tab = &syscons;
-#else
-	cn_tab = &romcons;
-#endif
 
 	/*
 	 * Tell the VM system about available physical memory.  The
@@ -779,7 +778,12 @@ module_init_md(void)
 }
 #endif
 
-#ifdef notyet
+#if 1
+
+struct consdev *cn_tab = &syscons;
+
+#else
+
 /*
  * romcons is useful until m68k TC register is initialized.
  */
@@ -795,6 +799,7 @@ struct consdev romcons = {
 	makedev(7, 0), /* XXX */
 	CN_DEAD,
 };
+struct consdev *cn_tab = &romcons;
 
 #define __		((int **)0x41000000)
 #define GETC()		(*(int (*)())__[6])()

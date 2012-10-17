@@ -1,4 +1,4 @@
-/*	$NetBSD: sata_subr.c,v 1.20 2012/07/31 15:50:34 bouyer Exp $	*/
+/*	$NetBSD: sata_subr.c,v 1.14 2010/12/12 00:38:07 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
  * Common functions for Serial ATA.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sata_subr.c,v 1.20 2012/07/31 15:50:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sata_subr.c,v 1.14 2010/12/12 00:38:07 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: sata_subr.c,v 1.20 2012/07/31 15:50:34 bouyer Exp $"
 
 #include <dev/ata/satareg.h>
 #include <dev/ata/satavar.h>
-#include <dev/ata/satapmpreg.h>
 
 /*
  * sata_speed:
@@ -106,18 +105,6 @@ sata_reset_interface(struct ata_channel *chp, bus_space_tag_t sata_t,
 			break;
 		tsleep(chp, PRIBIO, "sataup", mstohz(10));
 	}
-	/*
-	 * if we have a link up without device, wait a few more seconds
-	 * for connection to establish
-	 */
-	if ((sstatus & SStatus_DET_mask) == SStatus_DET_DEV_NE) {
-		for (i = 0; i < 500; i++) {
-			tsleep(chp, PRIBIO, "sataup", mstohz(10));
-			sstatus = bus_space_read_4(sata_t, sstatus_r, 0);
-			if ((sstatus & SStatus_DET_mask) == SStatus_DET_DEV)
-				break;
-		}
-	}
 
 	switch (sstatus & SStatus_DET_mask) {
 	case SStatus_DET_NODEV:
@@ -146,54 +133,4 @@ sata_reset_interface(struct ata_channel *chp, bus_space_tag_t sata_t,
 		    sstatus);
 	}
 	return(sstatus & SStatus_DET_mask);
-}
-
-void
-sata_interpret_sig(struct ata_channel *chp, int port, uint32_t sig)
-{
-	int err;
-	int s;
-
-	/* some ATAPI devices have bogus lower two bytes, sigh */
-	if ((sig & 0xffff0000) == 0xeb140000) {
-		sig &= 0xffff0000;
-		sig |= 0x00000101;
-	}
-	if (chp->ch_drive == NULL) {
-		if (sig == 0x96690101)
-			err = atabus_alloc_drives(chp, PMP_MAX_DRIVES);
-		else
-			err = atabus_alloc_drives(chp, 1);
-		if (err)
-			return;
-	}
-	KASSERT(port < chp->ch_ndrives);
-
-	s = splbio();
-	switch(sig) {
-	case 0x96690101:
-		KASSERT(port == 0 || port == PMP_PORT_CTL);
-		chp->ch_drive[PMP_PORT_CTL].drive_type = ATA_DRIVET_PM;
-		break;
-	case 0xc33c0101:
-		aprint_verbose_dev(chp->atabus, "port %d is SEMB, ignored\n",
-		    port);
-		break;
-	case 0xeb140101:
-		chp->ch_drive[port].drive_type = ATA_DRIVET_ATAPI;
-		break;
-	case 0x00000101:
-		chp->ch_drive[port].drive_type = ATA_DRIVET_ATA;
-		break;
-	case 0xffffffff:
-		/* COMRESET time out */
-		break;
-	default:
-		chp->ch_drive[port].drive_type = ATA_DRIVET_ATA;
-		aprint_verbose_dev(chp->atabus,
-		    "Unrecognized signature 0x%08x on port %d. "
-		    "Assuming it's a disk.\n", sig, port);
-		break;
-	}
-	splx(s);
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2012/09/23 17:22:22 joerg Exp $
+#	$NetBSD: Makefile,v 1.10 2011/10/11 13:53:58 joerg Exp $
 
 PROG_CXX=	llvm-mc
 NOMAN=		yes
@@ -20,8 +20,6 @@ LLVM_LIBS+= \
 	ARMDisassembler \
 	MipsCodeGen \
 	MipsTargetInfo \
-	MipsAsmParser \
-	MipsDisassembler \
 	MipsMCTargetDesc \
 	MipsAsmPrinter \
 	PowerPCCodeGen \

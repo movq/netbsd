@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.317 2012/07/22 22:40:18 rmind Exp $	*/
+/*	$NetBSD: proc.h,v 1.315 2012/02/11 23:16:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -171,6 +171,9 @@ struct emul {
 	/* Emulation-specific hook for userspace page faults */
 	int		(*e_usertrap)(struct lwp *, vaddr_t, void *);
 
+	/* SA-related information */
+	const struct sa_emul *e_sa;
+
 	size_t		e_ucsize;	/* size of ucontext_t */
 	void		(*e_startlwp)(void *);
 };
@@ -212,7 +215,7 @@ struct proc {
 	krwlock_t	p_reflock;	/* p: lock for debugger, procfs */
 	kcondvar_t	p_waitcv;	/* p: wait, stop CV on children */
 	kcondvar_t	p_lwpcv;	/* p: wait, stop CV on LWPs */
-
+      
 	/* Substructures: */
 	struct kauth_cred *p_cred;	/* p: Master copy of credentials */
 	struct filedesc	*p_fd;		/* :: Ptr to open files structure */
@@ -256,7 +259,8 @@ struct proc {
 	u_int		p_nstopchild;	/* l: Count of stopped/dead children */
 	u_int		p_waited;	/* l: parent has waited on child */
 	struct lwp	*p_zomblwp;	/* p: detached LWP to be reaped */
-	struct lwp	*p_vforklwp;	/* p: parent LWP waiting at vfork() */
+
+	struct sadata	*p_sa;		/* p: Scheduler activation info */
 
 	/* scheduling */
 	void		*p_sched_info;	/* p: Scheduler-specific structure */
@@ -273,6 +277,7 @@ struct proc {
 	u_quad_t 	p_iticks;	/* t: Statclock hits processing intr */
 
 	int		p_traceflag;	/* k: Kernel trace points */
+	int		p_timerpend;	/* p: Pending itimer to run */
 	void		*p_tracep;	/* k: Trace private data */
 	struct vnode 	*p_textvp;	/* :: Vnode of executable */
 
@@ -355,14 +360,16 @@ struct proc {
  * process context only.
  */
 #define	PS_NOCLDSTOP	0x00000008 /* No SIGCHLD when children stop */
-#define	PS_RUMP_LWPEXIT	0x00000400 /* LWPs in RUMP kernel should exit for GC */
+#define	PS_SA		0x00000400 /* Process using scheduler activations */
 #define	PS_WCORE	0x00001000 /* Process needs to dump core */
 #define	PS_WEXIT	0x00002000 /* Working on exiting */
 #define	PS_STOPFORK	0x00800000 /* Child will be stopped on fork(2) */
 #define	PS_STOPEXEC	0x01000000 /* Will be stopped on exec(2) */
 #define	PS_STOPEXIT	0x02000000 /* Will be stopped at process exit */
 #define	PS_NOTIFYSTOP	0x10000000 /* Notify parent of successful STOP */
+#define	PS_NOSA 	0x40000000 /* Do not enable SA */
 #define	PS_STOPPING	0x80000000 /* Transitioning SACTIVE -> SSTOP */
+#define	PS_RUMP_LWPEXIT PS_SA      /* LWPs in rump kernel should exit for g/c */
 
 /*
  * These flags are kept in p_sflag and are protected by the proc_lock

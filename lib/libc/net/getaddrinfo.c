@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.101 2012/06/08 07:54:14 martin Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.96.4.1 2012/06/03 21:41:34 jdc Exp $	*/
 /*	$KAME: getaddrinfo.c,v 1.29 2000/08/31 17:26:57 itojun Exp $	*/
 
 /*
@@ -55,7 +55,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getaddrinfo.c,v 1.101 2012/06/08 07:54:14 martin Exp $");
+__RCSID("$NetBSD: getaddrinfo.c,v 1.96.4.1 2012/06/03 21:41:34 jdc Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -332,8 +332,8 @@ str2number(const char *p)
 	ep = NULL;
 	errno = 0;
 	v = strtoul(p, &ep, 10);
-	if (errno == 0 && ep && *ep == '\0' && v <= INT_MAX)
-		return (int)v;
+	if (errno == 0 && ep && *ep == '\0' && v <= UINT_MAX)
+		return v;
 	else
 		return -1;
 }
@@ -436,7 +436,7 @@ getaddrinfo(const char *hostname, const char *servname,
 		}
 		error = get_portmatch(pai, servname, &svd);
 		if (error)
-			goto bad;
+			ERR(error);
 
 		*pai = ai0;
 	}
@@ -1152,7 +1152,7 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 		h_errno = NO_RECOVERY;
 		return (NULL);
 	}
-	n = dn_expand(answer->buf, eom, cp, bp, (int)(ep - bp));
+	n = dn_expand(answer->buf, eom, cp, bp, ep - bp);
 	if ((n < 0) || !(*name_ok)(bp)) {
 		h_errno = NO_RECOVERY;
 		return (NULL);
@@ -1163,7 +1163,7 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 		 * same as the one we sent; this just gets the expanded name
 		 * (i.e., with the succeeding search-domain tacked on).
 		 */
-		n = (int)strlen(bp) + 1;		/* for the \0 */
+		n = strlen(bp) + 1;		/* for the \0 */
 		if (n >= MAXHOSTNAMELEN) {
 			h_errno = NO_RECOVERY;
 			return (NULL);
@@ -1176,7 +1176,7 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 	haveanswer = 0;
 	had_error = 0;
 	while (ancount-- > 0 && cp < eom && !had_error) {
-		n = dn_expand(answer->buf, eom, cp, bp, (int)(ep - bp));
+		n = dn_expand(answer->buf, eom, cp, bp, ep - bp);
 		if ((n < 0) || !(*name_ok)(bp)) {
 			had_error++;
 			continue;
@@ -1195,14 +1195,14 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 		}
 		if ((qtype == T_A || qtype == T_AAAA || qtype == T_ANY) &&
 		    type == T_CNAME) {
-			n = dn_expand(answer->buf, eom, cp, tbuf, (int)sizeof tbuf);
+			n = dn_expand(answer->buf, eom, cp, tbuf, sizeof tbuf);
 			if ((n < 0) || !(*name_ok)(tbuf)) {
 				had_error++;
 				continue;
 			}
 			cp += n;
 			/* Get canonical name. */
-			n = (int)strlen(tbuf) + 1;	/* for the \0 */
+			n = strlen(tbuf) + 1;	/* for the \0 */
 			if (n > ep - bp || n >= MAXHOSTNAMELEN) {
 				had_error++;
 				continue;
@@ -1258,7 +1258,7 @@ getanswer(const querybuf *answer, int anslen, const char *qname, int qtype,
 				int nn;
 
 				canonname = bp;
-				nn = (int)strlen(bp) + 1;	/* for the \0 */
+				nn = strlen(bp) + 1;	/* for the \0 */
 				bp += nn;
 			}
 
@@ -1477,7 +1477,7 @@ _gethtent(FILE **hostf, const char *name, const struct addrinfo *pai)
 	if (!*hostf && !(*hostf = fopen(_PATH_HOSTS, "re")))
 		return (NULL);
  again:
-	if (!(p = fgets(hostbuf, (int)sizeof hostbuf, *hostf)))
+	if (!(p = fgets(hostbuf, sizeof hostbuf, *hostf)))
 		return (NULL);
 	if (*p == '#')
 		goto again;
@@ -1746,10 +1746,10 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 #endif
 
 		n = res_nmkquery(res, QUERY, name, class, type, NULL, 0, NULL,
-		    buf, (int)sizeof(buf));
+		    buf, sizeof(buf));
 #ifdef RES_USE_EDNS0
 		if (n > 0 && (res->options & RES_USE_EDNS0) != 0)
-			n = res_nopt(res, n, buf, (int)sizeof(buf), anslen);
+			n = res_nopt(res, n, buf, sizeof(buf), anslen);
 #endif
 		if (n <= 0) {
 #ifdef DEBUG

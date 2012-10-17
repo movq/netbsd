@@ -1,4 +1,4 @@
-/*	$NetBSD: symbol.c,v 1.61 2012/08/15 03:46:07 matt Exp $	 */
+/*	$NetBSD: symbol.c,v 1.59 2011/11/25 14:39:02 joerg Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: symbol.c,v 1.61 2012/08/15 03:46:07 matt Exp $");
+__RCSID("$NetBSD: symbol.c,v 1.59 2011/11/25 14:39:02 joerg Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -58,6 +58,8 @@ __RCSID("$NetBSD: symbol.c,v 1.61 2012/08/15 03:46:07 matt Exp $");
 
 #include "debug.h"
 #include "rtld.h"
+
+typedef void (*fptr_t)(void);
 
 /*
  * If the given object is already in the donelist, return true.  Otherwise
@@ -92,7 +94,6 @@ _rtld_is_exported(const Elf_Sym *def)
 		(fptr_t)dladdr,
 		(fptr_t)dlinfo,
 		(fptr_t)dl_iterate_phdr,
-		(fptr_t)_dlauxinfo,
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 		(fptr_t)_rtld_tls_allocate,
 		(fptr_t)_rtld_tls_free,

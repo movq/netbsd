@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.h,v 1.57 2012/06/10 17:05:18 mlelstv Exp $	*/
+/*	$NetBSD: disk.h,v 1.56.2.1 2012/07/05 18:12:48 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2004 The NetBSD Foundation, Inc.

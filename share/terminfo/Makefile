@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2012/06/03 23:19:11 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.8.1 2012/06/23 22:54:58 riz Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/8/93
 
 CLEANFILES= terminfo.cdb

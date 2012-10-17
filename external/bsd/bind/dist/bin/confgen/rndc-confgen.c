@@ -1,4 +1,4 @@
-/*	$NetBSD: rndc-confgen.c,v 1.4 2012/06/05 00:38:51 christos Exp $	*/
+/*	$NetBSD: rndc-confgen.c,v 1.3.4.1 2012/06/05 21:15:06 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009, 2011  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.c,v 1.26 2012/02/19 12:02:55 tsutsui Exp $	*/
+/*	$NetBSD: ofdev.c,v 1.25.2.1 2012/02/22 18:45:26 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.

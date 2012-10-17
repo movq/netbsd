@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.63 2012/07/19 19:23:52 macallan Exp $
+#	$NetBSD: Makefile,v 1.60.4.1 2012/06/11 20:53:40 riz Exp $
 
 # xf86-input drivers
 
@@ -61,8 +61,7 @@ SUBDIR+= \
 	xf86-video-tseng \
 	xf86-video-vmware \
 	xf86-video-vesa \
-	xf86-video-wsfb \
-	xf86-video-xgi
+	xf86-video-wsfb
 #	xf86-video-rendition
 
 .if ${MACHINE_ARCH} == "i386"
@@ -147,11 +146,6 @@ SUBDIR+= \
 SUBDIR+= \
 	xf86-video-wsfb
 .endif	# ${MACHINE} == "dreamcast"
-
-.if ${MACHINE} == "evbarm"
-SUBDIR+= \
-	xf86-video-wsfb
-.endif # ${MACHINE} == "evbarm"
 
 .if ${MACHINE} == "evbmips"
 SUBDIR+= \

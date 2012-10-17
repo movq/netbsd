@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2012/04/03 10:50:46 roy Exp $
+# $NetBSD: Makefile,v 1.3 2009/12/04 14:44:57 roy Exp $
 #
 
 .include <bsd.own.mk>
@@ -22,9 +22,9 @@ CLEANFILES=	${SCRIPTS} ${FILES} ${MAN}
 
 CMD1=		\1 status >/dev/null 2>\&1
 CMD2=		\1 restart
-RESTARTCMD=	if /etc/rc.d/${CMD1}; then /etc/rc.d/${CMD2}; fi
+RESTARTCMD=	/etc/rc.d/${CMD1} \&\& /etc/rc.d/${CMD2}
 .for f in ${SCRIPTS} ${FILES} ${MAN}
-${f}:	Makefile ${f}.in
+${f}:	${f}.in
 	${TOOL_SED} -e 's:@PREFIX@::g' \
 		-e 's:@SYSCONFDIR@:/etc:g' \
 		-e 's:@LIBEXECDIR@:/libexec/resolvconf:g' \

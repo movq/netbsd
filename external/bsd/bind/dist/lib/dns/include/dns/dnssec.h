@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec.h,v 1.4 2012/06/05 00:41:47 christos Exp $	*/
+/*	$NetBSD: dnssec.h,v 1.3.4.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2009-2012  Internet Systems Consortium, Inc. ("ISC")

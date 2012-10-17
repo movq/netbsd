@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_version.h,v 1.1.1.15 2012/08/10 12:35:44 tron Exp $	*/
+/*	$NetBSD: mail_version.h,v 1.1.1.12.2.3 2012/08/12 19:25:23 martin Exp $	*/
 
 #ifndef _MAIL_VERSION_H_INCLUDED_
 #define _MAIL_VERSION_H_INCLUDED_

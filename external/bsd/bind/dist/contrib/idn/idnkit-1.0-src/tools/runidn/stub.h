@@ -1,4 +1,4 @@
-/*	$NetBSD: stub.h,v 1.3 2012/06/05 00:39:58 christos Exp $	*/
+/*	$NetBSD: stub.h,v 1.2.6.1 2012/06/06 18:18:10 bouyer Exp $	*/
 
 /* Id: stub.h,v 1.1 2003/06/04 00:27:13 marka Exp  */
 

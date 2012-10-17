@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_extern.h,v 1.5 2012/07/23 04:13:06 matt Exp $	*/
+/*	$NetBSD: fpu_extern.h,v 1.4 2008/04/28 20:23:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -29,12 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _POWERPC_FPU_FPU_EXTERN_H_
-#define _POWERPC_FPU_FPU_EXTERN_H_
-
-#include <sys/signal.h>
-#include <sys/siginfo.h>
-
 struct proc;
 struct fpreg;
 struct trapframe;
@@ -43,7 +37,7 @@ struct fpemu;
 struct fpn;
 
 /* fpu.c */
-bool fpu_emulate(struct trapframe *, struct fpreg *, ksiginfo_t *);
+int fpu_emulate(struct trapframe *, struct fpreg *);
 int fpu_execute(struct trapframe *, struct fpemu *, union instr *);
 
 /* fpu_add.c */
@@ -79,5 +73,3 @@ struct fpn *fpu_sqrt(struct fpemu *);
 int fpu_shr(struct fpn *, int);
 void fpu_norm(struct fpn *);
 struct fpn *fpu_newnan(struct fpemu *);
-
-#endif /* _POWERPC_FPU_FPU_EXTERN_H_ */

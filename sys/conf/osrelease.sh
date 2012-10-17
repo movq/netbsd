@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: osrelease.sh,v 1.122 2012/02/16 23:56:57 christos Exp $
+#	$NetBSD: osrelease.sh,v 1.120.18.2 2012/02/17 00:08:38 riz Exp $
 #
 # Copyright (c) 1997 The NetBSD Foundation, Inc.
 # All rights reserved.

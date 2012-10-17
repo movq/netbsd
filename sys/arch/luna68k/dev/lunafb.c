@@ -1,4 +1,4 @@
-/* $NetBSD: lunafb.c,v 1.26 2012/07/20 19:31:53 tsutsui Exp $ */
+/* $NetBSD: lunafb.c,v 1.25.8.1 2012/07/25 21:30:35 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lunafb.c,v 1.26 2012/07/20 19:31:53 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lunafb.c,v 1.25.8.1 2012/07/25 21:30:35 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

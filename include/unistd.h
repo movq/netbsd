@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.135 2012/07/14 15:06:26 darrenr Exp $	*/
+/*	$NetBSD: unistd.h,v 1.128 2011/11/05 09:27:06 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -327,20 +327,6 @@ int	 getdomainname(char *, size_t);
 int	 getgrouplist(const char *, gid_t, gid_t *, int *);
 int	 getgroupmembership(const char *, gid_t, gid_t *, int, int *);
 mode_t	 getmode(const void *, mode_t);
-char	*getpassfd(const char *, char *, size_t, int *, int, int);
-#define	GETPASS_NEED_TTY	0x001	/* Fail if we cannot set tty */
-#define	GETPASS_FAIL_EOF	0x002	/* Fail on EOF */
-#define	GETPASS_BUF_LIMIT	0x004	/* beep on buffer limit */
-#define	GETPASS_NO_SIGNAL	0x008	/* don't make ttychars send signals */
-#define	GETPASS_NO_BEEP		0x010	/* don't beep */
-#define	GETPASS_ECHO		0x020	/* echo characters as they are typed */
-#define	GETPASS_ECHO_STAR	0x040	/* echo '*' for each character */
-#define	GETPASS_7BIT		0x080	/* mask the high bit each char */
-#define	GETPASS_FORCE_LOWER	0x100	/* lowercase each char */
-#define	GETPASS_FORCE_UPPER	0x200	/* uppercase each char */
-#define	GETPASS_ECHO_NL		0x400	/* echo a newline if successful */
-
-char	*getpass_r(const char *, char *, size_t);
 int	 getpeereid(int, uid_t *, gid_t *);
 int	 getsubopt(char **, char * const *, char **);
 __aconst char *getusershell(void);
@@ -385,7 +371,6 @@ int	 undelete(const char *);
 int	 rcmd_af(char **, int, const char *,
 	    const char *, const char *, int *, int);
 int	 rresvport_af(int *, int);
-int	 rresvport_af_addr(int *, int, void *);
 int	 iruserok_sa(const void *, int, int, const char *, const char *);
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_lwp.c,v 1.14 2012/07/20 02:27:36 christos Exp $	*/
+/*	$NetBSD: netbsd32_lwp.c,v 1.12.10.2 2012/07/21 00:01:45 riz Exp $	*/
 
 /*
  *  Copyright (c) 2005, 2006, 2007 The NetBSD Foundation.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_lwp.c,v 1.14 2012/07/20 02:27:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_lwp.c,v 1.12.10.2 2012/07/21 00:01:45 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

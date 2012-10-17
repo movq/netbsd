@@ -1,4 +1,4 @@
-/*	$NetBSD: dzkbd.c,v 1.25 2012/07/16 12:55:36 abs Exp $	*/
+/*	$NetBSD: dzkbd.c,v 1.23 2009/05/12 14:18:16 cegger Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dzkbd.c,v 1.25 2012/07/16 12:55:36 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dzkbd.c,v 1.23 2009/05/12 14:18:16 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

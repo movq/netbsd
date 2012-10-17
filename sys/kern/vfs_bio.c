@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_bio.c,v 1.239 2012/06/03 16:23:44 dsl Exp $	*/
+/*	$NetBSD: vfs_bio.c,v 1.236.2.2 2012/06/12 17:16:28 riz Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -123,7 +123,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.239 2012/06/03 16:23:44 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.236.2.2 2012/06/12 17:16:28 riz Exp $");
 
 #include "opt_bufcache.h"
 

@@ -1,10 +1,9 @@
-/*	$NetBSD: genfs.h,v 1.30 2012/05/08 23:53:26 riastradh Exp $	*/
+/*	$NetBSD: genfs.h,v 1.28.18.1 2012/07/02 18:01:17 jdc Exp $	*/
 
 #ifndef	_MISCFS_GENFS_GENFS_H_
 #define	_MISCFS_GENFS_GENFS_H_
 
 #include <sys/vnode.h>
-#include <sys/types.h>
 
 struct componentname;
 struct mount;
@@ -44,12 +43,10 @@ void	genfs_renamelock_exit(struct mount *);
 
 int	genfs_can_access(enum vtype, mode_t, uid_t, gid_t, mode_t,
 	    kauth_cred_t);
-int	genfs_can_chmod(enum vtype, kauth_cred_t, uid_t, gid_t, mode_t);
-int	genfs_can_chown(kauth_cred_t, uid_t, gid_t, uid_t, gid_t);
+int	genfs_can_chmod(vnode_t *, kauth_cred_t, uid_t, gid_t, mode_t);
+int	genfs_can_chown(vnode_t *, kauth_cred_t, uid_t, gid_t, uid_t, gid_t);
+int	genfs_can_mount(vnode_t *, mode_t, kauth_cred_t);
 int	genfs_can_chtimes(vnode_t *, u_int, uid_t, kauth_cred_t);
-int	genfs_can_chflags(kauth_cred_t, enum vtype, uid_t, bool);
-int	genfs_can_sticky(kauth_cred_t, uid_t, uid_t);
-int	genfs_can_extattr(kauth_cred_t, int, vnode_t *, const char *);
 
 /*
  * Rename is complicated.  Sorry.

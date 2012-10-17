@@ -1,5 +1,5 @@
 /*	Id: local2.c,v 1.28 2012/03/22 18:56:17 plunky Exp 	*/	
-/*	$NetBSD: local2.c,v 1.1.1.5 2012/03/26 14:26:41 plunky Exp $	*/
+/*	$NetBSD: local2.c,v 1.1.1.4.4.1 2012/04/03 16:36:21 riz Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: getcap.c,v 1.52 2012/06/04 20:56:40 joerg Exp $	*/
+/*	$NetBSD: getcap.c,v 1.50 2011/10/15 23:00:01 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)getcap.c	8.3 (Berkeley) 3/25/94";
 #else
-__RCSID("$NetBSD: getcap.c,v 1.52 2012/06/04 20:56:40 joerg Exp $");
+__RCSID("$NetBSD: getcap.c,v 1.50 2011/10/15 23:00:01 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,7 +52,6 @@ __RCSID("$NetBSD: getcap.c,v 1.52 2012/06/04 20:56:40 joerg Exp $");
 #include <sys/param.h>
 
 #include <assert.h>
-#include <stddef.h>
 #include <ctype.h>
 #ifndef SMALL
 #include <db.h>
@@ -160,7 +159,10 @@ cgetset(const char *ent)
  * return NULL.
  */
 char *
-cgetcap(char *buf, const char *cap, int type)
+cgetcap(buf, cap, type)
+	char *buf;
+	const char *cap;
+	int type;
 {
 	char *bp;
 	const char *cp;
@@ -391,7 +393,7 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 			rp = record;
 			for (;;) {
 				if (bp >= b_end) {
-					ssize_t n;
+					int n;
 		
 					n = read(fd, buf, sizeof(buf));
 					if (n <= 0) {
@@ -454,7 +456,7 @@ getent(char **cap, size_t *len, const char * const *db_array, int fd,
 				 * some more.
 				 */
 				if (rp >= r_end) {
-					ptrdiff_t pos;
+					u_int pos;
 					size_t newsize;
 
 					pos = rp - record;
@@ -516,8 +518,7 @@ tc_exp:
 	if (expandtc) {
 		char *newicap, *s;
 		size_t ilen, newilen;
-		int iret;
-		ptrdiff_t diff, tclen;
+		int diff, iret, tclen;
 		char *icap, *scan, *tc, *tcstart, *tcend;
 
 		/*
@@ -596,7 +597,7 @@ tc_exp:
 			 */
 			diff = newilen - tclen;
 			if (diff >= r_end - rp) {
-				ptrdiff_t pos, tcpos, tcposend;
+				u_int pos, tcpos, tcposend;
 				size_t newsize;
 
 				pos = rp - record;
@@ -916,7 +917,7 @@ cgetstr(char *buf, const char *cap, char **str)
 	u_int m_room;
 	const char *bp;
 	char *mp;
-	ptrdiff_t len;
+	int len;
 	char *mem, *newmem;
 
 	_DIAGASSERT(buf != NULL);
@@ -1032,8 +1033,7 @@ cgetstr(char *buf, const char *cap, char **str)
 		mem = newmem;
 	}
 	*str = mem;
-	_DIAGASSERT(__type_fit(int, len));
-	return (int)len;
+	return len;
 }
 
 /*
@@ -1052,7 +1052,7 @@ cgetustr(char *buf, const char *cap, char **str)
 	u_int m_room;
 	const char *bp;
 	char *mp;
-	size_t len;
+	int len;
 	char *mem, *newmem;
 
 	_DIAGASSERT(buf != NULL);
@@ -1117,8 +1117,7 @@ cgetustr(char *buf, const char *cap, char **str)
 		mem = newmem;
 	}
 	*str = mem;
-	_DIAGASSERT(__type_fit(int, len));
-	return (int)len;
+	return len;
 }
 
 /*

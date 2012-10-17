@@ -1,4 +1,4 @@
-/*	$NetBSD: memalloc.c,v 1.18 2012/07/20 09:20:05 pooka Exp $	*/
+/*	$NetBSD: memalloc.c,v 1.12 2012/02/04 22:11:43 para Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.18 2012/07/20 09:20:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.12 2012/02/04 22:11:43 para Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>
@@ -54,8 +54,22 @@ __KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.18 2012/07/20 09:20:05 pooka Exp $");
  * malloc
  */
 
+void
+malloc_type_attach(struct malloc_type *type)
+{
+
+	return;
+}
+
+void
+malloc_type_detach(struct malloc_type *type)
+{
+
+	return;
+}
+
 void *
-kern_malloc(unsigned long size, int flags)
+kern_malloc(unsigned long size, struct malloc_type *type, int flags)
 {
 	void *rv;
 
@@ -71,14 +85,14 @@ kern_malloc(unsigned long size, int flags)
 }
 
 void *
-kern_realloc(void *ptr, unsigned long size, int flags)
+kern_realloc(void *ptr, unsigned long size, struct malloc_type *type, int flags)
 {
 
 	return rumpuser_realloc(ptr, size);
 }
 
 void
-kern_free(void *ptr)
+kern_free(void *ptr, struct malloc_type *type)
 {
 
 	rumpuser_free(ptr);
@@ -88,7 +102,7 @@ kern_free(void *ptr)
  * Kmem
  */
 
-#ifdef RUMP_UNREAL_ALLOCATORS
+#ifdef RUMP_USE_UNREAL_ALLOCATORS
 void
 kmem_init()
 {
@@ -121,10 +135,6 @@ kmem_free(void *p, size_t size)
 
 	rumpuser_free(p);
 }
-
-__strong_alias(kmem_intr_alloc, kmem_alloc);
-__strong_alias(kmem_intr_zalloc, kmem_zalloc);
-__strong_alias(kmem_intr_free, kmem_free);
 
 /*
  * pool & pool_cache
@@ -289,8 +299,15 @@ pool_cache_set_drain_hook(pool_cache_t pc, void (*fn)(void *, int), void *arg)
 	pc->pc_pool.pr_drain_hook_arg = arg;
 }
 
+void
+pool_drain_start(struct pool **ppp, uint64_t *wp)
+{
+
+	/* nada */
+}
+
 bool
-pool_drain(struct pool **ppp)
+pool_drain_end(struct pool *pp, uint64_t w)
 {
 
 	/* can't reclaim anything in this model */
@@ -320,12 +337,6 @@ pool_page_free(struct pool *pp, void *item)
 
 	return pool_put(pp, item);
 }
-
-struct pool_allocator pool_allocator_kmem = {
-        .pa_alloc = pool_page_alloc,
-        .pa_free = pool_page_free,
-        .pa_pagesz = 0
-};
 
 void
 vmem_rehash_start()
@@ -391,4 +402,4 @@ percpu_foreach(percpu_t *pc, percpu_callback_t cb, void *arg)
 
 	cb(pc, arg, rump_cpu);
 }
-#endif /* RUMP_UNREAL_ALLOCATORS */
+#endif /* RUMP_USE_UNREAL_ALLOCATORS */

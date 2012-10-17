@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.3 2012/07/24 20:00:45 spz Exp $	*/
+/*	$NetBSD: queue.h,v 1.1.1.1.2.3 2012/07/25 09:00:18 martin Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

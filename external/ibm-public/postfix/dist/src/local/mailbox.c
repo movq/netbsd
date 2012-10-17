@@ -1,4 +1,4 @@
-/*	$NetBSD: mailbox.c,v 1.1.1.3 2012/02/17 08:36:10 tron Exp $	*/
+/*	$NetBSD: mailbox.c,v 1.1.1.2.4.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME

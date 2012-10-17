@@ -1,4 +1,4 @@
-/*	$NetBSD: touch.c,v 1.27 2012/02/29 23:37:07 joerg Exp $	*/
+/*	$NetBSD: touch.c,v 1.26.6.1 2012/03/05 19:12:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)touch.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: touch.c,v 1.27 2012/02/29 23:37:07 joerg Exp $");
+__RCSID("$NetBSD: touch.c,v 1.26.6.1 2012/03/05 19:12:07 sborrill Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

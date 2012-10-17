@@ -1,4 +1,4 @@
-/*	$NetBSD: opensslgost_link.c,v 1.3 2012/06/05 00:41:36 christos Exp $	*/
+/*	$NetBSD: opensslgost_link.c,v 1.2.8.1 2012/06/05 21:14:58 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2010, 2011  Internet Systems Consortium, Inc. ("ISC")

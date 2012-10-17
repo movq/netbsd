@@ -1,4 +1,4 @@
-/*	$NetBSD: ipmi.c,v 1.53 2012/04/04 17:44:31 njoly Exp $ */
+/*	$NetBSD: ipmi.c,v 1.52.2.1 2012/04/12 17:09:01 riz Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.53 2012/04/04 17:44:31 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.52.2.1 2012/04/12 17:09:01 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

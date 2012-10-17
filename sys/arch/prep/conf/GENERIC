@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.163 2012/06/05 08:44:14 abs Exp $
+# $NetBSD: GENERIC,v 1.161.2.1 2012/06/12 17:47:59 riz Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/prep/conf/std.prep"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.163 $"
+#ident		"GENERIC-$Revision: 1.161.2.1 $"
 
 maxusers	32
 
@@ -41,6 +41,8 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.65 2012/07/23 04:13:06 matt Exp $	*/
+/*	$NetBSD: trap.c,v 1.63 2011/12/13 11:03:53 kiyohara Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.65 2012/07/23 04:13:06 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.63 2011/12/13 11:03:53 kiyohara Exp $");
 
 #include "opt_altivec.h"
 #include "opt_ddb.h"
@@ -78,6 +78,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.65 2012/07/23 04:13:06 matt Exp $");
 #include <sys/reboot.h>
 #include <sys/syscall.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/userret.h>
 #include <sys/kauth.h>
 #include <sys/cpu.h>
@@ -189,6 +191,11 @@ trap(struct trapframe *tf)
 				map = kernel_map;
 			} else {
 				map = &p->p_vmspace->vm_map;
+				if ((l->l_flag & LW_SA)
+				    && (~l->l_pflag & LP_SA_NOBLOCK)) {
+					l->l_savp->savp_faultaddr = va;
+					l->l_pflag |= LP_SA_PAGEFAULT;
+				}
 			}
 
 			if (tf->tf_esr & (ESR_DST|ESR_DIZ))
@@ -205,6 +212,9 @@ trap(struct trapframe *tf)
 			pcb->pcb_onfault = NULL;
 			rv = uvm_fault(map, trunc_page(va), ftype);
 			pcb->pcb_onfault = fb;
+			if (map != kernel_map) {
+				l->l_pflag &= ~LP_SA_PAGEFAULT;
+			}
 			if (rv == 0)
 				goto done;
 			if (fb != NULL) {
@@ -233,10 +243,15 @@ trap(struct trapframe *tf)
 		    tf->tf_srr0, (ftype & VM_PROT_WRITE) ? "write" : "read",
 		    tf->tf_dear, tf->tf_esr));
 		KASSERT(l == curlwp && (l->l_stat == LSONPROC));
+		if (l->l_flag & LW_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)tf->tf_dear;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
 //		KASSERT(curpcb->pcb_onfault == NULL);
 		rv = uvm_fault(&p->p_vmspace->vm_map, trunc_page(tf->tf_dear),
 		    ftype);
 		if (rv == 0) {
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			break;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -252,10 +267,15 @@ trap(struct trapframe *tf)
 			ksi.ksi_signo = SIGKILL;
 		}
 		trapsignal(l, &ksi);
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		break;
 
 	case EXC_ITMISS|EXC_USER:
 	case EXC_ISI|EXC_USER:
+		if (l->l_flag & LW_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)tf->tf_srr0;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
 		ftype = VM_PROT_EXECUTE;
 		DBPRINTF(TDB_ALL,
 		    ("trap(EXC_ISI|EXC_USER) at %lx execute fault tf %p\n",
@@ -264,6 +284,7 @@ trap(struct trapframe *tf)
 		rv = uvm_fault(&p->p_vmspace->vm_map, trunc_page(tf->tf_srr0),
 		    ftype);
 		if (rv == 0) {
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			break;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -272,6 +293,7 @@ trap(struct trapframe *tf)
 		ksi.ksi_addr = (void *)tf->tf_srr0;
 		ksi.ksi_code = (rv == EACCES ? SEGV_ACCERR : SEGV_MAPERR);
 		trapsignal(l, &ksi);
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		break;
 
 	case EXC_AST|EXC_USER:
@@ -303,17 +325,13 @@ trap(struct trapframe *tf)
 			l->l_md.md_flags |= MDLWP_USEDFPU;
 		}
 
-		if (fpu_emulate(tf, &pcb->pcb_fpu, &ksi)) {
-			if (ksi.ksi_signo == 0)	/* was emulated */
-				break;
-		} else {
-			ksi.ksi_signo = SIGILL;
-			ksi.ksi_code = ILL_ILLOPC;
+		if ((rv = fpu_emulate(tf, (struct fpreg *)&pcb->pcb_fpu))) {
+			KSI_INIT_TRAP(&ksi);
+			ksi.ksi_signo = rv;
 			ksi.ksi_trap = EXC_PGM;
 			ksi.ksi_addr = (void *)tf->tf_srr0;
+			trapsignal(l, &ksi);
 		}
-
-		trapsignal(l, &ksi);
 		break;
 
 	case EXC_MCHK:

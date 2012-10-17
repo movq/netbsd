@@ -1,4 +1,4 @@
-.\"	$NetBSD: quotas.ms,v 1.7 2012/08/14 05:14:53 dholland Exp $
+.\"	$NetBSD: quotas.ms,v 1.4.56.1 2012/08/15 01:20:23 riz Exp $
 .\"
 .\" Copyright (c) 1983, 1993
 .\"	The Regents of the University of California.  All rights reserved.

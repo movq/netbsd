@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.3 2012/06/05 00:42:24 christos Exp $	*/
+/*	$NetBSD: version.c,v 1.2.6.1 2012/06/05 21:15:41 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_prot.c,v 1.116 2012/06/09 02:55:32 christos Exp $	*/
+/*	$NetBSD: kern_prot.c,v 1.113 2011/04/27 06:22:11 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1991, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.116 2012/06/09 02:55:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.113 2011/04/27 06:22:11 martin Exp $");
 
 #include "opt_compat_43.h"
 
@@ -346,12 +346,6 @@ do_setresuid(struct lwp *l, uid_t r, uid_t e, uid_t sv, u_int flags)
 		/* Update count of processes for this user */
 		(void)chgproccnt(kauth_cred_getuid(ncred), -1);
 		(void)chgproccnt(r, 1);
-
-		/* The first lwp of a process is not counted */
-		int nlwps = p->p_nlwps - 1;
-		(void)chglwpcnt(kauth_cred_getuid(ncred), -nlwps);
-		(void)chglwpcnt(r, nlwps);
-
 		kauth_cred_setuid(ncred, r);
 	}
 	if (sv != -1)
@@ -615,7 +609,7 @@ sys___setlogin(struct lwp *l, const struct sys___setlogin_args *uap, register_t 
 	if ((error = kauth_authorize_process(l->l_cred, KAUTH_PROCESS_SETID,
 	    p, NULL, NULL, NULL)) != 0)
 		return (error);
-	error = copyinstr(SCARG(uap, namebuf), newname, sizeof newname, NULL);
+	error = copyinstr(SCARG(uap, namebuf), &newname, sizeof newname, NULL);
 	if (error != 0)
 		return (error == ENAMETOOLONG ? EINVAL : error);
 

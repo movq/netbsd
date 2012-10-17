@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.de,v 1.70 2012/07/06 21:10:56 jdf Exp $	*/
+/*	$NetBSD: msg.mi.de,v 1.61.2.3 2012/09/30 18:53:58 bouyer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -35,7 +35,7 @@
 /* MI Message catalog -- German, machine independent */
 
 message usage
-{Aufruf: sysinst [-D] [-f Definitionsdatei] [-r Version]
+{Aufruf: sysinst [-r Release] [-f Definitionsdatei]
 }
 
 /*

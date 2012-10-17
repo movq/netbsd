@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.hostprog.mk,v 1.67 2012/02/29 20:07:57 tron Exp $
+#	$NetBSD: bsd.hostprog.mk,v 1.66.4.1 2012/03/02 18:27:56 riz Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .include <bsd.init.mk>

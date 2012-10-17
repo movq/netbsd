@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_obio.c,v 1.5 2012/08/22 12:36:35 jakllsch Exp $	*/
+/*	$NetBSD: bcm2835_obio.c,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,8 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_obio.c,v 1.5 2012/08/22 12:36:35 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_obio.c,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $");
 
+#include "opt_broadcom.h"
 #include "locators.h"
 #include "obio.h"
 
@@ -76,13 +77,6 @@ static const struct ambadev_locators bcm2835_ambadev_locs[] = {
 		.ad_addr = BCM2835_ARMICU_BASE,
 		.ad_size = BCM2835_ARMICU_SIZE,
 		.ad_intr = -1,
-	},
-        {
-		/* Mailbox */
-		.ad_name = "bcmmbox",
-		.ad_addr = BCM2835_ARMMBOX_BASE,
-		.ad_size = BCM2835_ARMMBOX_SIZE,
-		.ad_intr = -1, /* BCM2835_INT_ARMMAILBOX */
 	},
 	{
 		/* System Timer */
@@ -143,7 +137,7 @@ obio_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dmarange.dr_sysbase = 0;
 	sc->sc_dmarange.dr_busbase = 0xc0000000;	/* 0x40000000 if L2 */
-	sc->sc_dmarange.dr_len = physmem * PAGE_SIZE;
+	sc->sc_dmarange.dr_len = MEMSIZE * 1024 * 1024;
 	bcm2835_bus_dma_tag._ranges = &sc->sc_dmarange;
 	bcm2835_bus_dma_tag._nranges = 1;
 

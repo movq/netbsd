@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsa_common.c,v 1.8 2012/02/24 06:48:25 mrg Exp $	*/
+/*	$NetBSD: ubsa_common.c,v 1.7 2011/12/23 00:51:45 jakllsch Exp $	*/
 /*-
  * Copyright (c) 2002, Alexander Kabaev <kan.FreeBSD.org>.
  * All rights reserved.
@@ -54,18 +54,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubsa_common.c,v 1.8 2012/02/24 06:48:25 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubsa_common.c,v 1.7 2011/12/23 00:51:45 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
+#ifdef __FreeBSD__
+#include <sys/bus.h>
+#endif
 #include <sys/ioccom.h>
 #include <sys/fcntl.h>
 #include <sys/conf.h>
 #include <sys/tty.h>
 #include <sys/file.h>
+#if __FreeBSD_version >= 500014
+#include <sys/selinfo.h>
+#else
 #include <sys/select.h>
+#endif
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/poll.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_subr.S,v 1.49 2012/08/01 20:35:52 matt Exp $	*/
+/*	$NetBSD: locore_subr.S,v 1.47 2011/12/13 11:03:52 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -295,17 +295,7 @@ switchto_restore:
 #endif
 	ldreg	%r0,CFRAME_LR(%r1)
 	mtlr	%r0
-	blr				/* CPUINIT needs a raw blr */
-
 ENTRY_NOPROFILE(emptyidlespin)
-#ifdef DIAGNOSTIC
-	GET_CPUINFO(%r3)
-	lbz	%r4,CI_CPL(%r3)
-	twnei	%r4,IPL_NONE
-	mfmsr	%r5
-	andi.	%r5,%r5,PSL_EE@l
-	tweqi	%r5,PSL_EE@l
-#endif
 	blr				/* CPUINIT needs a raw blr */
 
 #ifdef __HAVE_FAST_SOFTINTS
@@ -506,6 +496,13 @@ _ENTRY(cpu_lwp_bootstrap)
 	 * r3 (old lwp) and r4 (new lwp) are setup in cpu_switchto.
 	 */
 	bl	_C_LABEL(lwp_startup)
+
+	/*
+	 * Fall through into setfunc_trampoline
+	 */
+
+	.globl	_C_LABEL(setfunc_trampoline)
+_ENTRY(setfunc_trampoline)
 
 	mtlr	%r31
 	mr	%r3,%r30

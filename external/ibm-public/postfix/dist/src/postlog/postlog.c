@@ -1,4 +1,4 @@
-/*	$NetBSD: postlog.c,v 1.1.1.2 2012/06/09 11:27:17 tron Exp $	*/
+/*	$NetBSD: postlog.c,v 1.1.1.1.12.1 2012/06/13 19:29:03 riz Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: dk.c,v 1.64 2012/06/10 17:05:19 mlelstv Exp $	*/
+/*	$NetBSD: dk.c,v 1.62.8.1 2012/07/05 18:12:47 riz Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.64 2012/06/10 17:05:19 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.62.8.1 2012/07/05 18:12:47 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_dkwedge.h"
@@ -183,8 +183,7 @@ static int
 dkwedge_compute_pdev(const char *pname, dev_t *pdevp)
 {
 	const char *name, *cp;
-	devmajor_t pmaj;
-	int punit;
+	int punit, pmaj;
 	char devname[16];
 
 	name = pname;
@@ -321,7 +320,7 @@ dkwedge_add(struct dkwedge_info *dkw)
 
 			if (sc->sc_offset >= lsc->sc_offset &&
 			    sc->sc_offset <= llastblk) {
-				/* Overlaps the tail of the existing wedge. */
+				/* Overlaps the tail of the exsiting wedge. */
 				break;
 			}
 			if (lastblk >= lsc->sc_offset &&

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.h,v 1.23 2012/09/22 22:34:02 joerg Exp $	*/
+/*	$NetBSD: linux_misc.h,v 1.21 2011/05/30 17:50:32 alnsn Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -78,10 +78,8 @@ struct linux_sysinfo {
 #define	LINUX_RLIMIT_LOCKS	10
 #ifdef __mips__  /* XXX only mips32. On mips64, it's ~0ul */
 #define	LINUX_RLIM_INFINITY	0x7fffffffUL
-#define	LINUX32_RLIM_INFINITY	0x7fffffffU
 #else
 #define	LINUX_RLIM_INFINITY	~0ul
-#define	LINUX32_RLIM_INFINITY	~0u
 #endif
 
 
@@ -118,8 +116,8 @@ struct linux_sysinfo {
 #define	LINUX_XENIX_SUPER_MAGIC		(LINUX_SYSV_MAGIC_BASE + 1)
 
 struct linux_mnttypes {
-	const char *mty_bsd;
-	int mty_linux;
+	const char *bsd;
+	int linux;
 };
 extern const struct linux_mnttypes linux_fstypes[];
 extern const int linux_fstypes_cnt;

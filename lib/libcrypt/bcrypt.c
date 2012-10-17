@@ -1,4 +1,4 @@
-/*	$NetBSD: bcrypt.c,v 1.17 2012/08/30 12:16:49 drochner Exp $	*/
+/*	$NetBSD: bcrypt.c,v 1.15 2011/12/28 03:12:38 christos Exp $	*/
 /*	$OpenBSD: bcrypt.c,v 1.16 2002/02/19 19:39:36 millert Exp $	*/
 
 /*
@@ -46,7 +46,7 @@
  *
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bcrypt.c,v 1.17 2012/08/30 12:16:49 drochner Exp $");
+__RCSID("$NetBSD: bcrypt.c,v 1.15 2011/12/28 03:12:38 christos Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -210,7 +210,9 @@ bcrypt_gensalt(u_int8_t log_rounds)
    i.e. $2$04$iwouldntknowwhattosayetKdJ6iFtacBqJdKe6aW7ou */
 
 char   *
-__bcrypt(const char *key, const char *salt)
+__bcrypt(key, salt)
+	const char   *key;
+	const char   *salt;
 {
 	blf_ctx state;
 	u_int32_t rounds, i, k;
@@ -314,7 +316,7 @@ __bcrypt(const char *key, const char *salt)
 	encode_base64((u_int8_t *) encrypted + i + 3, csalt, BCRYPT_MAXSALT);
 	encode_base64((u_int8_t *) encrypted + strlen(encrypted), ciphertext,
 	    4 * BCRYPT_BLOCKS - 1);
-	__explicit_bzero(&state, sizeof(state));
+	memset(&state, 0, sizeof(state));
 	return encrypted;
 }
 

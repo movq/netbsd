@@ -1,7 +1,7 @@
-/*	$NetBSD: key.c,v 1.79 2012/09/20 23:50:05 gdt Exp $	*/
+/*	$NetBSD: key.c,v 1.76.2.1 2012/09/03 19:19:54 riz Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/key.c,v 1.3.2.3 2004/02/14 22:23:23 bms Exp $	*/
 /*	$KAME: key.c,v 1.191 2001/06/27 10:46:49 sakane Exp $	*/
-
+	
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.79 2012/09/20 23:50:05 gdt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.76.2.1 2012/09/03 19:19:54 riz Exp $");
 
 /*
  * This code is referd to RFC 2367
@@ -138,6 +138,10 @@ static int key_blockacq_lifetime = 20;	/* lifetime for blocking SADB_ACQUIRE.*/
 static int key_prefered_oldsa = 0;	/* prefered old sa rather than new sa.*/
 
 static u_int32_t acq_seq = 0;
+
+/* XXX: referenced by kernfs, but not implemented... */
+struct _satailq satailq;
+struct _sptailq sptailq;
 
 static LIST_HEAD(_sptree, secpolicy) sptree[IPSEC_DIR_MAX];	/* SPD */
 static LIST_HEAD(_sahtree, secashead) sahtree;			/* SAD */
@@ -360,10 +364,10 @@ do { \
  * set parameters into secasindex buffer.
  * Must allocate secasindex buffer before calling this function.
  */
-static int
-key_setsecasidx (int, int, int, const struct sadb_address *,
+static int 
+key_setsecasidx (int, int, int, const struct sadb_address *, 
 		     const struct sadb_address *, struct secasindex *);
-
+	
 /* key statistics */
 struct _keystat {
 	u_long getspi_count; /* the avarage of count to try to get new SPI */
@@ -466,7 +470,7 @@ static int key_getspi (struct socket *, struct mbuf *,
 static u_int32_t key_do_getnewspi (const struct sadb_spirange *,
 					const struct secasindex *);
 #ifdef IPSEC_NAT_T
-static int key_handle_natt_info (struct secasvar *,
+static int key_handle_natt_info (struct secasvar *, 
 				     const struct sadb_msghdr *);
 static int key_set_natt_ports (union sockaddr_union *,
 			 	union sockaddr_union *,
@@ -997,7 +1001,7 @@ key_do_allocsa_policy(struct secashead *sah, u_int state)
 				("key_do_allocsa_policy: bogus ref count"));
 
 			satype = key_proto2satype(d->sah->saidx.proto);
-			if (satype == 0)
+			if (satype == 0) 
 				goto msgfail;
 
 			m = key_setsadbmsg(SADB_DELETE, 0,
@@ -1113,13 +1117,13 @@ key_allocsa(
 		printf("DP key_allocsa from %s:%u\n", where, tag));
 
 	/*
-	 * XXX IPCOMP case
+	 * XXX IPCOMP case 
 	 * We use cpi to define spi here. In the case where cpi <=
 	 * IPCOMP_CPI_NEGOTIATE_MIN, cpi just define the algorithm used, not
 	 * the real spi. In this case, don't check the spi but check the
 	 * algorithm
 	 */
-
+    
 	if (proto == IPPROTO_IPCOMP) {
 		u_int32_t tmp;
 		tmp = ntohl(spi);
@@ -1166,7 +1170,7 @@ key_allocsa(
 
 #if 0	/* don't check src */
 	/* Fix port in src->sa */
-
+				
 				/* check src address */
 				if (key_sockaddrcmp(&src->sa, &sav->sah->saidx.src.sa, 0) != 0)
 					continue;
@@ -1810,7 +1814,7 @@ fail:
  * m will always be freed.
  */
 static int
-key_spdadd(struct socket *so, struct mbuf *m,
+key_spdadd(struct socket *so, struct mbuf *m, 
 	   const struct sadb_msghdr *mhp)
 {
 	const struct sadb_address *src0, *dst0;
@@ -2439,8 +2443,8 @@ key_spdflush(struct socket *so, struct mbuf *m,
 	return key_sendup_mbuf(so, m, KEY_SENDUP_ALL);
 }
 
-static struct sockaddr key_src = {
-	.sa_len = 2,
+static struct sockaddr key_src = { 
+	.sa_len = 2, 
 	.sa_family = PF_KEY,
 };
 
@@ -3040,9 +3044,9 @@ key_delsav(struct secasvar *sav)
 		sav->tdb_xform = NULL;
 	} else {
 		if (sav->key_auth != NULL)
-			explicit_bzero(_KEYBUF(sav->key_auth), _KEYLEN(sav->key_auth));
+			memset(_KEYBUF(sav->key_auth), 0, _KEYLEN(sav->key_auth));
 		if (sav->key_enc != NULL)
-			explicit_bzero(_KEYBUF(sav->key_enc), _KEYLEN(sav->key_enc));
+			memset(_KEYBUF(sav->key_enc), 0, _KEYLEN(sav->key_enc));
 	}
 	if (sav->key_auth != NULL) {
 		KFREE(sav->key_auth);
@@ -3051,6 +3055,11 @@ key_delsav(struct secasvar *sav)
 	if (sav->key_enc != NULL) {
 		KFREE(sav->key_enc);
 		sav->key_enc = NULL;
+	}
+	if (sav->sched) {
+		memset(sav->sched, 0, sav->schedlen);
+		KFREE(sav->sched);
+		sav->sched = NULL;
 	}
 	if (sav->replay != NULL) {
 		KFREE(sav->replay);
@@ -3184,6 +3193,8 @@ key_setsaval(struct secasvar *sav, struct mbuf *m,
 	sav->replay = NULL;
 	sav->key_auth = NULL;
 	sav->key_enc = NULL;
+	sav->sched = NULL;
+	sav->schedlen = 0;
 	sav->lft_c = NULL;
 	sav->lft_h = NULL;
 	sav->lft_s = NULL;
@@ -3405,6 +3416,10 @@ key_setsaval(struct secasvar *sav, struct mbuf *m,
 		KFREE(sav->key_enc);
 		sav->key_enc = NULL;
 	}
+	if (sav->sched) {
+		KFREE(sav->sched);
+		sav->sched = NULL;
+	}
 	if (sav->lft_c != NULL) {
 		KFREE(sav->lft_c);
 		sav->lft_c = NULL;
@@ -3602,7 +3617,7 @@ key_setdumpsa(struct secasvar *sav, u_int8_t type, u_int8_t satype,
 		case SADB_X_EXT_NAT_T_TYPE:
 			m = key_setsadbxtype(sav->natt_type);
 			break;
-
+		
 		case SADB_X_EXT_NAT_T_DPORT:
 			if (sav->natt_type == 0)
 				continue;
@@ -3774,10 +3789,10 @@ key_setsadbxfrag(u_int16_t flen)
 	return m;
 }
 
-/*
+/* 
  * Get port from sockaddr, port is in network order
  */
-u_int16_t
+u_int16_t 
 key_portfromsaddr(const union sockaddr_union *saddr)
 {
 	u_int16_t port;
@@ -3822,7 +3837,7 @@ key_porttosaddr(union sockaddr_union *saddr, u_int16_t port)
 	}
 #endif
 	default:
-		printf("key_porttosaddr: unexpected address family %d\n",
+		printf("key_porttosaddr: unexpected address family %d\n", 
 			saddr->sa.sa_family);
 		break;
 	}
@@ -3831,7 +3846,7 @@ key_porttosaddr(union sockaddr_union *saddr, u_int16_t port)
 }
 
 /*
- * Safety check sa_len
+ * Safety check sa_len 
  */
 static int
 key_checksalen(const union sockaddr_union *saddr)
@@ -4822,23 +4837,23 @@ key_proto2satype(u_int16_t proto)
 	/* NOTREACHED */
 }
 
-static int
+static int 
 key_setsecasidx(int proto, int mode, int reqid,
 	        const struct sadb_address * src,
 	 	const struct sadb_address * dst,
 		struct secasindex * saidx)
 {
-	const union sockaddr_union * src_u =
+	const union sockaddr_union * src_u = 
 		(const union sockaddr_union *) src;
 	const union sockaddr_union * dst_u =
-		(const union sockaddr_union *) dst;
+		(const union sockaddr_union *) dst;  
 
 	/* sa len safety check */
 	if (key_checksalen(src_u) != 0)
 		return -1;
 	if (key_checksalen(dst_u) != 0)
 		return -1;
-
+	
 	memset(saidx, 0, sizeof(*saidx));
 	saidx->proto = proto;
 	saidx->mode = mode;
@@ -4847,7 +4862,7 @@ key_setsecasidx(int proto, int mode, int reqid,
 	memcpy(&saidx->dst, dst_u, dst_u->sa.sa_len);
 
 #ifndef IPSEC_NAT_T
-	key_porttosaddr(&((saidx)->src),0);
+	key_porttosaddr(&((saidx)->src),0);				     
 	key_porttosaddr(&((saidx)->dst),0);
 #endif
 	return 0;
@@ -4912,7 +4927,7 @@ key_getspi(struct socket *so, struct mbuf *m,
 	}
 
 
-	if ((error = key_setsecasidx(proto, mode, reqid, src0 + 1,
+	if ((error = key_setsecasidx(proto, mode, reqid, src0 + 1, 
 				     dst0 + 1, &saidx)) != 0)
 		return key_senderror(so, m, EINVAL);
 
@@ -5167,7 +5182,7 @@ key_handle_natt_info(struct secasvar *sav,
 		if (type)
 			sav->natt_type = type->sadb_x_nat_t_type_type;
 		if (sport)
-			key_porttosaddr(&sav->sah->saidx.src,
+			key_porttosaddr(&sav->sah->saidx.src, 
 			    sport->sadb_x_nat_t_port_port);
 		if (dport)
 			key_porttosaddr(&sav->sah->saidx.dst,
@@ -5213,7 +5228,7 @@ key_set_natt_ports(union sockaddr_union *src, union sockaddr_union *dst,
 		    mhp->ext[SADB_X_EXT_NAT_T_DPORT];
 
 		if (sport)
-			key_porttosaddr(src,
+			key_porttosaddr(src, 
 			    sport->sadb_x_nat_t_port_port);
 		if (dport)
 			key_porttosaddr(dst,
@@ -5294,7 +5309,7 @@ key_update(struct socket *so, struct mbuf *m, const struct sadb_msghdr *mhp)
 	src0 = (struct sadb_address *)(mhp->ext[SADB_EXT_ADDRESS_SRC]);
 	dst0 = (struct sadb_address *)(mhp->ext[SADB_EXT_ADDRESS_DST]);
 
-	if ((error = key_setsecasidx(proto, mode, reqid, src0 + 1,
+	if ((error = key_setsecasidx(proto, mode, reqid, src0 + 1, 
 				     dst0 + 1, &saidx)) != 0)
 		return key_senderror(so, m, EINVAL);
 
@@ -5729,7 +5744,7 @@ key_delete(struct socket *so, struct mbuf *m,
 	src0 = (struct sadb_address *)(mhp->ext[SADB_EXT_ADDRESS_SRC]);
 	dst0 = (struct sadb_address *)(mhp->ext[SADB_EXT_ADDRESS_DST]);
 
-	if ((error = key_setsecasidx(proto, IPSEC_MODE_ANY, 0, src0 + 1,
+	if ((error = key_setsecasidx(proto, IPSEC_MODE_ANY, 0, src0 + 1, 
 				     dst0 + 1, &saidx)) != 0)
 		return key_senderror(so, m, EINVAL);
 
@@ -5876,7 +5891,7 @@ key_delete_all(struct socket *so, struct mbuf *m,
  */
 static int
 key_get(struct socket *so, struct mbuf *m,
-	const struct sadb_msghdr *mhp)
+     	const struct sadb_msghdr *mhp)
 {
 	struct sadb_sa *sa0;
 	struct sadb_address *src0, *dst0;
@@ -5912,6 +5927,7 @@ key_get(struct socket *so, struct mbuf *m,
 	sa0 = (struct sadb_sa *)mhp->ext[SADB_EXT_SA];
 	src0 = (struct sadb_address *)mhp->ext[SADB_EXT_ADDRESS_SRC];
 	dst0 = (struct sadb_address *)mhp->ext[SADB_EXT_ADDRESS_DST];
+
 
 	if ((error = key_setsecasidx(proto, IPSEC_MODE_ANY, 0, src0 + 1,
 				     dst0 + 1, &saidx)) != 0)
@@ -7764,6 +7780,9 @@ key_do_init(void)
 	LIST_INIT(&acqtree);
 #endif
 	LIST_INIT(&spacqtree);
+
+	TAILQ_INIT(&satailq);
+	TAILQ_INIT(&sptailq);
 
 	/* system default */
 	ip4_def_policy.policy = IPSEC_POLICY_NONE;

@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_utils.c,v 1.4 2012/06/25 20:34:26 mlelstv Exp $	*/
+/*	$NetBSD: iscsi_utils.c,v 1.1.8.1 2012/07/03 20:48:40 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2004,2005,2006,2008 The NetBSD Foundation, Inc.

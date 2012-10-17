@@ -1,4 +1,4 @@
-/*	$NetBSD: gem.c,v 1.100 2012/07/22 14:32:57 matt Exp $ */
+/*	$NetBSD: gem.c,v 1.98.2.1 2012/07/05 17:59:12 riz Exp $ */
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gem.c,v 1.100 2012/07/22 14:32:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gem.c,v 1.98.2.1 2012/07/05 17:59:12 riz Exp $");
 
 #include "opt_inet.h"
 
@@ -113,7 +113,7 @@ void		gem_setladrf(struct gem_softc *);
 /* MII methods & callbacks */
 static int	gem_mii_readreg(device_t, int, int);
 static void	gem_mii_writereg(device_t, int, int, int);
-static void	gem_mii_statchg(struct ifnet *);
+static void	gem_mii_statchg(device_t);
 
 static int	gem_ifflags_cb(struct ethercom *);
 
@@ -2419,9 +2419,9 @@ gem_mii_writereg(device_t self, int phy, int reg, int val)
 }
 
 static void
-gem_mii_statchg(struct ifnet *ifp)
+gem_mii_statchg(device_t self)
 {
-	struct gem_softc *sc = ifp->if_softc;
+	struct gem_softc *sc = device_private(self);
 #ifdef GEM_DEBUG
 	int instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
 #endif

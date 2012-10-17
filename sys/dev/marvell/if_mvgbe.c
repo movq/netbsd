@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mvgbe.c,v 1.22 2012/10/04 14:21:00 msaitoh Exp $	*/
+/*	$NetBSD: if_mvgbe.c,v 1.16 2012/02/02 19:43:04 tls Exp $	*/
 /*
  * Copyright (c) 2007, 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mvgbe.c,v 1.22 2012/10/04 14:21:00 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mvgbe.c,v 1.16 2012/02/02 19:43:04 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -206,7 +206,6 @@ struct mvgbe_softc {
 	struct mvgbe_ring_data *sc_rdata;
 	bus_dmamap_t sc_ring_map;
 	int sc_if_flags;
-	int sc_wdogsoft;
 
 	LIST_HEAD(__mvgbe_jfreehead, mvgbe_jpool_entry) sc_jfree_listhead;
 	LIST_HEAD(__mvgbe_jinusehead, mvgbe_jpool_entry) sc_jinuse_listhead;
@@ -227,7 +226,7 @@ static int mvgbec_search(device_t, cfdata_t, const int *, void *);
 /* MII funcstions */
 static int mvgbec_miibus_readreg(device_t, int, int);
 static void mvgbec_miibus_writereg(device_t, int, int, int);
-static void mvgbec_miibus_statchg(struct ifnet *);
+static void mvgbec_miibus_statchg(device_t);
 
 static void mvgbec_wininit(struct mvgbec_softc *);
 
@@ -300,11 +299,9 @@ struct mvgbe_port {
 
 	{ MARVELL_KIRKWOOD_88F6180,	0, 1, { 11 }, FLAGS_FIX_TQTB },
 	{ MARVELL_KIRKWOOD_88F6192,	0, 1, { 11 }, FLAGS_FIX_TQTB },
-	{ MARVELL_KIRKWOOD_88F6192,	1, 1, { 15 }, FLAGS_FIX_TQTB },
+	{ MARVELL_KIRKWOOD_88F6192,	1, 1, { 14 }, FLAGS_FIX_TQTB },
 	{ MARVELL_KIRKWOOD_88F6281,	0, 1, { 11 }, FLAGS_FIX_TQTB },
 	{ MARVELL_KIRKWOOD_88F6281,	1, 1, { 15 }, FLAGS_FIX_TQTB },
-	{ MARVELL_KIRKWOOD_88F6282,	0, 1, { 11 }, FLAGS_FIX_TQTB },
-	{ MARVELL_KIRKWOOD_88F6282,	1, 1, { 15 }, FLAGS_FIX_TQTB },
 
 	{ MARVELL_MV78XX0_MV78100,	0, 1, { 40 }, FLAGS_FIX_TQTB },
 	{ MARVELL_MV78XX0_MV78100,	1, 1, { 44 }, FLAGS_FIX_TQTB },
@@ -360,7 +357,7 @@ mvgbec_attach(device_t parent, device_t self, void *aux)
 
 	if (mvgbec0 == NULL)
 		mvgbec0 = self;
-
+		
 	phyaddr = 0;
 	MVGBE_WRITE(sc, MVGBE_PHYADDR, phyaddr);
 
@@ -531,7 +528,7 @@ mvgbec_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 static void
-mvgbec_miibus_statchg(struct ifnet *ifp)
+mvgbec_miibus_statchg(device_t dev)
 {
 
 	/* nothing to do */
@@ -904,8 +901,7 @@ mvgbe_start(struct ifnet *ifp)
 		/*
 		 * Set a timeout in case the chip goes out to lunch.
 		 */
-		ifp->if_timer = 1;
-		sc->sc_wdogsoft = 1;
+		ifp->if_timer = 5;
 	}
 }
 
@@ -1164,22 +1160,11 @@ mvgbe_watchdog(struct ifnet *ifp)
 	 */
 	mvgbe_txeof(sc);
 	if (sc->sc_cdata.mvgbe_tx_cnt != 0) {
-		if (sc->sc_wdogsoft) {
-			/*
-			 * There is race condition between CPU and DMA
-			 * engine. When DMA engine encounters queue end,
-			 * it clears MVGBE_TQC_ENQ bit.
-			 */
-			MVGBE_WRITE(sc, MVGBE_TQC, MVGBE_TQC_ENQ);
-			ifp->if_timer = 5;
-			sc->sc_wdogsoft = 0;
-		} else {
-			aprint_error_ifnet(ifp, "watchdog timeout\n");
+		aprint_error_ifnet(ifp, "watchdog timeout\n");
 
-			ifp->if_oerrors++;
+		ifp->if_oerrors++;
 
-			mvgbe_init(ifp);
-		}
+		mvgbe_init(ifp);
 	}
 }
 
@@ -1306,7 +1291,6 @@ mvgbe_newbuf(struct mvgbe_softc *sc, int i, struct mbuf *m,
 	struct mvgbe_chain *c;
 	struct mvgbe_rx_desc *r;
 	int align;
-	vaddr_t offset;
 
 	if (m == NULL) {
 		void *buf = NULL;
@@ -1349,14 +1333,10 @@ mvgbe_newbuf(struct mvgbe_softc *sc, int i, struct mbuf *m,
 	c = &sc->sc_cdata.mvgbe_rx_chain[i];
 	r = c->mvgbe_desc;
 	c->mvgbe_mbuf = m_new;
-	offset = (vaddr_t)m_new->m_data - (vaddr_t)sc->sc_cdata.mvgbe_jumbo_buf;
-	r->bufptr = dmamap->dm_segs[0].ds_addr + offset;
+	r->bufptr = dmamap->dm_segs[0].ds_addr +
+	    (((vaddr_t)m_new->m_data - (vaddr_t)sc->sc_cdata.mvgbe_jumbo_buf));
 	r->bufsize = MVGBE_JLEN & ~MVGBE_RXBUF_MASK;
 	r->cmdsts = MVGBE_BUFFER_OWNED_BY_DMA | MVGBE_RX_ENABLE_INTERRUPT;
-
-	/* Invalidate RX buffer */
-	bus_dmamap_sync(sc->sc_dmat, dmamap, offset, r->bufsize,
-	    BUS_DMASYNC_PREREAD);
 
 	MVGBE_CDRXSYNC(sc, i, BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
@@ -1602,8 +1582,7 @@ do_defrag:
 		f = &sc->sc_rdata->mvgbe_tx_ring[current];
 		f->bufptr = txseg[i].ds_addr;
 		f->bytecnt = txseg[i].ds_len;
-		if (i != 0)
-			f->cmdsts = MVGBE_BUFFER_OWNED_BY_DMA;
+		f->cmdsts = MVGBE_BUFFER_OWNED_BY_DMA;
 		last = current;
 		current = MVGBE_TX_RING_NEXT(current);
 	}
@@ -1624,6 +1603,7 @@ do_defrag:
 	}
 	if (txmap->dm_nsegs == 1)
 		f->cmdsts = cmdsts		|
+		    MVGBE_BUFFER_OWNED_BY_DMA	|
 		    MVGBE_TX_GENERATE_CRC	|
 		    MVGBE_TX_ENABLE_INTERRUPT	|
 		    MVGBE_TX_ZERO_PADDING	|
@@ -1632,6 +1612,7 @@ do_defrag:
 	else {
 		f = &sc->sc_rdata->mvgbe_tx_ring[first];
 		f->cmdsts = cmdsts		|
+		    MVGBE_BUFFER_OWNED_BY_DMA	|
 		    MVGBE_TX_GENERATE_CRC	|
 		    MVGBE_TX_FIRST_DESC;
 
@@ -1641,22 +1622,14 @@ do_defrag:
 		    MVGBE_TX_ENABLE_INTERRUPT	|
 		    MVGBE_TX_ZERO_PADDING	|
 		    MVGBE_TX_LAST_DESC;
-
-		/* Sync descriptors except first */
-		MVGBE_CDTXSYNC(sc,
-		    (MVGBE_TX_RING_CNT - 1 == *txidx) ? 0 : (*txidx) + 1,
-		    txmap->dm_nsegs - 1,
-		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 
 	sc->sc_cdata.mvgbe_tx_chain[last].mvgbe_mbuf = m_head;
 	SIMPLEQ_REMOVE_HEAD(&sc->sc_txmap_head, link);
 	sc->sc_cdata.mvgbe_tx_map[last] = entry;
 
-	/* Finally, sync first descriptor */
-	sc->sc_rdata->mvgbe_tx_ring[first].cmdsts |=
-	    MVGBE_BUFFER_OWNED_BY_DMA;
-	MVGBE_CDTXSYNC(sc, *txidx, 1,
+	/* Sync descriptors before handing to chip */
+	MVGBE_CDTXSYNC(sc, *txidx, txmap->dm_nsegs,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	sc->sc_cdata.mvgbe_tx_cnt += i;
@@ -1676,7 +1649,6 @@ mvgbe_rxeof(struct mvgbe_softc *sc)
 	struct mbuf *m;
 	bus_dmamap_t dmamap;
 	uint32_t rxstat;
-	uint16_t bufsize;
 	int idx, cur, total_len;
 
 	idx = sc->sc_cdata.mvgbe_rx_prod;
@@ -1716,7 +1688,6 @@ mvgbe_rxeof(struct mvgbe_softc *sc)
 		cdata->mvgbe_rx_chain[idx].mvgbe_mbuf = NULL;
 		total_len = cur_rx->bytecnt;
 		rxstat = cur_rx->cmdsts;
-		bufsize = cur_rx->bufsize;
 
 		cdata->mvgbe_rx_map[idx] = NULL;
 
@@ -1745,35 +1716,20 @@ mvgbe_rxeof(struct mvgbe_softc *sc)
 			goto sw_csum;
 
 		if (rxstat & MVGBE_RX_IP_FRAME_TYPE) {
-			int flgs = 0;
-
 			/* Check IPv4 header checksum */
-			flgs |= M_CSUM_IPv4;
+			m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
 			if (!(rxstat & MVGBE_RX_IP_HEADER_OK))
-				flgs |= M_CSUM_IPv4_BAD;
-			else if ((bufsize & MVGBE_RX_MAX_FRAME_LEN_ERROR)
-			    == 0) {
-				/*
-				 * Check TCPv4/UDPv4 checksum for
-				 * non-fragmented packet only.
-				 *
-				 * It seemd that sometimes
-				 * MVGBE_RX_L4_CHECKSUM_OK bit was set to 0
-				 * even if the checksum is correct and the
-				 * packet was not fragmented. So we don't set
-				 * M_CSUM_TCP_UDP_BAD even if csum bit is 0.
-				 */
-
-				if (((rxstat & MVGBE_RX_L4_TYPE_MASK) ==
-					MVGBE_RX_L4_TYPE_TCP) &&
-				    ((rxstat & MVGBE_RX_L4_CHECKSUM_OK) != 0))
-					flgs |= M_CSUM_TCPv4;
-				else if (((rxstat & MVGBE_RX_L4_TYPE_MASK) ==
-					MVGBE_RX_L4_TYPE_UDP) &&
-				    ((rxstat & MVGBE_RX_L4_CHECKSUM_OK) != 0))
-					flgs |= M_CSUM_UDPv4;
-			}
-			m->m_pkthdr.csum_flags = flgs;
+				m->m_pkthdr.csum_flags |=
+				    M_CSUM_IPv4_BAD;
+			/* Check TCPv4/UDPv4 checksum */
+			if ((rxstat & MVGBE_RX_L4_TYPE_MASK) ==
+			    MVGBE_RX_L4_TYPE_TCP)
+				m->m_pkthdr.csum_flags |= M_CSUM_TCPv4;
+			else if ((rxstat & MVGBE_RX_L4_TYPE_MASK) ==
+			    MVGBE_RX_L4_TYPE_UDP)
+				m->m_pkthdr.csum_flags |= M_CSUM_UDPv4;
+			if (!(rxstat & MVGBE_RX_L4_CHECKSUM))
+				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
 		}
 sw_csum:
 

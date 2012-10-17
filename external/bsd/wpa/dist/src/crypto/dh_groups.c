@@ -16,7 +16,6 @@
 
 #include "common.h"
 #include "crypto.h"
-#include "random.h"
 #include "dh_groups.h"
 
 
@@ -565,8 +564,7 @@ struct wpabuf * dh_init(const struct dh_group *dh, struct wpabuf **priv)
 	if (*priv == NULL)
 		return NULL;
 
-	if (random_get_bytes(wpabuf_put(*priv, dh->prime_len), dh->prime_len))
-	{
+	if (os_get_random(wpabuf_put(*priv, dh->prime_len), dh->prime_len)) {
 		wpabuf_free(*priv);
 		*priv = NULL;
 		return NULL;

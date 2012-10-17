@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.17 2012/03/26 14:31:12 plunky Exp $
+#	$NetBSD: Makefile.inc,v 1.16.2.1 2012/04/03 16:36:20 riz Exp $
 
 PCC_DIR:=${.PARSEDIR}
 PCC_DIST=${PCC_DIR}/dist/pcc

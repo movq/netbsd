@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.20 2012/07/22 00:53:18 rmind Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.19.8.1 2012/08/12 12:59:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.20 2012/07/22 00:53:18 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.19.8.1 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>

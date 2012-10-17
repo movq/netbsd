@@ -125,7 +125,7 @@ static void	alc_init_tx_ring(struct alc_softc *);
 static int	alc_intr(void *);
 static void	alc_mac_config(struct alc_softc *);
 static int	alc_miibus_readreg(device_t, int, int);
-static void	alc_miibus_statchg(struct ifnet *);
+static void	alc_miibus_statchg(device_t);
 static void	alc_miibus_writereg(device_t, int, int, int);
 static int	alc_newbuf(struct alc_softc *, struct alc_rxdesc *, int);
 static void	alc_phy_down(struct alc_softc *);
@@ -209,14 +209,17 @@ alc_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 static void
-alc_miibus_statchg(struct ifnet *ifp)
+alc_miibus_statchg(device_t dev)
 {
-	struct alc_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_miibus;
+	struct alc_softc *sc = device_private(dev);
+	struct ifnet *ifp = &sc->sc_ec.ec_if;
+	struct mii_data *mii;
 	uint32_t reg;
 
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
 		return;
+
+	mii = &sc->sc_miibus;
 
 	sc->alc_flags &= ~ALC_FLAG_LINK;
 	if ((mii->mii_media_status & (IFM_ACTIVE | IFM_AVALID)) ==

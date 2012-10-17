@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bnx.c,v 1.47 2012/07/22 14:33:01 matt Exp $	*/
+/*	$NetBSD: if_bnx.c,v 1.45.8.1 2012/03/07 23:36:10 riz Exp $	*/
 /*	$OpenBSD: if_bnx.c,v 1.85 2009/11/09 14:32:41 dlg Exp $ */
 
 /*-
@@ -35,7 +35,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/dev/bce/if_bce.c,v 1.3 2006/04/13 14:12:26 ru Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.47 2012/07/22 14:33:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bnx.c,v 1.45.8.1 2012/03/07 23:36:10 riz Exp $");
 
 /*
  * The following controllers are supported by this driver:
@@ -319,7 +319,7 @@ void	bnx_reg_wr_ind(struct bnx_softc *, u_int32_t, u_int32_t);
 void	bnx_ctx_wr(struct bnx_softc *, u_int32_t, u_int32_t, u_int32_t);
 int	bnx_miibus_read_reg(device_t, int, int);
 void	bnx_miibus_write_reg(device_t, int, int, int);
-void	bnx_miibus_statchg(struct ifnet *);
+void	bnx_miibus_statchg(device_t);
 
 /****************************************************************************/
 /* BNX NVRAM Access Routines                                                */
@@ -1089,9 +1089,9 @@ bnx_miibus_write_reg(device_t dev, int phy, int reg, int val)
 /*   Nothing.                                                               */
 /****************************************************************************/
 void
-bnx_miibus_statchg(struct ifnet *ifp)
+bnx_miibus_statchg(device_t dev)
 {
-	struct bnx_softc	*sc = ifp->if_softc;
+	struct bnx_softc	*sc = device_private(dev);
 	struct mii_data		*mii = &sc->bnx_mii;
 	int			val;
 

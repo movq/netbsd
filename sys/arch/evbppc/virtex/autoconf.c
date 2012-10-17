@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.5 2012/07/29 18:05:42 mlelstv Exp $ */
+/*	$NetBSD: autoconf.c,v 1.4.2.1 2012/08/08 15:51:08 martin Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2012/07/29 18:05:42 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4.2.1 2012/08/08 15:51:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_int.c,v 1.11 2012/06/25 04:52:23 isaki Exp $	*/
+/*	$NetBSD: fpu_int.c,v 1.10.8.1 2012/07/04 20:30:00 jdc Exp $	*/
 
 /*
  * Copyright (c) 1995 Ken Nakata
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_int.c,v 1.11 2012/06/25 04:52:23 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_int.c,v 1.10.8.1 2012/07/04 20:30:00 jdc Exp $");
 
 #include <sys/types.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_time.c,v 1.175 2012/10/02 01:44:28 christos Exp $	*/
+/*	$NetBSD: kern_time.c,v 1.171 2011/12/18 22:30:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2005, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.175 2012/10/02 01:44:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.171 2011/12/18 22:30:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/resourcevar.h>
@@ -75,8 +75,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.175 2012/10/02 01:44:28 christos Exp
 #include <sys/timex.h>
 #include <sys/kauth.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/cpu.h>
+
+#include "opt_sa.h"
 
 static void	timer_intr(void *);
 static void	itimerfire(struct ptimer *);
@@ -303,35 +307,7 @@ sys___nanosleep50(struct lwp *l, const struct sys___nanosleep50_args *uap,
 	if (error)
 		return (error);
 
-	error = nanosleep1(l, CLOCK_MONOTONIC, 0, &rqt,
-	    SCARG(uap, rmtp) ? &rmt : NULL);
-	if (SCARG(uap, rmtp) == NULL || (error != 0 && error != EINTR))
-		return error;
-
-	error1 = copyout(&rmt, SCARG(uap, rmtp), sizeof(rmt));
-	return error1 ? error1 : error;
-}
-
-/* ARGSUSED */
-int
-sys_clock_nanosleep(struct lwp *l, const struct sys_clock_nanosleep_args *uap,
-    register_t *retval)
-{
-	/* {
-		syscallarg(clockid_t) clock_id;
-		syscallarg(int) flags;
-		syscallarg(struct timespec *) rqtp;
-		syscallarg(struct timespec *) rmtp;
-	} */
-	struct timespec rmt, rqt;
-	int error, error1;
-
-	error = copyin(SCARG(uap, rqtp), &rqt, sizeof(struct timespec));
-	if (error)
-		return (error);
-
-	error = nanosleep1(l, SCARG(uap, clock_id), SCARG(uap, flags), &rqt,
-	    SCARG(uap, rmtp) ? &rmt : NULL);
+	error = nanosleep1(l, &rqt, SCARG(uap, rmtp) ? &rmt : NULL);
 	if (SCARG(uap, rmtp) == NULL || (error != 0 && error != EINTR))
 		return error;
 
@@ -340,27 +316,21 @@ sys_clock_nanosleep(struct lwp *l, const struct sys_clock_nanosleep_args *uap,
 }
 
 int
-nanosleep1(struct lwp *l, clockid_t clock_id, int flags, struct timespec *rqt,
-    struct timespec *rmt)
+nanosleep1(struct lwp *l, struct timespec *rqt, struct timespec *rmt)
 {
 	struct timespec rmtstart;
 	int error, timo;
-
-	if ((error = clock_gettime1(clock_id, &rmtstart)) != 0)
-		return ENOTSUP;
-
-	if (flags & TIMER_ABSTIME)
-		timespecsub(rqt, &rmtstart, rqt);
 
 	if ((error = itimespecfix(rqt)) != 0)
 		return error;
 
 	timo = tstohz(rqt);
 	/*
-	 * Avoid inadvertently sleeping forever
+	 * Avoid inadvertantly sleeping forever
 	 */
 	if (timo == 0)
 		timo = 1;
+	getnanouptime(&rmtstart);
 again:
 	error = kpause("nanoslp", true, timo, NULL);
 	if (rmt != NULL || error == 0) {
@@ -368,7 +338,7 @@ again:
 		struct timespec t0;
 		struct timespec *t;
 
-		(void)clock_gettime1(clock_id, &rmtend);
+		getnanouptime(&rmtend);
 		t = (rmt != NULL) ? rmt : &t0;
 		timespecsub(&rmtend, &rmtstart, t);
 		timespecsub(rqt, t, t);
@@ -966,6 +936,50 @@ sys_timer_getoverrun(struct lwp *l, const struct sys_timer_getoverrun_args *uap,
 	return (0);
 }
 
+#ifdef KERN_SA
+/* Glue function that triggers an upcall; called from userret(). */
+void
+timerupcall(struct lwp *l)
+{
+	struct ptimers *pt = l->l_proc->p_timers;
+	struct proc *p = l->l_proc;
+	unsigned int i, fired, done;
+
+	KDASSERT(l->l_proc->p_sa);
+	/* Bail out if we do not own the virtual processor */
+	if (l->l_savp->savp_lwp != l)
+		return ;
+
+	mutex_enter(p->p_lock);
+
+	fired = pt->pts_fired;
+	done = 0;
+	while ((i = ffs(fired)) != 0) {
+		siginfo_t *si;
+		int mask = 1 << --i;
+		int f;
+
+		f = ~l->l_pflag & LP_SA_NOBLOCK;
+		l->l_pflag |= LP_SA_NOBLOCK;
+		si = siginfo_alloc(PR_WAITOK);
+		si->_info = pt->pts_timers[i]->pt_info.ksi_info;
+		if (sa_upcall(l, SA_UPCALL_SIGEV | SA_UPCALL_DEFER, NULL, l,
+		    sizeof(*si), si, siginfo_free) != 0) {
+			siginfo_free(si);
+			/* XXX What do we do here?? */
+		} else
+			done |= mask;
+		fired &= ~mask;
+		l->l_pflag ^= f;
+	}
+	pt->pts_fired &= ~done;
+	if (pt->pts_fired == 0)
+		l->l_proc->p_timerpend = 0;
+
+	mutex_exit(p->p_lock);
+}
+#endif /* KERN_SA */
+
 /*
  * Real interval timer expired:
  * send process whose timer expired an alarm signal.
@@ -1097,7 +1111,7 @@ sys___setitimer50(struct lwp *l, const struct sys___setitimer50_args *uap,
 		return (EINVAL);
 	itvp = SCARG(uap, itv);
 	if (itvp &&
-	    (error = copyin(itvp, &aitv, sizeof(struct itimerval))) != 0)
+	    (error = copyin(itvp, &aitv, sizeof(struct itimerval)) != 0))
 		return (error);
 	if (SCARG(uap, oitv) != NULL) {
 		SCARG(&getargs, which) = which;
@@ -1369,9 +1383,10 @@ itimerfire(struct ptimer *pt)
 	 * XXX Can overrun, but we don't do signal queueing yet, anyway.
 	 * XXX Relying on the clock interrupt is stupid.
 	 */
-	if (pt->pt_ev.sigev_notify != SIGEV_SIGNAL || pt->pt_queued) {
+	if ((pt->pt_ev.sigev_notify == SIGEV_SA && pt->pt_proc->p_sa == NULL) ||
+	    (pt->pt_ev.sigev_notify != SIGEV_SIGNAL &&
+	    pt->pt_ev.sigev_notify != SIGEV_SA) || pt->pt_queued)
 		return;
-	}
 	TAILQ_INSERT_TAIL(&timer_queue, pt, pt_chain);
 	pt->pt_queued = true;
 	softint_schedule(timer_sih);
@@ -1403,6 +1418,62 @@ timer_tick(lwp_t *l, bool user)
 	mutex_spin_exit(&timer_lock);
 }
 
+#ifdef KERN_SA
+/*
+ * timer_sa_intr:
+ *
+ *	SIGEV_SA handling for timer_intr(). We are called (and return)
+ * with the timer lock held. We know that the process had SA enabled
+ * when this timer was enqueued. As timer_intr() is a soft interrupt
+ * handler, SA should still be enabled by the time we get here.
+ */
+static void
+timer_sa_intr(struct ptimer *pt, proc_t *p)
+{
+	unsigned int		i;
+	struct sadata		*sa;
+	struct sadata_vp	*vp;
+
+	/* Cause the process to generate an upcall when it returns. */
+	if (!p->p_timerpend) {
+		/*
+		 * XXX stop signals can be processed inside tsleep,
+		 * which can be inside sa_yield's inner loop, which
+		 * makes testing for sa_idle alone insuffucent to
+		 * determine if we really should call setrunnable.
+		 */
+		pt->pt_poverruns = pt->pt_overruns;
+		pt->pt_overruns = 0;
+		i = 1 << pt->pt_entry;
+		p->p_timers->pts_fired = i;
+		p->p_timerpend = 1;
+
+		sa = p->p_sa;
+		mutex_enter(&sa->sa_mutex);
+		SLIST_FOREACH(vp, &sa->sa_vps, savp_next) {
+			struct lwp *vp_lwp = vp->savp_lwp;
+			lwp_lock(vp_lwp);
+			lwp_need_userret(vp_lwp);
+			if (vp_lwp->l_flag & LW_SA_IDLE) {
+				vp_lwp->l_flag &= ~LW_SA_IDLE;
+				lwp_unsleep(vp_lwp, true);
+				break;
+			}
+			lwp_unlock(vp_lwp);
+		}
+		mutex_exit(&sa->sa_mutex);
+	} else {
+		i = 1 << pt->pt_entry;
+		if ((p->p_timers->pts_fired & i) == 0) {
+			pt->pt_poverruns = pt->pt_overruns;
+			pt->pt_overruns = 0;
+			p->p_timers->pts_fired |= i;
+		} else
+			pt->pt_overruns++;
+	}
+}
+#endif /* KERN_SA */
+
 static void
 timer_intr(void *cookie)
 {
@@ -1422,9 +1493,14 @@ timer_intr(void *cookie)
 			continue;
 		}
 		p = pt->pt_proc;
-		if (pt->pt_ev.sigev_notify != SIGEV_SIGNAL) {
+#ifdef KERN_SA
+		if (pt->pt_ev.sigev_notify == SIGEV_SA) {
+			timer_sa_intr(pt, p);
 			continue;
 		}
+#endif /* KERN_SA */
+		if (pt->pt_ev.sigev_notify != SIGEV_SIGNAL)
+			continue;
 		if (sigismember(&p->p_sigpend.sp_set, pt->pt_ev.sigev_signo)) {
 			pt->pt_overruns++;
 			continue;

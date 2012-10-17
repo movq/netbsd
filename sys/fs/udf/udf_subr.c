@@ -1,4 +1,4 @@
-/* $NetBSD: udf_subr.c,v 1.119 2012/04/29 22:53:59 chs Exp $ */
+/* $NetBSD: udf_subr.c,v 1.118.6.1 2012/05/07 03:01:14 riz Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_subr.c,v 1.119 2012/04/29 22:53:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_subr.c,v 1.118.6.1 2012/05/07 03:01:14 riz Exp $");
 #endif /* not lint */
 
 

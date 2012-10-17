@@ -16,7 +16,6 @@
 
 #include "common.h"
 #include "crypto/dh_groups.h"
-#include "crypto/random.h"
 #include "ikev2.h"
 
 
@@ -425,7 +424,7 @@ static int ikev2_process_kei(struct ikev2_responder_data *data,
 	}
 
 	/* RFC 4306, Section 3.4:
-	 * The length of DH public value MUST be equal to the length of the
+	 * The length of DH public value MUST be equal to the lenght of the
 	 * prime modulus.
 	 */
 	if (kei_len - 4 != data->dh->prime_len) {
@@ -1134,7 +1133,7 @@ static struct wpabuf * ikev2_build_sa_init(struct ikev2_responder_data *data)
 		    data->r_spi, IKEV2_SPI_LEN);
 
 	data->r_nonce_len = IKEV2_NONCE_MIN_LEN;
-	if (random_get_bytes(data->r_nonce, data->r_nonce_len))
+	if (os_get_random(data->r_nonce, data->r_nonce_len))
 		return NULL;
 #ifdef CCNS_PL
 	/* Zeros are removed incorrectly from the beginning of the nonces in

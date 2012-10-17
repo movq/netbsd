@@ -1195,7 +1195,7 @@ typedef struct dns_rdata_in_srv {
 #ifndef GENERIC_NAPTR_35_H
 #define GENERIC_NAPTR_35_H 1
 
-/* $Id: rdatastruct.h,v 1.6 2012/06/05 00:43:12 christos Exp $ */
+/* $Id: rdatastruct.h,v 1.5.4.1 2012/06/05 21:15:38 bouyer Exp $ */
 
 /*!
  *  \brief Per RFC2915 */
@@ -1726,7 +1726,7 @@ typedef struct dns_rdata_in_dhcid {
 #ifndef GENERIC_NSEC3_50_H
 #define GENERIC_NSEC3_50_H 1
 
-/* $Id: rdatastruct.h,v 1.6 2012/06/05 00:43:12 christos Exp $ */
+/* $Id: rdatastruct.h,v 1.5.4.1 2012/06/05 21:15:38 bouyer Exp $ */
 
 /*!
  * \brief Per RFC 5155 */
@@ -1878,7 +1878,7 @@ typedef struct dns_rdata_nsec3param {
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $Id: rdatastruct.h,v 1.6 2012/06/05 00:43:12 christos Exp $ */
+/* $Id: rdatastruct.h,v 1.5.4.1 2012/06/05 21:15:38 bouyer Exp $ */
 
 #ifndef GENERIC_TLSA_52_H
 #define GENERIC_TLSA_52_H 1
@@ -2124,7 +2124,7 @@ typedef struct dns_rdata_any_tsig {
 #ifndef GENERIC_URI_256_H
 #define GENERIC_URI_256_H 1
 
-/* $Id: rdatastruct.h,v 1.6 2012/06/05 00:43:12 christos Exp $ */
+/* $Id: rdatastruct.h,v 1.5.4.1 2012/06/05 21:15:38 bouyer Exp $ */
 
 typedef struct dns_rdata_uri {
 	dns_rdatacommon_t	common;

@@ -1,4 +1,4 @@
-/*	$NetBSD: posix_spawnp.c,v 1.2 2012/02/22 17:51:01 martin Exp $	*/
+/*	$NetBSD: posix_spawnp.c,v 1.1.2.1 2012/02/23 18:34:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: posix_spawnp.c,v 1.2 2012/02/22 17:51:01 martin Exp $");
+__RCSID("$NetBSD: posix_spawnp.c,v 1.1.2.1 2012/02/23 18:34:33 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdio.h>

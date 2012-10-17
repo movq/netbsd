@@ -1,4 +1,4 @@
-/*	$NetBSD: namedconf.c,v 1.4 2012/06/05 00:43:01 christos Exp $	*/
+/*	$NetBSD: namedconf.c,v 1.3.4.1 2012/06/05 21:15:37 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

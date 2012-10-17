@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_pool.c,v 1.2 2012/02/28 02:48:39 christos Exp $	*/
+/*	$NetBSD: chfs_pool.c,v 1.1.4.1 2012/03/02 16:31:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,

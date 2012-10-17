@@ -1,4 +1,4 @@
-/*	$NetBSD: cprng.h,v 1.5 2012/04/17 02:50:39 tls Exp $ */
+/*	$NetBSD: cprng.h,v 1.4.2.1 2012/04/20 23:35:20 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

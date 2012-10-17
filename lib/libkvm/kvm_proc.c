@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_proc.c,v 1.89 2012/06/05 08:23:06 martin Exp $	*/
+/*	$NetBSD: kvm_proc.c,v 1.88.8.1 2012/06/12 17:18:22 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_proc.c	8.3 (Berkeley) 9/23/93";
 #else
-__RCSID("$NetBSD: kvm_proc.c,v 1.89 2012/06/05 08:23:06 martin Exp $");
+__RCSID("$NetBSD: kvm_proc.c,v 1.88.8.1 2012/06/12 17:18:22 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

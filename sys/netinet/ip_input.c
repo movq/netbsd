@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_input.c,v 1.302 2012/06/25 15:28:39 christos Exp $	*/
+/*	$NetBSD: ip_input.c,v 1.298 2012/01/09 14:31:22 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -91,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.302 2012/06/25 15:28:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.298 2012/01/09 14:31:22 liamjfoy Exp $");
 
 #include "opt_inet.h"
 #include "opt_compat_netbsd.h"
@@ -139,8 +139,12 @@ __KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.302 2012/06/25 15:28:39 christos Exp 
 #ifdef MROUTING
 #include <netinet/ip_mroute.h>
 #endif
-#include <netinet/portalgo.h>
 
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#include <netkey/key.h>
+#endif
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
@@ -532,11 +536,16 @@ ip_input(struct mbuf *m)
 			m_adj(m, len - m->m_pkthdr.len);
 	}
 
+#if defined(KAME_IPSEC)
+	/* ipflow (IP fast forwarding) is not compatible with IPsec. */
+	m->m_flags &= ~M_CANFASTFWD;
+#else
 	/*
 	 * Assume that we can create a fast-forward IP flow entry
 	 * based on this packet.
 	 */
 	m->m_flags |= M_CANFASTFWD;
+#endif
 
 #ifdef PFIL_HOOKS
 	/*
@@ -550,7 +559,9 @@ ip_input(struct mbuf *m)
 	 * let ipfilter look at packet on the wire,
 	 * not the decapsulated packet.
 	 */
-#if defined(FAST_IPSEC)
+#ifdef KAME_IPSEC
+	if (!ipsec_getnhist(m))
+#elif defined(FAST_IPSEC)
 	if (!ipsec_indone(m))
 #else
 	if (1)
@@ -732,6 +743,12 @@ ip_input(struct mbuf *m)
 			IP_STATINC(IP_STAT_CANTFORWARD);
 			return;
 		}
+#ifdef KAME_IPSEC
+		if (ipsec4_in_reject(m, NULL)) {
+			IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
+			goto bad;
+		}
+#endif
 #ifdef FAST_IPSEC
 		mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE, NULL);
 		s = splsoftnet();
@@ -809,6 +826,18 @@ ours:
 		hlen = ip->ip_hl << 2;
 	}
 
+#if defined(KAME_IPSEC)
+	/*
+	 * enforce IPsec policy checking if we are seeing last header.
+	 * note that we do not visit this with protocols with pcb layer
+	 * code - like udp/tcp/raw ip.
+	 */
+	if ((inetsw[ip_protox[ip->ip_p]].pr_flags & PR_LASTHDR) != 0 &&
+	    ipsec4_in_reject(m, NULL)) {
+		IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
+		goto bad;
+	}
+#endif
 #ifdef FAST_IPSEC
 	/*
 	 * enforce IPsec policy checking if we are seeing last header.
@@ -1423,7 +1452,7 @@ ip_forward(struct mbuf *m, int srcrt)
 		if ((rt = rtcache_validate(&ipforward_rt)) != NULL)
 			destmtu = rt->rt_ifp->if_mtu;
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		{
 			/*
 			 * If the packet is routed over IPsec tunnel, tell the
@@ -1465,10 +1494,14 @@ ip_forward(struct mbuf *m, int srcrt)
 					}
 				}
 
+#ifdef	KAME_IPSEC
+				key_freesp(sp);
+#else
 				KEY_FREESP(&sp);
+#endif
 			}
 		}
-#endif /*defined(FAST_IPSEC)*/
+#endif /*defined(KAME_IPSEC) || defined(FAST_IPSEC)*/
 		IP_STATINC(IP_STAT_CANTFRAG);
 		break;
 
@@ -1796,7 +1829,7 @@ sysctl_net_inet_ip_setup(struct sysctllog **clog)
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "mtudisctimeout",
 		       SYSCTL_DESCR("Lifetime of a Path MTU Discovered route"),
-		       sysctl_net_inet_ip_pmtudto, 0, (void *)&ip_mtudisc_timeout, 0,
+		       sysctl_net_inet_ip_pmtudto, 0, &ip_mtudisc_timeout, 0,
 		       CTL_NET, PF_INET, IPPROTO_IP,
 		       IPCTL_MTUDISCTIMEOUT, CTL_EOL);
 #ifdef GATEWAY
@@ -1887,27 +1920,6 @@ sysctl_net_inet_ip_setup(struct sysctllog **clog)
 		       sysctl_net_inet_ip_stats, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_IP, IPCTL_STATS,
 		       CTL_EOL);
-
-	/* anonportalgo RFC6056 subtree */
-	const struct sysctlnode *portalgo_node;
-	sysctl_createv(clog, 0, NULL, &portalgo_node,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "anonportalgo",
-		       SYSCTL_DESCR("Anonymous Port Algorithm Selection (RFC 6056)"),
-	    	       NULL, 0, NULL, 0,
-		       CTL_NET, PF_INET, IPPROTO_IP, CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, &portalgo_node, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRING, "available",
-		       SYSCTL_DESCR("available algorithms"),
-		       sysctl_portalgo_available, 0, NULL, PORTALGO_MAXLEN,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, &portalgo_node, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_STRING, "selected",
-		       SYSCTL_DESCR("selected algorithm"),
-		       sysctl_portalgo_selected, 0, NULL, PORTALGO_MAXLEN,
-		       CTL_CREATE, CTL_EOL);
 }
 
 void

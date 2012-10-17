@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.296 2012/04/30 22:51:28 rmind Exp $	*/
+/*	$NetBSD: lfs_vfsops.c,v 1.293.2.1 2012/03/17 17:40:07 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007, 2007
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.296 2012/04/30 22:51:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.293.2.1 2012/03/17 17:40:07 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_lfs.h"
@@ -722,9 +722,7 @@ lfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		    (mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-		    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp,
-		    KAUTH_ARG(accessmode));
+		error = genfs_can_mount(devvp, accessmode, l->l_cred);
 		VOP_UNLOCK(devvp);
 	}
 
@@ -927,7 +925,7 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	}
 
 	/* Allocate the mount structure, copy the superblock into it. */
-	fs = kmem_zalloc(sizeof(struct lfs), KM_SLEEP);
+	fs = malloc(sizeof(struct lfs), M_UFSMNT, M_WAITOK | M_ZERO);
 	memcpy(&fs->lfs_dlfs, tdfs, sizeof(struct dlfs));
 
 	/* Compatibility */
@@ -952,7 +950,7 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		      (long long)((bufmem_hiwater / bufmem_lowater) *
 				  LFS_INVERSE_MAX_BYTES(
 					  fsbtob(fs, LFS_NRESERVE(fs))) >> PAGE_SHIFT)));
-		kmem_free(fs, sizeof(struct lfs));
+		free(fs, M_UFSMNT);
 		error = EFBIG; /* XXX needs translation */
 		goto out;
 	}
@@ -963,7 +961,7 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		fs->lfs_rfpid = l->l_proc->p_pid;
 	}
 
-	ump = kmem_zalloc(sizeof(*ump), KM_SLEEP);
+	ump = malloc(sizeof *ump, M_UFSMNT, M_WAITOK | M_ZERO);
 	ump->um_lfs = fs;
 	ump->um_ops = &lfs_ufsops;
 	ump->um_fstype = UFS1;
@@ -1151,8 +1149,8 @@ out:
 	if (abp)
 		brelse(abp, 0);
 	if (ump) {
-		kmem_free(ump->um_lfs, sizeof(struct lfs));
-		kmem_free(ump, sizeof(*ump));
+		free(ump->um_lfs, M_UFSMNT);
+		free(ump, M_UFSMNT);
 		mp->mnt_data = NULL;
 	}
 
@@ -1239,9 +1237,8 @@ lfs_unmount(struct mount *mp, int mntflags)
 	cv_destroy(&fs->lfs_stopcv);
 	rw_destroy(&fs->lfs_fraglock);
 	rw_destroy(&fs->lfs_iflock);
-
-	kmem_free(fs, sizeof(struct lfs));
-	kmem_free(ump, sizeof(*ump));
+	free(fs, M_UFSMNT);
+	free(ump, M_UFSMNT);
 
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;

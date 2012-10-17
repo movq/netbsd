@@ -1,4 +1,4 @@
-/*	$NetBSD: t_rmdirrace.c,v 1.9 2012/02/16 02:47:56 perseant Exp $	*/
+/*	$NetBSD: t_rmdirrace.c,v 1.8.4.1 2012/03/17 17:40:07 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.8 2012/09/19 07:57:14 matt Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.6 2011/01/25 19:12:04 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -48,9 +48,6 @@ pthread__sp(void)
 
 	return (ret);
 }
-
-#define pthread__smt_pause()	__asm __volatile(".inst 0xe320f002") /* wfe */
-#define pthread__smt_wake()	__asm __volatile(".inst 0xe320f004") /* sev */
 
 #define	pthread__uc_sp(ucp)	((ucp)->uc_mcontext.__gregs[_REG_SP])
 

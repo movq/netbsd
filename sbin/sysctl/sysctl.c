@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.143 2012/06/02 21:38:09 dsl Exp $ */
+/*	$NetBSD: sysctl.c,v 1.140 2012/02/12 20:54:07 christos Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.143 2012/06/02 21:38:09 dsl Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.140 2012/02/12 20:54:07 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -122,7 +122,8 @@ __RCSID("$NetBSD: sysctl.c,v 1.143 2012/06/02 21:38:09 dsl Exp $");
 /*
  * generic routines
  */
-static const struct handlespec *findhandler(const char *, regex_t *, size_t *);
+static const struct handlespec *findhandler(const char *, int, regex_t *,
+    size_t *);
 static void canonicalize(const char *, char *);
 static void purge_tree(struct sysctlnode *);
 static void print_tree(int *, u_int, struct sysctlnode *, u_int, int, regex_t *,
@@ -146,7 +147,7 @@ static void getdesc(int *, u_int, struct sysctlnode *);
 static void trim_whitespace(char *, int);
 static void sysctlerror(int);
 static void sysctlparseerror(u_int, const char *);
-static void sysctlperror(const char *, ...) __printflike(1, 2);
+static void sysctlperror(const char *, ...);
 #define EXIT(n) do { \
 	if (fn == NULL) exit(n); else return; } while (/*CONSTCOND*/0)
 
@@ -384,7 +385,7 @@ main(int argc, char *argv[])
  * ********************************************************************
  */
 static const struct handlespec *
-findhandler(const char *s, regex_t *re, size_t *lastcompiled)
+findhandler(const char *s, int w, regex_t *re, size_t *lastcompiled)
 {
 	const struct handlespec *p;
 	size_t i, l;
@@ -405,7 +406,8 @@ findhandler(const char *s, regex_t *re, size_t *lastcompiled)
 		}
 		j = regexec(&re[i], s, 1, &match, 0);
 		if (j == 0) {
-			if (match.rm_so == 0 && match.rm_eo == (int)l)
+			if (match.rm_so == 0 && match.rm_eo == (int)l &&
+			    (w ? p[i].ps_w : p[i].ps_p) != NULL)
 				return &p[i];
 		}
 		else if (j != REG_NOMATCH) {
@@ -668,13 +670,8 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 	}
 
 	canonicalize(gsname, canonname);
-	p = findhandler(canonname, re, lastcompiled);
+	p = findhandler(canonname, 0, re, lastcompiled);
 	if (type != CTLTYPE_NODE && p != NULL) {
-		if (p->ps_p == NULL) {
-			sysctlperror("Cannot print `%s': %s\n", gsname, 
-			    strerror(EOPNOTSUPP));
-			exit(1);
-		}
 		(*p->ps_p)(gsname, gdname, NULL, name, namelen, pnode, type,
 			   __UNCONST(p->ps_d));
 		*sp = *dp = '\0';
@@ -908,13 +905,8 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
 	}
 
 	canonicalize(gsname, canonname);
-	if (type != CTLTYPE_NODE && (w = findhandler(canonname, re,
+	if (type != CTLTYPE_NODE && (w = findhandler(canonname, 1, re,
 	    lastcompiled)) != NULL) {
-		if (w->ps_w == NULL) {
-			sysctlperror("Cannot write `%s': %s\n", gsname, 
-			    strerror(EOPNOTSUPP));
-			exit(1);
-		}
 		(*w->ps_w)(gsname, gdname, value, name, namelen, node, type,
 			   __UNCONST(w->ps_d));
 		gsname[0] = '\0';
@@ -1176,9 +1168,6 @@ parse_create(char *l)
 					break;
 				case 'p':
 					flags |= CTLFLAG_PRIVATE;
-					break;
-				case 'u':
-					flags |= CTLFLAG_UNSIGNED;
 					break;
 				case 'x':
 					flags |= CTLFLAG_HEX;
@@ -1890,8 +1879,6 @@ display_number(const struct sysctlnode *node, const char *name,
 			printf("0x%0*x", (int)sz * 2, i);
 		else if (node->sysctl_flags & CTLFLAG_HEX)
 			printf("%#x", i);
-		else if (node->sysctl_flags & CTLFLAG_UNSIGNED)
-			printf("%u", i);
 		else
 			printf("%d", i);
 		break;
@@ -1910,8 +1897,6 @@ display_number(const struct sysctlnode *node, const char *name,
 			printf("0x%0*" PRIx64, (int)sz * 2, q);
 		else if (node->sysctl_flags & CTLFLAG_HEX)
 			printf("%#" PRIx64, q);
-		else if (node->sysctl_flags & CTLFLAG_UNSIGNED)
-			printf("%" PRIu64, q);
 		else
 			printf("%" PRIu64, q);
 		break;

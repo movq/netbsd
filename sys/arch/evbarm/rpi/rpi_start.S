@@ -1,4 +1,4 @@
-/*	$NetBSD: rpi_start.S,v 1.7 2012/09/23 15:56:32 skrll Exp $	*/
+/*	$NetBSD: rpi_start.S,v 1.2.2.2 2012/08/09 06:36:51 jdc Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -81,13 +81,14 @@
  * SUCH DAMAGE.
  */
 
+#include "opt_broadcom.h"
 #include "opt_cputypes.h"
 
 #include <machine/asm.h>
 #include <arm/armreg.h>
 #include "assym.h"
 
-RCSID("$NetBSD: rpi_start.S,v 1.7 2012/09/23 15:56:32 skrll Exp $")
+RCSID("$NetBSD: rpi_start.S,v 1.2.2.2 2012/08/09 06:36:51 jdc Exp $")
 
 /*
  * Workaround Erratum 411920 
@@ -121,9 +122,6 @@ RCSID("$NetBSD: rpi_start.S,v 1.7 2012/09/23 15:56:32 skrll Exp $")
 
 	.global	_C_LABEL(rpi_start)
 _C_LABEL(rpi_start):
-	adr	r8, rpi_boot_regs
-	stmia	r8!, {r0-r3}
-
 	mrs	r0, cpsr
 	bic	r0, r0, #PSR_MODE
 	orr	r0, r0, #(I32_bit | F32_bit | PSR_SVC32_MODE)
@@ -173,7 +171,6 @@ _C_LABEL(rpi_start):
 	bhi	2b
 
 3:	ldmia	itable!, {va,pa,n_sec,attr}
-	mov	n_sec, n_sec, lsr #L1_S_SHIFT
 	/* Convert va to l1 offset:	va = 4 * (va >> L1_S_SHIFT)	*/
 	mov	va, va, LSR #L1_S_SHIFT
 	mov	va, va, LSL #2
@@ -256,8 +253,8 @@ Ll1_s_frame:
 	.word	L1_S_FRAME
 
 Ltemp_l1_table:
-	/* Put the temporary L1 translation table just below the kernel. */
-	.word	0x4000
+	/* Put the temporary L1 translation table at the end of SDRAM. */
+	.word	0x00000000 + MEMSIZE * 0x100000 - L1_TABLE_SIZE
 	
 Lstart:
 	.word	start
@@ -307,22 +304,18 @@ Lctl_ID_dis:
 
 mmu_init_table:
 	/* Add 1MB of VA==PA at 0x00000000 so we can keep the kernel going */
-	MMU_INIT(0x0, 0x0,
-	    (_end - KERNEL_BASE + 2 * L1_S_SIZE - 1),
+	MMU_INIT(0x00000000, 0x00000000,
+	    (MEMSIZE * L1_S_SIZE + L1_S_SIZE - 1) / L1_S_SIZE, 
 	    L1_S_PROTO | L1_S_AP_KRW)
 
 	MMU_INIT(KERNEL_BASE, 0x0,
-	    (_end - KERNEL_BASE + 2 * L1_S_SIZE - 1),
+	    (MEMSIZE * L1_S_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
 	    L1_S_PROTO | L1_S_AP_KRW  | L1_S_B | L1_S_C)
 
 	/* Map the 16MB of peripherals */
 	MMU_INIT(RPI_KERNEL_IO_VBASE, RPI_KERNEL_IO_PBASE,
-	    (RPI_KERNEL_IO_VSIZE + L1_S_SIZE - 1),
+	    (RPI_KERNEL_IO_VSIZE + L1_S_SIZE - 1) / L1_S_SIZE,
 	    L1_S_PROTO | L1_S_AP_KRW)
 
 	/* end of table */
 	MMU_INIT(0, 0, 0, 0)
-
-	.globl	_C_LABEL(rpi_boot_regs)
-rpi_boot_regs:
-	.space 4 * 4

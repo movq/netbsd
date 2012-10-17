@@ -1,4 +1,4 @@
-.\" $NetBSD: rpc.5,v 1.10 2012/05/13 15:48:50 wiz Exp $
+.\" $NetBSD: rpc.5,v 1.9 2009/03/11 13:51:47 joerg Exp $
 .\" @(#)rpc.4 1.17 93/08/30 SMI; from SVr4
 .\" Copyright 1989 AT&T
 .Dd December 10, 1991
@@ -15,10 +15,8 @@ The
 file is a local source containing user readable names that
 can be used in place of RPC program numbers.
 .Pp
-The
-.Nm
-file has one line for each RPC program name.
-The line has the following format:
+The rpc file has one line for each RPC
+program name. The line has the following format:
 .Pp
 .Dl name-of-the-RPC-program	RPC-program-number	aliases
 .Pp
@@ -30,9 +28,9 @@ indicates the beginning of a comment;
 characters up to the end of the line are not interpreted
 by routines which search the file.
 .Sh FILES
-.Nm /etc/rpc
+.Nm /etc/nsswitch.conf
 .Sh EXAMPLES
-Below is an example of an RPC data base:
+Below is an example of an RPC database:
 .Pp
 .Bd -literal
 #

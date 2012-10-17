@@ -1,4 +1,4 @@
-/*      $NetBSD: advlib.h,v 1.18 2012/08/24 09:01:22 msaitoh Exp $        */
+/*      $NetBSD: advlib.h,v 1.17 2005/12/11 12:21:25 christos Exp $        */
 
 /*
  * Definitions for low level routines and data structures
@@ -324,7 +324,7 @@ struct adv_ccb;
 
 
 /*
- * SCSI Inquiry structure
+ * SCSI Iquiry structure
  */
 
 typedef struct

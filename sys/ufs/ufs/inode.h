@@ -1,4 +1,4 @@
-/*	$NetBSD: inode.h,v 1.62 2012/06/04 22:01:07 riastradh Exp $	*/
+/*	$NetBSD: inode.h,v 1.59 2012/01/02 22:10:45 perseant Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -50,9 +50,6 @@
  * Lookup result state (other than the result inode). This is
  * currently stashed in the vnode between VOP_LOOKUP and directory
  * operation VOPs, which is gross.
- *
- * XXX ulr_diroff is a lookup hint from the previos call of VOP_LOOKUP.
- * probably it should not be here.
  */
 struct ufs_lookup_results {
 	int32_t	  ulr_count;	/* Size of free slot in directory. */
@@ -238,7 +235,7 @@ struct inode {
 #define	IN_MODIFY	0x2000		/* Modification time update request. */
 #define	IN_MODIFIED	0x0008		/* Inode has been modified. */
 #define	IN_ACCESSED	0x0010		/* Inode has been accessed. */
-/* #define	IN_UNUSED	0x0020 */	/* unused, was IN_RENAME */
+#define	IN_RENAME	0x0020		/* Inode is being renamed. */
 #define	IN_SHLOCK	0x0040		/* File has shared lock. */
 #define	IN_EXLOCK	0x0080		/* File has exclusive lock. */
 #define	IN_CLEANING	0x0100		/* LFS: file is being cleaned */

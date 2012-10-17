@@ -1,4 +1,4 @@
-/* $NetBSD: lunaws.c,v 1.24 2012/07/16 11:31:13 tsutsui Exp $ */
+/* $NetBSD: lunaws.c,v 1.23.8.1 2012/07/25 21:30:35 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lunaws.c,v 1.24 2012/07/16 11:31:13 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lunaws.c,v 1.23.8.1 2012/07/25 21:30:35 martin Exp $");
 
 #include "wsmouse.h"
 

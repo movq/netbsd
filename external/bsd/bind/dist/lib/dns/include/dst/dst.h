@@ -1,4 +1,4 @@
-/*	$NetBSD: dst.h,v 1.4 2012/06/05 00:42:05 christos Exp $	*/
+/*	$NetBSD: dst.h,v 1.3.4.1 2012/06/05 21:15:50 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")

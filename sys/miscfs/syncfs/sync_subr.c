@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_subr.c,v 1.48 2012/06/02 21:36:46 dsl Exp $	*/
+/*	$NetBSD: sync_subr.c,v 1.47.8.1 2012/06/12 17:13:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -90,7 +90,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.48 2012/06/02 21:36:46 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.47.8.1 2012/06/12 17:13:58 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

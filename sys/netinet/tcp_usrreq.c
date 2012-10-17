@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_usrreq.c,v 1.165 2012/06/02 21:36:47 dsl Exp $	*/
+/*	$NetBSD: tcp_usrreq.c,v 1.162.2.1 2012/03/17 19:51:45 bouyer Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.165 2012/06/02 21:36:47 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.162.2.1 2012/03/17 19:51:45 bouyer Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -152,6 +152,10 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.165 2012/06/02 21:36:47 dsl Exp $")
 #include <netinet/tcp_vtw.h>
 
 #include "opt_tcp_space.h"
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#endif /*KAME_IPSEC*/
 
 /*
  * TCP protocol interface to socket abstraction.
@@ -1758,7 +1762,7 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "available",
 		       SYSCTL_DESCR("Available Congestion Control Mechanisms"),
-		       NULL, 0, tcp_congctl_avail, 0, CTL_CREATE, CTL_EOL);
+		       NULL, 0, &tcp_congctl_avail, 0, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, &congctl_node, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_STRING, "selected",

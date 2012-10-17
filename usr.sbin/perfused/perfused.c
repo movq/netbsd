@@ -1,4 +1,4 @@
-/*  $NetBSD: perfused.c,v 1.24 2012/07/21 05:49:42 manu Exp $ */
+/*  $NetBSD: perfused.c,v 1.22.2.2 2012/08/12 13:13:21 martin Exp $ */
 
 /*-
  *  Copyright (c) 2010 Emmanuel Dreyfus. All rights reserved.

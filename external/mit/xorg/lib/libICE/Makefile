@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2012/04/04 10:59:45 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2008/09/13 04:32:30 cube Exp $
 
 .include <bsd.own.mk>
 
@@ -19,8 +19,6 @@ SOCK_DEFINES=	-DBSD44SOCKETS
 CPPFLAGS+=	$(TRANS_INCLUDES) $(CONN_DEFINES) $(SOCK_DEFINES)
 
 PKGDIST=	${LIB}
-
-CWARNFLAGS.clang+=	-Wno-string-plus-int
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

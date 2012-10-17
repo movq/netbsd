@@ -1,4 +1,4 @@
-/* $NetBSD: globals.h,v 1.19 2012/04/26 19:59:37 phx Exp $ */
+/* $NetBSD: globals.h,v 1.16 2012/01/22 13:08:16 phx Exp $ */
 
 #ifdef DEBUG
 #define	DPRINTF(x)	printf x
@@ -22,7 +22,6 @@ extern int brdtype;
 #define BRD_STORCENTER		103
 #define BRD_DLINKDSM		104
 #define BRD_NH230NAS		105
-#define BRD_KUROBOXT4		106
 #define BRD_UNKNOWN		-1
 
 struct brdprop {
@@ -36,7 +35,6 @@ struct brdprop {
 	void (*setup)(struct brdprop *);
 	void (*brdfix)(struct brdprop *);
 	void (*pcifix)(struct brdprop *);
-	void (*launch)(struct brdprop *);
 	void (*reset)(void);
 };
 
@@ -80,14 +78,8 @@ struct pcidev {
 	unsigned pvd;	/* device ID */
 	void *drv;	/* driver */
 };
-extern struct pcidev lata[2];
-extern struct pcidev lnif[2];
-extern struct pcidev lusb[3];
-extern int nata, nnif, nusb;
-
 void  pcisetup(void);
 void  pcifixup(void);
-void  launchfixup(void);
 unsigned pcimaketag(int, int, int);
 void  pcidecomposetag(unsigned, int *, int *, int *);
 int   pcifinddev(unsigned, unsigned, unsigned *);
@@ -167,23 +159,8 @@ NIF_DECL(skg);
 NIF_DECL(stg);
 
 /* DSK support */
-#define MAX_UNITS 4
-
-struct disk {
-	char xname[8];
-	void *dvops;
-	unsigned unittag;
-	uint16_t ident[128];
-	uint64_t nsect;
-	uint64_t first;
-	void *dlabel;
-	int part;
-	void *fsops;
-	int (*lba_read)(struct disk *, int64_t, int, void *);
-};
-
 int dskdv_init(void *);
-int dlabel_valid(int);
+
 int dsk_open(struct open_file *, ...);
 int dsk_close(struct open_file *);
 int dsk_strategy(void *, int, daddr_t, size_t, void *, size_t *);
@@ -243,6 +220,19 @@ struct dkdev_ata {
 	struct dvata_chan chan[4];
 	int presense[4];
 	char *iobuf;
+};
+
+struct disk {
+	char xname[8];
+	void *dvops;
+	unsigned unittag;
+	uint16_t ident[128];
+	uint64_t nsect;
+	uint64_t first;
+	void *dlabel;
+	int part;
+	void *fsops;
+	int (*lba_read)(struct disk *, int64_t, int, void *);
 };
 
 int spinwait_unbusy(struct dkdev_ata *, int, int, const char **);

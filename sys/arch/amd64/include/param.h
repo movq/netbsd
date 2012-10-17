@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.18 2012/04/20 22:23:24 rmind Exp $	*/
+/*	$NetBSD: param.h,v 1.17.2.1 2012/05/09 03:22:54 riz Exp $	*/
 
 #ifdef __x86_64__
 

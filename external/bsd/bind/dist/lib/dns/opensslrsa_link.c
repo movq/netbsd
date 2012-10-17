@@ -1,4 +1,4 @@
-/*	$NetBSD: opensslrsa_link.c,v 1.4 2012/06/05 00:41:36 christos Exp $	*/
+/*	$NetBSD: opensslrsa_link.c,v 1.3.4.1 2012/06/05 21:15:02 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lwp.c,v 1.173 2012/09/27 20:43:15 rmind Exp $	*/
+/*	$NetBSD: kern_lwp.c,v 1.166.2.1 2012/10/01 23:07:08 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -211,10 +211,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.173 2012/09/27 20:43:15 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.166.2.1 2012/10/01 23:07:08 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_lockdebug.h"
+#include "opt_sa.h"
 #include "opt_dtrace.h"
 
 #define _LWP_API_PRIVATE
@@ -224,6 +225,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.173 2012/09/27 20:43:15 rmind Exp $")
 #include <sys/cpu.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/syscall_stats.h>
 #include <sys/kauth.h>
@@ -239,8 +242,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.173 2012/09/27 20:43:15 rmind Exp $")
 #include <sys/dtrace_bsd.h>
 #include <sys/sdt.h>
 #include <sys/xcall.h>
-#include <sys/uidinfo.h>
-#include <sys/sysctl.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_object.h>
@@ -288,47 +289,6 @@ struct lwp lwp0 __aligned(MIN_LWP_ALIGNMENT) = {
 	.l_fd = &filedesc0,
 };
 
-static int sysctl_kern_maxlwp(SYSCTLFN_PROTO);
-
-/*
- * sysctl helper routine for kern.maxlwp. Ensures that the new
- * values are not too low or too high.
- */
-static int
-sysctl_kern_maxlwp(SYSCTLFN_ARGS)
-{
-	int error, nmaxlwp;
-	struct sysctlnode node;
-
-	nmaxlwp = maxlwp;
-	node = *rnode;
-	node.sysctl_data = &nmaxlwp;
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return error;
-
-	if (nmaxlwp < 0 || nmaxlwp >= 65536)
-		return EINVAL;
-	if (nmaxlwp > cpu_maxlwp())
-		return EINVAL;
-	maxlwp = nmaxlwp;
-
-	return 0;
-}
-
-static void
-sysctl_kern_lwp_setup(void)
-{
-	struct sysctllog *clog = NULL;
-
-	sysctl_createv(&clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "maxlwp",
-		       SYSCTL_DESCR("Maximum number of simultaneous threads"),
-		       sysctl_kern_maxlwp, 0, NULL, 0,
-		       CTL_KERN, CTL_CREATE, CTL_EOL);
-}
-
 void
 lwpinit(void)
 {
@@ -338,9 +298,6 @@ lwpinit(void)
 	lwp_sys_init();
 	lwp_cache = pool_cache_init(sizeof(lwp_t), MIN_LWP_ALIGNMENT, 0, 0,
 	    "lwppl", NULL, IPL_NONE, NULL, lwp_dtor, NULL);
-
-	maxlwp = cpu_maxlwp();
-	sysctl_kern_lwp_setup();
 }
 
 void
@@ -356,7 +313,6 @@ lwp0_init(void)
 	callout_init(&l->l_timeout_ch, CALLOUT_MPSAFE);
 	callout_setfunc(&l->l_timeout_ch, sleepq_timeout, l);
 	cv_init(&l->l_sigcv, "sigwait");
-	cv_init(&l->l_waitcv, "vfork");
 
 	kauth_cred_hold(proc0.p_cred);
 	l->l_cred = proc0.p_cred;
@@ -495,7 +451,7 @@ void
 lwp_unstop(struct lwp *l)
 {
 	struct proc *p = l->l_proc;
-
+    
 	KASSERT(mutex_owned(proc_lock));
 	KASSERT(mutex_owned(p->p_lock));
 
@@ -721,25 +677,6 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	KASSERT(l1 == curlwp || l1->l_proc == &proc0);
 
 	/*
-	 * Enforce limits, excluding the first lwp and kthreads.
-	 */
-	if (p2->p_nlwps != 0 && p2 != &proc0) {
-		uid_t uid = kauth_cred_getuid(l1->l_cred);
-		int count = chglwpcnt(uid, 1);
-		if (__predict_false(count >
-		    p2->p_rlimit[RLIMIT_NTHR].rlim_cur)) {
-			if (kauth_authorize_process(l1->l_cred,
-			    KAUTH_PROCESS_RLIMIT, p2,
-			    KAUTH_ARG(KAUTH_REQ_PROCESS_RLIMIT_BYPASS),
-			    &p2->p_rlimit[RLIMIT_NTHR], KAUTH_ARG(RLIMIT_NTHR))
-			    != 0) {
-				(void)chglwpcnt(uid, -1);
-				return EAGAIN;
-			}
-		}
-	}
-
-	/*
 	 * First off, reap any detached LWP waiting to be collected.
 	 * We can re-use its LWP structure and turnstile.
 	 */
@@ -822,7 +759,6 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	callout_init(&l2->l_timeout_ch, CALLOUT_MPSAFE);
 	callout_setfunc(&l2->l_timeout_ch, sleepq_timeout, l2);
 	cv_init(&l2->l_sigcv, "sigwait");
-	cv_init(&l2->l_waitcv, "vfork");
 	l2->l_syncobj = &sched_syncobj;
 
 	if (rnewlwpp != NULL)
@@ -916,7 +852,6 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 void
 lwp_startup(struct lwp *prev, struct lwp *new)
 {
-	KASSERTMSG(new == curlwp, "l %p curlwp %p prevlwp %p", new, curlwp, prev);
 
 	SDT_PROBE(proc,,,lwp_start, new, 0,0,0,0);
 
@@ -981,7 +916,6 @@ lwp_exit(struct lwp *l)
 	mutex_enter(p->p_lock);
 	if (p->p_nlwps - p->p_nzlwps == 1) {
 		KASSERT(current == true);
-		KASSERT(p != &proc0);
 		/* XXXSMP kernel_lock not held */
 		exit1(l, 0);
 		/* NOTREACHED */
@@ -1107,8 +1041,6 @@ lwp_free(struct lwp *l, bool recycle, bool last)
 	KASSERT(l != curlwp);
 	KASSERT(last || mutex_owned(p->p_lock));
 
-	if (p != &proc0 && p->p_nlwps != 1)
-		(void)chglwpcnt(kauth_cred_getuid(l->l_cred), -1);
 	/*
 	 * If this was not the last LWP in the process, then adjust
 	 * counters and unlock.
@@ -1163,7 +1095,6 @@ lwp_free(struct lwp *l, bool recycle, bool last)
 	sigclear(&l->l_sigpend, NULL, &kq);
 	ksiginfo_queue_drain(&kq);
 	cv_destroy(&l->l_sigcv);
-	cv_destroy(&l->l_waitcv);
 
 	/*
 	 * Free lwpctl structure and affinity.
@@ -1305,7 +1236,7 @@ lwp_find2(pid_t pid, lwpid_t lid)
 }
 
 /*
- * Look up a live LWP within the specified process.
+ * Look up a live LWP within the specified process, and return it locked.
  *
  * Must be called with p->p_lock held.
  */
@@ -1441,10 +1372,22 @@ lwp_userret(struct lwp *l)
 		softint_overlay();
 #endif
 
+#ifdef KERN_SA
+	/* Generate UNBLOCKED upcall if needed */
+	if (l->l_flag & LW_SA_BLOCKING) {
+		sa_unblock_userret(l);
+		/* NOTREACHED */
+	}
+#endif
+
 	/*
-	 * It is safe to do this read unlocked on a MP system..
+	 * It should be safe to do this read unlocked on a multiprocessor
+	 * system..
+	 *
+	 * LW_SA_UPCALL will be handled after the while() loop, so don't
+	 * consider it now.
 	 */
-	while ((l->l_flag & LW_USERRET) != 0) {
+	while ((l->l_flag & (LW_USERRET & ~(LW_SA_UPCALL))) != 0) {
 		/*
 		 * Process pending signals first, unless the process
 		 * is dumping core or exiting, where we will instead
@@ -1499,6 +1442,19 @@ lwp_userret(struct lwp *l)
 			lwp_unlock(l);
 		}
 	}
+
+#ifdef KERN_SA
+	/*
+	 * Timer events are handled specially.  We only try once to deliver
+	 * pending timer upcalls; if if fails, we can try again on the next
+	 * loop around.  If we need to re-enter lwp_userret(), MD code will
+	 * bounce us back here through the trap path after we return.
+	 */
+	if (p->p_timerpend)
+		timerupcall(l);
+	if (l->l_flag & LW_SA_UPCALL)
+		sa_upcall_userret(l);
+#endif /* KERN_SA */
 }
 
 /*

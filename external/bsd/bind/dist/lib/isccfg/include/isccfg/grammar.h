@@ -1,4 +1,4 @@
-/*	$NetBSD: grammar.h,v 1.3 2012/06/05 00:43:02 christos Exp $	*/
+/*	$NetBSD: grammar.h,v 1.2.6.1 2012/06/05 21:15:37 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")

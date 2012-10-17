@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.5 2012/02/22 17:53:51 christos Exp $	*/
+/*	$NetBSD: compress.c,v 1.4.4.1 2012/03/07 23:18:28 riz Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -40,7 +40,7 @@
 #if 0
 FILE_RCSID("@(#)$File: compress.c,v 1.68 2011/12/08 12:38:24 rrt Exp $")
 #else
-__RCSID("$NetBSD: compress.c,v 1.5 2012/02/22 17:53:51 christos Exp $");
+__RCSID("$NetBSD: compress.c,v 1.4.4.1 2012/03/07 23:18:28 riz Exp $");
 #endif
 #endif
 

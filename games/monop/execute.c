@@ -1,4 +1,4 @@
-/*	$NetBSD: execute.c,v 1.22 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: execute.c,v 1.21 2008/02/24 06:12:49 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)execute.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: execute.c,v 1.22 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: execute.c,v 1.21 2008/02/24 06:12:49 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -78,7 +78,8 @@ static int getnum_withbrace(const char *what, char *txt, int min, int max,
  *	This routine executes the given command by index number
  */
 void
-execute(int com_num)
+execute(com_num)
+	int com_num;
 {
 	new_play = FALSE;	/* new_play is true if fixing	*/
 	(*func[com_num])();
@@ -94,7 +95,7 @@ execute(int com_num)
  *	This routine moves a piece around.
  */
 void
-do_move(void)
+do_move()
 {
 	int r1, r2;
 	bool was_jail;
@@ -127,7 +128,8 @@ ret:
  *	This routine moves a normal move
  */
 void
-move(int rl)
+move(rl)
+	int rl;
 {
 	int old_loc;
 
@@ -144,7 +146,7 @@ move(int rl)
  *	This routine shows the results of a move
  */
 static void
-show_move(void)
+show_move()
 {
 	SQUARE *sqp;
 
@@ -239,7 +241,7 @@ reset_game(void)
  *	This routine saves the current game for use at a later date
  */
 void
-save(void)
+save()
 {
 	char *sp;
 	FILE *outf;

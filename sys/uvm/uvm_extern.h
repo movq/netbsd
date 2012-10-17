@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.184 2012/09/01 00:26:37 matt Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.181.2.1 2012/04/12 17:05:37 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,6 +71,16 @@
  *
  * NOTE: vm system calls are prototyped in syscallargs.h
  */
+
+/*
+ * typedefs, necessary for standard UVM headers.
+ */
+
+typedef unsigned int uvm_flag_t;
+
+typedef int vm_inherit_t;	/* XXX: inheritance codes */
+typedef off_t voff_t;		/* XXX: offset within a uvm_object */
+typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
 
 /*
  * defines
@@ -601,7 +611,7 @@ bool			uvm_kernacc(void *, size_t, vm_prot_t);
 __dead void		uvm_scheduler(void);
 vaddr_t			uvm_uarea_alloc(void);
 void			uvm_uarea_free(vaddr_t);
-vaddr_t			uvm_uarea_system_alloc(struct cpu_info *);
+vaddr_t			uvm_uarea_system_alloc(void);
 void			uvm_uarea_system_free(vaddr_t);
 vaddr_t			uvm_lwp_getuarea(lwp_t *);
 void			uvm_lwp_setuarea(lwp_t *, vaddr_t);

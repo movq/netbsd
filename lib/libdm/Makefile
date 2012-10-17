@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2012/03/21 05:36:24 matt Exp $
+# $NetBSD: Makefile,v 1.1 2011/02/08 03:20:15 haad Exp $
 USE_FORT?= no  # network protocol library
 
 LIB=    dm
@@ -6,7 +6,7 @@ LIB=    dm
 SRCS=   libdm_ioctl.c
 MAN=	dm.3
 
-WARNS= 2
+WARN= 4
 
 CPPFLAGS+= -I${.CURDIR}
 #CFLAGS+= -g -O0

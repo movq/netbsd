@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_fork.c,v 1.191 2012/07/27 20:52:49 christos Exp $	*/
+/*	$NetBSD: kern_fork.c,v 1.187 2012/02/02 02:44:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.191 2012/07/27 20:52:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.187 2012/02/02 02:44:06 christos Exp $");
 
 #include "opt_ktrace.h"
 
@@ -84,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.191 2012/07/27 20:52:49 christos Exp
 #include <sys/file.h>
 #include <sys/acct.h>
 #include <sys/ktrace.h>
+#include <sys/vmmeter.h>
 #include <sys/sched.h>
 #include <sys/signalvar.h>
 #include <sys/kauth.h>
@@ -98,13 +99,13 @@ __KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.191 2012/07/27 20:52:49 christos Exp
 /*
  * DTrace SDT provider definitions
  */
-SDT_PROBE_DEFINE(proc,,,create,
+SDT_PROBE_DEFINE(proc,,,create, 
 	    "struct proc *", NULL,	/* new process */
 	    "struct proc *", NULL,	/* parent process */
 	    "int", NULL,		/* flags */
 	    NULL, NULL, NULL, NULL);
 
-u_int	nprocs __cacheline_aligned = 1;		/* process 0 */
+u_int	nprocs = 1;		/* process 0 */
 
 /*
  * Number of ticks to sleep if fork() would fail due to process hitting
@@ -112,43 +113,45 @@ u_int	nprocs __cacheline_aligned = 1;		/* process 0 */
  */
 int	forkfsleep = 0;
 
+/*ARGSUSED*/
 int
 sys_fork(struct lwp *l, const void *v, register_t *retval)
 {
 
-	return fork1(l, 0, SIGCHLD, NULL, 0, NULL, NULL, retval, NULL);
+	return (fork1(l, 0, SIGCHLD, NULL, 0, NULL, NULL, retval, NULL));
 }
 
 /*
  * vfork(2) system call compatible with 4.4BSD (i.e. BSD with Mach VM).
  * Address space is not shared, but parent is blocked until child exit.
  */
+/*ARGSUSED*/
 int
 sys_vfork(struct lwp *l, const void *v, register_t *retval)
 {
 
-	return fork1(l, FORK_PPWAIT, SIGCHLD, NULL, 0, NULL, NULL,
-	    retval, NULL);
+	return (fork1(l, FORK_PPWAIT, SIGCHLD, NULL, 0, NULL, NULL,
+	    retval, NULL));
 }
 
 /*
  * New vfork(2) system call for NetBSD, which implements original 3BSD vfork(2)
  * semantics.  Address space is shared, and parent is blocked until child exit.
  */
+/*ARGSUSED*/
 int
 sys___vfork14(struct lwp *l, const void *v, register_t *retval)
 {
 
-	return fork1(l, FORK_PPWAIT|FORK_SHAREVM, SIGCHLD, NULL, 0,
-	    NULL, NULL, retval, NULL);
+	return (fork1(l, FORK_PPWAIT|FORK_SHAREVM, SIGCHLD, NULL, 0,
+	    NULL, NULL, retval, NULL));
 }
 
 /*
  * Linux-compatible __clone(2) system call.
  */
 int
-sys___clone(struct lwp *l, const struct sys___clone_args *uap,
-    register_t *retval)
+sys___clone(struct lwp *l, const struct sys___clone_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) flags;
@@ -160,14 +163,14 @@ sys___clone(struct lwp *l, const struct sys___clone_args *uap,
 	 * We don't support the CLONE_PID or CLONE_PTRACE flags.
 	 */
 	if (SCARG(uap, flags) & (CLONE_PID|CLONE_PTRACE))
-		return EINVAL;
+		return (EINVAL);
 
 	/*
 	 * Linux enforces CLONE_VM with CLONE_SIGHAND, do same.
 	 */
 	if (SCARG(uap, flags) & CLONE_SIGHAND
 	    && (SCARG(uap, flags) & CLONE_VM) == 0)
-		return EINVAL;
+		return (EINVAL);
 
 	flags = 0;
 
@@ -184,7 +187,7 @@ sys___clone(struct lwp *l, const struct sys___clone_args *uap,
 
 	sig = SCARG(uap, flags) & CLONE_CSIGNAL;
 	if (sig < 0 || sig >= _NSIG)
-		return EINVAL;
+		return (EINVAL);
 
 	/*
 	 * Note that the Linux API does not provide a portable way of
@@ -192,20 +195,18 @@ sys___clone(struct lwp *l, const struct sys___clone_args *uap,
 	 * grows up or down.  So, we pass a stack size of 0, so that the
 	 * code that makes this adjustment is a noop.
 	 */
-	return fork1(l, flags, sig, SCARG(uap, stack), 0,
-	    NULL, NULL, retval, NULL);
+	return (fork1(l, flags, sig, SCARG(uap, stack), 0,
+	    NULL, NULL, retval, NULL));
 }
 
-/*
- * Print the 'table full' message once per 10 seconds.
- */
-static struct timeval fork_tfmrate = { 10, 0 };
+/* print the 'table full' message once per 10 seconds */
+struct timeval fork_tfmrate = { 10, 0 };
 
 /*
  * General fork call.  Note that another LWP in the process may call exec()
  * or exit() while we are forking.  It's safe to continue here, because
  * neither operation will complete until all LWPs have exited the process.
- */
+ */ 
 int
 fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
     void (*func)(void *), void *arg, register_t *retval,
@@ -242,23 +243,20 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 			tablefull("proc", "increase kern.maxproc or NPROC");
 		if (forkfsleep)
 			kpause("forkmx", false, forkfsleep, NULL);
-		return EAGAIN;
+		return (EAGAIN);
 	}
 
 	/*
 	 * Enforce limits.
 	 */
 	count = chgproccnt(uid, 1);
-	if (__predict_false(count > p1->p_rlimit[RLIMIT_NPROC].rlim_cur)) {
-		if (kauth_authorize_process(l1->l_cred, KAUTH_PROCESS_RLIMIT,
-		    p1, KAUTH_ARG(KAUTH_REQ_PROCESS_RLIMIT_BYPASS),
-		    &p1->p_rlimit[RLIMIT_NPROC], KAUTH_ARG(RLIMIT_NPROC)) != 0) {
-			(void)chgproccnt(uid, -1);
-			atomic_dec_uint(&nprocs);
-			if (forkfsleep)
-				kpause("forkulim", false, forkfsleep, NULL);
-			return EAGAIN;
-		}
+	if (kauth_authorize_generic(l1->l_cred, KAUTH_GENERIC_ISSUSER, NULL) !=
+	    0 && __predict_false(count > p1->p_rlimit[RLIMIT_NPROC].rlim_cur)) {
+		(void)chgproccnt(uid, -1);
+		atomic_dec_uint(&nprocs);
+		if (forkfsleep)
+			kpause("forkulim", false, forkfsleep, NULL);
+		return (EAGAIN);
 	}
 
 	/*
@@ -270,7 +268,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	if (__predict_false(uaddr == 0)) {
 		(void)chgproccnt(uid, -1);
 		atomic_dec_uint(&nprocs);
-		return ENOMEM;
+		return (ENOMEM);
 	}
 
 	/*
@@ -312,7 +310,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	if (flags & FORK_SYSTEM) {
 		/*
 		 * Mark it as a system process.  Set P_NOCLDWAIT so that
-		 * children are reparented to init(8) when they exit.
+		 * children are reparented to init(8) when they exit. 
 		 * init(8) can easily wait them out for us.
 		 */
 		p2->p_flag |= (PK_SYSTEM | PK_NOCLDWAIT);
@@ -373,14 +371,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		p2->p_limit = lim_copy(p1_lim);
 	}
 
-	if (flags & FORK_PPWAIT) {
-		/* Mark ourselves as waiting for a child. */
-		l1->l_pflag |= LP_VFORKWAIT;
-		p2->p_lflag = PL_PPWAIT;
-		p2->p_vforklwp = l1;
-	} else {
-		p2->p_lflag = 0;
-	}
+	p2->p_lflag = ((flags & FORK_PPWAIT) ? PL_PPWAIT : 0);
 	p2->p_sflag = 0;
 	p2->p_slflag = 0;
 	parent = (flags & FORK_NOWAIT) ? initproc : p1;
@@ -572,6 +563,28 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		sched_enqueue(l2, false);
 		lwp_unlock(l2);
 	}
+	mutex_exit(p2->p_lock);
+
+	/*
+	 * Preserve synchronization semantics of vfork.  If waiting for
+	 * child to exec or exit, set PL_PPWAIT on child, and sleep on our
+	 * proc (in case of exit).
+	 */
+	while (p2->p_lflag & PL_PPWAIT)
+		cv_wait(&p1->p_waitcv, proc_lock);
+
+        /*      
+         * Let the parent know that we are tracing its child.
+         */     
+	if (tracefork) {
+		ksiginfo_t ksi;
+                KSI_INIT_EMPTY(&ksi);
+                ksi.ksi_signo = SIGTRAP;
+                ksi.ksi_lid = l1->l_lid; 
+                kpsignal(p1, &ksi, NULL);
+	}
+
+	mutex_exit(proc_lock);
 
 	/*
 	 * Return child pid to parent process,
@@ -581,33 +594,6 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		retval[0] = p2->p_pid;
 		retval[1] = 0;
 	}
-	mutex_exit(p2->p_lock);
 
-	/*
-	 * Preserve synchronization semantics of vfork.  If waiting for
-	 * child to exec or exit, sleep until it clears LP_VFORKWAIT.
-	 */
-#if 0
-	while (l1->l_pflag & LP_VFORKWAIT) {
-		cv_wait(&l1->l_waitcv, proc_lock);
-	}
-#else
-	while (p2->p_lflag & PL_PPWAIT)
-		cv_wait(&p1->p_waitcv, proc_lock);
-#endif
-
-	/*
-	 * Let the parent know that we are tracing its child.
-	 */
-	if (tracefork) {
-		ksiginfo_t ksi;
-
-		KSI_INIT_EMPTY(&ksi);
-		ksi.ksi_signo = SIGTRAP;
-		ksi.ksi_lid = l1->l_lid;
-		kpsignal(p1, &ksi, NULL);
-	}
-	mutex_exit(proc_lock);
-
-	return 0;
+	return (0);
 }

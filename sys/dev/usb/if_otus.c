@@ -1,4 +1,4 @@
-/*	$NetBSD: if_otus.c,v 1.12 2012/08/20 07:32:49 christos Exp $	*/
+/*	$NetBSD: if_otus.c,v 1.9 2010/12/02 17:38:05 christos Exp $	*/
 /*	$OpenBSD: if_otus.c,v 1.18 2010/08/27 17:08:00 jsg Exp $	*/
 
 /*-
@@ -17,8 +17,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_otus.c,v 1.12 2012/08/20 07:32:49 christos Exp $");
 /*-
  * Driver for Atheros AR9001U chipset.
  * http://www.atheros.com/pt/bulletins/AR9001USBBulletin.pdf
@@ -33,6 +31,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_otus.c,v 1.12 2012/08/20 07:32:49 christos Exp $"
 #include <sys/callout.h>
 #include <sys/device.h>
 #include <sys/proc.h>
+
 #include <sys/bus.h>
 #include <sys/endian.h>
 #include <sys/intr.h>
@@ -59,7 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_otus.c,v 1.12 2012/08/20 07:32:49 christos Exp $"
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdevs.h>
 
 #include <dev/usb/if_otusreg.h>
@@ -1823,8 +1821,8 @@ otus_tx(struct otus_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	macctl = AR_TX_MAC_BACKOFF | AR_TX_MAC_HW_DUR | AR_TX_MAC_QID(qid);
 
 	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
-	    (hasqos && ((qos & IEEE80211_QOS_ACKPOLICY_MASK) ==
-	     IEEE80211_QOS_ACKPOLICY_NOACK)))
+	    (hasqos && ((qos & IEEE80211_QOS_ACK_POLICY_MASK) ==
+	     IEEE80211_QOS_ACK_POLICY_NOACK)))
 		macctl |= AR_TX_MAC_NOACK;
 
 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1)) {

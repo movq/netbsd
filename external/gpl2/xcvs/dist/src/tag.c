@@ -18,7 +18,6 @@
  */
 
 #include "cvs.h"
-#include <grp.h>
 #include "save-cwd.h"
 
 static int rtag_proc (int argc, char **argv, char *xwhere,
@@ -107,17 +106,15 @@ static const char *const tag_usage[] =
     NULL
 };
 
-char *UserTagOptions = "bcflRrD";
+
 
 int
 cvstag (int argc, char **argv)
 {
-    struct group *grp;
     bool local = false;			/* recursive by default */
     int c;
     int err = 0;
     bool run_module_prog = true;
-    int only_allowed_options;
 
     is_rtag = (strcmp (cvs_cmd_name, "rtag") == 0);
 
@@ -125,11 +122,8 @@ cvstag (int argc, char **argv)
 	usage (is_rtag ? rtag_usage : tag_usage);
 
     getoptreset ();
-    only_allowed_options = 1;
     while ((c = getopt (argc, argv, is_rtag ? rtag_opts : tag_opts)) != -1)
     {
-	if (!strchr(UserTagOptions, c))
-	    only_allowed_options = 0;
 	switch (c)
 	{
 	    case 'a':
@@ -198,42 +192,6 @@ cvstag (int argc, char **argv)
     if (delete_flag && branch_mode)
 	error (0, 0, "warning: -b ignored with -d options");
     RCS_check_tag (symtag);
-
-#ifdef CVS_ADMIN_GROUP
-    if (!only_allowed_options && 
-	(grp = getgrnam(CVS_ADMIN_GROUP)) != NULL)
-    {
-#ifdef HAVE_GETGROUPS
-	gid_t *grps;
-	int i, n;
-
-	/* get number of auxiliary groups */
-	n = getgroups (0, NULL);
-	if (n < 0)
-	    error (1, errno, "unable to get number of auxiliary groups");
-	grps = (gid_t *) xmalloc((n + 1) * sizeof *grps);
-	n = getgroups (n, grps);
-	if (n < 0)
-	    error (1, errno, "unable to get list of auxiliary groups");
-	grps[n] = getgid();
-	for (i = 0; i <= n; i++)
-	    if (grps[i] == grp->gr_gid) break;
-	free (grps);
-	if (i > n)
-	    error (1, 0, "usage is restricted to members of the group %s",
-		   CVS_ADMIN_GROUP);
-#else
-	char *me = getcaller();
-	char **grnam;
-	
-	for (grnam = grp->gr_mem; *grnam; grnam++)
-	    if (strcmp (*grnam, me) == 0) break;
-	if (!*grnam && getgid() != grp->gr_gid)
-	    error (1, 0, "usage is restricted to members of the group %s",
-		   CVS_ADMIN_GROUP);
-#endif
-    }
-#endif /* defined CVS_ADMIN_GROUP */
 
 #ifdef CLIENT_SUPPORT
     if (current_parsed_root->isremote)
@@ -313,13 +271,6 @@ cvstag (int argc, char **argv)
     }
     else
     {
-	int i;
-	for (i = 0; i < argc; i++)
-	{
-	    /* XXX last arg should be repository, but doesn't make sense here */
-	    history_write ('T', (delete_flag ? "D" : (numtag ? numtag :
-			   (date ? date : "A"))), symtag, argv[i], "");
-	}
 	err = rtag_proc (argc + 1, argv - 1, NULL, NULL, NULL, 0, local, NULL,
 			 NULL);
     }
@@ -997,25 +948,6 @@ rtag_fileproc (void *callerdat, struct file_info *finfo)
      * correctly without breaking your link!
      */
 
-/* cvsacl patch */
-#ifdef SERVER_SUPPORT
-    if (use_cvs_acl /* && server_active */)
-    {
-	if (!access_allowed (finfo->file, finfo->repository, numtag, 4,
-	    NULL, NULL, 1))
-	{
-	    if (stop_at_first_permission_denied)
-		error (1, 0, "permission denied for %s",
-		       Short_Repository (finfo->repository));
-	    else
-		error (0, 0, "permission denied for %s/%s",
-		       Short_Repository (finfo->repository), finfo->file);
-
-	    return (0);
-	}
-    }
-#endif
-
     if (delete_flag)
     {
 	retval = rtag_delete (rcsfile);
@@ -1235,21 +1167,6 @@ tag_fileproc (void *callerdat, struct file_info *finfo)
         if (!nversion)
 	    goto free_vars_and_return;
     }
-
-/* cvsacl patch */
-#ifdef SERVER_SUPPORT
-	if (use_cvs_acl /* && server_active */)
-	{
-	if (!access_allowed (finfo->file, finfo->repository, vers->tag, 4,
-			     NULL, NULL, 1))
-	{
-	    error (0, 0, "permission denied for %s/%s",
-		   Short_Repository (finfo->repository), finfo->file);
-	    return (0);
-	}
-    }
-#endif
-
     if (delete_flag)
     {
 

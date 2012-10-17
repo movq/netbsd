@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd1.c,v 1.33 2012/06/12 19:03:26 christos Exp $	*/
+/*	$NetBSD: cmd1.c,v 1.31 2011/09/16 15:39:27 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmd1.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: cmd1.c,v 1.33 2012/06/12 19:03:26 christos Exp $");
+__RCSID("$NetBSD: cmd1.c,v 1.31 2011/09/16 15:39:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -448,7 +448,7 @@ pipecmd(void *v)
 {
 	char *cmd;
 	FILE *volatile obuf;		/* void longjmp clobbering */
-	sig_t volatile oldsigpipe = sig_current(SIGPIPE);
+	sig_t volatile oldsigpipe;	/* XXX - is volatile needed? */
 
 	cmd = v;
 	if (dot == NULL) {
@@ -461,7 +461,7 @@ pipecmd(void *v)
 		goto close_pipe;
 
 	sig_check();
-	obuf = Popen(cmd, "we");
+	obuf = Popen(cmd, "w");
 	if (obuf == NULL) {
 		warn("pipecmd: Popen failed: %s", cmd);
 		return 1;

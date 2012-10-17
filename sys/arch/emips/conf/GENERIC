@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.6 2012/08/17 20:11:38 abs Exp $
+# $NetBSD: GENERIC,v 1.4 2011/11/22 21:25:05 tls Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/emips/conf/std.emips"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.6 $"
+#ident		"GENERIC-$Revision: 1.4 $"
 
 maxusers	64
 
@@ -52,6 +52,7 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -150,7 +151,6 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 #options 	FONT_GALLANT12x22
 
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
 

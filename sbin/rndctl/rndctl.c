@@ -1,4 +1,4 @@
-/*	$NetBSD: rndctl.c,v 1.25 2012/08/14 14:41:07 jruoho Exp $	*/
+/*	$NetBSD: rndctl.c,v 1.24 2012/02/02 19:42:57 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997 Michael Graff.
@@ -33,7 +33,7 @@
 #include <sha1.h>
 
 #ifndef lint
-__RCSID("$NetBSD: rndctl.c,v 1.25 2012/08/14 14:41:07 jruoho Exp $");
+__RCSID("$NetBSD: rndctl.c,v 1.24 2012/02/02 19:42:57 tls Exp $");
 #endif
 
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: rndctl.c,v 1.25 2012/08/14 14:41:07 jruoho Exp $");
 #include <fcntl.h>
 #include <errno.h>
 #include <err.h>
-#include <paths.h>
 #include <string.h>
 
 typedef struct {
@@ -134,11 +133,11 @@ do_save(const char *const filename)
 
 	int fd;
 
-	fd = open(_PATH_URANDOM, O_RDONLY, 0644);
+	fd = open("/dev/urandom", O_RDONLY, 0644);
 	if (fd < 0) {
 		err(1, "device open");
 	}
-
+	
 	if (ioctl(fd, RNDGETPOOLSTAT, &rp) < 0) {
 		err(1, "ioctl(RNDGETPOOLSTAT)");
 	}
@@ -172,7 +171,7 @@ do_save(const char *const filename)
 	if (fd < 0) {
 		err(1, "output open");
 	}
-
+	
 	if (write(fd, &rs, sizeof(rs)) != sizeof(rs)) {
 		unlink(filename);
 		fsync_range(fd, FDATASYNC|FDISKSYNC, (off_t)0, (off_t)0);
@@ -222,7 +221,7 @@ do_load(const char *const filename)
 	rd.entropy = rs.entropy;
 	memcpy(rd.data, rs.data, MIN(sizeof(rd.data), sizeof(rs.data)));
 
-	fd = open(_PATH_URANDOM, O_RDWR, 0644);
+	fd = open("/dev/urandom", O_RDWR, 0644);
 	if (fd < 0) {
 		err(1, "device open");
 	}
@@ -239,7 +238,7 @@ do_ioctl(rndctl_t *rctl)
 	int fd;
 	int res;
 
-	fd = open(_PATH_URANDOM, O_RDONLY, 0644);
+	fd = open("/dev/urandom", O_RDONLY, 0644);
 	if (fd < 0)
 		err(1, "open");
 
@@ -284,7 +283,7 @@ do_list(int all, u_int32_t type, char *name)
 	uint32_t i;
 	u_int32_t start;
 
-	fd = open(_PATH_URANDOM, O_RDONLY, 0644);
+	fd = open("/dev/urandom", O_RDONLY, 0644);
 	if (fd < 0)
 		err(1, "open");
 
@@ -340,7 +339,7 @@ do_stats(void)
 	rndpoolstat_t rs;
 	int fd;
 
-	fd = open(_PATH_URANDOM, O_RDONLY, 0644);
+	fd = open("/dev/urandom", O_RDONLY, 0644);
 	if (fd < 0)
 		err(1, "open");
 

@@ -345,6 +345,8 @@ do_arguments(globalstate *gstate, int ac, char **av)
 	{
 	case '1':
 	    gstate->percpustates = !gstate->percpustates;
+	    gstate->fulldraw = Yes;
+	    gstate->max_topn += display_setmulti(gstate->percpustates);
 	    break;
 #ifdef ENABLE_COLOR
 	case 'C':
@@ -769,7 +771,7 @@ main(int argc, char *argv[])
     gstate->fulldraw = Yes;
     gstate->use_color = Yes;
     gstate->interactive = Maybe;
-    gstate->percpustates = No;
+    gstate->percpustates = Yes;
 
     /* preset defaults for process selection */
     gstate->pselect.idle = Yes;

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.21 2012/07/29 18:05:45 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.20.10.1 2012/08/08 15:51:12 martin Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.21 2012/07/29 18:05:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20.10.1 2012/08/08 15:51:12 martin Exp $");
 
 #include "scsibus.h"
 

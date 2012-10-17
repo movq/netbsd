@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2012/06/17 07:40:25 joerg Exp $
+#	$NetBSD: Makefile,v 1.11 2011/07/18 19:11:28 joerg Exp $
 
 .include <bsd.init.mk>
 
@@ -9,12 +9,21 @@
 .include "Makefile.inc"
 .include "${LLVM_TOPLEVEL}/lib/Makefile.inc"
 
-realdepends realall: config/config.status need-dl
+realdepends realall: config/config.status need-dl \
+	config/include/clang/Basic/Version.inc
+
+config/include/clang/Basic/Version.inc: \
+	${LLVM_TOPLEVEL}/config/clang/Basic/Version.inc
+	mkdir -p ${.TARGET:H}
+	cat < ${.ALLSRC} > ${.TARGET}
 
 config/config.status: ${LLVM_SRCDIR}/configure
 	mkdir -p config
-	cd config && ${LLVM_SRCDIR}/configure ${LLVM_CONFIGURE_ARGS} \
-	    --enable-optimized CC=${HOST_CC:Q}
+	cd config && ${LLVM_SRCDIR}/configure CC=${HOST_CC:Q} --prefix=/usr \
+	    --enable-targets=x86,powerpc,sparc,arm,mips \
+	    --host=${MACHINE_GNU_PLATFORM} \
+	    --with-c-include-dirs=/usr/include/clang-3.0:/usr/include \
+	    --enable-optimized
 # --disable-assertions
 
 need-dl:

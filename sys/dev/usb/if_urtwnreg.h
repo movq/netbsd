@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urtwnreg.h,v 1.1 2012/03/25 00:11:16 nonaka Exp $	*/
+/*	$NetBSD: if_urtwnreg.h,v 1.1.6.2 2012/06/14 09:48:47 sborrill Exp $	*/
 /*	$OpenBSD: if_urtwnreg.h,v 1.3 2010/11/16 18:02:59 damien Exp $	*/
 
 /*-

@@ -52,6 +52,16 @@
 
 #define DEFAULT_PATH	"PATH=/usr/bin:/usr/sbin:/bin:/sbin"
 
+/* Some systems have route metrics */
+#ifndef HAVE_ROUTE_METRIC
+# ifdef __linux__
+#  define HAVE_ROUTE_METRIC 1
+# endif
+# ifndef HAVE_ROUTE_METRIC
+#  define HAVE_ROUTE_METRIC 0
+# endif
+#endif
+
 static struct rt *routes;
 
 static int
@@ -162,12 +172,7 @@ make_env(const struct interface *iface, const char *reason, char ***argv)
 	int dhcp, ra;
 
 	dhcp = ra = 0;
-	if (strcmp(reason, "TEST") == 0) {
-		if (ipv6rs_has_ra(iface))
-			ra = 1;
-		else
-			dhcp = 1;
-	} else if (strcmp(reason, "ROUTERADVERT") == 0)
+	if (strcmp(reason, "ROUTERADVERT") == 0)
 		ra = 1;
 	else
 		dhcp = 1;
@@ -216,10 +221,7 @@ make_env(const struct interface *iface, const char *reason, char ***argv)
 		e--;
 	}
 	*--p = '\0';
-	if (strcmp(reason, "TEST") == 0) {
-		env[8] = strdup("if_up=false");
-		env[9] = strdup("if_down=false");
-	} else if ((dhcp && iface->state->new) || (ra && ipv6rs_has_ra(iface))){
+	if ((dhcp && iface->state->new) || (ra && iface->ras)) {
 		env[8] = strdup("if_up=true");
 		env[9] = strdup("if_down=false");
 	} else {
@@ -305,6 +307,7 @@ send_interface1(int fd, const struct interface *iface, const char *reason)
 	struct iovec iov[2];
 	int retval;
 
+	retval = 0;
 	make_env(iface, reason, &env);
 	elen = arraytostr((const char *const *)env, &s);
 	iov[0].iov_base = &elen;
@@ -326,7 +329,7 @@ send_interface(int fd, const struct interface *iface)
 	int retval = 0;
 	if (send_interface1(fd, iface, iface->state->reason) == -1)
 		retval = -1;
-	if (ipv6rs_has_ra(iface)) {
+	if (iface->ras) {
 		if (send_interface1(fd, iface, "ROUTERADVERT") == -1)
 			retval = -1;
 	}
@@ -432,10 +435,9 @@ find_route(struct rt *rts, const struct rt *r, struct rt **lrt,
 }
 
 static void
-desc_route(const char *cmd, const struct rt *rt)
+desc_route(const char *cmd, const struct rt *rt, const char *ifname)
 {
 	char addr[sizeof("000.000.000.000") + 1];
-	const char *ifname = rt->iface->name;
 
 	strlcpy(addr, inet_ntoa(rt->dest), sizeof(addr));
 	if (rt->gate.s_addr == INADDR_ANY)
@@ -463,7 +465,7 @@ route_deleted(const struct rt *rt)
 	f = find_route(routes, rt, &l, NULL);
 	if (f == NULL)
 		return 0;
-	desc_route("removing", f);
+	desc_route("removing", f, f->iface->name);
 	if (l)
 		l->next = f->next;
 	else
@@ -473,60 +475,59 @@ route_deleted(const struct rt *rt)
 }
 
 static int
-n_route(struct rt *rt)
+n_route(struct rt *rt, const struct interface *iface)
 {
 	/* Don't set default routes if not asked to */
 	if (rt->dest.s_addr == 0 &&
 	    rt->net.s_addr == 0 &&
-	    !(rt->iface->state->options->options & DHCPCD_GATEWAY))
+	    !(iface->state->options->options & DHCPCD_GATEWAY))
 		return -1;
 
-	desc_route("adding", rt);
-	if (!add_route(rt))
+	desc_route("adding", rt, iface->name);
+	if (!add_route(iface, &rt->dest, &rt->net, &rt->gate, iface->metric))
 		return 0;
 	if (errno == EEXIST) {
 		/* Pretend we added the subnet route */
-		if (rt->dest.s_addr ==
-		    (rt->iface->addr.s_addr & rt->iface->net.s_addr) &&
-		    rt->net.s_addr == rt->iface->net.s_addr &&
+		if (rt->dest.s_addr == (iface->addr.s_addr & iface->net.s_addr) &&
+		    rt->net.s_addr == iface->net.s_addr &&
 		    rt->gate.s_addr == 0)
 			return 0;
 		else
 			return -1;
 	}
-	syslog(LOG_ERR, "%s: add_route: %m", rt->iface->name);
+	syslog(LOG_ERR, "%s: add_route: %m", iface->name);
 	return -1;
 }
 
 static int
-c_route(struct rt *ort, struct rt *nrt)
+c_route(struct rt *ort, struct rt *nrt, const struct interface *iface)
 {
 	/* Don't set default routes if not asked to */
 	if (nrt->dest.s_addr == 0 &&
 	    nrt->net.s_addr == 0 &&
-	    !(nrt->iface->state->options->options & DHCPCD_GATEWAY))
+	    !(iface->state->options->options & DHCPCD_GATEWAY))
 		return -1;
 
-	desc_route("changing", nrt);
+	desc_route("changing", nrt, iface->name);
 	/* We delete and add the route so that we can change metric.
 	 * This also has the nice side effect of flushing ARP entries so
 	 * we don't have to do that manually. */
-	del_route(ort);
-	if (!add_route(nrt))
+	del_route(ort->iface, &ort->dest, &ort->net, &ort->gate, ort->metric);
+	if (!add_route(iface, &nrt->dest, &nrt->net, &nrt->gate, nrt->metric))
 		return 0;
-	syslog(LOG_ERR, "%s: add_route: %m", nrt->iface->name);
+	syslog(LOG_ERR, "%s: add_route: %m", iface->name);
 	return -1;
 }
 
 static int
-d_route(struct rt *rt)
+d_route(struct rt *rt, const struct interface *iface, int metric)
 {
 	int retval;
 
-	desc_route("deleting", rt);
-	retval = del_route(rt);
+	desc_route("deleting", rt, iface->name);
+	retval = del_route(iface, &rt->dest, &rt->net, &rt->gate, metric);
 	if (retval != 0 && errno != ENOENT && errno != ESRCH)
-		syslog(LOG_ERR,"%s: del_route: %m", rt->iface->name);
+		syslog(LOG_ERR,"%s: del_route: %m", iface->name);
 	return retval;
 }
 
@@ -695,10 +696,8 @@ build_routes(void)
 		dnr = get_routes(ifp);
 		dnr = massage_host_routes(dnr, ifp);
 		dnr = add_subnet_route(dnr, ifp);
-		if (ifp->state->options->options & DHCPCD_GATEWAY) {
-			dnr = add_router_host_route(dnr, ifp);
-			dnr = add_destination_route(dnr, ifp);
-		}
+		dnr = add_router_host_route(dnr, ifp);
+		dnr = add_destination_route(dnr, ifp);
 		for (rt = dnr; rt && (rtn = rt->next, 1); lrt = rt, rt = rtn) {
 			rt->iface = ifp;
 			rt->metric = ifp->metric;
@@ -713,7 +712,7 @@ build_routes(void)
 				    rt->gate.s_addr != or->gate.s_addr ||
 				    rt->metric != or->metric)
 				{
-					if (c_route(or, rt) != 0)
+					if (c_route(or, rt, ifp) != 0)
 						continue;
 				}
 				if (rtl != NULL)
@@ -722,7 +721,7 @@ build_routes(void)
 					routes = or->next;
 				free(or);
 			} else {
-				if (n_route(rt) != 0)
+				if (n_route(rt, ifp) != 0)
 					continue;
 			}
 			if (dnr == rt)
@@ -731,7 +730,6 @@ build_routes(void)
 				lrt->next = rtn;
 			rt->next = nrs;
 			nrs = rt;
-			rt = lrt; /* When we loop this makes lrt correct */
 		}
 		free_routes(dnr);
 	}
@@ -739,7 +737,7 @@ build_routes(void)
 	/* Remove old routes we used to manage */
 	for (rt = routes; rt; rt = rt->next) {
 		if (find_route(nrs, rt, NULL, NULL) == NULL)
-			d_route(rt);
+			d_route(rt, rt->iface, rt->iface->metric);
 	}
 
 	free_routes(routes);
@@ -819,9 +817,8 @@ configure(struct interface *iface)
 	rt = get_subnet_route(dhcp);
 	if (rt != NULL) {
 		rt->iface = iface;
-		rt->metric = 0;
 		if (!find_route(routes, rt, NULL, NULL))
-			del_route(rt);
+			del_route(iface, &rt->dest, &rt->net, &rt->gate, 0);
 		free(rt);
 	}
 

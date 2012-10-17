@@ -1,4 +1,4 @@
-/*	$NetBSD: unix_pass_trigger.c,v 1.1.1.2 2012/08/10 12:35:59 tron Exp $	*/
+/*	$NetBSD: unix_pass_trigger.c,v 1.1.1.1.8.1 2012/08/12 19:25:23 martin Exp $	*/
 
 /*++
 /* NAME

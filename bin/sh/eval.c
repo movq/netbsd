@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.104 2012/06/14 18:56:54 joerg Exp $	*/
+/*	$NetBSD: eval.c,v 1.103 2011/11/14 18:24:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.9 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.104 2012/06/14 18:56:54 joerg Exp $");
+__RCSID("$NetBSD: eval.c,v 1.103 2011/11/14 18:24:45 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -984,7 +984,6 @@ normal_fork:
 		savehandler = handler;
 		savecmdname = commandname;
 		handler = &jmploc;
-		temp_path = 0;
 		if (!setjmp(jmploc.loc)) {
 			/* We need to ensure the command hash table isn't
 			 * corruped by temporary PATH assignments.
@@ -994,9 +993,10 @@ normal_fork:
 			    cmdentry.u.bltin == typecmd)) {
 				savelocalvars = localvars;
 				localvars = 0;
-				temp_path = 1;
 				mklocal(path - 5 /* PATH= */, 0);
-			}
+				temp_path = 1;
+			} else
+				temp_path = 0;
 			redirect(cmd->ncmd.redirect, mode);
 
 			/* exec is a special builtin, but needs this list... */

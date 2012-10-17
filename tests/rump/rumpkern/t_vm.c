@@ -1,4 +1,4 @@
-/*	$NetBSD: t_vm.c,v 1.3 2012/03/17 18:00:28 hannken Exp $	*/
+/*	$NetBSD: t_vm.c,v 1.2.8.1 2012/03/25 11:29:59 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

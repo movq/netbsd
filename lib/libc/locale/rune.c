@@ -1,4 +1,4 @@
-/*	$NetBSD: rune.c,v 1.45 2012/08/08 20:16:50 wiz Exp $	*/
+/*	$NetBSD: rune.c,v 1.43.2.1 2012/08/20 19:27:04 riz Exp $	*/
 /*-
  * Copyright (c)2010 Citrus Project,
  * All rights reserved.

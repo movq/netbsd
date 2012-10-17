@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sip.c,v 1.155 2012/09/23 01:10:59 chs Exp $	*/
+/*	$NetBSD: if_sip.c,v 1.153 2012/02/02 19:43:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.155 2012/09/23 01:10:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.153 2012/02/02 19:43:05 tls Exp $");
 
 
 
@@ -585,15 +585,15 @@ static void	gsip_rxintr(struct sip_softc *);
 
 static int	sipcom_dp83820_mii_readreg(device_t, int, int);
 static void	sipcom_dp83820_mii_writereg(device_t, int, int, int);
-static void	sipcom_dp83820_mii_statchg(struct ifnet *);
+static void	sipcom_dp83820_mii_statchg(device_t);
 
 static int	sipcom_sis900_mii_readreg(device_t, int, int);
 static void	sipcom_sis900_mii_writereg(device_t, int, int, int);
-static void	sipcom_sis900_mii_statchg(struct ifnet *);
+static void	sipcom_sis900_mii_statchg(device_t);
 
 static int	sipcom_dp83815_mii_readreg(device_t, int, int);
 static void	sipcom_dp83815_mii_writereg(device_t, int, int, int);
-static void	sipcom_dp83815_mii_statchg(struct ifnet *);
+static void	sipcom_dp83815_mii_statchg(device_t);
 
 static void	sipcom_mediastatus(struct ifnet *, struct ifmediareq *);
 
@@ -620,7 +620,7 @@ CFATTACH_DECL3_NEW(sip, sizeof(struct sip_softc),
 struct sip_variant {
 	int	(*sipv_mii_readreg)(device_t, int, int);
 	void	(*sipv_mii_writereg)(device_t, int, int, int);
-	void	(*sipv_mii_statchg)(struct ifnet *);
+	void	(*sipv_mii_statchg)(device_t);
 	void	(*sipv_set_filter)(struct sip_softc *);
 	void	(*sipv_read_macaddr)(struct sip_softc *,
 		    const struct pci_attach_args *, u_int8_t *);
@@ -737,13 +737,10 @@ sipcom_check_64bit(const struct pci_attach_args *pa)
 		/* Accton EN1407-T, Planex GN-1000TE */
 		{ 0x1113,	0x1407 },
 
-		/* Netgear GA621 */
+		/* Netgear GA-621 */
 		{ 0x1385,	0x621a },
 
-		/* Netgear GA622 */
-		{ 0x1385,	0x622a },
-
-		/* SMC EZ Card 1000 (9462TX) */
+		/* SMC EZ Card */
 		{ 0x10b8,	0x9462 },
 
 		{ 0, 0}
@@ -3377,9 +3374,9 @@ sipcom_dp83820_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-sipcom_dp83820_mii_statchg(struct ifnet *ifp)
+sipcom_dp83820_mii_statchg(device_t self)
 {
-	struct sip_softc *sc = ifp->if_softc;
+	struct sip_softc *sc = device_private(self);
 	struct mii_data *mii = &sc->sc_mii;
 	u_int32_t cfg, pcr;
 
@@ -3539,9 +3536,9 @@ sipcom_sis900_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-sipcom_sis900_mii_statchg(struct ifnet *ifp)
+sipcom_sis900_mii_statchg(device_t self)
 {
-	struct sip_softc *sc = ifp->if_softc;
+	struct sip_softc *sc = device_private(self);
 	struct mii_data *mii = &sc->sc_mii;
 	u_int32_t flowctl;
 
@@ -3651,9 +3648,9 @@ sipcom_dp83815_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-sipcom_dp83815_mii_statchg(struct ifnet *ifp)
+sipcom_dp83815_mii_statchg(device_t self)
 {
-	struct sip_softc *sc = ifp->if_softc;
+	struct sip_softc *sc = device_private(self);
 
 	/*
 	 * Update TXCFG for full-duplex operation.

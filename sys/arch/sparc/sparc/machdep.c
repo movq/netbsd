@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.324 2012/09/13 11:49:16 martin Exp $ */
+/*	$NetBSD: machdep.c,v 1.316.2.1 2012/05/21 15:25:59 riz Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.324 2012/09/13 11:49:16 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.316.2.1 2012/05/21 15:25:59 riz Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_sunos.h"
@@ -84,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.324 2012/09/13 11:49:16 martin Exp $")
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/extent.h>
+#include <sys/savar.h>
 #include <sys/cpu.h>
 #include <sys/buf.h>
 #include <sys/device.h>
@@ -141,7 +142,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.324 2012/09/13 11:49:16 martin Exp $")
 
 extern paddr_t avail_end;
 
+int	physmem;
+
 kmutex_t fpu_mtx;
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int   safepri = 0;
 
 /*
  * dvmamap24 is used to manage DVMA memory for devices that have the upper
@@ -589,6 +598,41 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 }
 
+/*
+ * cpu_upcall:
+ *
+ *	Send an an upcall to userland.
+ */
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	   void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	vaddr_t addr;
+
+	tf = l->l_md.md_tf;
+	addr = (vaddr_t) upcall;
+
+	/* Arguments to the upcall... */
+	tf->tf_out[0] = type;
+	tf->tf_out[1] = (vaddr_t) sas;
+	tf->tf_out[2] = nevents;
+	tf->tf_out[3] = ninterrupted;
+	tf->tf_out[4] = (vaddr_t) ap;
+
+	/*
+	 * Ensure the stack is double-word aligned, and provide a
+	 * C call frame.
+	 */
+	sp = (void *)(((vaddr_t)sp & ~0x7) - CCFSZ);
+
+	/* Arrange to begin execution at the upcall handler. */
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = (vaddr_t) sp;
+	tf->tf_out[7] = -1;		/* "you lose" if upcall returns */
+}
+
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
@@ -605,7 +649,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	 * registers into the pcb; we need them in the process's memory.
 	 */
 	write_user_windows();
-	if (rwindow_save(l)) {
+	if ((l->l_flag & LW_SA_SWITCHING) == 0 && rwindow_save(l)) {
 		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
@@ -633,7 +677,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	r[_REG_O6] = tf->tf_out[6];
 	r[_REG_O7] = tf->tf_out[7];
 
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 #ifdef FPU_CONTEXT
 	/*
@@ -739,8 +783,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_global[4] = r[_REG_G4];
 		tf->tf_global[5] = r[_REG_G5];
 		tf->tf_global[6] = r[_REG_G6];
-		/* done in lwp_setprivate */
-		/* tf->tf_global[7] = r[_REG_G7]; */
+		tf->tf_global[7] = r[_REG_G7];
 
 		tf->tf_out[0] = r[_REG_O0];
 		tf->tf_out[1] = r[_REG_O1];
@@ -751,8 +794,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_out[6] = r[_REG_O6];
 		tf->tf_out[7] = r[_REG_O7];
 
-		if (flags & _UC_TLSBASE)
-			lwp_setprivate(l, (void *)(uintptr_t)r[_REG_G7]);
+		lwp_setprivate(l, (void *)(uintptr_t)r[_REG_G7]);
 	}
 
 #ifdef FPU_CONTEXT
@@ -2530,7 +2572,7 @@ bus_space_write_4(
 	uint32_t		v)
 {
 	__insn_barrier();
-	bus_space_write_4_real(t, h, o, v);
+	bus_space_write_4_real(
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: vsnprintf_ss.c,v 1.12 2012/03/15 18:22:31 christos Exp $	*/
+/*	$NetBSD: vsnprintf_ss.c,v 1.10 2011/07/17 20:54:34 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)vsnprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vsnprintf_ss.c,v 1.12 2012/03/15 18:22:31 christos Exp $");
+__RCSID("$NetBSD: vsnprintf_ss.c,v 1.10 2011/07/17 20:54:34 joerg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -136,7 +136,6 @@ vsnprintf_ss(char *sbuf, size_t slen, const char *fmt0, va_list ap)
 	const char *xdigs;	/* digits for [xX] conversion */
 	char bf[128]; 		/* space for %c, %[diouxX] */
 	char *tailp;		/* tail pointer for snprintf */
-	size_t len;
 
 	static const char xdigs_lower[16] = "0123456789abcdef";
 	static const char xdigs_upper[16] = "0123456789ABCDEF";
@@ -146,7 +145,7 @@ vsnprintf_ss(char *sbuf, size_t slen, const char *fmt0, va_list ap)
 
 	if ((int)slen < 0) {
 		errno = EINVAL;
-		return -1;
+		return (-1);
 	}
 
 	tailp = sbuf + slen;
@@ -331,17 +330,13 @@ reswitch:	switch (ch) {
 				char *p = memchr(cp, 0, (size_t)prec);
 
 				if (p != NULL) {
-					_DIAGASSERT(__type_fit(int, p - cp));
-					size = (int)(p - cp);
+					size = p - cp;
 					if (size > prec)
 						size = prec;
 				} else
 					size = prec;
-			} else {
-				len = strlen(cp);
-				_DIAGASSERT(__type_fit(int, len));
-				size = (int)len;
-			}
+			} else
+				size = strlen(cp);
 			sign = '\0';
 			break;
 		case 'U':
@@ -414,14 +409,11 @@ number:			if ((dprec = prec) >= 0)
 				default:
 					/*XXXUNCONST*/
 					cp = __UNCONST("bug bad base");
-					len = strlen(cp);
-					_DIAGASSERT(__type_fit(int, len));
-					size = (int)len;
+					size = strlen(cp);
 					goto skipsize;
 				}
 			}
-			_DIAGASSERT(__type_fit(int, bf + sizeof(bf) - cp));
-			size = (int)(bf + sizeof(bf) - cp);
+			size = bf + sizeof(bf) - cp;
 		skipsize:
 			break;
 		default:	/* "%?" prints ?, unless ? is NUL */
@@ -501,6 +493,6 @@ done:
 		sbuf[-1] = '\0';
 	else
 		*sbuf = '\0';
-	return ret;
+	return (ret);
 	/* NOTREACHED */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsdkintf.c,v 1.298 2012/08/09 23:53:25 buhrow Exp $	*/
+/*	$NetBSD: rf_netbsdkintf.c,v 1.295.6.2 2012/08/13 19:41:29 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2008-2011 The NetBSD Foundation, Inc.
@@ -101,7 +101,7 @@
  ***********************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.298 2012/08/09 23:53:25 buhrow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.295.6.2 2012/08/13 19:41:29 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -479,14 +479,7 @@ rf_buildroothack(RF_ConfigSet_t *config_sets)
 	/* we found something bootable... */
 
 	if (num_root == 1) {
-		if (raid_softc[rootID].sc_dkdev.dk_nwedges != 0) {
-			/* XXX: How do we find the real root partition? */
-			char cname[sizeof(cset->ac->devname)];
-			snprintf(cname, sizeof(cname), "%s%c",
-			    device_xname(raid_softc[rootID].sc_dev), 'a');
-			booted_device = dkwedge_find_by_wname(cname);
-		} else
-			booted_device = raid_softc[rootID].sc_dev;
+		booted_device = raid_softc[rootID].sc_dev;
 	} else if (num_root > 1) {
 
 		/* 

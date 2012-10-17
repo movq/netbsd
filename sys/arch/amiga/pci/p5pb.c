@@ -1,4 +1,4 @@
-/*	$NetBSD: p5pb.c,v 1.11 2012/07/13 08:47:07 rkujawa Exp $ */
+/*	$NetBSD: p5pb.c,v 1.8 2012/01/29 15:32:52 para Exp $ */
 
 /*-
  * Copyright (c) 2011, 2012 The NetBSD Foundation, Inc.
@@ -41,7 +41,6 @@
 
 #include <uvm/uvm_extern.h>
 
-#define _M68K_BUS_DMA_PRIVATE
 #include <machine/bus.h>
 #include <machine/cpu.h>
 
@@ -67,24 +66,6 @@
 #define P5GFX_HEIGHT		480
 #define P5GFX_DEPTH		8
 #define P5GFX_LINEBYTES		640
-
-struct m68k_bus_dma_tag p5pb_bus_dma_tag = {
-	0,
-	0, 
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load_direct,
-	_bus_dmamap_load_mbuf_direct,
-	_bus_dmamap_load_uio_direct,
-	_bus_dmamap_load_raw_direct,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap
-};
 
 static int	p5pb_match(struct device *, struct cfdata *, void *);
 static void	p5pb_attach(struct device *, struct device *, void *);
@@ -212,7 +193,7 @@ p5pb_attach(device_t parent, device_t self, void *aux)
  
 	pba.pba_iot = &(sc->pci_io_area);
 	pba.pba_memt = &(sc->pci_mem_area);
-	pba.pba_dmat = &p5pb_bus_dma_tag; 
+	pba.pba_dmat = NULL; 
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = pc;
 	pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY; 
@@ -318,7 +299,7 @@ p5pb_find_resources(struct p5pb_softc *sc)
 
 /*
  * Set properties needed to support fb driver. These are read later during
- * autoconfg in device_register(). Needed for CVPPC/BVPPC.
+ * autoconfg in device_register(). Needed for CVPPC/BVPPC and Voodoo in G-REX.
  */
 void
 p5pb_set_props(struct p5pb_softc *sc) 
@@ -329,14 +310,26 @@ p5pb_set_props(struct p5pb_softc *sc)
 	dev = sc->sc_dev;
 	dict = device_properties(dev);
 
+	prop_dictionary_set_uint32(dict, "width", P5GFX_WIDTH);
+	prop_dictionary_set_uint32(dict, "height", P5GFX_HEIGHT);
+	prop_dictionary_set_uint8(dict, "depth", P5GFX_DEPTH);
+
 	/* genfb needs additional properties, like virtual, physical address */
 #if (NGENFB > 0)
 	/* XXX: currently genfb is supported only on CVPPC/BVPPC */
+	prop_dictionary_set_uint16(dict, "linebytes", P5GFX_LINEBYTES);
 	prop_dictionary_set_uint64(dict, "virtual_address",
 	    sc->pci_mem_area.base);
 	prop_dictionary_set_uint64(dict, "address", 
 	    kvtop((void*) sc->pci_mem_area.base)); 
 #endif
+
+#ifdef P5PB_CONSOLE
+	prop_dictionary_set_bool(dict, "is_console", true);
+#else
+	prop_dictionary_set_bool(dict, "is_console", false);
+#endif
+
 }
 
 pcireg_t
@@ -344,26 +337,11 @@ p5pb_pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 {
 	uint32_t data;
 	uint32_t bus, dev, func;
-	uint32_t offset;
-
+	
 	pci_decompose_tag(pc, tag, &bus, &dev, &func);
 
-	offset = (OFF_PCI_DEVICE << dev) + reg;
-
-	if(func == 0)	/* ugly, ugly hack */
-		offset += 0;
-	else if(func == 1)
-		offset += OFF_PCI_FUNCTION;
-	else
-		return 0xFFFFFFFF;	
-
-	if(badaddr((void *)__UNVOLATILE(((uint32_t)
-	    bus_space_vaddr(pc->pci_conf_datat, pc->pci_conf_datah) 
-	    + offset)))) 
-		return 0xFFFFFFFF;	
-
 	data = bus_space_read_4(pc->pci_conf_datat, pc->pci_conf_datah,
-	    offset);
+	    + reg + (dev * OFF_PCI_DEVICE));
 #ifdef P5PB_DEBUG_CONF
 	aprint_normal("p5pb conf read va: %lx, bus: %d, dev: %d, "
 	    "func: %d, reg: %d -r-> data %x\n",
@@ -376,26 +354,11 @@ void
 p5pb_pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t val)
 {
 	uint32_t bus, dev, func;
-	uint32_t offset;
-
+	
 	pci_decompose_tag(pc, tag, &bus, &dev, &func);
-
-	offset = (OFF_PCI_DEVICE << dev) + reg;
-
-	if(func == 0)	/* ugly, ugly hack */
-		offset += 0;
-	else if(func == 1)
-		offset += OFF_PCI_FUNCTION;
-	else
-		return;	
-
-	if(badaddr((void *)__UNVOLATILE(((uint32_t)
-	    bus_space_vaddr(pc->pci_conf_datat, pc->pci_conf_datah) 
-	    + offset)))) 
-		return;	
-
+	
 	bus_space_write_4(pc->pci_conf_datat, pc->pci_conf_datah,
-	    offset, val);
+	    + reg + (dev * OFF_PCI_DEVICE), val);
 #ifdef P5PB_DEBUG_CONF
 	aprint_normal("p5pb conf write va: %lx, bus: %d, dev: %d, "
 	    "func: %d, reg: %d -w-> data %x\n",
@@ -415,14 +378,14 @@ int
 p5pb_pci_bus_maxdevs_grex4000(pci_chipset_tag_t pc, int busno) 
 {
 	/* G-REX 4000 has 4, G-REX 4000T has 3 slots? */
-	return 4;
+	return 1; /* XXX: 4 not yet! */
 }
 
 int
 p5pb_pci_bus_maxdevs_grex1200(pci_chipset_tag_t pc, int busno) 
 {
 	/* G-REX 1200 has 5 slots. */
-	return 4; /* XXX: 5 not yet! */
+	return 1; /* XXX: 5 not yet! */
 }
 
 void
@@ -493,7 +456,7 @@ p5pb_bus_reconfigure(struct p5pb_softc *sc)
 	    EX_NOWAIT);
 
 	memext = extent_create("p5pbmem", sc->pci_mem_lowest, 
-	     sc->pci_mem_highest - 1, NULL, 0, EX_NOWAIT);
+	     sc->pci_mem_highest, NULL, 0, EX_NOWAIT);
 	
 	if ( (!ioext) || (!memext) ) 
 		return false;
@@ -552,7 +515,7 @@ p5pb_bus_map_conf(struct p5pb_softc *sc)
 	sc->apc.pci_conf_datat = &(sc->pci_conf_area);
 
 	if (bus_space_map(sc->apc.pci_conf_datat, OFF_PCI_CONF_DATA, 
-	    P5BUS_PCI_CONF_SIZE, 0, &sc->apc.pci_conf_datah)) 
+	    256, 0, &sc->apc.pci_conf_datah)) 
 		return false;
 
 	return true;
@@ -653,57 +616,4 @@ p5pb_conf_search(struct p5pb_softc *sc, uint16_t val)
 }
 
 #endif /* P5PB_DEBUG */
-
-#ifdef P5PB_CONSOLE
-void
-p5pb_device_register(device_t dev, void *aux)
-{
-	prop_dictionary_t dict, parent_dict;
-	struct pci_attach_args *pa = aux;
-
-	if (device_parent(dev) && device_is_a(device_parent(dev), "pci")) {
-
-		dict = device_properties(dev);
-
-		if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY) {
-
-			/* Handle the CVPPC/BVPPC card... */
-			if ( ((PCI_VENDOR(pa->pa_id) == PCI_VENDOR_TI)
-			    && (PCI_PRODUCT(pa->pa_id) ==
-			    PCI_PRODUCT_TI_TVP4020) ) ||
-			    /* ...and 3Dfx Voodoo 3 in G-REX. */
-			    ((PCI_VENDOR(pa->pa_id) == PCI_VENDOR_3DFX)
-			    && (PCI_PRODUCT(pa->pa_id) ==
-			    PCI_PRODUCT_3DFX_VOODOO3) )) {
-
-				parent_dict = device_properties(
-				    device_parent(device_parent(dev)));
-
-				prop_dictionary_set_uint32(dict, "width",
-				    P5GFX_WIDTH);
-
-				prop_dictionary_set_uint32(dict, "height",
-				    P5GFX_HEIGHT);
-
-				prop_dictionary_set_uint32(dict, "depth",
-				    P5GFX_DEPTH);
-
-#if (NGENFB > 0)
-				prop_dictionary_set_uint32(dict, "linebytes",
-				    P5GFX_LINEBYTES);
-
-				prop_dictionary_set(dict, "address",
-				    prop_dictionary_get(parent_dict,
-				    "address"));
-				prop_dictionary_set(dict, "virtual_address",
-				    prop_dictionary_get(parent_dict,
-				    "virtual_address"));
-#endif
-				prop_dictionary_set_bool(dict, "is_console",
-				    true);
-                        }
-                }
-        }
-}
-#endif /* P5PB_CONSOLE */
 

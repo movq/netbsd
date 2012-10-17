@@ -1,4 +1,4 @@
-/*	$NetBSD: license.c,v 1.3 2012/02/19 17:49:09 tron Exp $	*/
+/*	$NetBSD: license.c,v 1.2.6.1 2012/02/20 21:41:30 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2009 Joerg Sonnenberger <joerg@NetBSD.org>.

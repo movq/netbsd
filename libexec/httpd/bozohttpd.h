@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.h,v 1.23 2012/07/19 09:53:06 mrg Exp $	*/
+/*	$NetBSD: bozohttpd.h,v 1.20 2011/11/18 09:51:31 mrg Exp $	*/
 
 /*	$eterna: bozohttpd.h,v 1.39 2011/11/18 09:21:15 mrg Exp $	*/
 
@@ -128,7 +128,6 @@ typedef struct bozo_httpreq_t {
 	const char *hr_referrer;
 	const char *hr_range;
 	const char *hr_if_modified_since;
-	const char *hr_accept_encoding;
 	int         hr_have_range;
 	off_t       hr_first_byte_pos;
 	off_t       hr_last_byte_pos;
@@ -164,17 +163,18 @@ typedef struct bozoprefs_t {
 
 #define	strornull(x)	((x) ? (x) : "<null>")
 
-#if defined(__GNUC__) && __GNUC__ >= 3
-#define BOZO_PRINTFLIKE(x,y) __attribute__((__format__(__printf__, x,y)))
-#define BOZO_DEAD __attribute__((__noreturn__))
-#endif
-
 #ifndef NO_DEBUG
-void	debug__(bozohttpd_t *, int, const char *, ...) BOZO_PRINTFLIKE(3, 4);
+void	debug__(bozohttpd_t *, int, const char *, ...)
+			__attribute__((__format__(__printf__, 3, 4)));
 #define debug(x)	debug__ x
 #else
 #define	debug(x)	
 #endif /* NO_DEBUG */
+
+#if defined(__GNUC__) && __GNUC__ >= 3
+#define BOZO_PRINTFLIKE(x,y) __attribute__((__format__(__printf__, x,y)))
+#define BOZO_DEAD __attribute__((__noreturn__))
+#endif
 
 void	bozo_warn(bozohttpd_t *, const char *, ...)
 		BOZO_PRINTFLIKE(2, 3);
@@ -186,7 +186,6 @@ int	bozo_http_error(bozohttpd_t *, int, bozo_httpreq_t *, const char *);
 int	bozo_check_special_files(bozo_httpreq_t *, const char *);
 char	*bozo_http_date(char *, size_t);
 void	bozo_print_header(bozo_httpreq_t *, struct stat *, const char *, const char *);
-char	*escape_rfc3986(bozohttpd_t *httpd, const char *url);
 
 char	*bozodgetln(bozohttpd_t *, int, ssize_t *, ssize_t (*)(bozohttpd_t *, int, void *, size_t));
 char	*bozostrnsep(char **, const char *, ssize_t *);
@@ -278,7 +277,7 @@ void	bozo_add_content_map_mime(bozohttpd_t *, const char *, const char *, const 
 #endif
 
 /* I/O */
-int bozo_printf(bozohttpd_t *, const char *, ...) BOZO_PRINTFLIKE(2, 3);;
+int bozo_printf(bozohttpd_t *, const char *, ...);
 ssize_t bozo_read(bozohttpd_t *, int, void *, size_t);
 ssize_t bozo_write(bozohttpd_t *, int, const void *, size_t);
 int bozo_flush(bozohttpd_t *, FILE *);

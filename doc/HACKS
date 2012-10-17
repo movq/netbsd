@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.123 2012/03/03 03:21:16 nakayama Exp $
+# $NetBSD: HACKS,v 1.122.2.1 2012/03/05 20:59:25 sborrill Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.

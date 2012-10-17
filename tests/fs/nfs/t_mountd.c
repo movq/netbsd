@@ -1,4 +1,4 @@
-/*	$NetBSD: t_mountd.c,v 1.5 2012/02/24 13:53:46 joerg Exp $	*/
+/*	$NetBSD: t_mountd.c,v 1.4 2011/06/26 13:08:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -59,8 +59,6 @@ wrkwrkwrk(void *unused)
 {
 	int fd, fail;
 
-	fail = 0;
-
 	rump_sys_chdir(FSTEST_MNTNAME);
 	while (!quit) {
 		fd = rump_sys_open("file", O_RDWR | O_CREAT);
@@ -81,7 +79,7 @@ wrkwrkwrk(void *unused)
 	rump_sys_chdir("/");
 	quit = 1;
 
-	return fail ? wrkwrkwrk : NULL;
+	return fail ? &fail : NULL;
 }
 
 ATF_TC_BODY(mountdhup, tc)

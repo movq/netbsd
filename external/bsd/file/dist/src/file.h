@@ -1,4 +1,4 @@
-/*	$NetBSD: file.h,v 1.6 2012/02/22 17:53:51 christos Exp $	*/
+/*	$NetBSD: file.h,v 1.5.4.1 2012/03/07 23:18:29 riz Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.

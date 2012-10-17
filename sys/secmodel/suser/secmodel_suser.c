@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_suser.c,v 1.39 2012/03/13 18:41:02 elad Exp $ */
+/* $NetBSD: secmodel_suser.c,v 1.38 2012/01/17 10:47:28 cegger Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_suser.c,v 1.39 2012/03/13 18:41:02 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_suser.c,v 1.38 2012/01/17 10:47:28 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -259,12 +259,6 @@ secmodel_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 
 		break;
 
-	case KAUTH_SYSTEM_DEVMAPPER:
-		if (isroot)
-			result = KAUTH_RESULT_ALLOW;
-
-		break;
-
 	case KAUTH_SYSTEM_FS_QUOTA:
 		switch (req) {
 		case KAUTH_REQ_SYSTEM_FS_QUOTA_GET:
@@ -281,31 +275,19 @@ secmodel_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 
 		break;
 
-	case KAUTH_SYSTEM_SYSVIPC:
-		switch (req) {
-		case KAUTH_REQ_SYSTEM_SYSVIPC_BYPASS:
-		case KAUTH_REQ_SYSTEM_SYSVIPC_SHM_LOCK:
-		case KAUTH_REQ_SYSTEM_SYSVIPC_SHM_UNLOCK:
-		case KAUTH_REQ_SYSTEM_SYSVIPC_MSGQ_OVERSIZE:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
-			break;
-
-		default:
-			break;
-		}
-
-		break;
-
 	case KAUTH_SYSTEM_MOUNT:
 		switch (req) {
-		case KAUTH_REQ_SYSTEM_MOUNT_DEVICE:
 		case KAUTH_REQ_SYSTEM_MOUNT_GET:
+			if (isroot) {
+				result = KAUTH_RESULT_ALLOW;
+				break;
+			}
+
+			break;
+
 		case KAUTH_REQ_SYSTEM_MOUNT_NEW:
 		case KAUTH_REQ_SYSTEM_MOUNT_UNMOUNT:
 		case KAUTH_REQ_SYSTEM_MOUNT_UPDATE:
-		case KAUTH_REQ_SYSTEM_MOUNT_UMAP:
 			if (isroot) {
 				result = KAUTH_RESULT_ALLOW;
 				break;
@@ -316,12 +298,6 @@ secmodel_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 		default:
 			break;
 		}
-
-		break;
-
-	case KAUTH_SYSTEM_MQUEUE:
-		if (isroot)
-			result = KAUTH_RESULT_ALLOW;
 
 		break;
 
@@ -358,12 +334,6 @@ secmodel_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 		}
 		break;
 
-	case KAUTH_SYSTEM_SEMAPHORE:
-		if (isroot)
-			result = KAUTH_RESULT_ALLOW;
-
-		break;
-
 	case KAUTH_SYSTEM_SYSCTL:
 		switch (req) {
 		case KAUTH_REQ_SYSTEM_SYSCTL_ADD:
@@ -390,9 +360,6 @@ secmodel_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 	case KAUTH_SYSTEM_SETIDCORE:
 	case KAUTH_SYSTEM_MODULE:
 	case KAUTH_SYSTEM_FS_RESERVEDSPACE:
-	case KAUTH_SYSTEM_MAP_VA_ZERO:
-	case KAUTH_SYSTEM_FS_EXTATTR:
-	case KAUTH_SYSTEM_FS_SNAPSHOT:
 		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
 		break;
@@ -412,40 +379,13 @@ secmodel_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 		break;
 
 	case KAUTH_SYSTEM_CHSYSFLAGS:
-		/* Deprecated. */
+		/*
+		 * Needs to be checked in conjunction with the immutable and
+		 * append-only flags (usually). Should be handled differently.
+		 * Infects ufs, ext2fs, tmpfs, and rump.
+		 */
 		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
-
-		break;
-
-	case KAUTH_SYSTEM_VERIEXEC:
-		switch (req) {
-		case KAUTH_REQ_SYSTEM_VERIEXEC_ACCESS:
-		case KAUTH_REQ_SYSTEM_VERIEXEC_MODIFY:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
-			break;
-
-		default:
-			break;
-		}
-
-		break;
-
-	case KAUTH_SYSTEM_LFS:
-		switch (req) {
-		case KAUTH_REQ_SYSTEM_LFS_MARKV:
-		case KAUTH_REQ_SYSTEM_LFS_BMAPV:
-		case KAUTH_REQ_SYSTEM_LFS_SEGCLEAN:
-		case KAUTH_REQ_SYSTEM_LFS_SEGWAIT:
-		case KAUTH_REQ_SYSTEM_LFS_FCNTL:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
-		default:
-			break;
-		}
 
 		break;
 
@@ -532,7 +472,6 @@ secmodel_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 		switch (req) {
 		case KAUTH_REQ_PROCESS_RLIMIT_SET:
 		case KAUTH_REQ_PROCESS_RLIMIT_GET:
-		case KAUTH_REQ_PROCESS_RLIMIT_BYPASS:
 			if (isroot)
 				result = KAUTH_RESULT_ALLOW;
 
@@ -636,7 +575,6 @@ secmodel_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 		case KAUTH_REQ_NETWORK_INTERFACE_SET:
 		case KAUTH_REQ_NETWORK_INTERFACE_GETPRIV:
 		case KAUTH_REQ_NETWORK_INTERFACE_SETPRIV:
-		case KAUTH_REQ_NETWORK_INTERFACE_FIRMWARE:
 			if (isroot)
 				result = KAUTH_RESULT_ALLOW;
 			break;
@@ -644,20 +582,6 @@ secmodel_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 		default:
 			break;
 		}
-		break;
-
-	case KAUTH_NETWORK_INTERFACE_BRIDGE:
-		switch (req) {
-		case KAUTH_REQ_NETWORK_INTERFACE_BRIDGE_GETPRIV:
-		case KAUTH_REQ_NETWORK_INTERFACE_BRIDGE_SETPRIV:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			break;
-
-		default:
-			break;
-		}
-
 		break;
 
 	case KAUTH_NETWORK_INTERFACE_PPP:
@@ -665,20 +589,6 @@ secmodel_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 		case KAUTH_REQ_NETWORK_INTERFACE_PPP_ADD:
 			if (isroot)
 				result = KAUTH_RESULT_ALLOW;
-			break;
-
-		default:
-			break;
-		}
-
-		break;
-
-	case KAUTH_NETWORK_INTERFACE_PVC:
-		switch (req) {
-		case KAUTH_REQ_NETWORK_INTERFACE_PVC_ADD:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
 			break;
 
 		default:
@@ -726,21 +636,6 @@ secmodel_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 
 		break;
 
-	case KAUTH_NETWORK_IPV6:
-		switch (req) {
-		case KAUTH_REQ_NETWORK_IPV6_HOPBYHOP:
-		case KAUTH_REQ_NETWORK_IPV6_JOIN_MULTICAST:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
-			break;
-
-		default:
-			break;
-		}
-
-		break;
-
 	case KAUTH_NETWORK_NFS:
 		switch (req) {
 		case KAUTH_REQ_NETWORK_NFS_EXPORT:
@@ -753,23 +648,6 @@ secmodel_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 		default:
 			break;
 		}
-		break;
-
-	case KAUTH_NETWORK_SMB:
-		switch (req) {
-		case KAUTH_REQ_NETWORK_SMB_SHARE_ACCESS:
-		case KAUTH_REQ_NETWORK_SMB_SHARE_CREATE:
-		case KAUTH_REQ_NETWORK_SMB_VC_ACCESS:
-		case KAUTH_REQ_NETWORK_SMB_VC_CREATE:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
-			break;
-
-		default:
-			break;
-		}
-
 		break;
 
 	case KAUTH_NETWORK_SOCKET:
@@ -796,19 +674,6 @@ secmodel_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 
 		break;
 
-	case KAUTH_NETWORK_IPSEC:
-		switch (req) {
-		case KAUTH_REQ_NETWORK_IPSEC_BYPASS:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-
-			break;
-
-		default:
-			break;
-		}
-
-		break;
 
 	default:
 		break;
@@ -846,7 +711,6 @@ secmodel_suser_machdep_cb(kauth_cred_t cred, kauth_action_t action,
 	case KAUTH_MACHDEP_MTRR_SET:
 	case KAUTH_MACHDEP_NVRAM:
 	case KAUTH_MACHDEP_UNMANAGEDMEM:
-	case KAUTH_MACHDEP_PXG:
 		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
 		break;
@@ -882,13 +746,10 @@ secmodel_suser_device_cb(kauth_cred_t cred, kauth_action_t action,
 	case KAUTH_DEVICE_TTY_OPEN:
 	case KAUTH_DEVICE_TTY_PRIVSET:
 	case KAUTH_DEVICE_TTY_STI:
-	case KAUTH_DEVICE_TTY_VIRTUAL:
 	case KAUTH_DEVICE_RND_ADDDATA:
 	case KAUTH_DEVICE_RND_ADDDATA_ESTIMATE:
 	case KAUTH_DEVICE_RND_GETPRIV:
 	case KAUTH_DEVICE_RND_SETPRIV:
-	case KAUTH_DEVICE_WSCONS_KEYBOARD_BELL:
-	case KAUTH_DEVICE_WSCONS_KEYBOARD_KEYREPEAT:
 		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
 		break;
@@ -938,12 +799,8 @@ secmodel_suser_vnode_cb(kauth_cred_t cred, kauth_action_t action,
 	isroot = suser_isroot(cred);
 	result = KAUTH_RESULT_DEFER;
 
-	if (isroot) {
-		/* Superuser can execute only if the file's executable. */
-		if ((action & KAUTH_VNODE_EXECUTE) == 0 ||
-		    (action & KAUTH_VNODE_IS_EXEC))
-			result = KAUTH_RESULT_ALLOW;
-	}
+	if (isroot)
+		result = KAUTH_RESULT_ALLOW;
 
 	return (result);
 }

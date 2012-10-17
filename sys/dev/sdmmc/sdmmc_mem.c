@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmc_mem.c,v 1.23 2012/07/26 18:36:55 matt Exp $	*/
+/*	$NetBSD: sdmmc_mem.c,v 1.20.2.1 2012/08/08 06:18:59 jdc Exp $	*/
 /*	$OpenBSD: sdmmc_mem.c,v 1.10 2009/01/09 10:55:22 jsg Exp $	*/
 
 /*
@@ -45,7 +45,7 @@
 /* Routines for SD/MMC memory cards. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdmmc_mem.c,v 1.23 2012/07/26 18:36:55 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdmmc_mem.c,v 1.20.2.1 2012/08/08 06:18:59 jdc Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sdmmc.h"
@@ -658,8 +658,8 @@ sdmmc_mem_sd_init(struct sdmmc_softc *sc, struct sdmmc_function *sf)
 			sf->csd.tran_speed =
 			    switch_group0_functions[best_func].freq;
 
-			/* Wait 400KHz x 8 clock (2.5us * 8 + slop) */
-			delay(25);
+			/* Wait 400KHz x 8 clock */
+			delay(1);
 		}
 	}
 

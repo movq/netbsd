@@ -1,4 +1,4 @@
-/*	$NetBSD: selectiveencode.h,v 1.3 2012/06/05 00:39:57 christos Exp $	*/
+/*	$NetBSD: selectiveencode.h,v 1.2.6.1 2012/06/06 18:18:09 bouyer Exp $	*/
 
 /* Id: selectiveencode.h,v 1.2 2009/09/01 03:31:33 jinmei Exp  */
 /*

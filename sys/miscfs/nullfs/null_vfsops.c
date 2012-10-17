@@ -1,4 +1,4 @@
-/*	$NetBSD: null_vfsops.c,v 1.84 2012/04/30 22:51:27 rmind Exp $	*/
+/*	$NetBSD: null_vfsops.c,v 1.83 2010/11/19 06:44:46 dholland Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.84 2012/04/30 22:51:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: null_vfsops.c,v 1.83 2010/11/19 06:44:46 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -137,7 +137,7 @@ nullfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	pathbuf_destroy(pb);
 
 	/* Create the mount point. */
-	nmp = kmem_zalloc(sizeof(struct null_mount), KM_SLEEP);
+	nmp = malloc(sizeof(struct null_mount), M_UFSMNT, M_WAITOK | M_ZERO);
 	mp->mnt_data = nmp;
 	nmp->nullm_vfs = lowerrootvp->v_mount;
 	if (nmp->nullm_vfs->mnt_flag & MNT_LOCAL)
@@ -164,7 +164,7 @@ nullfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		vput(lowerrootvp);
 		hashdone(nmp->nullm_node_hashtbl, HASH_LIST,
 		    nmp->nullm_node_hash);
-		kmem_free(nmp, sizeof(struct null_mount));
+		free(nmp, M_UFSMNT);
 		return error;
 	}
 	/*
@@ -203,7 +203,7 @@ nullfs_unmount(struct mount *mp, int mntflags)
 	/* Finally, destroy the mount point structures. */
 	hashdone(nmp->nullm_node_hashtbl, HASH_LIST, nmp->nullm_node_hash);
 	mutex_destroy(&nmp->nullm_hashlock);
-	kmem_free(mp->mnt_data, sizeof(struct null_mount));
+	free(mp->mnt_data, M_UFSMNT);
 	mp->mnt_data = NULL;
 	return 0;
 }

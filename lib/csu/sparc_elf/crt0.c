@@ -1,4 +1,4 @@
-/* $NetBSD: crt0.c,v 1.15 2012/08/10 12:37:39 martin Exp $ */
+/* $NetBSD: crt0.c,v 1.14.6.1 2012/08/13 17:09:49 riz Exp $ */
 
 /*
  * Copyright (c) 1998 Christos Zoulas
@@ -100,7 +100,7 @@ ___start(int argc, char **argv, char **envp,
  * NOTE: Leave the RCS ID _after_ __start(), in case it gets placed in .text.
  */
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: crt0.c,v 1.15 2012/08/10 12:37:39 martin Exp $");
+__RCSID("$NetBSD: crt0.c,v 1.14.6.1 2012/08/13 17:09:49 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "common.c"

@@ -1,4 +1,4 @@
-/* $NetBSD: nilfs_vnops.c,v 1.18 2012/07/22 00:53:19 rmind Exp $ */
+/* $NetBSD: nilfs_vnops.c,v 1.16.6.1 2012/08/12 12:59:47 martin Exp $ */
 
 /*
  * Copyright (c) 2008, 2009 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.18 2012/07/22 00:53:19 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.16.6.1 2012/08/12 12:59:47 martin Exp $");
 #endif /* not lint */
 
 
@@ -1036,9 +1036,9 @@ nilfs_check_permitted(struct vnode *vp, struct vattr *vap, mode_t mode,
 {
 
 	/* ask the generic genfs_can_access to advice on security */
-	return kauth_authorize_vnode(cred, kauth_access_action(mode,
-	    vp->v_type, vap->va_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    vap->va_mode, vap->va_uid, vap->va_gid, mode, cred));
+	return genfs_can_access(vp->v_type,
+			vap->va_mode, vap->va_uid, vap->va_gid,
+			mode, cred);
 }
 
 int

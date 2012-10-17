@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.6 2012/05/19 14:40:13 kiyohara Exp $	*/
+/*	$NetBSD: conf.c,v 1.5 2006/04/10 18:40:06 garbled Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -37,14 +37,8 @@ int instrategy(void *, int , daddr_t, size_t, void *, size_t *);
 int inopen(struct open_file *, ...);
 int inclose(struct open_file *);
 
-int sdstrategy(void *, int , daddr_t, size_t, void *, size_t *);
-int sdopen(struct open_file *, ...);
-int sdclose(struct open_file *);
-
 struct devsw devsw[] = {
-	{ "sd",	sdstrategy, sdopen, sdclose, noioctl },
-	{ NULL,	NULL,       NULL,   NULL,    NULL },
+	{ "in",	instrategy, inopen, inclose, noioctl },
 };
-struct devsw pseudo_devsw = { "in", instrategy, inopen, inclose, noioctl };
 
 int ndevs = (sizeof (devsw) / sizeof (devsw[0]));

@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_build.c,v 1.4 2012/08/10 09:26:58 ttoth Exp $	*/
+/*	$NetBSD: chfs_build.c,v 1.2 2011/11/24 21:22:39 agc Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -67,11 +67,11 @@ void
 chfs_build_set_vnodecache_nlink(struct chfs_mount *chmp,
     struct chfs_vnode_cache *vc)
 {
-	struct chfs_dirent *fd, *tmpfd;
+	struct chfs_dirent *fd;
 	//dbg("set nlink\n");
 
 //	for (fd = vc->scan_dirents; fd; fd = fd->next) {
-	TAILQ_FOREACH_SAFE(fd, &vc->scan_dirents, fds, tmpfd) {
+	TAILQ_FOREACH(fd, &vc->scan_dirents, fds) {
 		struct chfs_vnode_cache *child_vc;
 
 		if (!fd->vno)
@@ -82,10 +82,9 @@ chfs_build_set_vnodecache_nlink(struct chfs_mount *chmp,
 		mutex_exit(&chmp->chm_lock_vnocache);
 		if (!child_vc) {
 			chfs_mark_node_obsolete(chmp, fd->nref);
-			TAILQ_REMOVE(&vc->scan_dirents, fd, fds);
 			continue;
 		}
-		if (fd->type == CHT_DIR) {
+		if (fd->type == VDIR) {
 			if (child_vc->nlink < 1)
 				child_vc->nlink = 1;
 
@@ -123,8 +122,8 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 	dbg("START\n");
 	dbg("vno: %llu\n", (unsigned long long)vc->vno);
 
-	KASSERT(mutex_owned(&chmp->chm_lock_mountfields));
 	nref = vc->dnode;
+	KASSERT(mutex_owned(&chmp->chm_lock_mountfields));
 	// The vnode cache is at the end of the data node's chain
 	while (nref != (struct chfs_node_ref *)vc) {
 		struct chfs_node_ref *next = nref->nref_next;
@@ -132,7 +131,6 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 		chfs_mark_node_obsolete(chmp, nref);
 		nref = next;
 	}
-	vc->dnode = (struct chfs_node_ref *)vc;
 	nref = vc->dirents;
 	// The vnode cache is at the end of the dirent node's chain
 	while (nref != (struct chfs_node_ref *)vc) {
@@ -141,7 +139,6 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 		chfs_mark_node_obsolete(chmp, nref);
 		nref = next;
 	}
-	vc->dirents = (struct chfs_node_ref *)vc;
 	if (!TAILQ_EMPTY(&vc->scan_dirents)) {
 		TAILQ_FOREACH_SAFE(fd, &vc->scan_dirents, fds, tmpfd) {
 //		while (vc->scan_dirents) {
@@ -192,14 +189,14 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 
 	nref = vc->v;
 	while ((struct chfs_vnode_cache *)nref != vc) {
-		chfs_mark_node_obsolete(chmp, nref);
+		if (!CHFS_REF_OBSOLETE(nref))
+			chfs_mark_node_obsolete(chmp, nref);
 		nref = nref->nref_next;
 	}
-	vc->v = (struct chfs_node_ref *)vc;
 
 	mutex_enter(&chmp->chm_lock_vnocache);
 	if (vc->vno != CHFS_ROOTINO)
-		vc->state = VNO_STATE_UNCHECKED;
+		chfs_vnode_cache_set_state(chmp, vc, VNO_STATE_UNCHECKED);
 	mutex_exit(&chmp->chm_lock_vnocache);
 	dbg("END\n");
 }
@@ -375,11 +372,14 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 					nref = &fd->nref;
 					*nref = fd->nref->nref_next;
 					//fd->nref->nref_next = NULL;
-				} else if (fd->type == CHT_DIR) {
+				} else if (fd->type == VDIR) {
 					//set state every non-VREG file's vc
 					mutex_enter(&chmp->chm_lock_vnocache);
-					notregvc = chfs_vnode_cache_get(chmp, fd->vno);
-					notregvc->state = VNO_STATE_PRESENT;
+					notregvc =
+					    chfs_vnode_cache_get(chmp,
+						fd->vno);
+					chfs_vnode_cache_set_state(chmp,
+					    notregvc, VNO_STATE_PRESENT);
 					mutex_exit(&chmp->chm_lock_vnocache);
 				}
 				chfs_free_dirent(fd);

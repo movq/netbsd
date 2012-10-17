@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_proc.c,v 1.10 2012/06/18 20:30:32 tron Exp $	*/
+/*	$NetBSD: lock_proc.c,v 1.9.30.1 2012/06/24 18:07:02 riz Exp $	*/
 
 /*
  * Copyright (c) 1995
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: lock_proc.c,v 1.10 2012/06/18 20:30:32 tron Exp $");
+__RCSID("$NetBSD: lock_proc.c,v 1.9.30.1 2012/06/24 18:07:02 riz Exp $");
 #endif
 
 #include <sys/param.h>

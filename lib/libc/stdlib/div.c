@@ -1,4 +1,4 @@
-/*	$NetBSD: div.c,v 1.8 2012/06/25 22:32:45 abs Exp $	*/
+/*	$NetBSD: div.c,v 1.7 2003/08/07 16:43:39 agc Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -37,14 +37,15 @@
 #if 0
 static char sccsid[] = "@(#)div.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: div.c,v 1.8 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: div.c,v 1.7 2003/08/07 16:43:39 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include <stdlib.h>		/* div_t */
 
 div_t
-div(int num, int denom)
+div(num, denom)
+	int num, denom;
 {
 	div_t r;
 

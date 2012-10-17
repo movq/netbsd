@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.h,v 1.8 2012/06/05 00:42:37 christos Exp $	*/
+/*	$NetBSD: mem.h,v 1.7.4.1 2012/06/05 21:15:27 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.52 2012/09/18 07:05:15 skrll Exp $
+#	$NetBSD: Makefile,v 1.50.2.1 2012/07/05 17:20:06 riz Exp $
 
 .include <bsd.own.mk>
 
@@ -6,6 +6,7 @@ GCC_LANGUAGES=c c++ objc
 MODULE=			gcc4
 
 MKNATIVE_CONFIG_TARGET_LIBS= \
+	configure-target-libiberty \
 	configure-target-libstdc++-v3 \
 	configure-target-libobjc
 
@@ -36,7 +37,7 @@ COMMON_CONFIGURE_ARGS=	--target=${MACHINE_GNU_PLATFORM} \
 			--enable-long-long \
 			--enable-threads \
 			--with-bugurl=http://www.NetBSD.org/Misc/send-pr.html \
-			--with-pkgversion="NetBSD nb1 20120916" \
+			--with-pkgversion="NetBSD nb2 20111202" \
 			--with-system-zlib \
 			${VAX_CONFIGURE_ARGS} \
 			--enable-__cxa_atexit

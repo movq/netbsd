@@ -1,4 +1,4 @@
-/*	$NetBSD: funcs.c,v 1.4 2012/02/22 17:53:51 christos Exp $	*/
+/*	$NetBSD: funcs.c,v 1.3.6.1 2012/03/07 23:18:29 riz Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.
@@ -32,7 +32,7 @@
 #if 0
 FILE_RCSID("@(#)$File: funcs.c,v 1.60 2011/12/08 12:38:24 rrt Exp $")
 #else
-__RCSID("$NetBSD: funcs.c,v 1.4 2012/02/22 17:53:51 christos Exp $");
+__RCSID("$NetBSD: funcs.c,v 1.3.6.1 2012/03/07 23:18:29 riz Exp $");
 #endif
 #endif	/* lint */
 

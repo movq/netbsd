@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.38 2012/02/17 18:42:19 bouyer Exp $	*/
+/*	$NetBSD: hypervisor.h,v 1.36.2.2 2012/02/22 18:56:46 riz Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.

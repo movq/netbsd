@@ -109,7 +109,6 @@ daemonise(void)
 		writepid(pidfd, pid);
 		close(pidfd);
 		pidfd = -1;
-		options |= DHCPCD_FORKED;
 		exit(EXIT_SUCCESS);
 	}
 	options |= DHCPCD_DAEMONISED;

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.238 2012/07/31 20:12:27 martin Exp $ */
+/*	$NetBSD: cpu.c,v 1.234.8.1 2012/03/19 23:21:23 riz Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.238 2012/07/31 20:12:27 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.234.8.1 2012/03/19 23:21:23 riz Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
@@ -1058,10 +1058,8 @@ int hypersparc_getmid(void);
 #define cypress_getmid	hypersparc_getmid
 int viking_getmid(void);
 
-#if (defined(SUN4M) && !defined(MSIIEP)) || defined(SUN4D)
-extern int (*moduleerr_handler)(void);
+int	(*moduleerr_handler)(void);
 int viking_module_error(void);
-#endif
 
 struct module_info module_unknown = {
 	CPUTYP_UNKNOWN,
@@ -1758,9 +1756,7 @@ static	int mxcc = -1;
 		sc->flags |= CPUFLG_CACHE_MANDATORY;
 		sc->zero_page = pmap_zero_page_viking_mxcc;
 		sc->copy_page = pmap_copy_page_viking_mxcc;
-#if !defined(MSIIEP)
 		moduleerr_handler = viking_module_error;
-#endif
 
 		/*
 		 * Ok to cache PTEs; set the flag here, so we don't
@@ -1818,7 +1814,6 @@ viking_getmid(void)
 	return (0);
 }
 
-#if !defined(MSIIEP)
 int
 viking_module_error(void)
 {
@@ -1848,7 +1843,6 @@ viking_module_error(void)
 	}
 	return (fatal);
 }
-#endif /* MSIIEP */
 #endif /* SUN4M || SUN4D */
 
 #if defined(SUN4D)

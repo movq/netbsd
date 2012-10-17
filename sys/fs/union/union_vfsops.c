@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.68 2012/04/30 22:51:27 rmind Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.67 2011/12/05 11:12:10 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.68 2012/04/30 22:51:27 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.67 2011/12/05 11:12:10 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,7 +164,8 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		goto bad;
 	}
 
-	um = kmem_zalloc(sizeof(struct union_mount), KM_SLEEP);
+	um = (struct union_mount *) malloc(sizeof(struct union_mount),
+				M_UFSMNT, M_WAITOK);	/* XXX */
 
 	/*
 	 * Keep a held reference to the target vnodes.
@@ -290,7 +291,7 @@ union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 
 bad:
 	if (um)
-		kmem_free(um, sizeof(struct union_mount));
+		free(um, M_UFSMNT);
 	if (upperrootvp)
 		vrele(upperrootvp);
 	if (lowerrootvp)
@@ -371,9 +372,9 @@ union_unmount(struct mount *mp, int mntflags)
 	/*
 	 * Finally, throw away the union_mount structure
 	 */
-	kmem_free(um, sizeof(struct union_mount));
+	free(mp->mnt_data, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
-	return 0;
+	return (0);
 }
 
 int

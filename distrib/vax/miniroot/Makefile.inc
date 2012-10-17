@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.22 2012/07/03 21:49:55 abs Exp $
+# $NetBSD: Makefile.inc,v 1.20.8.2 2012/07/05 18:22:50 riz Exp $
 
 IMAGESIZE=	7m
 MAKEFS_FLAGS=	-o density=3k

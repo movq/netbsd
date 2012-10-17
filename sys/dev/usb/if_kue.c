@@ -1,5 +1,4 @@
-/*	$NetBSD: if_kue.c,v 1.77 2012/03/11 01:06:06 mrg Exp $	*/
-
+/*	$NetBSD: if_kue.c,v 1.75 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -71,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.77 2012/03/11 01:06:06 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.75 2012/02/02 19:43:07 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -84,23 +83,25 @@ __KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.77 2012/03/11 01:06:06 mrg Exp $");
 #include <sys/socket.h>
 #include <sys/device.h>
 #include <sys/proc.h>
+
 #include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
-#include <net/bpf.h>
-#include <net/if_ether.h>
 
+#include <net/bpf.h>
+
+#include <net/if_ether.h>
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 #endif
 
+
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdevs.h>
 
 #include <dev/usb/if_kuereg.h>
@@ -984,6 +985,13 @@ kue_ioctl(struct ifnet *ifp, u_long command, void *data)
 
 	if (sc->kue_dying)
 		return (EIO);
+
+#ifdef DIAGNOSTIC
+	if (!curproc) {
+		printf("%s: no proc!!\n", device_xname(sc->kue_dev));
+		return EIO;
+	}
+#endif
 
 	s = splnet();
 

@@ -1,4 +1,4 @@
-/*      $NetBSD: ukbd.c,v 1.124 2012/06/10 06:15:54 mrg Exp $        */
+/*      $NetBSD: ukbd.c,v 1.115.2.2 2012/07/20 23:55:54 riz Exp $        */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukbd.c,v 1.124 2012/06/10 06:15:54 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukbd.c,v 1.115.2.2 2012/07/20 23:55:54 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: ukbd.c,v 1.124 2012/06/10 06:15:54 mrg Exp $");
 
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/usb_quirks.h>
 #include <dev/usb/uhidev.h>
@@ -150,28 +149,28 @@ Static const struct ukbd_keycodetrans trtab_apple_iso[] = {
 #ifdef GDIUM_KEYBOARD_HACK
 Static const struct ukbd_keycodetrans trtab_gdium_fn[] = {	
 #ifdef notyet
-	{ 58, 0 },	/* F1 -> toggle camera */
-	{ 59, 0 },	/* F2 -> toggle wireless */
+		{ 58, 0 },	/* F1 -> toggle camera */
+		{ 59, 0 },	/* F2 -> toggle wireless */
 #endif
-	{ 60, IS_PMF | PMFE_AUDIO_VOLUME_TOGGLE },
-	{ 61, IS_PMF | PMFE_AUDIO_VOLUME_UP },
-	{ 62, IS_PMF | PMFE_AUDIO_VOLUME_DOWN },
+		{ 60, IS_PMF | PMFE_AUDIO_VOLUME_TOGGLE },
+		{ 61, IS_PMF | PMFE_AUDIO_VOLUME_UP },
+		{ 62, IS_PMF | PMFE_AUDIO_VOLUME_DOWN },
 #ifdef notyet
-	{ 63, 0 },	/* F6 -> toggle ext. video */
-	{ 64, 0 },	/* F7 -> toggle mouse */
+		{ 63, 0 },	/* F6 -> toggle ext. video */
+		{ 64, 0 },	/* F7 -> toggle mouse */
 #endif
-	{ 65, IS_PMF | PMFE_DISPLAY_BRIGHTNESS_UP },
-	{ 66, IS_PMF | PMFE_DISPLAY_BRIGHTNESS_DOWN },
+		{ 65, IS_PMF | PMFE_DISPLAY_BRIGHTNESS_UP },
+		{ 66, IS_PMF | PMFE_DISPLAY_BRIGHTNESS_DOWN },
 #ifdef notyet
-	{ 67, 0 },	/* F10 -> suspend */
-	{ 68, 0 },	/* F11 -> user1 */
-	{ 69, 0 },	/* F12 -> user2 */
-	{ 70, 0 },	/* print screen -> sysrq */
+		{ 67, 0 },	/* F10 -> suspend */
+		{ 68, 0 },	/* F11 -> user1 */
+		{ 69, 0 },	/* F12 -> user2 */
+		{ 70, 0 },	/* print screen -> sysrq */
 #endif
-	{ 76, 71 },	/* delete -> scroll lock */
-	{ 81, 78 },	/* down -> page down */
-	{ 82, 75 },	/* up -> page up */
-	{  0, 0 }
+		{ 76, 71 },	/* delete -> scroll lock */
+		{ 81, 78 },	/* down -> page down */
+		{ 82, 75 },	/* up -> page up */
+		{  0, 0 }
 };
 #endif
 
@@ -182,7 +181,7 @@ Static const struct ukbd_keycodetrans trtab_generic[] = {
 	{ 0x00, 0x00 }
 };
 
-#if defined(WSDISPLAY_COMPAT_RAWKBD)
+#if defined(__NetBSD__) && defined(WSDISPLAY_COMPAT_RAWKBD)
 #define NN 0			/* no translation */
 /*
  * Translate USB keycodes to US keyboard XT scancodes.
@@ -208,10 +207,10 @@ Static const u_int8_t ukbd_trtab[256] = {
     0x7f, 0xd2, 0xc7, 0xc9, 0xd3, 0xcf, 0xd1, 0xcd, /* 48 - 4f */
     0xcb, 0xd0, 0xc8, 0x45, 0xb5, 0x37, 0x4a, 0x4e, /* 50 - 57 */
     0x9c, 0x4f, 0x50, 0x51, 0x4b, 0x4c, 0x4d, 0x47, /* 58 - 5f */
-    0x48, 0x49, 0x52, 0x53, 0x56, 0xdd, 0xdf, 0x59, /* 60 - 67 */
+    0x48, 0x49, 0x52, 0x53, 0x56, 0xdd,   NN, 0x59, /* 60 - 67 */
     0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,   NN, /* 68 - 6f */
-      NN,   NN,   NN,   NN, 0x84, 0x85, 0x87, 0x88, /* 70 - 77 */
-    0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,   NN, /* 78 - 7f */
+      NN,   NN,   NN,   NN,   NN,   NN,   NN,   NN, /* 70 - 77 */
+      NN,   NN,   NN,   NN,   NN,   NN,   NN,   NN, /* 78 - 7f */
       NN,   NN,   NN,   NN,   NN, 0x7e,   NN, 0x73, /* 80 - 87 */
     0x70, 0x7d, 0x79, 0x7b, 0x5c,   NN,   NN,   NN, /* 88 - 8f */
       NN,   NN, 0x78, 0x77, 0x76,   NN,   NN,   NN, /* 90 - 97 */
@@ -229,7 +228,7 @@ Static const u_int8_t ukbd_trtab[256] = {
       NN,   NN,   NN,   NN,   NN,   NN,   NN,   NN, /* f0 - f7 */
       NN,   NN,   NN,   NN,   NN,   NN,   NN,   NN, /* f8 - ff */
 };
-#endif /* defined(WSDISPLAY_COMPAT_RAWKBD) */
+#endif /* defined(__NetBSD__) && defined(WSDISPLAY_COMPAT_RAWKBD) */
 
 #define KEY_ERROR 0x01
 
@@ -269,8 +268,8 @@ struct ukbd_softc {
 	struct hid_location sc_numloc;
 	struct hid_location sc_capsloc;
 	struct hid_location sc_scroloc;
-	struct hid_location sc_compose;
 	int sc_leds;
+#if defined(__NetBSD__)
 	device_t sc_wskbddev;
 
 #if defined(WSDISPLAY_COMPAT_RAWKBD)
@@ -287,6 +286,7 @@ struct ukbd_softc {
 	int sc_spl;
 	int sc_npollchar;
 	u_int16_t sc_pollchars[MAXKEYS];
+#endif /* defined(__NetBSD__) */
 
 	u_char sc_dying;
 };
@@ -327,11 +327,13 @@ Static int	ukbd_is_console;
 Static void	ukbd_cngetc(void *, u_int *, int *);
 Static void	ukbd_cnpollc(void *, int);
 
+#if defined(__NetBSD__)
 const struct wskbd_consops ukbd_consops = {
-	.getc =  ukbd_cngetc,
-	.pollc = ukbd_cnpollc,
-	.bell =  NULL,
+	ukbd_cngetc,
+	ukbd_cnpollc,
+	NULL,	/* bell */
 };
+#endif
 
 Static const char *ukbd_parse_desc(struct ukbd_softc *sc);
 
@@ -342,6 +344,7 @@ Static void	ukbd_delayed_decode(void *addr);
 Static int	ukbd_enable(void *, int);
 Static void	ukbd_set_leds(void *, int);
 
+#if defined(__NetBSD__)
 Static int	ukbd_ioctl(void *, u_long, void *, int, struct lwp *);
 #if  defined(WSDISPLAY_COMPAT_RAWKBD) && defined(UKBD_REPEAT)
 Static void	ukbd_rawrepeat(void *v);
@@ -365,6 +368,7 @@ const struct wskbd_mapdata ukbd_keymapdata = {
 	KB_US,
 #endif
 };
+#endif
 
 static int ukbd_match(device_t, cfdata_t, void *);
 static void ukbd_attach(device_t, device_t, void *);
@@ -399,7 +403,11 @@ ukbd_attach(device_t parent, device_t self, void *aux)
 	struct uhidev_attach_arg *uha = aux;
 	u_int32_t qflags;
 	const char *parseerr;
+#if defined(__NetBSD__)
 	struct wskbddev_attach_args a;
+#else
+	int i;
+#endif
 
 	sc->sc_hdev.sc_dev = self;
 	sc->sc_hdev.sc_intr = ukbd_intr;
@@ -475,8 +483,7 @@ ukbd_attach(device_t parent, device_t self, void *aux)
 	callout_init(&sc->sc_delay, 0);
 
 	/* Flash the leds; no real purpose, just shows we're alive. */
-	ukbd_set_leds(sc, WSKBD_LED_SCROLL | WSKBD_LED_NUM | WSKBD_LED_CAPS
-			| WSKBD_LED_COMPOSE);
+	ukbd_set_leds(sc, WSKBD_LED_SCROLL | WSKBD_LED_NUM | WSKBD_LED_CAPS);
 	usbd_delay_ms(uha->parent->sc_udev, 400);
 	ukbd_set_leds(sc, 0);
 
@@ -893,8 +900,6 @@ ukbd_set_leds(void *v, int leds)
 	sc->sc_leds = leds;
 	res = 0;
 	/* XXX not really right */
-	if ((leds & WSKBD_LED_COMPOSE) && sc->sc_compose.size == 1)
-		res |= 1 << sc->sc_compose.pos;
 	if ((leds & WSKBD_LED_SCROLL) && sc->sc_scroloc.size == 1)
 		res |= 1 << sc->sc_scroloc.pos;
 	if ((leds & WSKBD_LED_NUM) && sc->sc_numloc.size == 1)
@@ -1088,8 +1093,6 @@ ukbd_parse_desc(struct ukbd_softc *sc)
 		   sc->sc_hdev.sc_report_id, hid_output, &sc->sc_capsloc, NULL);
 	hid_locate(desc, size, HID_USAGE2(HUP_LEDS, HUD_LED_SCROLL_LOCK),
 		   sc->sc_hdev.sc_report_id, hid_output, &sc->sc_scroloc, NULL);
-	hid_locate(desc, size, HID_USAGE2(HUP_LEDS, HUD_LED_COMPOSE),
-		   sc->sc_hdev.sc_report_id, hid_output, &sc->sc_compose, NULL);
 
 	return (NULL);
 }

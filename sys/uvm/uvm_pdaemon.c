@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdaemon.c,v 1.107 2012/07/30 23:56:48 matt Exp $	*/
+/*	$NetBSD: uvm_pdaemon.c,v 1.105 2012/02/01 23:43:49 para Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.107 2012/07/30 23:56:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.105 2012/02/01 23:43:49 para Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -82,10 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_pdaemon.c,v 1.107 2012/07/30 23:56:48 matt Exp $
 
 #include <uvm/uvm.h>
 #include <uvm/uvm_pdpolicy.h>
-
-#ifdef UVMHIST
-UVMHIST_DEFINE(pdhist);
-#endif
 
 /*
  * UVMPD_NUMDIRTYREACTS is how many dirty pages the pagedaemon will reactivate
@@ -232,6 +228,7 @@ uvm_pageout(void *arg)
 	int bufcnt, npages = 0;
 	int extrapages = 0;
 	struct pool *pp;
+	uint64_t where;
 	
 	UVMHIST_FUNC("uvm_pageout"); UVMHIST_CALLED(pdhist);
 
@@ -331,6 +328,12 @@ uvm_pageout(void *arg)
 			continue;
 
 		/*
+		 * start draining pool resources now that we're not
+		 * holding any locks.
+		 */
+		pool_drain_start(&pp, &where);
+
+		/*
 		 * kill unused metadata buffers.
 		 */
 		mutex_enter(&bufcache_lock);
@@ -338,9 +341,9 @@ uvm_pageout(void *arg)
 		mutex_exit(&bufcache_lock);
 
 		/*
-		 * drain the pools.
+		 * complete draining the pools.
 		 */
-		pool_drain(&pp);
+		pool_drain_end(pp, where);
 	}
 	/*NOTREACHED*/
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp6.c,v 1.161 2012/06/23 03:14:03 christos Exp $	*/
+/*	$NetBSD: icmp6.c,v 1.159 2011/12/31 20:41:59 christos Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.161 2012/06/23 03:14:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.159 2011/12/31 20:41:59 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -98,6 +98,11 @@ __KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.161 2012/06/23 03:14:03 christos Exp $")
 #include <netinet6/in6_ifattach.h>
 #include <netinet6/ip6protosw.h>
 #include <netinet6/scope6_var.h>
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#endif
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -2279,8 +2284,6 @@ icmp6_redirect_input(struct mbuf *m, int off)
 		 * (there will be additional hops, though).
 		 */
 		rtcount = rt_timer_count(icmp6_redirect_timeout_q);
-		if (0 <= ip6_maxdynroutes && rtcount >= ip6_maxdynroutes)
-			goto freeit;
 		if (0 <= icmp6_redirect_hiwat && rtcount > icmp6_redirect_hiwat)
 			return;
 		else if (0 <= icmp6_redirect_lowat &&
@@ -2316,7 +2319,7 @@ icmp6_redirect_input(struct mbuf *m, int off)
 
 		sockaddr_in6_init(&sdst, &reddst6, 0, 0, 0);
 		pfctlinput(PRC_REDIRECT_HOST, (struct sockaddr *)&sdst);
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		key_sa_routechange((struct sockaddr *)&sdst);
 #endif
 	}

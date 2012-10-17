@@ -1,4 +1,4 @@
-/*	$NetBSD: sdlz.c,v 1.5 2012/06/05 00:41:40 christos Exp $	*/
+/*	$NetBSD: sdlz.c,v 1.4.4.1 2012/06/05 21:15:00 bouyer Exp $	*/
 
 /*
  * Portions Copyright (C) 2005-2012  Internet Systems Consortium, Inc. ("ISC")

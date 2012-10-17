@@ -1,4 +1,4 @@
-/*	$NetBSD: job.c,v 1.163 2012/07/03 21:03:40 sjg Exp $	*/
+/*	$NetBSD: job.c,v 1.160 2011/09/16 15:38:03 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: job.c,v 1.163 2012/07/03 21:03:40 sjg Exp $";
+static char rcsid[] = "$NetBSD: job.c,v 1.160 2011/09/16 15:38:03 joerg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)job.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: job.c,v 1.163 2012/07/03 21:03:40 sjg Exp $");
+__RCSID("$NetBSD: job.c,v 1.160 2011/09/16 15:38:03 joerg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -352,7 +352,7 @@ static int JobStart(GNode *, int);
 static char *JobOutput(Job *, char *, char *, int);
 static void JobDoOutput(Job *, Boolean);
 static Shell *JobMatchShell(const char *);
-static void JobInterrupt(int, int) MAKE_ATTR_DEAD;
+static void JobInterrupt(int, int) __dead;
 static void JobRestartJobs(void);
 static void JobTokenAdd(void);
 static void JobSigLock(sigset_t *);
@@ -475,7 +475,7 @@ JobCondPassSig(int signo)
  *-----------------------------------------------------------------------
  */
 static void
-JobChildSig(int signo MAKE_ATTR_UNUSED)
+JobChildSig(int signo __unused)
 {
     write(childExitJob.outPipe, CHILD_EXIT, 1);
 }
@@ -498,7 +498,7 @@ JobChildSig(int signo MAKE_ATTR_UNUSED)
  *-----------------------------------------------------------------------
  */
 static void
-JobContinueSig(int signo MAKE_ATTR_UNUSED)
+JobContinueSig(int signo __unused)
 {
     /*
      * Defer sending to SIGCONT to our stopped children until we return
@@ -523,14 +523,14 @@ JobContinueSig(int signo MAKE_ATTR_UNUSED)
  *
  *-----------------------------------------------------------------------
  */
-MAKE_ATTR_DEAD static void
+__dead static void
 JobPassSig_int(int signo)
 {
     /* Run .INTERRUPT target then exit */
     JobInterrupt(TRUE, signo);
 }
 
-MAKE_ATTR_DEAD static void
+__dead static void
 JobPassSig_term(int signo)
 {
     /* Dont run .INTERRUPT target then exit */
@@ -1226,7 +1226,7 @@ Job_CheckCommands(GNode *gn, void (*abortProc)(const char *, ...))
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), gn, 0);
 	    if (p1)
 		free(p1);
-	} else if (Dir_MTime(gn, 0) == 0 && (gn->type & OP_SPECIAL) == 0) {
+	} else if (Dir_MTime(gn) == 0 && (gn->type & OP_SPECIAL) == 0) {
 	    /*
 	     * The node wasn't the target of an operator we have no .DEFAULT
 	     * rule to go on and the target doesn't already exist. There's
@@ -2423,7 +2423,7 @@ Job_ParseShell(char *line)
 	 * If no path was given, the user wants one of the pre-defined shells,
 	 * yes? So we find the one s/he wants with the help of JobMatchShell
 	 * and set things up the right way. shellPath will be set up by
-	 * Shell_Init.
+	 * Job_Init.
 	 */
 	if (newShell.name == NULL) {
 	    Parse_Error(PARSE_FATAL, "Neither path nor name specified");
@@ -2438,12 +2438,6 @@ Job_ParseShell(char *line)
 	    }
 	    commandShell = sh;
 	    shellName = newShell.name;
-	    if (shellPath) {
-		/* Shell_Init has already been called!  Do it again. */
-		free(UNCONST(shellPath));
-		shellPath = NULL;
-		Shell_Init();
-	    }
 	}
     } else {
 	/*

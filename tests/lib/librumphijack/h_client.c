@@ -1,4 +1,4 @@
-/*	$NetBSD: h_client.c,v 1.8 2012/04/20 05:15:11 jruoho Exp $	*/
+/*	$NetBSD: h_client.c,v 1.6 2011/03/14 15:56:40 pooka Exp $	*/
 
 /*
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -57,19 +57,19 @@ main(int argc, char *argv[])
 		tv.tv_usec = 1;
 
 		if (pipe(pipefd) == -1)
-			err(EXIT_FAILURE, "pipe");
+			err(1, "pipe");
 		FD_ZERO(&rfds);
 		FD_SET(pipefd[0], &rfds);
 
 		rv = select(pipefd[0]+1, &rfds, NULL, NULL, &tv);
 		if (rv == -1)
-			err(EXIT_FAILURE, "select");
+			err(1, "select");
 		if (rv != 0)
-			errx(EXIT_FAILURE, "select succesful");
+			errx(1, "select succesful");
 
 		if (FD_ISSET(pipefd[0], &rfds))
-			errx(EXIT_FAILURE, "stdin fileno is still set");
-		return EXIT_SUCCESS;
+			errx(1, "stdin fileno is still set");
+		exit(0);
 	} else if (strcmp(argv[1], "select_allunset") == 0) {
 		fd_set fds;
 		struct timeval tv;
@@ -82,24 +82,24 @@ main(int argc, char *argv[])
 
 		rv = select(100, &fds, &fds, &fds, &tv);
 		if (rv == -1)
-			err(EXIT_FAILURE, "select");
+			err(1, "select");
 		if (rv != 0)
-			errx(EXIT_FAILURE, "select succesful");
+			errx(1, "select succesful");
 
 		rv = select(0, NULL, NULL, NULL, &tv);
 		if (rv == -1)
-			err(EXIT_FAILURE, "select2");
+			err(1, "select2");
 		if (rv != 0)
-			errx(EXIT_FAILURE, "select2 succesful");
+			errx(1, "select2 succesful");
 
-		return EXIT_SUCCESS;
+		exit(0);
 	} else if (strcmp(argv[1], "invafd") == 0) {
 		struct pollfd pfd[2];
 		int fd, rv;
 
 		fd = open("/rump/dev/null", O_RDWR);
 		if (fd == -1)
-			err(EXIT_FAILURE, "open");
+			err(1, "open");
 		close(fd);
 
 		pfd[0].fd = STDIN_FILENO;
@@ -108,30 +108,26 @@ main(int argc, char *argv[])
 		pfd[1].events = POLLIN;
 
 		if ((rv = poll(pfd, 2, INFTIM)) != 1)
-			errx(EXIT_FAILURE, "poll unexpected rv %d (%d)",
-			    rv, errno);
+			errx(1, "poll unexpected rv %d (%d)", rv, errno);
 		if (pfd[1].revents != POLLNVAL || pfd[0].revents != 0)
-			errx(EXIT_FAILURE, "poll unexpected revents");
+			errx(1, "poll unexpected revents");
 
-		return EXIT_SUCCESS;
+		exit(0);
 	} else if (strcmp(argv[1], "fdoff8") == 0) {
-
-		(void)closefrom(0);
-
 		int fd;
 
-		do {
+		do
 			if ((fd = open("/dev/null", O_RDWR)) == -1)
-				err(EXIT_FAILURE, "open1");
-		} while (fd < 7);
+				err(1, "open1");
+		while (fd < 7);
 		fd = open("/dev/null", O_RDWR);
 		if (fd != -1 || errno != ENFILE)
-			errx(EXIT_FAILURE, "unexpected fd8 %d %d", fd, errno);
+			errx(1, "unexpected fd8 %d %d", fd, errno);
 		if (fcntl(0, F_MAXFD) != 7)
-			errx(EXIT_FAILURE, "fd leak?");
+			errx(1, "fd leak?");
 		if ((fd = open("/rump/dev/null", O_RDWR)) != 8)
-			errx(EXIT_FAILURE, "rump open %d %d", fd, errno);
-		return EXIT_SUCCESS;
+			errx(1, "rump open %d %d", fd, errno);
+		exit(0);
 	} else {
 		return ENOTSUP;
 	}

@@ -771,13 +771,12 @@ create_access (tree expr, gimple stmt, bool write)
 	  disqualify_candidate (base, "Encountered a variable sized access.");
 	  return NULL;
 	}
-      if (TREE_CODE (expr) == COMPONENT_REF
-	  && DECL_BIT_FIELD (TREE_OPERAND (expr, 1)))
+      if ((offset % BITS_PER_UNIT) != 0 || (size % BITS_PER_UNIT) != 0)
 	{
-	  disqualify_candidate (base, "Encountered a bit-field access.");
+	  disqualify_candidate (base,
+				"Encountered an acces not aligned to a byte.");
 	  return NULL;
 	}
-      gcc_assert ((offset % BITS_PER_UNIT) == 0);
 
       if (ptr)
 	mark_parm_dereference (base, offset + size, stmt);
@@ -1855,25 +1854,13 @@ analyze_access_subtree (struct access *root, bool allow_replacements,
       && build_ref_for_offset (NULL, TREE_TYPE (root->base), root->offset,
 			       root->type, false))
     {
-      bool new_integer_type;
-      if (TREE_CODE (root->type) == ENUMERAL_TYPE)
-	{
-	  tree rt = root->type;
-	  root->type = build_nonstandard_integer_type (TYPE_PRECISION (rt),
-						       TYPE_UNSIGNED (rt));
-	  new_integer_type = true;
-	}
-      else
-	new_integer_type = false;
-
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
 	  fprintf (dump_file, "Marking ");
 	  print_generic_expr (dump_file, root->base, 0);
-	  fprintf (dump_file, " offset: %u, size: %u ",
+	  fprintf (dump_file, " offset: %u, size: %u: ",
 		   (unsigned) root->offset, (unsigned) root->size);
-	  fprintf (dump_file, " to be replaced%s.\n",
-		   new_integer_type ? " with an integer": "");
+	  fprintf (dump_file, " to be replaced.\n");
 	}
 
       root->grp_to_be_replaced = 1;
@@ -2743,13 +2730,7 @@ sra_modify_assign (gimple *stmt, gimple_stmt_iterator *gsi,
     }
   else
     {
-      if (access_has_children_p (lacc)
-	  && access_has_children_p (racc)
-	  /* When an access represents an unscalarizable region, it usually
-	     represents accesses with variable offset and thus must not be used
-	     to generate new memory accesses.  */
-	  && !lacc->grp_unscalarizable_region
-	  && !racc->grp_unscalarizable_region)
+      if (access_has_children_p (lacc) && access_has_children_p (racc))
 	{
 	  gimple_stmt_iterator orig_gsi = *gsi;
 	  enum unscalarized_data_handling refreshed;

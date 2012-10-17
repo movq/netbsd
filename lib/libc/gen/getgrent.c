@@ -1,4 +1,4 @@
-/*	$NetBSD: getgrent.c,v 1.67 2012/08/29 18:50:35 dholland Exp $	*/
+/*	$NetBSD: getgrent.c,v 1.64 2011/10/15 23:00:01 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999-2000, 2004-2005 The NetBSD Foundation, Inc.
@@ -88,7 +88,7 @@
 #if 0
 static char sccsid[] = "@(#)getgrent.c	8.2 (Berkeley) 3/21/94";
 #else
-__RCSID("$NetBSD: getgrent.c,v 1.67 2012/08/29 18:50:35 dholland Exp $");
+__RCSID("$NetBSD: getgrent.c,v 1.64 2011/10/15 23:00:01 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -221,9 +221,9 @@ _gr_parse(const char *entry, struct group *grp, char *buf, size_t buflen)
 	}
 				/* grab ALIGNed char **gr_mem from buf */
 	ep = _gr_memfrombuf(memc * sizeof(char *) + ALIGNBYTES, &buf, &buflen);
-	if (ep == NULL)
-		return 0;
 	grp->gr_mem = (char **)ALIGN(ep);
+	if (grp->gr_mem == NULL)
+		return 0;
 
 	for (memc = 0; *entry != '\0'; memc++) {
 		count = strcspn(entry, ",");	/* parse member */
@@ -359,7 +359,7 @@ __grscan_files(int *retval, struct group *grp, char *buffer, size_t buflen,
 	rv = NS_NOTFOUND;
 
 							/* scan line by line */
-	while (fgets(filebuf, (int)sizeof(filebuf), state->fp) != NULL) {
+	while (fgets(filebuf, sizeof(filebuf), state->fp) != NULL) {
 		ep = strchr(filebuf, '\n');
 		if (ep == NULL) {	/* skip lines that are too big */
 			int ch;
@@ -1190,17 +1190,9 @@ _nis_getgrgid_r(void *nsrv, void *nscb, va_list ap)
 	_DIAGASSERT(result != NULL);
 
 	*result = NULL;
-/* remark: we run under a global mutex inside of this module ... */
-	if (_nis_state.stayopen)
-	  { /* use global state only if stayopen is set - otherwiese we would blow up getgrent_r() ... */
-	     rv = __grscan_nis(retval, grp, buffer, buflen, &_nis_state, 1, NULL, gid);
-	  }
-	else
-	  {
-	    memset(&state, 0, sizeof(state));
-	    rv = __grscan_nis(retval, grp, buffer, buflen, &state, 1, NULL, gid);
-	    __grend_nis(&state);
-	  }
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_nis(retval, grp, buffer, buflen, &state, 1, NULL, gid);
+	__grend_nis(&state);
 	if (rv == NS_SUCCESS)
 		*result = grp;
 	return rv;
@@ -1250,17 +1242,9 @@ _nis_getgrnam_r(void *nsrv, void *nscb, va_list ap)
 	_DIAGASSERT(result != NULL);
 
 	*result = NULL;
-/* remark: we run under a global mutex inside of this module ... */
-	if (_nis_state.stayopen)
-	  { /* use global state only if stayopen is set - otherwiese we would blow up getgrent_r() ... */
-	     rv = __grscan_nis(retval, grp, buffer, buflen, &_nis_state, 1, name, 0);
-	  }
-	else
-	  {
-	    memset(&state, 0, sizeof(state));
-	    rv = __grscan_nis(retval, grp, buffer, buflen, &state, 1, name, 0);
-	    __grend_nis(&state);
-	  }
+	memset(&state, 0, sizeof(state));
+	rv = __grscan_nis(retval, grp, buffer, buflen, &state, 1, name, 0);
+	__grend_nis(&state);
 	if (rv == NS_SUCCESS)
 		*result = grp;
 	return rv;
@@ -1443,7 +1427,7 @@ __grscan_compat(int *retval, struct group *grp, char *buffer, size_t buflen,
 		}
 
 							/* get next file line */
-		if (fgets(filebuf, (int)sizeof(filebuf), state->fp) == NULL)
+		if (fgets(filebuf, sizeof(filebuf), state->fp) == NULL)
 			break;
 
 		ep = strchr(filebuf, '\n');

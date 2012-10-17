@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.50 2012/05/21 21:34:16 dsl Exp $	 */
+/*	$NetBSD: exec.c,v 1.49.4.1 2012/06/03 21:42:51 jdc Exp $	 */
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.

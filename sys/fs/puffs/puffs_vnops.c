@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_vnops.c,v 1.174 2012/08/10 16:49:35 manu Exp $	*/
+/*	$NetBSD: puffs_vnops.c,v 1.163.2.4 2012/08/12 13:13:20 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_vnops.c,v 1.174 2012/08/10 16:49:35 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_vnops.c,v 1.163.2.4 2012/08/12 13:13:20 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>

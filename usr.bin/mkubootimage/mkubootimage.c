@@ -1,4 +1,4 @@
-/* $NetBSD: mkubootimage.c,v 1.16 2012/02/17 08:28:36 matt Exp $ */
+/* $NetBSD: mkubootimage.c,v 1.14 2011/09/04 20:35:07 joerg Exp $ */
 
 /*-
  * Copyright (c) 2010 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mkubootimage.c,v 1.16 2012/02/17 08:28:36 matt Exp $");
+__RCSID("$NetBSD: mkubootimage.c,v 1.14 2011/09/04 20:35:07 joerg Exp $");
 
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -322,7 +322,7 @@ main(int argc, char *argv[])
 	char *ep;
 	int kernel_fd, image_fd;
 	int ch;
-	unsigned long long num;
+	unsigned long num;
 
 	while ((ch = getopt(argc, argv, "A:C:E:O:T:a:e:hm:n:")) != -1) {
 		switch (ch) {
@@ -340,22 +340,18 @@ main(int argc, char *argv[])
 			break;
 		case 'a':	/* addr */
 			errno = 0;
-			num = strtoull(optarg, &ep, 0);
+			num = strtoul(optarg, &ep, 0);
 			if (*ep != '\0' || (errno == ERANGE &&
-			    (num == ULLONG_MAX || num == 0)) ||
-			    ((signed long long)num != (int32_t)num &&
-			     num != (uint32_t)num))
+			    (num == ULONG_MAX || num == 0)))
 				errx(1, "illegal number -- %s", optarg);
 			image_loadaddr = (uint32_t)num;
 			break;
 		case 'E':	/* ep (byte swapped) */
 		case 'e':	/* ep */
 			errno = 0;
-			num = strtoull(optarg, &ep, 0);
+			num = strtoul(optarg, &ep, 0);
 			if (*ep != '\0' || (errno == ERANGE &&
-			    (num == ULLONG_MAX || num == 0)) ||
-			    ((signed long long)num != (int32_t)num &&
-			     num != (uint32_t)num))
+			    (num == ULONG_MAX || num == 0)))
 				errx(1, "illegal number -- %s", optarg);
 			image_entrypoint = (uint32_t)num;
 			if (ch == 'E')

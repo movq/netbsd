@@ -1,4 +1,4 @@
-/*	$NetBSD: moreobj.c,v 1.12 2012/06/19 05:30:43 dholland Exp $	*/
+/*	$NetBSD: moreobj.c,v 1.11 2008/02/19 06:05:26 dholland Exp $	*/
 
 /*
  * moreobj.c 		Larn is copyrighted 1986 by Noah Morgan.
@@ -9,7 +9,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: moreobj.c,v 1.12 2012/06/19 05:30:43 dholland Exp $");
+__RCSID("$NetBSD: moreobj.c,v 1.11 2008/02/19 06:05:26 dholland Exp $");
 #endif				/* not lint */
 #include <stdlib.h>
 #include <unistd.h>
@@ -22,7 +22,7 @@ static void fch(int, long *);
  *	subroutine to process an altar object
  */
 void
-oaltar(void)
+oaltar()
 {
 
 	lprcat("\nDo you (p) pray  (d) desecrate");
@@ -64,7 +64,8 @@ oaltar(void)
 	subroutine to process a throne object
  */
 void
-othrone(int arg)
+othrone(arg)
+	int             arg;
 {
 
 	lprcat("\nDo you (p) pry off jewels, (s) sit down");
@@ -91,7 +92,7 @@ othrone(int arg)
 }
 
 void
-odeadthrone(void)
+odeadthrone()
 {
 	int    k;
 
@@ -123,7 +124,7 @@ odeadthrone(void)
 	subroutine to process a throne object
  */
 void
-ochest(void)
+ochest()
 {
 
 	lprcat("\nDo you (t) take it, (o) try to open it");
@@ -154,7 +155,7 @@ ochest(void)
 	process a fountain object
  */
 void
-ofountain(void)
+ofountain()
 {
 
 	cursors();
@@ -187,7 +188,9 @@ ofountain(void)
 	subroutine to process an up/down of a character attribute for ofountain
  */
 static void
-fch(int how, long *x)
+fch(how, x)
+	int             how;
+	long           *x;
 {
 	if (how < 0) {
 		lprcat(" went down by one!");
@@ -204,7 +207,8 @@ fch(int how, long *x)
 	if x > 0 they are raised   if x < 0 they are lowered
  */
 void
-fntchange(int how)
+fntchange(how)
+	int             how;
 {
 	long   j;
 	lprc('\n');

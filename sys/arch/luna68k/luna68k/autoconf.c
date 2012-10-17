@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.13 2012/07/29 18:05:44 mlelstv Exp $ */
+/* $NetBSD: autoconf.c,v 1.12.18.1 2012/08/08 15:51:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.13 2012/07/29 18:05:44 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.18.1 2012/08/08 15:51:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

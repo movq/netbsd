@@ -51,8 +51,7 @@ int l2_packet_send(struct l2_packet_data *l2, const u8 *dst_addr, u16 proto,
 	if (l2->l2_hdr) {
 		ret = send(l2->fd, buf, len, 0);
 		if (ret < 0)
-			wpa_printf(MSG_ERROR, "l2_packet_send - send: %s",
-				   strerror(errno));
+			perror("l2_packet_send - send");
 	} else {
 		struct sockaddr_ll ll;
 		os_memset(&ll, 0, sizeof(ll));
@@ -63,10 +62,8 @@ int l2_packet_send(struct l2_packet_data *l2, const u8 *dst_addr, u16 proto,
 		os_memcpy(ll.sll_addr, dst_addr, ETH_ALEN);
 		ret = sendto(l2->fd, buf, len, 0, (struct sockaddr *) &ll,
 			     sizeof(ll));
-		if (ret < 0) {
-			wpa_printf(MSG_ERROR, "l2_packet_send - sendto: %s",
-				   strerror(errno));
-		}
+		if (ret < 0)
+			perror("l2_packet_send - sendto");
 	}
 	return ret;
 }
@@ -85,8 +82,7 @@ static void l2_packet_receive(int sock, void *eloop_ctx, void *sock_ctx)
 	res = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *) &ll,
 		       &fromlen);
 	if (res < 0) {
-		wpa_printf(MSG_DEBUG, "l2_packet_receive - recvfrom: %s",
-			   strerror(errno));
+		perror("l2_packet_receive - recvfrom");
 		return;
 	}
 
@@ -115,16 +111,14 @@ struct l2_packet_data * l2_packet_init(
 	l2->fd = socket(PF_PACKET, l2_hdr ? SOCK_RAW : SOCK_DGRAM,
 			htons(protocol));
 	if (l2->fd < 0) {
-		wpa_printf(MSG_ERROR, "%s: socket(PF_PACKET): %s",
-			   __func__, strerror(errno));
+		perror("socket(PF_PACKET)");
 		os_free(l2);
 		return NULL;
 	}
 	os_memset(&ifr, 0, sizeof(ifr));
 	os_strlcpy(ifr.ifr_name, l2->ifname, sizeof(ifr.ifr_name));
 	if (ioctl(l2->fd, SIOCGIFINDEX, &ifr) < 0) {
-		wpa_printf(MSG_ERROR, "%s: ioctl[SIOCGIFINDEX]: %s",
-			   __func__, strerror(errno));
+		perror("ioctl[SIOCGIFINDEX]");
 		close(l2->fd);
 		os_free(l2);
 		return NULL;
@@ -136,16 +130,14 @@ struct l2_packet_data * l2_packet_init(
 	ll.sll_ifindex = ifr.ifr_ifindex;
 	ll.sll_protocol = htons(protocol);
 	if (bind(l2->fd, (struct sockaddr *) &ll, sizeof(ll)) < 0) {
-		wpa_printf(MSG_ERROR, "%s: bind[PF_PACKET]: %s",
-			   __func__, strerror(errno));
+		perror("bind[PF_PACKET]");
 		close(l2->fd);
 		os_free(l2);
 		return NULL;
 	}
 
 	if (ioctl(l2->fd, SIOCGIFHWADDR, &ifr) < 0) {
-		wpa_printf(MSG_ERROR, "%s: ioctl[SIOCGIFHWADDR]: %s",
-			   __func__, strerror(errno));
+		perror("ioctl[SIOCGIFHWADDR]");
 		close(l2->fd);
 		os_free(l2);
 		return NULL;
@@ -181,16 +173,14 @@ int l2_packet_get_ip_addr(struct l2_packet_data *l2, char *buf, size_t len)
 
 	s = socket(PF_INET, SOCK_DGRAM, 0);
 	if (s < 0) {
-		wpa_printf(MSG_ERROR, "%s: socket: %s",
-			   __func__, strerror(errno));
+		perror("socket");
 		return -1;
 	}
 	os_memset(&ifr, 0, sizeof(ifr));
 	os_strlcpy(ifr.ifr_name, l2->ifname, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGIFADDR, &ifr) < 0) {
 		if (errno != EADDRNOTAVAIL)
-			wpa_printf(MSG_ERROR, "%s: ioctl[SIOCGIFADDR]: %s",
-				   __func__, strerror(errno));
+			perror("ioctl[SIOCGIFADDR]");
 		close(s);
 		return -1;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $	*/
+/*	$NetBSD: inet_cidr_pton.c,v 1.6 2009/04/12 17:07:16 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -22,7 +22,7 @@
 #if 0
 static const char rcsid[] = "Id: inet_cidr_pton.c,v 1.6 2005/04/27 04:56:19 sra Exp";
 #else
-__RCSID("$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $");
+__RCSID("$NetBSD: inet_cidr_pton.c,v 1.6 2009/04/12 17:07:16 christos Exp $");
 #endif
 #endif
 
@@ -40,7 +40,6 @@ __RCSID("$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <stddef.h>
 #include <stdlib.h>
 
 #include "port_after.h"
@@ -55,9 +54,10 @@ __RCSID("$NetBSD: inet_cidr_pton.c,v 1.8 2012/03/20 17:08:13 matt Exp $");
 __weak_alias(inet_cidr_pton,_inet_cidr_pton)
 #endif
 
-static int	inet_cidr_pton_ipv4(const char *src, u_char *dst,
-					 int *bits, int ipv6);
-static int	inet_cidr_pton_ipv6(const char *src, u_char *dst, int *bits);
+static int	inet_cidr_pton_ipv4 __P((const char *src, u_char *dst,
+					 int *bits, int ipv6));
+static int	inet_cidr_pton_ipv6 __P((const char *src, u_char *dst,
+					 int *bits));
 
 static int	getbits(const char *, int ipv6);
 
@@ -96,8 +96,7 @@ static const char digits[] = "0123456789";
 static int
 inet_cidr_pton_ipv4(const char *src, u_char *dst, int *pbits, int ipv6) {
 	const u_char *odst = dst;
-	int ch, bits;
-	ptrdiff_t n, tmp;
+	int n, ch, tmp, bits;
 	size_t size = 4;
 
 	/* Get the mantissa. */
@@ -189,7 +188,7 @@ inet_cidr_pton_ipv6(const char *src, u_char *dst, int *pbits) {
 			pch = strchr((xdigits = xdigits_u), ch);
 		if (pch != NULL) {
 			val <<= 4;
-			val |= (int)(pch - xdigits);
+			val |= (pch - xdigits);
 			if (val > 0xffff)
 				return (0);
 			saw_xdigit = 1;
@@ -238,7 +237,7 @@ inet_cidr_pton_ipv6(const char *src, u_char *dst, int *pbits) {
 		 * Since some memmove()'s erroneously fail to handle
 		 * overlapping regions, we'll do the shift by hand.
 		 */
-		const ptrdiff_t n = tp - colonp;
+		const int n = tp - colonp;
 		int i;
 
 		if (tp == endp)
@@ -277,7 +276,7 @@ getbits(const char *src, int ipv6) {
 		if (cp == NULL)			/*%< syntax */
 			return (-2);
 		bits *= 10;
-		bits += (int)(cp - digits);
+		bits += cp - digits;
 		if (bits == 0 && *src != '\0')	/*%< no leading zeros */
 			return (-2);
 		if (bits > (ipv6 ? 128 : 32))	/*%< range error */

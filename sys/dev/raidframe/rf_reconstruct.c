@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconstruct.c,v 1.118 2012/02/20 22:42:52 oster Exp $	*/
+/*	$NetBSD: rf_reconstruct.c,v 1.117.8.1 2012/02/23 02:22:05 riz Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  ************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_reconstruct.c,v 1.118 2012/02/20 22:42:52 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_reconstruct.c,v 1.117.8.1 2012/02/23 02:22:05 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>

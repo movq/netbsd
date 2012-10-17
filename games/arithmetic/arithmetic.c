@@ -1,4 +1,4 @@
-/*	$NetBSD: arithmetic.c,v 1.27 2012/06/19 05:46:08 dholland Exp $	*/
+/*	$NetBSD: arithmetic.c,v 1.26 2011/08/31 16:24:55 plunky Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)arithmetic.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: arithmetic.c,v 1.27 2012/06/19 05:46:08 dholland Exp $");
+__RCSID("$NetBSD: arithmetic.c,v 1.26 2011/08/31 16:24:55 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -155,7 +155,8 @@ main(int argc, char **argv)
 
 /* Handle interrupt character.  Print score and exit. */
 static void
-intr(int dummy __unused)
+intr(dummy)
+	int dummy __unused;
 {
 	showstats(1);
 	exit(0);
@@ -163,7 +164,8 @@ intr(int dummy __unused)
 
 /* Print score.  Original `arithmetic' had a delay after printing it. */
 static void
-showstats(int bool_sigint)
+showstats(bool_sigint)
+	int bool_sigint;
 {
 	if (nright + nwrong > 0) {
 		(void)printf("\n\nRights %d; Wrongs %d; Score %d%%",
@@ -188,7 +190,7 @@ showstats(int bool_sigint)
  * more likely to appear in subsequent problems.
  */
 static int
-problem(void)
+problem()
 {
 	char *p;
 	time_t start, finish;
@@ -301,7 +303,8 @@ static struct penalty {
  * forget about the penalty (how likely is this, anyway?).
  */
 static void
-penalise(int value, int op, int operand)
+penalise(value, op, operand)
+	int value, op, operand;
 {
 	struct penalty *p;
 
@@ -321,7 +324,8 @@ penalise(int value, int op, int operand)
  * we find the corresponding value and return that, decreasing its penalty.
  */
 static int
-getrandom(int maxval, int op, int operand)
+getrandom(maxval, op, operand)
+	int maxval, op, operand;
 {
 	int value;
 	struct penalty **pp, *p;
@@ -365,7 +369,8 @@ getrandom(int maxval, int op, int operand)
 
 /* Return an index for the character op, which is one of [+-x/]. */
 static int
-opnum(int op)
+opnum(op)
+	int op;
 {
 	char *p;
 
@@ -377,7 +382,7 @@ opnum(int op)
 
 /* Print usage message and quit. */
 static void
-usage(void)
+usage()
 {
 	(void)fprintf(stderr, "Usage: %s [-o +-x/] [-r range]\n",
 		getprogname());

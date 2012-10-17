@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.25 2012/08/01 16:19:42 matt Exp $	*/
+/*	$NetBSD: frame.h,v 1.23.8.1 2012/08/09 06:52:14 jdc Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -159,6 +159,14 @@ struct callframe {
 	register_t cf_lr;
 	register_t cf_r30;
 	register_t cf_r31;
+};
+
+struct saframe {
+	register_t saf_r1;	/* stack pointer */
+	register_t saf_lr;	/* Callee lr save area */
+#ifndef _LP64
+	register_t saf_fill[2];	/* Pad to multiple of 16 bytes */
+#endif
 };
 
 #endif	/* _POWERPC_FRAME_H_ */

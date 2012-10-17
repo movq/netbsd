@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith.y,v 1.22 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: arith.y,v 1.21 2011/08/29 14:50:27 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)arith.y	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith.y,v 1.22 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: arith.y,v 1.21 2011/08/29 14:50:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -123,7 +123,8 @@ expr:	ARITH_LPAREN expr ARITH_RPAREN { $$ = $2; }
 	;
 %%
 intmax_t
-arith(const char *s)
+arith(s)
+	const char *s;
 {
 	intmax_t result;
 
@@ -143,7 +144,9 @@ arith(const char *s)
  *  The exp(1) builtin.
  */
 int
-expcmd(int argc, char **argv)
+expcmd(argc, argv)
+	int argc;
+	char **argv;
 {
 	const char *p;
 	char *concat;

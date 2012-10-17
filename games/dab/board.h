@@ -1,4 +1,4 @@
-/*	$NetBSD: board.h,v 1.4 2012/02/29 23:39:53 joerg Exp $	*/
+/*	$NetBSD: board.h,v 1.3.4.1 2012/03/05 19:12:08 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

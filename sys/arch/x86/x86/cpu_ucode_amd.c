@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_ucode_amd.c,v 1.4 2012/08/29 17:13:22 drochner Exp $ */
+/* $NetBSD: cpu_ucode_amd.c,v 1.1.2.1 2012/05/17 18:17:32 riz Exp $ */
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_ucode_amd.c,v 1.4 2012/08/29 17:13:22 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_ucode_amd.c,v 1.1.2.1 2012/05/17 18:17:32 riz Exp $");
 
 #include "opt_xen.h"
 #include "opt_cpu_ucode.h"
@@ -102,29 +102,14 @@ amd_cpufamily(void)
 }
 
 int
-cpu_ucode_amd_get_version(struct cpu_ucode_version *ucode)
+cpu_ucode_amd_get_version(struct cpu_ucode *ucode)
 {
-	struct cpu_ucode_version_amd data;
-
-	if (ucode->loader_version != CPU_UCODE_LOADER_AMD || amd_cpufamily() < 0x10)
+	if (amd_cpufamily() < 0x10) {
+		ucode->version = (uint64_t)-1;
 		return EOPNOTSUPP;
-	if (!ucode->data)
-		return 0;
+	}
 
-	data.version = rdmsr(MSR_UCODE_AMD_PATCHLEVEL);
-	return copyout(&data, ucode->data, sizeof(data));
-}
-
-int
-compat6_cpu_ucode_amd_get_version(struct compat6_cpu_ucode *ucode)
-{
-	uint64_t uclevel;
-
-	if (amd_cpufamily() < 0x10)
-		return EOPNOTSUPP;
-
-	uclevel = rdmsr(MSR_UCODE_AMD_PATCHLEVEL);
-	ucode->version = uclevel;
+	ucode->version = rdmsr(MSR_UCODE_AMD_PATCHLEVEL);
 	return 0;
 }
 
@@ -242,7 +227,7 @@ out:
 }
 
 int
-cpu_ucode_amd_apply(struct cpu_ucode_softc *sc, int cpuno)
+cpu_ucode_amd_apply(struct cpu_ucode_softc *sc)
 {
 	int i, error = 0;
 	uint32_t *magic;
@@ -250,10 +235,6 @@ cpu_ucode_amd_apply(struct cpu_ucode_softc *sc, int cpuno)
 	uint32_t equiv_cpuid = 0;
 	struct mc_buf mc;
 	int where;
-
-	if (sc->loader_version != CPU_UCODE_LOADER_AMD
-	    || cpuno != CPU_UCODE_ALL_CPUS)
-		return EINVAL;
 
 	cpu_signature = curcpu()->ci_signature;
 

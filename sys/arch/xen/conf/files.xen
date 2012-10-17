@@ -1,4 +1,4 @@
-#	$NetBSD: files.xen,v 1.129 2012/10/03 18:58:32 dsl Exp $
+#	$NetBSD: files.xen,v 1.125 2012/01/14 04:22:56 pgoyette Exp $
 #	NetBSD: files.x86,v 1.10 2003/10/08 17:30:00 bouyer Exp 
 #	NetBSD: files.i386,v 1.254 2004/03/25 23:32:10 jmc Exp 
 
@@ -43,6 +43,7 @@ file	arch/i386/i386/db_dbgreg.S	ddb | kstack_check_dr0
 file	arch/i386/i386/db_disasm.c	ddb
 file	arch/i386/i386/db_interface.c	ddb
 file	arch/i386/i386/db_machdep.c	ddb
+file	arch/i386/i386/db_memrw.c	ddb | kgdb
 file	arch/i386/i386/dumpsys.c
 file	arch/i386/i386/gdt.c
 file	arch/i386/i386/ipkdb_glue.c	ipkdb
@@ -71,6 +72,7 @@ file	arch/amd64/amd64/cpu_in_cksum.S		(inet | inet6) & cpu_in_cksum
 file	arch/amd64/amd64/db_disasm.c		ddb
 file	arch/amd64/amd64/db_interface.c		ddb
 file	arch/amd64/amd64/db_machdep.c		ddb
+file	arch/amd64/amd64/db_memrw.c		ddb | kgdb
 file	arch/amd64/amd64/kgdb_machdep.c	 kgdb
 file	arch/amd64/amd64/kobj_machdep.c	 	modular
 file	arch/amd64/amd64/gdt.c
@@ -82,7 +84,6 @@ file	arch/amd64/amd64/lock_stubs.S
 endif
 
 file	kern/subr_disk_mbr.c		disk
-file	arch/x86/x86/db_memrw.c		ddb | kgdb
 file	arch/x86/x86/db_trace.c		ddb
 file	arch/xen/x86/hypervisor_machdep.c
 # file 	arch/x86/x86/mtrr_i686.c	mtrr
@@ -94,7 +95,6 @@ file	arch/xen/x86/xenfunc.c
 
 file	arch/xen/xen/xen_ucode.c	dom0ops | cpu_ucode needs-flag
 file	arch/x86/x86/cpu_ucode_amd.c	dom0ops | cpu_ucode needs-flag
-file	arch/x86/x86/cpu_ucode_intel.c	dom0ops | cpu_ucode needs-flag
 
 file	arch/xen/xen/xen_machdep.c
 file	arch/xen/xen/xen_debug.c
@@ -316,6 +316,10 @@ ifdef i386
 # VM86 mode
 file	arch/i386/i386/vm86.c			vm86
 
+# VM86 in kernel
+file	arch/i386/i386/kvm86.c			kvm86
+file	arch/i386/i386/kvm86call.S		kvm86
+
 # Binary compatibility with previous NetBSD releases (COMPAT_XX)
 file	arch/i386/i386/compat_13_machdep.c	compat_13
 file	arch/i386/i386/compat_16_machdep.c	compat_16 | compat_ibcs2
@@ -388,7 +392,7 @@ endif
 include	"dev/pcmcia/files.pcmcia"
 
 # Domain-0 operations
-defflag	opt_xen.h			DOM0OPS
+defflag	opt_xen.h			DOM0OPS XEN_COMPAT_030001
 file	arch/xen/xen/privcmd.c		dom0ops
 file 	arch/xen/x86/xen_shm_machdep.c	dom0ops
 file	arch/x86/pci/pci_machdep.c	hypervisor & pci & dom0ops

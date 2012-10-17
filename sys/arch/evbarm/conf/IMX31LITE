@@ -1,4 +1,4 @@
-#	$NetBSD: IMX31LITE,v 1.19 2012/09/11 19:43:09 msaitoh Exp $
+#	$NetBSD: IMX31LITE,v 1.16 2011/12/18 05:49:25 dholland Exp $
 #
 #	IMX31LITE -- Freescale IMX31LITE Evaluation Board Kernel
 #
@@ -38,7 +38,6 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 file-system	PROCFS		# /proc
-#file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	TMPFS		# memory file system
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
@@ -98,6 +97,10 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
 
 # Device options
@@ -132,7 +135,7 @@ options 	VERBOSE_INIT_ARM # verbose bootstraping messages
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=500000
+options 	SYMTAB_SPACE=340000
 
 config		netbsd		root on ? type ?
 
@@ -169,8 +172,6 @@ wd*		at atabus? drive ? flags 0x0000
 # disk/mass storage pseudo-devices
 #pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	fss			# file system snapshot device
-#pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 #pseudo-device	bpfilter		# Berkeley packet filter

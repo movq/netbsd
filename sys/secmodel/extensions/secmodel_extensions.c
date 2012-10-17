@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_extensions.c,v 1.3 2012/03/13 18:41:01 elad Exp $ */
+/* $NetBSD: secmodel_extensions.c,v 1.2 2011/12/04 21:04:51 jym Exp $ */
 /*-
  * Copyright (c) 2011 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_extensions.c,v 1.3 2012/03/13 18:41:01 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_extensions.c,v 1.2 2011/12/04 21:04:51 jym Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: secmodel_extensions.c,v 1.3 2012/03/13 18:41:01 elad
 
 MODULE(MODULE_CLASS_SECMODEL, extensions, NULL);
 
-static int dovfsusermount;
+/* static */ int dovfsusermount;
 static int curtain;
 static int user_set_cpu_affinity;
 
@@ -320,13 +320,10 @@ static int
 secmodel_extensions_system_cb(kauth_cred_t cred, kauth_action_t action,
     void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
 {
-	vnode_t *vp;
-	struct vattr va;
 	struct mount *mp;
 	u_long flags;
 	int result;
 	enum kauth_system_req req;
-	int error;
 
 	req = (enum kauth_system_req)arg0;
 	result = KAUTH_RESULT_DEFER;
@@ -336,28 +333,11 @@ secmodel_extensions_system_cb(kauth_cred_t cred, kauth_action_t action,
 
 	switch (req) {
 	case KAUTH_REQ_SYSTEM_MOUNT_NEW:
-		vp = (vnode_t *)arg1;
-		mp = vp->v_mount;
+		mp = ((struct vnode *)arg1)->v_mount;
 		flags = (u_long)arg2;
 
-		/*
-		 * Ensure that the user owns the directory onto which the
-		 * mount is attempted.
-		 */
-		vn_lock(vp, LK_SHARED | LK_RETRY);
-		error = VOP_GETATTR(vp, &va, cred);
-		VOP_UNLOCK(vp);
-		if (error)
-			break;
-
-		if (va.va_uid != kauth_cred_geteuid(cred))
-			break;
-
-		error = usermount_common_policy(mp, flags);
-		if (error)
-			break;
-
-		result = KAUTH_RESULT_ALLOW;
+		if (usermount_common_policy(mp, flags) == 0)
+			result = KAUTH_RESULT_ALLOW;
 
 		break;
 

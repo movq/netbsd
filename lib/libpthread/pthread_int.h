@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_int.h,v 1.86 2012/08/16 04:49:47 matt Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.82 2012/01/17 20:34:57 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -52,10 +52,9 @@
 #include <sys/atomic.h>
 #include <sys/tree.h>
 
-#include <limits.h>
 #include <lwp.h>
 #include <signal.h>
-#include <stdbool.h>
+#include <limits.h>
 
 #ifdef __GNUC__
 #define	PTHREAD_HIDE	__attribute__ ((visibility("hidden")))
@@ -105,8 +104,6 @@ struct	__pthread_st {
 	int		pt_cancel;	/* Deferred cancellation */
 	int		pt_errno;	/* Thread-specific errno. */
 	stack_t		pt_stack;	/* Our stack */
-	bool		pt_stack_allocated;
-	size_t		pt_guardsize;
 	void		*pt_exitval;	/* Read by pthread_join() */
 	char		*pt_name;	/* Thread's name, set by the app. */
 	int		pt_willpark;	/* About to park */
@@ -178,8 +175,10 @@ struct	__pthread_st {
 #define PT_ATTR_MAGIC	0x22220002
 #define PT_ATTR_DEAD	0xDEAD0002
 
+extern int	pthread__stacksize_lg;
 extern size_t	pthread__stacksize;
-extern size_t	pthread__pagesize;
+extern vaddr_t	pthread__stackmask;
+extern vaddr_t	pthread__threadmask;
 extern int	pthread__nspins;
 extern int	pthread__concurrency;
 extern int 	pthread__osrev;
@@ -256,10 +255,7 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
 	} while (/*CONSTCOND*/0)
 
 
-#if !defined(__HAVE_TLS_VARIANT_I) && !defined(__HAVE_TLS_VARIANT_II)
-#error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
-#endif
-
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 static inline pthread_t __constfunc
 pthread__self(void)
 {
@@ -270,6 +266,9 @@ pthread__self(void)
 #endif
 	return (pthread_t)tcb->tcb_pthread;
 }
+#else
+#error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
+#endif
 
 #define pthread__abort()						\
 	pthread__assertfunc(__FILE__, __LINE__, __func__, "unreachable")
@@ -298,9 +297,6 @@ int	pthread__checkpri(int) PTHREAD_HIDE;
 
 #ifndef pthread__smt_pause
 #define	pthread__smt_pause()	/* nothing */
-#endif
-#ifndef pthread__smt_wake
-#define	pthread__smt_wake()	/* nothing */
 #endif
 
 /*

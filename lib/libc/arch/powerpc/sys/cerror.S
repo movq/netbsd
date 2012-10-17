@@ -1,10 +1,10 @@
-/*	$NetBSD: cerror.S,v 1.10 2012/02/27 15:47:11 matt Exp $	*/
+/*	$NetBSD: cerror.S,v 1.8.8.1 2012/02/27 20:23:00 riz Exp $	*/
 
 #include "SYS.h"
 #include "assym.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: cerror.S,v 1.10 2012/02/27 15:47:11 matt Exp $")
+__RCSID("$NetBSD: cerror.S,v 1.8.8.1 2012/02/27 20:23:00 riz Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 #ifndef _REENTRANT

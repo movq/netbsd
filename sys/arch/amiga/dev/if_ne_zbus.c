@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_zbus.c,v 1.16 2012/05/15 17:35:44 rkujawa Exp $ */
+/*	$NetBSD: if_ne_zbus.c,v 1.14 2011/07/19 15:55:27 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_zbus.c,v 1.16 2012/05/15 17:35:44 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_zbus.c,v 1.14 2011/07/19 15:55:27 dyoung Exp $");
 
 /*
  * Thanks to Village Tronic for giving me a card.
@@ -95,6 +95,10 @@ ne_zbus_match(device_t parent, cfdata_t cf, void *aux)
 	if (zap->manid == 2167 && zap->prodid == 202)
 		return (1);
 
+	/* X-surf ethernet card */
+	if (zap->manid == 4626 && zap->prodid == 23)
+		return (1);
+
 	return (0);
 }
 
@@ -120,6 +124,8 @@ ne_zbus_attach(device_t parent, device_t self, void *aux)
 	dsc->sc_media_init = rtl80x9_media_init;
 
 	zsc->sc_bst.base = (u_long)zap->va + 0;
+	if (zap->manid == 4626)
+		 zsc->sc_bst.base += 0x8000;
 
 	zsc->sc_bst.absm = &amiga_bus_stride_2;
 

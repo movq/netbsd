@@ -1,4 +1,4 @@
-/*      $NetBSD: amdtemp.c,v 1.16 2012/07/16 01:52:37 pgoyette Exp $ */
+/*      $NetBSD: amdtemp.c,v 1.12.8.2 2012/04/16 15:25:11 riz Exp $ */
 /*      $OpenBSD: kate.c,v 1.2 2008/03/27 04:52:03 cnst Exp $   */
 
 /*
@@ -48,7 +48,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdtemp.c,v 1.16 2012/07/16 01:52:37 pgoyette Exp $ ");
+__KERNEL_RCSID(0, "$NetBSD: amdtemp.c,v 1.12.8.2 2012/04/16 15:25:11 riz Exp $ ");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -189,7 +189,19 @@ amdtemp_match(device_t parent, cfdata_t match, void *aux)
 	pcireg_t cpu_signature;
 	uint32_t family;
 
-	KASSERT(PCI_VENDOR(pa->pa_id) == PCI_VENDOR_AMD);
+	if (PCI_VENDOR(pa->pa_id) != PCI_VENDOR_AMD)
+		return 0;
+
+	switch (PCI_PRODUCT(pa->pa_id)) {
+	case PCI_PRODUCT_AMD_AMD64_MISC:
+	case PCI_PRODUCT_AMD_AMD64_F10_MISC:
+	case PCI_PRODUCT_AMD_AMD64_F11_MISC:
+	case PCI_PRODUCT_AMD_F14_NB:	/* Family12h too */
+	case PCI_PRODUCT_AMD_F15_MISC:
+		break;
+	default:
+		return 0;
+	}
 
 	cpu_signature = pci_conf_read(pa->pa_pc,
 	    pa->pa_tag, CPUID_FAMILY_MODEL_R);
@@ -217,7 +229,7 @@ amdtemp_match(device_t parent, cfdata_t match, void *aux)
 	if (family > 0x15)
 		return 0;
 
-	return 1;
+	return 2;	/* supercede pchb(4) */
 }
 
 static void
@@ -425,7 +437,6 @@ amdtemp_k8_setup_sensors(struct amdtemp_softc *sc, int dv_unit)
 	for (i = 0; i < sc->sc_numsensors; i++) {
 		sc->sc_sensor[i].units = ENVSYS_STEMP;
 		sc->sc_sensor[i].state = ENVSYS_SVALID;
-		sc->sc_sensor[i].flags = ENVSYS_FHAS_ENTROPY;
 
 		snprintf(sc->sc_sensor[i].desc, sizeof(sc->sc_sensor[i].desc),
 			"CPU%u Sensor%u", dv_unit + (i / 2), i % 2);
@@ -499,7 +510,6 @@ amdtemp_family10_setup_sensors(struct amdtemp_softc *sc, int dv_unit)
 	 */
 	sc->sc_sensor[0].units = ENVSYS_STEMP;
 	sc->sc_sensor[0].state = ENVSYS_SVALID;
-	sc->sc_sensor[0].flags = ENVSYS_FHAS_ENTROPY;
 
 	snprintf(sc->sc_sensor[0].desc, sizeof(sc->sc_sensor[0].desc),
 		"cpu%u temperature", dv_unit);

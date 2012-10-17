@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.89 2012/07/22 00:53:18 rmind Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.88.8.1 2012/08/12 12:59:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.89 2012/07/22 00:53:18 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.88.8.1 2012/08/12 12:59:49 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"

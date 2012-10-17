@@ -1,4 +1,4 @@
-#  $NetBSD: Makefile,v 1.125 2012/08/04 15:16:16 matt Exp $
+#  $NetBSD: Makefile,v 1.120.4.1 2012/05/09 18:22:36 riz Exp $
 #
 #  @(#)Makefile 5.1beta 93/09/24
 #
@@ -108,18 +108,14 @@ ARCH_SRCS = e_acos.S e_asin.S e_atanh.S e_cosh.S e_exp.S e_fmod.S e_log.S \
 # XXX - ripped out due to lack of the insn polyd in the Mariah chip,
 # and emulation code isn't written yet.
 ARCHS_SRCS = n_scalbn.S
-WARNS?=5
+WARNS?=4
 .endif
 
-WARNS?=5
+WARNS?=4
 
 .PATH:	${.CURDIR}/man
 .PATH:	${.CURDIR}/src
 .PATH:	${.CURDIR}/noieee_src
-
-.if (${MACHINE_ARCH} == "alpha")
-COPTS+= -mfp-rounding-mode=d
-.endif
 
 .if (${MACHINE_ARCH} != "vax")
 CPPFLAGS+= -D_MULTI_LIBM -D_POSIX_MODE
@@ -166,8 +162,10 @@ COMMON_SRCS+= b_exp.c b_log.c b_tgamma.c \
 .PATH:	${.CURDIR}/compat
 COMMON_SRCS+= compat_cabs.c compat_cabsf.c
 # XXX our compatibility cabs() is different!
-COPTS.compat_cabs.c=	${${ACTIVE_CC} == "gcc":? -fno-builtin-cabs :}
-COPTS.compat_cabsf.c=	${${ACTIVE_CC} == "gcc":? -fno-builtin-cabsf :}
+.if defined(HAVE_GCC)
+COPTS.compat_cabs.c=	-fno-builtin-cabs
+COPTS.compat_cabsf.c=	-fno-builtin-cabsf
+.endif
 
 # math routines for non-IEEE architectures.
 NOIEEE_SRCS = n_asincos.c n_acosh.c n_asinh.c n_atan.c n_atanh.c n_cosh.c \

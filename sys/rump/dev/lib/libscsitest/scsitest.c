@@ -1,4 +1,4 @@
-/*	$NetBSD: scsitest.c,v 1.4 2012/09/14 16:29:21 pooka Exp $	*/
+/*	$NetBSD: scsitest.c,v 1.1 2010/08/24 11:23:35 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsitest.c,v 1.4 2012/09/14 16:29:21 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsitest.c,v 1.1 2010/08/24 11:23:35 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -218,12 +218,9 @@ scsitest_match(struct device *parent, struct cfdata *match, void *aux)
 		return 0;
 	mycdsize = fsize / CDBLOCKSIZE;
 
-	if ((isofd = rumpuser_open(MYCDISO, RUMPUSER_OPEN_RDWR, &error)) == -1)
+	if ((isofd = rumpuser_open(MYCDISO, O_RDWR, &error)) == -1)
 		return 0;
 #else
-	/*
-	 * We pretend to have a medium present initially, so != -1.
-	 */
 	isofd = -2;
 #endif
 

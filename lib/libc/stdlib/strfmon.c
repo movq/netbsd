@@ -1,4 +1,4 @@
-/*	$NetBSD: strfmon.c,v 1.10 2012/03/21 14:19:15 christos Exp $	*/
+/*	$NetBSD: strfmon.c,v 1.8 2011/08/14 09:07:15 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 Alexey Zelkin <phantom@FreeBSD.org>
@@ -32,7 +32,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/libc/stdlib/strfmon.c,v 1.14 2003/03/20 08:18:55 ache Exp $");
 #else
-__RCSID("$NetBSD: strfmon.c,v 1.10 2012/03/21 14:19:15 christos Exp $");
+__RCSID("$NetBSD: strfmon.c,v 1.8 2011/08/14 09:07:15 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -42,7 +42,6 @@ __RCSID("$NetBSD: strfmon.c,v 1.10 2012/03/21 14:19:15 christos Exp $");
 #endif
 
 #include <sys/types.h>
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
@@ -62,10 +61,6 @@ __RCSID("$NetBSD: strfmon.c,v 1.10 2012/03/21 14:19:15 christos Exp $");
 #define	LEFT_JUSTIFY		0x20	/* left justify */
 #define	USE_INTL_CURRENCY	0x40	/* use international currency symbol */
 #define IS_NEGATIVE		0x80	/* is argument value negative ? */
-
-#ifndef NBCHAR_MAX
-#define NBCHAR_MAX ((unsigned char)CHAR_MAX)
-#endif
 
 /* internal macros */
 #define PRINT(CH) do {						\
@@ -381,8 +376,7 @@ strfmon(char * __restrict s, size_t maxsize, const char * __restrict format,
 				while (dst - tmpptr < width)
 					PRINT(' ');
 			} else {
-				_DIAGASSERT(__type_fit(int, dst - tmpptr));
-				pad_size = dst - tmpptr;
+				pad_size = dst-tmpptr;
 				memmove(tmpptr + width-pad_size, tmpptr,
 				    (size_t) pad_size);
 				memset(tmpptr, ' ', (size_t) width-pad_size);
@@ -447,9 +441,9 @@ __setup_vars(int flags, char *cs_precedes, char *sep_by_space,
 	/* Set defult values for unspecified information. */
 	if (*cs_precedes != 0)
 		*cs_precedes = 1;
-	if ((unsigned char)*sep_by_space == NBCHAR_MAX)
+	if (*sep_by_space == CHAR_MAX)
 		*sep_by_space = 0;
-	if ((unsigned char)*sign_posn == NBCHAR_MAX)
+	if (*sign_posn == CHAR_MAX)
 		*sign_posn = 0;
 }
 
@@ -458,7 +452,7 @@ __calc_left_pad(int flags, char *cur_symb) {
 
 	char cs_precedes, sep_by_space, sign_posn;
 	const char *signstr;
-	size_t left_chars = 0;
+	int left_chars = 0;
 
 	__setup_vars(flags, &cs_precedes, &sep_by_space, &sign_posn, &signstr);
 
@@ -477,8 +471,7 @@ __calc_left_pad(int flags, char *cur_symb) {
 			if (cs_precedes != 0)
 				left_chars += strlen(signstr);
 	}
-	_DIAGASSERT(__type_fit(int, left_chars));
-	return (int)left_chars;
+	return (left_chars);
 }
 
 static int
@@ -486,14 +479,14 @@ get_groups(int size, char *grouping) {
 
 	int	chars = 0;
 
-	if ((unsigned char)*grouping == NBCHAR_MAX || *grouping <= 0)	/* no grouping ? */
+	if (*grouping == CHAR_MAX || *grouping <= 0)	/* no grouping ? */
 		return (0);
 
 	while (size > (int)*grouping) {
 		chars++;
 		size -= (int)*grouping++;
 		/* no more grouping ? */
-		if ((unsigned char)*grouping == NBCHAR_MAX)
+		if (*grouping == CHAR_MAX)
 			break;
 		/* rest grouping with same value ? */
 		if (*grouping == 0) {
@@ -585,7 +578,7 @@ __format_grouped_double(double value, int *flags,
         /* XXX: Why not use %' instead? */
 	if ((*flags & NEED_GROUPING) &&
 	    thousands_sep != '\0' &&	/* XXX: need investigation */
-	    (unsigned char)*grouping != NBCHAR_MAX &&
+	    *grouping != CHAR_MAX &&
 	    *grouping > 0) {
 		while (avalue_size > (int)*grouping) {
 			GRPCPY(*grouping);
@@ -593,7 +586,7 @@ __format_grouped_double(double value, int *flags,
 			grouping++;
 
 			/* no more grouping ? */
-			if ((unsigned char)*grouping == NBCHAR_MAX)
+			if (*grouping == CHAR_MAX)
 				break;
 
 			/* rest grouping with same value ? */

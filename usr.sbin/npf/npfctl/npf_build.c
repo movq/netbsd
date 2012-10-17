@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_build.c,v 1.14 2012/09/16 13:47:41 rmind Exp $	*/
+/*	$NetBSD: npf_build.c,v 1.4.2.6 2012/08/13 17:49:52 riz Exp $	*/
 
 /*-
  * Copyright (c) 2011-2012 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npf_build.c,v 1.14 2012/09/16 13:47:41 rmind Exp $");
+__RCSID("$NetBSD: npf_build.c,v 1.4.2.6 2012/08/13 17:49:52 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -42,7 +42,6 @@ __RCSID("$NetBSD: npf_build.c,v 1.14 2012/09/16 13:47:41 rmind Exp $");
 #include <stdlib.h>
 #include <inttypes.h>
 #include <string.h>
-#include <errno.h>
 #include <err.h>
 
 #include "npfctl.h"
@@ -378,36 +377,58 @@ npfctl_build_ncode(nl_rule_t *rl, sa_family_t family, const opt_proto_t *op,
 static void
 npfctl_build_rpcall(nl_rproc_t *rp, const char *name, npfvar_t *args)
 {
-	npf_extmod_t *extmod;
-	nl_ext_t *extcall;
-	int error;
+	/*
+	 * XXX/TODO: Hardcoded for the first release.  However,
+	 * rule procedures will become fully dynamic modules.
+	 */
 
-	extmod = npf_extmod_get(name, &extcall);
-	if (extmod == NULL) {
+	bool log = false, norm = false;
+	bool rnd = false, no_df = false;
+	int minttl = 0, maxmss = 0;
+
+	if (strcmp(name, "log") == 0) {
+		log = true;
+	} else if (strcmp(name, "normalise") == 0) {
+		norm = true;
+	} else {
 		yyerror("unknown rule procedure '%s'", name);
 	}
 
 	for (size_t i = 0; i < npfvar_get_count(args); i++) {
-		const char *param, *value;
-		proc_param_t *p;
+		module_arg_t *arg;
+		const char *aval;
 
-		p = npfvar_get_data(args, NPFVAR_PROC_PARAM, i);
-		param = p->pp_param;
-		value = p->pp_value;
+		arg = npfvar_get_data(args, NPFVAR_MODULE_ARG, i);
+		aval = arg->ma_name;
 
-		error = npf_extmod_param(extmod, extcall, param, value);
-		switch (error) {
-		case EINVAL:
-			yyerror("invalid parameter '%s'", param);
-		default:
-			break;
+		if (log) {
+			u_int if_idx = npfctl_find_ifindex(aval);
+			_npf_rproc_setlog(rp, if_idx);
+			return;
+		}
+
+		const int type = npfvar_get_type(arg->ma_opts, 0);
+		if (type != -1 && type != NPFVAR_NUM) {
+			yyerror("option '%s' is not numeric", aval);
+		}
+		unsigned long *opt;
+
+		if (strcmp(aval, "random-id") == 0) {
+			rnd = true;
+		} else if (strcmp(aval, "min-ttl") == 0) {
+			opt = npfvar_get_data(arg->ma_opts, NPFVAR_NUM, 0);
+			minttl = *opt;
+		} else if (strcmp(aval, "max-mss") == 0) {
+			opt = npfvar_get_data(arg->ma_opts, NPFVAR_NUM, 0);
+			maxmss = *opt;
+		} else if (strcmp(aval, "no-df") == 0) {
+			no_df = true;
+		} else {
+			yyerror("unknown argument '%s'", aval);
 		}
 	}
-	error = npf_rproc_extcall(rp, extcall);
-	if (error) {
-		yyerror(error == EEXIST ?
-		    "duplicate procedure call" : "unexpected error");
-	}
+	assert(norm == true);
+	_npf_rproc_setnorm(rp, rnd, no_df, minttl, maxmss);
 }
 
 /*
@@ -426,8 +447,8 @@ npfctl_build_rproc(const char *name, npfvar_t *procs)
 	npf_rproc_insert(npf_conf, rp);
 
 	for (i = 0; i < npfvar_get_count(procs); i++) {
-		proc_call_t *pc = npfvar_get_data(procs, NPFVAR_PROC, i);
-		npfctl_build_rpcall(rp, pc->pc_name, pc->pc_opts);
+		proc_op_t *po = npfvar_get_data(procs, NPFVAR_PROC_OP, i);
+		npfctl_build_rpcall(rp, po->po_name, po->po_opts);
 	}
 }
 
@@ -477,7 +498,7 @@ npfctl_build_rule(int attr, u_int if_idx, sa_family_t family,
 }
 
 /*
- * npfctl_build_nat: create a single NAT policy of a specified
+ * npfctl_build_onenat: create a single NAT policy of a specified
  * type with a given filter options.
  */
 static void
@@ -533,7 +554,7 @@ npfctl_build_nat(int type, u_int if_idx, sa_family_t family,
 }
 
 /*
- * npfctl_build_natseg: validate and create NAT policies.
+ * npfctl_build_nat: validate and create NAT policies.
  */
 void
 npfctl_build_natseg(int sd, int type, u_int if_idx, const addr_port_t *ap1,
@@ -558,11 +579,11 @@ npfctl_build_natseg(int sd, int type, u_int if_idx, const addr_port_t *ap1,
 
 	/*
 	 * If the filter criteria is not specified explicitly, apply implicit
-	 * filtering according to the given network segments.
+	 * filtering according to the given network segements.
 	 *
 	 * Note: filled below, depending on the type.
 	 */
-	if (__predict_true(!fopts)) {
+	if (!fopts) {
 		fopts = &imfopts;
 	}
 

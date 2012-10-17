@@ -1,4 +1,4 @@
-# $NetBSD: VAX780,v 1.10 2012/08/17 20:11:41 abs Exp $
+# $NetBSD: VAX780,v 1.7.2.1 2012/07/04 20:41:46 jdc Exp $
 #
 # 11/780,750,730 machine description file
 # 
@@ -111,7 +111,6 @@ options 	NFS_BOOT_BOOTPARAM	# Use the Sun way for netbooting.
 
 # WS console uses VT100 terminal emulation
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	WSDISPLAY_DEFAULTSCREENS=8
 #options 	FONT_QVSS8x15
 
@@ -119,6 +118,7 @@ options 	NFS_BOOT_BOOTPARAM	# Use the Sun way for netbooting.
 options 	SYSVMSG
 options 	SYSVSEM
 options 	SYSVSHM
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Old compat stuff; needed to run 4.3BSD Reno programs.
 # Note that if COMPAT_ULTRIX is set, you lose compatibility with

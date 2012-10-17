@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs.h,v 1.7 2012/08/10 09:26:58 ttoth Exp $	*/
+/*	$NetBSD: chfs.h,v 1.4 2011/11/28 12:50:07 ahoka Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -38,9 +38,6 @@
 #ifndef __CHFS_H__
 #define __CHFS_H__
 
-
-#ifdef _KERNEL
-
 #if 0
 #define DBG_MSG
 #define DBG_MSG_GC
@@ -74,19 +71,15 @@
 TAILQ_HEAD(chfs_dirent_list, chfs_dirent);
 
 #include "chfs_pool.h"
-#endif /* _KERNEL */
-
 #include "ebh.h"
 #include "media.h"
 #include "chfs_inode.h"
 
-#define CHFS_PAD(x) (((x)+3)&~3)
-
-#ifdef _KERNEL
-
 #ifndef MOUNT_CHFS
 #define MOUNT_CHFS "chfs"
-#endif /* MOUNT_CHFS */
+#endif
+
+#define CHFS_ROOTINO ROOTINO    /* ROOTINO == 2 */
 
 enum {
 	VNO_STATE_UNCHECKED,	/* CRC checks not yet done */
@@ -98,13 +91,14 @@ enum {
 	VNO_STATE_CLEARING	/* In clear_inode() */
 };
 
-
 #define VNODECACHE_SIZE 128
 
 #define MAX_READ_FREE(chmp) (((chmp)->chm_ebh)->eb_size / 8)
 /* an eraseblock will be clean if its dirty size is smaller than this */
 #define MAX_DIRTY_TO_CLEAN 255
 #define VERY_DIRTY(chmp, size) ((size) >= (((chmp)->chm_ebh)->eb_size / 2))
+
+#define CHFS_PAD(x) (((x)+3)&~3)
 
 enum {
 	CHFS_NODE_OK = 0,
@@ -191,7 +185,7 @@ struct chfs_dirent
 	uint64_t version;
 	ino_t vno;
 	uint32_t nhash;
-	enum chtype type;
+	enum vtype type;
 	uint8_t  nsize;
 	uint8_t  name[0];
 
@@ -494,10 +488,6 @@ int chfs_update_eb_dirty(struct chfs_mount *,
     struct chfs_eraseblock *, uint32_t);
 void chfs_add_node_to_list(struct chfs_mount *, struct chfs_vnode_cache *,
     struct chfs_node_ref *, struct chfs_node_ref **);
-void chfs_remove_node_from_list(struct chfs_mount *, struct chfs_vnode_cache *,
-    struct chfs_node_ref *, struct chfs_node_ref **);
-void chfs_remove_and_obsolete(struct chfs_mount *, struct chfs_vnode_cache *,
-    struct chfs_node_ref *, struct chfs_node_ref **);
 void chfs_add_fd_to_inode(struct chfs_mount *,
     struct chfs_inode *, struct chfs_dirent *);
 void chfs_add_vnode_ref_to_vc(struct chfs_mount *, struct chfs_vnode_cache *,
@@ -526,6 +516,7 @@ chfs_nref_to_vc(struct chfs_node_ref *nref)
 			dbg("Empty!\n");
 		}
 	}
+	//dbg("vno: %llu\n", ((struct chfs_vnode_cache *)(nref))->vno);
 
 	//dbg("NREF_TO_VC: GET IT\n");
 	//dbg("nref_next: %p, lnr: %u, ofs: %u\n", nref->nref_next, nref->nref_lnr, nref->nref_offset);
@@ -567,9 +558,7 @@ void chfs_free_tmp_dnode_info(struct chfs_tmp_dnode_info *);
 /* chfs_readinode.c */
 int chfs_read_inode(struct chfs_mount *, struct chfs_inode *);
 int chfs_read_inode_internal(struct chfs_mount *, struct chfs_inode *);
-void chfs_remove_frags_of_node(struct chfs_mount *, struct rb_tree *,
-	struct chfs_node_ref *);
-void chfs_kill_fragtree(struct chfs_mount *, struct rb_tree *);
+void chfs_kill_fragtree(struct rb_tree *);
 uint32_t chfs_truncate_fragtree(struct chfs_mount *,
 	struct rb_tree *, uint32_t);
 int chfs_add_full_dnode_to_inode(struct chfs_mount *,
@@ -642,7 +631,7 @@ int chfs_readvnode(struct mount *, ino_t, struct vnode **);
 int chfs_readdirent(struct mount *, struct chfs_node_ref *,
     struct chfs_inode *);
 int chfs_makeinode(int, struct vnode *, struct vnode **,
-    struct componentname *, enum vtype );
+    struct componentname *, int );
 void chfs_set_vnode_size(struct vnode *, size_t);
 void chfs_change_size_free(struct chfs_mount *,
 	struct chfs_eraseblock *, int);
@@ -658,6 +647,8 @@ void chfs_change_size_wasted(struct chfs_mount *,
 /* chfs_vnode_cache.c */
 struct chfs_vnode_cache **chfs_vnocache_hash_init(void);
 void chfs_vnocache_hash_destroy(struct chfs_vnode_cache **);
+void chfs_vnode_cache_set_state(struct chfs_mount *,
+    struct chfs_vnode_cache *, int);
 struct chfs_vnode_cache* chfs_vnode_cache_get(struct chfs_mount *, ino_t);
 void chfs_vnode_cache_add(struct chfs_mount *, struct chfs_vnode_cache *);
 void chfs_vnode_cache_remove(struct chfs_mount *, struct chfs_vnode_cache *);
@@ -674,7 +665,7 @@ int chfs_write_flash_dirent(struct chfs_mount *, struct chfs_inode *,
 int chfs_write_flash_dnode(struct chfs_mount *, struct vnode *,
     struct buf *, struct chfs_full_dnode *);
 int chfs_do_link(struct chfs_inode *,
-    struct chfs_inode *, const char *, int, enum chtype);
+    struct chfs_inode *, const char *, int, enum vtype);
 int chfs_do_unlink(struct chfs_inode *,
     struct chfs_inode *, const char *, int);
 
@@ -682,7 +673,7 @@ int chfs_do_unlink(struct chfs_inode *,
 size_t chfs_mem_info(bool);
 struct chfs_dirent * chfs_dir_lookup(struct chfs_inode *,
     struct componentname *);
-int chfs_filldir (struct uio *, ino_t, const char *, int, enum chtype);
+int chfs_filldir (struct uio *, ino_t, const char *, int, enum vtype);
 int chfs_chsize(struct vnode *, u_quad_t, kauth_cred_t);
 int chfs_chflags(struct vnode *, int, kauth_cred_t);
 void chfs_itimes(struct chfs_inode *, const struct timespec *,
@@ -774,5 +765,4 @@ CHFS_PAGES_MAX(struct chfs_mount *chmp)
 #define IMPLIES(a, b) (!(a) || (b))
 #define IFF(a, b) (IMPLIES(a, b) && IMPLIES(b, a))
 
-#endif /* _KERNEL */
 #endif /* __CHFS_H__ */

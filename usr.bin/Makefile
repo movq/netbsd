@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.210 2012/08/08 14:13:46 christos Exp $
+#	$NetBSD: Makefile,v 1.207 2012/02/07 19:13:31 joerg Exp $
 #	from: @(#)Makefile	8.3 (Berkeley) 1/7/94
 
 .include <bsd.own.mk>
@@ -22,7 +22,8 @@ SUBDIR= apply asa at audio audiocfg \
 	pagesize passwd paste patch pathchk pkill pmap pmc pr \
 	printenv printf progress pwhash qsubst quota radioctl rdist \
 	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh \
-	rup ruptime rusers rwall rwho \
+	rump_allserver rump_dhcpclient rump_halt rump_server rup ruptime \
+	rusers rwall rwho \
 	script sdiff sdpquery sed seq shar shlock shmif_dumpbus \
 	showmount shuffle sockstat soelim sort spell split stat su systat \
 	tabs tail talk tcopy tee telnet tftp tic time tip touch tpfmt tput \
@@ -30,17 +31,13 @@ SUBDIR= apply asa at audio audiocfg \
 	uniq units unvis unzip usbhidaction usbhidctl users utoppya \
 	uudecode uuencode uuidgen vacation vgrind videoctl vis \
 	vmstat vndcompress w \
-	wall wc what whereis who whois \
+	wall wc what whereis who whois window \
 	write xargs xinstall xlint xstr yes
 
 SUBDIR+= ../external/zlib/pigz/bin/pigz
 
-.if (${MKMAKEMANDB} == "no")
+.if MKMAKEMANDB == "no"
 SUBDIR+= apropos whatis
-.endif
-
-.if (${MKRUMP} != "no")
-SUBDIR+= rump_allserver rump_dhcpclient rump_halt rump_server
 .endif
 
 .if (${MKBSDGREP} != "no")

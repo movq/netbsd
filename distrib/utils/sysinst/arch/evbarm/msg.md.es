@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.es,v 1.10 2012/03/01 17:40:31 tsutsui Exp $	*/
+/*	$NetBSD: msg.md.es,v 1.8 2012/02/03 00:35:35 nisimura Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

@@ -1,4 +1,4 @@
-# $NetBSD: ALL,v 1.346 2012/10/03 18:58:30 dsl Exp $
+# $NetBSD: ALL,v 1.332.2.3 2012/06/12 17:47:53 riz Exp $
 # From NetBSD: GENERIC,v 1.787 2006/10/01 18:37:54 bouyer Exp
 #
 # ALL machine description file
@@ -17,7 +17,7 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"ALL-$Revision: 1.346 $"
+#ident 		"ALL-$Revision: 1.332.2.3 $"
 
 maxusers	64		# estimated number of users
 
@@ -89,6 +89,7 @@ options 	SEMMNS=60	# number of semaphores in system
 options 	SEMUME=10	# max number of undo entries per process
 options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 options 	MODULAR		# new style module(7) framework
 
@@ -125,7 +126,6 @@ makeoptions	DEBUG="-g"	# compile full symbol table
 options 	SYSCALL_STATS	# per syscall counts
 options 	SYSCALL_TIMES	# per syscall times
 options 	SYSCALL_TIMES_HASCOUNTER	# use 'broken' rdtsc (soekris)
-options 	KDTRACE_HOOKS	# kernel DTrace hooks
 
 # Compatibility options
 options 	COMPAT_NOMID	# NetBSD 0.8, 386BSD, and BSDI
@@ -159,7 +159,6 @@ options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
 # The following two options can break /etc/fstab, so handle with care
 options 	DKWEDGE_METHOD_BSDLABEL	# Support disklabel entries as wedges
 options 	DKWEDGE_METHOD_MBR	# Support MBR partitions as wedges
-options 	DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -327,6 +326,7 @@ p64h2apic* at pci? dev? function?	# P64H2 IOxAPIC
 #apm0	at mainbus0			# Advanced power management
 
 # Tuning for power management, see apm(4) for more details.
+#options 	APM_NO_IDLE		# Don't call BIOS CPU idle function
 #options 	APM_V10_ONLY		# Use only the APM 1.0 calls
 #options 	APM_NO_POWEROFF		# Don't power off on halt(8)
 #options 	APM_POWER_PRINT		# Print stats on the console
@@ -470,8 +470,7 @@ elanpar*	at elansc?
 elanpex*	at elansc?
 
 # Temperatures
-amdnb_misc* at pci?			# AMD NB Misc Configuration
-amdtemp* at amdnb_misc?			# AMD CPU Temperature sensors
+amdtemp* at pchb?			# AMD CPU Temperature sensors
 
 # PCI bridges
 amdpcib* at pci? dev ? function ?	# AMD 8111 PCI-ISA w/ HPET
@@ -573,8 +572,7 @@ machfb* 	at pci? dev ? function ?
 pm2fb*		at pci? dev ? function ?
 r128fb* 	at pci? dev ? function ?
 radeonfb*	at pci? dev ? function ?
-tga*		at pci? dev ? function ?	# DEC ZLXp-E[123] Graphics
-unichromefb*	at pci? dev ? function ?	# VIA Unichrome framebuffer console
+unichromefb*	at pci? dev ? function ?  # VIA Unichrome framebuffer console
 voodoofb*	at pci? dev ? function ?
 wcfb*	at pci? dev ? function ?
 wsdisplay*	at wsemuldisplaydev?
@@ -994,7 +992,6 @@ bce*	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge*	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
 bnx*	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 bwi*	at pci? dev ? function ?	# Broadcom BCM43xx wireless
-cas*	at pci? dev ? function ?	# Sun Cassini/Cassini+ Ethernet
 dge*	at pci? dev ? function ?	# Intel 82597 10GbE LR
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
@@ -1004,7 +1001,6 @@ et*	at pci? dev ? function ?	# Agere/LSI ET1310/ET1301 Gigabit
 ex*	at pci? dev ? function ?	# 3Com 3c90x[BC]
 fpa*	at pci? dev ? function ?	# DEC DEFPA FDDI
 fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
-gem*	at pci? dev ? function ?	# Apple GMAC and Sun ERI gigabit enet
 gsip*	at pci? dev ? function ?	# NS83820 Gigabit Ethernet
 hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 ipw*	at pci? dev ? function ?	# Intel PRO/Wireless 2100
@@ -1014,7 +1010,6 @@ jme*	at pci? dev ? function ?	# JMicron JMC2[56]0 Ethernet
 le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 lii*	at pci? dev ? function ?	# Atheros L2 Fast-Ethernet
 lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
-malo*   at pci? dev ? function ?    # Marvell Libertas Wireless
 mskc*	at pci? dev ? function ?	# Marvell Yukon 2 Gigabit Ethernet
 msk*	at mskc?			# Marvell Yukon 2 Gigabit Ethernet
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
@@ -1039,7 +1034,6 @@ tlp*	at pci? dev ? function ?	# DECchip 21x4x and clones
 txp*	at pci? dev ? function ?	# 3com 3cr990
 vge*	at pci? dev ? function ?	# VIATech VT612X Gigabit Ethernet
 vr*	at pci? dev ? function ?	# VIA Rhine Fast Ethernet
-vte*	at pci? dev ? function ?	# Vortex86 RDC R6040 Fast Ethernet
 wi*	at pci? dev ? function ?	# Intersil Prism Mini-PCI (802.11b)
 wm*	at pci? dev ? function ?	# Intel 8254x gigabit
 wpi*	at pci? dev ? function ?	# Intel PRO/Wireless 3945ABG
@@ -1154,7 +1148,6 @@ nsphy*	at mii? phy ?			# NS83840 PHYs
 nsphyter* at mii? phy ? 		# NS83843 PHYs
 pnaphy* at mii? phy ?			# generic HomePNA PHYs
 qsphy*	at mii? phy ?			# Quality Semiconductor QS6612 PHYs
-rdcphy* at mii? phy ?			# RDC R6040 internal PHY
 rgephy* at mii? phy ?			# Realtek 8169S/8110S internal PHYs
 rlphy*	at mii? phy ?			# Realtek 8139/8201L PHYs
 sqphy*	at mii? phy ?			# Seeq 80220/80221/80223 PHYs
@@ -1204,10 +1197,6 @@ wsmouse* at ums? mux 0
 # USB eGalax touch-panel
 uep*	at uhub? port ?
 wsmouse* at uep? mux 0
-
-# USB Apple trackpad
-uatp*	at uhidev? reportid ?
-wsmouse* at uatp? mux 0
 
 uyurex* at uhidev? reportid ?
 
@@ -1276,7 +1265,7 @@ urndis* at uhub? port ?		# Microsoft RNDIS specification
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
 otus*	at uhub? port ?		# Atheros AR9001U
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 upgt*	at uhub? port ?		# Intersil PrismGT
 zyd*	at uhub? port ?		# Zydas ZD1211
@@ -1659,6 +1648,9 @@ options 	VND_COMPRESSION		# compressed vnd(4)
 
 pseudo-device 	dm			# device-mapper disk driver
 
+# NPF
+pseudo-device	npf
+
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
 pseudo-device	carp			# Common Address Redundancy Protocol
@@ -1683,8 +1675,7 @@ options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	pf			# PF packet filter
 pseudo-device	pflog			# PF log if
-pseudo-device	pfsync			# PF sync if
-pseudo-device	npf			# NPF packet filter
+pseudo-device	pfsync
 pseudo-device	kttcp
 pseudo-device	etherip			# EtherIP
 # srt is EXPERIMENTAL
@@ -2089,7 +2080,7 @@ options HD64461PCMCIA_DEBUG
 options HD64461VIDEO_DEBUG
 options HD64465PCMCIA_DEBUG
 options HDAUDIO_DEBUG
-options HDAFG_DEBUG
+options HDAUDIO_AFG_DEBUG
 options HDLCDEBUG
 options HIFN_DEBUG
 options HMEDEBUG
@@ -2140,6 +2131,7 @@ options KLOADER_DEBUG
 options KSTACK_DEBUG
 options KSYMS_DEBUG
 options KUE_DEBUG
+options KVM86DEBUG
 options LANA_DEBUG
 options LCD_DEBUG
 options LDT_DEBUG

@@ -497,7 +497,6 @@ static void eap_fast_write(char **buf, char **pos, size_t *buf_len,
 			*buf = NULL;
 			return;
 		}
-		*pos = nbuf + (*pos - *buf);
 		*buf = nbuf;
 		*buf_len += need;
 	}

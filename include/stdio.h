@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.82 2012/04/18 19:30:15 christos Exp $	*/
+/*	$NetBSD: stdio.h,v 1.80 2012/01/22 18:36:16 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -121,9 +121,9 @@ typedef	struct __sFILE {
 	/* operations */
 	void	*_cookie;	/* cookie passed to io functions */
 	int	(*_close)(void *);
-	ssize_t	(*_read) (void *, void *, size_t);
+	int	(*_read) (void *, char *, int);
 	__off_t	(*_seek) (void *, __off_t, int);
-	ssize_t	(*_write)(void *, const void *, size_t);
+	int	(*_write)(void *, const char *, int);
 
 	/* file extension */
 	struct	__sbuf _ext;
@@ -136,9 +136,8 @@ typedef	struct __sFILE {
 	unsigned char _ubuf[3];	/* guarantee an ungetc() buffer */
 	unsigned char _nbuf[1];	/* guarantee a getc() buffer */
 
-	int	(*_flush)(void *);
 	/* Formerly used by fgetln/fgetwln; kept for binary compatibility */
-	char	_lb_unused[sizeof(struct __sbuf) - sizeof(int (*)(void *))];
+	struct	__sbuf _lb__unused;
 
 	/* Unix stdio files get aligned to block boundaries on fseek() */
 	int	_blksize;	/* stat.st_blksize (may be != _bf._size) */
@@ -146,7 +145,7 @@ typedef	struct __sFILE {
 } FILE;
 
 __BEGIN_DECLS
-extern FILE __sF[3];
+extern FILE __sF[];
 __END_DECLS
 
 #define	__SLBF	0x0001		/* line buffered */
@@ -428,21 +427,13 @@ __END_DECLS
  */
 __BEGIN_DECLS
 FILE	*funopen(const void *,
-    int (*)(void *, char *, int),
-    int (*)(void *, const char *, int),
-    off_t (*)(void *, off_t, int),
-    int (*)(void *));
-FILE	*funopen2(const void *,
-    ssize_t (*)(void *, void *, size_t),
-    ssize_t (*)(void *, const void *, size_t),
-    off_t (*)(void *, off_t, int),
-    int (*)(void *),
-    int (*)(void *));
+		int (*)(void *, char *, int),
+		int (*)(void *, const char *, int),
+		off_t (*)(void *, off_t, int),
+		int (*)(void *));
 __END_DECLS
 #define	fropen(cookie, fn) funopen(cookie, fn, 0, 0, 0)
 #define	fwopen(cookie, fn) funopen(cookie, 0, fn, 0, 0)
-#define	fropen2(cookie, fn) funopen2(cookie, fn, 0, 0, 0, 0)
-#define	fwopen2(cookie, fn) funopen2(cookie, 0, fn, 0, 0, 0)
 #endif /* _NETBSD_SOURCE */
 
 /*

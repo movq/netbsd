@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.29 2012/05/28 19:24:30 martin Exp $	*/
+/*	$NetBSD: boot.c,v 1.28.10.1 2012/06/05 16:22:24 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 Eduardo E. Horvath.  All rights reserved.

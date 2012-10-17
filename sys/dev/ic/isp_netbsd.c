@@ -1,4 +1,4 @@
-/* $NetBSD: isp_netbsd.c,v 1.86 2012/08/21 15:53:07 bouyer Exp $ */
+/* $NetBSD: isp_netbsd.c,v 1.85.2.1 2012/09/03 18:38:34 riz Exp $ */
 /*
  * Platform (NetBSD) dependent common attachment code for Qlogic adapters.
  */
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.86 2012/08/21 15:53:07 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp_netbsd.c,v 1.85.2.1 2012/09/03 18:38:34 riz Exp $");
 
 #include <dev/ic/isp_netbsd.h>
 #include <dev/ic/isp_ioctl.h>

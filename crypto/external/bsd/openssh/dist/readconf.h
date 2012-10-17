@@ -1,5 +1,5 @@
-/*	$NetBSD: readconf.h,v 1.8 2012/05/02 02:41:08 christos Exp $	*/
-/* $OpenBSD: readconf.h,v 1.91 2011/09/23 07:45:05 markus Exp $ */
+/*	$NetBSD: readconf.h,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: readconf.h,v 1.90 2011/05/24 07:15:47 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -25,7 +25,6 @@ typedef struct {
 	char	 *connect_host;		/* Host to connect. */
 	int	  connect_port;		/* Port to connect on connect_host. */
 	int	  allocated_port;	/* Dynamically allocated listen port */
-	int	  handle;		/* Handle for dynamic listen ports */
 }       Forward;
 /* Data structure for representing option data. */
 
@@ -152,7 +151,6 @@ typedef struct {
 	int	use_roaming;
 
 	int	request_tty;
-	int	send_version_first;
 }       Options;
 
 #define SSHCTL_MASTER_NO	0

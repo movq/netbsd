@@ -1,4 +1,4 @@
-/*      $NetBSD: rumpuser_dl.c,v 1.8 2012/07/27 09:09:05 pooka Exp $	*/
+/*      $NetBSD: rumpuser_dl.c,v 1.7 2011/03/22 22:27:33 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -30,16 +30,13 @@
  * Called during rump bootstrap.
  */
 
-#include "rumpuser_port.h"
-
-#if !defined(lint)
-__RCSID("$NetBSD: rumpuser_dl.c,v 1.8 2012/07/27 09:09:05 pooka Exp $");
-#endif /* !lint */
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rumpuser_dl.c,v 1.7 2011/03/22 22:27:33 pooka Exp $");
 
 #include <sys/types.h>
 #include <sys/time.h>
-#include <assert.h>
 
+#include <assert.h>
 #include <dlfcn.h>
 #include <elf.h>
 #include <errno.h>
@@ -53,7 +50,7 @@ __RCSID("$NetBSD: rumpuser_dl.c,v 1.8 2012/07/27 09:09:05 pooka Exp $");
 #include <rump/rumpuser.h>
 
 #if defined(__ELF__) && (defined(__NetBSD__) || defined(__FreeBSD__)	\
-    || (defined(__sun__) && defined(__svr4__))) || defined(__linux__)
+    || (defined(__sun__) && defined(__svr4__)))
 static size_t symtabsize = 0, strtabsize = 0;
 static size_t symtaboff = 0, strtaboff = 0;
 static uint8_t *symtab = NULL;
@@ -64,12 +61,6 @@ static unsigned char eident;
 #ifndef Elf_Symindx
 #define Elf_Symindx uint32_t
 #endif
-
-/*
- * Linux ld.so requires a valid handle for dlinfo(), so use the main
- * handle.  We initialize this variable in rumpuser_dl_bootstrap()
- */
-static void *mainhandle;
 
 static void *
 reservespace(void *store, size_t *storesize,
@@ -139,18 +130,6 @@ do {									\
 
 #define SYM_GETSIZE() ((eident==ELFCLASS32)?sizeof(Elf32_Sym):sizeof(Elf64_Sym))
 
-/*
- * On NetBSD, the dynamic section pointer values seem to be relative to
- * the address the dso is mapped at.  On Linux, they seem to contain
- * the absolute address.  I couldn't find anything definite from a quick
- * read of the standard and therefore I will not go and figure beyond ifdef.
- */
-#ifdef __linux__
-#define adjptr(_map_, _ptr_) ((void *)(_ptr_))
-#else
-#define adjptr(_map_, _ptr_) ((void *)(_map_->l_addr + (_ptr_)))
-#endif
-
 static int
 getsymbols(struct link_map *map)
 {
@@ -163,7 +142,7 @@ getsymbols(struct link_map *map)
 	unsigned i;
 
 	if (map->l_addr) {
-		if (memcmp((void *)map->l_addr, ELFMAG, SELFMAG) != 0)
+		if (memcmp(map->l_addr, ELFMAG, SELFMAG) != 0)
 			return ENOEXEC;
 		eident = *(unsigned char *)(map->l_addr + EI_CLASS);
 		if (eident != ELFCLASS32 && eident != ELFCLASS64)
@@ -197,11 +176,11 @@ getsymbols(struct link_map *map)
 		switch (ed_tag) {
 		case DT_SYMTAB:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			syms_base = adjptr(map, edptr);
+			syms_base = map->l_addr + edptr;
 			break;
 		case DT_STRTAB:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			str_base = adjptr(map, edptr);
+			str_base = map->l_addr + edptr;
 			break;
 		case DT_STRSZ:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_val, edval);
@@ -209,7 +188,7 @@ getsymbols(struct link_map *map)
 			break;
 		case DT_HASH:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			hashtab = (Elf_Symindx *)adjptr(map, edptr);
+			hashtab = (Elf_Symindx *)(map->l_addr + edptr);
 			cursymcount = hashtab[1];
 			break;
 		case DT_SYMENT:
@@ -328,8 +307,7 @@ rumpuser_dl_bootstrap(rump_modinit_fn domodinit,
 	struct link_map *map, *origmap;
 	int error;
 
-	mainhandle = dlopen(NULL, RTLD_NOW);
-	if (dlinfo(mainhandle, RTLD_DI_LINKMAP, &origmap) == -1) {
+	if (dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &origmap) == -1) {
 		fprintf(stderr, "warning: rumpuser module bootstrap "
 		    "failed: %s\n", dlerror());
 		return;
@@ -351,7 +329,7 @@ rumpuser_dl_bootstrap(rump_modinit_fn domodinit,
 		if (strstr(map->l_name, "librump") != NULL)
 			error = getsymbols(map);
 		/* this should be the main object */
-		else if (!map->l_addr && map->l_prev == NULL)
+		else if (map->l_addr == NULL && map->l_prev == NULL)
 			error = getsymbols(map);
 	}
 
@@ -394,7 +372,7 @@ rumpuser_dl_component_init(int type, rump_component_init_fn compinit)
 {
 	struct link_map *map;
 
-	if (dlinfo(mainhandle, RTLD_DI_LINKMAP, &map) == -1) {
+	if (dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &map) == -1) {
 		fprintf(stderr, "warning: rumpuser module bootstrap "
 		    "failed: %s\n", dlerror());
 		return;

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.364 2012/09/23 01:05:21 chs Exp $
+# $NetBSD: GENERIC,v 1.348.2.6 2012/08/15 15:32:59 sborrill Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include	"arch/amd64/conf/std.amd64"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.364 $"
+#ident 		"GENERIC-$Revision: 1.348.2.6 $"
 
 maxusers	64		# estimated number of users
 
@@ -66,6 +66,7 @@ options		CPU_UCODE	# cpu ucode loading support
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 options 	MODULAR		# new style module(7) framework
 options 	USERCONF	# userconf(4) support
@@ -78,7 +79,6 @@ coretemp*	at cpu?		# Intel on-die thermal sensor
 est0		at cpu0		# Intel Enhanced SpeedStep (non-ACPI)
 #odcm0		at cpu0		# On-demand clock modulation
 powernow0	at cpu0		# AMD PowerNow! and Cool'n'Quiet (non-ACPI)
-vmt0		at cpu0		# VMware Tools
 
 # Alternate buffer queue strategies for better responsiveness under high
 # disk I/O load.
@@ -86,7 +86,7 @@ vmt0		at cpu0		# VMware Tools
 options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
-options 	DIAGNOSTIC	# expensive kernel consistency checks
+#options 	DIAGNOSTIC	# expensive kernel consistency checks
 				# XXX to be commented out on release branch
 #options 	DEBUG		# expensive debugging checks/support
 #options 	LOCKDEBUG	# expensive locking checks/support
@@ -98,7 +98,6 @@ options 	DIAGNOSTIC	# expensive kernel consistency checks
 #
 makeoptions	COPTS="-O2 -fno-omit-frame-pointer"
 options 	DDB		# in-kernel debugger
-#options	DDB_COMMANDONENTER="bt"	# execute command when ddb is entered
 #options 	DDB_ONPANIC=1	# see also sysctl(8): `ddb.onpanic'
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
@@ -128,12 +127,10 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Wedge support
 options 	DKWEDGE_AUTODISCOVER	# Automatically add dk(4) instances
 options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
-# The following three options can break /etc/fstab, so handle with care
+# The following two options can break /etc/fstab, so handle with care
 #options 	DKWEDGE_METHOD_BSDLABEL	# Support disklabel entries as wedges
 #options 	DKWEDGE_METHOD_MBR	# Support MBR partitions as wedges
-#options	DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
 
-# File systems
 file-system 	FFS		# UFS
 file-system	MFS		# memory file system
 file-system 	NFS		# Network File System client
@@ -161,7 +158,7 @@ file-system	PTYFS		# /dev/ptm support
 # File system options
 options 	QUOTA		# legacy UFS quotas
 options 	QUOTA2		# new, in-filesystem UFS quotas
-options 	FFS_EI		# FFS Endian Independent support
+#options 	FFS_EI		# FFS Endian Independent support
 options 	WAPBL		# File system journaling support
 # Note that UFS_DIRHASH is suspected of causing kernel memory corruption.
 # It is not recommended for general use.
@@ -340,7 +337,7 @@ puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
 #amdpcib* at pci? dev ? function ?	# AMD 8111 PCI-ISA w/ HPET
 #hpet*	at amdpcib?
 
-pwdog*	at pci? dev ? function ?	# QUANCOM PWDOG1
+#pwdog*	at pci? dev ? function ?	# QUANCOM PWDOG1
 
 ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-LPC w/ timecounter,
 					# watchdog and Speedstep and HPET
@@ -441,8 +438,7 @@ lpt1	at isa? port 0x278
 
 # Hardware monitors
 
-amdnb_misc* at pci?			# AMD NB Misc Configuration
-amdtemp* at amdnb_misc?			# AMD CPU Temperature sensors
+amdtemp* at pchb?			# AMD CPU Temperature sensors
 
 # Winbond LPC Super I/O
 #wbsio*	at isa? port 0x2e
@@ -715,7 +711,6 @@ hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 lii*	at pci? dev ? function ?	# Atheros L2 Fast-Ethernet
 lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
-malo*	at pci? dev ? function ?	# Marvell Libertas Wireless
 mskc*	at pci? dev ? function ?	# Marvell Yukon 2 Gigabit Ethernet
 msk*	at mskc?			# Marvell Yukon 2 Gigabit Ethernet
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
@@ -965,9 +960,8 @@ uscanner* at uhub? port ?
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel at76c50x 802.11b
 otus*	at uhub? port ?		# Atheros AR9001U
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
-run*	at uhub? port ?		# Ralink Technology RT(2[78]|30)00 802.11a/b/g/n
 urtw*	at uhub? port ?		# Realtek RTL8187/RTL8187B 802.11b/g
 urtwn*	at uhub? port ?		# Realtek RTL8188CU/RTL8192CU 802.11b/g/n
 zyd*	at uhub? port ?		# Zydas ZD1211
@@ -1151,10 +1145,8 @@ viomb*	at virtio?			# Virtio memory balloon device
 ld*	at virtio?			# Virtio disk device
 vioif*	at virtio?			# Virtio network device
 
-
 # Pull in optional local configuration
 cinclude "arch/amd64/conf/GENERIC.local"
-
 
 # Pseudo-Devices
 
@@ -1185,6 +1177,8 @@ options 	MEMORY_DISK_DYNAMIC	# loaded via kernel module(7)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
+# NPF
+#pseudo-device	npf
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -1207,10 +1201,6 @@ pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
-#pseudo-device	pf			# PF packet filter
-#pseudo-device	pflog			# PF log if
-#pseudo-device	pfsync			# PF sync if
-#pseudo-device	npf			# NPF packet filter
 
 #
 # accept filters
@@ -1224,6 +1214,8 @@ pseudo-device	sequencer	1	# MIDI sequencer
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
+#pseudo-device	pf			# PF packet filter
+#pseudo-device	pflog			# PF log if
 pseudo-device	lockstat		# lock profiling
 pseudo-device	bcsp			# BlueCore Serial Protocol
 pseudo-device	btuart			# Bluetooth HCI UART (H4)

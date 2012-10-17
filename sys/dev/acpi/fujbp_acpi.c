@@ -1,4 +1,4 @@
-/*	$NetBSD: fujbp_acpi.c,v 1.3 2012/06/02 21:36:43 dsl Exp $ */
+/*	$NetBSD: fujbp_acpi.c,v 1.1 2011/02/20 08:31:46 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fujbp_acpi.c,v 1.3 2012/06/02 21:36:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fujbp_acpi.c,v 1.1 2011/02/20 08:31:46 jruoho Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -401,7 +401,7 @@ fujitsu_bp_sysctl_setup(struct fujitsu_bp_softc *sc)
 		(void)sysctl_createv(&sc->sc_log, 0, &rnode, NULL,
 		    access, CTLTYPE_INT, "brightness",
 		    SYSCTL_DESCR("Internal DFP brightness level"),
-		    fujitsu_bp_sysctl_brightness, 0, (void *)sc, 0,
+		    fujitsu_bp_sysctl_brightness, 0, sc, 0,
 		    CTL_CREATE, CTL_EOL);
 	}
 
@@ -414,7 +414,7 @@ fujitsu_bp_sysctl_setup(struct fujitsu_bp_softc *sc)
 		(void)sysctl_createv(&sc->sc_log, 0, &rnode, NULL,
 		    access, CTLTYPE_BOOL, "pointer",
 		    SYSCTL_DESCR("Internal pointer switch state"),
-		    fujitsu_bp_sysctl_pointer, 0, (void *)sc, 0,
+		    fujitsu_bp_sysctl_pointer, 0, sc, 0,
 		    CTL_CREATE, CTL_EOL);
 	}
 
@@ -437,12 +437,12 @@ fujitsu_bp_sysctl_brightness(SYSCTLFN_ARGS)
 
 	mutex_enter(&sc->sc_mtx);
 	error = fujitsu_bp_get_brightness(sc, &level);
+	val = (int)level;
 	mutex_exit(&sc->sc_mtx);
 
 	if (error)
 		return error;
 
-	val = (int)level;
 	node.sysctl_data = &val;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	if (error || newp == NULL)

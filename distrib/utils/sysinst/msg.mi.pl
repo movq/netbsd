@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.86 2012/07/06 21:10:56 jdf Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.78.2.3 2012/09/30 18:53:58 bouyer Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -37,7 +37,7 @@
 /* MI Message catalog -- polish, machine independent */
 
 message usage
-{uzycie: sysinst [-D] [-f plik_definicja] [-r wersja]
+{uzycie: sysinst [-r wersja] [-f plik-definicji]
 }
 
 /*

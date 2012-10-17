@@ -1,4 +1,4 @@
-/*	$NetBSD: merge.c,v 1.14 2012/03/13 21:13:48 christos Exp $	*/
+/*	$NetBSD: merge.c,v 1.13 2011/05/18 19:36:36 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)merge.c	8.2 (Berkeley) 2/14/94";
 #else
-__RCSID("$NetBSD: merge.c,v 1.14 2012/03/13 21:13:48 christos Exp $");
+__RCSID("$NetBSD: merge.c,v 1.13 2011/05/18 19:36:36 dsl Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -108,8 +108,11 @@ static void insertionsort(u_char *, size_t, size_t,
  * Arguments are as for qsort.
  */
 int
-mergesort(void *base, size_t nmemb, size_t size,
-    int (*cmp)(const void *, const void *))
+mergesort(base, nmemb, size, cmp)
+	void *base;
+	size_t nmemb;
+	size_t size;
+	int (*cmp)(const void *, const void *);
 {
 	size_t i;
 	int sense;
@@ -278,12 +281,13 @@ COPY:	    			b = t;
 
 /* XXX: shouldn't this function be static? - lukem 990810 */
 void
-setup(u_char *list1, u_char *list2, size_t n, size_t size,
-    int (*cmp)(const void *, const void *))
+setup(list1, list2, n, size, cmp)
+	size_t n, size;
+	int (*cmp)(const void *, const void *);
+	u_char *list1, *list2;
 {
-	int length, tmp, sense;
+	int i, length, size2, tmp, sense;
 	u_char *f1, *f2, *s, *l2, *last, *p2;
-	size_t size2, i;
 
 	_DIAGASSERT(cmp != NULL);
 	_DIAGASSERT(list1 != NULL);
@@ -300,7 +304,7 @@ setup(u_char *list1, u_char *list2, size_t n, size_t size,
 	 * for simplicity.
 	 */
 	i = 4 + (n & 1);
-	insertionsort(list1 + (n - i) * size, i, size, cmp);
+	insertionsort(list1 + (n - i) * size, (size_t)i, size, cmp);
 	last = list1 + size * (n - i);
 	*EVAL(list2 + (last - list1)) = list2 + n * size;
 
@@ -328,12 +332,12 @@ setup(u_char *list1, u_char *list2, size_t n, size_t size,
 				if ((cmp(f2-size, f2) > 0) != sense) {
 					p2 = *EVAL(p2) = f2 - list1 + list2;
 					if (sense > 0)
-						reverse(f1, f2 - size);
+						reverse(f1, f2-size);
 					f1 = f2;
 				}
 			}
 			if (sense > 0)
-				reverse(f1, f2 - size);
+				reverse (f1, f2-size);
 			f1 = f2;
 			if (f2 < last || cmp(f2 - size, f2) > 0)
 				p2 = *EVAL(p2) = f2 - list1 + list2;
@@ -355,11 +359,13 @@ setup(u_char *list1, u_char *list2, size_t n, size_t size,
  * last 4 elements.
  */
 static void
-insertionsort(u_char *a, size_t n, size_t size,
-    int (*cmp)(const void *, const void *))
+insertionsort(a, n, size, cmp)
+	u_char *a;
+	size_t n, size;
+	int (*cmp)(const void *, const void *);
 {
 	u_char *ai, *s, *t, *u, tmp;
-	size_t i;
+	int i;
 
 	_DIAGASSERT(a != NULL);
 	_DIAGASSERT(cmp != NULL);

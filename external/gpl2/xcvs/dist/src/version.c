@@ -30,9 +30,7 @@ char *config_string = "\n";
 #endif
 #endif
 
-/* cvsacl patch */
-static const char aclpatch_string[] =
-    "with CVSACL Patch 1.2.5 (cvsacl.sourceforge.net)\n";
+
 
 static const char *const version_usage[] =
 {
@@ -65,8 +63,6 @@ version (int argc, char **argv)
        released.  */
     (void) fputs (PACKAGE_STRING, stdout);
     (void) fputs (config_string, stdout);
-    /* cvsacl patch */
-    (void) fputs (aclpatch_string, stdout);
 
 #ifdef CLIENT_SUPPORT
     if (current_parsed_root && current_parsed_root->isremote)

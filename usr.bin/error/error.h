@@ -1,4 +1,4 @@
-/*	$NetBSD: error.h,v 1.19 2012/02/29 23:37:07 joerg Exp $	*/
+/*	$NetBSD: error.h,v 1.18.4.1 2012/03/05 19:12:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993

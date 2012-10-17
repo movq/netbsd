@@ -1,4 +1,4 @@
-/* $NetBSD: dot_init.h,v 1.9 2012/08/05 01:44:43 matt Exp $ */
+/* $NetBSD: dot_init.h,v 1.6 2008/05/10 15:31:03 martin Exp $ */
 
 /*-
  * Copyright (c) 2001 Ross Harvey

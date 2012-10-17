@@ -1,4 +1,4 @@
-/*	$NetBSD: task_p.h,v 1.3 2012/06/05 00:42:32 christos Exp $	*/
+/*	$NetBSD: task_p.h,v 1.2.6.1 2012/06/05 21:15:08 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

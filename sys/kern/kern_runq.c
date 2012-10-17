@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_runq.c,v 1.35 2012/08/30 02:25:35 matt Exp $	*/
+/*	$NetBSD: kern_runq.c,v 1.33 2011/12/02 12:31:03 yamt Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008 Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_runq.c,v 1.35 2012/08/30 02:25:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_runq.c,v 1.33 2011/12/02 12:31:03 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -99,7 +99,7 @@ static void	sched_balance(void *);
 /*
  * Preemption control.
  */
-int		sched_upreempt_pri = 0;
+int		sched_upreempt_pri = PRI_KERNEL;
 #ifdef __HAVE_PREEMPTION
 # ifdef DEBUG
 int		sched_kpreempt_pri = 0;
@@ -471,9 +471,7 @@ sched_catchlwp(struct cpu_info *ci)
 		if (l == NULL) {
 			break;
 		}
-		KASSERTMSG(l->l_stat == LSRUN, "%s l %p (%s) l_stat %d",
-		    ci->ci_data.cpu_name,
-		    l, (l->l_name ? l->l_name : l->l_proc->p_comm), l->l_stat);
+		KASSERT(l->l_stat == LSRUN);
 
 		/* Look for threads, whose are allowed to migrate */
 		if ((l->l_pflag & LP_BOUND) || lwp_cache_hot(l) ||

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vnops.c,v 1.80 2012/07/22 00:53:20 rmind Exp $	*/
+/*	$NetBSD: smbfs_vnops.c,v 1.78.2.1 2012/08/12 12:59:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.80 2012/07/22 00:53:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.78.2.1 2012/08/12 12:59:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -190,12 +190,10 @@ smbfs_check_permitted(struct vnode *vp, struct smbnode *np, mode_t mode,
     kauth_cred_t cred)
 {
 	struct smbmount *smp = VTOSMBFS(vp);
-	mode_t file_mode = (vp->v_type == VDIR) ? smp->sm_args.dir_mode :
-	    smp->sm_args.file_mode;
 
-	return kauth_authorize_vnode(cred, kauth_access_action(mode,
-	    vp->v_type, file_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    file_mode, smp->sm_args.uid, smp->sm_args.gid, mode, cred));
+	return genfs_can_access(vp->v_type,
+	    (vp->v_type == VDIR) ? smp->sm_args.dir_mode : smp->sm_args.file_mode,
+	    smp->sm_args.uid, smp->sm_args.gid, mode, cred);
 }
 
 int
@@ -459,10 +457,8 @@ smbfs_setattr(void *v)
 	if (vap->va_atime.tv_sec != VNOVAL)
 		atime = &vap->va_atime;
 	if (mtime != atime) {
-		error = kauth_authorize_vnode(ap->a_cred,
-		    KAUTH_VNODE_WRITE_TIMES, ap->a_vp, NULL,
-		    genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
-		    VTOSMBFS(vp)->sm_args.uid, ap->a_cred));
+		error = genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
+		    VTOSMBFS(vp)->sm_args.uid, ap->a_cred);
 		if (error)
 			return (error);
 

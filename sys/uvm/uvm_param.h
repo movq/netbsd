@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_param.h,v 1.31 2012/03/19 00:17:08 uebayasi Exp $	*/
+/*	$NetBSD: uvm_param.h,v 1.26 2011/11/29 07:43:54 matt Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -68,7 +68,6 @@
 #define	_VM_PARAM_
 
 #ifdef _KERNEL_OPT
-#include "opt_modular.h"
 #include "opt_uvm.h"
 #endif
 #ifdef _KERNEL
@@ -135,13 +134,10 @@
  * If MIN_PAGE_SIZE and MAX_PAGE_SIZE are not equal, then we must use
  * non-constant PAGE_SIZE, et al for LKMs.
  */
-#if (MIN_PAGE_SIZE != MAX_PAGE_SIZE)
-#define	__uvmexp_pagesize
-#if defined(_LKM) || defined(_MODULE)
+#if (MIN_PAGE_SIZE != MAX_PAGE_SIZE) && defined(_LKM)
 #undef PAGE_SIZE
 #undef PAGE_MASK
 #undef PAGE_SHIFT
-#endif
 #endif
 
 /*
@@ -149,12 +145,13 @@
  * have ones that are compile-time constants.
  */
 #if !defined(PAGE_SIZE)
-extern const int *const uvmexp_pagesize;
-extern const int *const uvmexp_pagemask;
-extern const int *const uvmexp_pageshift;
+extern int *uvmexp_pagesize;
+extern int *uvmexp_pagemask;
+extern int *uvmexp_pageshift;
 #define	PAGE_SIZE	(*uvmexp_pagesize)	/* size of page */
 #define	PAGE_MASK	(*uvmexp_pagemask)	/* size of page - 1 */
 #define	PAGE_SHIFT	(*uvmexp_pageshift)	/* bits to shift for pages */
+#define	__uvmexp_pagesize
 #endif /* PAGE_SIZE */
 
 #endif /* _KERNEL */
@@ -262,16 +259,5 @@ extern u_int		uvm_emap_size;	/* size of emap */
 	((((vaddr_t)(x)) / vm_page_size) * vm_page_size)
 
 #endif /* _KERNEL */
-
-/*
- * typedefs, necessary for standard UVM headers.
- */
-
-typedef unsigned int uvm_flag_t;
-
-typedef int vm_inherit_t;	/* XXX: inheritance codes */
-typedef off_t voff_t;		/* XXX: offset within a uvm_object */
-typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
-
 #endif /* ASSEMBLER */
 #endif /* _VM_PARAM_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.172 2012/09/27 18:28:56 alnsn Exp $	*/
+/*	$NetBSD: bpf.c,v 1.168 2011/12/16 03:05:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.172 2012/09/27 18:28:56 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.168 2011/12/16 03:05:23 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_bpf.h"
@@ -108,6 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.172 2012/09/27 18:28:56 alnsn Exp $");
 int bpf_bufsize = BPF_BUFSIZE;
 int bpf_maxbufsize = BPF_DFLTBUFSIZE;	/* XXX set dynamically, see above */
 
+
 /*
  * Global BPF statistics returned by net.bpf.stats sysctl.
  */
@@ -129,7 +130,7 @@ LIST_HEAD(, bpf_d) bpf_list;
 static int	bpf_allocbufs(struct bpf_d *);
 static void	bpf_deliver(struct bpf_if *,
 		            void *(*cpfn)(void *, const void *, size_t),
-		            void *, u_int, u_int, const bool);
+			    void *, u_int, u_int, struct ifnet *);
 static void	bpf_freed(struct bpf_d *);
 static void	bpf_ifname(struct ifnet *, struct ifreq *);
 static void	*bpf_mcpy(void *, const void *, size_t);
@@ -1054,42 +1055,40 @@ int
 bpf_setf(struct bpf_d *d, struct bpf_program *fp)
 {
 	struct bpf_insn *fcode, *old;
-	size_t flen, size;
+	u_int flen, size;
 	int s;
 
-	flen = fp->bf_len;
-
-	if ((fp->bf_insns == NULL && flen) || flen > BPF_MAXINSNS) {
-		return EINVAL;
-	}
-
-	if (flen) {
-		/*
-		 * Allocate the buffer, copy the byte-code from
-		 * userspace and validate it.
-		 */
-		size = flen * sizeof(*fp->bf_insns);
-		fcode = malloc(size, M_DEVBUF, M_WAITOK);
-		if (copyin(fp->bf_insns, fcode, size) != 0 ||
-		    !bpf_validate(fcode, (int)flen)) {
-			free(fcode, M_DEVBUF);
-			return EINVAL;
-		}
-	} else {
-		fcode = NULL;
-	}
-
-	s = splnet();
 	old = d->bd_filter;
-	d->bd_filter = fcode;
-	reset_d(d);
-	splx(s);
-
-	if (old) {
-		free(old, M_DEVBUF);
+	if (fp->bf_insns == 0) {
+		if (fp->bf_len != 0)
+			return (EINVAL);
+		s = splnet();
+		d->bd_filter = 0;
+		reset_d(d);
+		splx(s);
+		if (old != 0)
+			free(old, M_DEVBUF);
+		return (0);
 	}
+	flen = fp->bf_len;
+	if (flen > BPF_MAXINSNS)
+		return (EINVAL);
 
-	return 0;
+	size = flen * sizeof(*fp->bf_insns);
+	fcode = malloc(size, M_DEVBUF, M_WAITOK);
+	if (copyin(fp->bf_insns, fcode, size) == 0 &&
+	    bpf_validate(fcode, (int)flen)) {
+		s = splnet();
+		d->bd_filter = fcode;
+		reset_d(d);
+		splx(s);
+		if (old != 0)
+			free(old, M_DEVBUF);
+
+		return (0);
+	}
+	free(fcode, M_DEVBUF);
+	return (EINVAL);
 }
 
 /*
@@ -1303,6 +1302,39 @@ bpf_kqfilter(struct file *fp, struct knote *kn)
 }
 
 /*
+ * Incoming linkage from device drivers.  Process the packet pkt, of length
+ * pktlen, which is stored in a contiguous buffer.  The packet is parsed
+ * by each process' filter, and if accepted, stashed into the corresponding
+ * buffer.
+ */
+static void
+_bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
+{
+	struct bpf_d *d;
+	u_int slen;
+	struct timespec ts;
+	int gottime=0;
+
+	/*
+	 * Note that the ipl does not have to be raised at this point.
+	 * The only problem that could arise here is that if two different
+	 * interfaces shared any data.  This is not the case.
+	 */
+	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
+		++d->bd_rcount;
+		++bpf_gstats.bs_recv;
+		slen = bpf_filter(d->bd_filter, pkt, pktlen, pktlen);
+		if (slen != 0) {
+			if (!gottime) {
+				nanotime(&ts);
+				gottime = 1;
+			}
+			catchpacket(d, pkt, pktlen, slen, memcpy, &ts);
+		}
+	}
+}
+
+/*
  * Copy data from an mbuf chain into a buffer.  This code is derived
  * from m_copydata in sys/uipc_mbuf.c.
  */
@@ -1330,57 +1362,35 @@ bpf_mcpy(void *dst_arg, const void *src_arg, size_t len)
 /*
  * Dispatch a packet to all the listeners on interface bp.
  *
- * pkt     pointer to the packet, either a data buffer or an mbuf chain
- * buflen  buffer length, if pkt is a data buffer
- * cpfn    a function that can copy pkt into the listener's buffer
+ * marg    pointer to the packet, either a data buffer or an mbuf chain
+ * buflen  buffer length, if marg is a data buffer
+ * cpfn    a function that can copy marg into the listener's buffer
  * pktlen  length of the packet
- * rcv     true if packet came in
+ * rcvif   either NULL or the interface the packet came in on.
  */
 static inline void
 bpf_deliver(struct bpf_if *bp, void *(*cpfn)(void *, const void *, size_t),
-    void *pkt, u_int pktlen, u_int buflen, const bool rcv)
+	    void *marg, u_int pktlen, u_int buflen, struct ifnet *rcvif)
 {
+	u_int slen;
 	struct bpf_d *d;
 	struct timespec ts;
-	bool gottime = false;
+	int gottime = 0;
 
-	/*
-	 * Note that the IPL does not have to be raised at this point.
-	 * The only problem that could arise here is that if two different
-	 * interfaces shared any data.  This is not the case.
-	 */
-	for (d = bp->bif_dlist; d != NULL; d = d->bd_next) {
-		u_int slen;
-
-		if (!d->bd_seesent && !rcv) {
+	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
+		if (!d->bd_seesent && (rcvif == NULL))
 			continue;
+		++d->bd_rcount;
+		++bpf_gstats.bs_recv;
+		slen = bpf_filter(d->bd_filter, marg, pktlen, buflen);
+		if (slen != 0) {
+			if(!gottime) {
+				nanotime(&ts);
+				gottime = 1;
+			}
+			catchpacket(d, marg, pktlen, slen, cpfn, &ts);
 		}
-		d->bd_rcount++;
-		bpf_gstats.bs_recv++;
-
-		slen = bpf_filter(d->bd_filter, pkt, pktlen, buflen);
-		if (!slen) {
-			continue;
-		}
-		if (!gottime) {
-			gottime = true;
-			nanotime(&ts);
-		}
-		catchpacket(d, pkt, pktlen, slen, cpfn, &ts);
 	}
-}
-
-/*
- * Incoming linkage from device drivers.  Process the packet pkt, of length
- * pktlen, which is stored in a contiguous buffer.  The packet is parsed
- * by each process' filter, and if accepted, stashed into the corresponding
- * buffer.
- */
-static void
-_bpf_tap(struct bpf_if *bp, u_char *pkt, u_int pktlen)
-{
-
-	bpf_deliver(bp, memcpy, pkt, pktlen, pktlen, true);
 }
 
 /*
@@ -1411,7 +1421,7 @@ _bpf_mtap2(struct bpf_if *bp, void *data, u_int dlen, struct mbuf *m)
 	mb.m_data = data;
 	mb.m_len = dlen;
 
-	bpf_deliver(bp, bpf_mcpy, &mb, pktlen, 0, m->m_pkthdr.rcvif != NULL);
+	bpf_deliver(bp, bpf_mcpy, &mb, pktlen, 0, m->m_pkthdr.rcvif);
 }
 
 /*
@@ -1442,7 +1452,7 @@ _bpf_mtap(struct bpf_if *bp, struct mbuf *m)
 		buflen = 0;
 	}
 
-	bpf_deliver(bp, cpfn, marg, pktlen, buflen, m->m_pkthdr.rcvif != NULL);
+	bpf_deliver(bp, cpfn, marg, pktlen, buflen, m->m_pkthdr.rcvif);
 }
 
 /*
@@ -1678,11 +1688,11 @@ bpf_freed(struct bpf_d *d)
 	 * been detached from its interface and it yet hasn't been marked
 	 * free.
 	 */
-	if (d->bd_sbuf != NULL) {
+	if (d->bd_sbuf != 0) {
 		free(d->bd_sbuf, M_DEVBUF);
-		if (d->bd_hbuf != NULL)
+		if (d->bd_hbuf != 0)
 			free(d->bd_hbuf, M_DEVBUF);
-		if (d->bd_fbuf != NULL)
+		if (d->bd_fbuf != 0)
 			free(d->bd_fbuf, M_DEVBUF);
 	}
 	if (d->bd_filter)

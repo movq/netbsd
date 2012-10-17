@@ -1,4 +1,4 @@
-/*	$NetBSD: gemvar.h,v 1.24 2012/07/02 11:23:40 jdc Exp $ */
+/*	$NetBSD: gemvar.h,v 1.23.2.1 2012/07/05 17:59:12 riz Exp $ */
 
 /*
  *

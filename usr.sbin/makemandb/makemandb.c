@@ -1,4 +1,4 @@
-/*	$NetBSD: makemandb.c,v 1.15 2012/10/06 15:33:59 wiz Exp $	*/
+/*	$NetBSD: makemandb.c,v 1.2.2.5 2012/05/09 03:41:00 riz Exp $	*/
 /*
  * Copyright (c) 2011 Abhinav Upadhyay <er.abhinav.upadhyay@gmail.com>
  * Copyright (c) 2011 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: makemandb.c,v 1.15 2012/10/06 15:33:59 wiz Exp $");
+__RCSID("$NetBSD: makemandb.c,v 1.2.2.5 2012/05/09 03:41:00 riz Exp $");
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -304,12 +304,13 @@ main(int argc, char *argv[])
 	size_t linesize;
 	struct mandb_rec rec;
 
-	while ((ch = getopt(argc, argv, "C:floQqv")) != -1) {
+	while ((ch = getopt(argc, argv, "C:floqv")) != -1) {
 		switch (ch) {
 		case 'C':
 			manconf = optarg;
 			break;
 		case 'f':
+			remove(DBPATH);
 			mflags.recreate = 1;
 			break;
 		case 'l':
@@ -318,11 +319,8 @@ main(int argc, char *argv[])
 		case 'o':
 			mflags.optimize = 1;
 			break;
-		case 'Q':
-			mflags.verbosity = 0;
-			break;
 		case 'q':
-			mflags.verbosity = 1;
+			mflags.verbosity = 0;
 			break;
 		case 'v':
 			mflags.verbosity = 2;
@@ -337,22 +335,7 @@ main(int argc, char *argv[])
 	init_secbuffs(&rec);
 	mp = mparse_alloc(MPARSE_AUTO, MANDOCLEVEL_FATAL, NULL, NULL);
 
-	if (manconf) {
-		char *arg;
-		size_t command_len = shquote(manconf, NULL, 0) + 1;
-		arg = emalloc(command_len);
-		shquote(manconf, arg, command_len);
-		easprintf(&command, "man -p -C %s", arg);
-		free(arg);
-	} else {
-		command = estrdup("man -p");
-		manconf = MANCONF;
-	}
-
-	if (mflags.recreate)
-		remove(get_dbpath(manconf));
-
-	if ((db = init_db(MANDB_CREATE, manconf)) == NULL)
+	if ((db = init_db(MANDB_CREATE)) == NULL)
 		exit(EXIT_FAILURE);
 
 	sqlite3_exec(db, "PRAGMA synchronous = 0", NULL, NULL, 	&errmsg);
@@ -372,6 +355,16 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+	if (manconf) {
+		char *arg;
+		size_t command_len = shquote(manconf, NULL, 0) + 1;
+		arg = malloc(command_len );
+		shquote(manconf, arg, command_len);
+		easprintf(&command, "man -p -C %s", arg);
+		free(arg);
+	} else {
+		command = estrdup("man -p");
+	}
 
 	/* Call man -p to get the list of man page dirs */
 	if ((file = popen(command, "r")) == NULL) {
@@ -424,8 +417,6 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "pclose error");
 	}
 
-	if (mflags.verbosity)
-		printf("Performing index update\n");
 	update_db(db, mp, &rec);
 	mparse_free(mp);
 	free_secbuffs(&rec);
@@ -460,8 +451,7 @@ traversedir(const char *parent, const char *file, sqlite3 *db,
 	char *buf;
 
 	if (stat(file, &sb) < 0) {
-		if (mflags.verbosity)
-			warn("stat failed: %s", file);
+		warn("stat failed: %s", file);
 		return;
 	}
 	
@@ -474,8 +464,7 @@ traversedir(const char *parent, const char *file, sqlite3 *db,
 	/* If it is a directory, traverse it recursively */
 	if (S_ISDIR(sb.st_mode)) {
 		if ((dp = opendir(file)) == NULL) {
-			if (mflags.verbosity)
-				warn("opendir error: %s", file);
+			warn("opendir error: %s", file);
 			return;
 		}
 		
@@ -514,16 +503,14 @@ build_file_cache(sqlite3 *db, const char *parent, const char *file,
 		 " :mtime, :parent, :file)";
 	rc = sqlite3_prepare_v2(db, sqlstr, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		return;
 	}
 
 	idx = sqlite3_bind_parameter_index(stmt, ":device");
 	rc = sqlite3_bind_int64(stmt, idx, device_cache);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
@@ -531,8 +518,7 @@ build_file_cache(sqlite3 *db, const char *parent, const char *file,
 	idx = sqlite3_bind_parameter_index(stmt, ":inode");
 	rc = sqlite3_bind_int64(stmt, idx, inode_cache);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
@@ -540,8 +526,7 @@ build_file_cache(sqlite3 *db, const char *parent, const char *file,
 	idx = sqlite3_bind_parameter_index(stmt, ":mtime");
 	rc = sqlite3_bind_int64(stmt, idx, mtime_cache);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
@@ -549,8 +534,7 @@ build_file_cache(sqlite3 *db, const char *parent, const char *file,
 	idx = sqlite3_bind_parameter_index(stmt, ":parent");
 	rc = sqlite3_bind_text(stmt, idx, parent, -1, NULL);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
@@ -558,8 +542,7 @@ build_file_cache(sqlite3 *db, const char *parent, const char *file,
 	idx = sqlite3_bind_parameter_index(stmt, ":file");
 	rc = sqlite3_bind_text(stmt, idx, file, -1, NULL);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		return;
 	}
@@ -584,8 +567,7 @@ update_existing_entry(sqlite3 *db, const char *file, const char *hash,
 		       "  :inode2 OR mtime <> :mtime2)";
 	rc = sqlite3_prepare_v2(db, inner_sqlstr, -1, &inner_stmt, NULL);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		return;
 	}
 	idx = sqlite3_bind_parameter_index(inner_stmt, ":device");
@@ -609,7 +591,7 @@ update_existing_entry(sqlite3 *db, const char *file, const char *hash,
 	if (rc == SQLITE_DONE) {
 		/* Check if an update has been performed. */
 		if (update_count != sqlite3_total_changes(db)) {
-			if (mflags.verbosity == 2)
+			if (mflags.verbosity)
 				printf("Updated %s\n", file);
 			(*new_count)++;
 		} else {
@@ -617,8 +599,7 @@ update_existing_entry(sqlite3 *db, const char *file, const char *hash,
 			(*link_count)++;
 		}
 	} else {
-		if (mflags.verbosity == 2)
-			warnx("Could not update the meta data for %s", file);
+		warnx("Could not update the meta data for %s", file);
 		(*err_count)++;
 	}
 	sqlite3_finalize(inner_stmt);
@@ -662,8 +643,7 @@ read_and_decompress(const char *file, void **buf, size_t *len)
 		if (off == *len) {
 			*len *= 2;
 			if (*len < off) {
-				if (mflags.verbosity)
-					warnx("File too large: %s", file);
+				warnx("File too large: %s", file);
 				free(*buf);
 				archive_read_close(a);
 				return -1;
@@ -711,7 +691,6 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 
 	rc = sqlite3_prepare_v2(db, sqlstr, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
 		warnx("%s", sqlite3_errmsg(db));
 		close_db(db);
 		errx(EXIT_FAILURE, "Could not query file cache");
@@ -734,8 +713,7 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 		md5_status = check_md5(file, db, "mandb_meta", &md5sum, buf, buflen);
 		assert(md5sum != NULL);
 		if (md5_status == -1) {
-			if (mflags.verbosity)
-				warnx("An error occurred in checking md5 value"
+			warnx("An error occurred in checking md5 value"
 			      " for file %s", file);
 			err_count++;
 			continue;
@@ -765,7 +743,7 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 			 * This means is either a new file or an updated file.
 			 * We should go ahead with parsing.
 			 */
-			if (mflags.verbosity == 2)
+			if (mflags.verbosity > 1)
 				printf("Parsing: %s\n", file);
 			rec->md5_hash = md5sum;
 			rec->file_path = estrdup(file);
@@ -773,8 +751,7 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 			chdir(parent);
 			begin_parse(file, mp, rec, buf, buflen);
 			if (insert_into_db(db, rec) < 0) {
-				if (mflags.verbosity)
-					warnx("Error in indexing %s", file);
+				warnx("Error in indexing %s", file);
 				err_count++;
 			} else {
 				new_count++;
@@ -785,20 +762,20 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 
 	sqlite3_finalize(stmt);
 	
-	if (mflags.verbosity == 2) {
-		printf("Total Number of new or updated pages encountered = %d\n"
-			"Total number of (hard or symbolic) links found = %d\n"
+	if (mflags.verbosity) {
+		printf("Total Number of new or updated pages enountered = %d\n"
 			"Total number of pages that were successfully"
 			" indexed/updated = %d\n"
+			"Total number of (hard or symbolic) links found = %d\n"
 			"Total number of pages that could not be indexed"
 			" due to errors = %d\n",
-			total_count - link_count, link_count, new_count, err_count);
+			total_count, new_count, link_count, err_count);
 	}
 
 	if (mflags.recreate)
 		return;
 
-	if (mflags.verbosity == 2)
+	if (mflags.verbosity)
 		printf("Deleting stale index entries\n");
 
 	sqlstr = "DELETE FROM mandb_meta WHERE file NOT IN"
@@ -833,19 +810,13 @@ begin_parse(const char *file, struct mparse *mp, mandb_rec *rec,
 	rec->xr_found = 0;
 
 	if (mparse_readmem(mp, buf, len, file) >= MANDOCLEVEL_FATAL) {
-		/* Printing this warning at verbosity level 2
-		 * because some packages from pkgsrc might trigger several
-		 * of such warnings.
-		 */
-		if (mflags.verbosity == 2)
-			warnx("%s: Parse failure", file);
+		warnx("%s: Parse failure", file);
 		return;
 	}
 
 	mparse_result(mp, &mdoc, &man);
 	if (mdoc == NULL && man == NULL) {
-		if (mflags.verbosity == 2)
-			warnx("Not a man(7) or mdoc(7) page");
+		warnx("Not a man(7) or mdoc(7) page");
 		return;
 	}
 
@@ -1699,8 +1670,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 		sqlite3_exec(db, sql, NULL, NULL, &errmsg);
 		sqlite3_free(sql);
 		if (errmsg != NULL) {
-			if (mflags.verbosity)
-				warnx("%s", errmsg);
+			warnx("%s", errmsg);
 			free(errmsg);
 		}
 		sqlstr = "UPDATE mandb_meta SET device = :device,"
@@ -1708,8 +1678,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 			 " md5_hash = :md5 WHERE file = :file";
 		rc = sqlite3_prepare_v2(db, sqlstr, -1, &stmt, NULL);
 		if (rc != SQLITE_OK) {
-			if (mflags.verbosity)
-				warnx("Update failed with error: %s",
+			warnx("Update failed with error: %s",
 			    sqlite3_errmsg(db));
 			close_db(db);
 			cleanup(rec);
@@ -1733,8 +1702,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 		sqlite3_finalize(stmt);
 
 		if (rc != SQLITE_DONE) {
-			if (mflags.verbosity)
-				warnx("%s", sqlite3_errmsg(db));
+			warnx("%s", sqlite3_errmsg(db));
 			close_db(db);
 			cleanup(rec);
 			errx(EXIT_FAILURE,
@@ -1778,8 +1746,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 	return 0;
 
   Out:
-	if (mflags.verbosity)
-		warnx("%s", sqlite3_errmsg(db));
+	warnx("%s", sqlite3_errmsg(db));
 	cleanup(rec);
 	return -1;
 }
@@ -1809,8 +1776,7 @@ check_md5(const char *file, sqlite3 *db, const char *table, char **md5sum,
 	assert(file != NULL);
 	*md5sum = MD5Data(buf, buflen, NULL);
 	if (*md5sum == NULL) {
-		if (mflags.verbosity)
-			warn("md5 failed: %s", file);
+		warn("md5 failed: %s", file);
 		return -1;
 	}
 
@@ -1827,8 +1793,7 @@ check_md5(const char *file, sqlite3 *db, const char *table, char **md5sum,
 	idx = sqlite3_bind_parameter_index(stmt, ":md5_hash");
 	rc = sqlite3_bind_text(stmt, idx, *md5sum, -1, NULL);
 	if (rc != SQLITE_OK) {
-		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		sqlite3_finalize(stmt);
 		free(sqlstr);
 		free(*md5sum);
@@ -1854,14 +1819,13 @@ optimize(sqlite3 *db)
 	const char *sqlstr;
 	char *errmsg = NULL;
 
-	if (mflags.verbosity == 2)
+	if (mflags.verbosity)
 		printf("Optimizing the database index\n");
 	sqlstr = "INSERT INTO mandb(mandb) VALUES (\'optimize\');"
 		 "VACUUM";
 	sqlite3_exec(db, sqlstr, NULL, NULL, &errmsg);
 	if (errmsg != NULL) {
-		if (mflags.verbosity)
-			warnx("%s", errmsg);
+		warnx("%s", errmsg);
 		free(errmsg);
 		return;
 	}
@@ -2072,6 +2036,6 @@ append(secbuff *sbuff, const char *src)
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-floQqv] [-C path]\n", getprogname());
+	fprintf(stderr, "Usage: %s [-flo]\n", getprogname());
 	exit(1);
 }

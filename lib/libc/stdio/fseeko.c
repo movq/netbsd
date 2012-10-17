@@ -1,4 +1,4 @@
-/*	$NetBSD: fseeko.c,v 1.12 2012/03/27 15:05:42 christos Exp $	*/
+/*	$NetBSD: fseeko.c,v 1.9 2012/01/22 18:36:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fseeko.c,v 1.12 2012/03/27 15:05:42 christos Exp $");
+__RCSID("$NetBSD: fseeko.c,v 1.9 2012/01/22 18:36:17 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -82,7 +82,7 @@ fseeko(FILE *fp, off_t offset, int whence)
 	if ((seekfn = fp->_seek) == NULL) {
 		errno = ESPIPE;			/* historic practice */
 		FUNLOCKFILE(fp);
-		return -1;
+		return (-1);
 	}
 
 	/*
@@ -97,14 +97,14 @@ fseeko(FILE *fp, off_t offset, int whence)
 		 * we have to first find the current stream offset a la
 		 * ftell (see ftell for details).
 		 */
-		(void)__sflush(fp); /* may adjust seek offset on append stream */
+		__sflush(fp);	/* may adjust seek offset on append stream */
 		if (fp->_flags & __SOFF)
 			curoff = fp->_offset;
 		else {
 			curoff = (*seekfn)(fp->_cookie, (off_t)0, SEEK_CUR);
 			if (curoff == POS_ERR) {
 				FUNLOCKFILE(fp);
-				return -1;
+				return (-1);
 			}
 		}
 		if (fp->_flags & __SRD) {
@@ -128,7 +128,7 @@ fseeko(FILE *fp, off_t offset, int whence)
 	default:
 		errno = EINVAL;
 		FUNLOCKFILE(fp);
-		return -1;
+		return (-1);
 	}
 
 	/*
@@ -207,13 +207,12 @@ fseeko(FILE *fp, off_t offset, int whence)
 		int o = (int)(target - curoff);
 
 		fp->_p = fp->_bf._base + o;
-		_DIAGASSERT(__type_fit(int, n - o));
-		fp->_r = (int)(n - o);
+		fp->_r = n - o;
 		if (HASUB(fp))
 			FREEUB(fp);
 		fp->_flags &= ~__SEOF;
 		FUNLOCKFILE(fp);
-		return 0;
+		return (0);
 	}
 
 	/*
@@ -237,11 +236,10 @@ fseeko(FILE *fp, off_t offset, int whence)
 		if (__srefill(fp) || (size_t)fp->_r < n)
 			goto dumb;
 		fp->_p += n;
-		_DIAGASSERT(__type_fit(int, fp->_r - n));
-		fp->_r -= (int)n;
+		fp->_r -= n;
 	}
 	FUNLOCKFILE(fp);
-	return 0;
+	return (0);
 
 	/*
 	 * We get here if we cannot optimise the seek ... just
@@ -251,7 +249,7 @@ dumb:
 	if (__sflush(fp) ||
 	    (*seekfn)(fp->_cookie, offset, whence) == POS_ERR) {
 		FUNLOCKFILE(fp);
-		return -1;
+		return (-1);
 	}
 	/* success: clear EOF indicator and discard ungetc() data */
 	if (HASUB(fp))
@@ -261,5 +259,5 @@ dumb:
 	/* fp->_w = 0; */	/* unnecessary (I think...) */
 	fp->_flags &= ~__SEOF;
 	FUNLOCKFILE(fp);
-	return 0;
+	return (0);
 }

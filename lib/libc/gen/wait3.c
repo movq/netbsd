@@ -1,4 +1,4 @@
-/*	$NetBSD: wait3.c,v 1.10 2012/03/20 16:36:05 matt Exp $	*/
+/*	$NetBSD: wait3.c,v 1.9 2010/03/23 20:28:59 drochner Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)wait3.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: wait3.c,v 1.10 2012/03/20 16:36:05 matt Exp $");
+__RCSID("$NetBSD: wait3.c,v 1.9 2010/03/23 20:28:59 drochner Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -45,7 +45,10 @@ __RCSID("$NetBSD: wait3.c,v 1.10 2012/03/20 16:36:05 matt Exp $");
 #include <sys/resource.h>
 
 pid_t
-wait3(int *istat, int options, struct rusage *rup)
+wait3(istat, options, rup)
+	int *istat;
+	int options;
+	struct rusage *rup;
 {
 	return (wait4(WAIT_ANY, istat, options, rup));
 }

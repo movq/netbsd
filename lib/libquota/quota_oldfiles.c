@@ -1,4 +1,4 @@
-/*	$NetBSD: quota_oldfiles.c,v 1.9 2012/02/24 18:00:09 njoly Exp $	*/
+/*	$NetBSD: quota_oldfiles.c,v 1.8.2.1 2012/03/02 16:45:29 riz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: quota_oldfiles.c,v 1.9 2012/02/24 18:00:09 njoly Exp $");
+__RCSID("$NetBSD: quota_oldfiles.c,v 1.8.2.1 2012/03/02 16:45:29 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

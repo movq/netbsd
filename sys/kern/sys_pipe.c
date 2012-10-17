@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pipe.c,v 1.136 2012/05/16 09:41:11 martin Exp $	*/
+/*	$NetBSD: sys_pipe.c,v 1.135.2.1 2012/05/19 15:34:32 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.136 2012/05/16 09:41:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.135.2.1 2012/05/19 15:34:32 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

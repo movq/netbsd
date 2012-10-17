@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2012/09/23 17:22:23 joerg Exp $
+#	$NetBSD: Makefile,v 1.7 2012/01/11 23:24:47 joerg Exp $
 
 LIB=	LLVMMipsCodeGen
 
@@ -6,27 +6,19 @@ LIB=	LLVMMipsCodeGen
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/Mips
 
-SRCS+=	Mips16InstrInfo.cpp \
-	Mips16FrameLowering.cpp \
-	Mips16RegisterInfo.cpp \
-	MipsAnalyzeImmediate.cpp \
-	MipsAsmPrinter.cpp \
+SRCS+=	MipsAsmPrinter.cpp \
 	MipsCodeEmitter.cpp \
 	MipsDelaySlotFiller.cpp \
-	MipsDirectObjLower.cpp \
-	MipsELFWriterInfo.cpp \
+	MipsEmitGPRestore.cpp \
+	MipsExpandPseudo.cpp \
 	MipsFrameLowering.cpp \
 	MipsInstrInfo.cpp \
 	MipsISelDAGToDAG.cpp \
 	MipsISelLowering.cpp \
 	MipsJITInfo.cpp \
-	MipsLongBranch.cpp \
 	MipsMachineFunction.cpp \
 	MipsMCInstLower.cpp \
 	MipsRegisterInfo.cpp \
-	MipsSEInstrInfo.cpp \
-	MipsSEFrameLowering.cpp \
-	MipsSERegisterInfo.cpp \
 	MipsSubtarget.cpp \
 	MipsTargetMachine.cpp \
 	MipsTargetObjectFile.cpp \
@@ -37,13 +29,10 @@ TABLEGEN_INCLUDES=	-I${LLVM_SRCDIR}/lib/Target/Mips
 TABLEGEN_OUTPUT= \
 	MipsGenRegisterInfo.inc|-gen-register-info \
 	MipsGenInstrInfo.inc|-gen-instr-info \
-	MipsGenAsmMatcher.inc|-gen-asm-matcher \
 	MipsGenAsmWriter.inc|-gen-asm-writer \
 	MipsGenCallingConv.inc|-gen-callingconv \
 	MipsGenCodeEmitter.inc|-gen-emitter \
 	MipsGenDAGISel.inc|-gen-dag-isel \
-	MipsGenDisassemblerTables.inc|-gen-disassembler \
-	MipsGenEDInfo.inc|-gen-enhanced-disassembly-info \
 	MipsGenMCCodeEmitter.inc|-gen-emitter^-mc-emitter \
 	MipsGenSubtargetInfo.inc|-gen-subtarget
 

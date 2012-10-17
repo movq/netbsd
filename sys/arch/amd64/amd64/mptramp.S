@@ -1,4 +1,4 @@
-/*	$NetBSD: mptramp.S,v 1.14 2012/04/20 22:23:24 rmind Exp $	*/
+/*	$NetBSD: mptramp.S,v 1.12.14.2 2012/05/09 03:22:54 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.

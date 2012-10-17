@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_odbc_driver.c,v 1.3 2012/06/05 00:39:39 christos Exp $	*/
+/*	$NetBSD: dlz_odbc_driver.c,v 1.2.6.1 2012/06/05 21:15:35 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

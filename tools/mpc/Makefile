@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2012/04/15 08:37:32 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.4.1 2012/05/07 03:08:35 riz Exp $
 #
 
 GNUHOSTDIST=	${.CURDIR}/../../external/lgpl2/mpc/dist

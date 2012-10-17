@@ -1,4 +1,4 @@
-/*	$NetBSD: dbcool.c,v 1.38 2012/06/02 21:36:44 dsl Exp $ */
+/*	$NetBSD: dbcool.c,v 1.35 2011/10/02 19:03:56 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbcool.c,v 1.38 2012/06/02 21:36:44 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbcool.c,v 1.35 2011/10/02 19:03:56 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -818,10 +818,10 @@ bool dbcool_pmf_suspend(device_t dev, const pmf_qual_t *qual)
 	struct dbcool_softc *sc = device_private(dev);
 	uint8_t reg, bit, cfg;
 
-	if ((sc->sc_dc.dc_chip->flags & DBCFLAG_HAS_SHDN) == 0)
+	if ((sc->sc_dc.dc_chip->flags && DBCFLAG_HAS_SHDN) == 0)
 		return true;
  
-	if (sc->sc_dc.dc_chip->flags & DBCFLAG_ADT7466) {
+	if (sc->sc_dc.dc_chip->flags && DBCFLAG_ADT7466) {
 		reg = DBCOOL_ADT7466_CONFIG2;
 		bit = DBCOOL_ADT7466_CFG2_SHDN;
 	} else {
@@ -842,10 +842,10 @@ bool dbcool_pmf_resume(device_t dev, const pmf_qual_t *qual)
 	struct dbcool_softc *sc = device_private(dev);
 	uint8_t reg, bit, cfg;
 
-	if ((sc->sc_dc.dc_chip->flags & DBCFLAG_HAS_SHDN) == 0)
+	if ((sc->sc_dc.dc_chip->flags && DBCFLAG_HAS_SHDN) == 0)
 		return true;
  
-	if (sc->sc_dc.dc_chip->flags & DBCFLAG_ADT7466) {
+	if (sc->sc_dc.dc_chip->flags && DBCFLAG_ADT7466) {
 		reg = DBCOOL_ADT7466_CONFIG2;
 		bit = DBCOOL_ADT7466_CFG2_SHDN;
 	} else {
@@ -1056,7 +1056,7 @@ dbcool_read_volt(struct dbcool_softc *sc, uint8_t reg, int nom_idx, bool extres)
 	if (!extres)
 		val = sc->sc_dc.dc_readreg(&sc->sc_dc, reg);
 	else if (reg == DBCOOL_12VIN) {
-		ext = sc->sc_dc.dc_readreg(&sc->sc_dc, DBCOOL_EXTRES2_REG) & 0x03;
+		ext = sc->sc_dc.dc_readreg(&sc->sc_dc, DBCOOL_EXTRES2_REG) && 0x03;
 		val = sc->sc_dc.dc_readreg(&sc->sc_dc, reg);
 		(void)dbcool_read_temp(sc, DBCOOL_LOCAL_TEMP, true);
 	} else if (reg == DBCOOL_VTT || reg == DBCOOL_IMON) {
@@ -1115,11 +1115,7 @@ dbcool_read_volt(struct dbcool_softc *sc, uint8_t reg, int nom_idx, bool extres)
 SYSCTL_SETUP(sysctl_dbcoolsetup, "sysctl dBCool subtree setup")
 {
 	sysctl_createv(clog, 0, NULL, NULL,
-#ifdef _MODULE
-		       0,
-#else
 		       CTLFLAG_PERMANENT,
-#endif
 		       CTLTYPE_NODE, "hw", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_HW, CTL_EOL);
@@ -1549,7 +1545,7 @@ dbcool_setup(device_t self)
 			(void *)&node,
 			CTLFLAG_READWRITE, CTLTYPE_INT, "reg_select", NULL,
 			sysctl_dbcool_reg_select,
-			0, (void *)sc, sizeof(int),
+			0, sc, sizeof(int),
 			CTL_HW, me->sysctl_num, CTL_CREATE, CTL_EOL);
 		if (node != NULL)
 			node->sysctl_data = sc;
@@ -1558,7 +1554,7 @@ dbcool_setup(device_t self)
 			(void *)&node,
 			CTLFLAG_READWRITE, CTLTYPE_INT, "reg_access", NULL,
 			sysctl_dbcool_reg_access,
-			0, (void *)sc, sizeof(int),
+			0, sc, sizeof(int),
 			CTL_HW, me->sysctl_num, CTL_CREATE, CTL_EOL);
 		if (node != NULL)
 			node->sysctl_data = sc;
@@ -1741,7 +1737,7 @@ dbcool_attach_temp_control(struct dbcool_softc *sc, int idx,
 			     CTLTYPE_INT, name,
 			     SYSCTL_DESCR(dbc_sysctl_table[sysctl_index].desc),
 			     dbc_sysctl_table[sysctl_index].helper,
-			     0, (void *)sc, sizeof(int),
+			     0, sc, sizeof(int),
 			     CTL_HW, sc->sc_root_sysctl_num,
 				sc->sc_sysctl_num[j],
 				DBC_PWM_SYSCTL(idx, sysctl_reg), CTL_EOL);
@@ -1779,7 +1775,7 @@ dbcool_setup_controllers(struct dbcool_softc *sc)
 				rw_flag = CTLFLAG_READONLY | CTLFLAG_OWNDESC;
 			else
 				rw_flag = CTLFLAG_READWRITE | CTLFLAG_OWNDESC;
-			ret = (sysctl_createv)(&sc->sc_sysctl_log, 0, NULL,
+			ret = sysctl_createv(&sc->sc_sysctl_log, 0, NULL,
 				&node, rw_flag,
 				(j == DBC_PWM_BEHAVIOR)?
 					CTLTYPE_STRING:CTLTYPE_INT,
@@ -2182,23 +2178,18 @@ static int
 dbcool_modcmd(modcmd_t cmd, void *opaque)
 {
 	int error = 0;
-#ifdef _MODULE
-	static struct sysctllog *dbcool_sysctl_clog;
-#endif
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
 #ifdef _MODULE
 		error = config_init_component(cfdriver_ioconf_dbcool,
 		    cfattach_ioconf_dbcool, cfdata_ioconf_dbcool);
-		sysctl_dbcoolsetup(&dbcool_sysctl_clog);
 #endif
 		return error;
 	case MODULE_CMD_FINI:
 #ifdef _MODULE
 		error = config_fini_component(cfdriver_ioconf_dbcool,
 		    cfattach_ioconf_dbcool, cfdata_ioconf_dbcool);
-		sysctl_teardown(&dbcool_sysctl_clog);
 #endif
 		return error;
 	default:

@@ -1,4 +1,4 @@
-/*	$NetBSD: gcscide.c,v 1.14 2012/07/31 15:50:32 bouyer Exp $	*/
+/*	$NetBSD: gcscide.c,v 1.9 2011/04/04 20:37:51 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.14 2012/07/31 15:50:32 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.9 2011/04/04 20:37:51 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -198,15 +198,15 @@ gcscide_setup_channel(struct ata_channel *chp)
 
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 
 		reg = rdmsr(drive ? GCSCIDE_ATAC_CH0D1_DMA :
 		    GCSCIDE_ATAC_CH0D0_DMA);
 
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			splx(s);
 			/* Enable the Ultra DMA mode bit */
 			reg |= GCSCIDE_ATAC_DMA_SEL;
@@ -216,7 +216,7 @@ gcscide_setup_channel(struct ata_channel *chp)
 			wrmsr(drive ? GCSCIDE_ATAC_CH0D1_DMA :
 			    GCSCIDE_ATAC_CH0D0_DMA, reg);
 
-		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		} else if (drvp->drive_flags & DRIVE_DMA) {
 			/* Enable the Multi-word DMA bit */
 			reg &= ~GCSCIDE_ATAC_DMA_SEL;
 			/* set the Multi-word DMA mode */

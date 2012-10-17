@@ -1,4 +1,4 @@
-/*	$NetBSD: gemreg.h,v 1.15 2012/07/02 11:23:40 jdc Exp $ */
+/*	$NetBSD: gemreg.h,v 1.14.34.1 2012/07/05 17:59:12 riz Exp $ */
 
 /*
  *

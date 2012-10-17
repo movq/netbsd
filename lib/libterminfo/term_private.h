@@ -1,4 +1,4 @@
-/* $NetBSD: term_private.h,v 1.10 2012/06/03 23:19:10 joerg Exp $ */
+/* $NetBSD: term_private.h,v 1.9.4.1 2012/06/23 22:54:57 riz Exp $ */
 
 /*
  * Copyright (c) 2009, 2010 The NetBSD Foundation, Inc.

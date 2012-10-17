@@ -1,4 +1,4 @@
-/*	$NetBSD: k_uvm.c,v 1.1 2012/02/17 22:36:50 jmmv Exp $	*/
+/*	$NetBSD: k_uvm.c,v 1.1.4.2 2012/05/17 19:03:23 riz Exp $	*/
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: k_uvm.c,v 1.1 2012/02/17 22:36:50 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: k_uvm.c,v 1.1.4.2 2012/05/17 19:03:23 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

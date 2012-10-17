@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.5 2012/06/01 20:28:02 wiz Exp $
+# $NetBSD: Makefile.inc,v 1.3.2.2 2012/06/11 23:15:38 riz Exp $
 
 WARNS=		2
 

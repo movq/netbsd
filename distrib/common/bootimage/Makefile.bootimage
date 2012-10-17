@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.bootimage,v 1.6 2012/04/22 07:23:42 tsutsui Exp $
+#	$NetBSD: Makefile.bootimage,v 1.3.2.1 2012/05/09 19:58:27 riz Exp $
 #
 # Copyright (c) 2009, 2010, 2011 Izumi Tsutsui.  All rights reserved.
 #
@@ -39,7 +39,7 @@
 #		(default: sd0)
 #	USE_MBR
 #		set yes if target disk image requires MBR partition
-#		(default: no)
+#		(defautl: no)
 #	MBR_BOOTCODE
 #		optional MBR bootcode which should be installed by fdisk(8)
 #		(default: empty)
@@ -82,7 +82,7 @@
 #			DIR	TARGETPATH
 #		for installation image etc.
 #		(default: empty)
-#		XXX: currently permissions in IMGDIR_EXTRA are not handled
+#		XXX: currently permittions in IMGDIR_EXTRA are not handled
 #	IMGDIR_EXCLUDE
 #		pax(1) options to exclude files which should not copied
 #		into TARGETPATH in IMGDIR_EXTRA
@@ -287,7 +287,7 @@ ${TARGETFS}: prepare_md_post
 .if defined(SPEC_EXTRA)
 	cat ${SPEC_EXTRA} >> ${WORKSPEC}
 .endif
-	@echo Creating rootfs...
+	@echo Createing rootfs...
 	# XXX /var/spool/ftp/hidden is unreadable
 	${CHMOD} +r ${WORKDIR}/var/spool/ftp/hidden
 	${TOOL_MAKEFS} -M ${FSSIZE} -m ${FSSIZE}			\

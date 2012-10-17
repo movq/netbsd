@@ -1,4 +1,4 @@
-/*	$NetBSD: hpc_machdep.c,v 1.101 2012/07/29 00:07:06 matt Exp $	*/
+/*	$NetBSD: hpc_machdep.c,v 1.99 2010/11/14 03:17:50 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -40,20 +40,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpc_machdep.c,v 1.101 2012/07/29 00:07:06 matt Exp $");
-
-#include "opt_cputypes.h"
-#include "opt_kloader.h"
-#ifndef KLOADER_KERNEL_PATH
-#define KLOADER_KERNEL_PATH	"/netbsd"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: hpc_machdep.c,v 1.99 2010/11/14 03:17:50 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/boot_flag.h>
-#include <sys/mount.h>
-#include <sys/pmf.h>
 #include <sys/reboot.h>
+#include <sys/pmf.h>
 
 #include <uvm/uvm.h>
 
@@ -61,23 +53,15 @@ __KERNEL_RCSID(0, "$NetBSD: hpc_machdep.c,v 1.101 2012/07/29 00:07:06 matt Exp $
 
 #include <machine/bootconfig.h>
 #include <machine/bootinfo.h>
-#include <machine/platid.h>
 #include <machine/pmap.h>
-#ifdef KLOADER
-#include <machine/kloader.h>
-#endif
 
 #include <dev/cons.h>
 #include <dev/hpc/apm/apmvar.h>
 
 BootConfig bootconfig;		/* Boot config storage */
-#ifdef KLOADER
-struct kloader_bootinfo kbootinfo;
-static char kernel_path[] = KLOADER_KERNEL_PATH;
-#endif
 struct bootinfo *bootinfo, bootinfo_storage;
 char booted_kernel_storage[80];
-extern char *booted_kernel;
+char *booted_kernel = booted_kernel_storage;
 
 paddr_t physical_start;
 paddr_t physical_freestart;
@@ -87,6 +71,12 @@ paddr_t physical_end;
 #ifndef PMAP_STATIC_L1S
 int max_processes = 64;			/* Default number */
 #endif /* !PMAP_STATIC_L1S */
+
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 
 char *boot_args = NULL;
 char boot_file[16];
@@ -102,14 +92,6 @@ void *__sleep_ctx;
 
 void (*__cpu_reset)(void) = cpu_reset;
 
-u_int initarm(int, char **, struct bootinfo *);
-#if defined(CPU_SA1100) || defined(CPU_SA1110)
-u_int init_sa11x0(int, char **, struct bootinfo *);
-#endif
-#if defined(CPU_XSCALE_PXA250) || defined(CPU_XSCALE_PXA270)
-u_int init_pxa2x0(int, char **, struct bootinfo *);
-#endif
-
 #ifdef BOOT_DUMP
 void	dumppages(char *, int);
 #endif
@@ -123,7 +105,6 @@ void	dumppages(char *, int);
 void
 cpu_reboot(int howto, char *bootstr)
 {
-
 	/*
 	 * If we are still cold then hit the air brakes
 	 * and crash to earth fast.
@@ -146,16 +127,6 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Disable console buffering. */
 	cnpollc(1);
-
-#ifdef KLOADER
-	if ((howto & RB_HALT) == 0) {
-		if (howto & RB_STRING) {
-			kloader_reboot_setup(bootstr);
-		} else {
-			kloader_reboot_setup(kernel_path);
-		}
-	}
-#endif
 
 	/*
 	 * If RB_NOSYNC was not specified sync the discs.
@@ -186,11 +157,6 @@ cpu_reboot(int howto, char *bootstr)
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
-#ifdef KLOADER
-	} else {
-		kloader_reboot();
-		/* NOTREACHED */
-#endif
 	}
 
 	printf("rebooting...\n");
@@ -209,96 +175,6 @@ machine_sleep(void)
 void
 machine_standby(void)
 {
-}
-
-/*
- * Initial entry point on startup. This gets called before main() is
- * entered.
- * It should be responsible for setting up everything that must be
- * in place when main is called.
- * This includes:
- *   Taking a copy of the boot configuration structure.
- */
-u_int
-initarm(int argc, char **argv, struct bootinfo *bi)
-{
-
-	__sleep_func = NULL;
-	__sleep_ctx = NULL;
-
-	/* parse kernel args */
-	booted_kernel = booted_kernel_storage;
-	boothowto = 0;
-	boot_file[0] = '\0';
-	if (argc > 0 && argv != NULL) {
-		strncpy(booted_kernel_storage, argv[0],
-		    sizeof(booted_kernel_storage));
-		for (int i = 1; i < argc; i++) {
-			char *cp = argv[i];
-
-			switch (*cp) {
-			case 'b':
-				/* boot device: -b=sd0 etc. */
-				cp = cp + 2;
-				if (strcmp(cp, MOUNT_NFS) == 0)
-					rootfstype = MOUNT_NFS;
-				else
-					strncpy(boot_file, cp,
-					    sizeof(boot_file));
-				break;
-
-			default:
-				BOOT_FLAG(*cp, boothowto);
-				break;
-			}
-		}
-	}
-
-	/* copy bootinfo into known kernel space */
-	if (bi != NULL)
-		bootinfo_storage = *bi;
-	bootinfo = &bootinfo_storage;
-
-#ifdef BOOTINFO_FB_WIDTH
-	bootinfo->fb_line_bytes = BOOTINFO_FB_LINE_BYTES;
-	bootinfo->fb_width = BOOTINFO_FB_WIDTH;
-	bootinfo->fb_height = BOOTINFO_FB_HEIGHT;
-	bootinfo->fb_type = BOOTINFO_FB_TYPE;
-#endif
-
-	if (bootinfo->magic == BOOTINFO_MAGIC) {
-		platid.dw.dw0 = bootinfo->platid_cpu;
-		platid.dw.dw1 = bootinfo->platid_machine;
-
-#ifndef RTC_OFFSET
-		/*
-		 * rtc_offset from bootinfo.timezone set by hpcboot.exe
-		 */
-		if (rtc_offset == 0 &&
-		    (bootinfo->timezone > (-12 * 60) &&
-		     bootinfo->timezone <= (12 * 60)))
-			rtc_offset = bootinfo->timezone;
-#endif
-	}
-
-#ifdef KLOADER
-	/* copy boot parameter for kloader */
-	kloader_bootinfo_set(&kbootinfo, argc, argv, bi, false);
-#endif
-
-	/*
-	 * Heads up ... Setup the CPU / MMU / TLB functions.
-	 */
-	set_cpufuncs();
-	IRQdisable;
-
-#if defined(CPU_SA1100) || defined(CPU_SA1110)
-	return init_sa11x0(argc, argv, bi);
-#elif defined(CPU_XSCALE_PXA250) || defined(CPU_XSCALE_PXA270)
-	return init_pxa2x0(argc, argv, bi);
-#else
-#error	No CPU support
-#endif
 }
 
 #ifdef BOOT_DUMP

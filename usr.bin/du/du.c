@@ -1,4 +1,4 @@
-/*	$NetBSD: du.c,v 1.36 2012/03/11 11:23:20 shattered Exp $	*/
+/*	$NetBSD: du.c,v 1.35 2011/09/01 13:37:33 joerg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)du.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: du.c,v 1.36 2012/03/11 11:23:20 shattered Exp $");
+__RCSID("$NetBSD: du.c,v 1.35 2011/09/01 13:37:33 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,7 +54,6 @@ __RCSID("$NetBSD: du.c,v 1.36 2012/03/11 11:23:20 shattered Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fts.h>
-#include <inttypes.h>
 #include <util.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,14 +61,11 @@ __RCSID("$NetBSD: du.c,v 1.36 2012/03/11 11:23:20 shattered Exp $");
 #include <unistd.h>
 #include <limits.h>
 
-/* Count inodes or file size */
-#define	COUNT	(iflag ? 1 : p->fts_statp->st_blocks)
-
 static int	linkchk(dev_t, ino_t);
 static void	prstat(const char *, int64_t);
 __dead static void	usage(void);
 
-static int hflag, iflag;
+static int hflag;
 static long blocksize;
 
 int
@@ -87,7 +83,7 @@ main(int argc, char *argv[])
 	totalblocks = 0;
 	ftsoptions = FTS_PHYSICAL;
 	depth = INT_MAX;
-	while ((ch = getopt(argc, argv, "HLPacd:ghikmnrsx")) != -1)
+	while ((ch = getopt(argc, argv, "HLPacd:ghkmnrsx")) != -1)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
@@ -121,9 +117,6 @@ main(int argc, char *argv[])
 			break;
 		case 'h':
 			hflag = 1;
-			break;
-		case 'i':
-			iflag = 1;
 			break;
 		case 'k':
 			blocksize = 1024;
@@ -213,9 +206,9 @@ main(int argc, char *argv[])
 			break;
 		case FTS_DP:
 			p->fts_parent->fts_number += 
-			    p->fts_number += COUNT;
+			    p->fts_number += p->fts_statp->st_blocks;
 			if (cflag)
-				totalblocks += COUNT;
+				totalblocks += p->fts_statp->st_blocks;
 			/*
 			 * If listing each directory, or not listing files
 			 * or directories and this is post-order of the
@@ -242,10 +235,10 @@ main(int argc, char *argv[])
 			 * the root of a traversal, display the total.
 			 */
 			if (listfiles || !p->fts_level)
-				prstat(p->fts_path, COUNT);
-			p->fts_parent->fts_number += COUNT;
+				prstat(p->fts_path, p->fts_statp->st_blocks);
+			p->fts_parent->fts_number += p->fts_statp->st_blocks;
 			if (cflag)
-				totalblocks += COUNT;
+				totalblocks += p->fts_statp->st_blocks;
 		}
 	}
 	if (errno)
@@ -258,11 +251,6 @@ main(int argc, char *argv[])
 static void
 prstat(const char *fname, int64_t blocks)
 {
-	if (iflag) {
-		(void)printf("%" PRId64 "\t%s\n", blocks, fname);
-		return;
-	}
-
 	if (hflag) {
 		char buf[5];
 		int64_t sz = blocks * 512;
@@ -272,8 +260,8 @@ prstat(const char *fname, int64_t blocks)
 
 		(void)printf("%s\t%s\n", buf, fname);
 	} else
-		(void)printf("%" PRId64 "\t%s\n",
-		    howmany(blocks, (int64_t)blocksize),
+		(void)printf("%lld\t%s\n",
+		    (long long)howmany(blocks, (int64_t)blocksize),
 		    fname);
 }
 
@@ -357,6 +345,6 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: du [-H | -L | -P] [-a | -d depth | -s] [-cghikmnrx] [file ...]\n");
+		"usage: du [-H | -L | -P] [-a | -d depth | -s] [-cghkmnrx] [file ...]\n");
 	exit(1);
 }

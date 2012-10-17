@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.prog.mk,v 1.278 2012/08/24 20:26:24 jmmv Exp $
+#	$NetBSD: bsd.prog.mk,v 1.270.2.1 2012/03/02 18:27:55 riz Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .ifndef HOSTPROG
@@ -310,34 +310,24 @@ _CCLINK=	${CXX} ${_CCLINKFLAGS}
 
 .if defined(RUMPPRG)
 PROG=			${RUMPPRG}
-. ifndef CRUNCHEDPROG
-.  if (${MKRUMP} != "no")
+.ifndef CRUNCHEDPROG
 PROGS=			${RUMPPRG} rump.${RUMPPRG}
-.  else
-PROGS=			${RUMPPRG}
-.  endif
-.  if defined(SRCS)
-.   if (${MKRUMP} != "no")
+. if defined(SRCS)
 SRCS.rump.${PROG}:=	${SRCS} ${PROG}_rumpops.c ${RUMPSRCS}
-.   endif
 SRCS+=			${PROG}_hostops.c
-.  else
+. else
 SRCS=			${PROG}.c ${PROG}_hostops.c
-.   if (${MKRUMP} != "no")
 SRCS.rump.${PROG}=	${PROG}.c ${PROG}_rumpops.c ${RUMPSRCS}
-.   endif
-.  endif
-.   if (${MKRUMP} != "no")
+. endif
 DPSRCS+=		${PROG}_rumpops.c ${RUMPSRCS}
 LDADD.rump.${PROG}+=	-lrumpclient
 DPADD.rump.${PROG}+=	${LIBRUMPCLIENT}
 MAN.rump.${PROG}=	# defined but feeling empty
 _RUMPINSTALL.rump.${PROG}=# defined
-.   endif
-. else # CRUNCHEDPROG
+.else # CRUNCHEDPROG
 PROGS=			${PROG}
 CPPFLAGS+=		-DCRUNCHOPS
-. endif
+.endif
 .endif
 
 .if defined(PROG)
@@ -372,17 +362,12 @@ PROGS=		${PROG}
 # Per-program definitions and targets.
 #
 
-_CCLINK.CDEFAULT= ${CC} ${_CCLINKFLAGS}
 # Definitions specific to C programs.
 .for _P in ${PROGS}
 SRCS.${_P}?=	${_P}.c
 _CCLINK.${_P}=	${CC} ${_CCLINKFLAGS}
-_CFLAGS.${_P}=	${CFLAGS} ${CPUFLAGS}
-_CPPFLAGS.${_P}=	${CPPFLAGS}
-_COPTS.${_P}=	${COPTS}
 .endfor
 
-_CCLINK.CXXDEFAULT= ${CXX} ${_CCLINKFLAGS}
 # Definitions specific to C++ programs.
 .for _P in ${PROGS_CXX}
 SRCS.${_P}?=	${_P}.cc
@@ -405,14 +390,13 @@ PAXCTL_FLAGS.${_P}?= ${PAXCTL_FLAGS}
 
 ##### PROG specific flags.
 
-_DPADD.${_P}=		${DPADD}    ${DPADD.${_P}}
 _LDADD.${_P}=		${LDADD}    ${LDADD.${_P}}
 _LDFLAGS.${_P}=		${LDFLAGS}  ${LDFLAGS.${_P}}
 _LDSTATIC.${_P}=	${LDSTATIC} ${LDSTATIC.${_P}}
 
 ##### Build and install rules
 .if !empty(_APPEND_SRCS:M[Yy][Ee][Ss])
-SRCS+=		${SRCS.${_P}}	# For bsd.dep.mk
+SRCS+=		${SRCS.${_P}} # For bsd.dep.mk
 .endif
 
 _YPSRCS.${_P}=	${SRCS.${_P}:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS.${_P}:M*.y:.y=.h}}
@@ -428,58 +412,9 @@ LOBJS.${_P}+=	${LSRCS:.c=.ln} ${SRCS.${_P}:M*.c:.c=.ln}
 .if defined(OBJS.${_P}) && !empty(OBJS.${_P})			# {
 .NOPATH: ${OBJS.${_P}} ${_P} ${_YPSRCS.${_P}}
 
-.if (defined(USE_COMBINE) && ${USE_COMBINE} != "no" && !commands(${_P}) \
-   && (${_CCLINK.${_P}} == ${_CCLINK.CDEFAULT} \
-       || ${_CCLINK.${_P}} == ${_CCLINK.CXXDEFAULT}) \
-   && !defined(NOCOMBINE.${_P}) && !defined(NOCOMBINE))
-.for f in ${SRCS.${_P}:N*.h:N*.sh:N*.fth:C/\.[yl]$/.c/g}
-#_XFLAGS.$f := ${CPPFLAGS.$f:D1} ${CPUFLAGS.$f:D2} \
-#     ${COPTS.$f:D3} ${OBJCOPTS.$f:D4} ${CXXFLAGS.$f:D5}
-.if (${CPPFLAGS.$f:D1} == "1" || ${CPUFLAGS.$f:D2} == "2" \
-     || ${COPTS.$f:D3} == "3" || ${OBJCOPTS.$f:D4} == "4" \
-     || ${CXXFLAGS.$f:D5} == "5") \
-    || ("${f:M*.[cyl]}" == "" || commands(${f:R:S/$/.o/}))
-XOBJS.${_P}+=	${f:R:S/$/.o/}
-.else
-XSRCS.${_P}+=	${f}
-NODPSRCS+=	${f}
-.endif
-.endfor
-
-${_P}: .gdbinit ${LIBCRT0} ${XOBJS.${_P}} ${SRCS.${_P}} ${DPSRCS} ${LIBC} ${LIBCRTBEGIN} ${LIBCRTEND} ${_DPADD.${_P}}
-	${_MKTARGET_LINK}
-.if defined(DESTDIR)
-	${_CCLINK.${_P}} -Wl,-nostdlib \
-	    ${_LDFLAGS.${_P}} ${_LDSTATIC.${_P}} -o ${.TARGET} ${_PROGLDOPTS} \
-	    -B${_GCC_CRTDIR}/ -B${DESTDIR}/usr/lib/ \
-	    -MD --combine ${_CPPFLAGS.${_P}} ${_CFLAGS.${_P}} ${_COPTS.${_P}} \
-	    ${XSRCS.${_P}:@.SRC.@${.ALLSRC:M*.c:M*${.SRC.}}@:O:u} ${XOBJS.${_P}} \
-	    ${_LDADD.${_P}} -L${_GCC_LIBGCCDIR} -L${DESTDIR}/usr/lib
-.else
-	${_CCLINK.${_P}} ${_LDFLAGS.${_P}} ${_LDSTATIC.${_P}} -o ${.TARGET} ${_PROGLDOPTS} \
-	    -MD --combine ${_CPPFLAGS.${_P}} ${_COPTS.${_P}}
-	    ${XSRCS.${_P}:@.SRC.@${.ALLSRC:M*.c:M*${.SRC.}}@:O:u} ${XOBJS.${_P}} \
-	    ${_LDADD.${_P}}
-.endif	# defined(DESTDIR)
-.if defined(CTFMERGE)
-	${CTFMERGE} ${CTFMFLAGS} -o ${.TARGET} ${OBJS.${_P}}
-.endif
-.if defined(PAXCTL_FLAGS.${_P})
-	${PAXCTL} ${PAXCTL_FLAGS.${_P}} ${.TARGET}
-.endif
-.if ${MKSTRIPIDENT} != "no"
-	${OBJCOPY} -R .ident ${.TARGET}
-.endif
-
-CLEANFILES+=	${_P}.d
-.if exists(${_P}.d)
-.include "${_P}.d"		# include -MD depend for program.
-.endif
-.else	# USE_COMBINE
-
 ${OBJS.${_P}} ${LOBJS.${_P}}: ${DPSRCS}
 
-${_P}: .gdbinit ${LIBCRT0} ${OBJS.${_P}} ${LIBC} ${LIBCRTBEGIN} ${LIBCRTEND} ${_DPADD.${_P}}
+${_P}: .gdbinit ${LIBCRT0} ${OBJS.${_P}} ${LIBC} ${LIBCRTBEGIN} ${LIBCRTEND} ${DPADD}
 .if !commands(${_P})
 	${_MKTARGET_LINK}
 	${_CCLINK.${_P}} \
@@ -496,9 +431,8 @@ ${_P}: .gdbinit ${LIBCRT0} ${OBJS.${_P}} ${LIBC} ${LIBCRTBEGIN} ${LIBCRTEND} ${_
 	${OBJCOPY} -R .ident ${.TARGET}
 .endif
 .endif	# !commands(${_P})
-.endif	# USE_COMBINE
 
-${_P}.ro: ${OBJS.${_P}} ${_DPADD.${_P}}
+${_P}.ro: ${OBJS.${_P}} ${DPADD}
 	${_MKTARGET_LINK}
 	${CC} ${LDFLAGS} -nostdlib -r -Wl,-dc -o ${.TARGET} ${OBJS.${_P}}
 

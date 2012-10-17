@@ -1,4 +1,4 @@
-/*	$NetBSD: reentrant.h,v 1.15 2012/06/03 21:27:30 joerg Exp $	*/
+/*	$NetBSD: reentrant.h,v 1.14.10.1 2012/06/23 22:54:55 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2003 The NetBSD Foundation, Inc.

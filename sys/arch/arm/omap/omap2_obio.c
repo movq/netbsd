@@ -1,7 +1,7 @@
-/*	$Id: omap2_obio.c,v 1.14 2012/09/05 00:19:59 matt Exp $	*/
+/*	$Id: omap2_obio.c,v 1.12 2011/07/01 20:30:21 dyoung Exp $	*/
 
 /* adapted from: */
-/*	$NetBSD: omap2_obio.c,v 1.14 2012/09/05 00:19:59 matt Exp $ */
+/*	$NetBSD: omap2_obio.c,v 1.12 2011/07/01 20:30:21 dyoung Exp $ */
 
 
 /*
@@ -103,7 +103,7 @@
 
 #include "opt_omap.h"
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.14 2012/09/05 00:19:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.12 2011/07/01 20:30:21 dyoung Exp $");
 
 #include "locators.h"
 #include "obio.h"
@@ -129,6 +129,16 @@ typedef struct {
 	ulong		cs_addr;
 	ulong		cs_size;
 } obio_csconfig_t;
+
+struct obio_softc {
+	device_t		sc_dev;
+	bus_dma_tag_t		sc_dmat;
+	bus_space_tag_t		sc_iot;
+	bus_space_handle_t	sc_ioh;
+	bus_addr_t		sc_base;
+	bus_size_t		sc_size;
+};
+
 
 /* prototypes */
 static int	obio_match(device_t, cfdata_t, void *);
@@ -217,7 +227,6 @@ obio_attach(device_t parent, device_t self, void *aux)
 	 * Attach critical devices first.
 	 */
 	obio_attach_critical(sc);
-
 	/*
 	 * Then attach the rest of our devices
 	 */
@@ -339,11 +348,10 @@ static const struct {
 	bus_addr_t addr;
 	bool required;
 } critical_devs[] = {
-#if defined(OMAP_2430) || defined(OMAP_2420)
-	{ .name = "avic", .addr = INTC_BASE, .required = true },
-#endif
-#if defined(OMAP_3530)
+#ifdef OMAP_3530
 	{ .name = "avic", .addr = INTC_BASE_3530, .required = true },
+#else
+	{ .name = "avic", .addr = INTC_BASE, .required = true },
 #endif
 	{ .name = "gpio1", .addr = GPIO1_BASE, .required = false },
 	{ .name = "gpio2", .addr = GPIO2_BASE, .required = false },

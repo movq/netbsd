@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exec.c,v 1.355 2012/08/29 18:56:39 dholland Exp $	*/
+/*	$NetBSD: kern_exec.c,v 1.339.2.5 2012/04/16 15:28:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.355 2012/08/29 18:56:39 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.339.2.5 2012/04/16 15:28:19 riz Exp $");
 
 #include "opt_exec.h"
 #include "opt_ktrace.h"
@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.355 2012/08/29 18:56:39 dholland Exp
 #include "opt_syscall_debug.h"
 #include "veriexec.h"
 #include "opt_pax.h"
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,6 +96,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.355 2012/08/29 18:56:39 dholland Exp
 #include <sys/pax.h>
 #include <sys/cpu.h>
 #include <sys/module.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallvar.h>
 #include <sys/syscallargs.h>
 #if NVERIEXEC > 0
@@ -166,6 +169,19 @@ struct exec_entry {
 void	syscall(void);
 #endif
 
+#ifdef KERN_SA
+static struct sa_emul saemul_netbsd = {
+	sizeof(ucontext_t),
+	sizeof(struct sa_t),
+	sizeof(struct sa_t *),
+	NULL,
+	NULL,
+	cpu_upcall,
+	(void (*)(struct lwp *, void *))getucontext_sa,
+	sa_ucsp
+};
+#endif /* KERN_SA */
+
 /* NetBSD emul struct */
 struct emul emul_netbsd = {
 	.e_name =		"netbsd",
@@ -203,6 +219,11 @@ struct emul emul_netbsd = {
 	.e_fault =		NULL,
 	.e_vm_default_addr =	uvm_default_mapaddr,
 	.e_usertrap =		NULL,
+#ifdef KERN_SA
+	.e_sa =			&saemul_netbsd,
+#else
+	.e_sa =			NULL,
+#endif
 	.e_ucsize =		sizeof(ucontext_t),
 	.e_startlwp =		startlwp
 };
@@ -489,6 +510,7 @@ execve_fetch_element(char * const *array, size_t index, char **value)
 /*
  * exec system call
  */
+/* ARGSUSED */
 int
 sys_execve(struct lwp *l, const struct sys_execve_args *uap, register_t *retval)
 {
@@ -574,6 +596,7 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	char			*dp, *sp;
 	size_t			i, len;
 	struct exec_fakearg	*tmpfap;
+	int			oldlwpflags;
 	u_int			modgen;
 
 	KASSERT(data != NULL);
@@ -599,14 +622,16 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	 * to call exec in order to do something useful.
 	 */
  retry:
-	if (p->p_flag & PK_SUGID) {
-		if (kauth_authorize_process(l->l_cred, KAUTH_PROCESS_RLIMIT,
-		     p, KAUTH_ARG(KAUTH_REQ_PROCESS_RLIMIT_BYPASS),
-		     &p->p_rlimit[RLIMIT_NPROC],
-		     KAUTH_ARG(RLIMIT_NPROC)) != 0 &&
-		    chgproccnt(kauth_cred_getuid(l->l_cred), 0) >
-		     p->p_rlimit[RLIMIT_NPROC].rlim_cur)
+	if ((p->p_flag & PK_SUGID) && kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL) != 0 && chgproccnt(kauth_cred_getuid(
+	    l->l_cred), 0) > p->p_rlimit[RLIMIT_NPROC].rlim_cur)
 		return EAGAIN;
+
+	oldlwpflags = l->l_flag & (LW_SA | LW_SA_UPCALL);
+	if (l->l_flag & LW_SA) {
+		lwp_lock(l);
+		l->l_flag &= ~(LW_SA | LW_SA_UPCALL);
+		lwp_unlock(l);
 	}
 
 	/*
@@ -830,6 +855,9 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	PNBUF_PUT(data->ed_resolvedpathbuf);
 
  clrflg:
+	lwp_lock(l);
+	l->l_flag |= oldlwpflags;
+	lwp_unlock(l);
 	rw_exit(&p->p_reflock);
 
 	if (modgen != module_gen && error == ENOEXEC) {
@@ -909,7 +937,7 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 		aip = &data->ed_arginfo;
 
 	/* Get rid of other LWPs. */
-	if (p->p_nlwps > 1) {
+	if (p->p_sa || p->p_nlwps > 1) {
 		mutex_enter(p->p_lock);
 		exit_lwps(l);
 		mutex_exit(p->p_lock);
@@ -919,6 +947,12 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 	/* Destroy any lwpctl info. */
 	if (p->p_lwpctl != NULL)
 		lwp_ctl_exit();
+
+#ifdef KERN_SA
+	/* Release any SA state. */
+	if (p->p_sa)
+		sa_release(p);
+#endif /* KERN_SA */
 
 	/* Remove POSIX timers */
 	timers_free(p, TIMERS_POSIX);
@@ -1079,7 +1113,7 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 #endif
 	else {
 #ifdef notyet
-		printf("Cannot get path for pid %d [%s] (error %d)\n",
+		printf("Cannot get path for pid %d [%s] (error %d)",
 		    (int)p->p_pid, p->p_comm, error);
 #endif
 		data->ed_pack.ep_path = NULL;
@@ -1180,26 +1214,11 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 	 * exited and exec()/exit() are the only places it will be cleared.
 	 */
 	if ((p->p_lflag & PL_PPWAIT) != 0) {
-#if 0
-		lwp_t *lp;
-
-		mutex_enter(proc_lock);
-		lp = p->p_vforklwp;
-		p->p_vforklwp = NULL;
-
-		l->l_lwpctl = NULL; /* was on loan from blocked parent */
-		p->p_lflag &= ~PL_PPWAIT;
-
-		lp->l_pflag &= ~LP_VFORKWAIT; /* XXX */
-		cv_broadcast(&lp->l_waitcv);
-		mutex_exit(proc_lock);
-#else
 		mutex_enter(proc_lock);
 		l->l_lwpctl = NULL; /* was on loan from blocked parent */
 		p->p_lflag &= ~PL_PPWAIT;
 		cv_broadcast(&p->p_pptr->p_waitcv);
 		mutex_exit(proc_lock);
-#endif
 	}
 
 	/*
@@ -2127,10 +2146,8 @@ check_posix_spawn(struct lwp *l1)
 	 * Enforce limits.
 	 */
 	count = chgproccnt(uid, 1);
-	if (kauth_authorize_process(l1->l_cred, KAUTH_PROCESS_RLIMIT,
-	     p1, KAUTH_ARG(KAUTH_REQ_PROCESS_RLIMIT_BYPASS),
-	     &p1->p_rlimit[RLIMIT_NPROC], KAUTH_ARG(RLIMIT_NPROC)) != 0 &&
-	    __predict_false(count > p1->p_rlimit[RLIMIT_NPROC].rlim_cur)) {
+	if (kauth_authorize_generic(l1->l_cred, KAUTH_GENERIC_ISSUSER, NULL) !=
+	    0 && __predict_false(count > p1->p_rlimit[RLIMIT_NPROC].rlim_cur)) {
 		(void)chgproccnt(uid, -1);
 		atomic_dec_uint(&nprocs);
 		return EAGAIN;

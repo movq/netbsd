@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.h,v 1.110 2012/08/15 03:46:06 matt Exp $	 */
+/*	$NetBSD: rtld.h,v 1.107 2011/12/02 09:06:49 skrll Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -114,6 +114,7 @@ typedef struct Struct_Ver_Entry {
 /* Ver_Entry.flags */
 #define VER_INFO_HIDDEN	0x01
 
+
 #define RTLD_MAX_ENTRY 10
 #define RTLD_MAX_LIBRARY 4
 #define RTLD_MAX_CTL 2
@@ -139,8 +140,6 @@ typedef struct _rtld_library_xform_t {
 
 #define RTLD_MAGIC	0xd550b87a
 #define RTLD_VERSION	1
-
-typedef void (*fptr_t)(void);
 
 typedef struct Struct_Obj_Entry {
 	Elf32_Word      magic;		/* Magic number (sanity check) */
@@ -189,8 +188,8 @@ typedef struct Struct_Obj_Entry {
 	Search_Path    *rpaths;		/* Search path specified in object */
 	Needed_Entry   *needed;		/* Shared objects needed by this (%) */
 
-	fptr_t		init;		/* Initialization function to call */
-	fptr_t		fini;		/* Termination function to call */
+	void            (*init)(void); 	/* Initialization function to call */
+	void            (*fini)(void);	/* Termination function to call */
 
 	/*
 	 * BACKWARDS COMPAT Entry points for dlopen() and friends.
@@ -278,12 +277,6 @@ typedef struct Struct_Obj_Entry {
 	Ver_Entry	*vertab;	/* Versions required/defined by this
 					 * object */
 	int		vertabnum;	/* Number of entries in vertab */
-
-	/* init_array/fini_array */
-	fptr_t		*init_array;	/* start of init array */
-	size_t		init_arraysz;	/* # of entries in it */
-	fptr_t		*fini_array;	/* start of fini array */
-	size_t		fini_arraysz;	/* # of entries in it */
 } Obj_Entry;
 
 typedef struct Struct_DoneList {
@@ -338,14 +331,12 @@ __dso_public int dlinfo(void *, int, void *);
 __dso_public int dl_iterate_phdr(int (*)(struct dl_phdr_info *, size_t, void *),
     void *);
 
-__dso_public void *_dlauxinfo(void) __pure;
-
 /* These aren't exported */
 void _rtld_error(const char *, ...)
      __attribute__((__format__(__printf__,1,2)));
 void _rtld_die(void) __attribute__((__noreturn__));
 void *_rtld_objmain_sym(const char *);
-__dso_public void _rtld_debug_state(void) __noinline;
+__dso_public void _rtld_debug_state(void);
 void _rtld_linkmap_add(Obj_Entry *);
 void _rtld_linkmap_delete(Obj_Entry *);
 void _rtld_objlist_push_head(Objlist *, Obj_Entry *);

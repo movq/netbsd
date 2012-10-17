@@ -1,4 +1,4 @@
-/*	$NetBSD: version.h,v 1.9 2012/02/21 18:27:05 wiz Exp $	*/
+/*	$NetBSD: version.h,v 1.7.6.2 2012/02/24 17:50:18 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Thomas Klausner.  All rights reserved.

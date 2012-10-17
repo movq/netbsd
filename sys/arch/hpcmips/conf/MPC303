@@ -1,5 +1,5 @@
 #
-# 	$NetBSD: MPC303,v 1.60 2012/06/05 08:44:11 abs Exp $
+# 	$NetBSD: MPC303,v 1.59.2.1 2012/06/12 17:47:55 riz Exp $
 # 	From: NetBSD: GENERIC,v 1.91 2001/05/06 14:25:16 takemura Exp
 #
 # Kernel configuration file for Victor MP-C303; enami's test machine.
@@ -9,7 +9,7 @@ include		"arch/hpcmips/conf/std.hpcmips"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.60 $"
+#ident 		"GENERIC-$Revision: 1.59.2.1 $"
 
 maxusers	16
 

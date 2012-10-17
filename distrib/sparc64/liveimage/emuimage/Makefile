@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2012/08/17 16:56:36 riz Exp $
+#	$NetBSD: Makefile,v 1.1.2.1 2012/08/17 20:50:50 martin Exp $
 
 LIVEIMGBASE=	NetBSD-${DISTRIBVER}-sparc64-live-sd0root # gives ${IMGBASE}.img
 

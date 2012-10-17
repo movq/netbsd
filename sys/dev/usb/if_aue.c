@@ -1,5 +1,4 @@
-/*	$NetBSD: if_aue.c,v 1.127 2012/07/22 14:33:05 matt Exp $	*/
-
+/*	$NetBSD: if_aue.c,v 1.124 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -78,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.127 2012/07/22 14:33:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.124 2012/02/02 19:43:07 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -239,7 +238,7 @@ Static int aue_eeprom_getword(struct aue_softc *, int);
 Static void aue_read_mac(struct aue_softc *, u_char *);
 Static int aue_miibus_readreg(device_t, int, int);
 Static void aue_miibus_writereg(device_t, int, int, int);
-Static void aue_miibus_statchg(struct ifnet *);
+Static void aue_miibus_statchg(device_t);
 
 Static void aue_lock_mii(struct aue_softc *);
 Static void aue_unlock_mii(struct aue_softc *);
@@ -425,7 +424,7 @@ aue_unlock_mii(struct aue_softc *sc)
 {
 	mutex_exit(&sc->aue_mii_lock);
 	if (--sc->aue_refcnt < 0)
-		usb_detach_wakeupold(sc->aue_dev);
+		usb_detach_wakeup((sc->aue_dev));
 }
 
 Static int
@@ -516,10 +515,10 @@ aue_miibus_writereg(device_t dev, int phy, int reg, int data)
 }
 
 Static void
-aue_miibus_statchg(struct ifnet *ifp)
+aue_miibus_statchg(device_t dev)
 {
-	struct aue_softc *sc = ifp->if_softc;
-	struct mii_data	*mii = GET_MII(sc);
+	struct aue_softc *sc = device_private(dev);
+	struct mii_data		*mii = GET_MII(sc);
 
 	DPRINTFN(5,("%s: %s: enter\n", device_xname(sc->aue_dev), __func__));
 
@@ -547,8 +546,8 @@ aue_miibus_statchg(struct ifnet *ifp)
 	 */
 	if (!sc->aue_dying && (sc->aue_flags & LSYS)) {
 		u_int16_t auxmode;
-		auxmode = aue_miibus_readreg(sc->aue_dev, 0, 0x1b);
-		aue_miibus_writereg(sc->aue_dev, 0, 0x1b, auxmode | 0x04);
+		auxmode = aue_miibus_readreg(dev, 0, 0x1b);
+		aue_miibus_writereg(dev, 0, 0x1b, auxmode | 0x04);
 	}
 	DPRINTFN(5,("%s: %s: exit\n", device_xname(sc->aue_dev), __func__));
 }
@@ -924,7 +923,7 @@ aue_detach(device_t self, int flags)
 
 	if (--sc->aue_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->aue_dev);
+		usb_detach_wait((sc->aue_dev));
 	}
 	splx(s);
 

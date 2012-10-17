@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11t.h,v 1.3 2012/06/05 00:39:18 christos Exp $	*/
+/*	$NetBSD: pkcs11t.h,v 1.2.6.1 2012/06/05 21:15:51 bouyer Exp $	*/
 
 /* pkcs11t.h include file for PKCS #11. */
 /* Revision: 1.2  */

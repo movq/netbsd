@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2012/08/09 14:37:07 joerg Exp $
+#	$NetBSD: Makefile,v 1.8 2012/01/11 23:24:48 joerg Exp $
 
 LIB=	LLVMSupport
 
@@ -19,25 +19,21 @@ SRCS+=	APFloat.cpp \
 	ConstantRange.cpp \
 	CrashRecoveryContext.cpp \
 	DataExtractor.cpp \
-	DataStream.cpp \
 	Debug.cpp \
 	DeltaAlgorithm.cpp \
 	DAGDeltaAlgorithm.cpp \
 	Dwarf.cpp \
 	ErrorHandling.cpp \
-	FileOutputBuffer.cpp \
 	FileUtilities.cpp \
 	FoldingSet.cpp \
 	FormattedStream.cpp \
 	GraphWriter.cpp \
-	Hashing.cpp \
 	IntEqClasses.cpp \
 	IntervalMap.cpp \
 	IntrusiveRefCntPtr.cpp \
 	IsInf.cpp \
 	IsNAN.cpp \
-	Locale.cpp \
-	LockFileManager.cpp \
+	JSONParser.cpp \
 	ManagedStatic.cpp \
 	MemoryBuffer.cpp \
 	MemoryObject.cpp \
@@ -48,7 +44,6 @@ SRCS+=	APFloat.cpp \
 	SmallVector.cpp \
 	SourceMgr.cpp \
 	Statistic.cpp \
-	StreamableMemoryObject.cpp \
 	StringExtras.cpp \
 	StringMap.cpp \
 	StringPool.cpp \
@@ -59,7 +54,6 @@ SRCS+=	APFloat.cpp \
 	ToolOutputFile.cpp \
 	Triple.cpp \
 	Twine.cpp \
-	YAMLParser.cpp \
 	raw_os_ostream.cpp \
 	raw_ostream.cpp \
 	regcomp.c \

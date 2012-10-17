@@ -1,4 +1,4 @@
-/* $NetBSD: ls.c,v 1.4 2012/03/02 12:08:44 tsutsui Exp $ */
+/* $NetBSD: ls.c,v 1.3.2.1 2012/03/08 17:35:12 riz Exp $ */
 
 /*-
  * Copyright (c) 2011

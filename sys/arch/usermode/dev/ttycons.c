@@ -1,4 +1,4 @@
-/* $NetBSD: ttycons.c,v 1.19 2012/03/03 21:15:15 reinoud Exp $ */
+/* $NetBSD: ttycons.c,v 1.18.2.1 2012/03/07 23:44:24 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ttycons.c,v 1.19 2012/03/03 21:15:15 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttycons.c,v 1.18.2.1 2012/03/07 23:44:24 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

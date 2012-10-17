@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atureg.h,v 1.10 2012/09/23 01:08:17 chs Exp $ */
+/*	$NetBSD: if_atureg.h,v 1.8 2009/09/04 18:10:08 dyoung Exp $ */
 /*	$OpenBSD: if_atureg.h,v 1.21 2004/12/23 13:19:38 dlg Exp $ */
 /*
  * Copyright (c) 2003
@@ -36,11 +36,11 @@
 #define ATU_CONFIG_NO		1
 #define ATU_IFACE_IDX		0
 
-/* the number of simultaneously requested RX transfers */
+/* the number of simultaniuously requested RX transfers */
 #define ATU_RX_LIST_CNT	1
 
 /*
- * the number of simultaneously started TX transfers
+ * the number of simultaniously started TX transfers
  * my measurements :
  * 1		430.82 KB/sec
  * 2		534.66 KB/sec
@@ -91,10 +91,7 @@ enum atu_radio_type {
 	RadioRFMD = 0,
 	RadioRFMD2958,
 	RadioRFMD2958_SMC,
-	RadioIntersil,
-	AT76C503_i3863,
-	AT76C503_rfmd_acc,
-	AT76C505_rfmd
+	RadioIntersil
 };
 
 struct atu_type {

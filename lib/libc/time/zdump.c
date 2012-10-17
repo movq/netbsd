@@ -1,4 +1,4 @@
-/*	$NetBSD: zdump.c,v 1.25 2012/08/09 12:38:26 christos Exp $	*/
+/*	$NetBSD: zdump.c,v 1.24 2011/09/16 16:05:59 joerg Exp $	*/
 /*
 ** This file is in the public domain, so clarified as of
 ** 2009-05-17 by Arthur David Olson.
@@ -6,10 +6,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: zdump.c,v 1.25 2012/08/09 12:38:26 christos Exp $");
+#ifndef NOID
+__RCSID("$NetBSD: zdump.c,v 1.24 2011/09/16 16:05:59 joerg Exp $");
+#endif /* !defined NOID */
 #endif /* !defined lint */
 
-#include "version.h"
+static char	elsieid[] = "@(#)zdump.c	8.10";
+
 /*
 ** This code has been made independent of the rest of the time
 ** conversion package to increase confidence in the verification it provides.
@@ -286,7 +289,7 @@ char *	argv[];
 	progname = argv[0];
 	for (i = 1; i < argc; ++i)
 		if (strcmp(argv[i], "--version") == 0) {
-			(void) printf("%s\n", TZVERSION);
+			(void) printf("%s\n", elsieid);
 			exit(EXIT_SUCCESS);
 		} else if (strcmp(argv[i], "--help") == 0) {
 			usage(stdout, EXIT_SUCCESS);

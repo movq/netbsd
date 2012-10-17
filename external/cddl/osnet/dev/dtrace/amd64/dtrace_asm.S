@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_asm.S,v 1.4 2012/06/11 15:18:05 chs Exp $	*/
+/*	$NetBSD: dtrace_asm.S,v 1.3 2010/03/13 22:31:15 christos Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -32,6 +32,7 @@
 
 #define _ASM
 
+
 #include <sys/cpuvar_defs.h>
 #include <sys/dtrace.h>
 #include <machine/asm.h>
@@ -64,6 +65,8 @@
 1:	addq	$TF_RIP,%rsp;
 
 
+	.globl	calltrap
+	.type	calltrap,@function
 	ENTRY(dtrace_invop_start)
 
 	/*
@@ -78,7 +81,7 @@
 	pushq	(%rsi)
 	movq	%rsp, %rsi
 	call	dtrace_invop
-	ALTENTRY(dtrace_invop_callsite)
+//	ALTENTRY(dtrace_invop_callsite)
 	addq	$8, %rsp
 	cmpl	$DTRACE_INVOP_PUSHL_EBP, %eax
 	je	bp_push
@@ -144,7 +147,7 @@ bp_nop:
 	/*NOTREACHED*/
 
 bp_ret:
-	INTR_POP
+//	INTR_POP
 	pushq	%rax			/* push temp */
 	movq	32(%rsp), %rax		/* load %rsp */
 	movq	(%rax), %rax		/* load calling RIP */

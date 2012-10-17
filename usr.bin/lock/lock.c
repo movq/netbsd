@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.c,v 1.32 2012/03/20 20:34:58 matt Exp $	*/
+/*	$NetBSD: lock.c,v 1.31 2008/12/29 01:26:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\
 #if 0
 static char sccsid[] = "@(#)lock.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: lock.c,v 1.32 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: lock.c,v 1.31 2008/12/29 01:26:46 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -326,7 +326,8 @@ skey_auth(const char *user)
 #endif
 
 static void
-hi(int dummy)
+hi(dummy)
+	int dummy;
 {
 	struct timeval timval;
 

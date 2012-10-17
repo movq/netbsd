@@ -53,6 +53,6 @@ int  mxkp_enable(void *, int);
 void mxkp_set_leds(void *, int);
 int  mxkp_ioctl(void *, u_long, void *, int, struct lwp *);
 
-extern const struct wskbd_accessops mxkp_accessops;
+const struct wskbd_accessops mxkp_accessops;
 
 #endif

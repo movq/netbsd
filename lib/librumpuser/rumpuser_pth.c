@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser_pth.c,v 1.8 2012/07/27 09:09:05 pooka Exp $	*/
+/*	$NetBSD: rumpuser_pth.c,v 1.7 2011/02/05 13:51:56 yamt Exp $	*/
 
 /*
  * Copyright (c) 2007-2010 Antti Kantee.  All Rights Reserved.
@@ -25,15 +25,19 @@
  * SUCH DAMAGE.
  */
 
-#include "rumpuser_port.h"
-
+#include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser_pth.c,v 1.8 2012/07/27 09:09:05 pooka Exp $");
+__RCSID("$NetBSD: rumpuser_pth.c,v 1.7 2011/02/05 13:51:56 yamt Exp $");
 #endif /* !lint */
+
+#ifdef __linux__
+#define _XOPEN_SOURCE 500
+#define _BSD_SOURCE
+#define _FILE_OFFSET_BITS 64
+#endif
 
 #include <assert.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -182,21 +186,6 @@ rumpuser_biothread(void *arg)
 void
 rumpuser_thrinit(kernel_lockfn lockfn, kernel_unlockfn unlockfn, int threads)
 {
-#ifdef __linux__
-	/* XXX: there's no rumpuser_bootstrap, so do this here */
-	uint32_t rv;
-	int fd;
-
-	if ((fd = open("/dev/urandom", O_RDONLY)) == -1) {
-		srandom(time(NULL));
-	} else {
-		if (read(fd, &rv, sizeof(rv)) != sizeof(rv))
-			srandom(time(NULL));
-		else
-			srandom(rv);
-		close(fd);
-	}
-#endif
 
 	pthread_mutex_init(&rumpuser_aio_mtx.pthmtx, NULL);
 	pthread_cond_init(&rumpuser_aio_cv.pthcv, NULL);

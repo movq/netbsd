@@ -1,4 +1,4 @@
-/* $NetBSD: ofwoea_machdep.c,v 1.30 2012/07/17 03:13:31 jmmv Exp $ */
+/* $NetBSD: ofwoea_machdep.c,v 1.27.2.1 2012/06/12 19:37:09 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwoea_machdep.c,v 1.30 2012/07/17 03:13:31 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwoea_machdep.c,v 1.27.2.1 2012/06/12 19:37:09 riz Exp $");
 
 #include "opt_ppcarch.h"
 #include "opt_compat_netbsd.h"
@@ -159,7 +159,7 @@ ofwoea_initppc(u_int startkernel, u_int endkernel, char *args)
 	/* get model name and perform model-specific actions */
 	memset(model_name, 0, sizeof(model_name));
 	node = OF_finddevice("/");
-	if (node != -1) {
+	if (node >= 0) {
 		l = OF_getprop(node, "model", model_name, sizeof(model_name));
 		if (l == -1)
 			OF_getprop(node, "name", model_name,
@@ -416,13 +416,16 @@ ofwoea_batinit(void)
 	/*
 	 * cover PCI and register space but not the firmware ROM
 	 */
-	oea_batinit(0x80000000, BAT_BL_1G,
+	oea_batinit(0x80000000, BAT_BL_256M,
+		    0x90000000, BAT_BL_256M,
+		    0xa0000000, BAT_BL_256M,
+		    0xb0000000, BAT_BL_256M,
 		    0xf0000000, BAT_BL_128M,
 		    0xf8000000, BAT_BL_64M,
 		    0xfe000000, BAT_BL_8M,	/* Grackle IO */
 		    0);
 #else
-	uint16_t bitmap;
+        u_int16_t bitmap;
 	int node, i;
 
 	node = OF_finddevice("/");

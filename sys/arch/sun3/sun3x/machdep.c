@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.133 2012/07/28 19:08:26 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.131 2011/12/12 19:03:12 mrg Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.133 2012/07/28 19:08:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.131 2011/12/12 19:03:12 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -112,11 +112,18 @@ struct cpu_info cpu_info_store;
 
 struct vm_map *phys_map = NULL;
 
+int	physmem;
 int	fputype;
 void *	msgbufaddr;
 
 /* Virtual page frame for /dev/mem (see mem.c) */
 vaddr_t vmmap;
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int	safepri = PSL_LOWIPL;
 
 u_char cpu_machine_id = 0;
 const char *cpu_string = NULL;

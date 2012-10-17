@@ -34,12 +34,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_gdtoa.c,v 1.4 2012/09/27 08:19:18 martin Exp $");
+__RCSID("$NetBSD: t_gdtoa.c,v 1.2 2011/06/14 12:17:57 njoly Exp $");
 
 #include <atf-c.h>
 
 #include <stdio.h>
-#include <stdlib.h>
 
 /* reported by Maksymilian Arciemowicz */
 
@@ -54,8 +53,7 @@ ATF_TC_HEAD(long_format, tc)
 ATF_TC_BODY(long_format, tc)
 {
 	char *buf;
-	ATF_REQUIRE_EQ(262161, asprintf(&buf, "%1.262159f", 1.1));
-	free(buf);
+	(void)asprintf(&buf, "%1.262159f", 1.1);
 }
 
 ATF_TP_ADD_TCS(tp)

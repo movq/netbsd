@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.75 2012/08/15 08:10:28 sborrill Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.72.14.1 2012/08/15 15:22:55 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -63,7 +63,7 @@
 /*
  * Virtual memory related constants, all in bytes
  */
-#define	MAXTSIZ		(256*1024*1024)		/* max text size */
+#define	MAXTSIZ		(64*1024*1024)		/* max text size */
 #ifndef DFLDSIZ
 #define	DFLDSIZ		(256*1024*1024)		/* initial data size limit */
 #endif
@@ -100,7 +100,7 @@
 #define	VM_MAX_ADDRESS		\
 	((vaddr_t)((PDIR_SLOT_PTE << L2_SHIFT) + (PDIR_SLOT_PTE << L1_SHIFT)))
 #define	VM_MIN_KERNEL_ADDRESS	((vaddr_t)(PDIR_SLOT_KERN << L2_SHIFT))
-#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)((PDIR_SLOT_KERN + NKL2_MAX_ENTRIES) << L2_SHIFT))
+#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t)(PDIR_SLOT_APTE << L2_SHIFT))
 
 /*
  * The address to which unspecified mapping requests default

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm.c,v 1.130 2012/07/27 09:06:01 pooka Exp $	*/
+/*	$NetBSD: vm.c,v 1.122.2.2 2012/04/03 16:14:02 riz Exp $	*/
 
 /*
  * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm.c,v 1.130 2012/07/27 09:06:01 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm.c,v 1.122.2.2 2012/04/03 16:14:02 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -73,18 +73,15 @@ struct uvmexp uvmexp;
 struct uvm uvm;
 
 #ifdef __uvmexp_pagesize
-const int * const uvmexp_pagesize = &uvmexp.pagesize;
-const int * const uvmexp_pagemask = &uvmexp.pagemask;
-const int * const uvmexp_pageshift = &uvmexp.pageshift;
+int *uvmexp_pagesize = &uvmexp.pagesize;
+int *uvmexp_pagemask = &uvmexp.pagemask;
+int *uvmexp_pageshift = &uvmexp.pageshift;
 #endif
 
 struct vm_map rump_vmmap;
 
 static struct vm_map kernel_map_store;
 struct vm_map *kernel_map = &kernel_map_store;
-
-static struct vm_map module_map_store;
-extern struct vm_map *module_map;
 
 vmem_t *kmem_arena;
 vmem_t *kmem_va_arena;
@@ -331,13 +328,9 @@ uvm_init(void)
 	cv_init(&pdaemoncv, "pdaemon");
 	cv_init(&oomwait, "oomwait");
 
-	module_map = &module_map_store;
-
 	kernel_map->pmap = pmap_kernel();
 
 	pool_subsystem_init();
-
-#ifndef RUMP_UNREAL_ALLOCATORS
 	vmem_bootstrap();
 	kmem_arena = vmem_create("kmem", 0, 1024*1024, PAGE_SIZE,
 	    NULL, NULL, NULL,
@@ -348,7 +341,6 @@ uvm_init(void)
 	kmem_va_arena = vmem_create("kva", 0, 0, PAGE_SIZE,
 	    vmem_alloc, vmem_free, kmem_arena,
 	    8 * PAGE_SIZE, VM_NOSLEEP | VM_BOOTSTRAP, IPL_VM);
-#endif /* !RUMP_UNREAL_ALLOCATORS */
 
 	pool_cache_bootstrap(&pagecache, sizeof(struct vm_page), 0, 0, 0,
 	    "page$", NULL, IPL_NONE, pgctor, pgdtor, NULL);
@@ -360,16 +352,6 @@ uvmspace_init(struct vmspace *vm, struct pmap *pmap, vaddr_t vmin, vaddr_t vmax)
 
 	vm->vm_map.pmap = pmap_kernel();
 	vm->vm_refcnt = 1;
-}
-
-bool
-uvm_page_locked_p(struct vm_page *pg)
-{
-
-	if (pg->uobject != NULL) {
-		return mutex_owned(pg->uobject->vmobjlock);
-	}
-	return true;
 }
 
 void
@@ -707,22 +689,19 @@ uvm_km_alloc(struct vm_map *map, vsize_t size, vsize_t align, uvm_flag_t flags)
 	 * just use a simple "if" instead of coming up with a fancy
 	 * generic solution.
 	 */
+	extern struct vm_map *module_map;
 	if (map == module_map) {
 		desired = (void *)(0x80000000 - size);
 	}
 #endif
 
-	if (__predict_false(map == module_map)) {
-		alignbit = 0;
-		if (align) {
-			alignbit = ffs(align)-1;
-		}
-		rv = rumpuser_anonmmap(desired, size, alignbit,
-		    flags & UVM_KMF_EXEC, &error);
-	} else {
-		rv = rumpuser_malloc(size, align);
+	alignbit = 0;
+	if (align) {
+		alignbit = ffs(align)-1;
 	}
 
+	rv = rumpuser_anonmmap(desired, size, alignbit, flags & UVM_KMF_EXEC,
+	    &error);
 	if (rv == NULL) {
 		if (flags & (UVM_KMF_CANFAIL | UVM_KMF_NOWAIT))
 			return 0;
@@ -740,10 +719,7 @@ void
 uvm_km_free(struct vm_map *map, vaddr_t vaddr, vsize_t size, uvm_flag_t flags)
 {
 
-	if (__predict_false(map == module_map))
-		rumpuser_unmap((void *)vaddr, size);
-	else
-		rumpuser_free((void *)vaddr);
+	rumpuser_unmap((void *)vaddr, size);
 }
 
 struct vm_map *
@@ -1003,6 +979,7 @@ uvm_pageout(void *arg)
 {
 	struct vm_page *pg;
 	struct pool *pp, *pp_first;
+	uint64_t where;
 	int cleaned, skip, skipped;
 	int waspaging;
 	bool succ;
@@ -1107,15 +1084,19 @@ uvm_pageout(void *arg)
 		/*
 		 * And then drain the pools.  Wipe them out ... all of them.
 		 */
-		for (pp_first = NULL;;) {
+
+		pool_drain_start(&pp_first, &where);
+		pp = pp_first;
+		for (;;) {
 			rump_vfs_drainbufs(10 /* XXX: estimate better */);
-
-			succ = pool_drain(&pp);
-			if (succ || pp == pp_first)
+			succ = pool_drain_end(pp, where);
+			if (succ)
 				break;
-
-			if (pp_first == NULL)
-				pp_first = pp;
+			pool_drain_start(&pp, &where);
+			if (pp == pp_first) {
+				succ = pool_drain_end(pp, where);
+				break;
+			}
 		}
 
 		/*

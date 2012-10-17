@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_intr.h,v 1.8 2012/09/01 14:48:29 matt Exp $ */
+/*	$NetBSD: omap_intr.h,v 1.6 2009/04/14 06:33:23 marty Exp $ */
 
 /*
  * Redistribution and use in source and binary forms, with or without
@@ -142,7 +142,9 @@ omap_splx(int new)
 	write_icu(bases[2], OMAP_INTB_MIR, masks[2] | omap_global_masks[2]);
 	write_icu(bases[3], OMAP_INTB_MIR, masks[3] | omap_global_masks[3]);
 	write_icu(bases[4], OMAP_INTB_MIR, masks[4] | omap_global_masks[4]);
-	cpu_dosoftints();
+#ifdef __HAVE_FAST_SOFTINTS
+	cpu_dosoftintrs();
+#endif
 	restore_interrupts(psw);
 }
 

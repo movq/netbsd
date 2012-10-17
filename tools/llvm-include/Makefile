@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2012/06/17 07:40:25 joerg Exp $
-
-HOST_BUILD=
+#	$NetBSD: Makefile,v 1.1 2011/02/06 01:14:11 joerg Exp $
 
 .include "${.PARSEDIR}/../llvm/Makefile.inc"
 

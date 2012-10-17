@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.5 2012/03/14 14:18:10 skrll Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.4.8.1 2012/03/17 17:50:44 bouyer Exp $	*/
 
 /*	$OpenBSD: sbrk.S,v 1.7 2001/06/04 23:14:04 mickey Exp $	*/
 
@@ -31,7 +31,7 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: sbrk.S,v 1.5 2012/03/14 14:18:10 skrll Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.4.8.1 2012/03/17 17:50:44 bouyer Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 	.global	_end

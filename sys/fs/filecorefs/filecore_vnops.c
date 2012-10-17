@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vnops.c,v 1.34 2012/03/13 18:40:37 elad Exp $	*/
+/*	$NetBSD: filecore_vnops.c,v 1.33 2011/05/23 22:00:31 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.34 2012/03/13 18:40:37 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.33 2011/05/23 22:00:31 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,10 +126,8 @@ filecore_check_permitted(struct vnode *vp, struct filecore_node *ip,
 {
 	struct filecore_mnt *fcmp = ip->i_mnt;
 
-	return kauth_authorize_vnode(cred, kauth_access_action(mode,
-	    vp->v_type, filecore_mode(ip)), vp, NULL,
-	    genfs_can_access(vp->v_type, filecore_mode(ip), fcmp->fc_uid,
-	    fcmp->fc_gid, mode, cred));
+	return genfs_can_access(vp->v_type, filecore_mode(ip),
+	    fcmp->fc_uid, fcmp->fc_gid, mode, cred);
 }
 
 int

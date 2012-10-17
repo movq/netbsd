@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfbvar.h,v 1.16 2012/03/15 05:47:19 macallan Exp $ */
+/* $NetBSD: radeonfbvar.h,v 1.13.2.1 2012/03/21 16:12:19 riz Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -53,7 +53,6 @@
 #include <dev/wsfont/wsfont.h>
 #include <dev/rasops/rasops.h>
 #include <dev/wscons/wsdisplay_vconsvar.h>
-#include <dev/wscons/wsdisplay_glyphcachevar.h>
 #include <dev/videomode/videomode.h>
 #include <dev/videomode/edidvar.h>
 #ifdef SPLASHSCREEN
@@ -194,7 +193,6 @@ struct radeonfb_display {
 	struct vcons_screen	rd_vscreen;
 	struct vcons_data	rd_vd;
 	void (*rd_putchar)(void *, int, int, u_int, long);
-	glyphcache		rd_gc;
 
 #if 0
 	uint8_t			rd_cmap_red[256];
@@ -319,7 +317,6 @@ struct radeonfb_softc {
 
 #define	GET32(sc, r)	radeonfb_get32(sc, r)
 #define	PUT32(sc, r, v)	radeonfb_put32(sc, r, v)
-#define	PUT32S(sc, r, v)	radeonfb_put32s(sc, r, v)
 #define	SET32(sc, r, v)	PUT32(sc, r, GET32(sc, r) | (v))
 #define	CLR32(sc, r, v)	PUT32(sc, r, GET32(sc, r) & ~(v))
 #define	PATCH32(sc, r, v, m)	PUT32(sc, r, (GET32(sc, r) & (m)) | (v))
@@ -352,7 +349,6 @@ struct radeonfb_softc {
 
 uint32_t radeonfb_get32(struct radeonfb_softc *, uint32_t);
 void radeonfb_put32(struct radeonfb_softc *, uint32_t, uint32_t);
-void radeonfb_put32s(struct radeonfb_softc *, uint32_t, uint32_t);
 void radeonfb_mask32(struct radeonfb_softc *, uint32_t, uint32_t, uint32_t);
 
 uint32_t radeonfb_getindex(struct radeonfb_softc *, uint32_t);

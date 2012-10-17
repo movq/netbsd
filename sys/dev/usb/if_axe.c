@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axe.c,v 1.57 2012/08/24 09:01:23 msaitoh Exp $	*/
+/*	$NetBSD: if_axe.c,v 1.51 2012/02/02 19:43:07 tls Exp $	*/
 /*	$OpenBSD: if_axe.c,v 1.96 2010/01/09 05:33:08 jsg Exp $ */
 
 /*
@@ -77,7 +77,7 @@
  *   to send any packets.
  *
  * Note that this device appears to only support loading the station
- * address via autoload from the EEPROM (i.e. there's no way to manaully
+ * address via autload from the EEPROM (i.e. there's no way to manaully
  * set it).
  *
  * (Adam Weinberger wanted me to name this driver if_gir.c.)
@@ -89,11 +89,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.57 2012/08/24 09:01:23 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.51 2012/02/02 19:43:07 tls Exp $");
 
-#if defined(_KERNEL_OPT)
+#if defined(__NetBSD__)
+#ifndef _MODULE
 #include "opt_inet.h"
 #endif
+#endif
+
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -193,7 +196,7 @@ static void	axe_stop(struct ifnet *, int);
 static void	axe_watchdog(struct ifnet *);
 static int	axe_miibus_readreg(device_t, int, int);
 static void	axe_miibus_writereg(device_t, int, int, int);
-static void	axe_miibus_statchg(struct ifnet *);
+static void	axe_miibus_statchg(device_t);
 static int	axe_cmd(struct axe_softc *, int, int, int, void *);
 static void	axe_reset(struct axe_softc *sc);
 static int	axe_ifmedia_upd(struct ifnet *);
@@ -221,7 +224,7 @@ axe_unlock_mii(struct axe_softc *sc)
 
 	mutex_exit(&sc->axe_mii_lock);
 	if (--sc->axe_refcnt < 0)
-		usb_detach_wakeupold((sc->axe_dev));
+		usb_detach_wakeup((sc->axe_dev));
 }
 
 static int
@@ -321,9 +324,9 @@ axe_miibus_writereg(device_t dev, int phy, int reg, int aval)
 }
 
 static void
-axe_miibus_statchg(struct ifnet *ifp)
+axe_miibus_statchg(device_t dev)
 {
-	struct axe_softc *sc = ifp->if_softc;
+	struct axe_softc *sc = device_private(dev);
 	struct mii_data *mii = &sc->axe_mii;
 	int val, err;
 
@@ -778,7 +781,7 @@ axe_detach(device_t self, int flags)
 
 	if (--sc->axe_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->axe_dev);
+		usb_detach_wait((sc->axe_dev));
 	}
 	splx(s);
 
@@ -1449,7 +1452,7 @@ axe_stop(struct ifnet *ifp, int disable)
 	sc->axe_link = 0;
 }
 
-MODULE(MODULE_CLASS_DRIVER, if_axe, "bpf");
+MODULE(MODULE_CLASS_DRIVER, if_axe, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

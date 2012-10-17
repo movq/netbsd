@@ -1,4 +1,4 @@
-/* $NetBSD: asus_acpi.c,v 1.24 2012/06/02 21:36:43 dsl Exp $ */
+/* $NetBSD: asus_acpi.c,v 1.23.2.1 2012/06/12 17:13:57 riz Exp $ */
 
 /*-
  * Copyright (c) 2007, 2008, 2009 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asus_acpi.c,v 1.24 2012/06/02 21:36:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asus_acpi.c,v 1.23.2.1 2012/06/12 17:13:57 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

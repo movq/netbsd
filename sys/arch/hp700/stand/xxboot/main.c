@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.10 2012/02/24 18:45:20 skrll Exp $	*/
+/*	$NetBSD: main.c,v 1.9.18.1 2012/02/27 20:13:30 riz Exp $	*/
 
 /*
  * Copyright (c) 2003 ITOH Yasufumi.

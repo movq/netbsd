@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_getloadavg.c,v 1.11 2012/03/21 10:10:36 matt Exp $	*/
+/*	$NetBSD: kvm_getloadavg.c,v 1.10.8.2 2012/04/23 23:40:40 riz Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_getloadavg.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_getloadavg.c,v 1.11 2012/03/21 10:10:36 matt Exp $");
+__RCSID("$NetBSD: kvm_getloadavg.c,v 1.10.8.2 2012/04/23 23:40:40 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -56,11 +56,11 @@ __RCSID("$NetBSD: kvm_getloadavg.c,v 1.11 2012/03/21 10:10:36 matt Exp $");
 #include "kvm_private.h"
 
 static struct nlist nl[] = {
-	{ .n_name = "_averunnable" },
+	{ "_averunnable" },
 #define	X_AVERUNNABLE	0
-	{ .n_name = "_fscale" },
+	{ "_fscale" },
 #define	X_FSCALE	1
-	{ .n_name = "" },
+	{ "" },
 };
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.733 2012/10/03 18:58:32 dsl Exp $	*/
+/*	$NetBSD: machdep.c,v 1.717.2.7 2012/05/21 15:25:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006, 2008, 2009
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.733 2012/10/03 18:58:32 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.717.2.7 2012/05/21 15:25:58 riz Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -109,6 +109,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.733 2012/10/03 18:58:32 dsl Exp $");
 #include <sys/kcore.h>
 #include <sys/ucontext.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/ksyms.h>
 #include <sys/device.h>
 
@@ -177,6 +179,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.733 2012/10/03 18:58:32 dsl Exp $");
 #endif
 
 #include "acpica.h"
+#include "apmbios.h"
 #include "bioscall.h"
 
 #if NBIOSCALL > 0
@@ -187,6 +190,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.733 2012/10/03 18:58:32 dsl Exp $");
 #include <dev/acpi/acpivar.h>
 #define ACPI_MACHDEP_PRIVATE
 #include <machine/acpi_machdep.h>
+#endif
+
+#if NAPMBIOS > 0
+#include <machine/apmvar.h>
 #endif
 
 #include "isa.h"
@@ -227,6 +234,8 @@ int     cpureset_delay = 2000; /* default to 2s */
 #ifdef MTRR
 struct mtrr_funcs *mtrr_funcs;
 #endif
+
+int	physmem;
 
 int	cpu_class;
 int	use_pae;
@@ -518,6 +527,9 @@ i386_proc0_tss_ldt_init(void)
 }
 
 #ifdef XEN
+/* Shim for curcpu() until %fs is ready */
+extern struct cpu_info	* (*xpq_cpu)(void);
+
 /* used in assembly */
 void i386_switch_context(lwp_t *);
 void i386_tls_switch(lwp_t *);
@@ -569,6 +581,12 @@ i386_tls_switch(lwp_t *l)
 			  (union descriptor *) &pcb->pcb_fsd);
 	update_descriptor(&ci->ci_gdt[GUGS_SEL], 
 			  (union descriptor *) &pcb->pcb_gsd);
+
+	/* setup curcpu() to use %fs now */
+	/* XXX: find a way to do this, just once */
+	if (__predict_false(xpq_cpu != x86_curcpu)) {
+		xpq_cpu = x86_curcpu;
+	}
 
 }
 #endif /* XEN */
@@ -689,7 +707,7 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 	sysctl_createv(clog, 0, NULL, NULL, 
 	    	       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRING, "cpu_brand", NULL,
-		       NULL, 0, cpu_brand_string, 0,
+		       NULL, 0, &cpu_brand_string, 0,
 		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
@@ -809,6 +827,44 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 }
 
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas,
+	   void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct pmap *pmap = vm_map_pmap(&l->l_proc->p_vmspace->vm_map);
+	struct saframe *sf, frame;
+	struct trapframe *tf;
+
+	tf = l->l_md.md_regs;
+
+	/* Finally, copy out the rest of the frame. */
+	frame.sa_type = type;
+	frame.sa_sas = sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+	frame.sa_arg = ap;
+	frame.sa_ra = 0;
+
+	sf = (struct saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		/* Copying onto the stack didn't work. Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_eip = (int) upcall;
+	tf->tf_esp = (int) sf;
+	tf->tf_ebp = 0; /* indicate call-frame-top to debuggers */
+	tf->tf_gs = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_fs = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_es = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_cs = pmap->pm_hiexec > I386_MAX_EXE_ADDR ?
+	    GSEL(GUCODEBIG_SEL, SEL_UPL) : GSEL(GUCODE_SEL, SEL_UPL);
+	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_eflags &= ~(PSL_T|PSL_VM|PSL_AC);
+}
+
 static void
 maybe_dump(int howto)
 {
@@ -888,6 +944,21 @@ haltsys:
 			splx(s);
 
 		acpi_enter_sleep_state(ACPI_STATE_S5);
+#endif
+#if NAPMBIOS > 0 && !defined(APM_NO_POWEROFF)
+		/* turn off, if we can.  But try to turn disk off and
+		 * wait a bit first--some disk drives are slow to clean up
+		 * and users have reported disk corruption.
+		 */
+		delay(500000);
+		apm_set_powstate(NULL, APM_DEV_DISK(APM_DEV_ALLUNITS),
+		    APM_SYS_OFF);
+		delay(500000);
+		apm_set_powstate(NULL, APM_DEV_ALLDEVS, APM_SYS_OFF);
+		printf("WARNING: APM powerdown failed!\n");
+		/*
+		 * RB_POWERDOWN implies RB_HALT... fall into it...
+		 */
 #endif
 	}
 
@@ -1059,7 +1130,6 @@ krwlock_t svr4_fasttrap_lock;
 #define MAX_XEN_IDT 128
 trap_info_t xen_idt[MAX_XEN_IDT];
 int xen_idt_idx;
-extern union descriptor tmpgdt[];
 #endif
 
 void cpu_init_idt(void)
@@ -1078,13 +1148,11 @@ void cpu_init_idt(void)
 void
 initgdt(union descriptor *tgdt)
 {
-	KASSERT(tgdt != NULL);
-	
-	gdt = tgdt;
 #ifdef XEN
 	u_long	frames[16];
 #else
 	struct region_descriptor region;
+	gdt = tgdt;
 	memset(gdt, 0, NGDT*sizeof(*gdt));
 #endif /* XEN */
 	/* make gdt gates and memory segments */
@@ -1110,14 +1178,6 @@ initgdt(union descriptor *tgdt)
 	setregion(&region, gdt, NGDT * sizeof(gdt[0]) - 1);
 	lgdt(&region);
 #else /* !XEN */
-	/*
-	 * We jumpstart the bootstrap process a bit so we can update
-	 * page permissions. This is done redundantly later from
-	 * x86_xpmap.c:xen_pmap_bootstrap() - harmless.
-	 */
-	xpmap_phys_to_machine_mapping =
-	    (unsigned long *)xen_start_info.mfn_list;
-
 	frames[0] = xpmap_ptom((uint32_t)gdt - KERNBASE) >> PAGE_SHIFT;
 	{	/*
 		 * Enter the gdt page RO into the kernel map. We can't
@@ -1126,25 +1186,27 @@ initgdt(union descriptor *tgdt)
 		 * the base pointer for curcpu() and curlwp(), both of
 		 * which are in the callpath of pmap_kenter_pa().
 		 * So we mash up our own - this is MD code anyway.
+		 *
+		 * XXX: review this once we have finegrained locking
+		 * for xpq.
 		 */
-		pt_entry_t pte;
+		pt_entry_t *pte, npte;
 		pt_entry_t pg_nx = (cpu_feature[2] & CPUID_NOX ? PG_NX : 0);
 
-		pte = pmap_pa2pte((vaddr_t)gdt - KERNBASE);
-		pte |= PG_k | PG_RO | pg_nx | PG_V;
+		pte = kvtopte((vaddr_t)gdt);
+		npte = pmap_pa2pte((vaddr_t)gdt - KERNBASE);
+		npte |= PG_RO | pg_nx | PG_V;
 
-		if (HYPERVISOR_update_va_mapping((vaddr_t)gdt, pte, UVMF_INVLPG) < 0) {
-			panic("gdt page RO update failed.\n");
-		}
-
+		xpq_queue_pte_update(xpmap_ptetomach(pte), npte);
+		xpq_flush_queue();
 	}
 
 	XENPRINTK(("loading gdt %lx, %d entries\n", frames[0] << PAGE_SHIFT,
 	    NGDT));
 	if (HYPERVISOR_set_gdt(frames, NGDT /* XXX is it right ? */))
 		panic("HYPERVISOR_set_gdt failed!\n");
-
 	lgdt_finish();
+
 #endif /* !XEN */
 }
 
@@ -1342,7 +1404,7 @@ init386(paddr_t first_avail)
 	/* Make sure the end of the space used by the kernel is rounded. */
 	first_avail = round_page(first_avail);
 	avail_start = first_avail;
-	avail_end = ctob((paddr_t)xen_start_info.nr_pages);
+	avail_end = ctob((paddr_t)xen_start_info.nr_pages) + XPMAP_OFFSET;
 	pmap_pa_start = (KERNTEXTOFF - KERNBASE);
 	pmap_pa_end = pmap_pa_start + ctob((paddr_t)xen_start_info.nr_pages);
 	mem_clusters[0].start = avail_start;
@@ -1355,8 +1417,7 @@ init386(paddr_t first_avail)
 	 * initialised. initgdt() uses pmap_kenter_pa so it can't be called
 	 * before the above variables are set.
 	 */
-
-	initgdt(gdt);
+	initgdt(NULL);
 
 	mutex_init(&pte_lock, MUTEX_DEFAULT, IPL_VM);
 #endif /* XEN */
@@ -1404,20 +1465,6 @@ init386(paddr_t first_avail)
 	uvm_page_physload(atop(avail_start), atop(avail_end),
 	    atop(avail_start), atop(avail_end),
 	    VM_FREELIST_DEFAULT);
-
-	/* Reclaim the boot gdt page - see locore.s */
-	{
-		pt_entry_t pte;
-		pt_entry_t pg_nx = (cpu_feature[2] & CPUID_NOX ? PG_NX : 0);
-
-		pte = pmap_pa2pte((vaddr_t)tmpgdt - KERNBASE);
-		pte |= PG_k | PG_RW | pg_nx | PG_V;
-
-		if (HYPERVISOR_update_va_mapping((vaddr_t)tmpgdt, pte, UVMF_INVLPG) < 0) {
-			panic("tmpgdt page relaim RW update failed.\n");
-		}
-	}
-
 #endif /* !XEN */
 
 	init386_msgbuf();
@@ -1442,7 +1489,7 @@ init386(paddr_t first_avail)
 	pmap_update(pmap_kernel());
 	memcpy((void *)BIOSTRAMP_BASE, biostramp_image, biostramp_image_size);
 
-	/* Needed early, for bioscall() */
+	/* Needed early, for bioscall() and kvm86_call() */
 	cpu_info_primary.ci_pmap = pmap_kernel();
 #endif
 #endif /* !XEN */

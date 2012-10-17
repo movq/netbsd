@@ -1,4 +1,4 @@
-/*	$NetBSD: md2.c,v 1.7 2012/06/25 22:32:44 abs Exp $	*/
+/*	$NetBSD: md2.c,v 1.5 2008/04/28 20:23:00 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: md2.c,v 1.7 2012/06/25 22:32:44 abs Exp $");
+__RCSID("$NetBSD: md2.c,v 1.5 2008/04/28 20:23:00 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -110,7 +110,8 @@ __weak_alias(MD2Transform,_MD2Transform)
 #endif
 
 void
-MD2Init(MD2_CTX *context)
+MD2Init(context)
+	MD2_CTX *context;
 {
 	_DIAGASSERT(context != 0);
 
@@ -120,7 +121,10 @@ MD2Init(MD2_CTX *context)
 }
 
 void
-MD2Update(MD2_CTX *context, const unsigned char *input, unsigned int inputLen)
+MD2Update(context, input, inputLen)
+	MD2_CTX *context;
+	const unsigned char *input;
+	unsigned int inputLen;
 {
 	unsigned int idx, piece;
 
@@ -138,7 +142,9 @@ MD2Update(MD2_CTX *context, const unsigned char *input, unsigned int inputLen)
 }
 
 void
-MD2Final(unsigned char digest[16], MD2_CTX *context)
+MD2Final(digest, context)
+	unsigned char digest[16];	/* message digest */
+	MD2_CTX *context;		/* context */
 {
 	unsigned int padlen;
 
@@ -162,9 +168,10 @@ MD2Final(unsigned char digest[16], MD2_CTX *context)
 }
 
 /*static*/ void
-MD2Transform(MD2_CTX *context)
+MD2Transform(context)
+	MD2_CTX *context;
 {
-	uint32_t l, j, k, t;
+	u_int32_t l, j, k, t;
 
 	/* set block "3" and update "checksum" */
 	for (l = context->C[15], j = 0; j < 16; j++) {

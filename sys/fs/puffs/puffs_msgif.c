@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_msgif.c,v 1.92 2012/07/27 07:38:44 manu Exp $	*/
+/*	$NetBSD: puffs_msgif.c,v 1.89.8.1 2012/08/12 13:13:21 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.92 2012/07/27 07:38:44 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.89.8.1 2012/08/12 13:13:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: events.c,v 1.1.1.4 2012/06/09 11:27:25 tron Exp $	*/
+/*	$NetBSD: events.c,v 1.1.1.3.6.1 2012/06/13 19:29:05 riz Exp $	*/
 
 /*++
 /* NAME

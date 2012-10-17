@@ -1,4 +1,4 @@
-/*	$NetBSD: namespace.h,v 1.156 2012/08/20 21:38:10 dsl Exp $	*/
+/*	$NetBSD: namespace.h,v 1.150.2.1 2012/06/23 22:54:55 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -155,10 +155,6 @@
 #define alarm			_alarm
 #define alphasort		_alphasort
 #define arc4random		_arc4random
-#define arc4random_addrandom	_arc4random_addrandom
-#define arc4random_buf		_arc4random_buf
-#define arc4random_stir		_arc4random_stir
-#define arc4random_uniform	_arc4random_uniform
 #define asctime_r		_asctime_r
 #define asprintf		_asprintf
 #define atoll			_atoll
@@ -331,8 +327,6 @@
 #define getopt_long		_getopt_long
 #define getpagesize		_getpagesize
 #define getpass			_getpass
-#define getpassfd		_getpassfd
-#define getpass_r		_getpass_r
 #define getprogname		_getprogname
 #define getprotobyname		_getprotobyname
 #define getprotobyname_r	_getprotobyname_r
@@ -462,7 +456,6 @@
 #define mq_timedreceive		_mq_timedreceive
 #define mq_timedsend		_mq_timedsend
 #define mrand48			_mrand48
-#define murmurhash2		_murmurhash2
 #define nc_perror		_nc_perror
 #define nc_sperror		_nc_sperror
 #define nanosleep		_nanosleep
@@ -809,7 +802,6 @@
 #define yp_unbind		_yp_unbind
 #define yperr_string		_yperr_string
 #define ypprot_err		_ypprot_err
-#define yp_setbindtries		_yp_setbindtries
 #define dlopen			__dlopen
 #define dlclose			__dlclose
 #define dlsym			__dlsym

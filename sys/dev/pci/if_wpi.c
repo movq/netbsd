@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpi.c,v 1.53 2012/08/04 03:52:46 riastradh Exp $    */
+/*  $NetBSD: if_wpi.c,v 1.50.2.3 2012/08/12 18:55:10 martin Exp $    */
 
 /*-
  * Copyright (c) 2006, 2007
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.53 2012/08/04 03:52:46 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.50.2.3 2012/08/12 18:55:10 martin Exp $");
 
 /*
  * Driver for Intel PRO/Wireless 3945ABG 802.11 network adapters.
@@ -310,7 +310,7 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 
 	/* set device capabilities */
 	ic->ic_caps =
-#ifdef netyet
+#ifdef notyet
 		IEEE80211_C_IBSS |       /* IBSS mode support */
 #endif
 		IEEE80211_C_WPA |        /* 802.11i */
@@ -3253,7 +3253,7 @@ wpi_sysctlattach(struct wpi_softc *sc)
 	if ((rc = sysctl_createv(clog, 0, &rnode, &cnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_INT, "radio",
 	    SYSCTL_DESCR("radio transmitter switch state (0=off, 1=on)"),
-	    wpi_sysctl_radio, 0, (void *)sc, 0, CTL_CREATE, CTL_EOL)) != 0)
+	    wpi_sysctl_radio, 0, sc, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 #ifdef WPI_DEBUG

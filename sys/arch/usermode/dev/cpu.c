@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.72 2012/07/29 18:05:47 mlelstv Exp $ */
+/* $NetBSD: cpu.c,v 1.69.2.3 2012/08/08 15:51:08 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_hz.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.72 2012/07/29 18:05:47 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.69.2.3 2012/08/08 15:51:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

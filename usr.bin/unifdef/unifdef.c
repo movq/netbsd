@@ -1,4 +1,4 @@
-/*	$NetBSD: unifdef.c,v 1.21 2012/02/29 23:35:10 joerg Exp $	*/
+/*	$NetBSD: unifdef.c,v 1.20.4.1 2012/03/05 19:12:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -77,7 +77,7 @@ static const char copyright[] =
 #endif
 #ifdef __IDSTRING
 __IDSTRING(Berkeley, "@(#)unifdef.c	8.1 (Berkeley) 6/6/93");
-__IDSTRING(NetBSD, "$NetBSD: unifdef.c,v 1.21 2012/02/29 23:35:10 joerg Exp $");
+__IDSTRING(NetBSD, "$NetBSD: unifdef.c,v 1.20.4.1 2012/03/05 19:12:07 sborrill Exp $");
 __IDSTRING(dotat, "$dotat: things/unifdef.c,v 1.161 2003/07/01 15:32:48 fanf2 Exp $");
 #endif
 #endif /* not lint */

@@ -1,4 +1,4 @@
-/*	$NetBSD: redir.c,v 1.33 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: redir.c,v 1.32 2011/08/31 16:24:55 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)redir.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: redir.c,v 1.33 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: redir.c,v 1.32 2011/08/31 16:24:55 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -340,7 +340,7 @@ SHELLPROC {
 
 /* Return true if fd 0 has already been redirected at least once.  */
 int
-fd0_redirected_p (void) {
+fd0_redirected_p () {
         return fd0_redirected != 0;
 }
 
@@ -349,7 +349,8 @@ fd0_redirected_p (void) {
  */
 
 void
-clearredir(int vforked)
+clearredir(vforked)
+	int vforked;
 {
 	struct redirtab *rp;
 	int i;

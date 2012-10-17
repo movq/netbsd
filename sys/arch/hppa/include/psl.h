@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.8 2012/03/29 21:44:10 skrll Exp $	*/
+/*	$NetBSD: psl.h,v 1.7 2009/11/03 05:07:26 snj Exp $	*/
 
 /*	$OpenBSD: psl.h,v 1.6 1999/11/25 18:29:01 mickey Exp $	*/
 
@@ -105,5 +105,9 @@
 #define	RESET_PSW	(PSW_R | PSW_Q | PSW_P | PSW_D | PSW_I)
 #define PSW_MBS		(PSW_C | PSW_Q | PSW_P | PSW_D | PSW_I)
 #define PSW_MBZ		(PSW_Y | PSW_Z | PSW_S | PSW_X | PSW_M | PSW_R)
+
+#ifdef _KERNEL
+#include <machine/intr.h>
+#endif
 
 #endif  /* _HPPA_PSL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: last.c,v 1.36 2012/03/15 03:04:05 dholland Exp $	*/
+/*	$NetBSD: last.c,v 1.35 2011/09/16 15:39:27 joerg Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)last.c	8.2 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: last.c,v 1.36 2012/03/15 03:04:05 dholland Exp $");
+__RCSID("$NetBSD: last.c,v 1.35 2011/09/16 15:39:27 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -378,14 +378,14 @@ fmttime(time_t t, int flags)
 #define LINESIZE UT_LINESIZE
 #define HOSTSIZE UT_HOSTSIZE
 #define ut_timefld ut_time
-#define HAS_UT_SS 0
+#define FIRSTVALID 0
 #include "want.c"
 #undef TYPE /*(a)*/
 #undef NAMESIZE
 #undef LINESIZE
 #undef HOSTSIZE
 #undef ut_timefld
-#undef HAS_UT_SS
+#undef FIRSTVALID
 #endif
 
 #ifdef SUPPORT_UTMPX
@@ -400,6 +400,6 @@ fmttime(time_t t, int flags)
 #define LINESIZE UTX_LINESIZE
 #define HOSTSIZE UTX_HOSTSIZE
 #define ut_timefld ut_xtime
-#define HAS_UT_SS 1
+#define FIRSTVALID 1
 #include "want.c"
 #endif

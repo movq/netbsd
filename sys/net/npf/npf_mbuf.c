@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_mbuf.c,v 1.7 2012/04/14 19:01:21 rmind Exp $	*/
+/*	$NetBSD: npf_mbuf.c,v 1.6.14.1 2012/06/26 00:07:16 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2011 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_mbuf.c,v 1.7 2012/04/14 19:01:21 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_mbuf.c,v 1.6.14.1 2012/06/26 00:07:16 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>

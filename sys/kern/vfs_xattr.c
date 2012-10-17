@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_xattr.c,v 1.31 2012/05/01 07:48:25 manu Exp $	*/
+/*	$NetBSD: vfs_xattr.c,v 1.29.6.1 2012/05/19 15:03:31 riz Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.31 2012/05/01 07:48:25 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.29.6.1 2012/05/19 15:03:31 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,8 +87,6 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.31 2012/05/01 07:48:25 manu Exp $");
 #include <sys/kauth.h>
 #include <sys/ktrace.h>
 
-#include <miscfs/genfs/genfs.h>
-
 /*
  * Credential check based on process requesting service, and per-attribute
  * permissions.
@@ -96,15 +94,28 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.31 2012/05/01 07:48:25 manu Exp $");
  * NOTE: Vnode must be locked.
  */
 int
-extattr_check_cred(struct vnode *vp, const char *attr, kauth_cred_t cred,
-    int access)
+extattr_check_cred(struct vnode *vp, int attrnamespace,
+    kauth_cred_t cred, struct lwp *l, int access)
 {
 
 	if (cred == NOCRED)
 		return (0);
 
-	return kauth_authorize_vnode(cred, kauth_extattr_action(access), vp,
-	    NULL, genfs_can_extattr(cred, access, vp, attr));
+	switch (attrnamespace) {
+	case EXTATTR_NAMESPACE_SYSTEM:
+		/*
+		 * Do we really want to allow this, or just require that
+		 * these requests come from kernel code (NOCRED case above)?
+		 */
+		return (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+		    NULL));
+
+	case EXTATTR_NAMESPACE_USER:
+		return (VOP_ACCESS(vp, access, cred));
+
+	default:
+		return (EPERM);
+	}
 }
 
 /*

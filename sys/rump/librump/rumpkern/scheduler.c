@@ -1,4 +1,4 @@
-/*      $NetBSD: scheduler.c,v 1.29 2012/09/15 17:15:01 pooka Exp $	*/
+/*      $NetBSD: scheduler.c,v 1.27.8.1 2012/06/26 14:49:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.29 2012/09/15 17:15:01 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.27.8.1 2012/06/26 14:49:09 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -300,7 +300,7 @@ rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 	KASSERT(l->l_target_cpu != NULL);
 	rcpu = &rcpu_storage[l->l_target_cpu-&rump_cpus[0]];
 	if (atomic_cas_ptr(&rcpu->rcpu_prevlwp, l, RCPULWP_BUSY) == l) {
-		if (interlock == rcpu->rcpu_mtx)
+		if (__predict_true(interlock == rcpu->rcpu_mtx))
 			rumpuser_mutex_exit(rcpu->rcpu_mtx);
 		SCHED_FASTPATH(rcpu);
 		/* jones, you're the man */
@@ -317,7 +317,7 @@ rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 		domigrate = true;
 
 	/* Take lock.  This acts as a load barrier too. */
-	if (interlock != rcpu->rcpu_mtx)
+	if (__predict_true(interlock != rcpu->rcpu_mtx))
 		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
 
 	for (;;) {
@@ -442,23 +442,17 @@ rump_unschedule_cpu1(struct lwp *l, void *interlock)
 	 * is relevant only in the non-fastpath scheduling case, but
 	 * we don't know here if that's going to happen, so need to
 	 * expect the worst.
-	 *
-	 * If the scheduler interlock was requested by the caller, we
-	 * need to obtain it before we release the CPU.  Otherwise, we risk a
-	 * race condition where another thread is scheduled onto the
-	 * rump kernel CPU before our current thread can
-	 * grab the interlock.
 	 */
-	if (interlock == rcpu->rcpu_mtx)
-		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
-	else
-		membar_exit();
+	membar_exit();
 
 	/* Release the CPU. */
 	old = atomic_swap_ptr(&rcpu->rcpu_prevlwp, l);
 
 	/* No waiters?  No problems.  We're outta here. */
 	if (old == RCPULWP_BUSY) {
+		/* Was the scheduler interlock requested? */
+		if (__predict_false(interlock == rcpu->rcpu_mtx))
+			rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
 		return;
 	}
 
@@ -470,11 +464,11 @@ rump_unschedule_cpu1(struct lwp *l, void *interlock)
 	 * Snailpath: take lock and signal anyone waiting for this CPU.
 	 */
 
-	if (interlock != rcpu->rcpu_mtx)
-		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
+	rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
 	if (rcpu->rcpu_wanted)
 		rumpuser_cv_broadcast(rcpu->rcpu_cv);
-	if (interlock != rcpu->rcpu_mtx)
+
+	if (__predict_true(interlock != rcpu->rcpu_mtx))
 		rumpuser_mutex_exit(rcpu->rcpu_mtx);
 }
 

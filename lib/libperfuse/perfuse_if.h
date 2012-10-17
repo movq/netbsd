@@ -1,4 +1,4 @@
-/*  $NetBSD: perfuse_if.h,v 1.20 2012/07/21 05:49:42 manu Exp $ */
+/*  $NetBSD: perfuse_if.h,v 1.18.2.2 2012/08/12 13:13:20 martin Exp $ */
 
 /*-
  *  Copyright (c) 2010-2011 Emmanuel Dreyfus. All rights reserved.

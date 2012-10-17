@@ -1,4 +1,4 @@
-/*	$NetBSD: param3x.h,v 1.18 2012/08/11 14:35:33 tsutsui Exp $	*/
+/*	$NetBSD: param3x.h,v 1.17.10.1 2012/08/13 19:38:10 riz Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
