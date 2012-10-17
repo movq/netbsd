@@ -1,4 +1,4 @@
-/* $NetBSD: mfivar.h,v 1.20 2012/09/19 21:24:29 bouyer Exp $ */
+/* $NetBSD: mfivar.h,v 1.14.16.1 2012/03/22 23:04:27 riz Exp $ */
 /* $OpenBSD: mfivar.h,v 1.28 2006/08/31 18:18:46 marco Exp $ */
 /*
  * Copyright (c) 2006 Marco Peereboom <marco@peereboom.us>
@@ -18,7 +18,6 @@
 
 #include <dev/sysmon/sysmonvar.h>
 #include <sys/envsys.h>
-#include <sys/workqueue.h>
 
 #define DEVNAME(_s)     (device_xname((_s)->sc_dev))
 
@@ -35,7 +34,6 @@ extern uint32_t			mfi_debug;
 #define	MFI_D_RW		0x0020
 #define	MFI_D_MEM		0x0040
 #define	MFI_D_CCB		0x0080
-#define	MFI_D_SYNC		0x0100
 #else
 #define DPRINTF(x, ...)
 #define DNPRINTF(n, x, ...)
@@ -82,17 +80,6 @@ struct mfi_ccb {
 #define MFI_DATA_IN	1
 #define MFI_DATA_OUT	2
 
-	/*
-	 * memory structure used by ThunderBolt controller.
-	 * The legacy structures above are used too, depending on
-	 * the command type.
-	 */
-	union mfi_mpi2_request_descriptor	ccb_tb_request_desc;
-	struct mfi_mpi2_request_raid_scsi_io	*ccb_tb_io_request;
-	bus_addr_t				ccb_tb_pio_request;
-	mpi2_sge_io_union			*ccb_tb_sg_frame;
-	bus_addr_t				ccb_tb_psg_frame;
-
 	struct scsipi_xfer	*ccb_xs;
 
 	void			(*ccb_done)(struct mfi_ccb *);
@@ -100,13 +87,10 @@ struct mfi_ccb {
 	volatile enum {
 		MFI_CCB_FREE,
 		MFI_CCB_READY,
-		MFI_CCB_RUNNING,
 		MFI_CCB_DONE
 	}			ccb_state;
 	uint32_t		ccb_flags;
 #define MFI_CCB_F_ERR			(1<<0)
-#define MFI_CCB_F_TBOLT			(1<<1) /* Thunderbolt descriptor */
-#define MFI_CCB_F_TBOLT_IO		(1<<2) /* Thunderbolt I/O descriptor */
 	TAILQ_ENTRY(mfi_ccb)	ccb_link;
 };
 
@@ -116,8 +100,7 @@ enum mfi_iop {
 	MFI_IOP_XSCALE,
 	MFI_IOP_PPC,
 	MFI_IOP_GEN2,
-	MFI_IOP_SKINNY,
-	MFI_IOP_TBOLT
+	MFI_IOP_SKINNY
 };
 
 struct mfi_iop_ops {
@@ -125,10 +108,7 @@ struct mfi_iop_ops {
 	void 			(*mio_intr_dis)(struct mfi_softc *);
 	void 			(*mio_intr_ena)(struct mfi_softc *);
 	int 			(*mio_intr)(struct mfi_softc *);
-	void 			(*mio_post)(struct mfi_softc *,
-				    struct mfi_ccb *);
-	int			(*mio_ld_io)(struct mfi_ccb *,
-				    struct scsipi_xfer *, uint64_t, uint32_t);
+	void 			(*mio_post)(struct mfi_softc *, struct mfi_ccb *);
 };
 
 struct mfi_softc {
@@ -137,17 +117,15 @@ struct mfi_softc {
 	struct scsipi_adapter	sc_adapt;
 
 	const struct mfi_iop_ops *sc_iop;
-	enum mfi_iop		sc_ioptype;
 
 	void			*sc_ih;
 
-	bool			sc_64bit_dma;
+	uint32_t		sc_flags;
 
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
-	bus_size_t		sc_size;
 	bus_dma_tag_t		sc_dmat;
-	bus_dma_tag_t		sc_datadmat;
+	bus_size_t		sc_size;
 
 	/* save some useful information for logical drives that is missing
 	 * in sc_ld_list
@@ -160,7 +138,6 @@ struct mfi_softc {
 	/* firmware determined max, totals and other information*/
 	uint32_t		sc_max_cmds;
 	uint32_t		sc_max_sgl;
-	uint32_t		sc_sgl_size;
 	uint32_t		sc_max_ld;
 	uint32_t		sc_ld_cnt;
 	/* XXX these struct should be local to mgmt function */
@@ -178,27 +155,6 @@ struct mfi_softc {
 	struct mfi_mem		*sc_frames;
 	uint32_t		sc_frames_size;
 
-	/* thunderbolt memory */
-	struct mfi_mem		*sc_tbolt_reqmsgpool;
-
-	struct mfi_mem		*sc_tbolt_ioc_init;
-	/* Virtual address of reply Frame Pool, part of sc_tbolt_reqmsgpool */
-	int			sc_reply_pool_size;
-	struct mfi_mpi2_reply_header*   sc_reply_frame_pool;
-	bus_addr_t		sc_reply_frame_busaddr;
-	uint8_t 		*sc_reply_pool_limit;
-	bus_addr_t		sc_sg_frame_busaddr;
-	int 			sc_last_reply_idx;
-
-	struct mfi_mem		*sc_tbolt_verbuf;
-
-	bool			sc_MFA_enabled;
-
-	/* workqueue for the ld sync command */
-	struct workqueue	*sc_ldsync_wq;
-	struct work		sc_ldsync_wk;
-	struct mfi_ccb		*sc_ldsync_ccb;
-
 	/* sense memory */
 	struct mfi_mem		*sc_sense;
 
@@ -206,13 +162,8 @@ struct mfi_softc {
 
 	struct sysmon_envsys    *sc_sme;
 	envsys_data_t		*sc_sensor;
-	bool			sc_bbuok;
-	bool			sc_running;
 
 	device_t		sc_child;
-
-	/* for ioctl interface */
-	bool			sc_opened;
 };
 
 int	mfi_rescan(device_t, const char *, const int *);
@@ -220,4 +171,3 @@ void	mfi_childdetached(device_t, device_t);
 int	mfi_attach(struct mfi_softc *, enum mfi_iop);
 int	mfi_detach(struct mfi_softc *, int);
 int	mfi_intr(void *);
-int	mfi_tbolt_intrh(void *);

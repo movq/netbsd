@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.149 2012/03/12 19:21:07 dholland Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.148 2011/11/24 01:45:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.149 2012/03/12 19:21:07 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.148 2011/11/24 01:45:39 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -342,7 +342,7 @@ log(int level, const char *fmt, ...)
 }
 
 /*
- * vlog: write to the log buffer [already have va_list]
+ * vlog: write to the log buffer [already have va_alist]
  */
 
 void
@@ -1001,7 +1001,7 @@ printf(const char *fmt, ...)
 
 /*
  * vprintf: print a message to the console and the log [already have
- *	va_list]
+ *	va_alist]
  */
 
 void
@@ -1036,7 +1036,7 @@ sprintf(char *bf, const char *fmt, ...)
 }
 
 /*
- * vsprintf: print a message to a buffer [already have va_list]
+ * vsprintf: print a message to a buffer [already have va_alist]
  */
 
 int
@@ -1067,7 +1067,7 @@ snprintf(char *bf, size_t size, const char *fmt, ...)
 }
 
 /*
- * vsnprintf: print a message to a buffer [already have va_list]
+ * vsnprintf: print a message to a buffer [already have va_alist]
  */
 int
 vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)

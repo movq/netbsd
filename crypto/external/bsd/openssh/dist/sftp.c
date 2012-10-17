@@ -1,5 +1,5 @@
-/*	$NetBSD: sftp.c,v 1.9 2012/05/02 02:41:08 christos Exp $	*/
-/* $OpenBSD: sftp.c,v 1.134 2011/11/16 12:24:28 oga Exp $ */
+/*	$NetBSD: sftp.c,v 1.8 2011/09/16 15:36:18 joerg Exp $	*/
+/* $OpenBSD: sftp.c,v 1.132 2010/12/04 00:18:01 djm Exp $ */
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
  *
@@ -17,7 +17,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sftp.c,v 1.9 2012/05/02 02:41:08 christos Exp $");
+__RCSID("$NetBSD: sftp.c,v 1.8 2011/09/16 15:36:18 joerg Exp $");
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
@@ -781,8 +781,7 @@ do_globbed_ls(struct sftp_conn *conn, char *path, char *strip_path,
 	memset(&g, 0, sizeof(g));
 
 	if (remote_glob(conn, path,
-	    GLOB_MARK|GLOB_NOCHECK|GLOB_BRACE|GLOB_KEEPSTAT|GLOB_NOSORT,
-	    NULL, &g) ||
+	    GLOB_MARK|GLOB_NOCHECK|GLOB_BRACE|GLOB_KEEPSTAT, NULL, &g) ||
 	    (g.gl_pathc && !g.gl_matchc)) {
 		if (g.gl_pathc)
 			globfree(&g);
@@ -1634,10 +1633,8 @@ complete_cmd_parse(EditLine *el, char *cmd, int lastarg, char quote,
 	}
 	list[count] = NULL;
 
-	if (count == 0) {
-		xfree(list);
+	if (count == 0)
 		return 0;
-	}
 
 	/* Complete ambigious command */
 	tmp = complete_ambiguous(cmd, list, count);

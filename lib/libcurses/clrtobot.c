@@ -1,4 +1,4 @@
-/*	$NetBSD: clrtobot.c,v 1.22 2012/02/19 19:38:13 christos Exp $	*/
+/*	$NetBSD: clrtobot.c,v 1.21.8.1 2012/03/17 17:51:47 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)clrtobot.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: clrtobot.c,v 1.22 2012/02/19 19:38:13 christos Exp $");
+__RCSID("$NetBSD: clrtobot.c,v 1.21.8.1 2012/03/17 17:51:47 bouyer Exp $");
 #endif
 #endif				/* not lint */
 

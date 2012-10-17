@@ -1,4 +1,4 @@
-/*	$NetBSD: uname.c,v 1.11 2012/03/20 16:36:05 matt Exp $	*/
+/*	$NetBSD: uname.c,v 1.10 2007/01/15 22:26:35 cbiere Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)uname.c	8.1 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: uname.c,v 1.11 2012/03/20 16:36:05 matt Exp $");
+__RCSID("$NetBSD: uname.c,v 1.10 2007/01/15 22:26:35 cbiere Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,7 +51,8 @@ __weak_alias(uname,_uname)
 #endif
 
 int
-uname(struct utsname *name)
+uname(name)
+	struct utsname *name;
 {
 	int mib[2];
 	size_t len;

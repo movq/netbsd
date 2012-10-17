@@ -1,4 +1,4 @@
-/*  $NetBSD: ops.c,v 1.59 2012/07/21 05:49:42 manu Exp $ */
+/*  $NetBSD: ops.c,v 1.50.2.6 2012/08/12 13:13:20 martin Exp $ */
 
 /*-
  *  Copyright (c) 2010-2011 Emmanuel Dreyfus. All rights reserved.

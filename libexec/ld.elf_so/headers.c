@@ -1,4 +1,4 @@
-/*	$NetBSD: headers.c,v 1.43 2012/08/15 03:46:06 matt Exp $	 */
+/*	$NetBSD: headers.c,v 1.41.4.1 2012/08/08 06:24:51 jdc Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: headers.c,v 1.43 2012/08/15 03:46:06 matt Exp $");
+__RCSID("$NetBSD: headers.c,v 1.41.4.1 2012/08/08 06:24:51 jdc Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -227,31 +227,9 @@ _rtld_digest_dynamic(const char *execname, Obj_Entry *obj)
 			init = dynp->d_un.d_ptr;
 			break;
 
-#ifdef HAVE_INITFINI_ARRAY
-		case DT_INIT_ARRAY:
-			obj->init_array =
-			    (fptr_t *)(obj->relocbase + dynp->d_un.d_ptr);
-			break;
-
-		case DT_INIT_ARRAYSZ:
-			obj->init_arraysz = dynp->d_un.d_val / sizeof(fptr_t);
-			break;
-#endif
-
 		case DT_FINI:
 			fini = dynp->d_un.d_ptr;
 			break;
-
-#ifdef HAVE_INITFINI_ARRAY
-		case DT_FINI_ARRAY:
-			obj->fini_array =
-			    (fptr_t *)(obj->relocbase + dynp->d_un.d_ptr);
-			break;
-
-		case DT_FINI_ARRAYSZ:
-			obj->fini_arraysz = dynp->d_un.d_val / sizeof(fptr_t); 
-			break;
-#endif
 
 		/*
 		 * Don't process DT_DEBUG on MIPS as the dynamic section

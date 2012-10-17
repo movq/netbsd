@@ -1,4 +1,4 @@
-/*	$NetBSD: bm.c,v 1.12 2012/06/25 22:32:46 abs Exp $	*/
+/*	$NetBSD: bm.c,v 1.11 2003/08/07 16:43:47 agc Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)bm.c	8.7 (Berkeley) 6/21/94";
 #else
-__RCSID("$NetBSD: bm.c,v 1.12 2012/06/25 22:32:46 abs Exp $");
+__RCSID("$NetBSD: bm.c,v 1.11 2003/08/07 16:43:47 agc Exp $");
 #endif
 #endif /* LIBC_SCCS && not lint */
 
@@ -100,7 +100,10 @@ static u_char const freq_def[256] = {
 };
 
 bm_pat *
-bm_comp(u_char const *pb, size_t len, u_char const *freq)
+bm_comp(pb, len, freq)
+	u_char const *pb;
+	size_t len;
+	u_char const *freq;
 {
 	u_char const *pe, *p;
 	size_t *d, r;
@@ -157,7 +160,8 @@ mem:	sv_errno = errno;
 }
 
 void
-bm_free(bm_pat *pat)
+bm_free(pat)
+	bm_pat *pat;
 {
 
 	_DIAGASSERT(pat != NULL);
@@ -170,7 +174,10 @@ bm_free(bm_pat *pat)
 }
 
 u_char *
-bm_exec(bm_pat *pat, u_char *base, size_t n)
+bm_exec(pat, base, n)
+	bm_pat *pat;
+	u_char *base;
+	size_t n;
 {
 	u_char *e, *ep, *p, *q, *s;
 	size_t *d0, k, md2, n1, ro;

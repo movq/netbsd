@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_alloc.c,v 1.112 2012/02/16 02:47:55 perseant Exp $	*/
+/*	$NetBSD: lfs_alloc.c,v 1.111.8.1 2012/03/17 17:40:06 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.112 2012/02/16 02:47:55 perseant Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.111.8.1 2012/03/17 17:40:06 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"

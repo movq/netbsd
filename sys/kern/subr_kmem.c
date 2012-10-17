@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_kmem.c,v 1.46 2012/07/21 11:45:04 para Exp $	*/
+/*	$NetBSD: subr_kmem.c,v 1.42.2.2 2012/08/12 14:45:31 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kmem.c,v 1.46 2012/07/21 11:45:04 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_kmem.c,v 1.42.2.2 2012/08/12 14:45:31 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/callback.h>
@@ -138,11 +138,8 @@ static pool_cache_t kmem_cache_big[KMEM_CACHE_BIG_COUNT] __cacheline_aligned;
 static size_t kmem_cache_big_maxidx __read_mostly;
 
 
-#if defined(DEBUG) && defined(_HARDKERNEL)
-#ifndef KMEM_GUARD_DEPTH
-#define KMEM_GUARD_DEPTH 0
-#endif
-int kmem_guard_depth = KMEM_GUARD_DEPTH;
+#if defined(DEBUG)
+int kmem_guard_depth = 0;
 size_t kmem_guard_size;
 static struct uvm_kmguard kmem_guard;
 static void *kmem_freecheck;

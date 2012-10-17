@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw.c,v 1.60 2012/09/22 00:33:41 matt Exp $	*/
+/*	$NetBSD: ofw.c,v 1.57 2011/11/23 23:07:30 jmcneill Exp $	*/
 
 /*
  * Copyright 1997
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.60 2012/09/22 00:33:41 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.57 2011/11/23 23:07:30 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -132,6 +132,12 @@ paddr_t physical_freestart;
 paddr_t physical_freeend;
 paddr_t physical_end;
 u_int free_pages;
+#ifndef	OFWGENCFG
+pv_addr_t irqstack;
+#endif
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 
 paddr_t msgbufphys;
 
@@ -775,7 +781,7 @@ ofw_configmem(void)
 
 	/* Switch to the proc0 pagetables. */
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

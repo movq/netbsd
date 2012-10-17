@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_tableset.c,v 1.14 2012/08/12 03:35:14 rmind Exp $	*/
+/*	$NetBSD: npf_tableset.c,v 1.9.2.5 2012/08/13 17:49:52 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2012 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_tableset.c,v 1.14 2012/08/12 03:35:14 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_tableset.c,v 1.9.2.5 2012/08/13 17:49:52 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

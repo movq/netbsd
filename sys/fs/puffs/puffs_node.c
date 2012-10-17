@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_node.c,v 1.27 2012/07/23 19:06:10 manu Exp $	*/
+/*	$NetBSD: puffs_node.c,v 1.23.2.2 2012/08/12 12:59:50 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.27 2012/07/23 19:06:10 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.23.2.2 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/hash.h>

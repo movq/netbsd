@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.111 2012/09/16 13:47:41 rmind Exp $
+#	$NetBSD: Makefile,v 1.101 2012/01/17 16:59:38 jakllsch Exp $
 
 .include <bsd.own.mk>
 
@@ -16,7 +16,6 @@ SUBDIR+=	compat
 SUBDIR+=	compat_ossaudio
 SUBDIR+=	coredump
 SUBDIR+=	chfs
-SUBDIR+=	dbcool
 SUBDIR+=	efs
 SUBDIR+=	ext2fs
 SUBDIR+=	exec_script
@@ -31,9 +30,9 @@ SUBDIR+=	gpioiic
 SUBDIR+=	gpioow
 SUBDIR+=	gpiosim
 SUBDIR+=	hfs
-SUBDIR+=	if_axe
 SUBDIR+=	iic
 SUBDIR+=	kernfs
+SUBDIR+=	ksem
 SUBDIR+=	layerfs
 SUBDIR+=	lfs
 SUBDIR+=	mfs
@@ -48,8 +47,6 @@ SUBDIR+=	nfsserver
 SUBDIR+=	nilfs
 SUBDIR+=	npf
 SUBDIR+=	npf_alg_icmp
-SUBDIR+=	npf_ext_log
-SUBDIR+=	npf_ext_normalise
 SUBDIR+=	ntfs
 SUBDIR+=	null
 SUBDIR+=	onewire
@@ -63,7 +60,6 @@ SUBDIR+=	ptyfs
 SUBDIR+=	puffs
 SUBDIR+=	putter
 SUBDIR+=	scsiverbose
-SUBDIR+=	sdtemp
 SUBDIR+=	secmodel_bsd44
 SUBDIR+=	secmodel_extensions
 SUBDIR+=	secmodel_overlay
@@ -74,12 +70,10 @@ SUBDIR+=	sysvbfs
 SUBDIR+=	suser
 SUBDIR+=	swsensor
 SUBDIR+=	tmpfs
-SUBDIR+=	uatp
 SUBDIR+=	udf
 SUBDIR+=	umap
 SUBDIR+=	union
 SUBDIR+=	usbverbose
-SUBDIR+=	vcoda
 SUBDIR+=	v7fs
 SUBDIR+=	vnd
 SUBDIR+=	tprof
@@ -111,8 +105,6 @@ SUBDIR+=	exec_elf64
 SUBDIR+=	amdtemp
 SUBDIR+=	coretemp
 SUBDIR+=	est
-SUBDIR+=	hdafg
-SUBDIR+=	hdaudio
 SUBDIR+=	hpet
 SUBDIR+=	odcm
 SUBDIR+=	powernow
@@ -219,14 +211,6 @@ SUBDIR+=	pwdog
 .endif
 
 .include <bsd.own.mk>
-
-#
-# NetBSD/usermode support
-#
-.if ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "x86_64"
-SUBDIR+=	../arch/usermode/modules/syscallemu
-.endif
 
 # we need our device mapper for LVM
 .if (${MKLVM} != "no")

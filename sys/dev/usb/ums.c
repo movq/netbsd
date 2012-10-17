@@ -1,4 +1,4 @@
-/*	$NetBSD: ums.c,v 1.84 2012/04/30 17:27:50 christos Exp $	*/
+/*	$NetBSD: ums.c,v 1.83.2.1 2012/05/07 16:28:42 riz Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.84 2012/04/30 17:27:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.83.2.1 2012/05/07 16:28:42 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cerror.S,v 1.4 2012/02/27 15:47:11 matt Exp $	*/
+/*	$NetBSD: cerror.S,v 1.2.4.1 2012/02/27 20:22:59 riz Exp $	*/
 
 #include <machine/asm.h>
 #include "SYS.h"

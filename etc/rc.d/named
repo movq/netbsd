@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: named,v 1.23 2012/10/01 18:46:43 christos Exp $
+# $NetBSD: named,v 1.22.8.1 2012/10/09 22:58:35 riz Exp $
 #
 
 # PROVIDE: named

@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_lwp.c,v 1.55 2012/09/27 20:43:15 rmind Exp $	*/
+/*	$NetBSD: sys_lwp.c,v 1.52.14.2 2012/10/01 23:07:07 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.55 2012/09/27 20:43:15 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.52.14.2 2012/10/01 23:07:07 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,6 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.55 2012/09/27 20:43:15 rmind Exp $");
 #include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
+
+#include "opt_sa.h"
 
 #define	LWP_UNPARK_MAX		1024
 
@@ -72,11 +74,20 @@ lwp_sys_init(void)
 int
 do_lwp_create(lwp_t *l, void *arg, u_long flags, lwpid_t *new_lwp)
 {
-	struct proc *p = l->l_proc;
-	struct lwp *l2;
-	struct schedstate_percpu *spc;
-	vaddr_t uaddr;
+ 	struct proc *p = l->l_proc;
+ 	struct lwp *l2;
+ 	struct schedstate_percpu *spc;
+ 	vaddr_t uaddr;
 	int error;
+
+#ifdef KERN_SA
+	mutex_enter(p->p_lock);
+	if ((p->p_sflag & (PS_SA | PS_WEXIT)) != 0 || p->p_sa != NULL) {
+		mutex_exit(p->p_lock);
+		return EINVAL;
+	}
+	mutex_exit(p->p_lock);
+#endif
 
 	/* XXX check against resource limits */
 
@@ -214,6 +225,14 @@ sys__lwp_suspend(struct lwp *l, const struct sys__lwp_suspend_args *uap,
 	int error;
 
 	mutex_enter(p->p_lock);
+
+#ifdef KERN_SA
+	if ((p->p_sflag & PS_SA) != 0 || p->p_sa != NULL) {
+		mutex_exit(p->p_lock);
+		return EINVAL;
+	}
+#endif
+
 	if ((t = lwp_find(p, SCARG(uap, target))) == NULL) {
 		mutex_exit(p->p_lock);
 		return ESRCH;

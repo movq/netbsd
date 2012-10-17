@@ -1,4 +1,4 @@
-/*	$NetBSD: resolver.c,v 1.14 2012/07/24 20:00:45 spz Exp $	*/
+/*	$NetBSD: resolver.c,v 1.11.4.2 2012/07/25 09:00:17 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

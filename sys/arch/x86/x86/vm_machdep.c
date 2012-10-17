@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.16 2012/07/15 15:17:56 dsl Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.14 2012/01/21 16:48:57 chs Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.16 2012/07/15 15:17:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.14 2012/01/21 16:48:57 chs Exp $");
 
 #include "opt_mtrr.h"
 
@@ -138,7 +138,6 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 {
 	struct pcb *pcb1, *pcb2;
 	struct trapframe *tf;
-	struct switchframe *sf;
 	vaddr_t uv;
 
 	pcb1 = lwp_getpcb(l1);
@@ -219,20 +218,31 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	l2->l_md.md_flags = l1->l_md.md_flags;
 	l2->l_md.md_astpending = 0;
 
-	sf = (struct switchframe *)tf - 1;
+	cpu_setfunc(l2, func, arg);
+}
+
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb *pcb = lwp_getpcb(l);
+	struct trapframe *tf = l->l_md.md_regs;
+	struct switchframe *sf = (struct switchframe *)tf - 1;
 
 #ifdef __x86_64__
 	sf->sf_r12 = (uint64_t)func;
 	sf->sf_r13 = (uint64_t)arg;
-	sf->sf_rip = (uint64_t)lwp_trampoline;
-	pcb2->pcb_rsp = (uint64_t)sf;
-	pcb2->pcb_rbp = (uint64_t)l2;
+	if (func == child_return && !(l->l_proc->p_flag & PK_32))
+		sf->sf_rip = (uint64_t)child_trampoline;
+	else
+		sf->sf_rip = (uint64_t)lwp_trampoline;
+	pcb->pcb_rsp = (uint64_t)sf;
+	pcb->pcb_rbp = (uint64_t)l;
 #else
 	sf->sf_esi = (int)func;
 	sf->sf_ebx = (int)arg;
 	sf->sf_eip = (int)lwp_trampoline;
-	pcb2->pcb_esp = (int)sf;
-	pcb2->pcb_ebp = (int)l2;
+	pcb->pcb_esp = (int)sf;
+	pcb->pcb_ebp = (int)l;
 #endif
 }
 

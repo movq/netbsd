@@ -1,4 +1,4 @@
-/* $NetBSD: ffsv1.c,v 1.6 2012/05/21 21:34:16 dsl Exp $ */
+/* $NetBSD: ffsv1.c,v 1.5.2.1 2012/06/03 21:42:52 jdc Exp $ */
 
 #define LIBSA_FFSv1
 

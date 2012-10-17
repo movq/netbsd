@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.171 2012/08/17 20:11:39 abs Exp $
+# $NetBSD: GENERIC,v 1.169 2011/12/18 05:49:27 dholland Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/hp300/conf/std.hp300"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.171 $"
+#ident 		"GENERIC-$Revision: 1.169 $"
 
 maxusers	32		# estimated number of users
 
@@ -55,6 +55,7 @@ options 	NTP		# NTP phase/frequency locked loop
 options 	SYSVSHM		# System V-style shared memory
 options 	SYSVMSG		# System V-style message queues
 options 	SYSVSEM		# System V-style semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #options 	MODULAR		# new style module(7) framework
 
@@ -177,7 +178,6 @@ options 	DIOVERBOSE	# recognize "unknown" DIO devices
 
 # workstation console options
 options 	WSEMUL_VT100            # VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK

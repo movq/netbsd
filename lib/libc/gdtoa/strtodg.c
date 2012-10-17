@@ -1,4 +1,4 @@
-/* $NetBSD: strtodg.c,v 1.10 2012/03/22 13:09:12 he Exp $ */
+/* $NetBSD: strtodg.c,v 1.8 2011/03/21 12:53:50 christos Exp $ */
 
 /****************************************************************
 
@@ -37,13 +37,14 @@ THIS SOFTWARE.
 #include "locale.h"
 #endif
 
-#ifndef VAX
  static CONST int
 fivesbits[] = {	 0,  3,  5,  7, 10, 12, 14, 17, 19, 21,
 		24, 26, 28, 31, 33, 35, 38, 40, 42, 45,
 		47, 49, 52
-		};
+#ifdef VAX
+		, 54, 56
 #endif
+		};
 
  Bigint *
 #ifdef KR_headers
@@ -328,10 +329,7 @@ strtodg
 #endif
 {
 	int abe, abits, asub;
-#ifdef INFNAN_CHECK
-	int decpt;
-#endif
-	int bb0, bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, denorm;
+	int bb0, bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, decpt, denorm;
 	int dsign, e, e1, e2, emin, esign, finished, i, inex, irv;
 	int j, k, nbits, nd, nd0, nf, nz, nz0, rd, rvbits, rve, rve1, sign;
 	int sudden_underflow = 0; /* pacify gcc */
@@ -348,7 +346,7 @@ strtodg
 #else
 	char *decimalpoint;
 	static char *decimalpoint_cache;
-	static size_t dplen;
+	static int dplen;
 	if (!(s0 = decimalpoint_cache)) {
 		s0 = localeconv()->decimal_point;
 		if ((decimalpoint_cache = MALLOC(strlen(s0) + 1)) != NULL) {
@@ -415,10 +413,7 @@ strtodg
 	sudden_underflow = fpi->sudden_underflow;
 	s0 = s;
 	y = z = 0;
-#ifdef INFNAN_CHECK
-	decpt = 0;
-#endif
-	for(nd = nf = 0; (c = *s) >= '0' && c <= '9'; nd++, s++)
+	for(decpt = nd = nf = 0; (c = *s) >= '0' && c <= '9'; nd++, s++)
 		if (nd < 9)
 			y = 10*y + c - '0';
 		else if (nd < 16)
@@ -435,9 +430,7 @@ strtodg
 	if (c == '.') {
 		c = *++s;
 #endif
-#ifdef INFNAN_CHECK
 		decpt = 1;
-#endif
 		if (!nd) {
 			for(; c == '0'; c = *++s)
 				nz++;

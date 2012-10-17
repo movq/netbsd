@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpgareg.h,v 1.4 2012/07/25 07:26:18 skrll Exp $ */
+/*	$NetBSD: ifpgareg.h,v 1.3.118.1 2012/08/09 06:36:44 jdc Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd

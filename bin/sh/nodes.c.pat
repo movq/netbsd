@@ -1,4 +1,4 @@
-/*	$NetBSD: nodes.c.pat,v 1.13 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: nodes.c.pat,v 1.12 2004/06/15 22:57:27 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -67,7 +67,8 @@ STATIC char *nodesavestr(char *);
  */
 
 union node *
-copyfunc(union node *n)
+copyfunc(n)
+	union node *n;
 {
 	if (n == NULL)
 		return NULL;
@@ -82,7 +83,8 @@ copyfunc(union node *n)
 
 
 STATIC void
-calcsize(union node *n)
+calcsize(n)
+	union node *n;
 {
 	%CALCSIZE
 }
@@ -90,7 +92,8 @@ calcsize(union node *n)
 
 
 STATIC void
-sizenodelist(struct nodelist *lp)
+sizenodelist(lp)
+	struct nodelist *lp;
 {
 	while (lp) {
 		funcblocksize += SHELL_ALIGN(sizeof(struct nodelist));
@@ -102,7 +105,8 @@ sizenodelist(struct nodelist *lp)
 
 
 STATIC union node *
-copynode(union node *n)
+copynode(n)
+	union node *n;
 {
 	union node *new;
 
@@ -112,7 +116,8 @@ copynode(union node *n)
 
 
 STATIC struct nodelist *
-copynodelist(struct nodelist *lp)
+copynodelist(lp)
+	struct nodelist *lp;
 {
 	struct nodelist *start;
 	struct nodelist **lpp;
@@ -133,7 +138,8 @@ copynodelist(struct nodelist *lp)
 
 
 STATIC char *
-nodesavestr(char *s)
+nodesavestr(s)
+	char   *s;
 {
 	register char *p = s;
 	register char *q = funcstring;
@@ -152,7 +158,8 @@ nodesavestr(char *s)
  */
 
 void
-freefunc(union node *n)
+freefunc(n)
+	union node *n;
 {
 	if (n)
 		ckfree(n);

@@ -1,4 +1,4 @@
-/*	$NetBSD: t_filedesc.c,v 1.5 2012/03/18 09:46:50 jruoho Exp $	*/
+/*	$NetBSD: t_filedesc.c,v 1.4 2010/11/03 16:10:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_filedesc.c,v 1.5 2012/03/18 09:46:50 jruoho Exp $");
+__RCSID("$NetBSD: t_filedesc.c,v 1.4 2010/11/03 16:10:20 christos Exp $");
 
 #include <sys/types.h>
 
@@ -47,7 +47,8 @@ ATF_TC_HEAD(getfilerace, tc)
 {
 
 	atf_tc_set_md_var(tc, "descr", "race between multithreaded proc. "
-	    "fd_getfile() and fd_close() (PR kern/43694)");
+	    "fd_getfile() and fd_close()");
+	/* PR kern/43694 */
 }
 
 static int fd;

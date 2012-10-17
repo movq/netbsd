@@ -1,4 +1,4 @@
-# $NetBSD: t_miscquota.sh,v 1.7 2012/09/30 21:26:58 bouyer Exp $ 
+# $NetBSD: t_miscquota.sh,v 1.6.2.1 2012/10/01 19:55:22 riz Exp $ 
 #
 #  Copyright (c) 2011 Manuel Bouyer
 #  All rights reserved.

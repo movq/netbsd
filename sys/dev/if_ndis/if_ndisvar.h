@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ndisvar.h,v 1.8 2012/07/28 00:43:23 matt Exp $	*/
+/*	$NetBSD: if_ndisvar.h,v 1.7 2011/05/14 12:44:16 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2003
@@ -107,7 +107,7 @@ struct ndis_resource {
 #endif
 
 #ifdef __NetBSD__
-extern int ndis_in_isr;
+int ndis_in_isr;
 #endif
 
 struct ndis_softc {

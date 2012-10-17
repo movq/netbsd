@@ -1,4 +1,4 @@
-#	$NetBSD: cms.inc,v 1.4 2012/07/26 19:58:40 christos Exp $
+#	$NetBSD: cms.inc,v 1.3.4.1 2012/08/14 07:57:02 riz Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gcmsaty
 #

@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.4 2012/06/30 10:20:26 tsutsui Exp $
+# $NetBSD: dot.profile,v 1.3.10.1 2012/07/05 17:33:59 riz Exp $
 #
 # Copyright (c) 1995 Jason R. Thorpe
 # Copyright (c) 1994 Christopher G. Demetriou

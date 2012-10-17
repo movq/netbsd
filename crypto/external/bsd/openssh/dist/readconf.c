@@ -1,5 +1,5 @@
-/*	$NetBSD: readconf.c,v 1.8 2012/05/02 02:41:08 christos Exp $	*/
-/* $OpenBSD: readconf.c,v 1.194 2011/09/23 07:45:05 markus Exp $ */
+/*	$NetBSD: readconf.c,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: readconf.c,v 1.193 2011/05/24 07:15:47 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,7 +14,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: readconf.c,v 1.8 2012/05/02 02:41:08 christos Exp $");
+__RCSID("$NetBSD: readconf.c,v 1.6 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -147,7 +147,6 @@ typedef enum {
 	oKexAlgorithms, oIPQoS, oRequestTTY,
 	oNoneEnabled, oTcpRcvBufPoll, oTcpRcvBuf, oNoneSwitch, oHPNDisabled,
 	oHPNBufferSize,
-	oSendVersionFirst,
 	oDeprecated, oUnsupported
 } OpCodes;
 
@@ -273,7 +272,6 @@ static struct {
 	{ "noneswitch", oNoneSwitch },
 	{ "hpndisabled", oHPNDisabled },
 	{ "hpnbuffersize", oHPNBufferSize },
-	{ "sendversionfirst", oSendVersionFirst },
 
 	{ NULL, oBadOption }
 };
@@ -321,7 +319,6 @@ add_remote_forward(Options *options, const Forward *newfwd)
 	fwd->listen_port = newfwd->listen_port;
 	fwd->connect_host = newfwd->connect_host;
 	fwd->connect_port = newfwd->connect_port;
-	fwd->handle = newfwd->handle;
 	fwd->allocated_port = 0;
 }
 
@@ -1126,10 +1123,6 @@ parse_int:
 			*intptr = value;
 		break;
 
-	case oSendVersionFirst:
-		intptr = &options->send_version_first;
-		goto parse_flag;
-
 	case oDeprecated:
 		debug("%s line %d: Deprecated option \"%s\"",
 		    filename, linenum, keyword);
@@ -1304,7 +1297,6 @@ initialize_options(Options * options)
 	options->hpn_buffer_size = -1;
 	options->tcp_rcv_buf_poll = -1;
 	options->tcp_rcv_buf = -1;
-	options->send_version_first = -1;
 }
 
 /*
@@ -1503,8 +1495,6 @@ fill_default_options(Options * options)
 		options->ip_qos_bulk = IPTOS_THROUGHPUT;
 	if (options->request_tty == -1)
 		options->request_tty = REQUEST_TTY_AUTO;
-	if (options->send_version_first == -1)
-		options->send_version_first = 1;
 	/* options->local_command should not be set by default */
 	/* options->proxy_command should not be set by default */
 	/* options->user will be set in the main program if appropriate */

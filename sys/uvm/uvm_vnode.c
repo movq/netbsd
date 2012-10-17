@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_vnode.c,v 1.99 2012/07/30 23:56:48 matt Exp $	*/
+/*	$NetBSD: uvm_vnode.c,v 1.97.8.1 2012/06/11 21:25:02 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.99 2012/07/30 23:56:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.97.8.1 2012/06/11 21:25:02 riz Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -64,10 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.99 2012/07/30 23:56:48 matt Exp $");
 
 #include <uvm/uvm.h>
 #include <uvm/uvm_readahead.h>
-
-#ifdef UVMHIST
-UVMHIST_DEFINE(ubchist);
-#endif
 
 /*
  * functions

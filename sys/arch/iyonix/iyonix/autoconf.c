@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.14 2012/07/29 18:05:44 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.12.18.1 2012/08/08 15:51:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2012/07/29 18:05:44 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.18.1 2012/08/08 15:51:05 martin Exp $");
 
 #include "opt_md.h"
 
@@ -52,6 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2012/07/29 18:05:44 mlelstv Exp $"
 #include <iyonix/iyonix/iyonixvar.h>
 
 #include <acorn32/include/bootconfig.h>
+
+struct device *booted_device;
+int booted_partition;
 
 extern struct bootconfig bootconfig;
 

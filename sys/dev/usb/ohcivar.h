@@ -1,4 +1,5 @@
-/*	$NetBSD: ohcivar.h,v 1.53 2012/06/10 06:15:53 mrg Exp $	*/
+/*	$NetBSD: ohcivar.h,v 1.51 2011/05/28 15:47:17 tsutsui Exp $	*/
+/*	$FreeBSD: src/sys/dev/usb/ohcivar.h,v 1.13 1999/11/17 22:33:41 n_hibma Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -86,10 +87,6 @@ typedef struct ohci_softc {
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
-	void *sc_rhsc_si;
-
 	usb_dma_t sc_hccadma;
 	struct ohci_hcca *sc_hcca;
 	ohci_soft_ed_t *sc_eds[OHCI_NO_EDS];
@@ -112,8 +109,9 @@ typedef struct ohci_softc {
 #define	OHCI_BIG_ENDIAN		1	/* big endian OHCI? never seen it */
 #define	OHCI_HOST_ENDIAN	2	/* if OHCI always matches CPU */
 
+#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
-	kcondvar_t sc_softwake_cv;
+#endif /* USB_USE_SOFTINTR */
 
 	ohci_soft_ed_t *sc_freeeds;
 	ohci_soft_td_t *sc_freetds;

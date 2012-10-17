@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk_mbr.c,v 1.45 2012/10/03 07:05:51 mlelstv Exp $	*/
+/*	$NetBSD: subr_disk_mbr.c,v 1.42.8.1 2012/08/12 19:02:33 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.45 2012/10/03 07:05:51 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.42.8.1 2012/08/12 19:02:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -342,6 +342,10 @@ scan_iso_vrs(mbr_args_t *a)
 					&is_iso9660, &is_udf);
 			}
 		}
+		if (is_udf < 0) {
+			/* defaulting udf on the RAW partition */
+			is_udf = 0;
+		}
 	} else {
 		/* try start of disc */
 		sector = 0;
@@ -353,16 +357,26 @@ scan_iso_vrs(mbr_args_t *a)
 
 	strncpy(a->lp->d_typename, "iso partition", 16);
 
-	/* adjust session information for iso9660 partition */
+	/* add iso9660 partition if found */
 	if (is_iso9660 >= 0) {
 		/* set 'a' partition to iso9660 */
 		a->lp->d_partitions[0].p_offset = 0;
 		a->lp->d_partitions[0].p_size   = a->lp->d_secperunit;
 		a->lp->d_partitions[0].p_cdsession = is_iso9660;
 		a->lp->d_partitions[0].p_fstype = FS_ISO9660;
+#ifdef notyet
+	} else {
+		a->lp->d_partitions[0].p_size   = 0;
+		a->lp->d_partitions[0].p_fstype = FS_UNUSED;
+#endif
 	}
 
-	/* UDF doesn't care about the cd session specified here */
+	/* add udf partition if found */
+	if (is_udf >= 0) {
+		/* set the RAW partition to UDF for CD/USB stick etc */
+		a->lp->d_partitions[RAW_PART].p_fstype = FS_UDF;
+		/* UDF doesn't care about the cd session specified here */
+	}
 
 	return SCAN_FOUND;
 }

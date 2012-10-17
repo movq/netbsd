@@ -1,4 +1,4 @@
-/* $NetBSD: t_mmap.c,v 1.7 2012/06/14 17:47:58 bouyer Exp $ */
+/* $NetBSD: t_mmap.c,v 1.2.4.2 2012/06/15 08:53:32 sborrill Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -55,7 +55,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_mmap.c,v 1.7 2012/06/14 17:47:58 bouyer Exp $");
+__RCSID("$NetBSD: t_mmap.c,v 1.2.4.2 2012/06/15 08:53:32 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>

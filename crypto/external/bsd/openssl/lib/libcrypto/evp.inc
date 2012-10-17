@@ -1,4 +1,4 @@
-#	$NetBSD: evp.inc,v 1.3 2012/07/26 19:58:40 christos Exp $
+#	$NetBSD: evp.inc,v 1.2.4.1 2012/08/14 07:57:03 riz Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

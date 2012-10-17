@@ -1,4 +1,4 @@
-/*	$NetBSD: keytable.c,v 1.6 2012/06/05 00:41:33 christos Exp $	*/
+/*	$NetBSD: keytable.c,v 1.5.6.1 2012/06/05 21:14:59 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2010  Internet Systems Consortium, Inc. ("ISC")

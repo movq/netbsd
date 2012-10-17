@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.gzboot,v 1.20 2012/08/13 10:25:02 khorben Exp $
+#	$NetBSD: Makefile.gzboot,v 1.17.10.1 2012/08/13 20:24:10 riz Exp $
 
 NOMAN=  # defined
 
@@ -91,7 +91,7 @@ cleandir distclean: .WAIT cleanlibdir
 cleanlibdir:
 	-rm -rf lib
 
-LDFLAGS= -M -T ${LDSCRIPT} --fix-v4bx
+LDFLAGS= -M -T ${LDSCRIPT}
 
 LIBLIST=${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBSA}
 
@@ -117,6 +117,5 @@ FILES=	${PROGSYM}
 .include <bsd.prog.mk>
 
 ${PROGSYM}: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${_MKTARGET_LINK}
 	${LD} -o ${.TARGET} ${LDFLAGS} ${STARTFILE} \
 	    ${OBJS} ${LIBLIST} > ${BASE}.list

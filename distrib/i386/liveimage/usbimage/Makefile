@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2012/08/17 16:56:35 riz Exp $
+#	$NetBSD: Makefile,v 1.1.2.1 2012/08/17 20:50:51 martin Exp $
 
 LIVEIMGBASE=	NetBSD-${DISTRIBVER}-i386-live-sd0root	# gives ${IMGBASE}.img
 

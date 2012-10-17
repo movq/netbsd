@@ -1,4 +1,4 @@
-/*	$NetBSD: kirkwood.c,v 1.7 2012/09/06 03:05:41 msaitoh Exp $	*/
+/*	$NetBSD: kirkwood.c,v 1.4 2011/05/24 17:45:49 matt Exp $	*/
 /*
  * Copyright (c) 2010 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kirkwood.c,v 1.7 2012/09/06 03:05:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kirkwood.c,v 1.4 2011/05/24 17:45:49 matt Exp $");
 
 #define _INTR_PRIVATE
 
@@ -64,15 +64,15 @@ static const char * const sources[64] = {
     "GbE1Rx(16)",      "GbE1Tx(17)",      "GbE1Misc(18)",    "USB0Cnt(19)",
     "Reserved(20)",    "Sata(21)",        "SecurityInt(22)", "SPIInt(23)",
     "AudioINT(24)",    "Reserved(25)",    "TS0Int(26)",      "Reserved(27)",
-    "SDIOInt(28)",     "TWSI(29)",        "AVBInt(30)",      "TDMInt(31)",
+    "SDIOInt(28)",     "TWSI(29)",        "AVBInt(30)",      "TDMInt(31)"
 
-    "Reserved(32)",    "Uart0Int(33)",    "Uart1Int(34)",    "GPIOLo7_0(35)",
-    "GPIOLo8_15(36)",  "GPIOLo16_23(37)", "GPIOLo24_31(38)", "GPIOHi7_0(39)",
-    "GPIOHi8_15(40)",  "GPIOHi16_23(41)", "XOR0Err(42)",     "XOR1Err(43)",
-    "PEX0Err(44)",     "Reserved(45)",    "GbE0Err(46)",     "GbE1Err(47)",
-    "USBErr(48)",      "SecurityErr(49)", "AudioErr(50)",    "Reserved(51)",
-    "Reserved(52)",    "RTCInt(53)",      "Reserved(54)",    "Reserved(55)",
-    "Reserved(56)",    "Reserved(57)",    "Reserved(58)",    "Reserved(59)",
+    "Reserved(32)",    "Uart0Int(33)",    "Uart1Int(34)",    "GPIOLo7_0(35)"
+    "GPIOLo8_15(36)",  "GPIOLo16_23(37)", "GPIOLo24_31(38)", "GPIOHi7_0(39)"
+    "GPIOHi8_15(40)",  "GPIOHi16_23(41)", "XOR0Err(42)",     "XOR1Err(43)"
+    "PEX0Err(44)",     "Reserved(45)",    "GbE0Err(46)",     "GbE1Err(47)"
+    "USBErr(48)",      "SecurityErr(49)", "AudioErr(50)",    "Reserved(51)"
+    "Reserved(52)",    "RTCInt(53)",      "Reserved(54)",    "Reserved(55)"
+    "Reserved(56)",    "Reserved(57)",    "Reserved(58)",    "Reserved(59)"
     "Reserved(60)",    "Reserved(61)",    "Reserved(62)",    "Reserved(63)"
 };
 
@@ -114,7 +114,6 @@ kirkwood_intr_bootstrap(void)
 	case MARVELL_KIRKWOOD_88F6180: gpp_npins = 30; break;
 	case MARVELL_KIRKWOOD_88F6192: gpp_npins = 36; break;
 	case MARVELL_KIRKWOOD_88F6281: gpp_npins = 50; break;
-	case MARVELL_KIRKWOOD_88F6282: gpp_npins = 50; break;
 	}
 	gpp_irqbase = 96;	/* Main Low(32) + High(32) + Bridge(32) */
 #endif
@@ -189,7 +188,7 @@ kirkwood_find_pending_irqs(void)
 	if (pendinglow != 0)
 		ipl |= pic_mark_pending_sources(&kirkwood_pic, 0, pendinglow);
 
-	if ((causelow & (1 << KIRKWOOD_IRQ_HIGH)) == (1 << KIRKWOOD_IRQ_HIGH)) {
+	if ((causelow & KIRKWOOD_IRQ_HIGH) == KIRKWOOD_IRQ_HIGH) {
 		uint32_t causehigh = read_mlmbreg(KIRKWOOD_MLMB_MICHR);
 		uint32_t pendinghigh = read_mlmbreg(KIRKWOOD_MLMB_MIRQIMHR);
 		pendinghigh &= causehigh;
@@ -212,8 +211,7 @@ kirkwood_getclks(bus_addr_t iobase)
 #define MHz	* 1000 * 1000
 
 	model = mvsoc_model();
-	if (model == MARVELL_KIRKWOOD_88F6281 ||
-	    model == MARVELL_KIRKWOOD_88F6282)
+	if (model == MARVELL_KIRKWOOD_88F6281)
 		mvTclk = 200 MHz;
 	else		/* 166MHz */
 		mvTclk = 166666667;
@@ -230,28 +228,20 @@ kirkwood_getclks(bus_addr_t iobase)
 		mvSysclk = 200 MHz;
 	} else {
 		switch (reg & 0x0040001a) {
-		case 0x00000002: mvPclk =  400 MHz; break;
 		case 0x00000008: mvPclk =  600 MHz; break;
 		case 0x00400008: mvPclk =  800 MHz; break;
 		case 0x0040000a: mvPclk = 1000 MHz; break;
 		case 0x00000012: mvPclk = 1200 MHz; break;
-		case 0x00000018: mvPclk = 1500 MHz; break;
-		case 0x0000001a: mvPclk = 1600 MHz; break;
-		case 0x00400018: mvPclk = 1800 MHz; break;
-		case 0x0040001a: mvPclk = 2000 MHz; break;
+		case 0x00000018: mvPclk = 1200 MHz; break;
+		case 0x00000002: mvPclk = 1200 MHz; break;
 		default:
 			panic("unknown mvPclk\n");
 		}
 
 		switch (reg & 0x000001e0) {
-		case 0x00000000: mvSysclk = mvPclk * 1 / 1; break;
-		case 0x00000040: mvSysclk = mvPclk * 1 / 2; break;
 		case 0x00000060: mvSysclk = mvPclk * 2 / 5; break;
 		case 0x00000080: mvSysclk = mvPclk * 1 / 3; break;
 		case 0x000000c0: mvSysclk = mvPclk * 1 / 4; break;
-		case 0x000000e0: mvSysclk = mvPclk * 2 / 9; break;
-		case 0x00000100: mvSysclk = mvPclk * 1 / 5; break;
-		case 0x00000120: mvSysclk = mvPclk * 1 / 6; break;
 		default:
 			panic("unknown mvSysclk\n");
 		}

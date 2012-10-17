@@ -96,9 +96,16 @@
  */
 
 unsigned int
-lzf_compress_r (const void *const in_data, unsigned int in_len,
-	        void *out_data, unsigned int out_len, LZF_STATE htab)
+lzf_compress (const void *const in_data, unsigned int in_len,
+	      void *out_data, unsigned int out_len
+#if LZF_STATE_ARG
+              , LZF_STATE htab
+#endif
+              )
 {
+#if !LZF_STATE_ARG
+  LZF_STATE htab;
+#endif
   const u8 **hslot;
   const u8 *ip = (const u8 *)in_data;
         u8 *op = (u8 *)out_data;
@@ -288,3 +295,4 @@ lzf_compress_r (const void *const in_data, unsigned int in_len,
 
   return (unsigned)(op - (u8 *)out_data);
 }
+

@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.157 2012/07/04 06:09:37 is Exp $	*/
+/*	$NetBSD: util.c,v 1.156 2011/12/10 05:53:58 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.157 2012/07/04 06:09:37 is Exp $");
+__RCSID("$NetBSD: util.c,v 1.156 2011/12/10 05:53:58 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -1351,7 +1351,7 @@ get_line(FILE *stream, char *buf, size_t buflen, const char **errormsg)
  * error message displayed.)
  */
 int
-ftp_connect(int sock, const struct sockaddr *name, socklen_t namelen, int pe)
+ftp_connect(int sock, const struct sockaddr *name, socklen_t namelen)
 {
 	int		flags, rv, timeout, error;
 	socklen_t	slen;
@@ -1417,9 +1417,8 @@ ftp_connect(int sock, const struct sockaddr *name, socklen_t namelen, int pe)
 	rv = connect(sock, name, namelen);	/* inititate the connection */
 	if (rv == -1) {				/* connection error */
 		if (errno != EINPROGRESS) {	/* error isn't "please wait" */
-			if (pe || (errno != EHOSTUNREACH))
  connecterror:
-				warn("Can't connect to `%s:%s'", hname, sname);
+			warn("Can't connect to `%s:%s'", hname, sname);
 			return -1;
 		}
 

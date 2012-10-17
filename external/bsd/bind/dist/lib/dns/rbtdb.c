@@ -1,4 +1,4 @@
-/*	$NetBSD: rbtdb.c,v 1.12 2012/06/05 00:41:37 christos Exp $	*/
+/*	$NetBSD: rbtdb.c,v 1.11.2.1 2012/06/05 21:15:03 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

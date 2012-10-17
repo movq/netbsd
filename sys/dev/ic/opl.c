@@ -1,4 +1,4 @@
-/*	$NetBSD: opl.c,v 1.39 2012/04/09 10:18:16 plunky Exp $	*/
+/*	$NetBSD: opl.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl.c,v 1.39 2012/04/09 10:18:16 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -142,8 +142,9 @@ opl_attach(struct opl_softc *sc)
 {
 	int i;
 
-	KASSERT(sc->dev != NULL);
-	KASSERT(sc->lock != NULL);
+	if (sc->lock == NULL) {
+		panic("opl_attach: no lock");
+	}
 
 	mutex_enter(sc->lock);
 	i = opl_find(sc);
@@ -163,7 +164,7 @@ opl_attach(struct opl_softc *sc)
 	sc->syn.data = sc;
 	sc->syn.nvoice = sc->model == OPL_2 ? OPL2_NVOICE : OPL3_NVOICE;
 	sc->syn.lock = sc->lock;
-	midisyn_init(&sc->syn);
+	midisyn_attach(&sc->mididev, &sc->syn);
 
 	/* Set up voice table */
 	for (i = 0; i < OPL3_NVOICE; i++)
@@ -175,7 +176,7 @@ opl_attach(struct opl_softc *sc)
 	sc->panl = OPL_VOICE_TO_LEFT;
 	sc->panr = OPL_VOICE_TO_RIGHT;
 	if (sc->model == OPL_3 &&
-	    device_cfdata(sc->dev)->cf_flags & OPL_FLAGS_SWAP_LR) {
+	    device_cfdata(sc->mididev.dev)->cf_flags & OPL_FLAGS_SWAP_LR) {
 		sc->panl = OPL_VOICE_TO_RIGHT;
 		sc->panr = OPL_VOICE_TO_LEFT;
 		aprint_normal(": LR swapped");
@@ -185,7 +186,7 @@ opl_attach(struct opl_softc *sc)
 	aprint_naive("\n");
 
 	sc->sc_mididev =
-	    midi_attach_mi(&midisyn_hw_if, &sc->syn, sc->dev);
+	    midi_attach_mi(&midisyn_hw_if, &sc->syn, sc->mididev.dev);
 }
 
 int

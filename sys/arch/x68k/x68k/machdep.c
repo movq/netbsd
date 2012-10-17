@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.185 2012/07/30 17:19:59 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.181.2.1 2012/05/09 20:01:51 riz Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.185 2012/07/30 17:19:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.181.2.1 2012/05/09 20:01:51 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -107,7 +107,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.185 2012/07/30 17:19:59 christos Exp $
 #include <machine/autoconf.h>
 #include <arch/x68k/dev/intiovar.h>
 
-extern void doboot(void) __attribute__((__noreturn__));
+void initcpu(void);
+void identifycpu(void);
+void doboot(void) __attribute__((__noreturn__));
 
 /* the following is used externally (sysctl_hw) */
 char	machine[] = MACHINE;	/* from <machine/param.h> */
@@ -122,6 +124,13 @@ extern u_int lowram;
 extern int end, *esym;
 
 int	maxmem;			/* max memory per process */
+int	physmem = MAXMEM;	/* max supported memory, changes to actual */
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int	safepri = PSL_LOWIPL;
 
 /* prototypes for local functions */
 void	identifycpu(void);

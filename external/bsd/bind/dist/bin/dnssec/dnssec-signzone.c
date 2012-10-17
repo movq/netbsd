@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-signzone.c,v 1.6 2012/06/05 00:38:57 christos Exp $	*/
+/*	$NetBSD: dnssec-signzone.c,v 1.5.4.1 2012/06/05 21:15:17 bouyer Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")

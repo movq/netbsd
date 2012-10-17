@@ -1,4 +1,4 @@
-/* $NetBSD: t_mincore.c,v 1.8 2012/06/08 07:18:58 martin Exp $ */
+/* $NetBSD: t_mincore.c,v 1.3 2011/07/14 10:24:56 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_mincore.c,v 1.8 2012/06/08 07:18:58 martin Exp $");
+__RCSID("$NetBSD: t_mincore.c,v 1.3 2011/07/14 10:24:56 jruoho Exp $");
 
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -67,12 +67,10 @@ __RCSID("$NetBSD: t_mincore.c,v 1.8 2012/06/08 07:18:58 martin Exp $");
 #include <atf-c.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <kvm.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/resource.h>
 
 static long		page = 0;
 static const char	path[] = "mincore";
@@ -94,10 +92,8 @@ check_residency(void *addr, size_t npgs)
 		if (vec[i] != 0)
 			resident++;
 
-#if 0
 		(void)fprintf(stderr, "page 0x%p is %sresident\n",
 		    (char *)addr + (i * page), vec[i] ? "" : "not ");
-#endif
 	}
 
 	free(vec);
@@ -143,14 +139,10 @@ ATF_TC_HEAD(mincore_resid, tc)
 ATF_TC_BODY(mincore_resid, tc)
 {
 	void *addr, *addr2, *addr3, *buf;
-	size_t npgs = 0, resident;
+	size_t npgs = 0;
 	struct stat st;
+	ssize_t tot;
 	int fd, rv;
-	struct rlimit rlim;
-
-	ATF_REQUIRE(getrlimit(RLIMIT_MEMLOCK, &rlim) == 0);
-	rlim.rlim_cur = rlim.rlim_max;
-	ATF_REQUIRE(setrlimit(RLIMIT_MEMLOCK, &rlim) == 0);
 
 	(void)memset(&st, 0, sizeof(struct stat));
 
@@ -160,8 +152,15 @@ ATF_TC_BODY(mincore_resid, tc)
 	ATF_REQUIRE(fd >= 0);
 	ATF_REQUIRE(buf != NULL);
 
-	rv = write(fd, buf, page * 5);
-	ATF_REQUIRE(rv >= 0);
+	tot = 0;
+
+	while (tot < page) {
+
+		rv = write(fd, buf, sizeof(buf));
+		ATF_REQUIRE(rv >= 0);
+
+		tot += rv;
+	}
 
 	ATF_REQUIRE(fd >= 0);
 	ATF_REQUIRE(fstat(fd, &st) == 0);
@@ -180,9 +179,7 @@ ATF_TC_BODY(mincore_resid, tc)
 
 	(void)check_residency(addr, npgs);
 
-	rv = mlock(addr, npgs * page);
-	if (rv == -1 && errno == EAGAIN)
-		atf_tc_skip("hit process resource limits");
+	ATF_REQUIRE(mlock(addr, npgs * page) == 0);
 	ATF_REQUIRE(munmap(addr, st.st_size) == 0);
 
 	npgs = 128;
@@ -191,8 +188,7 @@ ATF_TC_BODY(mincore_resid, tc)
 	    MAP_ANON | MAP_PRIVATE | MAP_WIRED, -1, (off_t)0);
 
 	if (addr == MAP_FAILED)
-		atf_tc_skip("could not mmap wired anonymous test area, system "
-		    "might be low on memory");
+		return;
 
 	ATF_REQUIRE(check_residency(addr, npgs) == npgs);
 	ATF_REQUIRE(munmap(addr, npgs * page) == 0);
@@ -202,32 +198,21 @@ ATF_TC_BODY(mincore_resid, tc)
 	addr = mmap(NULL, npgs * page, PROT_READ | PROT_WRITE,
 	    MAP_ANON | MAP_PRIVATE, -1, (off_t)0);
 
-	ATF_REQUIRE(addr != MAP_FAILED);
+	if (addr == MAP_FAILED)
+		return;
 
 	/*
 	 * Check that the in-core pages match the locked pages.
 	 */
 	ATF_REQUIRE(check_residency(addr, npgs) == 0);
-
-	errno = 0;
-	if (mlockall(MCL_CURRENT|MCL_FUTURE) != 0 && errno != ENOMEM)
-		atf_tc_fail("mlockall(2) failed");
-	if (errno == ENOMEM)
-		atf_tc_skip("mlockall() exceeded process resource limits");
-
-	resident = check_residency(addr, npgs);
-	if (resident < npgs)
-		atf_tc_fail("mlockall(MCL_FUTURE) succeeded, still only "
-		    "%zu pages of the newly mapped %zu pages are resident",
-		    resident, npgs);
+	ATF_REQUIRE(mlockall(MCL_CURRENT|MCL_FUTURE) == 0);
+	ATF_REQUIRE(check_residency(addr, npgs) == npgs);
 
 	addr2 = mmap(NULL, npgs * page, PROT_READ, MAP_ANON, -1, (off_t)0);
 	addr3 = mmap(NULL, npgs * page, PROT_NONE, MAP_ANON, -1, (off_t)0);
 
 	if (addr2 == MAP_FAILED || addr3 == MAP_FAILED)
-		atf_tc_skip("could not mmap more anonymous test pages with "
-		    "mlockall(MCL_FUTURE) in effect, system "
-		    "might be low on memory");
+		return;
 
 	ATF_REQUIRE(check_residency(addr2, npgs) == npgs);
 	ATF_REQUIRE(check_residency(addr3, npgs) == 0);

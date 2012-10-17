@@ -1,4 +1,4 @@
-/*	$NetBSD: make.h,v 1.89 2012/06/12 19:21:51 joerg Exp $	*/
+/*	$NetBSD: make.h,v 1.87 2011/09/16 15:38:04 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -93,33 +93,26 @@
 # include <sys/cdefs.h>
 #endif
 
+#if !defined(__GNUC_PREREQ__)
 #if defined(__GNUC__)
-#define	MAKE_GNUC_PREREQ(x, y)						\
+#define	__GNUC_PREREQ__(x, y)						\
 	((__GNUC__ == (x) && __GNUC_MINOR__ >= (y)) ||			\
 	 (__GNUC__ > (x)))
 #else /* defined(__GNUC__) */
-#define	MAKE_GNUC_PREREQx, y)	0
+#define	__GNUC_PREREQ__(x, y)	0
 #endif /* defined(__GNUC__) */
+#endif /* !defined(__GNUC_PREREQ__) */
 
-#if MAKE_GNUC_PREREQ(2, 7)
-#define	MAKE_ATTR_UNUSED	__attribute__((__unused__))
+#if !defined(__unused)
+#if __GNUC_PREREQ__(2, 7)
+#define __unused        __attribute__((__unused__))
 #else
-#define	MAKE_ATTR_UNUSED	/* delete */
+#define __unused        /* delete */
+#endif
 #endif
 
-#if MAKE_GNUC_PREREQ(2, 5)
-#define	MAKE_ATTR_DEAD		__attribute__((__noreturn__))
-#elif defined(__GNUC__)
-#define	MAKE_ATTR_DEAD		__volatile
-#else
-#define	MAKE_ATTR_DEAD		/* delete */
-#endif
-
-#if MAKE_GNUC_PREREQ(2, 7)
-#define MAKE_ATTR_PRINTFLIKE(fmtarg, firstvararg)	\
-	    __attribute__((__format__ (__printf__, fmtarg, firstvararg)))
-#else
-#define MAKE_ATTR_PRINTFLIKE(fmtarg, firstvararg)	/* delete */
+#if !defined(__dead)
+#define __dead
 #endif
 
 #include "sprite.h"
@@ -408,7 +401,6 @@ extern Lst	defIncPath;	/* The default include path. */
 extern char	curdir[];	/* Startup directory */
 extern char	*progname;	/* The program name */
 extern char	*makeDependfile; /* .depend */
-extern char	**savedEnv;	 /* if we replaced environ this will be non-NULL */
 
 /*
  * We cannot vfork() in a child of vfork().

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp $	*/
+/*	$NetBSD: ip_mroute.c,v 1.122 2011/12/19 11:59:57 drochner Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.122 2011/12/19 11:59:57 drochner Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -113,7 +113,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp 
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 
@@ -136,6 +135,11 @@ __KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.126 2012/09/24 03:05:53 msaitoh Exp 
 #include <netinet/pim_var.h>
 #endif
 #include <netinet/ip_encap.h>
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#endif
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -1572,7 +1576,7 @@ expire_upcalls(void *v)
 				struct bw_meter *x = rt->mfc_bw_meter;
 
 				rt->mfc_bw_meter = x->bm_mfc_next;
-				kmem_free(x, sizeof(*x));
+				free(x, M_BWMETER);
 			}
 
 			++mrtstat.mrts_cache_cleanups;
@@ -2512,7 +2516,7 @@ add_bw_upcall(struct bw_upcall *req)
     }
 
     /* Allocate the new bw_meter entry */
-    x = kmem_intr_alloc(sizeof(*x), KM_NOSLEEP);
+    x = (struct bw_meter *)malloc(sizeof(*x), M_BWMETER, M_NOWAIT);
     if (x == NULL) {
 	splx(s);
 	return ENOBUFS;
@@ -2548,7 +2552,7 @@ free_bw_list(struct bw_meter *list)
 
 	list = list->bm_mfc_next;
 	unschedule_bw_meter(x);
-	kmem_free(x, sizeof(*x));
+	free(x, M_BWMETER);
     }
 }
 
@@ -2607,7 +2611,7 @@ del_bw_upcall(struct bw_upcall *req)
 	    unschedule_bw_meter(x);
 	    splx(s);
 	    /* Free the bw_meter entry */
-	    kmem_free(x, sizeof(*x));
+	    free(x, M_BWMETER);
 	    return 0;
 	} else {
 	    splx(s);
@@ -3023,7 +3027,7 @@ pim_register_send(struct ip *ip, struct vif *vifp,
     struct mbuf *mb_copy, *mm;
 
     if (mrtdebug & DEBUG_PIM)
-        log(LOG_DEBUG, "pim_register_send: \n");
+        log(LOG_DEBUG, "pim_register_send: ");
 
     mb_copy = pim_register_prepare(ip, m);
     if (mb_copy == NULL)
@@ -3143,7 +3147,7 @@ pim_register_send_upcall(struct ip *ip, struct vif *vifp,
     if (socket_send(ip_mrouter, mb_first, &k_igmpsrc) < 0) {
 	if (mrtdebug & DEBUG_PIM)
 	    log(LOG_WARNING,
-		"mcast: pim_register_send_upcall: ip_mrouter socket queue full\n");
+		"mcast: pim_register_send_upcall: ip_mrouter socket queue full");
 	++mrtstat.mrts_upq_sockfull;
 	return ENOBUFS;
     }
@@ -3311,7 +3315,7 @@ pim_input(struct mbuf *m, ...)
     } else if (in_cksum(m, datalen)) {
 	pimstat.pims_rcv_badsum++;
 	if (mrtdebug & DEBUG_PIM)
-	    log(LOG_DEBUG, "pim_input: invalid checksum\n");
+	    log(LOG_DEBUG, "pim_input: invalid checksum");
 	m_freem(m);
 	return;
     }

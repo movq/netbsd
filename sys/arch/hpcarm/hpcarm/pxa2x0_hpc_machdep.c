@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_hpc_machdep.c,v 1.19 2012/09/22 00:33:41 matt Exp $	*/
+/*	$NetBSD: pxa2x0_hpc_machdep.c,v 1.13.8.1 2012/03/08 17:25:46 riz Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_hpc_machdep.c,v 1.19 2012/09/22 00:33:41 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_hpc_machdep.c,v 1.13.8.1 2012/03/08 17:25:46 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_dram_pages.h"
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_hpc_machdep.c,v 1.19 2012/09/22 00:33:41 matt
 #include <sys/msgbuf.h>
 #include <sys/exec.h>
 #include <sys/ksyms.h>
+#include <sys/boot_flag.h>
 #include <sys/conf.h>	/* XXX for consinit related hacks */
 #include <sys/device.h>
 #include <sys/bus.h>
@@ -79,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_hpc_machdep.c,v 1.19 2012/09/22 00:33:41 matt
 #include <arm/xscale/pxa2x0_gpio.h>
 #include <arm/cpuconf.h>
 #include <arm/undefined.h>
-#include <arm/arm32/machdep.h>
 
 #include <machine/bootconfig.h>
 #include <machine/bootinfo.h>
@@ -94,6 +94,12 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_hpc_machdep.c,v 1.19 2012/09/22 00:33:41 matt
 #include <dev/hpc/apm/apmvar.h>
 #include <dev/ic/comreg.h>
 
+#include <sys/mount.h>
+#include <nfs/rpcv2.h>
+#include <nfs/nfsproto.h>
+#include <nfs/nfs.h>
+#include <nfs/nfsmount.h>
+
 /* Kernel text starts 2MB in from the bottom of the kernel address space. */
 #define	KERNEL_TEXT_BASE	(KERNEL_BASE + 0x00200000)
 #ifndef	KERNEL_VM_BASE
@@ -106,15 +112,43 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_hpc_machdep.c,v 1.19 2012/09/22 00:33:41 matt
  */
 #define	KERNEL_VM_SIZE		0x0c000000
 
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependent as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+u_int cpu_reset_address = 0;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 extern BootConfig bootconfig;		/* Boot config storage */
+extern struct bootinfo *bootinfo, bootinfo_storage;
+extern char booted_kernel_storage[80];
+extern char *booted_kernel;
 
 extern paddr_t physical_start;
 extern paddr_t physical_freestart;
 extern paddr_t physical_freeend;
 extern paddr_t physical_end;
+extern int physmem;
+
+/* Physical and virtual addresses for some global pages */
+extern pv_addr_t irqstack;
+extern pv_addr_t undstack;
+extern pv_addr_t abtstack;
+extern pv_addr_t kernelstack;
+
+extern char *boot_args;
+extern char boot_file[16];
 
 extern vaddr_t msgbufphys;
 
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 extern int end;
 
 #ifdef PMAP_DEBUG
@@ -139,7 +173,7 @@ void prefetch_abort_handler(trapframe_t *);
 void undefinedinstruction_bounce(trapframe_t *);
 u_int cpu_get_control(void);
 
-u_int init_pxa2x0(int, char **, struct bootinfo *);
+u_int initarm(int, char **, struct bootinfo *);
 
 /* Machine dependent initialize function */
 extern void pxa2x0_machdep_init(void);
@@ -236,14 +270,17 @@ read_ttb(void)
 }
 
 /*
+ * Initial entry point on startup. This gets called before main() is
+ * entered.
  * It should be responsible for setting up everything that must be
  * in place when main is called.
  * This includes:
+ *   Taking a copy of the boot configuration structure.
  *   Initializing the physical console so characters can be printed.
  *   Setting up page tables for the kernel.
  */
 u_int
-init_pxa2x0(int argc, char **argv, struct bootinfo *bi)
+initarm(int argc, char **argv, struct bootinfo *bi)
 {
 #ifdef DIAGNOSTIC
 	extern vsize_t xscale_minidata_clean_size; /* used in KASSERT */
@@ -253,10 +290,67 @@ init_pxa2x0(int argc, char **argv, struct bootinfo *bi)
 	u_int l1pagetable;
 	vaddr_t freemempos;
 	vsize_t pt_size;
-	int loop;
+	int loop, i;
 #if NKSYMS || defined(DDB) || defined(MODULAR)
 	Elf_Shdr *sh;
 #endif
+
+	__sleep_func = NULL;
+	__sleep_ctx = NULL;
+
+	/* parse kernel args */
+	boothowto = 0;
+	boot_file[0] = '\0';
+	strncpy(booted_kernel_storage, argv[0], sizeof(booted_kernel_storage));
+	for (i = 1; i < argc; i++) {
+		char *cp = argv[i];
+
+		switch (*cp) {
+		case 'b':
+			/* boot device: -b=sd0 etc. */
+			cp = cp + 2;
+			if (strcmp(cp, MOUNT_NFS) == 0)
+				rootfstype = MOUNT_NFS;
+			else
+				strncpy(boot_file, cp, sizeof(boot_file));
+			break;
+		default:
+			BOOT_FLAG(*cp, boothowto);
+			break;
+		}
+	}
+
+	/* copy bootinfo into known kernel space */
+	bootinfo_storage = *bi;
+	bootinfo = &bootinfo_storage;
+
+#ifdef BOOTINFO_FB_WIDTH
+	bootinfo->fb_line_bytes = BOOTINFO_FB_LINE_BYTES;
+	bootinfo->fb_width = BOOTINFO_FB_WIDTH;
+	bootinfo->fb_height = BOOTINFO_FB_HEIGHT;
+	bootinfo->fb_type = BOOTINFO_FB_TYPE;
+#endif
+
+	if (bootinfo->magic == BOOTINFO_MAGIC) {
+		platid.dw.dw0 = bootinfo->platid_cpu;
+		platid.dw.dw1 = bootinfo->platid_machine;
+	}
+
+#ifndef RTC_OFFSET
+	/*
+	 * rtc_offset from bootinfo.timezone set by hpcboot.exe
+	 */
+	if (rtc_offset == 0 &&
+	    (bootinfo->timezone > (-12 * 60) &&
+	     bootinfo->timezone <= (12 * 60)))
+		rtc_offset = bootinfo->timezone;
+#endif
+
+	/*
+	 * Heads up ... Setup the CPU / MMU / TLB functions.
+	 */
+	set_cpufuncs();
+	IRQdisable;
 
 	pmap_devmap_bootstrap((vaddr_t)read_ttb(), pxa2x0_devmap);
 	pxa2x0_memctl_bootstrap(PXA2X0_MEMCTL_VBASE);
@@ -587,7 +681,7 @@ init_pxa2x0(int argc, char **argv, struct bootinfo *bi)
 	printf("switching to new L1 page table  @%#lx...\n", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

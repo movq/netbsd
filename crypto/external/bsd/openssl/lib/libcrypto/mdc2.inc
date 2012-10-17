@@ -1,4 +1,4 @@
-#	$NetBSD: mdc2.inc,v 1.3 2012/07/12 18:44:49 christos Exp $
+#	$NetBSD: mdc2.inc,v 1.1.8.1 2012/08/14 07:57:03 riz Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

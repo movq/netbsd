@@ -1,4 +1,4 @@
-/* $NetBSD: wakeonlan.c,v 1.1 2012/05/26 01:58:21 uebayasi Exp $ */
+/* $NetBSD: wakeonlan.c,v 1.1.2.2 2012/06/05 15:37:23 jdc Exp $ */
 
 /*
  * Copyright (C) 2006, 2007, 2008, 2009, 2010 Marc Balmer <marc@msys.ch>

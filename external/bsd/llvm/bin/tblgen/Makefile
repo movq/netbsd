@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2012/08/09 14:37:06 joerg Exp $
+#	$NetBSD: Makefile,v 1.10 2012/01/11 23:24:46 joerg Exp $
 
 PROG_CXX=	llvm-tblgen
 NOMAN=		yes
@@ -15,7 +15,6 @@ SRCS=	AsmMatcherEmitter.cpp \
 	CodeGenDAGPatterns.cpp \
 	CodeGenInstruction.cpp \
 	CodeGenRegisters.cpp \
-	CodeGenSchedule.cpp \
 	CodeGenTarget.cpp \
 	DAGISelEmitter.cpp \
 	DAGISelMatcher.cpp \
@@ -27,11 +26,14 @@ SRCS=	AsmMatcherEmitter.cpp \
 	EDEmitter.cpp \
 	FastISelEmitter.cpp \
 	FixedLenDecoderEmitter.cpp \
+	FixedLenDecoderEmitter.h \
+	InstrEnumEmitter.cpp \
 	InstrInfoEmitter.cpp \
 	IntrinsicEmitter.cpp \
 	PseudoLoweringEmitter.cpp \
 	RegisterInfoEmitter.cpp \
 	SetTheory.cpp \
+	StringMatcher.cpp \
 	SubtargetEmitter.cpp \
 	TGValueTypes.cpp \
 	TableGen.cpp \

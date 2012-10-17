@@ -1,4 +1,4 @@
-# $NetBSD: NULL,v 1.35 2012/08/17 20:11:38 abs Exp $
+# $NetBSD: NULL,v 1.33 2011/12/18 05:49:24 dholland Exp $
 #
 # NULL machine description file
 # 
@@ -7,7 +7,7 @@ include "arch/amigappc/conf/std.amigappc"
 
 #options 	INCLUDE_CONFIG_FILE     # embed config file in kernel binary
 
-#ident          "GENERIC-$Revision: 1.35 $"
+#ident          "GENERIC-$Revision: 1.33 $"
 
 maxusers	8
 
@@ -39,6 +39,7 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 #options 	SYSVSHM		# System V-like shared memory
 #options 	SYSVMSG		# System V-like messages
 #options 	SYSVSEM		# System V-like semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
@@ -218,7 +219,6 @@ fd*		at fdc0 unit ?		# floppy disks on the later
 #amidisplaycc0	at mainbus0		# wscons interface to custom chips
 #wsdisplay0	at amidisplaycc0 console ?
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	FONT_VT220L8x10
 #options	FONT_VT220ISO8x16
 #

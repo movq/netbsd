@@ -1,4 +1,4 @@
-/*	$NetBSD: eso.c,v 1.61 2012/08/12 18:39:32 gson Exp $	*/
+/*	$NetBSD: eso.c,v 1.59.4.2 2012/08/13 20:27:11 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.61 2012/08/12 18:39:32 gson Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.59.4.2 2012/08/13 20:27:11 riz Exp $");
 
 #include "mpu.h"
 

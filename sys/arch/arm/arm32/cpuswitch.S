@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuswitch.S,v 1.72 2012/09/05 00:11:20 matt Exp $	*/
+/*	$NetBSD: cpuswitch.S,v 1.63 2011/04/07 10:03:47 matt Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -89,7 +89,7 @@
 #include <machine/asm.h>
 #include <machine/cpu.h>
 
-	RCSID("$NetBSD: cpuswitch.S,v 1.72 2012/09/05 00:11:20 matt Exp $")
+	RCSID("$NetBSD: cpuswitch.S,v 1.63 2011/04/07 10:03:47 matt Exp $")
 
 /* LINTSTUB: include <sys/param.h> */
 	
@@ -140,9 +140,9 @@ ENTRY(cpu_switchto)
 	mov	r6, r1
 	mov	r4, r0
 
-#ifdef TPIDRPRW_IS_CURCPU
+#ifdef PROCESS_ID_CURCPU
 	GET_CURCPU(r7)
-#elif defined(TPIDRPRW_IS_CURLWP)
+#elif defined(PROCESS_ID_IS_CURLWP)
 	mcr	p15, 0, r0, c13, c0, 4		/* get old lwp (r4 maybe 0) */
 	ldr	r7, [r0, #(L_CPU)]		/* get cpu from old lwp */
 #elif !defined(MULTIPROCESSOR) 
@@ -165,14 +165,18 @@ ENTRY(cpu_switchto)
 	/* l->l_cpu initialized in fork1() for single-processor */
 #endif
 
-#if defined(TPIDRPRW_IS_CURLWP)
+#if defined(PROCESS_ID_IS_CURLWP)
 	mcr	p15, 0, r6, c13, c0, 4		/* set current lwp */
 #endif
+#if !defined(PROCESS_ID_IS_CURLWP) || defined(MULTIPROCESSOR)
 	/* We have a new curlwp now so make a note it */
 	str	r6, [r7, #(CI_CURLWP)]
+#endif
 
-	/* Get the new pcb */
-	ldr	r7, [r6, #(L_PCB)]
+	/* Hook in a new pcb */
+	ldr	r0, [r6, #(L_PCB)]
+	str	r0, [r7, #(CI_CURPCB)]
+	mov	r7, r0
 
 	/* At this point we can allow IRQ's again. */
 #ifndef __HAVE_UNNESTED_INTRS
@@ -231,6 +235,15 @@ ENTRY(cpu_switchto)
 	/* rem: r7 = new pcb */
 	/* rem: interrupts are enabled */
 
+#ifdef FPU_VFP
+	/*
+	 * Now's a good time to 'save' the VFP context.  Note that we
+	 * don't really force a save here, which can save time if we
+	 * end up restarting the same context.
+	 */
+	bl	_C_LABEL(vfp_savecontext)
+#endif
+
 	/* Restore saved context */
 
 .Ldo_switch:
@@ -277,6 +290,10 @@ ENTRY(cpu_switchto)
 	/* rem: r6 = new lwp */
 	/* rem: r7 = new pcb */
 
+#ifdef FPU_VFP
+	mov	r0, r6
+	bl	_C_LABEL(vfp_loadcontext)
+#endif
 #ifdef ARMFPE
 	add	r0, r7, #(PCB_SIZE) & 0x00ff
 	add	r0, r0, #(PCB_SIZE) & 0xff00 
@@ -293,7 +310,7 @@ ENTRY(cpu_switchto)
 	 */
 
 	ldr	r2, [r5, #(P_RASLIST)]
-	ldr	r1, [r6, #(L_MD_TF)]	/* r1 = trapframe (used below) */
+	ldr	r1, [r7, #(PCB_TF)]	/* r1 = trapframe (used below) */
 	teq	r2, #0			/* p->p_nras == 0? */
 	bne	.Lswitch_do_ras		/* no, check for one */
 
@@ -302,10 +319,6 @@ ENTRY(cpu_switchto)
 	mov	r0, r4
 	/* lwp_trampoline expects new lwp as it's second argument */
 	mov	r1, r6
-
-#ifdef _ARM_ARCH_7
-	clrex				/* cause any subsequent STREX* to fail */
-#endif
 
 	/*
 	 * Pull the registers that got pushed when cpu_switchto() was called,
@@ -318,43 +331,32 @@ ENTRY(cpu_switchto)
 	mov	r0, r5			/* first ras_lookup() arg */
 	bl	_C_LABEL(ras_lookup)
 	cmn	r0, #1			/* -1 means "not in a RAS" */
-	ldrne	r1, [r6, #(L_MD_TF)]
+	ldrne	r1, [r7, #(PCB_TF)]
 	strne	r0, [r1, #(TF_PC)]
 	b	.Lswitch_return
 
 ENTRY(lwp_trampoline)
 	/*
 	 * cpu_switchto gives us:
-	 *	arg0(r0) = old lwp
-	 *	arg1(r1) = new lwp
-	 * setup by cpu_lwp_fork:
-	 *	r4 = func to call
-	 *	r5 = arg to func
-	 *	r6 = <unused>
-	 *	r7 = spsr mode
+	 *
+	 * arg0(r0) = old lwp
+	 * arg1(r1) = new lwp
 	 */
 	bl	_C_LABEL(lwp_startup)
 
-	mov	fp, #0			/* top stack frame */
 	mov	r0, r5
 	mov	r1, sp
-#ifdef _ARM_ARCH_5
-	blx	r4
-#else
 	mov	lr, pc
 	mov	pc, r4
-#endif
 
-	GET_CPSR(r0)
-	CPSID_I(r0, r0)			/* Kill irq's */
+	/* Kill irq's */
+        mrs     r0, cpsr
+        orr     r0, r0, #(IF32_bits)
+        msr     cpsr_c, r0
 
-	GET_CURCPU(r4)			/* for DO_AST */
-	DO_AST_AND_RESTORE_ALIGNMENT_FAULTS
 	PULLFRAME
 
 	movs	pc, lr			/* Exit */
-
-AST_ALIGNMENT_FAULT_LOCALS
 
 #ifdef __HAVE_FAST_SOFTINTS
 /*
@@ -366,7 +368,7 @@ ENTRY_NP(softint_switch)
 	stmfd	sp!, {r4, r6, r7, lr}
 
 	ldr	r7, [r0, #L_CPU]		/* get curcpu */
-#if defined(TPIDRPRW_IS_CURLWP)
+#if defined(PROCESS_ID_IS_CURLWP)
 	mrc	p15, 0, r4, c13, c0, 4		/* get old lwp */
 #else
 	ldr	r4, [r7, #(CI_CURLWP)]		/* get old lwp */
@@ -404,17 +406,22 @@ ENTRY_NP(softint_switch)
 	/*
 	 * We're switching to a bound LWP so its l_cpu is already correct.
 	 */
-#if defined(TPIDRPRW_IS_CURLWP)
+#if defined(PROCESS_ID_IS_CURLWP)
 	mcr	p15, 0, r5, c13, c0, 4		/* save new lwp */
 #endif
+#if !defined(PROCESS_ID_IS_CURLWP) || defined(MULTIPROCESSOR)
 	str	r5, [r7, #(CI_CURLWP)]		/* save new lwp */
+#endif
+
+	/* Hook in a new pcb */
+	str	r2, [r7, #(CI_CURPCB)]
 
 	/*
 	 * Normally, we'd get {r8-r13} but since this is a softint lwp
 	 * it's existing state doesn't matter.  We start the stack just
 	 * below the trapframe.
 	 */
-	ldr	sp, [r5, #(L_MD_TF)]	/* get new lwp's stack ptr */
+	ldr	sp, [r2, #(PCB_TF)]	/* get new lwp's stack ptr */
 
 	/* At this point we can allow IRQ's again. */
 #ifndef __HAVE_UNNESTED_INTRS
@@ -437,10 +444,13 @@ ENTRY_NP(softint_switch)
 	 * never executed.  But we do need the SP from the formerly pinned lwp.
 	 */
 
-#if defined(TPIDRPRW_IS_CURLWP)
+#if defined(PROCESS_ID_IS_CURLWP)
 	mcr	p15, 0, r4, c13, c0, 4		/* restore pinned lwp */
 #endif
+#if !defined(PROCESS_ID_IS_CURLWP) || defined(MULTIPROCESSOR)
 	str	r4, [r7, #(CI_CURLWP)]		/* restore pinned lwp */
+#endif
+	str	r2, [r7, #(CI_CURPCB)]		/* restore the curpcb */
 	ldr	sp, [r2, #(PCB_SP)]	/* now running on the old stack. */
 
 	/* At this point we can allow IRQ's again. */

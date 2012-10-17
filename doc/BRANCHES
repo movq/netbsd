@@ -1,4 +1,4 @@
-#	$NetBSD: BRANCHES,v 1.325 2012/05/23 13:54:37 yamt Exp $
+#	$NetBSD: BRANCHES,v 1.320 2012/01/25 00:43:03 yamt Exp $
 #
 # This file contains a list of branches that exist in the NetBSD CVS
 # tree and their current state.
@@ -225,17 +225,6 @@ Maintainer:	5.0 Release Engineering <releng-5@NetBSD.org>
 Scope:		Entire tree. (src + xsrc)
 Notes:		Commits restricted to Release Engineering.
 
-Branch:		netbsd-6
-Description:	The NetBSD 6 release branch
-Status:		Active
-Start Date:	15 Feb 2012
-End Date:
-Base Tag:	netbsd-6-base
-Maintainer:	6.0 Release Engineering <releng-6@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:
-		Commits restricted to Release Engineering.
-
 ########################################################################
 # Individual developers' branches (Active/Dormant):
 ########################################################################
@@ -283,19 +272,6 @@ Base Tag:	ad-audiomp2-base
 Maintainer:	Andrew Doran <ad@NetBSD.org>
 Scope:		kernel
 Notes:		Ressurect ad-audiomp, make the audio drivers MP safe.
-
-Branch:		agc-netpgp-standalone
-Description:	Remove dependency on openssl libraries in netpgp
-Status:		Active
-Start Date:	5 May 2012
-End Date:
-Base Tag:	agc-netpgp-standalone-base
-Maintainer:	Alistair Crooks <agc@NetBSD.org>
-Scope:		src/crypto/external/bsd/netpgp
-Notes:		This branch is used to develop the version of netpgp
-		which has its own version of bignum, ciphers, and signatures
-		libraries, so that it is able to operate without openssl
-		being in place.
 
 Branch:		bjh21-hydra
 Description:	Simtec Hydra support and ARM SMP in general
@@ -617,7 +593,7 @@ Description:	page cache related changes
 Status:		Active
 Start Date:	Wed Nov 2 2011
 End Date:	
-Base Tag:	yamt-pagecache-base5
+Base Tag:	yamt-pagecache-base3
 Maintainer:	YAMAMOTO Takashi <yamt@NetBSD.org>
 Scope:		src
 Notes:		- maintain object pages in radix tree rather than rb tree.
@@ -629,15 +605,13 @@ Notes:		- maintain object pages in radix tree rather than rb tree.
 		  dirtiness more precisely in uvm layer.
 		- fix nfs commit range tracking.
 		- fix nfs write clustering.  XXX hack
-		- fix A->O loaning
-		- write radixtree(9) man page
 
 		TODO:
 			- benchmark
 			- test
 			- make the write clustering fix less kludgy
+			- revert PG_HOLE stuff?
 			- fix or disable the ad-hoc per-cpu statistic
-			- disable A->O loan as its benefit is unclear at best
 
 		tested: i386, amd64, nfs, ffs
 

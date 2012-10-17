@@ -1,4 +1,4 @@
-/*	$NetBSD: regcomp.c,v 1.33 2012/03/13 21:13:43 christos Exp $	*/
+/*	$NetBSD: regcomp.c,v 1.32 2011/11/08 19:25:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)regcomp.c	8.5 (Berkeley) 3/20/94";
 #else
-__RCSID("$NetBSD: regcomp.c,v 1.33 2012/03/13 21:13:43 christos Exp $");
+__RCSID("$NetBSD: regcomp.c,v 1.32 2011/11/08 19:25:45 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -112,7 +112,7 @@ struct parse {
 	sop *strip;		/* malloced strip */
 	sopno ssize;		/* malloced strip size (allocated) */
 	sopno slen;		/* malloced strip length (used) */
-	size_t ncsalloc;	/* number of csets allocated */
+	int ncsalloc;		/* number of csets allocated */
 	struct re_guts *g;
 #	define	NPAREN	10	/* we need to remember () 1-9 for back refs */
 	sopno pbegin[NPAREN];	/* -> ( ([0] unused) */
@@ -797,12 +797,12 @@ p_bracket(
 		return;
 
 	if (p->g->cflags&REG_ICASE) {
-		ssize_t i;
+		int i;
 		int ci;
 
 		for (i = p->g->csetsize - 1; i >= 0; i--)
 			if (CHIN(cs, i) && isalpha(i)) {
-				ci = othercase((int)i);
+				ci = othercase(i);
 				if (ci != i)
 					CHadd(cs, ci);
 			}
@@ -810,13 +810,13 @@ p_bracket(
 			mccase(p, cs);
 	}
 	if (invert) {
-		ssize_t i;
+		int i;
 
 		for (i = p->g->csetsize - 1; i >= 0; i--)
 			if (CHIN(cs, i))
-				CHsub(cs, (int)i);
+				CHsub(cs, i);
 			else
-				CHadd(cs, (int)i);
+				CHadd(cs, i);
 		if (p->g->cflags&REG_NEWLINE)
 			CHsub(cs, '\n');
 		if (cs->multis != NULL)
@@ -1084,11 +1084,8 @@ ordinary(
 		bothcases(p, (unsigned char) ch);
 	else {
 		EMIT(OCHAR, (sopno)(unsigned char)ch);
-		if (cap[ch] == 0) {
-			_DIAGASSERT(__type_fit(unsigned char,
-			    p->g->ncategories + 1));
-			cap[ch] = (unsigned char)p->g->ncategories++;
-		}
+		if (cap[ch] == 0)
+			cap[ch] = p->g->ncategories++;
 	}
 }
 
@@ -1230,12 +1227,12 @@ static cset *
 allocset(
     struct parse *p)
 {
-	size_t no;
+	int no;
 	size_t nc;
 	size_t nbytes;
 	cset *cs;
 	size_t css;
-	size_t i;
+	int i;
 
 	_DIAGASSERT(p != NULL);
 
@@ -1274,7 +1271,7 @@ oomem:
 
 	cs = &p->g->sets[no];
 	cs->ptr = p->g->setbits + css*((no)/CHAR_BIT);
-	cs->mask = 1 << (unsigned int)((no) % CHAR_BIT);
+	cs->mask = 1 << ((no) % CHAR_BIT);
 	cs->hash = 0;
 	cs->smultis = 0;
 	cs->multis = NULL;
@@ -1302,7 +1299,7 @@ freeset(
 	css = (size_t)p->g->csetsize;
 
 	for (i = 0; i < css; i++)
-		CHsub(cs, (int)i);
+		CHsub(cs, i);
 	if (cs == top-1)	/* recover only the easy case */
 		p->g->ncsets--;
 }
@@ -1558,8 +1555,8 @@ isinsets(
     int c)
 {
 	uch *col;
-	size_t i;
-	size_t ncols;
+	int i;
+	int ncols;
 	unsigned uc = (unsigned char)c;
 
 	_DIAGASSERT(g != NULL);
@@ -1586,8 +1583,8 @@ samesets(
     int c2)
 {
 	uch *col;
-	size_t i;
-	size_t ncols;
+	int i;
+	int ncols;
 	unsigned uc1 = (unsigned char)c1;
 	unsigned uc2 = (unsigned char)c2;
 
@@ -1626,8 +1623,6 @@ categorize(
 
 	for (c = CHAR_MIN; c <= CHAR_MAX; c++)
 		if (cats[c] == 0 && isinsets(g, c)) {
-			_DIAGASSERT(__type_fit(unsigned char,
-			    g->ncategories + 1));
 			cat = g->ncategories++;
 			cats[c] = cat;
 			for (c2 = c+1; c2 <= CHAR_MAX; c2++)
@@ -1678,6 +1673,7 @@ doemit(
     sop op,
     sopno opnd)
 {
+
 	_DIAGASSERT(p != NULL);
 
 	/* avoid making error situations worse */
@@ -1693,7 +1689,7 @@ doemit(
 			return;
 
 	/* finally, it's all reduced to the easy case */
-	p->strip[p->slen++] = (sop)SOP(op, opnd);
+	p->strip[p->slen++] = SOP(op, opnd);
 }
 
 /*
@@ -1755,7 +1751,7 @@ dofwd(
 		return;
 
 	assert(value < 1<<OPSHIFT);
-	p->strip[pos] = (sop)(OP(p->strip[pos]) | value);
+	p->strip[pos] = OP(p->strip[pos]) | value;
 }
 
 /*

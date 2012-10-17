@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.190 2012/09/03 05:01:44 cherry Exp $	*/
+/*	$NetBSD: machdep.c,v 1.175.2.7 2012/09/03 19:22:45 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2006, 2007, 2008, 2011
@@ -111,7 +111,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.190 2012/09/03 05:01:44 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.175.2.7 2012/09/03 19:22:45 riz Exp $");
 
 /* #define XENDEBUG_LOW  */
 
@@ -147,6 +147,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.190 2012/09/03 05:01:44 cherry Exp $")
 #include <sys/ucontext.h>
 #include <machine/kcore.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
 #include <sys/device.h>
@@ -217,6 +219,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.190 2012/09/03 05:01:44 cherry Exp $")
 char machine[] = "amd64";		/* CPU "architecture" */
 char machine_arch[] = "x86_64";		/* machine == machine_arch */
 
+/* Our exported CPU info; we have only one right now. */  
+struct cpu_info cpu_info_primary;
+struct cpu_info *cpu_info_list;
+
 extern struct bi_devmatch *x86_alldisks;
 extern int x86_ndisks;
 
@@ -232,6 +238,7 @@ int	cpu_class = CPUCLASS_686;
 struct mtrr_funcs *mtrr_funcs;
 #endif
 
+int	physmem;
 uint64_t	dumpmem_low;
 uint64_t	dumpmem_high;
 int	cpu_class;
@@ -331,8 +338,6 @@ int dump_seg_count_range(paddr_t, paddr_t);
 int dumpsys_seg(paddr_t, paddr_t);
 
 void	init_x86_64(paddr_t);
-
-static int valid_user_selector(struct lwp *, uint64_t);
 
 /*
  * Machine-dependent startup code
@@ -627,7 +632,7 @@ buildcontext(struct lwp *l, void *catcher, void *f)
 	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
 
 	/* Ensure FP state is reset, if FP is used. */
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 }
 
 void
@@ -674,7 +679,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	/*
 	 * Don't bother copying out FP state if there is none.
 	 */
-	if (l->l_md.md_flags & MDL_USEDFPU)
+	if (l->l_md.md_flags & MDP_USEDFPU)
 		tocopy = sizeof (struct sigframe_siginfo);
 	else
 		tocopy = sizeof (struct sigframe_siginfo) -
@@ -715,7 +720,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 
 	if ((vaddr_t)catcher >= VM_MAXUSER_ADDRESS) {
-		/*
+		/* 
 		 * process has given an invalid address for the
 		 * handler. Stop it, but do not do it before so
 		 * we can return the right info to userland (or in core dump)
@@ -723,6 +728,39 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 		sigexit(l, SIGILL);
 		/* NOTREACHED */
 	}
+}
+
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+
+	tf = l->l_md.md_regs;
+
+#if 0
+	printf("proc %d: upcall to lwp %d, type %d ev %d int %d sas %p to %p\n",
+	    (int)l->l_proc->p_pid, (int)l->l_lid, type, nevents, ninterrupted,
+	    sas, (void *)upcall);
+#endif
+
+	tf->tf_rdi = type;
+	tf->tf_rsi = (u_int64_t)sas;
+	tf->tf_rdx = nevents;
+	tf->tf_rcx = ninterrupted;
+	tf->tf_r8 = (u_int64_t)ap;
+
+	tf->tf_rip = (u_int64_t)upcall;
+	tf->tf_rsp = ((unsigned long)sp & ~15) - 8;
+	tf->tf_rbp = 0; /* indicate call-frame-top to debuggers */
+	tf->tf_gs = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_fs = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_es = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
+	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
+	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC);
+
+	l->l_md.md_flags |= MDP_IRET;
 }
 
 struct pcb dumppcb;
@@ -1241,18 +1279,17 @@ dodumpsys(void)
 	 */
 	if (dumpsize == 0)
 		cpu_dumpconf();
-
-	printf("\ndumping to dev %llu,%llu (offset=%ld, size=%d):",
-	    (unsigned long long)major(dumpdev),
-	    (unsigned long long)minor(dumpdev), dumplo, dumpsize);
-
-	if (dumplo <= 0 || dumpsize <= 0) {
-		printf(" not possible\n");
+	if (dumplo <= 0 || dumpsize == 0) {
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
+	printf("\ndumping to dev %llu,%llu offset %ld\n",
+	    (unsigned long long)major(dumpdev),
+	    (unsigned long long)minor(dumpdev), dumplo);
 
 	psize = bdev_size(dumpdev);
-	printf("\ndump ");
+	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
 		return;
@@ -1359,11 +1396,7 @@ cpu_dumpconf(void)
 	dumpblks = cpu_dumpsize();
 	if (dumpblks < 0)
 		goto bad;
-
-	/* dumpsize is in page units, and doesn't include headers. */
-	dumpsize = cpu_dump_mempagecnt();
-
-	dumpblks += ctod(dumpsize);
+	dumpblks += ctod(cpu_dump_mempagecnt());
 
 	/* If dump won't fit (incl. room for possible label), punt. */
 	if (dumpblks > (nblks - ctod(1))) {
@@ -1379,6 +1412,8 @@ cpu_dumpconf(void)
 		dumplo = nblks - dumpblks;
 	}
 
+	/* dumpsize is in page units, and doesn't include headers. */
+	dumpsize = cpu_dump_mempagecnt();
 
 	/* Now that we've decided this will work, init ancillary stuff. */
 	dump_misc_init();
@@ -1406,7 +1441,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	pmap_ldt_cleanup(l);
 #endif
 
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 	pcb->pcb_flags = 0;
 	pcb->pcb_savefpu.fp_fxsave.fx_fcw = __NetBSD_NPXCW__;
 	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr = __INITIAL_MXCSR__;
@@ -1999,7 +2034,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	mcp->_mc_tlsbase = (uintptr_t)l->l_private;;
 	*flags |= _UC_TLSBASE;
 
-	if ((l->l_md.md_flags & MDL_USEDFPU) != 0) {
+	if ((l->l_md.md_flags & MDP_USEDFPU) != 0) {
 		struct pcb *pcb = lwp_getpcb(l);
 
 		if (pcb->pcb_fpcpu) {
@@ -2054,7 +2089,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_err = err;
 		tf->tf_trapno = trapno;
 
-		l->l_md.md_flags |= MDL_IRET;
+		l->l_md.md_flags |= MDP_IRET;
 	}
 
 	if (pcb->pcb_fpcpu != NULL)
@@ -2063,7 +2098,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 	if ((flags & _UC_FPU) != 0) {
 		memcpy(&pcb->pcb_savefpu.fp_fxsave, mcp->__fpregs,
 		    sizeof (mcp->__fpregs));
-		l->l_md.md_flags |= MDL_USEDFPU;
+		l->l_md.md_flags |= MDP_USEDFPU;
 	}
 
 	if ((flags & _UC_TLSBASE) != 0)
@@ -2095,28 +2130,28 @@ cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
 		return EINVAL;
 
 	if (__predict_false(pmap->pm_ldt != NULL)) {
-		error = valid_user_selector(l, gr[_REG_ES]);
+		error = valid_user_selector(l, gr[_REG_ES], NULL, 0);
 		if (error != 0)
 			return error;
 
-		error = valid_user_selector(l, gr[_REG_FS]);
+		error = valid_user_selector(l, gr[_REG_FS], NULL, 0);
 		if (error != 0)
 			return error;
 
-		error = valid_user_selector(l, gr[_REG_GS]);
+		error = valid_user_selector(l, gr[_REG_GS], NULL, 0);
 		if (error != 0)
 			return error;
 
 		if ((gr[_REG_DS] & 0xffff) == 0)
 			return EINVAL;
-		error = valid_user_selector(l, gr[_REG_DS]);
+		error = valid_user_selector(l, gr[_REG_DS], NULL, 0);
 		if (error != 0)
 			return error;
 
 #ifndef XEN
 		if ((gr[_REG_SS] & 0xffff) == 0)
 			return EINVAL;
-		error = valid_user_selector(l, gr[_REG_SS]);
+		error = valid_user_selector(l, gr[_REG_SS], NULL, 0);
 		if (error != 0)
 			return error;
 #endif
@@ -2171,8 +2206,9 @@ cpu_initclocks(void)
 	(*initclock_func)();
 }
 
-static int
-valid_user_selector(struct lwp *l, uint64_t seg)
+int
+memseg_baseaddr(struct lwp *l, uint64_t seg, char *ldtp, int llen,
+		uint64_t *addr)
 {
 	int off, len;
 	char *dt;
@@ -2183,12 +2219,18 @@ valid_user_selector(struct lwp *l, uint64_t seg)
 
 	seg &= 0xffff;
 
-	if (seg == 0)
+	if (seg == 0) {
+		if (addr != NULL)
+			*addr = 0;
 		return 0;
+	}
 
 	off = (seg & 0xfff8);
 	if (seg & SEL_LDT) {
-		if (pmap->pm_ldt != NULL) {
+		if (ldtp != NULL) {
+			dt = ldtp;
+			len = llen;
+		} else if (pmap->pm_ldt != NULL) {
 			len = pmap->pm_ldt_len; /* XXX broken */
 			dt = (char *)pmap->pm_ldt;
 		} else {
@@ -2201,7 +2243,6 @@ valid_user_selector(struct lwp *l, uint64_t seg)
 	} else {
 		if (seg != GUDATA_SEL || seg != GUDATA32_SEL)
 			return EINVAL;
-		__builtin_unreachable();
 	}
 
 	sdp = (struct mem_segment_descriptor *)(dt + off);
@@ -2215,7 +2256,18 @@ valid_user_selector(struct lwp *l, uint64_t seg)
 	if (base >= VM_MAXUSER_ADDRESS)
 		return EINVAL;
 
+	if (addr == NULL)
+		return 0;
+
+	*addr = base;
+
 	return 0;
+}
+
+int
+valid_user_selector(struct lwp *l, uint64_t seg, char *ldtp, int len)
+{
+	return memseg_baseaddr(l, seg, ldtp, len, NULL);
 }
 
 int

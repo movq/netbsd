@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.400 2012/07/31 15:50:34 bouyer Exp $ */
+/*	$NetBSD: wd.c,v 1.392.2.1 2012/07/03 21:13:25 jdc Exp $ */
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.400 2012/07/31 15:50:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.392.2.1 2012/07/03 21:13:25 jdc Exp $");
 
 #include "opt_ata.h"
 
@@ -283,8 +283,7 @@ wdattach(device_t parent, device_t self, void *aux)
 	wd->drvp = adev->adev_drv_data;
 
 	wd->drvp->drv_done = wddone;
-	wd->drvp->drv_softc = wd->sc_dev; /* done in atabusconfig_thread()
-					     but too late */
+	wd->drvp->drv_softc = wd->sc_dev;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
@@ -292,7 +291,7 @@ wdattach(device_t parent, device_t self, void *aux)
 	/* read our drive info */
 	if (wd_get_params(wd, AT_WAIT, &wd->sc_params) != 0) {
 		aprint_error_dev(self, "IDENTIFY failed\n");
-		goto out;
+		return;
 	}
 
 	for (blank = 0, p = wd->sc_params.atap_model, q = tbuf, i = 0;
@@ -381,7 +380,6 @@ wdattach(device_t parent, device_t self, void *aux)
 	ATADEBUG_PRINT(("%s: atap_dmatiming_mimi=%d, atap_dmatiming_recom=%d\n",
 	    device_xname(self), wd->sc_params.atap_dmatiming_mimi,
 	    wd->sc_params.atap_dmatiming_recom), DEBUG_PROBE);
-out:
 	/*
 	 * Initialize and attach the disk structure.
 	 */
@@ -463,8 +461,7 @@ wddetach(device_t self, int flags)
 
 	callout_destroy(&sc->sc_restart_ch);
 
-	sc->drvp->drive_type = ATA_DRIVET_NONE; /* no drive any more here */
-	sc->drvp->drive_flags = 0;
+	sc->drvp->drive_flags = 0; /* no drive any more here */
 
 	return (0);
 }
@@ -775,7 +772,7 @@ wddone(void *v)
 		errmsg = "error";
 		do_perror = 1;
 retry:		/* Just reset and retry. Can we do more ? */
-		(*wd->atabus->ata_reset_drive)(wd->drvp, AT_RST_NOCMD, NULL);
+		(*wd->atabus->ata_reset_drive)(wd->drvp, AT_RST_NOCMD);
 retry2:
 		diskerr(bp, "wd", errmsg, LOG_PRINTF,
 		    wd->sc_wdc_bio.blkdone, wd->sc_dk.dk_label);
@@ -899,9 +896,6 @@ wdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	if (! device_is_active(wd->sc_dev))
 		return (ENODEV);
 
-	if (wd->sc_capacity == 0)
-		return (ENODEV);
-
 	part = WDPART(dev);
 
 	mutex_enter(&wd->sc_dk.dk_openlock);
@@ -934,15 +928,11 @@ wdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 		}
 	} else {
 		if ((wd->sc_flags & WDF_LOADED) == 0) {
+			wd->sc_flags |= WDF_LOADED;
 
 			/* Load the physical device parameters. */
-			if (wd_get_params(wd, AT_WAIT, &wd->sc_params) != 0) {
-				aprint_error_dev(wd->sc_dev,
-				"IDENTIFY failed\n");
-				error = EIO;
-				goto bad2;
-			}
-			wd->sc_flags |= WDF_LOADED;
+			wd_get_params(wd, AT_WAIT, &wd->sc_params);
+
 			/* Load the partition info if not already loaded. */
 			wdgetdisklabel(wd);
 		}
@@ -1087,7 +1077,7 @@ wdgetdisklabel(struct wd_softc *wd)
 
 	if (wd->drvp->state > RESET) {
 		s = splbio();
-		wd->drvp->drive_flags |= ATA_DRIVE_RESET;
+		wd->drvp->drive_flags |= DRIVE_RESET;
 		splx(s);
 	}
 	errstring = readdisklabel(MAKEWDDEV(0, device_unit(wd->sc_dev),
@@ -1102,7 +1092,7 @@ wdgetdisklabel(struct wd_softc *wd)
 		 */
 		if (wd->drvp->state > RESET) {
 			s = splbio();
-			wd->drvp->drive_flags |= ATA_DRIVE_RESET;
+			wd->drvp->drive_flags |= DRIVE_RESET;
 			splx(s);
 		}
 		errstring = readdisklabel(MAKEWDDEV(0, device_unit(wd->sc_dev),
@@ -1115,7 +1105,7 @@ wdgetdisklabel(struct wd_softc *wd)
 
 	if (wd->drvp->state > RESET) {
 		s = splbio();
-		wd->drvp->drive_flags |= ATA_DRIVE_RESET;
+		wd->drvp->drive_flags |= DRIVE_RESET;
 		splx(s);
 	}
 #ifdef HAS_BAD144_HANDLING
@@ -1303,7 +1293,7 @@ wdioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 		if (error == 0) {
 			if (wd->drvp->state > RESET) {
 				s = splbio();
-				wd->drvp->drive_flags |= ATA_DRIVE_RESET;
+				wd->drvp->drive_flags |= DRIVE_RESET;
 				splx(s);
 			}
 			if (xfer == DIOCWDINFO
@@ -1617,7 +1607,7 @@ wddump(dev_t dev, daddr_t blkno, void *va, size_t size)
 	if (wddumprecalibrated == 0) {
 		wddumprecalibrated = 1;
 		(*wd->atabus->ata_reset_drive)(wd->drvp,
-					       AT_POLL | AT_RST_EMERG, NULL);
+					       AT_POLL | AT_RST_EMERG);
 		wd->drvp->state = RESET;
 	}
 
@@ -1772,8 +1762,6 @@ wd_get_params(struct wd_softc *wd, u_int8_t flags, struct ataparams *params)
 	case CMD_AGAIN:
 		return 1;
 	case CMD_ERR:
-		if (wd->drvp->drive_type != ATA_DRIVET_OLD)
-			return 1;
 		/*
 		 * We `know' there's a drive here; just assume it's old.
 		 * This geometry is only used to read the MBR and print a
@@ -1906,15 +1894,14 @@ wd_flushcache(struct wd_softc *wd, int flags)
 		return ENODEV;
 	memset(&ata_c, 0, sizeof(struct ata_command));
 	if ((wd->sc_params.atap_cmd2_en & ATA_CMD2_LBA48) != 0 &&
-	    (wd->sc_params.atap_cmd2_en & ATA_CMD2_FCE) != 0) {
+	    (wd->sc_params.atap_cmd2_en & ATA_CMD2_FCE) != 0)
 		ata_c.r_command = WDCC_FLUSHCACHE_EXT;
-		flags |= AT_LBA48;
-	} else
+	else
 		ata_c.r_command = WDCC_FLUSHCACHE;
 	ata_c.r_st_bmask = WDCS_DRDY;
 	ata_c.r_st_pmask = WDCS_DRDY;
-	ata_c.flags = flags | AT_READREG;
-	ata_c.timeout = 300000; /* 5m timeout */
+	ata_c.flags = flags;
+	ata_c.timeout = 30000; /* 30s timeout */
 	if (wd->atabus->ata_exec_command(wd->drvp, &ata_c) != ATACMD_COMPLETE) {
 		aprint_error_dev(wd->sc_dev,
 		    "flush cache command didn't complete\n");

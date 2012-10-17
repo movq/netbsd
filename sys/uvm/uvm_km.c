@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_km.c,v 1.135 2012/09/07 06:45:04 para Exp $	*/
+/*	$NetBSD: uvm_km.c,v 1.120.2.3 2012/09/07 22:17:34 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -83,14 +83,10 @@
  * up the locking and protection of the kernel address space into smaller
  * chunks.
  *
- * the vm system has several standard kernel submaps/arenas, including:
- *   kmem_arena => used for kmem/pool (memoryallocators(9))
+ * the vm system has several standard kernel submaps, including:
  *   pager_map => used to map "buf" structures into kernel space
  *   exec_map => used during exec to handle exec args
  *   etc...
- *
- * The kmem_arena is a "special submap", as it lives in a fixed map entry
- * within the kernel_map and is controlled by vmem(9).
  *
  * the kernel allocates its private memory out of special uvm_objects whose
  * reference count is set to UVM_OBJ_KERN (thus indicating that the objects
@@ -121,38 +117,10 @@
  * freed right away.   this is done with the uvm_km_pgremove() function.
  * this has to be done because there is no backing store for kernel pages
  * and no need to save them after they are no longer referenced.
- *
- * Generic arenas:
- *
- * kmem_arena:
- *	Main arena controlling the kernel KVA used by other arenas.
- *
- * kmem_va_arena:
- *	Implements quantum caching in order to speedup allocations and
- *	reduce fragmentation.  The pool(9), unless created with a custom
- *	meta-data allocator, and kmem(9) subsystems use this arena.
- *
- * Arenas for meta-data allocations are used by vmem(9) and pool(9).
- * These arenas cannot use quantum cache.  However, kmem_va_meta_arena
- * compensates this by importing larger chunks from kmem_arena.
- *
- * kmem_va_meta_arena:
- *	Space for meta-data.
- *
- * kmem_meta_arena:
- *	Imports from kmem_va_meta_arena.  Allocations from this arena are
- *	backed with the pages.
- *
- * Arena stacking:
- *
- *	kmem_arena
- *		kmem_va_arena
- *		kmem_va_meta_arena
- *			kmem_meta_arena
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_km.c,v 1.135 2012/09/07 06:45:04 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_km.c,v 1.120.2.3 2012/09/07 22:17:34 riz Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -512,10 +480,7 @@ uvm_km_pgremove_intrsafe(struct vm_map *map, vaddr_t start, vaddr_t end)
 	UVMHIST_FUNC(__func__); UVMHIST_CALLED(maphist);
 
 	KASSERT(VM_MAP_IS_KERNEL(map));
-	KASSERTMSG(vm_map_min(map) <= start,
-	    "vm_map_min(map) [%#"PRIxVADDR"] <= start [%#"PRIxVADDR"]"
-	    " (size=%#"PRIxVSIZE")",
-	    vm_map_min(map), start, end - start);
+	KASSERT(vm_map_min(map) <= start);
 	KASSERT(start < end);
 	KASSERT(end <= vm_map_max(map));
 
@@ -532,7 +497,7 @@ uvm_km_pgremove_intrsafe(struct vm_map *map, vaddr_t start, vaddr_t end)
 		}
 		npgrm = i;
 		/* now remove the mappings */
-		pmap_kremove(batch_vastart, va - batch_vastart);
+		pmap_kremove(batch_vastart, PAGE_SIZE * npgrm);
 		/* and free the pages */
 		for (i = 0; i < npgrm; i++) {
 			pg = PHYS_TO_VM_PAGE(pa[i]);
@@ -564,13 +529,15 @@ uvm_km_check_empty(struct vm_map *map, vaddr_t start, vaddr_t end)
 			panic("uvm_km_check_empty: va %p has pa 0x%llx",
 			    (void *)va, (long long)pa);
 		}
-		mutex_enter(uvm_kernel_object->vmobjlock);
-		pg = uvm_pagelookup(uvm_kernel_object,
-		    va - vm_map_min(kernel_map));
-		mutex_exit(uvm_kernel_object->vmobjlock);
-		if (pg) {
-			panic("uvm_km_check_empty: "
-			    "has page hashed at %p", (const void *)va);
+		if ((map->flags & VM_MAP_INTRSAFE) == 0) {
+			mutex_enter(uvm_kernel_object->vmobjlock);
+			pg = uvm_pagelookup(uvm_kernel_object,
+			    va - vm_map_min(kernel_map));
+			mutex_exit(uvm_kernel_object->vmobjlock);
+			if (pg) {
+				panic("uvm_km_check_empty: "
+				    "has page hashed at %p", (const void *)va);
+			}
 		}
 	}
 }
@@ -806,13 +773,9 @@ again:
 	loopsize = size;
 
 	while (loopsize) {
-#ifdef DIAGNOSTIC
-		paddr_t pa;
-#endif
-		KASSERTMSG(!pmap_extract(pmap_kernel(), loopva, &pa),
-		    "loopva=%#"PRIxVADDR" loopsize=%#"PRIxVSIZE
-		    " pa=%#"PRIxPADDR" vmem=%p",
-		    loopva, loopsize, pa, vm);
+		KASSERTMSG(!pmap_extract(pmap_kernel(), loopva, NULL),
+		    "loopva=%#"PRIxVADDR" loopsize=%#"PRIxVSIZE" vmem=%p",
+		    loopva, loopsize, vm);
 
 		pg = uvm_pagealloc(NULL, loopva, NULL,
 		    UVM_FLAG_COLORMATCH
@@ -824,7 +787,7 @@ again:
 			} else {
 				uvm_km_pgremove_intrsafe(kernel_map, va,
 				    va + size);
-				vmem_free(vm, va, size);
+				vmem_free(kmem_va_arena, va, size);
 				return ENOMEM;
 			}
 		}

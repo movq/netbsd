@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.234 2012/08/17 19:43:25 abs Exp $
+# $NetBSD: GENERIC,v 1.230 2012/01/11 17:18:51 macallan Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/sparc/conf/std.sparc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.234 $"
+#ident 		"GENERIC-$Revision: 1.230 $"
 
 maxusers	32
 
@@ -51,8 +51,8 @@ options 	SUN4_MMU3L	# sun4/400 3-level MMU
 #options 	RASTERCONSOLE_BGCOL=WSCOL_WHITE
 
 # wscons stuff
-#options 	WSEMUL_SUN
-options 	WSEMUL_VT100
+options 	WSEMUL_SUN
+#options 	WSEMUL_VT100
 options 	WSDISPLAY_COMPAT_RAWKBD
 options 	WSDISPLAY_CUSTOM_OUTPUT
 options 	WS_DEFAULT_FG=WSCOL_BLACK
@@ -61,7 +61,7 @@ options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WS_KERNEL_BG=WSCOL_LIGHT_WHITE
 options 	WSDISPLAY_COMPAT_PCVT
 options 	WSDISPLAY_COMPAT_SYSCONS
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	WSDISPLAY_COMPAT_USL
 
 options 	WSDISPLAY_SCROLLSUPPORT
 
@@ -90,6 +90,7 @@ options 	KTRACE
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 options 	MODULAR		# new style module(7) framework
 
@@ -229,7 +230,7 @@ options 	INET6		# IPV6
 #options 	NETATALK	# AppleTalk (over Ethernet) protocol
 options 	NTP		# Network Time Protocol in-kernel support
 #options 	PPS_SYNC	# Add serial line synchronization for NTP
-options 	PFIL_HOOKS	# Add pfil(9) packet filter hooks
+options 	PFIL_HOOKS	# Add pfil(9) hooks, intended for custom LKMs.
 options 	IPFILTER_LOG	# Add ipmon(8) logging for ipfilter device
 options 	IPFILTER_LOOKUP	# ippool(8) support
 options 	IPFILTER_COMPAT # Compat for IP-Filter

@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_vnode.c,v 1.7 2012/08/13 13:12:51 ttoth Exp $	*/
+/*	$NetBSD: chfs_vnode.c,v 1.2 2011/11/24 21:09:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -39,8 +39,6 @@
 #include <sys/namei.h>
 #include <sys/uio.h>
 #include <sys/buf.h>
-
-#include <miscfs/genfs/genfs.h>
 
 struct vnode *
 chfs_vnode_lookup(struct chfs_mount *chmp, ino_t vno)
@@ -83,7 +81,7 @@ chfs_readvnode(struct mount* mp, ino_t ino, struct vnode** vpp)
 
 	if (chvc && ino != CHFS_ROOTINO) {
 		/* debug... */
-		dbg("offset: %" PRIu32 ", lnr: %d\n",
+		printf("readvnode; offset: %" PRIu32 ", lnr: %d\n",
 		    CHFS_GET_OFS(chvc->v->nref_offset), chvc->v->nref_lnr);
 
 		KASSERT((void *)chvc != (void *)chvc->v);
@@ -101,8 +99,7 @@ chfs_readvnode(struct mount* mp, ino_t ino, struct vnode** vpp)
 		chfvn = (struct chfs_flash_vnode*)buf;
 		chfs_set_vnode_size(vp, chfvn->dn_size);
 		ip->mode = chfvn->mode;
-		ip->ch_type = IFTOCHT(ip->mode);
-		vp->v_type = CHTTOVT(ip->ch_type);
+		vp->v_type = IFTOVT(ip->mode);
 		ip->version = chfvn->version;
 		//ip->chvc->highest_version = ip->version;
 		ip->uid = chfvn->uid;
@@ -187,14 +184,14 @@ chfs_readdirent(struct mount *mp, struct chfs_node_ref *chnr, struct chfs_inode 
  */
 int
 chfs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
-    struct componentname *cnp, enum vtype type)
+    struct componentname *cnp, int type)
 {
 	struct chfs_inode *ip, *pdir;
 	struct vnode *vp;
 	struct ufsmount* ump = VFSTOUFS(dvp->v_mount);
 	struct chfs_mount* chmp = ump->um_chfs;
 	struct chfs_vnode_cache* chvc;
-	int error;
+	int error, ismember = 0;
 	ino_t vno;
 	struct chfs_dirent *nfd;//, *fd;
 
@@ -211,6 +208,7 @@ chfs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 
 	mutex_enter(&chmp->chm_lock_vnocache);
 	chvc = chfs_vnode_cache_get(chmp, vno);
+	mutex_exit(&chmp->chm_lock_vnocache);
 
 	chvc->pvno = pdir->ino;
 	chvc->vno_version = kmem_alloc(sizeof(uint64_t), KM_SLEEP);
@@ -219,8 +217,8 @@ chfs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 		chvc->nlink = 1;
 	else
 		chvc->nlink = 2;
+//	chfs_vnode_cache_set_state(chmp, chvc, VNO_STATE_CHECKEDABSENT);
 	chvc->state = VNO_STATE_CHECKEDABSENT;
-	mutex_exit(&chmp->chm_lock_vnocache);
 
 	ip = VTOI(vp);
 	ip->ino = vno;
@@ -240,17 +238,11 @@ chfs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	ip->target = NULL;
 
 	ip->mode = mode;
-	vp->v_type = type;		/* Rest init'd in getnewvnode(). */
-	ip->ch_type = VTTOCHT(vp->v_type);
-
-	/* Authorize setting SGID if needed. */
-	if (ip->mode & ISGID) {
-		error = kauth_authorize_vnode(cnp->cn_cred, KAUTH_VNODE_WRITE_SECURITY,
-		    vp, NULL, genfs_can_chmod(vp->v_type, cnp->cn_cred, ip->uid,
-		    ip->gid, mode));
-		if (error)
-			ip->mode &= ~ISGID;
-	}
+	vp->v_type = type;	/* Rest init'd in getnewvnode(). */
+	if ((ip->mode & ISGID) && (kauth_cred_ismember_gid(cnp->cn_cred,
+		ip->gid, &ismember) != 0 || !ismember) &&
+	    kauth_authorize_generic(cnp->cn_cred, KAUTH_GENERIC_ISSUSER, NULL))
+		ip->mode &= ~ISGID;
 
 	chfs_update(vp, NULL, NULL, UPDATE_WAIT);
 
@@ -281,7 +273,7 @@ chfs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	nfd = chfs_alloc_dirent(cnp->cn_namelen + 1);
 	nfd->vno = ip->ino;
 	nfd->version = (++pdir->chvc->highest_version);
-	nfd->type = ip->ch_type;
+	nfd->type = type;
 //	nfd->next = NULL;
 	nfd->nsize = cnp->cn_namelen;
 	memcpy(&(nfd->name), cnp->cn_nameptr, cnp->cn_namelen);

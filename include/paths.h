@@ -1,4 +1,4 @@
-/*	$NetBSD: paths.h,v 1.41 2012/06/03 21:42:46 joerg Exp $	*/
+/*	$NetBSD: paths.h,v 1.40.4.1 2012/06/23 22:54:56 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

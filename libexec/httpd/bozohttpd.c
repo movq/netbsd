@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.c,v 1.32 2012/07/19 09:53:06 mrg Exp $	*/
+/*	$NetBSD: bozohttpd.c,v 1.30 2011/11/18 09:51:31 mrg Exp $	*/
 
 /*	$eterna: bozohttpd.c,v 1.178 2011/11/18 09:21:15 mrg Exp $	*/
 
@@ -696,9 +696,6 @@ bozo_read_request(bozohttpd_t *httpd)
 			else if (strcasecmp(hdr->h_header,
 					"if-modified-since") == 0)
 				request->hr_if_modified_since = hdr->h_value;
-			else if (strcasecmp(hdr->h_header,
-					"accept-encoding") == 0)
-				request->hr_accept_encoding = hdr->h_value;
 
 			debug((httpd, DEBUG_FAT, "adding header %s: %s",
 			    hdr->h_header, hdr->h_value));
@@ -847,67 +844,6 @@ parse_http_date(const char *val, time_t *timestamp)
 }
 
 /*
- * given an url, encode it ala rfc 3986.  ie, escape ? and friends.
- * note that this function returns a static buffer, and thus needs
- * to be updated for any sort of parallel processing.
- */
-char *
-escape_rfc3986(bozohttpd_t *httpd, const char *url)
-{
-	static char *buf;
-	static size_t buflen = 0;
-	size_t len;
-	const char *s;
-	char *d;
-
-	len = strlen(url);
-	if (buflen < len * 3 + 1) {
-		buflen = len * 3 + 1;
-		buf = bozorealloc(httpd, buf, buflen);
-	}
-	
-	if (url == NULL) {
-		buf[0] = 0;
-		return buf;
-	}
-
-	for (s = url, d = buf; *s;) {
-		if (*s & 0x80)
-			goto encode_it;
-		switch (*s) {
-		case ':':
-		case '/':
-		case '?':
-		case '#':
-		case '[':
-		case ']':
-		case '@':
-		case '!':
-		case '$':
-		case '&':
-		case '\'':
-		case '(':
-		case ')':
-		case '*':
-		case '+':
-		case ',':
-		case ';':
-		case '=':
-		encode_it:
-			snprintf(d, 4, "%%%2X", *s++);
-			d += 3;
-			len += 3;
-		default:
-			*d++ = *s++;
-			len++;
-		}
-	}
-	buf[len] = 0;
-
-	return buf;
-}
-
-/*
  * checks to see if this request has a valid .bzdirect file.  returns
  * 0 on failure and 1 on success.
  */
@@ -959,10 +895,10 @@ handle_redirect(bozo_httpreq_t *request,
 		url = urlbuf;
 	} else
 		urlbuf = NULL;
-	url = escape_rfc3986(request->hr_httpd, url);
 
-	if (request->hr_query && strlen(request->hr_query))
+	if (request->hr_query && strlen(request->hr_query)) {
 		query = 1;
+	}
 
 	if (request->hr_serverport && strcmp(request->hr_serverport, "80") != 0)
 		snprintf(portbuf, sizeof(portbuf), ":%s",
@@ -979,9 +915,9 @@ handle_redirect(bozo_httpreq_t *request,
 		if (absolute == 0)
 			bozo_printf(httpd, "%s%s", httpd->virthostname, portbuf);
 		if (query) {
-			bozo_printf(httpd, "%s?%s\r\n", url, request->hr_query);
+		  bozo_printf(httpd, "%s?%s\r\n", url, request->hr_query);
 		} else {
-			bozo_printf(httpd, "%s\r\n", url);
+		  bozo_printf(httpd, "%s\r\n", url);
 		}
 	}
 	bozo_printf(httpd, "\r\n");
@@ -991,17 +927,16 @@ handle_redirect(bozo_httpreq_t *request,
 	bozo_printf(httpd, "<body><h1>Document Moved</h1>\n");
 	bozo_printf(httpd, "This document had moved <a href=\"http://");
 	if (query) {
-		if (absolute)
-			bozo_printf(httpd, "%s?%s", url, request->hr_query);
-		else
-			bozo_printf(httpd, "%s%s%s?%s", httpd->virthostname,
-				    portbuf, url, request->hr_query);
-	} else {
-		if (absolute)
-			bozo_printf(httpd, "%s", url);
-		else
-			bozo_printf(httpd, "%s%s%s", httpd->virthostname,
-				    portbuf, url);
+	  if (absolute)
+	    bozo_printf(httpd, "%s?%s", url, request->hr_query);
+	  else
+	    bozo_printf(httpd, "%s%s%s?%s", httpd->virthostname, portbuf, url,
+	    		request->hr_query);
+        } else {
+	  if (absolute)
+	    bozo_printf(httpd, "%s", url);
+	  else
+	    bozo_printf(httpd, "%s%s%s", httpd->virthostname, portbuf, url);
 	}
 	bozo_printf(httpd, "\">here</a>\n");
 	bozo_printf(httpd, "</body></html>\n");
@@ -1415,53 +1350,6 @@ bad_done:
 }
 
 /*
- * can_gzip checks if the request supports and prefers gzip encoding.
- *
- * XXX: we do not consider the associated q with gzip in making our
- *      decision which is broken.
- */
-
-static int
-can_gzip(bozo_httpreq_t *request)
-{
-	const char	*pos;
-	const char	*tmp;
-	size_t		 len;
-
-	/* First we decide if the request can be gzipped at all. */
-
-	/* not if we already are encoded... */
-	tmp = bozo_content_encoding(request, request->hr_file);
-	if (tmp && *tmp)
-		return 0;
-
-	/* not if we are not asking for the whole file... */
-	if (request->hr_last_byte_pos != -1 || request->hr_have_range)
-		return 0;
-
-	/* Then we determine if gzip is on the cards. */
-
-	for (pos = request->hr_accept_encoding; pos && *pos; pos += len) {
-		while (*pos == ' ')
-			pos++;
-
-		len = strcspn(pos, ";,");
-
-		if ((len == 4 && strncasecmp("gzip", pos, 4) == 0) ||
-		    (len == 6 && strncasecmp("x-gzip", pos, 6) == 0))
-			return 1;
-
-		if (pos[len] == ';')
-			len += strcspn(&pos[len], ",");
-
-		if (pos[len])
-			len++;
-	}
-
-	return 0;
-}
-
-/*
  * bozo_process_request does the following:
  *	- check the request is valid
  *	- process cgi-bin if necessary
@@ -1486,21 +1374,9 @@ bozo_process_request(bozo_httpreq_t *request)
 	if (transform_request(request, &isindex) == 0)
 		return;
 
-	fd = -1;
-	encoding = NULL;
-	if (can_gzip(request)) {
-		asprintf(&file, "%s.gz", request->hr_file);
-		fd = open(file, O_RDONLY);
-		if (fd >= 0)
-			encoding = "gzip";
-		free(file);
-	}
-
 	file = request->hr_file;
 
-	if (fd < 0)
-		fd = open(file, O_RDONLY);
-
+	fd = open(file, O_RDONLY);
 	if (fd < 0) {
 		debug((httpd, DEBUG_FAT, "open failed: %s", strerror(errno)));
 		if (errno == EPERM)
@@ -1556,8 +1432,7 @@ bozo_process_request(bozo_httpreq_t *request)
 
 	if (request->hr_proto != httpd->consts.http_09) {
 		type = bozo_content_type(request, file);
-		if (!encoding)
-			encoding = bozo_content_encoding(request, file);
+		encoding = bozo_content_encoding(request, file);
 
 		bozo_print_header(request, &sb, type, encoding);
 		bozo_printf(httpd, "\r\n");

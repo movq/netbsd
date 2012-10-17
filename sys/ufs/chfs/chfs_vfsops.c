@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_vfsops.c,v 1.5 2012/08/10 09:26:58 ttoth Exp $	*/
+/*	$NetBSD: chfs_vfsops.c,v 1.2 2011/11/24 21:09:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -255,15 +255,20 @@ chfs_mountfs(struct vnode *devvp, struct mount *mp)
 		return (err);
 	}
 
-	ump = kmem_zalloc(sizeof(struct ufsmount), KM_SLEEP);
-
+	ump = malloc(sizeof(*ump), M_UFSMNT, M_WAITOK);
+	memset(ump, 0, sizeof(*ump));
 	ump->um_fstype = UFS1;
 	//ump->um_ops = &chfs_ufsops;
-	ump->um_chfs = kmem_zalloc(sizeof(struct chfs_mount), KM_SLEEP);
+	ump->um_chfs = malloc(sizeof(struct chfs_mount),
+	    M_UFSMNT, M_WAITOK);
+	memset(ump->um_chfs, 0, sizeof(struct chfs_mount));
+
 	mutex_init(&ump->um_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	/* Get superblock and set flash device number */
 	chmp = ump->um_chfs;
+	if (!chmp)
+		return ENOMEM;
 
 	chmp->chm_ebh = kmem_alloc(sizeof(struct chfs_ebh), KM_SLEEP);
 
@@ -271,7 +276,9 @@ chfs_mountfs(struct vnode *devvp, struct mount *mp)
 	err = ebh_open(chmp->chm_ebh, devvp->v_rdev);
 	if (err) {
 		dbg("error while opening flash\n");
-		goto fail;
+		kmem_free(chmp->chm_ebh, sizeof(struct chfs_ebh));
+		free(chmp, M_UFSMNT);
+		return err;
 	}
 
 	//TODO check flash sizes
@@ -281,6 +288,14 @@ chfs_mountfs(struct vnode *devvp, struct mount *mp)
 
 	chmp->chm_blocks = kmem_zalloc(chmp->chm_ebh->peb_nr *
 	    sizeof(struct chfs_eraseblock), KM_SLEEP);
+
+	if (!chmp->chm_blocks) {
+		kmem_free(chmp->chm_ebh, chmp->chm_ebh->peb_nr *
+		    sizeof(struct chfs_eraseblock));
+		ebh_close(chmp->chm_ebh);
+		free(chmp, M_UFSMNT);
+		return ENOMEM;
+	}
 
 	mutex_init(&chmp->chm_lock_mountfields, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&chmp->chm_lock_sizes, MUTEX_DEFAULT, IPL_NONE);
@@ -322,9 +337,11 @@ chfs_mountfs(struct vnode *devvp, struct mount *mp)
 
 	if (err) {
 		chfs_vnocache_hash_destroy(chmp->chm_vnocache_hash);
+		kmem_free(chmp->chm_ebh, chmp->chm_ebh->peb_nr *
+		    sizeof(struct chfs_eraseblock));
 		ebh_close(chmp->chm_ebh);
-		err = EIO;
-		goto fail;
+		free(chmp, M_UFSMNT);
+		return EIO;
 	}
 
 	mp->mnt_data = ump;
@@ -368,11 +385,6 @@ chfs_mountfs(struct vnode *devvp, struct mount *mp)
 
 	devvp->v_specmountpoint = mp;
 	return 0;
-fail:
-	kmem_free(chmp->chm_ebh, sizeof(struct chfs_ebh));
-	kmem_free(chmp, sizeof(struct chfs_mount));
-	kmem_free(ump, sizeof(struct ufsmount));
-	return err;
 }
 
 /* --------------------------------------------------------------------- */
@@ -426,8 +438,8 @@ chfs_unmount(struct mount *mp, int mntflags)
 
 	mutex_destroy(&ump->um_lock);
 
-	//kmem_free(ump->um_chfs, sizeof(struct chfs_mount));
-	kmem_free(ump, sizeof(struct ufsmount));
+	//free(ump->um_chfs, M_UFSMNT);
+	free(ump, M_UFSMNT);
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	dbg("[END]\n");
@@ -499,7 +511,6 @@ retry:
 	memset(ip, 0, sizeof(*ip));
 	vp->v_data = ip;
 	ip->vp = vp;
-	ip->ch_type = VTTOCHT(vp->v_type);
 	ip->ump = ump;
 	ip->chmp = chmp = ump->um_chfs;
 	ip->dev = dev;
@@ -518,7 +529,6 @@ retry:
 		dbg("SETROOT\n");
 		vp->v_vflag |= VV_ROOT;
 		vp->v_type = VDIR;
-		ip->ch_type = CHT_DIR;
 		ip->mode = IFMT | IEXEC | IWRITE | IREAD;
 		ip->iflag |= (IN_ACCESS | IN_CHANGE | IN_UPDATE);
 		chfs_update(vp, NULL, NULL, UPDATE_WAIT);
@@ -539,7 +549,8 @@ retry:
 		if (ino == CHFS_ROOTINO) {
 			chvc->nlink = 2;
 			chvc->pvno = CHFS_ROOTINO;
-			chvc->state = VNO_STATE_CHECKEDABSENT;
+			chfs_vnode_cache_set_state(chmp,
+			    chvc, VNO_STATE_CHECKEDABSENT);
 		}
 		chfs_vnode_cache_add(chmp, chvc);
 		mutex_exit(&chmp->chm_lock_vnocache);
@@ -559,8 +570,8 @@ retry:
 
 		mutex_enter(&chmp->chm_lock_mountfields);
 		// init type specific things
-		switch (ip->ch_type) {
-		case CHT_DIR:
+		switch (vp->v_type) {
+		case VDIR:
 			nref = chvc->dirents;
 			while (nref &&
 			    (struct chfs_vnode_cache *)nref != chvc) {
@@ -569,8 +580,8 @@ retry:
 			}
 			chfs_set_vnode_size(vp, 512);
 			break;
-		case CHT_REG:
-		case CHT_SOCK:
+		case VREG:
+		case VSOCK:
 			//build the fragtree of the vnode
 			dbg("read_inode_internal | ino: %llu\n",
 				(unsigned long long)ip->ino);
@@ -582,7 +593,7 @@ retry:
 				return (error);
 			}
 			break;
-		case CHT_LNK:
+		case VLNK:
 			//build the fragtree of the vnode
 			dbg("read_inode_internal | ino: %llu\n",
 				(unsigned long long)ip->ino);
@@ -609,9 +620,9 @@ retry:
 			putiobuf(bp);
 
 			break;
-		case CHT_CHR:
-		case CHT_BLK:
-		case CHT_FIFO:
+		case VCHR:
+		case VBLK:
+		case VFIFO:
 			//build the fragtree of the vnode
 			dbg("read_inode_internal | ino: %llu\n",
 				(unsigned long long)ip->ino);
@@ -633,16 +644,16 @@ retry:
 			    bp->b_data, sizeof(dev_t));
 			kmem_free(bp->b_data, sizeof(dev_t));
 			putiobuf(bp);
-			if (ip->ch_type == CHT_FIFO) {
+			if (vp->v_type == VFIFO)
 				vp->v_op = chfs_fifoop_p;
-			} else {
+			else {
 				vp->v_op = chfs_specop_p;
 				spec_node_init(vp, ip->rdev);
 			}
 
 		    break;
-		case CHT_BLANK:
-		case CHT_BAD:
+		case VNON:
+		case VBAD:
 			break;
 		}
 		mutex_exit(&chmp->chm_lock_mountfields);

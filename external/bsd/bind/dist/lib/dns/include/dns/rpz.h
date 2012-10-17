@@ -1,4 +1,4 @@
-/*	$NetBSD: rpz.h,v 1.3 2012/06/05 00:41:53 christos Exp $	*/
+/*	$NetBSD: rpz.h,v 1.2.8.1 2012/06/05 21:14:57 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

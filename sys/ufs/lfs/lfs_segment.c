@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_segment.c,v 1.224 2012/02/16 02:47:55 perseant Exp $	*/
+/*	$NetBSD: lfs_segment.c,v 1.223.2.1 2012/03/17 17:40:06 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.224 2012/02/16 02:47:55 perseant Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.223.2.1 2012/03/17 17:40:06 bouyer Exp $");
 
 #ifdef DEBUG
 # define vndebug(vp, str) do {						\

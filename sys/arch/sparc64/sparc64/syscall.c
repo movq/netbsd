@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.41 2012/02/19 21:06:31 rmind Exp $ */
+/*	$NetBSD: syscall.c,v 1.40 2012/02/11 23:16:16 martin Exp $ */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -79,11 +79,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.41 2012/02/19 21:06:31 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.40 2012/02/11 23:16:16 martin Exp $");
+
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/signal.h>
 #include <sys/kmem.h>
 #include <sys/ktrace.h>
@@ -309,6 +313,12 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 	if ((error = getargs(p, tf, &code, &callp, &args, &s64)) != 0)
 		goto bad;
 
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
 	rval[0] = 0;
 	rval[1] = tf->tf_out[1];
 
@@ -396,6 +406,11 @@ syscall_fancy(struct trapframe64 *tf, register_t code, register_t pc)
 	}
 #else
 	ap = &args;
+#endif
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
 #endif
 
 	if ((error = trace_enter(code, ap->r, callp->sy_narg)) != 0) {
@@ -490,5 +505,13 @@ startlwp(void *arg)
 	KASSERT(error == 0);
 
 	kmem_free(uc, sizeof(ucontext_t));
+	userret(l, 0, 0);
+}
+
+void
+upcallret(struct lwp *l)
+{
+
+	KERNEL_UNLOCK_LAST(l);
 	userret(l, 0, 0);
 }

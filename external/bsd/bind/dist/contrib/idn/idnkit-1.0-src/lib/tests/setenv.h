@@ -1,4 +1,4 @@
-/*	$NetBSD: setenv.h,v 1.3 2012/06/05 00:39:56 christos Exp $	*/
+/*	$NetBSD: setenv.h,v 1.2.6.1 2012/06/06 18:18:08 bouyer Exp $	*/
 
 /* Id: setenv.h,v 1.1 2003/06/04 00:27:01 marka Exp  */
 /*

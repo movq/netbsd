@@ -1,4 +1,4 @@
-/* $NetBSD: conffile.c,v 1.3 2012/03/15 04:06:54 joerg Exp $ */
+/* $NetBSD: conffile.c,v 1.2.8.1 2012/03/17 17:48:49 bouyer Exp $ */
 
 /*
  * Copyright © 2006 Alistair Crooks.  All rights reserved.

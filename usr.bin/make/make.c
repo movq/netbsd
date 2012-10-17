@@ -1,4 +1,4 @@
-/*	$NetBSD: make.c,v 1.87 2012/06/12 19:21:51 joerg Exp $	*/
+/*	$NetBSD: make.c,v 1.84 2011/09/16 15:38:04 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: make.c,v 1.87 2012/06/12 19:21:51 joerg Exp $";
+static char rcsid[] = "$NetBSD: make.c,v 1.84 2011/09/16 15:38:04 joerg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)make.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: make.c,v 1.87 2012/06/12 19:21:51 joerg Exp $");
+__RCSID("$NetBSD: make.c,v 1.84 2011/09/16 15:38:04 joerg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -139,7 +139,7 @@ static int MakeCheckOrder(void *, void *);
 static int MakeBuildChild(void *, void *);
 static int MakeBuildParent(void *, void *);
 
-MAKE_ATTR_DEAD static void
+__dead static void
 make_abort(GNode *gn, int line)
 {
     static int two = 2;
@@ -221,7 +221,7 @@ Make_OODate(GNode *gn)
      * doesn't depend on their modification time...
      */
     if ((gn->type & (OP_JOIN|OP_USE|OP_USEBEFORE|OP_EXEC)) == 0) {
-	(void)Dir_MTime(gn, 1);
+	(void)Dir_MTime(gn);
 	if (DEBUG(MAKE)) {
 	    if (gn->mtime != 0) {
 		fprintf(debug_file, "modified %s...", Targ_FmtTime(gn->mtime));
@@ -406,7 +406,7 @@ MakeFindChild(void *gnp, void *pgnp)
     GNode          *gn = (GNode *)gnp;
     GNode          *pgn = (GNode *)pgnp;
 
-    (void)Dir_MTime(gn, 0);
+    (void)Dir_MTime(gn);
     Make_TimeStamp(pgn, gn);
     pgn->unmade--;
 
@@ -574,7 +574,7 @@ MakeHandleUse(void *cgnp, void *pgnp)
 time_t
 Make_Recheck(GNode *gn)
 {
-    time_t mtime = Dir_MTime(gn, 1);
+    time_t mtime = Dir_MTime(gn);
 
 #ifndef RECHECK
     /*
@@ -867,7 +867,7 @@ Make_Update(GNode *cgn)
  *-----------------------------------------------------------------------
  */
 static int
-MakeUnmark(void *cgnp, void *pgnp MAKE_ATTR_UNUSED)
+MakeUnmark(void *cgnp, void *pgnp __unused)
 {
     GNode	*cgn = (GNode *)cgnp;
 
@@ -1005,7 +1005,7 @@ Make_DoAllVar(GNode *gn)
  */
 
 static int
-MakeCheckOrder(void *v_bn, void *ignore MAKE_ATTR_UNUSED)
+MakeCheckOrder(void *v_bn, void *ignore __unused)
 {
     GNode *bn = v_bn;
 
@@ -1336,7 +1336,7 @@ Make_ExpandUse(Lst targs)
 	    *eon = ')';
 	}
 
-	(void)Dir_MTime(gn, 0);
+	(void)Dir_MTime(gn);
 	Var_Set(TARGET, gn->path ? gn->path : gn->name, gn, 0);
 	Lst_ForEach(gn->children, MakeUnmark, gn);
 	Lst_ForEach(gn->children, MakeHandleUse, gn);

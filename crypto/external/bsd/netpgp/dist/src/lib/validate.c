@@ -54,7 +54,7 @@
 
 #if defined(__NetBSD__)
 __COPYRIGHT("@(#) Copyright (c) 2009 The NetBSD Foundation, Inc. All rights reserved.");
-__RCSID("$NetBSD: validate.c,v 1.44 2012/03/05 02:20:18 christos Exp $");
+__RCSID("$NetBSD: validate.c,v 1.43 2010/11/11 00:58:04 agc Exp $");
 #endif
 
 #include <sys/types.h>
@@ -379,16 +379,15 @@ pgp_validate_key_cb(const pgp_packet_t *pkt, pgp_cbdata_t *cbinfo)
 			if (!add_sig_to_list(&content->sig.info,
 				&key->result->valid_sigs,
 				&key->result->validc)) {
-				PGP_ERROR_1(errors, PGP_E_UNIMPLEMENTED, "%s",
+				PGP_ERROR(errors, PGP_E_UNIMPLEMENTED,
 				    "Can't add good sig to list\n");
 			}
 		} else {
-			PGP_ERROR_1(errors, PGP_E_V_BAD_SIGNATURE, "%s",
-			    "Bad Sig");
+			PGP_ERROR(errors, PGP_E_V_BAD_SIGNATURE, "Bad Sig");
 			if (!add_sig_to_list(&content->sig.info,
 				&key->result->invalid_sigs,
 				&key->result->invalidc)) {
-				PGP_ERROR_1(errors, PGP_E_UNIMPLEMENTED, "%s",
+				PGP_ERROR(errors, PGP_E_UNIMPLEMENTED,
 				    "Can't add good sig to list\n");
 			}
 		}
@@ -483,13 +482,13 @@ validate_data_cb(const pgp_packet_t *pkt, pgp_cbdata_t *cbinfo)
 		signer = pgp_getkeybyid(io, data->keyring,
 					 content->sig.info.signer_id, &from, &sigkey);
 		if (!signer) {
-			PGP_ERROR_1(errors, PGP_E_V_UNKNOWN_SIGNER,
-			    "%s", "Unknown Signer");
+			PGP_ERROR(errors, PGP_E_V_UNKNOWN_SIGNER,
+					"Unknown Signer");
 			if (!add_sig_to_list(&content->sig.info,
 					&data->result->unknown_sigs,
 					&data->result->unknownc)) {
-				PGP_ERROR_1(errors, PGP_E_V_UNKNOWN_SIGNER,
-				    "%s", "Can't add unknown sig to list");
+				PGP_ERROR(errors, PGP_E_V_UNKNOWN_SIGNER,
+					"Can't add unknown sig to list");
 			}
 			break;
 		}
@@ -538,16 +537,16 @@ validate_data_cb(const pgp_packet_t *pkt, pgp_cbdata_t *cbinfo)
 			if (!add_sig_to_list(&content->sig.info,
 					&data->result->valid_sigs,
 					&data->result->validc)) {
-				PGP_ERROR_1(errors, PGP_E_V_BAD_SIGNATURE,
-				    "%s", "Can't add good sig to list");
+				PGP_ERROR(errors, PGP_E_V_BAD_SIGNATURE,
+					"Can't add good sig to list");
 			}
 		} else {
-			PGP_ERROR_1(errors, PGP_E_V_BAD_SIGNATURE,
-			    "%s", "Bad Signature");
+			PGP_ERROR(errors, PGP_E_V_BAD_SIGNATURE,
+					"Bad Signature");
 			if (!add_sig_to_list(&content->sig.info,
 					&data->result->invalid_sigs,
 					&data->result->invalidc)) {
-				PGP_ERROR_1(errors, PGP_E_V_BAD_SIGNATURE, "%s",
+				PGP_ERROR(errors, PGP_E_V_BAD_SIGNATURE,
 					"Can't add good sig to list");
 			}
 		}
@@ -565,7 +564,7 @@ validate_data_cb(const pgp_packet_t *pkt, pgp_cbdata_t *cbinfo)
 		break;
 
 	default:
-		PGP_ERROR_1(errors, PGP_E_V_NO_SIGNATURE, "%s", "No signature");
+		PGP_ERROR(errors, PGP_E_V_NO_SIGNATURE, "No signature");
 		break;
 	}
 	return PGP_RELEASE_MEMORY;

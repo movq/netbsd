@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exit.c,v 1.242 2012/09/27 20:43:15 rmind Exp $	*/
+/*	$NetBSD: kern_exit.c,v 1.236.2.2 2012/10/01 23:07:07 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,10 +67,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.242 2012/09/27 20:43:15 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.236.2.2 2012/10/01 23:07:07 riz Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_perfctrs.h"
+#include "opt_sa.h"
 #include "opt_sysv.h"
 
 #include <sys/param.h>
@@ -97,6 +98,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.242 2012/09/27 20:43:15 rmind Exp $"
 #include <sys/ras.h>
 #include <sys/signalvar.h>
 #include <sys/sched.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
@@ -193,21 +196,32 @@ sys_exit(struct lwp *l, const struct sys_exit_args *uap, register_t *retval)
 void
 exit1(struct lwp *l, int rv)
 {
-	struct proc	*p, *child, *next_child, *old_parent, *new_parent;
+	struct proc	*p, *q, *nq;
 	struct pgrp	*pgrp;
 	ksiginfo_t	ksi;
 	ksiginfoq_t	kq;
-	int		wakeinit;
+	int		wakeinit, sa;
 
 	p = l->l_proc;
 
 	KASSERT(mutex_owned(p->p_lock));
 	KASSERT(p->p_vmspace != NULL);
 
-	if (__predict_false(p == initproc)) {
+	if (__predict_false(p == initproc))
 		panic("init died (signal %d, exit %d)",
 		    WTERMSIG(rv), WEXITSTATUS(rv));
+
+	/*
+	 * Disable scheduler activation upcalls.  We're trying to get out of
+	 * here.
+	 */
+	sa = 0;
+#ifdef KERN_SA
+	if ((p->p_sa != NULL)) {
+		l->l_pflag |= LP_SA_NOBLOCK;
+		sa = 1;
 	}
+#endif
 
 	p->p_sflag |= PS_WEXIT;
 
@@ -215,9 +229,8 @@ exit1(struct lwp *l, int rv)
 	 * Force all other LWPs to exit before we do.  Only then can we
 	 * begin to tear down the rest of the process state.
 	 */
-	if (p->p_nlwps > 1) {
+	if (sa || p->p_nlwps > 1)
 		exit_lwps(l);
-	}
 
 	ksiginfo_queue_init(&kq);
 
@@ -243,7 +256,7 @@ exit1(struct lwp *l, int rv)
 
 	/*
 	 * Bin any remaining signals and mark the process as dying so it will
-	 * not be found for, e.g. signals.
+	 * not be found for, e.g. signals. 
 	 */
 	sigfillset(&p->p_sigctx.ps_sigignore);
 	sigclearall(p, NULL, &kq);
@@ -330,21 +343,9 @@ exit1(struct lwp *l, int rv)
 	 */
 	mutex_enter(proc_lock);
 	if (p->p_lflag & PL_PPWAIT) {
-#if 0
-		lwp_t *lp;
-
-		l->l_lwpctl = NULL; /* was on loan from blocked parent */
-		p->p_lflag &= ~PL_PPWAIT;
-
-		lp = p->p_vforklwp;
-		p->p_vforklwp = NULL;
-		lp->l_pflag &= ~LP_VFORKWAIT; /* XXX */
-		cv_broadcast(&lp->l_waitcv);
-#else
 		l->l_lwpctl = NULL; /* was on loan from blocked parent */
 		p->p_lflag &= ~PL_PPWAIT;
 		cv_broadcast(&p->p_pptr->p_waitcv);
-#endif
 	}
 
 	if (SESS_LEADER(p)) {
@@ -414,7 +415,7 @@ exit1(struct lwp *l, int rv)
 	 */
 	KNOTE(&p->p_klist, NOTE_EXIT);
 
-	SDT_PROBE(proc,,,exit,
+	SDT_PROBE(proc,,,exit, 
 		(WCOREDUMP(rv) ? CLD_DUMPED :
 		 (WIFSIGNALED(rv) ? CLD_KILLED : CLD_EXITED)),
 		0,0,0,0);
@@ -439,7 +440,6 @@ exit1(struct lwp *l, int rv)
 	 * p_opptr anymore.
 	 */
 	if (__predict_false(p->p_slflag & PSL_CHTRACED)) {
-		struct proc *q;
 		PROCLIST_FOREACH(q, &allproc) {
 			if (q->p_opptr == p)
 				q->p_opptr = NULL;
@@ -449,10 +449,10 @@ exit1(struct lwp *l, int rv)
 	/*
 	 * Give orphaned children to init(8).
 	 */
-	child = LIST_FIRST(&p->p_children);
-	wakeinit = (child != NULL);
-	for (; child != NULL; child = next_child) {
-		next_child = LIST_NEXT(child, p_sibling);
+	q = LIST_FIRST(&p->p_children);
+	wakeinit = (q != NULL);
+	for (; q != NULL; q = nq) {
+		nq = LIST_NEXT(q, p_sibling);
 
 		/*
 		 * Traced processes are killed since their existence
@@ -461,20 +461,19 @@ exit1(struct lwp *l, int rv)
 		 * triggered to reparent the process to its
 		 * original parent, so we must do this here.
 		 */
-		if (__predict_false(child->p_slflag & PSL_TRACED)) {
+		if (__predict_false(q->p_slflag & PSL_TRACED)) {
 			mutex_enter(p->p_lock);
-			child->p_slflag &=
-			    ~(PSL_TRACED|PSL_FSTRACE|PSL_SYSCALL);
+			q->p_slflag &= ~(PSL_TRACED|PSL_FSTRACE|PSL_SYSCALL);
 			mutex_exit(p->p_lock);
-			if (child->p_opptr != child->p_pptr) {
-				struct proc *t = child->p_opptr;
-				proc_reparent(child, t ? t : initproc);
-				child->p_opptr = NULL;
+			if (q->p_opptr != q->p_pptr) {
+				struct proc *t = q->p_opptr;
+				proc_reparent(q, t ? t : initproc);
+				q->p_opptr = NULL;
 			} else
-				proc_reparent(child, initproc);
-			killproc(child, "orphaned traced process");
+				proc_reparent(q, initproc);
+			killproc(q, "orphaned traced process");
 		} else
-			proc_reparent(child, initproc);
+			proc_reparent(q, initproc);
 	}
 
 	/*
@@ -492,12 +491,12 @@ exit1(struct lwp *l, int rv)
 	p->p_stat = SDEAD;
 
 	/* Put in front of parent's sibling list for parent to collect it */
-	old_parent = p->p_pptr;
-	old_parent->p_nstopchild++;
-	if (LIST_FIRST(&old_parent->p_children) != p) {
+	q = p->p_pptr;
+	q->p_nstopchild++;
+	if (LIST_FIRST(&q->p_children) != p) {
 		/* Put child where it can be found quickly */
 		LIST_REMOVE(p, p_sibling);
-		LIST_INSERT_HEAD(&old_parent->p_children, p, p_sibling);
+		LIST_INSERT_HEAD(&q->p_children, p, p_sibling);
 	}
 
 	/*
@@ -505,7 +504,7 @@ exit1(struct lwp *l, int rv)
 	 * flag set, notify init instead (and hope it will handle
 	 * this situation).
 	 */
-	if (old_parent->p_flag & (PK_NOCLDWAIT|PK_CLDSIGIGN)) {
+	if (q->p_flag & (PK_NOCLDWAIT|PK_CLDSIGIGN)) {
 		proc_reparent(p, initproc);
 		wakeinit = 1;
 
@@ -514,17 +513,17 @@ exit1(struct lwp *l, int rv)
 		 * parent, so in case he was wait(2)ing, he will
 		 * continue.
 		 */
-		if (LIST_FIRST(&old_parent->p_children) == NULL)
-			cv_broadcast(&old_parent->p_waitcv);
+		if (LIST_FIRST(&q->p_children) == NULL)
+			cv_broadcast(&q->p_waitcv);
 	}
 
 	/* Reload parent pointer, since p may have been reparented above */
-	new_parent = p->p_pptr;
+	q = p->p_pptr;
 
-	if (__predict_false((p->p_slflag & PSL_FSTRACE) == 0 &&
+	if (__predict_false((p->p_slflag & PSL_FSTRACE) == 0 && 
 	    p->p_exitsig != 0)) {
-		exit_psignal(p, new_parent, &ksi);
-		kpsignal(new_parent, &ksi, NULL);
+		exit_psignal(p, q, &ksi);
+		kpsignal(q, &ksi, NULL);
 	}
 
 	/* Calculate the final rusage info.  */
@@ -604,7 +603,40 @@ exit_lwps(struct lwp *l)
 	int nlocks;
 
 	KERNEL_UNLOCK_ALL(l, &nlocks);
-retry:
+
+#ifdef KERN_SA
+	if (p->p_sa != NULL) {
+		struct sadata_vp *vp;
+		SLIST_FOREACH(vp, &p->p_sa->sa_vps, savp_next) {
+			/*
+			 * Make SA-cached LWPs normal process interruptable
+			 * so that the exit code can wake them. Locking
+			 * savp_mutex locks all the lwps on this vp that
+			 * we need to adjust.
+			 */
+			mutex_enter(&vp->savp_mutex);
+			DPRINTF(("exit_lwps: Making cached LWPs of %d on "
+			    "VP %d interruptable: ", p->p_pid, vp->savp_id));
+			TAILQ_FOREACH(l2, &vp->savp_lwpcache, l_sleepchain) {
+				l2->l_flag |= LW_SINTR;
+				DPRINTF(("%d ", l2->l_lid));
+			}
+			DPRINTF(("\n"));
+
+			DPRINTF(("exit_lwps: Making unblocking LWPs of %d on "
+			    "VP %d interruptable: ", p->p_pid, vp->savp_id));
+			TAILQ_FOREACH(l2, &vp->savp_woken, l_sleepchain) {
+				vp->savp_woken_count--;
+				l2->l_flag |= LW_SINTR;
+				DPRINTF(("%d ", l2->l_lid));
+			}
+			DPRINTF(("\n"));
+			mutex_exit(&vp->savp_mutex);
+		}
+	}
+#endif
+
+ retry:
 	KASSERT(mutex_owned(p->p_lock));
 
 	/*
@@ -615,6 +647,7 @@ retry:
 		if (l2 == l)
 			continue;
 		lwp_lock(l2);
+		l2->l_flag &= ~LW_SA;
 		l2->l_flag |= LW_WEXIT;
 		if ((l2->l_stat == LSSLEEP && (l2->l_flag & LW_SINTR)) ||
 		    l2->l_stat == LSSUSPENDED || l2->l_stat == LSSTOP) {
@@ -876,6 +909,12 @@ proc_free(struct proc *p, struct rusage *ru)
 	if (ru != NULL)
 		*ru = p->p_stats->p_ru;
 	p->p_xstat = 0;
+
+	/* Release any SA state. */
+#ifdef KERN_SA
+	if (p->p_sa)
+		sa_release(p);
+#endif
 
 	/*
 	 * At this point we are going to start freeing the final resources. 

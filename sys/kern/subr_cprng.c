@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_cprng.c,v 1.12 2012/09/08 02:58:13 msaitoh Exp $ */
+/*	$NetBSD: subr_cprng.c,v 1.5.2.3 2012/05/21 16:49:54 jdc Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
 
 #include <sys/cprng.h>
 
-__KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.12 2012/09/08 02:58:13 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.5.2.3 2012/05/21 16:49:54 jdc Exp $");
 
 void
 cprng_init(void)
@@ -171,7 +171,7 @@ cprng_strong_create(const char *const name, int ipl, int flags)
 	c->reseed.state = RSTATE_IDLE;
 	c->reseed.cb = cprng_strong_reseed;
 	c->reseed.arg = c;
-	c->entropy_serial = rnd_initial_entropy ? rnd_filled : -1;
+	c->entropy_serial = rnd_filled;
 	mutex_init(&c->reseed.mtx, MUTEX_DEFAULT, IPL_VM);
 	strlcpy(c->reseed.name, name, sizeof(c->reseed.name));
 
@@ -228,15 +228,8 @@ cprng_strong(cprng_strong_t *const c, void *const p, size_t len, int flags)
 	}
 	mutex_enter(&c->mtx);
 
-	/* If we were initialized with the pool empty, rekey ASAP */
-	if (__predict_false(c->entropy_serial == -1) && rnd_initial_entropy) {
-		c->entropy_serial = 0;
-		goto rekeyany;		/* We have _some_ entropy, use it. */
-	}
-		
 	if (nist_ctr_drbg_generate(&c->drbg, p, len, &cc, sizeof(cc))) {
 		/* A generator failure really means we hit the hard limit. */
-rekeyany:
 		if (c->flags & CPRNG_REKEY_ANY) {
 			uint8_t key[NIST_BLOCK_KEYLEN_BYTES];
 
@@ -284,8 +277,7 @@ rekeyany:
 	 * If the generator has just been keyed, perform
 	 * the statistical RNG test.
 	 */
-	if (__predict_false(c->drbg.reseed_counter == 1) &&
-	    (flags & FASYNC) == 0) {
+	if (__predict_false(c->drbg.reseed_counter == 1)) {
 		rngtest_t *rt = kmem_alloc(sizeof(*rt), KM_NOSLEEP);
 
 		if (rt) {

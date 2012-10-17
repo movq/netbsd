@@ -1,4 +1,4 @@
-/*	$NetBSD: frameasm.h,v 1.20 2012/07/15 15:17:56 dsl Exp $	*/
+/*	$NetBSD: frameasm.h,v 1.16.8.1 2012/06/03 21:45:10 jdc Exp $	*/
 
 #ifndef _AMD64_MACHINE_FRAMEASM_H
 #define _AMD64_MACHINE_FRAMEASM_H
@@ -34,8 +34,6 @@
 #define CLI(temp_reg) cli
 #define STI(temp_reg) sti
 #endif	/* XEN */
-
-#define	SWAPGS	NOT_XEN(swapgs)
 
 /*
  * These are used on interrupt or trap entry or exit.
@@ -81,7 +79,7 @@
 	testb	$SEL_UPL,TF_CS(%rsp)	; \
 	je	kernel_trap		; \
 usertrap				; \
-	SWAPGS				; \
+	swapgs				; \
 	movw	%gs,TF_GS(%rsp)		; \
 	movw	%fs,TF_FS(%rsp)		; \
 	movw	%es,TF_ES(%rsp)		; \
@@ -95,11 +93,11 @@ usertrap				; \
 	INTR_RESTORE_GPRS 		; \
 	testq	$SEL_UPL,TF_CS(%rsp)	/* Interrupted %cs */ ; \
 	je	99f			; \
-/* Disable interrupts until the 'iret', user registers loaded. */ \
+/* XEN: Disabling events before going to user mode sounds like a BAD idea */ \
 	NOT_XEN(cli;)			  \
 	movw	TF_ES(%rsp),%es		; \
 	movw	TF_DS(%rsp),%ds		; \
-	SWAPGS				; \
+	swapgs				; \
 99:	addq	$TF_REGSIZE+16,%rsp	/* + T_xxx and error code */ ; \
 	iretq
 

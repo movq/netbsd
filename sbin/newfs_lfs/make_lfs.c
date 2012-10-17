@@ -1,4 +1,4 @@
-/*	$NetBSD: make_lfs.c,v 1.19 2012/02/16 02:47:54 perseant Exp $	*/
+/*	$NetBSD: make_lfs.c,v 1.18.2.1 2012/03/17 17:40:08 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
 #if 0
 static char sccsid[] = "@(#)lfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: make_lfs.c,v 1.19 2012/02/16 02:47:54 perseant Exp $");
+__RCSID("$NetBSD: make_lfs.c,v 1.18.2.1 2012/03/17 17:40:08 bouyer Exp $");
 #endif
 #endif /* not lint */
 

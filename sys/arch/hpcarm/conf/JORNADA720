@@ -1,4 +1,4 @@
-#	$NetBSD: JORNADA720,v 1.87 2012/08/17 19:43:25 abs Exp $
+#	$NetBSD: JORNADA720,v 1.85 2011/12/18 05:49:28 dholland Exp $
 #
 #	JORNADA -- Windows-CE based jornada 720
 #
@@ -7,7 +7,7 @@ include	"arch/hpcarm/conf/std.sa11x0"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.87 $"
+#ident 		"GENERIC-$Revision: 1.85 $"
 
 # estimated number of users
 maxusers	32
@@ -100,6 +100,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -261,7 +262,7 @@ options 	WSEMUL_VT100
 options 	WSDISPLAY_DEFAULTSCREENS=2
 options 	FONT_VT220L8x10
 # The X server requires theses two options
-options         WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options         WSDISPLAY_COMPAT_USL
 options         WSDISPLAY_COMPAT_RAWKBD
 # customization of console and kernel output - see dev/wscons/wsdisplayvar.h
 options 	WSDISPLAY_CUSTOM_OUTPUT	# color customization from wsconsctl(8)

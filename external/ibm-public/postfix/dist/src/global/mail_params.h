@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_params.h,v 1.8 2012/06/09 11:32:20 tron Exp $	*/
+/*	$NetBSD: mail_params.h,v 1.7.6.1 2012/06/13 19:29:02 riz Exp $	*/
 
 #ifndef _MAIL_PARAMS_H_INCLUDED_
 #define _MAIL_PARAMS_H_INCLUDED_

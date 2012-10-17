@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.c,v 1.159 2012/10/01 03:03:46 riastradh Exp $	 */
+/*	$NetBSD: rtld.c,v 1.155 2011/11/25 21:27:15 joerg Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rtld.c,v 1.159 2012/10/01 03:03:46 riastradh Exp $");
+__RCSID("$NetBSD: rtld.c,v 1.155 2011/11/25 21:27:15 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -103,7 +103,6 @@ Search_Path    *_rtld_default_paths;
 Search_Path    *_rtld_paths;
 
 Library_Xform  *_rtld_xforms;
-static void    *auxinfo;
 
 /*
  * Global declarations normally provided by crt0.
@@ -135,50 +134,13 @@ static void _rtld_unload_object(sigset_t *, Obj_Entry *, bool);
 static void _rtld_unref_dag(Obj_Entry *);
 static Obj_Entry *_rtld_obj_from_addr(const void *);
 
-static inline void
-_rtld_call_initfini_function(fptr_t func, sigset_t *mask)
-{
-	_rtld_exclusive_exit(mask);
-	(*func)();
-	_rtld_exclusive_enter(mask);
-}
-
-static void
-_rtld_call_fini_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
-{
-	if (obj->fini_arraysz == 0 && (obj->fini == NULL || obj->fini_called)) {
-		    	return;
-	}
-	if (obj->fini != NULL && !obj->fini_called) {
-		dbg (("calling fini function %s at %p%s", obj->path,
-		    (void *)obj->fini,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		obj->fini_called = 1; 
-		_rtld_call_initfini_function(obj->fini, mask);
-	}
-#ifdef HAVE_INITFINI_ARRAY
-	/*
-	 * Now process the fini_array if it exists.  Simply go from
-	 * start to end.  We need to make restartable so just advance
-	 * the array pointer and decrement the size each time through
-	 * the loop.
-	 */
-	while (obj->fini_arraysz > 0 && _rtld_objgen == cur_objgen) {
-		fptr_t fini = *obj->fini_array++;
-		obj->fini_arraysz--;
-		dbg (("calling fini array function %s at %p%s", obj->path,
-		    (void *)fini,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		_rtld_call_initfini_function(fini, mask);
-	}
-#endif /* HAVE_INITFINI_ARRAY */
-}
-
 static void
 _rtld_call_fini_functions(sigset_t *mask, int force)
 {
 	Objlist_Entry *elm;
 	Objlist finilist;
+	Obj_Entry *obj;
+	void (*fini)(void);
 	u_int cur_objgen;
 
 	dbg(("_rtld_call_fini_functions(%d)", force));
@@ -190,33 +152,49 @@ restart:
 
 	/* First pass: objects _not_ marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &finilist, link) {
-		Obj_Entry * const obj = elm->obj;
-		if (!obj->z_initfirst) {
-			if (obj->refcount > 0 && !force) {
-				continue;
-			}
-			/*
-			 * XXX This can race against a concurrent dlclose().
-			 * XXX In that case, the object could be unmapped before
-			 * XXX the fini() call or the fini_array has completed.
-			 */
-			_rtld_call_fini_function(obj, mask, cur_objgen);
-			if (_rtld_objgen != cur_objgen) {
-				dbg(("restarting fini iteration"));
-				_rtld_objlist_clear(&finilist);
-				goto restart;
+		obj = elm->obj;
+		if (obj->refcount > 0 && !force) {
+			continue;
 		}
+		if (obj->fini == NULL || obj->fini_called || obj->z_initfirst) {
+		    	continue;
+		}
+		dbg (("calling fini function %s at %p",  obj->path,
+		    (void *)obj->fini));
+		obj->fini_called = 1;
+		/*
+		 * XXX This can race against a concurrent dlclose().
+		 * XXX In that case, the object could be unmapped before
+		 * XXX the fini() call is done.
+		 */
+		fini = obj->fini;
+		_rtld_exclusive_exit(mask);
+		(*fini)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting fini iteration"));
+			_rtld_objlist_clear(&finilist);
+			goto restart;
 		}
 	}
 
 	/* Second pass: objects marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &finilist, link) {
-		Obj_Entry * const obj = elm->obj;
+		obj = elm->obj;
 		if (obj->refcount > 0 && !force) {
 			continue;
 		}
+		if (obj->fini == NULL || obj->fini_called) {
+		    	continue;
+		}
+		dbg (("calling fini function %s at %p (DF_1_INITFIRST)",
+		    obj->path, (void *)obj->fini));
+		obj->fini_called = 1;
 		/* XXX See above for the race condition here */
-		_rtld_call_fini_function(obj, mask, cur_objgen);
+		fini = obj->fini;
+		_rtld_exclusive_exit(mask);
+		(*fini)();
+		_rtld_exclusive_enter(mask);
 		if (_rtld_objgen != cur_objgen) {
 			dbg(("restarting fini iteration"));
 			_rtld_objlist_clear(&finilist);
@@ -228,42 +206,12 @@ restart:
 }
 
 static void
-_rtld_call_init_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
-{
-	if (obj->init_arraysz == 0 && (obj->init_called || obj->init == NULL)) {
-		return;
-	}
-	if (!obj->init_called && obj->init != NULL) {
-		dbg (("calling init function %s at %p%s",
-		    obj->path, (void *)obj->init,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		obj->init_called = 1;
-		_rtld_call_initfini_function(obj->init, mask);
-	}
-
-#ifdef HAVE_INITFINI_ARRAY
-	/*
-	 * Now process the init_array if it exists.  Simply go from
-	 * start to end.  We need to make restartable so just advance
-	 * the array pointer and decrement the size each time through
-	 * the loop.
-	 */
-	while (obj->init_arraysz > 0 && _rtld_objgen == cur_objgen) {
-		fptr_t init = *obj->init_array++;
-		obj->init_arraysz--;
-		dbg (("calling init_array function %s at %p%s",
-		    obj->path, (void *)init,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		_rtld_call_initfini_function(init, mask);
-	}
-#endif /* HAVE_INITFINI_ARRAY */
-}
-
-static void
 _rtld_call_init_functions(sigset_t *mask)
 {
 	Objlist_Entry *elm;
 	Objlist initlist;
+	Obj_Entry *obj;
+	void (*init)(void);
 	u_int cur_objgen;
 
 	dbg(("_rtld_call_init_functions()"));
@@ -275,20 +223,37 @@ restart:
 
 	/* First pass: objects marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &initlist, link) {
-		Obj_Entry * const obj = elm->obj;
-		if (obj->z_initfirst) {
-			_rtld_call_init_function(obj, mask, cur_objgen);
-			if (_rtld_objgen != cur_objgen) {
-				dbg(("restarting init iteration"));
-				_rtld_objlist_clear(&initlist);
-				goto restart;
-			}
+		obj = elm->obj;
+		if (obj->init == NULL || obj->init_called || !obj->z_initfirst) {
+			continue;
+		}
+		dbg (("calling init function %s at %p (DF_1_INITFIRST)",
+		    obj->path, (void *)obj->init));
+		obj->init_called = 1;
+		init = obj->init;
+		_rtld_exclusive_exit(mask);
+		(*init)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting init iteration"));
+			_rtld_objlist_clear(&initlist);
+			goto restart;
 		}
 	}
 
 	/* Second pass: all other objects. */
 	SIMPLEQ_FOREACH(elm, &initlist, link) {
-		_rtld_call_init_function(elm->obj, mask, cur_objgen);
+		obj = elm->obj;
+		if (obj->init == NULL || obj->init_called) {
+			continue;
+		}
+		dbg (("calling init function %s at %p",  obj->path,
+		    (void *)obj->init));
+		obj->init_called = 1;
+		init = obj->init;
+		_rtld_exclusive_exit(mask);
+		(*init)();
+		_rtld_exclusive_enter(mask);
 		if (_rtld_objgen != cur_objgen) {
 			dbg(("restarting init iteration"));
 			_rtld_objlist_clear(&initlist);
@@ -384,12 +349,6 @@ _rtld_exit(void)
 	_rtld_exclusive_exit(&mask);
 }
 
-__dso_public void *
-_dlauxinfo(void)
-{
-	return auxinfo;
-}
-
 /*
  * Main entry point for dynamic linking.  The argument is the stack
  * pointer.  The stack is expected to be laid out as described in the
@@ -412,6 +371,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		       *pAUX_ruid, *pAUX_rgid;
 	const AuxInfo  *pAUX_pagesz;
 	char          **env, **oenvp;
+	const AuxInfo  *aux;
 	const AuxInfo  *auxp;
 	Obj_Entry      *obj;
 	Elf_Addr       *const osp = sp;
@@ -461,7 +421,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		dbg(("env[%d] = %p %s", i++, (void *)sp[-1], (char *)sp[-1]));
 #endif
 	}
-	auxinfo = (AuxInfo *) sp;
+	aux = (const AuxInfo *) sp;
 
 	pAUX_base = pAUX_entry = pAUX_execfd = NULL;
 	pAUX_phdr = pAUX_phent = pAUX_phnum = NULL;
@@ -471,7 +431,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	execname = NULL;
 
 	/* Digest the auxiliary vector. */
-	for (auxp = auxinfo; auxp->a_type != AT_NULL; ++auxp) {
+	for (auxp = aux; auxp->a_type != AT_NULL; ++auxp) {
 		switch (auxp->a_type) {
 		case AT_BASE:
 			pAUX_base = auxp;
@@ -775,7 +735,7 @@ _rtld_dlcheck(void *handle)
 			break;
 
 	if (obj == NULL || obj->dl_refcount == 0) {
-		_rtld_error("Invalid shared object handle %p", handle);
+		xwarnx("Invalid shared object handle %p", handle);
 		return NULL;
 	}
 	return obj;
@@ -1335,6 +1295,7 @@ dlinfo(void *handle, int req, void *v)
 		}
 	} else {
 		if ((obj = _rtld_dlcheck(handle)) == NULL) {
+			_rtld_error("Invalid handle");
 			_rtld_shared_exit();
 			return -1;
 		}
@@ -1418,8 +1379,7 @@ void
 _rtld_debug_state(void)
 {
 
-	/* Prevent optimizer from removing calls to this function */
-	__insn_barrier();
+	/* do nothing */
 }
 
 void

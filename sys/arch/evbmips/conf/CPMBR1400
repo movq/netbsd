@@ -29,6 +29,7 @@ options 	NTP		# NTP phase/frequency locked loop
 #options 	SYSVSEM		# System V-like semaphores
 #options 	SYSVSHM		# System V-like memory sharing
 #options 	SHMMAXPGS=2048	# 2048 pages is the default
+#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #options 	NMBCLUSTERS=1024
 #options 	MCLSHIFT=12 # 4k mbuf clusters (increases pool max's to 4k as well)
@@ -156,7 +157,7 @@ options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	MEMORY_RBFLAGS=0		# keep the kernel from forcing single user mode
 
 # Options for NFS root boot
-options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM,NFS_BOOT_BOOTSTATIC
+options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM,NFS_BOOT_STATIC
 #options 	NFS_BOOTSTATIC_MYIP="\"192.168.0.1\""
 #options 	NFS_BOOTSTATIC_GWIP="\"192.168.0.1\""
 #options 	NFS_BOOTSTATIC_MASK="\"255.255.255.0\""

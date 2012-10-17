@@ -1,4 +1,4 @@
-/*	$NetBSD: spkr.c,v 1.33 2012/04/06 20:16:58 plunky Exp $	*/
+/*	$NetBSD: spkr.c,v 1.32 2012/02/01 02:01:28 matt Exp $	*/
 
 /*
  * Copyright (c) 1990 Eric S. Raymond (esr@snark.thyrsus.com)
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.33 2012/04/06 20:16:58 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.32 2012/02/01 02:01:28 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -409,8 +409,10 @@ spkrattach(device_t parent, device_t self, void *aux)
 	printf("\n");
 	ppicookie = ((struct pcppi_attach_args *)aux)->pa_cookie;
 	spkr_attached = 1;
-	if (!pmf_device_register(self, NULL, NULL))
+        if (!device_pmf_is_registered(self)
+	    && !pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n"); 
+
 }
 
 int

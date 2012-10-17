@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fwip.c,v 1.25 2012/04/29 18:31:40 dsl Exp $	*/
+/*	$NetBSD: if_fwip.c,v 1.24 2010/05/23 18:56:59 christos Exp $	*/
 /*-
  * Copyright (c) 2004
  *	Doug Rabson
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fwip.c,v 1.25 2012/04/29 18:31:40 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fwip.c,v 1.24 2010/05/23 18:56:59 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -104,6 +104,7 @@ static int broadcast_channel = 0xc0 | 0x1f; /*  tag | channel(XXX) */
 static int tx_speed = 2;
 static int rx_queue_len = FWMAXQUEUE;
 
+MALLOC_DEFINE(M_FWIP, "if_fwip", "IP over IEEE1394 interface");
 /*
  * Setup sysctl(3) MIB, hw.fwip.*
  *
@@ -361,7 +362,7 @@ fwip_init(struct ifnet *ifp)
 		xferq->buf = NULL;
 		xferq->bulkxfer = (struct fw_bulkxfer *) malloc(
 			sizeof(struct fw_bulkxfer) * xferq->bnchunk,
-							M_FW, M_WAITOK);
+							M_FWIP, M_WAITOK);
 		if (xferq->bulkxfer == NULL) {
 			aprint_error_ifnet(ifp, "if_fwip: malloc failed\n");
 			return ENOMEM;
@@ -388,7 +389,7 @@ fwip_init(struct ifnet *ifp)
 		/* pre-allocate xfer */
 		STAILQ_INIT(&sc->sc_fwb.xferlist);
 		for (i = 0; i < rx_queue_len; i++) {
-			xfer = fw_xfer_alloc(M_FW);
+			xfer = fw_xfer_alloc(M_FWIP);
 			if (xfer == NULL)
 				break;
 			m = m_getcl(M_WAITOK, MT_DATA, M_PKTHDR);
@@ -404,7 +405,7 @@ fwip_init(struct ifnet *ifp)
 
 		STAILQ_INIT(&sc->sc_xferlist);
 		for (i = 0; i < TX_MAX_QUEUE; i++) {
-			xfer = fw_xfer_alloc(M_FW);
+			xfer = fw_xfer_alloc(M_FWIP);
 			if (xfer == NULL)
 				break;
 			xfer->send.spd = tx_speed;
@@ -454,7 +455,7 @@ fwip_stop(struct ifnet *ifp, int disable)
 
 		for (i = 0; i < xferq->bnchunk; i++)
 			m_freem(xferq->bulkxfer[i].mbuf);
-		free(xferq->bulkxfer, M_FW);
+		free(xferq->bulkxfer, M_FWIP);
 
 		fw_bindremove(fc, &sc->sc_fwb);
 		for (xfer = STAILQ_FIRST(&sc->sc_fwb.xferlist); xfer != NULL;

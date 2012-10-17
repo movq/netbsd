@@ -1,4 +1,4 @@
-/*	$NetBSD: humanize_number.c,v 1.16 2012/03/17 20:01:14 christos Exp $	*/
+/*	$NetBSD: humanize_number.c,v 1.14.24.1 2012/03/19 23:24:58 riz Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: humanize_number.c,v 1.16 2012/03/17 20:01:14 christos Exp $");
+__RCSID("$NetBSD: humanize_number.c,v 1.14.24.1 2012/03/19 23:24:58 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -48,9 +48,9 @@ humanize_number(char *buf, size_t len, int64_t bytes,
     const char *suffix, int scale, int flags)
 {
 	const char *prefixes, *sep;
-	int	b, r, s1, s2, sign;
+	int	b, i, r, maxscale, s1, s2, sign;
 	int64_t	divisor, max, post = 1;
-	size_t	i, baselen, maxscale;
+	size_t	baselen;
 
 	_DIAGASSERT(buf != NULL);
 	_DIAGASSERT(suffix != NULL);
@@ -78,7 +78,7 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 #define	SCALE2PREFIX(scale)	(&prefixes[(scale) << 1])
 	maxscale = 7;
 
-	if ((size_t)scale >= maxscale &&
+	if (scale >= maxscale &&
 	    (scale & (HN_AUTOSCALE | HN_GETSCALE)) == 0)
 		return (-1);
 
@@ -132,12 +132,10 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 		for (i = 0; bytes >= max - 50 && i < maxscale; i++)
 			bytes /= divisor;
 
-		if (scale & HN_GETSCALE) {
-			_DIAGASSERT(__type_fit(int, i));
-			return (int)i;
-		}
+		if (scale & HN_GETSCALE)
+			return (i);
 	} else
-		for (i = 0; i < (size_t)scale && i < maxscale; i++)
+		for (i = 0; i < scale && i < maxscale; i++)
 			bytes /= divisor;
 	bytes *= post;
 

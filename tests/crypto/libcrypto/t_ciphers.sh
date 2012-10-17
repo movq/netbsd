@@ -1,4 +1,4 @@
-# $NetBSD: t_ciphers.sh,v 1.4 2012/07/14 16:04:06 spz Exp $
+# $NetBSD: t_ciphers.sh,v 1.3.4.1 2012/09/17 19:00:26 riz Exp $
 #
 # Copyright (c) 2008, 2009, 2010 The NetBSD Foundation, Inc.
 # All rights reserved.

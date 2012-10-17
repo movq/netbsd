@@ -1,4 +1,4 @@
-/*	$NetBSD: localtime.c,v 1.67 2012/03/20 16:39:08 matt Exp $	*/
+/*	$NetBSD: localtime.c,v 1.65 2012/01/07 15:19:35 martin Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -10,7 +10,7 @@
 #if 0
 static char	elsieid[] = "@(#)localtime.c	8.17";
 #else
-__RCSID("$NetBSD: localtime.c,v 1.67 2012/03/20 16:39:08 matt Exp $");
+__RCSID("$NetBSD: localtime.c,v 1.65 2012/01/07 15:19:35 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -370,7 +370,7 @@ tzload(timezone_t sp, const char *name, const int doextend)
 	int			i;
 	int			fid;
 	int			stored;
-	ssize_t			nread;
+	int			nread;
 	typedef union {
 		struct tzhead	tzhead;
 		char		buf[2 * sizeof(struct tzhead) +
@@ -457,8 +457,8 @@ tzload(timezone_t sp, const char *name, const int doextend)
 			ttisgmtcnt)			/* ttisgmts */
 				goto oops;
 		for (i = 0; i < sp->timecnt; ++i) {
-			sp->ats[i] = (time_t)((stored == 4) ?
-				detzcode(p) : detzcode64(p));
+			sp->ats[i] = (stored == 4) ?
+				detzcode(p) : detzcode64(p);
 			p += stored;
 		}
 		for (i = 0; i < sp->timecnt; ++i) {
@@ -487,8 +487,8 @@ tzload(timezone_t sp, const char *name, const int doextend)
 			struct lsinfo *	lsisp;
 
 			lsisp = &sp->lsis[i];
-			lsisp->ls_trans = (time_t)((stored == 4) ?
-			    detzcode(p) : detzcode64(p));
+			lsisp->ls_trans = (stored == 4) ?
+				detzcode(p) : detzcode64(p);
 			p += stored;
 			lsisp->ls_corr = detzcode(p);
 			p += 4;
@@ -659,7 +659,8 @@ static const int	year_lengths[2] = {
 */
 
 static const char *
-getzname(const char *strp)
+getzname(strp)
+const char *	strp;
 {
 	char	c;
 
@@ -696,7 +697,11 @@ getqzname(const char *strp, const int delim)
 */
 
 static const char *
-getnum(const char *strp, int * const nump, const int min, const int max)
+getnum(strp, nump, min, max)
+const char *	strp;
+int * const		nump;
+const int		min;
+const int		max;
 {
 	char	c;
 	int	num;
@@ -868,7 +873,7 @@ transtime(const time_t janfirst, const int year, const struct rule *const rulep,
 		** add SECSPERDAY times the day number-1 to the time of
 		** January 1, midnight, to get the day.
 		*/
-		value = (time_t)(janfirst + (rulep->r_day - 1) * SECSPERDAY);
+		value = janfirst + (rulep->r_day - 1) * SECSPERDAY;
 		if (leapyear && rulep->r_day >= 60)
 			value += SECSPERDAY;
 		break;
@@ -879,7 +884,7 @@ transtime(const time_t janfirst, const int year, const struct rule *const rulep,
 		** Just add SECSPERDAY times the day number to the time of
 		** January 1, midnight, to get the day.
 		*/
-		value = (time_t)(janfirst + rulep->r_day * SECSPERDAY);
+		value = janfirst + rulep->r_day * SECSPERDAY;
 		break;
 
 	case MONTH_NTH_DAY_OF_WEEK:
@@ -888,7 +893,7 @@ transtime(const time_t janfirst, const int year, const struct rule *const rulep,
 		*/
 		value = janfirst;
 		for (i = 0; i < rulep->r_mon - 1; ++i)
-			value += (time_t)(mon_lengths[leapyear][i] * SECSPERDAY);
+			value += mon_lengths[leapyear][i] * SECSPERDAY;
 
 		/*
 		** Use Zeller's Congruence to get day-of-week of first day of
@@ -921,7 +926,7 @@ transtime(const time_t janfirst, const int year, const struct rule *const rulep,
 		/*
 		** "d" is the day-of-month (zero-origin) of the day we want.
 		*/
-		value += (time_t)(d * SECSPERDAY);
+		value += d * SECSPERDAY;
 		break;
 	}
 
@@ -931,7 +936,7 @@ transtime(const time_t janfirst, const int year, const struct rule *const rulep,
 	** time on that day, add the transition time and the current offset
 	** from UTC.
 	*/
-	return (time_t)(value + rulep->r_time + offset);
+	return value + rulep->r_time + offset;
 }
 
 /*
@@ -1027,7 +1032,7 @@ tzparse(timezone_t sp, const char *name, const int lastditch)
 			memset(sp->ttis, 0, sizeof(sp->ttis));
 			sp->ttis[0].tt_gmtoff = -dstoffset;
 			sp->ttis[0].tt_isdst = 1;
-			sp->ttis[0].tt_abbrind = (int)(stdlen + 1);
+			sp->ttis[0].tt_abbrind = stdlen + 1;
 			sp->ttis[1].tt_gmtoff = -stdoffset;
 			sp->ttis[1].tt_isdst = 0;
 			sp->ttis[1].tt_abbrind = 0;
@@ -1057,8 +1062,8 @@ tzparse(timezone_t sp, const char *name, const int lastditch)
 				}
 				sp->timecnt += 2;
 				newfirst = janfirst;
-				newfirst += (time_t)
-				    (year_lengths[isleap(year)] * SECSPERDAY);
+				newfirst += year_lengths[isleap(year)] *
+					SECSPERDAY;
 				if (newfirst <= janfirst)
 					break;
 				janfirst = newfirst;
@@ -1124,11 +1129,11 @@ tzparse(timezone_t sp, const char *name, const int lastditch)
 					** offset.
 					*/
 					if (isdst && !sp->ttis[j].tt_ttisstd) {
-						sp->ats[i] += (time_t)
-						    (dstoffset - theirdstoffset);
+						sp->ats[i] += dstoffset -
+							theirdstoffset;
 					} else {
-						sp->ats[i] += (time_t)
-						    (stdoffset - theirstdoffset);
+						sp->ats[i] += stdoffset -
+							theirstdoffset;
 					}
 				}
 				theiroffset = -sp->ttis[j].tt_gmtoff;
@@ -1145,7 +1150,7 @@ tzparse(timezone_t sp, const char *name, const int lastditch)
 			sp->ttis[0].tt_abbrind = 0;
 			sp->ttis[1].tt_gmtoff = -dstoffset;
 			sp->ttis[1].tt_isdst = TRUE;
-			sp->ttis[1].tt_abbrind = (int)(stdlen + 1);
+			sp->ttis[1].tt_abbrind = stdlen + 1;
 			sp->typecnt = 2;
 		}
 	} else {
@@ -1157,9 +1162,9 @@ tzparse(timezone_t sp, const char *name, const int lastditch)
 		sp->ttis[0].tt_isdst = 0;
 		sp->ttis[0].tt_abbrind = 0;
 	}
-	sp->charcnt = (int)(stdlen + 1);
+	sp->charcnt = stdlen + 1;
 	if (dstlen != 0)
-		sp->charcnt += (int)(dstlen + 1);
+		sp->charcnt += dstlen + 1;
 	if ((size_t) sp->charcnt > sizeof sp->chars)
 		return -1;
 	cp = sp->chars;
@@ -1327,8 +1332,7 @@ localsub(const timezone_t sp, const time_t * const timep, const long offset,
 				seconds = sp->ats[0] - t;
 			else	seconds = t - sp->ats[sp->timecnt - 1];
 			--seconds;
-			tcycles = (time_t)
-			    (seconds / YEARSPERREPEAT / AVGSECSPERYEAR);
+			tcycles = seconds / YEARSPERREPEAT / AVGSECSPERYEAR;
 			++tcycles;
 			icycles = tcycles;
 			if (tcycles - icycles >= 1 || icycles - tcycles >= 1)
@@ -1569,7 +1573,7 @@ timesub(const timezone_t sp, const time_t *const timep, const long offset,
 		}
 	}
 	y = EPOCH_YEAR;
-	tdays = (time_t)(*timep / SECSPERDAY);
+	tdays = *timep / SECSPERDAY;
 	rem = (long) (*timep - tdays * SECSPERDAY);
 	while (tdays < 0 || tdays >= year_lengths[isleap(y)]) {
 		int		newy;
@@ -1596,7 +1600,7 @@ timesub(const timezone_t sp, const time_t *const timep, const long offset,
 		long	seconds;
 
 		seconds = tdays * SECSPERDAY + 0.5;
-		tdays = (time_t)(seconds / SECSPERDAY);
+		tdays = seconds / SECSPERDAY;
 		rem += (long) (seconds - tdays * SECSPERDAY);
 	}
 	/*
@@ -1844,7 +1848,7 @@ again:
 	}
 	if (long_increment_overflow(&y, -TM_YEAR_BASE))
 		goto overflow;
-	yourtm.tm_year = (int)y;
+	yourtm.tm_year = y;
 	if (yourtm.tm_year != y)
 		goto overflow;
 	if (yourtm.tm_sec >= 0 && yourtm.tm_sec < SECSPERMIN)
@@ -1958,8 +1962,8 @@ again:
 			for (j = sp->typecnt - 1; j >= 0; --j) {
 				if (sp->ttis[j].tt_isdst == yourtm.tm_isdst)
 					continue;
-				newt = (time_t)(t + sp->ttis[j].tt_gmtoff -
-				    sp->ttis[i].tt_gmtoff);
+				newt = t + sp->ttis[j].tt_gmtoff -
+					sp->ttis[i].tt_gmtoff;
 				if ((*funcp)(sp, &newt, offset, &mytm) == NULL)
 					continue;
 				if (tmcomp(&mytm, &yourtm) != 0)
@@ -2197,7 +2201,7 @@ leapcorr(const timezone_t sp, time_t *timep)
 time_t
 time2posix_z(const timezone_t sp, time_t t)
 {
-	return (time_t)(t - leapcorr(sp, &t));
+	return t - leapcorr(sp, &t);
 }
 
 time_t
@@ -2206,7 +2210,7 @@ time2posix(time_t t)
 	time_t result;
 	rwlock_wrlock(&lcl_lock);
 	tzset_unlocked();
-	result = (time_t)(t - leapcorr(lclptr, &t));
+	result = t - leapcorr(lclptr, &t);
 	rwlock_unlock(&lcl_lock);
 	return (result);
 }
@@ -2223,12 +2227,12 @@ posix2time_z(const timezone_t sp, time_t t)
 	** hit, the corresponding time doesn't exist,
 	** so we return an adjacent second.
 	*/
-	x = (time_t)(t + leapcorr(sp, &t));
-	y = (time_t)(x - leapcorr(sp, &x));
+	x = t + leapcorr(sp, &t);
+	y = x - leapcorr(sp, &x);
 	if (y < t) {
 		do {
 			x++;
-			y = (time_t)(x - leapcorr(sp, &x));
+			y = x - leapcorr(sp, &x);
 		} while (y < t);
 		if (t != y) {
 			return x - 1;
@@ -2236,7 +2240,7 @@ posix2time_z(const timezone_t sp, time_t t)
 	} else if (y > t) {
 		do {
 			--x;
-			y = (time_t)(x - leapcorr(sp, &x));
+			y = x - leapcorr(sp, &x);
 		} while (y > t);
 		if (t != y) {
 			return x + 1;

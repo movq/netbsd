@@ -51,10 +51,6 @@ OBJS += ../src/ap/ap_mlme.o
 OBJS += ../src/ap/wpa_auth_ie.o
 OBJS += ../src/ap/preauth_auth.o
 OBJS += ../src/ap/pmksa_cache_auth.o
-OBJS += ../src/ap/ieee802_11_shared.o
-OBJS += ../src/ap/beacon.o
-
-OBJS_c = hostapd_cli.o ../src/common/wpa_ctrl.o ../src/utils/os_$(CONFIG_OS).o
 
 NEED_RC4=y
 NEED_AES=y
@@ -67,25 +63,18 @@ CFLAGS += -DHOSTAPD
 ifdef CONFIG_WPA_TRACE
 CFLAGS += -DWPA_TRACE
 OBJS += ../src/utils/trace.o
-HOBJS += ../src/utils/trace.o
 LDFLAGS += -rdynamic
 CFLAGS += -funwind-tables
 ifdef CONFIG_WPA_TRACE_BFD
 CFLAGS += -DWPA_TRACE_BFD
 LIBS += -lbfd
 LIBS_c += -lbfd
-LIBS_h += -lbfd
 endif
 endif
 
-ifndef CONFIG_ELOOP
-CONFIG_ELOOP=eloop
-endif
-OBJS += ../src/utils/$(CONFIG_ELOOP).o
-OBJS_c += ../src/utils/$(CONFIG_ELOOP).o
+OBJS += ../src/utils/eloop.o
 OBJS += ../src/utils/common.o
 OBJS += ../src/utils/wpa_debug.o
-OBJS_c += ../src/utils/wpa_debug.o
 OBJS += ../src/utils/wpabuf.o
 OBJS += ../src/utils/os_$(CONFIG_OS).o
 OBJS += ../src/utils/ip_addr.o
@@ -285,12 +274,6 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
-ifdef CONFIG_EAP_PWD
-CFLAGS += -DEAP_SERVER_PWD
-OBJS += ../src/eap_server/eap_server_pwd.o ../src/eap_common/eap_pwd_common.o
-NEED_SHA256=y
-endif
-
 ifdef CONFIG_EAP_VENDOR_TEST
 CFLAGS += -DEAP_SERVER_VENDOR_TEST
 OBJS += ../src/eap_server/eap_server_vendor_test.o
@@ -306,10 +289,6 @@ NEED_AES_UNWRAP=y
 endif
 
 ifdef CONFIG_WPS
-ifdef CONFIG_WPS2
-CFLAGS += -DCONFIG_WPS2
-endif
-
 CFLAGS += -DCONFIG_WPS -DEAP_SERVER_WSC
 OBJS += ../src/utils/uuid.o
 OBJS += ../src/ap/wps_hostapd.o
@@ -365,15 +344,6 @@ OBJS += ../src/wps/upnp_xml.o
 OBJS += ../src/wps/httpread.o
 OBJS += ../src/wps/http_client.o
 OBJS += ../src/wps/http_server.o
-endif
-
-ifdef CONFIG_WPS_STRICT
-CFLAGS += -DCONFIG_WPS_STRICT
-OBJS += ../src/wps/wps_validate.o
-endif
-
-ifdef CONFIG_WPS_TESTING
-CFLAGS += -DCONFIG_WPS_TESTING
 endif
 
 endif
@@ -436,10 +406,6 @@ ifndef CONFIG_TLS
 CONFIG_TLS=openssl
 endif
 
-ifdef CONFIG_TLSV11
-CFLAGS += -DCONFIG_TLSV11
-endif
-
 ifeq ($(CONFIG_TLS), openssl)
 ifdef TLS_FUNCS
 OBJS += ../src/crypto/tls_openssl.o
@@ -458,6 +424,10 @@ ifeq ($(CONFIG_TLS), gnutls)
 ifdef TLS_FUNCS
 OBJS += ../src/crypto/tls_gnutls.o
 LIBS += -lgnutls -lgpg-error
+ifdef CONFIG_GNUTLS_EXTRA
+CFLAGS += -DCONFIG_GNUTLS_EXTRA
+LIBS += -lgnutls-extra
+endif
 endif
 OBJS += ../src/crypto/crypto_gnutls.o
 HOBJS += ../src/crypto/crypto_gnutls.o
@@ -655,7 +625,6 @@ endif
 ifdef NEED_MD5
 ifdef CONFIG_INTERNAL_MD5
 OBJS += ../src/crypto/md5-internal.o
-HOBJS += ../src/crypto/md5-internal.o
 endif
 endif
 
@@ -696,16 +665,6 @@ OBJS += ../src/crypto/dh_group5.o
 endif
 endif
 
-ifdef CONFIG_NO_RANDOM_POOL
-CFLAGS += -DCONFIG_NO_RANDOM_POOL
-else
-OBJS += ../src/crypto/random.o
-HOBJS += ../src/crypto/random.o
-HOBJS += ../src/utils/eloop.o
-HOBJS += $(SHA1OBJS)
-HOBJS += ../src/crypto/md5.o
-endif
-
 ifdef CONFIG_RADIUS_SERVER
 CFLAGS += -DRADIUS_SERVER
 OBJS += ../src/radius/radius_server.o
@@ -730,6 +689,7 @@ OBJS += ../src/utils/base64.o
 endif
 
 ifdef NEED_AP_MLME
+OBJS += ../src/ap/beacon.o
 OBJS += ../src/ap/wmm.o
 OBJS += ../src/ap/ap_list.o
 OBJS += ../src/ap/ieee802_11.o
@@ -740,29 +700,8 @@ ifdef CONFIG_IEEE80211N
 OBJS += ../src/ap/ieee802_11_ht.o
 endif
 
-ifdef CONFIG_P2P_MANAGER
-CFLAGS += -DCONFIG_P2P_MANAGER
-OBJS += ../src/ap/p2p_hostapd.o
-endif
-
-ifdef CONFIG_INTERWORKING
-CFLAGS += -DCONFIG_INTERWORKING
-endif
-
-OBJS += ../src/drivers/driver_common.o
-
-ifdef CONFIG_WPA_CLI_EDIT
-OBJS_c += ../src/utils/edit.o
-else
-OBJS_c += ../src/utils/edit_simple.o
-endif
-
 ifdef CONFIG_NO_STDOUT_DEBUG
 CFLAGS += -DCONFIG_NO_STDOUT_DEBUG
-endif
-
-ifdef CONFIG_DEBUG_FILE
-CFLAGS += -DCONFIG_DEBUG_FILE
 endif
 
 ALL=hostapd hostapd_cli
@@ -790,8 +729,7 @@ verify_config:
 	fi
 
 install: all
-	mkdir -p $(DESTDIR)/usr/local/bin
-	for i in $(ALL); do cp -f $$i $(DESTDIR)/usr/local/bin/$$i; done
+	for i in $(ALL); do cp -f $$i /usr/local/bin/$$i; done
 
 ../src/drivers/build.hostapd:
 	@if [ -f ../src/drivers/build.wpa_supplicant ]; then \
@@ -802,15 +740,15 @@ install: all
 BCHECK=../src/drivers/build.hostapd
 
 hostapd: $(BCHECK) $(OBJS)
-	$(Q)$(CC) $(LDFLAGS) -o hostapd $(OBJS) $(LIBS)
-	@$(E) "  LD " $@
+	$(CC) $(LDFLAGS) -o hostapd $(OBJS) $(LIBS)
 
+OBJS_c = hostapd_cli.o ../src/common/wpa_ctrl.o ../src/utils/os_$(CONFIG_OS).o
 ifdef CONFIG_WPA_TRACE
 OBJS_c += ../src/utils/trace.o
+OBJS_c += ../src/utils/wpa_debug.o
 endif
 hostapd_cli: $(OBJS_c)
-	$(Q)$(CC) $(LDFLAGS) -o hostapd_cli $(OBJS_c) $(LIBS_c)
-	@$(E) "  LD " $@
+	$(CC) $(LDFLAGS) -o hostapd_cli $(OBJS_c) $(LIBS_c)
 
 NOBJS = nt_password_hash.o ../src/crypto/ms_funcs.o $(SHA1OBJS) ../src/crypto/md5.o
 ifdef NEED_RC4
@@ -840,12 +778,10 @@ HOBJS += ../src/crypto/aes-internal-enc.o
 endif
 
 nt_password_hash: $(NOBJS)
-	$(Q)$(CC) $(LDFLAGS) -o nt_password_hash $(NOBJS) $(LIBS_n)
-	@$(E) "  LD " $@
+	$(CC) $(LDFLAGS) -o nt_password_hash $(NOBJS) $(LIBS_n)
 
 hlr_auc_gw: $(HOBJS)
-	$(Q)$(CC) $(LDFLAGS) -o hlr_auc_gw $(HOBJS) $(LIBS_h)
-	@$(E) "  LD " $@
+	$(CC) $(LDFLAGS) -o hlr_auc_gw $(HOBJS) $(LIBS_h)
 
 clean:
 	$(MAKE) -C ../src clean

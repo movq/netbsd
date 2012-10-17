@@ -1,4 +1,4 @@
-/* $NetBSD: balloon.c,v 1.16 2012/06/30 23:36:20 jym Exp $ */
+/* $NetBSD: balloon.c,v 1.13 2012/01/05 18:11:50 jym Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
 #define BALLOONDEBUG 0
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: balloon.c,v 1.16 2012/06/30 23:36:20 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: balloon.c,v 1.13 2012/01/05 18:11:50 jym Exp $");
 
 #include <sys/inttypes.h>
 #include <sys/device.h>
@@ -397,8 +397,12 @@ balloon_inflate(struct balloon_xenbus_softc *sc, size_t tpages)
 		mfn_list[rpages] = xpmap_ptom(pa) >> PAGE_SHIFT;
 
 		s = splvm();
+
 		/* Invalidate pg */
-		xpmap_ptom_unmap(pa);
+		xpmap_phys_to_machine_mapping[
+			(pa - XPMAP_OFFSET) >> PAGE_SHIFT
+			] = INVALID_P2M_ENTRY;
+
 		splx(s);
 
 		SLIST_INSERT_HEAD(&balloon_sc->balloon_page_entries, 
@@ -407,7 +411,7 @@ balloon_inflate(struct balloon_xenbus_softc *sc, size_t tpages)
 	}
 
 	/* Hand over pages to Hypervisor */
-	set_xen_guest_handle(reservation.extent_start, mfn_list);
+	xenguest_handle(reservation.extent_start) = mfn_list;
 	reservation.nr_extents = rpages;
 
 	s = splvm();
@@ -471,7 +475,7 @@ balloon_deflate(struct balloon_xenbus_softc *sc, size_t tpages)
 	}
 
 	/* reclaim pages from balloon */
-	set_xen_guest_handle(reservation.extent_start, mfn_list);
+	xenguest_handle(reservation.extent_start) = mfn_list;
 	reservation.nr_extents = tpages;
 
 	s = splvm();
@@ -513,8 +517,11 @@ balloon_deflate(struct balloon_xenbus_softc *sc, size_t tpages)
 
 		s = splvm();
 
-		xpmap_ptom_map(pa, ptoa(mfn_list[rpages]));
-		xpq_queue_machphys_update(ptoa(mfn_list[rpages]), pa);
+		xpmap_phys_to_machine_mapping[
+		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn_list[rpages];
+
+		xpq_queue_machphys_update(
+		    ((paddr_t) (mfn_list[rpages])) << PAGE_SHIFT, pa);
 
 		splx(s);
 

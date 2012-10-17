@@ -1,4 +1,4 @@
-/*	$NetBSD: netgroup.c,v 1.7 2012/03/20 20:34:58 matt Exp $	*/
+/*	$NetBSD: netgroup.c,v 1.6 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: netgroup.c,v 1.7 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: netgroup.c,v 1.6 2008/04/28 20:24:14 martin Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +41,7 @@ static void usage __P((void)) __dead;
 int main __P((int, char *[]));
 
 static void
-usage(void)
+usage()
 {
 
 	(void)fprintf(stderr, "usage: %s [-hud] <netgroup>\n", getprogname());
@@ -49,7 +49,9 @@ usage(void)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int c, i = 0;
 	const char *p[3];

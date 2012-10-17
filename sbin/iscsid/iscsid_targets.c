@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid_targets.c,v 1.4 2012/05/27 16:50:32 riz Exp $	*/
+/*	$NetBSD: iscsid_targets.c,v 1.3.2.1 2012/05/30 08:06:26 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2005,2006,2011 The NetBSD Foundation, Inc.

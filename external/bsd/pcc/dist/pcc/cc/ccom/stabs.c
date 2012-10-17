@@ -1,5 +1,5 @@
 /*	Id: stabs.c,v 1.33 2012/03/22 18:04:41 plunky Exp 	*/	
-/*	$NetBSD: stabs.c,v 1.1.1.5 2012/03/26 14:26:52 plunky Exp $	*/
+/*	$NetBSD: stabs.c,v 1.1.1.4.4.1 2012/04/03 16:36:22 riz Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).

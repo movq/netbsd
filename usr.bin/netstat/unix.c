@@ -1,4 +1,4 @@
-/*	$NetBSD: unix.c,v 1.34 2012/03/20 20:34:58 matt Exp $	*/
+/*	$NetBSD: unix.c,v 1.33 2011/05/29 04:45:08 manu Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)unix.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: unix.c,v 1.34 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: unix.c,v 1.33 2011/05/29 04:45:08 manu Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,7 +83,7 @@ unixdomainprhdr(void)
 	       "Nextref");
 }
 
-static	const char * const socktype[] =
+static	const char *socktype[] =
     { "#0", "stream", "dgram", "raw", "rdm", "seqpacket" };
 
 static void
@@ -102,7 +102,9 @@ unixdomainpr0(u_long so_pcb, u_long so_type, u_long rcvq, u_long sndq,
 }
 
 static void
-unixdomainpr(struct socket *so, void *soaddr)
+unixdomainpr(so, soaddr)
+	struct socket *so;
+	void *soaddr;
 {
 	struct unpcb unp, runp;
 	struct sockaddr_un sun, rsun;
@@ -138,7 +140,8 @@ unixdomainpr(struct socket *so, void *soaddr)
 }
 
 void
-unixpr(u_long off)
+unixpr(off)
+	u_long	off;
 {
 	struct file *fp;
 	struct socket sock, *so = &sock;

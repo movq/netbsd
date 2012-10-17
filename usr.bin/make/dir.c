@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.65 2012/06/12 19:21:50 joerg Exp $	*/
+/*	$NetBSD: dir.c,v 1.63 2011/03/05 23:57:05 sjg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: dir.c,v 1.65 2012/06/12 19:21:50 joerg Exp $";
+static char rcsid[] = "$NetBSD: dir.c,v 1.63 2011/03/05 23:57:05 sjg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)dir.c	8.2 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: dir.c,v 1.65 2012/06/12 19:21:50 joerg Exp $");
+__RCSID("$NetBSD: dir.c,v 1.63 2011/03/05 23:57:05 sjg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -860,8 +860,8 @@ Dir_Expand(const char *word, Lst path, Lst expansions)
  *-----------------------------------------------------------------------
  */
 static char *
-DirLookup(Path *p, const char *name MAKE_ATTR_UNUSED, const char *cp, 
-          Boolean hasSlash MAKE_ATTR_UNUSED)
+DirLookup(Path *p, const char *name __unused, const char *cp, 
+          Boolean hasSlash __unused)
 {
     char *file;		/* the current filename to check */
 
@@ -1004,7 +1004,7 @@ DirLookupAbs(Path *p, const char *name, const char *cp)
  *-----------------------------------------------------------------------
  */
 static char *
-DirFindDot(Boolean hasSlash MAKE_ATTR_UNUSED, const char *name, const char *cp)
+DirFindDot(Boolean hasSlash __unused, const char *name, const char *cp)
 {
 
 	if (Hash_FindEntry(&dot->files, cp) != NULL) {
@@ -1428,7 +1428,7 @@ Dir_FindHereOrAbove(char *here, char *search_path, char *result, int rlen) {
  *-----------------------------------------------------------------------
  */
 int
-Dir_MTime(GNode *gn, Boolean recheck)
+Dir_MTime(GNode *gn)
 {
     char          *fullName;  /* the full pathname of name */
     struct stat	  stb;	      /* buffer for finding the mod time */
@@ -1481,16 +1481,19 @@ Dir_MTime(GNode *gn, Boolean recheck)
 	fullName = bmake_strdup(gn->name);
     }
 
-    if (!recheck)
-	entry = Hash_FindEntry(&mtimes, fullName);
-    else
-	entry = NULL;
+    entry = Hash_FindEntry(&mtimes, fullName);
     if (entry != NULL) {
+	/*
+	 * Only do this once -- the second time folks are checking to
+	 * see if the file was actually updated, so we need to actually go
+	 * to the file system.
+	 */
 	if (DEBUG(DIR)) {
 	    fprintf(debug_file, "Using cached time %s for %s\n",
 		    Targ_FmtTime(Hash_GetTimeValue(entry)), fullName);
 	}
 	stb.st_mtime = Hash_GetTimeValue(entry);
+	Hash_DeleteEntry(&mtimes, entry);
     } else if (stat(fullName, &stb) < 0) {
 	if (gn->type & OP_MEMBER) {
 	    if (fullName != gn->path)
@@ -1499,16 +1502,12 @@ Dir_MTime(GNode *gn, Boolean recheck)
 	} else {
 	    stb.st_mtime = 0;
 	}
-    } else {
-	if (stb.st_mtime == 0) {
-		/*
-		 * 0 handled specially by the code, if the time is really 0,
-		 * return something else instead
-		 */
-		stb.st_mtime = 1;
-	}
-	entry = Hash_CreateEntry(&mtimes, fullName, NULL);
-	Hash_SetTimeValue(entry, stb.st_mtime);
+    } else if (stb.st_mtime == 0) {
+	/*
+	 * 0 handled specially by the code, if the time is really 0, return
+	 * something else instead
+	 */
+	stb.st_mtime = 1;
     }
 	
     if (fullName && gn->path == NULL) {

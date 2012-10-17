@@ -1,4 +1,4 @@
-/*	$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt Exp $	*/
+/*	$NetBSD: eb7500atx_machdep.c,v 1.21 2011/07/19 15:59:52 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 Reinoud Zandijk.
@@ -55,7 +55,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.21 2011/07/19 15:59:52 dyoung Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -119,8 +119,16 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.25 2012/09/22 00:33:37 matt 
  * This is machine architecture dependent as it varies depending
  * on where the ROM appears when you turn the MMU off.
  */
+u_int cpu_reset_address = 0x0; /* XXX 0x3800000 too for rev0 RiscPC 600 */
 
 #define VERBOSE_INIT_ARM
+
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 
 struct bootconfig bootconfig;	/* Boot config storage */
 videomemory_t videomemory;	/* Video memory descriptor */
@@ -129,7 +137,7 @@ char *boot_args = NULL;		/* holds the pre-processed boot arguments */
 extern char *booted_kernel;	/* used for ioctl to retrieve booted kernel */
 
 extern int       *vidc_base;
-extern uint32_t  iomd_base;
+extern u_int32_t  iomd_base;
 extern struct bus_space iomd_bs_tag;
 
 paddr_t physical_start;
@@ -148,7 +156,18 @@ int max_processes = 64;		/* Default number */
 
 u_int videodram_size = 0;	/* Amount of DRAM to reserve for video */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t systempage;
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
+
 paddr_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -742,7 +761,7 @@ initarm(void *cookie)
 #ifdef VERBOSE_INIT_ARM
 	printf("switching to new L1 page table\n");
 #endif
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	cpu_setttb(kernel_l1pt.pv_pa);
 
 	/*
 	 * We must now clean the cache again....

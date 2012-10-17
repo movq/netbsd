@@ -1,4 +1,4 @@
-/*	$NetBSD: g760a.c,v 1.4 2012/07/29 07:04:09 mlelstv Exp $	*/
+/*	$NetBSD: g760a.c,v 1.2 2011/06/20 20:16:19 pgoyette Exp $	*/
 
 /*-
  * Copyright (C) 2008 A.Leo.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: g760a.c,v 1.4 2012/07/29 07:04:09 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: g760a.c,v 1.2 2011/06/20 20:16:19 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -218,11 +218,11 @@ g760a_setup(struct g760a_softc* sc)
 {
 	int error;
 	int ret;
-	const struct sysctlnode *me, *node;
+	struct sysctlnode* me = NULL, * node = NULL;
 
 	sc->sc_sme = sysmon_envsys_create();
 
-	ret = sysctl_createv(NULL, 0, NULL, &me,
+	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode**)&me,
 			CTLFLAG_READWRITE,
 			CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
 			NULL, 0, NULL, 0,
@@ -236,11 +236,13 @@ g760a_setup(struct g760a_softc* sc)
 	if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_sensor))
 		goto out;
 
-	ret = sysctl_createv(NULL, 0, NULL, &node,
+	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode**)&node,
 			CTLFLAG_READWRITE,
 			CTLTYPE_INT, "rpm", sc->sc_sensor.desc,
-			sysctl_g760a_rpm, 0x42, (void*)sc, 0,
+			sysctl_g760a_rpm, 0x42, NULL, 0,
 			CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL);
+	if (node != NULL)
+		node->sysctl_data = sc;
 
 	sc->sc_sme->sme_name = device_xname(sc->sc_dev);
 	sc->sc_sme->sme_cookie = sc;

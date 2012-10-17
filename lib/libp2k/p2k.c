@@ -1,4 +1,4 @@
-/*	$NetBSD: p2k.c,v 1.57 2012/08/16 09:25:44 manu Exp $	*/
+/*	$NetBSD: p2k.c,v 1.55.4.2 2012/09/13 20:20:17 riz Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008, 2009  Antti Kantee.  All Rights Reserved.

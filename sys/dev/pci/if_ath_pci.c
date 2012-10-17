@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ath_pci.c,v 1.46 2012/08/04 04:05:36 riastradh Exp $	*/
+/*	$NetBSD: if_ath_pci.c,v 1.45.8.1 2012/08/12 18:51:09 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ath_pci.c,v 1.46 2012/08/04 04:05:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ath_pci.c,v 1.45.8.1 2012/08/12 18:51:09 martin Exp $");
 
 /*
  * PCI/Cardbus front-end for the Atheros Wireless LAN controller driver.

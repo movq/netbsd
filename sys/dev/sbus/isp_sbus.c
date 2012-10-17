@@ -1,4 +1,4 @@
-/* $NetBSD: isp_sbus.c,v 1.81 2012/09/07 22:37:27 macallan Exp $ */
+/* $NetBSD: isp_sbus.c,v 1.80.14.1 2012/09/13 22:22:45 riz Exp $ */
 /*
  * SBus specific probe and attach routines for Qlogic ISP SCSI adapters.
  *
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp_sbus.c,v 1.81 2012/09/07 22:37:27 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp_sbus.c,v 1.80.14.1 2012/09/13 22:22:45 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

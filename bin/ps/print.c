@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.120 2012/03/20 18:42:28 matt Exp $	*/
+/*	$NetBSD: print.c,v 1.119 2012/02/13 12:55:28 wiz Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.120 2012/03/20 18:42:28 matt Exp $");
+__RCSID("$NetBSD: print.c,v 1.119 2012/02/13 12:55:28 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -1067,7 +1067,8 @@ cputime(void *arg, VARENT *ve, int mode)
 }
 
 double
-getpcpu(const struct kinfo_proc2 *k)
+getpcpu(k)
+	const struct kinfo_proc2 *k;
 {
 	static int failure;
 
@@ -1100,7 +1101,8 @@ pcpu(void *arg, VARENT *ve, int mode)
 }
 
 double
-getpmem(const struct kinfo_proc2 *k)
+getpmem(k)
+	const struct kinfo_proc2 *k;
 {
 	static int failure;
 	double fracmem;
@@ -1167,7 +1169,10 @@ tsize(void *arg, VARENT *ve, int mode)
  * structures.
  */
 static void
-printval(void *bp, VAR *v, int mode)
+printval(bp, v, mode)
+	void *bp;
+	VAR *v;
+	int mode;
 {
 	static char ofmt[32] = "%";
 	int width, vok, fmtlen;

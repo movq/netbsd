@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsproxy.c,v 1.1.1.2 2012/02/17 08:36:20 tron Exp $	*/
+/*	$NetBSD: tlsproxy.c,v 1.1.1.1.8.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME

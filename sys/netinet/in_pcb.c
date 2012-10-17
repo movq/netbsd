@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $	*/
+/*	$NetBSD: in_pcb.c,v 1.140 2011/12/19 11:59:56 drochner Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.140 2011/12/19 11:59:56 drochner Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -124,7 +124,7 @@ __KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $"
 #include <netinet/in_pcb.h>
 #include <netinet/in_var.h>
 #include <netinet/ip_var.h>
-#include <netinet/portalgo.h>
+#include <netinet/rfc6056.h>
 
 #ifdef INET6
 #include <netinet/ip6.h>
@@ -132,7 +132,10 @@ __KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.143 2012/06/25 15:28:39 christos Exp $"
 #include <netinet6/in6_pcb.h>
 #endif
 
-#ifdef FAST_IPSEC
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#elif FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
 #endif /* IPSEC */
@@ -191,7 +194,7 @@ in_pcballoc(struct socket *so, void *v)
 	struct inpcbtable *table = v;
 	struct inpcb *inp;
 	int s;
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	int error;
 #endif
 
@@ -205,9 +208,9 @@ in_pcballoc(struct socket *so, void *v)
 	inp->inp_table = table;
 	inp->inp_socket = so;
 	inp->inp_errormtu = -1;
-	inp->inp_portalgo = PORTALGO_DEFAULT;
+	inp->inp_rfc6056algo = RFC6056_ALGO_DEFAULT;
 	inp->inp_bindportonsend = false;
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	error = ipsec_init_pcbpolicy(so, &inp->inp_sp);
 	if (error != 0) {
 		s = splnet();
@@ -260,7 +263,7 @@ in_pcbsetport(struct sockaddr_in *sin, struct inpcb *inp, kauth_cred_t cred)
        /*
         * Use RFC6056 randomized port selection
         */
-	error = portalgo_randport(&lport, &inp->inp_head, cred);
+	error = rfc6056_randport(&lport, &inp->inp_head, cred);
 	if (error)
 		return error;
 
@@ -551,7 +554,7 @@ in_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 	}
 
 	in_pcbstate(inp, INP_CONNECTED);
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	if (inp->inp_socket->so_type == SOCK_STREAM)
 		ipsec_pcbconn(inp->inp_sp);
 #endif
@@ -569,7 +572,7 @@ in_pcbdisconnect(void *v)
 	inp->inp_faddr = zeroin_addr;
 	inp->inp_fport = 0;
 	in_pcbstate(inp, INP_BOUND);
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	ipsec_pcbdisconn(inp->inp_sp);
 #endif
 	if (inp->inp_socket->so_state & SS_NOFDREF)
@@ -586,7 +589,7 @@ in_pcbdetach(void *v)
 	if (inp->inp_af != AF_INET)
 		return;
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	ipsec4_delete_pcbpolicy(inp);
 #endif /*IPSEC*/
 	so->so_pcb = 0;
@@ -806,9 +809,8 @@ in_pcblookup_port(struct inpcbtable *table, struct in_addr laddr,
 {
 	struct inpcbhead *head;
 	struct inpcb_hdr *inph;
-	struct inpcb *match = NULL;
-	int matchwild = 3;
-	int wildcard;
+	struct inpcb *inp, *match = 0;
+	int matchwild = 3, wildcard;
 	u_int16_t lport = lport_arg;
 
 	if (vp)
@@ -816,23 +818,12 @@ in_pcblookup_port(struct inpcbtable *table, struct in_addr laddr,
 
 	head = INPCBHASH_PORT(table, lport);
 	LIST_FOREACH(inph, head, inph_lhash) {
-		struct inpcb * const inp = (struct inpcb *)inph;
-
+		inp = (struct inpcb *)inph;
 		if (inp->inp_af != AF_INET)
 			continue;
+
 		if (inp->inp_lport != lport)
 			continue;
-		/*
-		 * check if inp's faddr and laddr match with ours.
-		 * our faddr is considered null.
-		 * count the number of wildcard matches. (0 - 2)
-		 *
-		 *	null	null	match
-		 *	A	null	wildcard match
-		 *	null	B	wildcard match
-		 *	A	B	non match
-		 *	A	A	match
-		 */
 		wildcard = 0;
 		if (!in_nullhost(inp->inp_faddr))
 			wildcard++;
@@ -849,9 +840,6 @@ in_pcblookup_port(struct inpcbtable *table, struct in_addr laddr,
 		}
 		if (wildcard && !lookup_wildcard)
 			continue;
-		/*
-		 * prefer an address with less wildcards.
-		 */
 		if (wildcard < matchwild) {
 			match = inp;
 			matchwild = wildcard;

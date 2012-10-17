@@ -1,4 +1,4 @@
-/*	$NetBSD: sdhcvar.h,v 1.8 2012/07/21 16:14:05 skrll Exp $	*/
+/*	$NetBSD: sdhcvar.h,v 1.6.2.1 2012/08/09 06:36:48 jdc Exp $	*/
 /*	$OpenBSD: sdhcvar.h,v 1.3 2007/09/06 08:01:01 jsg Exp $	*/
 
 /*

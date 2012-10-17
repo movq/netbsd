@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vfsops.c,v 1.97 2012/10/03 23:32:43 jakllsch Exp $	*/
+/*	$NetBSD: msdosfs_vfsops.c,v 1.93.6.1 2012/07/05 17:36:31 riz Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.97 2012/10/03 23:32:43 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.93.6.1 2012/07/05 17:36:31 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -361,11 +361,10 @@ msdosfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			 */
 			devvp = pmp->pm_devvp;
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-			error = kauth_authorize_system(l->l_cred,
-			    KAUTH_SYSTEM_MOUNT, KAUTH_REQ_SYSTEM_MOUNT_DEVICE,
-			    mp, devvp, KAUTH_ARG(VREAD | VWRITE));
+			error = genfs_can_mount(devvp, VREAD | VWRITE,
+			    l->l_cred);
 			VOP_UNLOCK(devvp);
-			DPRINTF(("KAUTH_REQ_SYSTEM_MOUNT_DEVICE %d\n", error));
+			DPRINTF(("genfs_can_mount %d\n", error));
 			if (error)
 				return (error);
 
@@ -405,11 +404,10 @@ msdosfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if ((mp->mnt_flag & MNT_RDONLY) == 0)
 		accessmode |= VWRITE;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(accessmode));
+	error = genfs_can_mount(devvp, accessmode, l->l_cred);
 	VOP_UNLOCK(devvp);
 	if (error) {
-		DPRINTF(("KAUTH_REQ_SYSTEM_MOUNT_DEVICE %d\n", error));
+		DPRINTF(("genfs_can_mount %d\n", error));
 		vrele(devvp);
 		return (error);
 	}
@@ -493,7 +491,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 		goto error_exit;
 
 	error = getdisksize(devvp, &psize, &secsize);
-	if (error) {
+	if (error || secsize == 0) {
 		if (argp->flags & MSDOSFSMNT_GEMDOSFS)
 			goto error_exit;
 
@@ -771,7 +769,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 	 * Allocate memory for the bitmap of allocated clusters, and then
 	 * fill it in.
 	 */
-	pmp->pm_inusemap = malloc(((pmp->pm_maxcluster + N_INUSEBITS)
+	pmp->pm_inusemap = malloc(((pmp->pm_maxcluster + N_INUSEBITS - 1)
 				   / N_INUSEBITS)
 				  * sizeof(*pmp->pm_inusemap),
 				  M_MSDOSFSFAT, M_WAITOK);

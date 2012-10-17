@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.66 2012/08/04 14:53:32 reinoud Exp $ */
+/* $NetBSD: trap.c,v 1.63.2.3 2012/08/08 15:32:25 martin Exp $ */
 
 /*-
  * Copyright (c) 2011 Reinoud Zandijk <reinoud@netbsd.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.66 2012/08/04 14:53:32 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.63.2.3 2012/08/08 15:32:25 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

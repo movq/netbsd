@@ -1,4 +1,4 @@
-/*	$NetBSD: hmac_link.c,v 1.3 2012/06/05 00:41:32 christos Exp $	*/
+/*	$NetBSD: hmac_link.c,v 1.2.6.1 2012/06/05 21:15:01 bouyer Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")

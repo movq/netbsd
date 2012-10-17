@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf_filter.c,v 1.54 2012/09/27 18:28:56 alnsn Exp $	*/
+/*	$NetBSD: bpf_filter.c,v 1.50 2011/12/29 23:47:21 alnsn Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf_filter.c,v 1.54 2012/09/27 18:28:56 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf_filter.c,v 1.50 2011/12/29 23:47:21 alnsn Exp $");
 
 #if 0
 #if !(defined(lint) || defined(KERNEL))
@@ -57,7 +57,7 @@ static const char rcsid[] =
 #ifdef _KERNEL
 #include <sys/mbuf.h>
 #define MINDEX(len, m, k) 		\
-{					\
+{ 					\
 	len = m->m_len; 		\
 	while (k >= len) { 		\
 		k -= len; 		\
@@ -65,7 +65,7 @@ static const char rcsid[] =
 		if (m == 0) 		\
 			return 0; 	\
 		len = m->m_len; 	\
-	}				\
+	} 				\
 }
 
 static int m_xword (const struct mbuf *, uint32_t, int *);
@@ -90,12 +90,14 @@ m_xword(const struct mbuf *m, uint32_t k, int *err)
 		return 0;
 	*err = 0;
 	np = mtod(m0, u_char *);
-
 	switch (len - k) {
+
 	case 1:
 		return (cp[0] << 24) | (np[0] << 16) | (np[1] << 8) | np[2];
+
 	case 2:
 		return (cp[0] << 24) | (cp[1] << 16) | (np[0] << 8) | np[1];
+
 	default:
 		return (cp[0] << 24) | (cp[1] << 16) | (cp[2] << 8) | np[0];
 	}
@@ -139,21 +141,14 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 	uint32_t A, X, k;
 	uint32_t mem[BPF_MEMWORDS];
 
-	if (pc == 0) {
+	if (pc == 0)
 		/*
 		 * No filter means accept all.
 		 */
 		return (u_int)-1;
-	}
-
-	/*
-	 * Note: safe to leave memwords uninitialised, as the validation
-	 * step ensures that it will not be read, if it was not written.
-	 */
 	A = 0;
 	X = 0;
 	--pc;
-
 	for (;;) {
 		++pc;
 		switch (pc->code) {
@@ -175,7 +170,7 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			k = pc->k;
 			if (k > buflen || sizeof(int32_t) > buflen - k) {
 #ifdef _KERNEL
-				int merr;
+				int merr = 0;	/* XXX: GCC */
 
 				if (buflen != 0)
 					return 0;
@@ -242,7 +237,7 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			if (pc->k > buflen || X > buflen - pc->k ||
 			    sizeof(int32_t) > buflen - k) {
 #ifdef _KERNEL
-				int merr;
+				int merr = 0;	/* XXX: GCC */
 
 				if (buflen != 0)
 					return 0;
@@ -262,7 +257,7 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			if (pc->k > buflen || X > buflen - pc->k ||
 			    sizeof(int16_t) > buflen - k) {
 #ifdef _KERNEL
-				int merr;
+				int merr = 0;	/* XXX: GCC */
 
 				if (buflen != 0)
 					return 0;

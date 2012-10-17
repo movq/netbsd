@@ -1,4 +1,4 @@
-/*	$NetBSD: config.c,v 1.28 2012/08/08 04:05:26 msaitoh Exp $	*/
+/*	$NetBSD: config.c,v 1.27.2.1 2012/08/08 15:37:49 martin Exp $	*/
 /*	$KAME: config.c,v 1.93 2005/10/17 14:40:02 suz Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: pq3gpio.c,v 1.8 2012/07/15 08:44:56 matt Exp $	*/
+/*	$NetBSD: pq3gpio.c,v 1.4.8.1 2012/05/09 22:49:06 riz Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pq3gpio.c,v 1.8 2012/07/15 08:44:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pq3gpio.c,v 1.4.8.1 2012/05/09 22:49:06 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>
@@ -64,6 +64,10 @@ __KERNEL_RCSID(0, "$NetBSD: pq3gpio.c,v 1.8 2012/07/15 08:44:56 matt Exp $");
 #include <powerpc/booke/e500reg.h>
 
 struct pq3gpio_group {
+#if 0
+	SIMPLEQ_ENTRY(pq3gpio_group) gc_link;
+	struct pq3gpio_softc *gc_softc;
+#endif
 	struct gpio_chipset_tag gc_tag;
 	gpio_pin_t gc_pins[32];
 	bus_space_tag_t gc_bst;
@@ -102,106 +106,27 @@ pq3gpio_pin_write(void *v, int num, int val)
 	}
 }
 
-#if defined(MPC8548) || defined(MPC8555) || defined(MPC8544)
-static void
-pq3gpio_null_pin_ctl(void *v, int num, int ctl)
-{
-}
-#endif
-
-#if defined(P1025)
-/*
- * P1025 has controllable input/output pins
- */
-static void
-pq3gpio_pin_ctl(void *v, int num, int ctl)
-{
-	struct pq3gpio_group * const gc = v;
-	const size_t shift = gc->gc_pins[num].pin_num ^ 31;
-  
-	uint64_t old_dir =
-	    ((uint64_t)bus_space_read_4(gc->gc_bst, gc->gc_bsh, CPDIR1) << 32)
-	    | (bus_space_read_4(gc->gc_bst, gc->gc_bsh, CPDIR2) << 0);
-
-	uint32_t dir = 0;
-	switch (ctl & (GPIO_PIN_INPUT|GPIO_PIN_OUTPUT)) {
-	case GPIO_PIN_INPUT|GPIO_PIN_OUTPUT:	dir = CPDIR_INOUT; break;
-	case GPIO_PIN_OUTPUT:			dir = CPDIR_OUT; break;
-	case GPIO_PIN_INPUT:			dir = CPDIR_INOUT; break;
-	case 0:					dir = CPDIR_DIS; break;
-	}
-
-	uint64_t new_dir = (old_dir & (3ULL << (2 * shift)))
-	    | ((uint64_t)dir << (2 * shift));
-
-	if ((uint32_t)old_dir != (uint32_t)new_dir)
-		bus_space_write_4(gc->gc_bst, gc->gc_bsh, CPDIR2,
-		    (uint32_t)new_dir);
-	new_dir >>= 32;
-	old_dir >>= 32;
-	if ((uint32_t)old_dir != (uint32_t)new_dir)
-		bus_space_write_4(gc->gc_bst, gc->gc_bsh, CPDIR1,
-		    (uint32_t)new_dir);
-
-	/*
-	 * Now handle opendrain
-	 */
-	uint32_t old_odr = bus_space_read_4(gc->gc_bst, gc->gc_bsh, CPODR);
-	uint32_t new_odr = old_odr;
-	uint32_t odr_mask = 1UL << shift;
-
-	if (ctl & GPIO_PIN_OPENDRAIN) {
-		new_odr |= odr_mask;
-	} else {
-		new_odr &= ~odr_mask;
-	}
-
-	if (old_odr != new_odr)
-		bus_space_write_4(gc->gc_bst, gc->gc_bsh, CPODR, new_odr);
-}
-#endif
-
-#if defined(MPC8536) || defined(P2020)
-/*
- * MPC8536 / P20x0 have controllable input/output pins
- */
 static void
 pq3gpio_pin_ctl(void *v, int num, int ctl)
 {
 	struct pq3gpio_group * const gc = v;
 	const u_int mask = 1 << (gc->gc_pins[num].pin_num ^ 31);
+        uint32_t old, new; 
   
-	uint32_t old_dir = bus_space_read_4(gc->gc_bst, gc->gc_bsh, GPDIR);
-	uint32_t new_dir = old_dir;
-	switch (ctl & (GPIO_PIN_INPUT|GPIO_PIN_OUTPUT)) {
-	case GPIO_PIN_OUTPUT:	new_dir |= mask; break;
-	case GPIO_PIN_INPUT:	new_dir &= ~mask; break;
-	default:		return;
-	}
-	if (old_dir != new_dir)
-		bus_space_write_4(gc->gc_bst, gc->gc_bsh, GPDIR, new_dir);
-
-	/*
-	 * Now handle opendrain
-	 */
-	uint32_t old_odr = bus_space_read_4(gc->gc_bst, gc->gc_bsh, GPODR);
-	uint32_t new_odr = old_odr;
-
-	if (ctl & GPIO_PIN_OPENDRAIN) {
-		new_odr |= mask;
-	} else {
-		new_odr &= ~mask;
-	}
-
-	if (old_odr != new_odr)
-		bus_space_write_4(gc->gc_bst, gc->gc_bsh, GPODR, new_odr);
+        old = bus_space_read_4(gc->gc_bst, gc->gc_bsh, GPDIR);
+        new = old;
+        switch (ctl & (GPIO_PIN_INPUT|GPIO_PIN_OUTPUT)) {
+        case GPIO_PIN_OUTPUT:    new |= mask; break;
+        case GPIO_PIN_INPUT:   new &= ~mask; break;
+        default:                return;
+        }
+        if (old != new)
+		bus_space_write_4(gc->gc_bst, gc->gc_bsh, GPDIR, new);
 }
-#endif
 
 static void
 pq3gpio_group_create(device_t self, bus_space_tag_t bst, bus_space_handle_t bsh,
-	bus_size_t reg, uint32_t pinmask, int pincaps,
-	void (*pin_ctl)(void *, int, int))
+	bus_size_t reg, uint32_t pinmask, int pincaps)
 {
 	struct pq3gpio_group * const gc = kmem_zalloc(sizeof(*gc), KM_SLEEP);
 
@@ -215,7 +140,7 @@ pq3gpio_group_create(device_t self, bus_space_tag_t bst, bus_space_handle_t bsh,
 #endif
 	gc->gc_tag.gp_pin_read = pq3gpio_pin_read;
 	gc->gc_tag.gp_pin_write = pq3gpio_pin_write;
-	gc->gc_tag.gp_pin_ctl = pin_ctl;
+	gc->gc_tag.gp_pin_ctl = pq3gpio_pin_ctl;
 
 	u_int data = bus_space_read_4(gc->gc_bst, gc->gc_bsh, reg);
 	u_int mask = __BIT(31);
@@ -263,10 +188,10 @@ pq3gpio_mpc8536_attach(device_t self, bus_space_tag_t bst,
 		[15] = ilog2(PMUXCR_DMA1),
 	};
 	
-	uint32_t pinmask = 0xffff0000;	/* assume all bits are valid */
+	uint32_t pinmask = ~0;	/* assume all bits are valid */
 	uint32_t gpiomask = __BIT(31);
-	size_t pincnt = 16;
-	const uint32_t pmuxcr = cpu_read_4(GLOBAL_BASE + PMUXCR);
+	size_t pincnt = 32;
+	const uint32_t pmuxcr = bus_space_read_4(bst, bsh, PMUXCR);
 	for (size_t i = 0; i < __arraycount(gpio2pmuxcr_map);
 	     i++, gpiomask >>= 1) {
 		if (pmuxcr & __BIT(gpio2pmuxcr_map[i])) {
@@ -278,11 +203,10 @@ pq3gpio_mpc8536_attach(device_t self, bus_space_tag_t bst,
 	/*
 	 * Create GPIO pin groups
 	 */
-	aprint_normal_dev(self, "%zu input/output/opendrain pins\n",
-	    pincnt);
-	pq3gpio_group_create(self, bst, bsh, GPDAT, pinmask,
-	    GPIO_PIN_INPUT | GPIO_PIN_OUTPUT | GPIO_PIN_OPENDRAIN,
-	    pq3gpio_pin_ctl);
+	aprint_normal_dev(self, "%zu input pins, %zu output pins\n",
+	    pincnt, pincnt);
+	pq3gpio_group_create(self, bst, bsh, GPINDR, pinmask, GPIO_PIN_INPUT);
+	pq3gpio_group_create(self, bst, bsh, GPOUTDR, pinmask, GPIO_PIN_OUTPUT);
 }
 #endif /* MPC8536 */
 
@@ -303,10 +227,8 @@ pq3gpio_mpc8544_attach(device_t self, bus_space_tag_t bst,
 	/*
 	 * Create GPIO pin groups
 	 */
-	pq3gpio_group_create(self, bst, bsh, GPINDR, 0xff000000,
-	    GPIO_PIN_INPUT, pq3gpio_null_pin_ctl);
-	pq3gpio_group_create(self, bst, bsh, GPOUTDR, 0xff000000,
-	    GPIO_PIN_OUTPUT, pq3gpio_null_pin_ctl);
+	pq3gpio_group_create(self, bst, bsh, GPINDR, 0xff000000, GPIO_PIN_INPUT);
+	pq3gpio_group_create(self, bst, bsh, GPOUTDR, 0xff000000, GPIO_PIN_OUTPUT);
 }
 #endif /* MPC8544 */
 
@@ -371,62 +293,11 @@ pq3gpio_mpc8548_attach(device_t self, bus_space_tag_t bst,
 	    ipins, opins);
 
 	if (inmask)
-		pq3gpio_group_create(self, bst, bsh, GPINDR, inmask,
-		    GPIO_PIN_INPUT, pq3gpio_null_pin_ctl);
+		pq3gpio_group_create(self, bst, bsh, GPINDR, inmask, GPIO_PIN_INPUT);
 	if (outmask)
-		pq3gpio_group_create(self, bst, bsh, GPOUTDR, outmask,
-		    GPIO_PIN_OUTPUT, pq3gpio_null_pin_ctl);
+		pq3gpio_group_create(self, bst, bsh, GPOUTDR, outmask, GPIO_PIN_OUTPUT);
 }
 #endif /* MPC8548 */
-
-#ifdef P1025
-static void
-pq3gpio_p1025_attach(device_t self, bus_space_tag_t bst,
-	bus_space_handle_t bsh, u_int svr)
-{
-	static const uint32_t gpio2pmuxcr_map[][4] = {
-		{ 0, __BIT(12), 0, PMUXCR_SDHC_WP },
-		{ __BIT(15), __BIT(8), 0, PMUXCR_USB1 },
-		{ __BITS(14,4)|__BIT(16)|__BITS(27,17)|__BIT(30),
-		  __BIT(1)|__BITS(3,2), 0, PMUXCR_QE0 },
-		{ __BITS(3,1), 0, 0, PMUXCR_QE3 },
-		{ 0, __BITS(17,14), 0, PMUXCR_QE8 },
-		{ __BIT(29), __BITS(19,18), 0, PMUXCR_QE9 },
-		{ 0, __BITS(22,21), 0, PMUXCR_QE10 },
-		{ 0, __BITS(28,23), 0, PMUXCR_QE11 },
-		{ 0, __BIT(20), 0, PMUXCR_QE12 },
-	};
-	
-	uint32_t pinmask[3] = {
-		 0xffffffff, 0xffffffff, 0xffffffff
-	};	/* assume all bits are valid */
-	const uint32_t pmuxcr = cpu_read_4(GLOBAL_BASE + PMUXCR);
-	for (size_t i = 0; i < __arraycount(gpio2pmuxcr_map); i++) {
-		if (pmuxcr & gpio2pmuxcr_map[i][3]) {
-			pinmask[0] &= ~gpio2pmuxcr_map[i][0];
-			pinmask[1] &= ~gpio2pmuxcr_map[i][1];
-			pinmask[2] &= ~gpio2pmuxcr_map[i][2];
-		}
-	}
-
-	/*
-	 * Create GPIO pin groups
-	 */
-	for (size_t i = 0; i < 3; i++) {
-		if (pinmask[i]) {
-			bus_space_handle_t bsh2;
-			aprint_normal_dev(self,
-			    "gpio[%c]: %zu input/output/opendrain pins\n",
-			    "abc"[i], popcount32(pinmask[i]));
-			bus_space_subregion(bst, bsh, CPBASE(i), 0x20, &bsh2);
-			pq3gpio_group_create(self, bst, bsh2, CPDAT,
-			    pinmask[0],
-			    GPIO_PIN_INPUT|GPIO_PIN_OUTPUT|GPIO_PIN_OPENDRAIN,
-			    pq3gpio_pin_ctl);
-		}
-	}
-}
-#endif /* P1025 */
 
 #ifdef P2020
 static void
@@ -446,9 +317,9 @@ pq3gpio_p20x0_attach(device_t self, bus_space_tag_t bst,
 	
 	uint32_t pinmask = 0xffff0000;	/* assume all bits are valid */
 	size_t pincnt = 16;
-	const uint32_t pmuxcr = cpu_read_4(GLOBAL_BASE + PMUXCR);
+	const uint32_t pmuxcr = bus_space_read_4(bst, bsh, PMUXCR);
 	for (size_t i = 0; i < __arraycount(gpio2pmuxcr_map); i++) {
-		if (pmuxcr & gpio2pmuxcr_map[i][1]) {
+		if ((pmuxcr & gpio2pmuxcr_map[i][1]) == 0) {
 			pinmask &= ~gpio2pmuxcr_map[i][0];
 			pincnt--;
 		}
@@ -457,43 +328,31 @@ pq3gpio_p20x0_attach(device_t self, bus_space_tag_t bst,
 	/*
 	 * Create GPIO pin groups
 	 */
-	aprint_normal_dev(self, "%zu input/output/opendrain pins\n",
+	aprint_normal_dev(self, "%zu input/output pins\n",
 	    pincnt);
 	pq3gpio_group_create(self, bst, bsh, GPDAT, pinmask,
-	    GPIO_PIN_INPUT|GPIO_PIN_OUTPUT|GPIO_PIN_OPENDRAIN,
-	    pq3gpio_pin_ctl);
+	    GPIO_PIN_INPUT|GPIO_PIN_OUTPUT);
 }
 #endif /* P2020 */
 
-static const struct pq3gpio_svr_info {
-	uint16_t si_svr;
-	void (*si_attach)(device_t, bus_space_tag_t, bus_space_handle_t, u_int);
-	bus_addr_t si_base;
-	bus_size_t si_size;
+static const struct {
+	uint16_t svr;
+	void (*attach)(device_t, bus_space_tag_t, bus_space_handle_t, u_int);
 } pq3gpio_svrs[] = {
 #ifdef MPC8548
-	{ SVR_MPC8548v2 >> 16, pq3gpio_mpc8548_attach,
-	    GLOBAL_BASE, GLOBAL_SIZE },
+	{ SVR_MPC8548v2 >> 16, pq3gpio_mpc8548_attach },
 #endif
 #ifdef MPC8555
-	{ SVR_MPC8555v1 >> 16, pq3gpio_mpc8548_attach,
-	    GLOBAL_BASE, GLOBAL_SIZE },
+	{ SVR_MPC8555v1 >> 16, pq3gpio_mpc8548_attach },
 #endif
 #ifdef MPC8544
-	{ SVR_MPC8544v1 >> 16, pq3gpio_mpc8544_attach,
-	    GLOBAL_BASE, GLOBAL_SIZE },
+	{ SVR_MPC8544v1 >> 16, pq3gpio_mpc8544_attach },
 #endif
 #ifdef MPC8536
-	{ SVR_MPC8536v1 >> 16, pq3gpio_mpc8536_attach,
-	    GPIO_BASE, GPIO_SIZE },
-#endif
-#ifdef P1025
-	{ SVR_P1025v1 >> 16, pq3gpio_p1025_attach,
-	    GLOBAL_BASE, GLOBAL_SIZE },
+	{ SVR_MPC8536v1 >> 16, pq3gpio_mpc8536_attach },
 #endif
 #ifdef P2020
-	{ SVR_P2020v2 >> 16, pq3gpio_p20x0_attach,
-	    GPIO_BASE, GPIO_SIZE },
+	{ SVR_P2020v2 >> 16, pq3gpio_p20x0_attach },
 #endif
 };
 
@@ -503,20 +362,20 @@ pq3gpio_attach(device_t parent, device_t self, void *aux)
 	struct mainbus_attach_args * const ma = aux;
 	bus_space_tag_t bst = ma->ma_memt;
 	bus_space_handle_t bsh;
+	int error;
+
+	error = bus_space_map(bst, GLOBAL_BASE, GLOBAL_SIZE, 0, &bsh);
+	if (error) {
+		aprint_error_dev(self,
+		    "can't map global registers for gpio: %d\n",
+		    error);
+		return;
+	}
 
 	const uint16_t svr = e500_get_svr();
 	for (u_int i = 0; i < __arraycount(pq3gpio_svrs); i++) {
-		const struct pq3gpio_svr_info * const si = &pq3gpio_svrs[i];
-		if (si->si_svr == svr) {
-			int error = bus_space_map(bst, si->si_base,
-			    si->si_size, 0, &bsh);
-			if (error) {
-				aprint_error_dev(self,
-				    "can't map global registers for gpio: %d\n",
-				    error);
-				return;
-			}
-			(*si->si_attach)(self, bst, bsh, svr);
+		if (pq3gpio_svrs[i].svr == svr) {
+			(*pq3gpio_svrs[i].attach)(self, bst, bsh, svr);
 			return;
 		}
 	}

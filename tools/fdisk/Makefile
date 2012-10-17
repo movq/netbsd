@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.7 2012/06/05 13:41:23 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.4.8.1 2012/06/12 19:11:51 riz Exp $
 
 HOSTPROGNAME=	${MACHINE_GNU_PLATFORM}-fdisk
 HOST_SRCDIR=	sbin/fdisk
-HOST_SRCS=	disklabel.c
+HOST_SRCS=	getcap.c disklabel.c
 
 HOST_CPPFLAGS=	-DDEFAULT_BOOTDIR=\"${DESTDIR}/usr/mdec\"
 

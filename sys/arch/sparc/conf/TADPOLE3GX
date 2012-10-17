@@ -1,4 +1,4 @@
-# 	$NetBSD: TADPOLE3GX,v 1.57 2012/06/26 02:04:55 macallan Exp $
+# 	$NetBSD: TADPOLE3GX,v 1.54.4.1 2012/06/12 17:47:59 riz Exp $
 
 include "arch/sparc/conf/std.sparc"
 
@@ -22,8 +22,8 @@ options 	SUN4M		# sun4m - SS10, SS20, Classic, etc.
 #options 	BLINK
 
 # wsdisplay options
-#options 	WSEMUL_SUN
-options 	WSEMUL_VT100
+options 	WSEMUL_SUN
+#options 	WSEMUL_VT100
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 options 	WSDISPLAY_CUSTOM_OUTPUT		# wsconsctl(8)
 
@@ -64,6 +64,8 @@ options 	KTRACE
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+
+## Loadable kernel module support; still under development.
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -181,7 +183,7 @@ options 	INET		# IP (Internet Protocol) v4
 #options 	NETATALK	# AppleTalk (over Ethernet) protocol
 options 	NTP		# Network Time Protocol in-kernel support
 #options 	PPS_SYNC	# Add serial line synchronization for NTP
-options 	PFIL_HOOKS	# Add pfil(9) packet filter hooks
+options 	PFIL_HOOKS	# Add pfil(9) hooks, intended for custom LKMs.
 options 	IPFILTER_LOG	# Add ipmon(8) logging for ipfilter device
 options 	IPFILTER_LOOKUP	# ippool(8) support
 options 	IPFILTER_COMPAT # Compat for IP-Filter

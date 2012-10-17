@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_fpu.c,v 1.8 2012/02/27 15:57:21 matt Exp $	*/
+/*	$NetBSD: mips_fpu.c,v 1.7.8.1 2012/03/02 16:42:22 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mips_fpu.c,v 1.8 2012/02/27 15:57:21 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_fpu.c,v 1.7.8.1 2012/03/02 16:42:22 riz Exp $");
 
 #include "opt_multiprocessor.h"
 

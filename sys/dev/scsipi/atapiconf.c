@@ -1,4 +1,4 @@
-/*	$NetBSD: atapiconf.c,v 1.86 2012/06/24 07:48:01 riastradh Exp $	*/
+/*	$NetBSD: atapiconf.c,v 1.83.14.3 2012/07/02 21:11:50 jdc Exp $	*/
 
 /*
  * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.86 2012/06/24 07:48:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.83.14.3 2012/07/02 21:11:50 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

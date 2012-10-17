@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.256 2012/09/29 04:02:42 tsutsui Exp $
+#	$NetBSD: build.sh,v 1.253.2.1 2012/03/02 16:48:10 riz Exp $
 #
 # Copyright (c) 2001-2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -554,14 +554,6 @@ getarch()
 	#
 	case "${MACHINE}" in
 
-	evbearm-e[bl])
-		makewrappermachine=${MACHINE}
-		# MACHINE_ARCH is "arm" or "armeb", not "armel"
-		MACHINE_ARCH=earm${MACHINE##*-}
-		MACHINE_ARCH=${MACHINE_ARCH%el}
-		MACHINE=evbarm
-		;;
-
 	evbarm-e[bl])
 		makewrappermachine=${MACHINE}
 		# MACHINE_ARCH is "arm" or "armeb", not "armel"
@@ -679,7 +671,7 @@ validatearch()
 	#
 	case "${MACHINE_ARCH}" in
 
-	alpha|arm|armeb|earm|earmeb|hppa|i386|m68000|m68k|mipse[bl]|mips64e[bl]|powerpc|powerpc64|sh3e[bl]|sparc|sparc64|vax|x86_64|ia64)
+	alpha|arm|armeb|hppa|i386|m68000|m68k|mipse[bl]|mips64e[bl]|powerpc|powerpc64|sh3e[bl]|sparc|sparc64|vax|x86_64|ia64)
 		;;
 
 	"")
@@ -697,11 +689,7 @@ validatearch()
 	case "${MACHINE}" in
 
 	evbarm)
-		arches="arm armeb earm earmeb"
-		;;
-
-	cats|iyonix|netwinder|shark|zaurus)
-		arches="arm earm"
+		arches="arm armeb"
 		;;
 
 	algor|arc|cobalt|pmax)
@@ -1668,7 +1656,7 @@ createmakewrapper()
 	eval cat <<EOF ${makewrapout}
 #! ${HOST_SH}
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.256 2012/09/29 04:02:42 tsutsui Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.253.2.1 2012/03/02 16:48:10 riz Exp $
 # with these arguments: ${_args}
 #
 
@@ -1819,13 +1807,14 @@ buildmodules()
 
 	statusmsg "Building kernel modules for NetBSD/${MACHINE} ${DISTRIBVER}"
 	if [ "${MKOBJDIRS}" != "no" ]; then
-		make_in_dir sys/modules obj
+		make_in_dir sys/modules obj ||
+		    bomb "Failed to make obj in sys/modules"
 	fi
 	if [ "${MKUPDATE}" = "no" ]; then
 		make_in_dir sys/modules cleandir
 	fi
-	make_in_dir sys/modules dependall
-	make_in_dir sys/modules install
+	${runcmd} "${makewrapper}" ${parallel} do-sys-modules ||
+	    bomb "Failed to make do-sys-modules"
 
 	statusmsg "Successful build of kernel modules for NetBSD/${MACHINE} ${DISTRIBVER}"
 }

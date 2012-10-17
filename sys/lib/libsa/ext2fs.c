@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs.c,v 1.13 2012/05/21 21:34:16 dsl Exp $	*/
+/*	$NetBSD: ext2fs.c,v 1.12.2.1 2012/06/03 21:42:52 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.

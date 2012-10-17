@@ -1,10 +1,10 @@
-#	$NetBSD: MALTA,v 1.68 2012/09/17 15:47:47 matt Exp $
+#	$NetBSD: MALTA,v 1.65.2.1 2012/09/17 18:40:12 riz Exp $
 
 include 	"arch/evbmips/conf/std.malta"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"MALTA-$Revision: 1.68 $"
+#ident 		"MALTA-$Revision: 1.65.2.1 $"
 
 maxusers	32
 

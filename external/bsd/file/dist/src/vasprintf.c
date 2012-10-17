@@ -1,4 +1,4 @@
-/*	$NetBSD: vasprintf.c,v 1.1.1.2 2012/02/22 17:48:20 christos Exp $	*/
+/*	$NetBSD: vasprintf.c,v 1.1.1.1.10.1 2012/03/07 23:18:29 riz Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -113,7 +113,7 @@ you use strange formats.
 #if 0
 FILE_RCSID("@(#)$File: vasprintf.c,v 1.8 2011/12/08 12:38:24 rrt Exp $")
 #else
-__RCSID("$NetBSD: vasprintf.c,v 1.1.1.2 2012/02/22 17:48:20 christos Exp $");
+__RCSID("$NetBSD: vasprintf.c,v 1.1.1.1.10.1 2012/03/07 23:18:29 riz Exp $");
 #endif
 #endif	/* lint */
 

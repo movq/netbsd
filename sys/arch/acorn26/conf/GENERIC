@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.68 2012/08/17 20:11:37 abs Exp $
+# $NetBSD: GENERIC,v 1.66 2011/12/18 05:49:22 dholland Exp $
 #
 # GENERIC machine description file
 # 
@@ -121,6 +121,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
@@ -149,7 +150,6 @@ options 	NFS_BOOT_RWSIZE=1024	# XXX "ea" driver bug workaround
 #options 	WSEMUL_NODUMB
 #options 	WSEMUL_SUN
 options 	WSEMUL_VT100
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_VT220L8x8		# 8x8 font for console
 
 config		netbsd	root on ? type ?

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.32 2012/09/01 18:17:51 jakllsch Exp $
+# $NetBSD: GENERIC,v 1.30 2011/12/18 05:49:29 dholland Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include		"arch/landisk/conf/std.landisk"
 
 options         INCLUDE_CONFIG_FILE     # embed config file in kernel binary
 
-#ident          "GENERIC-$Revision: 1.32 $"
+#ident          "GENERIC-$Revision: 1.30 $"
 
 maxusers	16		# estimated number of users
 
@@ -57,6 +57,7 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 #options 	MODULAR		# new style module(7) framework
 
@@ -338,7 +339,7 @@ cdce*	at uhub? port ?		# CDC, Ethernet Networking Control Model
 cue*	at uhub? port ?		# CATC USB-EL1201A based adapters
 kue*	at uhub? port ?		# Kawasaki LSI KL5KUSB101B based adapters
 udav*	at uhub? port ?		# Davicom DM9601 based adapters
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		#
 url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # USB 802.11b adapters

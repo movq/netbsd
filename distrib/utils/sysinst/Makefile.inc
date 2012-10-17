@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.59 2012/04/06 23:48:53 riz Exp $
+#	$NetBSD: Makefile.inc,v 1.58.2.1 2012/05/17 18:57:07 sborrill Exp $
 #
 # Makefile for sysinst
 

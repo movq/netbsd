@@ -1,4 +1,4 @@
-/*	$NetBSD: function.c,v 1.71 2012/08/26 14:26:37 wiz Exp $	*/
+/*	$NetBSD: function.c,v 1.67 2011/09/22 12:49:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)function.c	8.10 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: function.c,v 1.71 2012/08/26 14:26:37 wiz Exp $");
+__RCSID("$NetBSD: function.c,v 1.67 2011/09/22 12:49:57 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -215,7 +215,9 @@ c_amin(char ***argvp, int isok)
  *	file.
  */
 int
-f_anewer(PLAN *plan, FTSENT *entry)
+f_anewer(plan, entry)
+	PLAN *plan;
+	FTSENT *entry;
 {
 
 	return (entry->fts_statp->st_atime > plan->t_data);
@@ -355,7 +357,7 @@ c_ctime(char ***argvp, int isok)
 /*
  * -delete functions --
  *
- *	Always true.  Makes its best shot and continues on regardless.
+ *	True always.  Makes its best shot and continues on regardless.
  */
 int
 f_delete(PLAN *plan __unused, FTSENT *entry)
@@ -637,8 +639,8 @@ c_exec(char ***argvp, int isok)
 		new->flags |= F_NEEDOK;
 
 	/*
-	 * Terminate if we encounter an arg exactly equal to ";", or an
-	 * arg exactly equal to "+" following an arg exactly equal to
+	 * Terminate if we encounter an arg exacty equal to ";", or an
+	 * arg exacty equal to "+" following an arg exacty equal to
 	 * "{}".
 	 */
 	for (ap = argv = *argvp, brace = 0;; ++ap) {

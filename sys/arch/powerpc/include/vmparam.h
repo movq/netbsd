@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.17 2012/02/23 20:33:29 matt Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.16.10.1 2012/05/17 18:38:54 riz Exp $	*/
 
 #ifndef _POWERPC_VMPARAM_H_
 #define _POWERPC_VMPARAM_H_

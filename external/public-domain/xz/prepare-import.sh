@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: prepare-import.sh,v 1.3 2012/05/28 17:28:53 jdc Exp $
+# $NetBSD: prepare-import.sh,v 1.1.8.2 2012/07/04 19:45:31 riz Exp $
 
 set -e
 

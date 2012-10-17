@@ -1,5 +1,5 @@
 /*	$OpenBSD: main.c,v 1.77 2009/10/14 17:19:47 sthen Exp $	*/
-/*	$NetBSD: main.c,v 1.42 2012/04/25 18:23:58 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.41.4.1 2012/05/07 16:26:47 riz Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@
 #include "nbtool_config.h"
 #endif
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: main.c,v 1.42 2012/04/25 18:23:58 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.41.4.1 2012/05/07 16:26:47 riz Exp $");
 #include <assert.h>
 #include <signal.h>
 #include <err.h>

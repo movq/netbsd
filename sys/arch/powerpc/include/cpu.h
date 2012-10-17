@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.93 2012/07/28 23:11:00 matt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.89.2.2 2012/05/17 18:24:27 riz Exp $	*/
 
 /*
  * Copyright (C) 1999 Wolfgang Solfrank.
@@ -114,7 +114,7 @@ struct cpu_info {
 	register_t ci_savearea[CPUSAVE_SIZE];
 #if defined(PPC_BOOKE) || defined(MODULAR) || defined(_MODULE)
 	uint32_t ci_pmap_asid_cur;
-	union pmap_segtab *ci_pmap_segtabs[2];
+	struct pmap_segtab *ci_pmap_segtabs[2];
 #define	ci_pmap_kern_segtab	ci_pmap_segtabs[0]
 #define	ci_pmap_user_segtab	ci_pmap_segtabs[1]
 	struct pmap_tlb_info *ci_tlb_info;
@@ -335,7 +335,6 @@ extern const char __CPU_MAXNUM;
 #endif /* _MODULE */
 
 #if !defined(_MODULE)
-extern char *booted_kernel;
 extern int powersave;
 extern int cpu_timebase;
 extern int cpu_printfataltraps;

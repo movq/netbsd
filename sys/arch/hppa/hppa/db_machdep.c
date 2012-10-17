@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.7 2012/04/02 13:18:04 skrll Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.5 2012/01/18 09:35:48 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -30,22 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.7 2012/04/02 13:18:04 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.5 2012/01/18 09:35:48 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/lwp.h>
 
 #include <machine/db_machdep.h>
-#include <machine/psl.h>
 
 #include <ddb/db_command.h>
 #include <ddb/db_output.h>
 #include <ddb/db_variables.h>
 #include <ddb/db_access.h>
-
-#ifndef _KERNEL
-#include <util.h>
-#endif
 
 db_regs_t	ddb_regs;
 const struct db_variable db_regs[] = {
@@ -135,7 +130,6 @@ db_dump_trap(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	const char *cp = modif;
 	bool lwpaddr = false;
 	char c;
-	char buf[64];
 
 	tf = DDB_REGS;
 	while ((c = *cp++) != 0) {
@@ -192,9 +186,7 @@ db_dump_trap(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	db_printf("\n");
 	db_printf("Other state\n");
 	db_printf("eiem:   %08x\n", tf->tf_eiem);
-	
-	snprintb(buf, sizeof(buf), PSW_BITS, tf->tf_ipsw);
-	db_printf("ipsw:   %s\n", buf);
+	db_printf("ipsw:   %08x\n", tf->tf_ipsw);
 	db_printf("flags:  %08x\n", tf->tf_flags);
 	db_printf("sar:    %08x\n", tf->tf_sar);
 	db_printf("pidr1:  %08x\n", tf->tf_pidr1);	/* cr8 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.14 2012/05/25 12:32:48 matt Exp $	*/
+/*	$NetBSD: userret.h,v 1.13 2011/07/03 02:18:20 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,7 +31,6 @@
  */
 
 #include <sys/userret.h>
-#include <sys/ras.h>
 
 /*
  *	Common code used by various exception handlers to
@@ -43,15 +42,6 @@ userret(struct lwp *l, struct trapframe *tf, u_quad_t oticks)
 	struct proc * const p = l->l_proc;
 
 	mi_userret(l);
-
-	/*
-	 * Check to see if a RAS was interrupted and restart it if it was.
-	 */
-	if (__predict_false(p->p_raslist != NULL)) {
-		void * const ras_pc = ras_lookup(p, (void *) tf->tf_pc);
-		if (ras_pc != (void *) -1)
-			tf->tf_pc = (vaddr_t) ras_pc;
-	}
 
 	/*
 	 * If profiling, charge system time to the trapped pc.

@@ -1,4 +1,4 @@
-/* $NetBSD: ldp_errors.h,v 1.3 2012/03/15 02:02:24 joerg Exp $ */
+/* $NetBSD: ldp_errors.h,v 1.2 2011/06/14 11:28:51 kefren Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -52,8 +52,8 @@
 
 void	printtime(void);
 
-void	debugp(const char *, ...) __printflike(1, 2);
-void	fatalp(const char *, ...) __printflike(1, 2);
-void	warnp(const char *, ...) __printflike(1, 2);
+void	debugp(const char *, ...);
+void	fatalp(const char *, ...);
+void	warnp(const char *, ...);
 
 #endif	/* !_LDP_ERRORS_H_ */

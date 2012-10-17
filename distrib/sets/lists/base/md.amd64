@@ -1,4 +1,4 @@
-# $NetBSD: md.amd64,v 1.177 2012/09/16 18:59:24 tls Exp $
+# $NetBSD: md.amd64,v 1.156.2.5 2012/09/17 19:00:25 riz Exp $
 ./dev/lms0					base-obsolete		obsolete
 ./dev/mms0					base-obsolete		obsolete
 ./libexec/ld.elf_so-i386			base-sys-shlib		compat,pic
@@ -58,10 +58,6 @@
 ./usr/lib/i386/libarchive.so.3.1		base-compat-shlib	compat,pic
 ./usr/lib/i386/libasn1.so.9			base-compat-shlib	compat,pic,kerberos
 ./usr/lib/i386/libasn1.so.9.0			base-compat-shlib	compat,pic,kerberos
-./usr/lib/i386/libatf-c.so.0			base-compat-shlib	compat,pic,atf
-./usr/lib/i386/libatf-c.so.0.0			base-compat-shlib	compat,pic,atf
-./usr/lib/i386/libatf-c++.so.0			base-compat-shlib	compat,pic,atf
-./usr/lib/i386/libatf-c++.so.0.0		base-compat-shlib	compat,pic,atf
 ./usr/lib/i386/libbfd.so.12			base-compat-shlib	compat,pic,binutils
 ./usr/lib/i386/libbfd.so.12.0			base-compat-shlib	compat,pic,binutils
 ./usr/lib/i386/libbind9.so.5			base-compat-shlib	compat,pic
@@ -73,17 +69,13 @@
 ./usr/lib/i386/libbz2.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libbz2.so.1.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libc.so.12			base-compat-shlib	compat,pic
-./usr/lib/i386/libc.so.12.185			base-compat-shlib	compat,pic
+./usr/lib/i386/libc.so.12.181			base-compat-shlib	compat,pic
 ./usr/lib/i386/libcom_err.so.7			base-compat-shlib	compat,pic,kerberos
 ./usr/lib/i386/libcom_err.so.7.0		base-compat-shlib	compat,pic,kerberos
 ./usr/lib/i386/libcrypt.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libcrypt.so.1.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libcrypto.so.8			base-compat-shlib	compat,pic
 ./usr/lib/i386/libcrypto.so.8.0			base-compat-shlib	compat,pic
-./usr/lib/i386/libcrypto_idea.so.7		base-obsolete		obsolete
-./usr/lib/i386/libcrypto_idea.so.7.0		base-obsolete		obsolete
-./usr/lib/i386/libcrypto_mdc2.so.7		base-obsolete		obsolete
-./usr/lib/i386/libcrypto_mdc2.so.7.0		base-obsolete		obsolete
 ./usr/lib/i386/libcrypto_rc5.so.7		base-compat-shlib	compat,pic,crypto,crypto_rc5
 ./usr/lib/i386/libcrypto_rc5.so.7.0		base-compat-shlib	compat,pic,crypto,crypto_rc5
 ./usr/lib/i386/libcurses.so.7			base-compat-shlib	compat,pic
@@ -112,16 +104,14 @@
 ./usr/lib/i386/libelf.so.0.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libevent.so.3			base-compat-shlib	compat,pic
 ./usr/lib/i386/libevent.so.3.2			base-compat-shlib	compat,pic
-./usr/lib/i386/libexecinfo.so.0			base-compat-shlib	compat,pic
-./usr/lib/i386/libexecinfo.so.0.0		base-compat-shlib	compat,pic
 ./usr/lib/i386/libexpat.so.2			base-compat-shlib	compat,pic
-./usr/lib/i386/libexpat.so.2.1			base-compat-shlib	compat,pic
+./usr/lib/i386/libexpat.so.2.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libfetch.so.3			base-compat-shlib	compat,pic
 ./usr/lib/i386/libfetch.so.3.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libform.so.6			base-compat-shlib	compat,pic
 ./usr/lib/i386/libform.so.6.0			base-compat-shlib	compat,pic
-./usr/lib/i386/libgcc_s.so.1			base-compat-shlib	compat,pic,gcccmds
-./usr/lib/i386/libgcc_s.so.1.0			base-compat-shlib	compat,pic,gcccmds
+./usr/lib/i386/libgcc_s.so.1			base-compat-shlib	compat,pic
+./usr/lib/i386/libgcc_s.so.1.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libgnumalloc.so.1		base-compat-shlib	compat,pic
 ./usr/lib/i386/libgnumalloc.so.1.0		base-compat-shlib	compat,pic
 ./usr/lib/i386/libgomp.so.1			base-compat-shlib	compat,pic,gcc=45
@@ -175,8 +165,8 @@
 ./usr/lib/i386/liblua.so.1.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/liblwres.so.5			base-compat-shlib	compat,pic
 ./usr/lib/i386/liblwres.so.5.7			base-compat-shlib	compat,pic
-./usr/lib/i386/liblzf.so.1			base-compat-shlib	compat,pic
-./usr/lib/i386/liblzf.so.1.0			base-compat-shlib	compat,pic
+./usr/lib/i386/liblzf.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/liblzf.so.0.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/liblzma.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/liblzma.so.1.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libm.so.0			base-compat-shlib	compat,pic
@@ -191,14 +181,14 @@
 ./usr/lib/i386/libnetpgp.so.3.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libnpf.so.0			base-compat-shlib	compat,pic,npf
 ./usr/lib/i386/libnpf.so.0.0			base-compat-shlib	compat,pic,npf
-./usr/lib/i386/libobjc.so.3			base-compat-shlib	compat,pic,gcccmds
-./usr/lib/i386/libobjc.so.3.0			base-compat-shlib	compat,pic,gcccmds
+./usr/lib/i386/libobjc.so.3			base-compat-shlib	compat,pic
+./usr/lib/i386/libobjc.so.3.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libopcodes.so.5			base-compat-shlib	compat,pic,binutils
 ./usr/lib/i386/libopcodes.so.5.0		base-compat-shlib	compat,pic,binutils
 ./usr/lib/i386/libossaudio.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libossaudio.so.1.0		base-compat-shlib	compat,pic
-./usr/lib/i386/libp2k.so.2			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/libp2k.so.2.0			base-compat-shlib	compat,pic,rump
+./usr/lib/i386/libp2k.so.2			base-compat-shlib	compat,pic
+./usr/lib/i386/libp2k.so.2.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libpam.so.3			base-compat-shlib	compat,pic,pam
 ./usr/lib/i386/libpam.so.3.0			base-compat-shlib	compat,pic,pam
 ./usr/lib/i386/libpcap.so.4			base-compat-shlib	compat,pic
@@ -215,7 +205,7 @@
 ./usr/lib/i386/libprop.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libprop.so.1.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libpthread.so.1			base-compat-shlib	compat,pic
-./usr/lib/i386/libpthread.so.1.1		base-compat-shlib	compat,pic
+./usr/lib/i386/libpthread.so.1.0		base-compat-shlib	compat,pic
 ./usr/lib/i386/libpthread_dbg.so.2		base-compat-shlib	compat,pic
 ./usr/lib/i386/libpthread_dbg.so.2.0		base-compat-shlib	compat,pic
 ./usr/lib/i386/libpuffs.so.2			base-compat-shlib	compat,pic
@@ -233,23 +223,23 @@
 ./usr/lib/i386/librpcsvc.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/librpcsvc.so.1.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/librt.so.1			base-compat-shlib	compat,pic
-./usr/lib/i386/librt.so.1.1			base-compat-shlib	compat,pic
-./usr/lib/i386/librump.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librump.so.0.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpcrypto.so.0		base-obsolete		obsolete,rump
-./usr/lib/i386/librumpcrypto.so.0.0		base-obsolete		obsolete,rump
-./usr/lib/i386/librumpclient.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpclient.so.0.0		base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpdev.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpdev.so.0.0		base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpnet.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpnet.so.0.0		base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpuser.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpuser.so.0.0		base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumphijack.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumphijack.so.0.0		base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpvfs.so.0			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/librumpvfs.so.0.0		base-compat-shlib	compat,pic,rump
+./usr/lib/i386/librt.so.1.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librump.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librump.so.0.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumpcrypto.so.0		base-obsolete		obsolete
+./usr/lib/i386/librumpcrypto.so.0.0		base-obsolete		obsolete
+./usr/lib/i386/librumpclient.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumpclient.so.0.0		base-compat-shlib	compat,pic
+./usr/lib/i386/librumpdev.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumpdev.so.0.0		base-compat-shlib	compat,pic
+./usr/lib/i386/librumpnet.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumpnet.so.0.0		base-compat-shlib	compat,pic
+./usr/lib/i386/librumpuser.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumpuser.so.0.0		base-compat-shlib	compat,pic
+./usr/lib/i386/librumphijack.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumphijack.so.0.0		base-compat-shlib	compat,pic
+./usr/lib/i386/librumpvfs.so.0			base-compat-shlib	compat,pic
+./usr/lib/i386/librumpvfs.so.0.0		base-compat-shlib	compat,pic
 ./usr/lib/i386/libsaslc.so.0			base-compat-shlib	compat,pic,crypto
 ./usr/lib/i386/libsaslc.so.0.0			base-compat-shlib	compat,pic,crypto
 ./usr/lib/i386/libskey.so.2			base-compat-shlib	compat,pic,skey
@@ -258,11 +248,11 @@
 ./usr/lib/i386/libsl.so.5.0			base-compat-shlib	compat,pic,kerberos
 ./usr/lib/i386/libsqlite3.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libsqlite3.so.1.1		base-compat-shlib	compat,pic
-./usr/lib/i386/libssh.so.19			base-compat-shlib	compat,pic
-./usr/lib/i386/libssh.so.19.0			base-compat-shlib	compat,pic
+./usr/lib/i386/libssh.so.18			base-compat-shlib	compat,pic
+./usr/lib/i386/libssh.so.18.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libssl.so.10			base-compat-shlib	compat,pic
 ./usr/lib/i386/libssl.so.10.0			base-compat-shlib	compat,pic
-./usr/lib/i386/libstdc++.so.7			base-compat-shlib	compat,pic,gcccmds
+./usr/lib/i386/libstdc++.so.7			base-compat-shlib	compat,pic
 ./usr/lib/i386/libstdc++.so.7.0			base-compat-shlib	gcc=4,compat,pic
 ./usr/lib/i386/libstdc++.so.7.1			base-compat-shlib	gcc=45,compat,pic
 ./usr/lib/i386/libsupc++.so.1			base-obsolete		obsolete
@@ -275,12 +265,12 @@
 ./usr/lib/i386/libtermlib.so.0.6		base-compat-shlib	compat,pic
 ./usr/lib/i386/libtre.so.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libtre.so.0.8			base-compat-shlib	compat,pic
-./usr/lib/i386/libukfs.so.1			base-compat-shlib	compat,pic,rump
-./usr/lib/i386/libukfs.so.1.0			base-compat-shlib	compat,pic,rump
+./usr/lib/i386/libukfs.so.1			base-compat-shlib	compat,pic
+./usr/lib/i386/libukfs.so.1.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libusbhid.so.1			base-compat-shlib	compat,pic
 ./usr/lib/i386/libusbhid.so.1.0			base-compat-shlib	compat,pic
 ./usr/lib/i386/libutil.so.7			base-compat-shlib	compat,pic
-./usr/lib/i386/libutil.so.7.21			base-compat-shlib	compat,pic
+./usr/lib/i386/libutil.so.7.19			base-compat-shlib	compat,pic
 ./usr/lib/i386/libwind.so.0			base-compat-shlib	compat,pic,kerberos
 ./usr/lib/i386/libwind.so.0.0			base-compat-shlib	compat,pic,kerberos
 ./usr/lib/i386/libwrap.so.1			base-compat-shlib	compat,pic
@@ -339,7 +329,6 @@
 ./usr/mdec/bootxx_cd9660			base-sysutil-bin
 ./usr/mdec/bootxx_dosfs				base-obsolete		obsolete
 ./usr/mdec/bootxx_ext2fs			base-sysutil-bin
-./usr/mdec/bootxx_fat12				base-sysutil-bin
 ./usr/mdec/bootxx_fat16				base-sysutil-bin
 ./usr/mdec/bootxx_ffsv1				base-sysutil-bin
 ./usr/mdec/bootxx_ffsv2				base-sysutil-bin

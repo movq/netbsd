@@ -1,4 +1,4 @@
-/*	$NetBSD: recv.c,v 1.10 2012/03/20 17:44:18 matt Exp $	*/
+/*	$NetBSD: recv.c,v 1.9 2003/10/22 15:40:19 drochner Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)recv.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: recv.c,v 1.10 2012/03/20 17:44:18 matt Exp $");
+__RCSID("$NetBSD: recv.c,v 1.9 2003/10/22 15:40:19 drochner Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -44,7 +44,10 @@ __RCSID("$NetBSD: recv.c,v 1.10 2012/03/20 17:44:18 matt Exp $");
 #include <stddef.h>
 
 ssize_t
-recv(int s, void *buf, size_t len, int flags)
+recv(s, buf, len, flags)
+	int s, flags;
+	size_t len;
+	void *buf;
 {
 	return (recvfrom(s, buf, len, flags, NULL, NULL));
 }

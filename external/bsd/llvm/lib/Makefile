@@ -1,4 +1,6 @@
-# $NetBSD: Makefile,v 1.25 2012/09/23 17:22:23 joerg Exp $
+# $NetBSD: Makefile,v 1.18 2012/01/17 15:51:55 joerg Exp $
+
+.include <bsd.own.mk>
 
 .include <bsd.own.mk>
 
@@ -24,7 +26,6 @@ SUBDIR=	\
 	libLLVMTableGen \
 	libLLVMTarget \
 	libLLVMTransformsUtils \
-	libLLVMVectorize \
 	libLLVMARMCodeGen \
 	libLLVMMipsCodeGen \
 	libLLVMPowerPCCodeGen \
@@ -43,7 +44,6 @@ SUBDIR+= \
 SUBDIR+= \
 	libLLVMMipsAsmParser \
 	libLLVMMipsAsmPrinter \
-	libLLVMMipsDisassembler \
 	libLLVMMipsMCTargetDesc \
 	libLLVMMipsTargetInfo
 
@@ -68,6 +68,8 @@ SUBDIR+= \
 SUBDIR+= \
 	libLLVMArchive \
 	libLLVMDebugInfo \
+	libLLVMCBackend \
+	libLLVMCBackendInfo \
 	libLLVMCppBackend \
 	libLLVMCppBackendInfo \
 	libLLVMExecutionEngine \
@@ -86,24 +88,17 @@ SUBDIR+= \
 	libclangBasic \
 	libclangCodeGen \
 	libclangDriver \
-	libclangEdit \
 	libclangFrontend \
 	libclangFrontendTool \
+	libclangIndex \
 	libclangLex \
 	libclangParse \
-	libclangRewriteFrontend \
-	libclangRewriteCore \
+	libclangRewrite \
 	libclangSema \
 	libclangSerialization \
 	libclangStaticAnalyzerCheckers \
 	libclangStaticAnalyzerCore \
 	.WAIT \
 	libclangStaticAnalyzerFrontend
-
-.if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
-SUBDIR+= \
-	libclangTooling \
-	libclangASTMatchers
-.endif
 
 .include <bsd.subdir.mk>

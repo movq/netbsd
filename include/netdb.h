@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.65 2012/03/17 21:57:48 christos Exp $	*/
+/*	$NetBSD: netdb.h,v 1.64.8.1 2012/06/03 21:41:34 jdc Exp $	*/
 
 /*
  * ++Copyright++ 1980, 1983, 1988, 1993

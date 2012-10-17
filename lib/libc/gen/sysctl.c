@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.32 2012/03/20 16:36:05 matt Exp $	*/
+/*	$NetBSD: sysctl.c,v 1.30 2008/08/27 08:56:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.2 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.32 2012/03/20 16:36:05 matt Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.30 2008/08/27 08:56:49 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -43,7 +43,6 @@ __RCSID("$NetBSD: sysctl.c,v 1.32 2012/03/20 16:36:05 matt Exp $");
 #define __COMPAT_SYSCTL
 #include <sys/sysctl.h>
 
-#include <assert.h>
 #include <errno.h>
 #include <paths.h>
 #include <stdio.h>
@@ -70,9 +69,12 @@ static size_t __cvt_node_out(uint, const struct sysctlnode *, void **,
 #include <stdlib.h>
 
 int
-sysctl(const int *name, unsigned int namelen,
-	void *oldp, size_t *oldlenp,
-	const void *newp, size_t newlen)
+sysctl(name, namelen, oldp, oldlenp, newp, newlen)
+	const int *name;
+	unsigned int namelen;
+	void *oldp;
+	const void *newp;
+	size_t *oldlenp, newlen;
 {
 	size_t oldlen, savelen;
 	int error;
@@ -102,9 +104,12 @@ sysctl(const int *name, unsigned int namelen,
 }
 
 static int
-user_sysctl(const int *name, unsigned int namelen,
-	void *oldp, size_t *oldlenp,
-	const void *newp, size_t newlen)
+user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
+	const int *name;
+	unsigned int namelen;
+	void *oldp;
+	const void *newp;
+	size_t *oldlenp, newlen;
 {
 #define _INT(s, n, v, d) {					\
 	.sysctl_flags = CTLFLAG_IMMEDIATE|CTLFLAG_PERMANENT|	\
@@ -312,13 +317,10 @@ user_sysctl(const int *name, unsigned int namelen,
 			if (sysctl_usermib[ni].sysctl_desc == NULL)
 				d1->descr_len = 1;
 			else {
-				size_t dlen;
 				(void)strlcpy(d1->descr_str,
 					sysctl_usermib[ni].sysctl_desc,
 					sizeof(buf) - sizeof(*d1));
-				dlen = strlen(d1->descr_str) + 1;
-				_DIAGASSERT(__type_fit(uint32_t, dlen));
-				d1->descr_len = (uint32_t)dlen;
+				d1->descr_len = strlen(d1->descr_str) + 1;
 			}
 			d = (size_t)__sysc_desc_adv(NULL, d1->descr_len);
 			if (d2 != NULL)

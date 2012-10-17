@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket.c,v 1.211 2012/07/09 04:35:13 chs Exp $	*/
+/*	$NetBSD: uipc_socket.c,v 1.209.2.1 2012/07/12 17:11:17 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.211 2012/07/09 04:35:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.209.2.1 2012/07/12 17:11:17 riz Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_sock_counters.h"
@@ -622,7 +622,7 @@ solisten(struct socket *so, int backlog, struct lwp *l)
 	if ((so->so_state & (SS_ISCONNECTED | SS_ISCONNECTING | 
 	    SS_ISDISCONNECTING)) != 0) {
 	    	sounlock(so);
-		return (EINVAL);
+		return (EOPNOTSUPP);
 	}
 	error = (*so->so_proto->pr_usrreq)(so, PRU_LISTEN, NULL,
 	    NULL, NULL, l);

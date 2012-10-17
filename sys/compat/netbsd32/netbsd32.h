@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32.h,v 1.95 2012/04/08 11:27:44 martin Exp $	*/
+/*	$NetBSD: netbsd32.h,v 1.92.2.1 2012/04/12 17:05:37 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008 Matthew R. Green
@@ -476,6 +476,13 @@ struct netbsd32_msqid_ds14 {
 	netbsd32_long	msg_pad4[4];
 };
 
+/* from  <sys/sa.h> */
+typedef netbsd32_pointer_t netbsd32_sa_upcall_t;
+typedef netbsd32_pointer_t netbsd32_sa_upcallp_t;
+
+void    netbsd32_cpu_upcall(struct lwp *, int, int, int, void *, void *,
+    void *, sa_upcall_t);
+
 /* from <sys/sem.h> */
 typedef netbsd32_pointer_t netbsd32_semp_t;
 
@@ -930,19 +937,6 @@ struct netbsd32_nfs_args {
 	int32_t		leaseterm;	/* Ignored; Term (sec) of lease */
 	int32_t		deadthresh;	/* Retrans threshold */
 	netbsd32_charp	hostname;	/* server's name */
-};
-struct netbsd32_msdosfs_args {
-	netbsd32_charp	fspec;		/* blocks special holding the fs to mount */
-	struct	netbsd32_export_args30 _pad1; /* compat with old userland tools */
-	uid_t	uid;		/* uid that owns msdosfs files */
-	gid_t	gid;		/* gid that owns msdosfs files */
-	mode_t  mask;		/* mask to be applied for msdosfs perms */
-	int	flags;		/* see below */
-
-	/* Following items added after versioning support */
-	int	version;	/* version of the struct */
-	mode_t  dirmask;	/* v2: mask to be applied for msdosfs perms */
-	int	gmtoff;		/* v3: offset from UTC in seconds */
 };
 
 struct netbsd32_posix_spawn_file_actions_entry {

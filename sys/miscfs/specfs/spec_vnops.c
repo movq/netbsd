@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.135 2012/04/29 22:54:00 chs Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.134.8.1 2012/05/07 03:01:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.135 2012/04/29 22:54:00 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.134.8.1 2012/05/07 03:01:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: ss.c,v 1.84 2012/02/28 14:04:19 mbalmer Exp $	*/
+/*	$NetBSD: ss.c,v 1.80.18.1 2012/03/02 16:34:47 riz Exp $	*/
 
 /*
  * Copyright (c) 1995 Kenneth Stailey.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.84 2012/02/28 14:04:19 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.80.18.1 2012/03/02 16:34:47 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -178,10 +178,11 @@ ssattach(device_t parent, device_t self, void *aux)
 	if (memcmp(sa->sa_inqbuf.vendor, "HP      ", 8) == 0 &&
 	    memcmp(sa->sa_inqbuf.product, "ScanJet 5300C", 13) != 0)
 		scanjet_attach(ss, sa);
-
+#if 0
 	if (ss->special == NULL) {
 		/* XXX add code to restart a SCSI2 scanner, if any */
 	}
+#endif
 	ss->flags &= ~SSF_AUTOCONF;
 }
 
@@ -216,7 +217,9 @@ ssdetach(device_t self, int flags)
 	return 0;
 }
 
-/*  open the device. */
+/*
+ * open the device.
+ */
 static int
 ssopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
@@ -304,9 +307,12 @@ ssclose(dev_t dev, int flag, int mode, struct lwp *l)
 			error = (ss->special->rewind_scanner)(ss);
 			if (error)
 				return error;
-		} else {
+		}
+#if 0
+		else {
 			/* XXX add code to restart a SCSI2 scanner, if any */
 		}
+#endif
 		ss->sio.scan_window_size = 0;
 		ss->flags &= ~SSF_TRIGGERED;
 	}
@@ -320,8 +326,10 @@ ssclose(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 /*
- * trim the size of the transfer if needed, called by physio
- * basically the smaller of our min and the scsi driver's minphys
+ * trim the size of the transfer if needed,
+ * called by physio
+ * basically the smaller of our min and the scsi driver's
+ * minphys
  */
 static void
 ssminphys(struct buf *bp)
@@ -451,8 +459,10 @@ ssstart(struct scsipi_periph *periph)
 	struct buf *bp;
 
 	SC_DEBUG(periph, SCSIPI_DB2, ("ssstart "));
-
-	/* See if there is a buf to do and we are not already doing one */
+	/*
+	 * See if there is a buf to do and we are not already
+	 * doing one
+	 */
 	while (periph->periph_active < periph->periph_openings) {
 		/* if a special awaits, let it proceed first */
 		if (periph->periph_flags & PERIPH_WAITING) {
@@ -461,16 +471,20 @@ ssstart(struct scsipi_periph *periph)
 			return;
 		}
 
-		/* See if there is a buf with work for us to do.. */
+		/*
+		 * See if there is a buf with work for us to do..
+		 */
 		if ((bp = bufq_peek(ss->buf_queue)) == NULL)
 			return;
 
 		if (ss->special && ss->special->read)
 			(ss->special->read)(ss, bp);
-		else {
+#if 0
+		} else {
 			/* generic scsi2 scanner read */
 			/* XXX add code for SCSI2 scanner read */
 		}
+#endif
 	}
 }
 

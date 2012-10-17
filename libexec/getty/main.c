@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.59 2012/06/28 08:55:10 roy Exp $	*/
+/*	$NetBSD: main.c,v 1.58.8.1 2012/07/05 17:22:02 riz Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.59 2012/06/28 08:55:10 roy Exp $");
+__RCSID("$NetBSD: main.c,v 1.58.8.1 2012/07/05 17:22:02 riz Exp $");
 #endif
 #endif /* not lint */
 

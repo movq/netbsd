@@ -1,45 +1,23 @@
-# $NetBSD: md.i386,v 1.127 2012/08/29 17:13:21 drochner Exp $
-./usr/include/clang-3.0/avxintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/avx2intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/bmi2intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/bmiintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/emmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/fma4intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/immintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/lzcntintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/mm3dnow.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/mm_malloc.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/mmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/nmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/pmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/popcntintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/smmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/tmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/wmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/x86intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/xmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/ammintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/avxintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/avx2intrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/bmi2intrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/bmiintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/emmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/fma4intrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/fmaintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/immintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/lzcntintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/mm3dnow.h		comp-c-include		llvm
-./usr/include/clang-3.2/mm_malloc.h		comp-c-include		llvm
-./usr/include/clang-3.2/mmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/nmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/pmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/popcntintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/smmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/tmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/wmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/x86intrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/xmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.2/xopintrin.h		comp-c-include		llvm
+# $NetBSD: md.i386,v 1.124 2012/01/11 23:24:46 joerg Exp $
+./usr/include/clang-3.0/avxintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/avx2intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/bmi2intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/bmiintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/emmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/fma4intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/immintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/lzcntintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/mm3dnow.h		comp-c-include		llvm
+./usr/include/clang-3.0/mm_malloc.h		comp-c-include		llvm
+./usr/include/clang-3.0/mmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/nmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/pmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/popcntintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/smmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/tmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/wmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/x86intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/xmmintrin.h		comp-c-include		llvm
 ./usr/include/emmintrin.h			comp-obsolete		obsolete
 ./usr/include/gcc-4.1/emmintrin.h		comp-c-include		gcccmds,gcc=4
 ./usr/include/gcc-4.1/emmintrin.h		comp-obsolete		gcc=45,obsolete
@@ -91,7 +69,7 @@
 ./usr/include/i386/cdefs.h			comp-c-include
 ./usr/include/i386/conf.h			comp-obsolete		obsolete
 ./usr/include/i386/cpu.h			comp-c-include
-./usr/include/i386/cpufunc.h			comp-c-obsolete		obsolete
+./usr/include/i386/cpufunc.h			comp-c-include
 ./usr/include/i386/cputypes.h			comp-c-include
 ./usr/include/i386/db_machdep.h			comp-obsolete		obsolete
 ./usr/include/i386/disklabel.h			comp-c-include
@@ -165,7 +143,6 @@
 ./usr/include/x86/bus.h				comp-obsolete		obsolete
 ./usr/include/x86/cacheinfo.h			comp-c-include
 ./usr/include/x86/cpu.h				comp-c-include
-./usr/include/x86/cpu_ucode.h			comp-c-include
 ./usr/include/x86/cputypes.h			comp-c-include
 ./usr/include/x86/cpuvar.h			comp-c-include
 ./usr/include/x86/float.h			comp-c-include

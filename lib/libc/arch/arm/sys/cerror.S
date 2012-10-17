@@ -1,4 +1,4 @@
-/*	$NetBSD: cerror.S,v 1.8 2012/02/27 12:26:21 joerg Exp $	*/
+/*	$NetBSD: cerror.S,v 1.7.8.1 2012/02/27 20:22:59 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.

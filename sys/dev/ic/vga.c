@@ -1,4 +1,4 @@
-/* $NetBSD: vga.c,v 1.109 2012/08/09 23:56:35 uwe Exp $ */
+/* $NetBSD: vga.c,v 1.108.2.1 2012/08/12 13:27:43 martin Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.109 2012/08/09 23:56:35 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.108.2.1 2012/08/12 13:27:43 martin Exp $");
 
 /* for WSCONS_SUPPORT_PCVTFONTS */
 #include "opt_wsdisplay_compat.h"

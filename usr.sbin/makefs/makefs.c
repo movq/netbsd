@@ -1,4 +1,4 @@
-/*	$NetBSD: makefs.c,v 1.35 2012/06/22 06:15:18 sjg Exp $	*/
+/*	$NetBSD: makefs.c,v 1.31 2012/01/28 02:35:46 christos Exp $	*/
 
 /*
  * Copyright (c) 2001-2003 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: makefs.c,v 1.35 2012/06/22 06:15:18 sjg Exp $");
+__RCSID("$NetBSD: makefs.c,v 1.31 2012/01/28 02:35:46 christos Exp $");
 #endif	/* !__lint */
 
 #include <assert.h>
@@ -73,8 +73,6 @@ static fstype_t fstypes[] = {
 	{ "ffs", ffs_prep_opts,	ffs_parse_opts,	ffs_cleanup_opts, ffs_makefs },
 	{ "cd9660", cd9660_prep_opts, cd9660_parse_opts, cd9660_cleanup_opts,
 	  cd9660_makefs},
-	{ "chfs", chfs_prep_opts, chfs_parse_opts, chfs_cleanup_opts,
-	  chfs_makefs },
 	{ "v7fs", v7fs_prep_opts, v7fs_parse_opts, v7fs_cleanup_opts,
 	  v7fs_makefs },
 	{ .type = NULL	},
@@ -84,7 +82,8 @@ u_int		debug;
 struct timespec	start_time;
 
 static	fstype_t *get_fstype(const char *);
-static	void	usage(void) __dead;
+static	void	usage(void);
+int		main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -117,7 +116,7 @@ main(int argc, char *argv[])
 	start_time.tv_sec = start.tv_sec;
 	start_time.tv_nsec = start.tv_usec * 1000;
 
-	while ((ch = getopt(argc, argv, "B:b:d:f:F:M:m:N:o:s:S:t:xZ")) != -1) {
+	while ((ch = getopt(argc, argv, "B:b:d:f:F:M:m:N:o:s:S:t:x")) != -1) {
 		switch (ch) {
 
 		case 'B':
@@ -230,10 +229,6 @@ main(int argc, char *argv[])
 			fsoptions.onlyspec = 1;
 			break;
 
-		case 'Z':
-			fsoptions.sparse = 1;
-			break;
-
 		case '?':
 		default:
 			usage();
@@ -299,7 +294,7 @@ main(int argc, char *argv[])
 
 
 int
-set_option(const option_t *options, const char *var, const char *val)
+set_option(option_t *options, const char *var, const char *val)
 {
 	int	i;
 
@@ -333,7 +328,7 @@ usage(void)
 
 	prog = getprogname();
 	fprintf(stderr,
-"usage: %s [-xZ] [-B endian] [-b free-blocks] [-d debug-mask]\n"
+"usage: %s [-x] [-B endian] [-b free-blocks] [-d debug-mask]\n"
 "\t[-F mtree-specfile] [-f free-files] [-M minimum-size]\n"
 "\t[-m maximum-size] [-N userdb-dir] [-o fs-options] [-S sector-size]\n"
 "\t[-s image-size] [-t fs-type] image-file directory [extra-directory ...]\n",

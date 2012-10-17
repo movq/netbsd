@@ -1,4 +1,4 @@
-/*	$NetBSD: apropos-utils.c,v 1.7 2012/10/06 15:33:59 wiz Exp $	*/
+/*	$NetBSD: apropos-utils.c,v 1.2.2.2 2012/05/09 03:41:00 riz Exp $	*/
 /*-
  * Copyright (c) 2011 Abhinav Upadhyay <er.abhinav.upadhyay@gmail.com>
  * All rights reserved.
@@ -31,9 +31,8 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: apropos-utils.c,v 1.7 2012/10/06 15:33:59 wiz Exp $");
+__RCSID("$NetBSD: apropos-utils.c,v 1.2.2.2 2012/05/09 03:41:00 riz Exp $");
 
-#include <sys/queue.h>
 #include <sys/stat.h>
 
 #include <assert.h>
@@ -47,7 +46,6 @@ __RCSID("$NetBSD: apropos-utils.c,v 1.7 2012/10/06 15:33:59 wiz Exp $");
 #include <zlib.h>
 
 #include "apropos-utils.h"
-#include "manconf.h"
 #include "mandoc.h"
 #include "sqlite3.h"
 
@@ -262,28 +260,6 @@ unzip(sqlite3_context *pctx, int nval, sqlite3_value **apval)
 	sqlite3_result_text(pctx, (const char *) outbuf, stream.total_out, free);
 }
 
-/*
- * get_dbpath --
- *   Read the path of the database from man.conf and return.
- */
-char *
-get_dbpath(const char *manconf)
-{
-	TAG *tp;
-	char *dbpath;
-
-	config(manconf);
-	tp = gettag("_mandb", 1);
-	if (!tp)
-		return NULL;
-	
-	if (TAILQ_EMPTY(&tp->entrylist))
-		return NULL;
-
-	dbpath = TAILQ_LAST(&tp->entrylist, tqh)->s;
-	return dbpath;
-}
-
 /* init_db --
  *   Prepare the database. Register the compress/uncompress functions and the
  *   stopword tokenizer.
@@ -300,7 +276,7 @@ get_dbpath(const char *manconf)
  *  	In normal cases the function should return a handle to the db.
  */
 sqlite3 *
-init_db(int db_flag, const char *manconf)
+init_db(int db_flag)
 {
 	sqlite3 *db = NULL;
 	sqlite3_stmt *stmt;
@@ -308,11 +284,8 @@ init_db(int db_flag, const char *manconf)
 	int rc;
 	int create_db_flag = 0;
 
-	char *dbpath = get_dbpath(manconf);
-	if (dbpath == NULL)
-		errx(EXIT_FAILURE, "_mandb entry not found in man.conf");
 	/* Check if the database exists or not */
-	if (!(stat(dbpath, &sb) == 0 && S_ISREG(sb.st_mode))) {
+	if (!(stat(DBPATH, &sb) == 0 && S_ISREG(sb.st_mode))) {
 		/* Database does not exist, check if DB_CREATE was specified, and set
 		 * flag to create the database schema
 		 */
@@ -326,7 +299,7 @@ init_db(int db_flag, const char *manconf)
 
 	/* Now initialize the database connection */
 	sqlite3_initialize();
-	rc = sqlite3_open_v2(dbpath, &db, db_flag, NULL);
+	rc = sqlite3_open_v2(DBPATH, &db, db_flag, NULL);
 	
 	if (rc != SQLITE_OK) {
 		warnx("%s", sqlite3_errmsg(db));
@@ -377,7 +350,6 @@ init_db(int db_flag, const char *manconf)
 		goto error;
 	}
 	return db;
-
 error:
 	sqlite3_close(db);
 	sqlite3_shutdown();
@@ -784,8 +756,7 @@ callback_pager(void *data, const char *section, const char *name,
  *  For this purpose it first calls it's own callback function callback_pager
  *  which then delegates the call to the user supplied callback.
  */
-int
-run_query_pager(sqlite3 *db, query_args *args)
+int run_query_pager(sqlite3 *db, query_args *args)
 {
 	struct orig_callback_data orig_data;
 	orig_data.callback = args->callback;

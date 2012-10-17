@@ -1,4 +1,4 @@
-/* $NetBSD: term.h,v 1.12 2012/05/29 00:27:59 dholland Exp $ */
+/* $NetBSD: term.h,v 1.10.4.2 2012/06/11 17:48:37 riz Exp $ */
 
 /*
  * Copyright (c) 2009, 2010, 2011 The NetBSD Foundation, Inc.

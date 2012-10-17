@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.63 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: piixide.c,v 1.57.10.1 2012/03/07 23:33:10 riz Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.63 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.57.10.1 2012/03/07 23:33:10 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -486,7 +486,6 @@ piix_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 		sc->sc_wdcdev.sc_atac.atac_set_modes = piix3_4_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	ATADEBUG_PRINT(("piix_setup_chip: old idetim=0x%x",
 	    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_IDETIM)),
@@ -612,8 +611,8 @@ piix_setup_channel(struct ata_channel *chp)
 	 */
 
 	/* If both drives supports DMA, take the lower mode */
-	if ((drvp[0].drive_flags & ATA_DRIVE_DMA) &&
-	    (drvp[1].drive_flags & ATA_DRIVE_DMA)) {
+	if ((drvp[0].drive_flags & DRIVE_DMA) &&
+	    (drvp[1].drive_flags & DRIVE_DMA)) {
 		mode[0] = mode[1] =
 		    min(drvp[0].DMA_mode, drvp[1].DMA_mode);
 		    drvp[0].DMA_mode = mode[0];
@@ -624,7 +623,7 @@ piix_setup_channel(struct ata_channel *chp)
 	 * If only one drive supports DMA, use its mode, and
 	 * put the other one in PIO mode 0 if mode not compatible
 	 */
-	if (drvp[0].drive_flags & ATA_DRIVE_DMA) {
+	if (drvp[0].drive_flags & DRIVE_DMA) {
 		mode[0] = drvp[0].DMA_mode;
 		mode[1] = drvp[1].PIO_mode;
 		if (piix_isp_pio[mode[1]] != piix_isp_dma[mode[0]] ||
@@ -632,7 +631,7 @@ piix_setup_channel(struct ata_channel *chp)
 			mode[1] = drvp[1].PIO_mode = 0;
 		goto ok;
 	}
-	if (drvp[1].drive_flags & ATA_DRIVE_DMA) {
+	if (drvp[1].drive_flags & DRIVE_DMA) {
 		mode[1] = drvp[1].DMA_mode;
 		mode[0] = drvp[0].PIO_mode;
 		if (piix_isp_pio[mode[0]] != piix_isp_dma[mode[1]] ||
@@ -658,7 +657,7 @@ piix_setup_channel(struct ata_channel *chp)
 	}
 ok:	/* The modes are setup */
 	for (drive = 0; drive < 2; drive++) {
-		if (drvp[drive].drive_flags & ATA_DRIVE_DMA) {
+		if (drvp[drive].drive_flags & DRIVE_DMA) {
 			idetim |= piix_setup_idetim_timings(
 			    mode[drive], 1, chp->ch_channel);
 			goto end;
@@ -677,10 +676,10 @@ end:	/*
 	 */
 	for (drive = 0; drive < 2; drive++) {
 		/* If no drive, skip */
-		if (drvp[drive].drive_type == ATA_DRIVET_NONE)
+		if ((drvp[drive].drive_flags & DRIVE) == 0)
 			continue;
 		idetim |= piix_setup_idetim_drvs(&drvp[drive]);
-		if (drvp[drive].drive_flags & ATA_DRIVE_DMA)
+		if (drvp[drive].drive_flags & DRIVE_DMA)
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 	}
 	if (idedma_ctl != 0) {
@@ -722,10 +721,10 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		    PIIX_UDMATIM_SET(0x3, channel, drive));
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
-		if (((drvp->drive_flags & ATA_DRIVE_DMA) == 0 &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA) == 0))
+		if (((drvp->drive_flags & DRIVE_DMA) == 0 &&
+		    (drvp->drive_flags & DRIVE_UDMA) == 0))
 			goto pio;
 
 		if (sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801AA_IDE ||
@@ -782,10 +781,10 @@ piix3_4_setup_channel(struct ata_channel *chp)
 				ideconf &= ~PIIX_CONFIG_UDMA66(channel, drive);
 		}
 		if ((wdc->sc_atac.atac_cap & ATAC_CAP_UDMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_UDMA)) {
+		    (drvp->drive_flags & DRIVE_UDMA)) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_DMA;
+			drvp->drive_flags &= ~DRIVE_DMA;
 			splx(s);
 			udmareg |= PIIX_UDMACTL_DRV_EN( channel, drive);
 			udmareg |= PIIX_UDMATIM_SET(
@@ -793,7 +792,7 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		} else {
 			/* use Multiword DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
+			drvp->drive_flags &= ~DRIVE_UDMA;
 			splx(s);
 			if (drive == 0) {
 				idetim |= piix_setup_idetim_timings(
@@ -861,9 +860,9 @@ piix_setup_idetim_drvs(struct ata_drive_datas *drvp)
 	 * If drive is using UDMA, timings setups are independent
 	 * So just check DMA and PIO here.
 	 */
-	if (drvp->drive_flags & ATA_DRIVE_DMA) {
+	if (drvp->drive_flags & DRIVE_DMA) {
 		/* if mode = DMA mode 0, use compatible timings */
-		if ((drvp->drive_flags & ATA_DRIVE_DMA) &&
+		if ((drvp->drive_flags & DRIVE_DMA) &&
 		    drvp->DMA_mode == 0) {
 			drvp->PIO_mode = 0;
 			return ret;
@@ -944,7 +943,6 @@ piixsata_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	cmdsts = pci_conf_read(sc->sc_pc, sc->sc_tag, PCI_COMMAND_STATUS_REG);
 	cmdsts &= ~PCI_COMMAND_INTERRUPT_DISABLE;

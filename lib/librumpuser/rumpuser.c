@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser.c,v 1.20 2012/09/14 16:29:22 pooka Exp $	*/
+/*	$NetBSD: rumpuser.c,v 1.16 2011/11/28 08:05:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2007-2010 Antti Kantee.  All Rights Reserved.
@@ -25,24 +25,30 @@
  * SUCH DAMAGE.
  */
 
-#include "rumpuser_port.h"
-
+#include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser.c,v 1.20 2012/09/14 16:29:22 pooka Exp $");
+__RCSID("$NetBSD: rumpuser.c,v 1.16 2011/11/28 08:05:05 tls Exp $");
 #endif /* !lint */
 
+/* thank the maker for this */
+#ifdef __linux__
+#define _XOPEN_SOURCE 500
+#define _BSD_SOURCE
+#define _FILE_OFFSET_BITS 64
+#include <features.h>
+#endif
+
+#include <sys/param.h>
+#include <sys/event.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 
 #ifdef __NetBSD__
 #include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/dkio.h>
 #include <sys/sysctl.h>
-#include <sys/event.h>
 #endif
 
 #include <assert.h>
@@ -64,7 +70,7 @@ __RCSID("$NetBSD: rumpuser.c,v 1.20 2012/09/14 16:29:22 pooka Exp $");
 #include "rumpuser_int.h"
 
 int
-rumpuser_getversion(void)
+rumpuser_getversion()
 {
 
 	return RUMPUSER_VERSION;
@@ -250,16 +256,10 @@ rumpuser_anonmmap(void *prefaddr, size_t size, int alignbit,
 	void *rv;
 	int prot;
 
-#ifndef MAP_ALIGNED
-#define MAP_ALIGNED(a) 0
-	if (alignbit)
-		fprintf(stderr, "rumpuser_anonmmap: warning, requested "
-		    "alignment not supported by hypervisor\n");
-#endif
-
 	prot = PROT_READ|PROT_WRITE;
 	if (exec)
 		prot |= PROT_EXEC;
+	/* XXX: MAP_ALIGNED() is not portable */
 	rv = mmap(prefaddr, size, prot,
 	    MAP_ANON | MAP_ALIGNED(alignbit), -1, 0);
 	if (rv == MAP_FAILED) {
@@ -317,32 +317,10 @@ rumpuser_memsync(void *addr, size_t len, int *error)
 }
 
 int
-rumpuser_open(const char *path, int ruflags, int *error)
+rumpuser_open(const char *path, int flags, int *error)
 {
-	int flags;
 
-	switch (ruflags & RUMPUSER_OPEN_ACCMODE) {
-	case RUMPUSER_OPEN_RDONLY:
-		flags = O_RDONLY;
-		break;
-	case RUMPUSER_OPEN_WRONLY:
-		flags = O_WRONLY;
-		break;
-	case RUMPUSER_OPEN_RDWR:
-		flags = O_RDWR;
-		break;
-	default:
-		*error = EINVAL;
-		return -1;
-	}
-
-#define TESTSET(_ru_, _h_) if (ruflags & _ru_) flags |= _h_;
-	TESTSET(RUMPUSER_OPEN_CREATE, O_CREAT);
-	TESTSET(RUMPUSER_OPEN_EXCL, O_EXCL);
-	TESTSET(RUMPUSER_OPEN_DIRECT, O_DIRECT);
-#undef TESTSET
-
-	DOCALL_KLOCK(int, (open(path, flags, 0644)));
+	DOCALL(int, (open(path, flags, 0644)));
 }
 
 int
@@ -572,7 +550,6 @@ rumpuser_seterrno(int error)
 	errno = error;
 }
 
-#ifdef __NetBSD__
 int
 rumpuser_writewatchfile_setup(int kq, int fd, intptr_t opaque, int *error)
 {
@@ -615,7 +592,6 @@ rumpuser_writewatchfile_wait(int kq, intptr_t *opaque, int *error)
 		*opaque = kev.udata;
 	return rv;
 }
-#endif
 
 /*
  * This is meant for safe debugging prints from the kernel.
@@ -653,39 +629,20 @@ rumpuser_kill(int64_t pid, int sig, int *error)
 int
 rumpuser_getnhostcpu(void)
 {
-	int ncpu = 1;
-
-#ifdef __NetBSD__
+	int ncpu;
 	size_t sz = sizeof(ncpu);
 
-	sysctlbyname("hw.ncpu", &ncpu, &sz, NULL, 0);
-#elif __linux__
-	FILE *fp;
-	char *line = NULL;
-	size_t n = 0;
-
-	/* If anyone knows a better way, I'm all ears */
-	if ((fp = fopen("/proc/cpuinfo", "r")) != NULL) {
-		ncpu = 0;
-		while (getline(&line, &n, fp) != -1) {
-			if (strncmp(line,
-			    "processor", sizeof("processor")-1) == 0)
-			    	ncpu++;
-		}
-		if (ncpu == 0)
-			ncpu = 1;
-		free(line);
-		fclose(fp);
-	}
-#endif
-	
+#ifdef __NetBSD__
+	if (sysctlbyname("hw.ncpu", &ncpu, &sz, NULL, 0) == -1)
+		return 1;
 	return ncpu;
+#else
+	return 1;
+#endif
 }
 
-/* XXX: this hypercall needs a better name */
 uint32_t
 rumpuser_arc4random(void)
 {
-
 	return arc4random();
 }

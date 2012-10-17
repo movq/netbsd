@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid.h,v 1.3 2012/05/27 20:05:04 christos Exp $	*/
+/*	$NetBSD: iscsid.h,v 1.2.4.1 2012/05/30 08:06:26 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2004,2006,2011 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: nand.c,v 1.17 2012/07/12 03:05:01 matt Exp $	*/
+/*	$NetBSD: nand.c,v 1.16 2011/08/28 20:49:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -34,7 +34,7 @@
 /* Common driver for NAND chips implementing the ONFI 2.2 specification */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nand.c,v 1.17 2012/07/12 03:05:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nand.c,v 1.16 2011/08/28 20:49:30 martin Exp $");
 
 #include "locators.h"
 
@@ -429,9 +429,6 @@ nand_scan_media(device_t self, struct nand_chip *chip)
 	case 16:
 		ecc->necc_offset = 0;
 		break;
-	case 32:
-		ecc->necc_offset = 0;
-		break;
 	case 64:
 		ecc->necc_offset = 40;
 		break;
@@ -439,7 +436,7 @@ nand_scan_media(device_t self, struct nand_chip *chip)
 		ecc->necc_offset = 80;
 		break;
 	default:
-		panic("OOB size %zu is unexpected", chip->nc_spare_size);
+		panic("OOB size is unexpected");
 	}
 
 	ecc->necc_steps = chip->nc_page_size / ecc->necc_block_size;

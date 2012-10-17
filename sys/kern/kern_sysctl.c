@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.236 2012/06/06 05:10:54 matt Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.233.4.1 2012/03/22 22:56:54 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.236 2012/06/06 05:10:54 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.233.4.1 2012/03/22 22:56:54 riz Exp $");
 
 #include "opt_defcorename.h"
 #include "ksyms.h"
@@ -1918,7 +1918,6 @@ out:
  * own nodes without orphaning the others when they are done.
  * ********************************************************************
  */
-#undef sysctl_createv
 int
 sysctl_createv(struct sysctllog **log, int cflags,
 	       const struct sysctlnode **rnode, const struct sysctlnode **cnode,
@@ -1957,26 +1956,19 @@ sysctl_createv(struct sysctllog **log, int cflags,
 	 */
 	va_start(ap, newlen);
 	namelen = 0;
-	error = 0;
 	ni = -1;
 	do {
-		if (++ni == CTL_MAXNAME) {
-			error = ENAMETOOLONG;
-			break;
-		}
+		if (++ni == CTL_MAXNAME)
+			return (ENAMETOOLONG);
 		name[ni] = va_arg(ap, int);
 		/*
 		 * sorry, this is not supported from here
 		 */
-		if (name[ni] == CTL_CREATESYM) {
-			error = EINVAL;
-			break;
-		}
+		if (name[ni] == CTL_CREATESYM)
+			return (EINVAL);
 	} while (name[ni] != CTL_EOL && name[ni] != CTL_CREATE);
-	va_end(ap);
-	if (error)
-		return error;
 	namelen = ni + (name[ni] == CTL_CREATE ? 1 : 0);
+	va_end(ap);
 
 	/*
 	 * what's it called

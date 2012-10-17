@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_wdc.c,v 1.101 2012/07/31 15:50:34 bouyer Exp $	*/
+/*	$NetBSD: ata_wdc.c,v 1.96 2012/01/09 01:01:48 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2003 Manuel Bouyer.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_wdc.c,v 1.101 2012/07/31 15:50:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_wdc.c,v 1.96 2012/01/09 01:01:48 jakllsch Exp $");
 
 #include "opt_ata.h"
 #include "opt_wdc.h"
@@ -149,7 +149,7 @@ wdc_ata_bio(struct ata_drive_datas *drvp, struct ata_bio *ata_bio)
 	if (ata_bio->flags & ATA_POLL)
 		xfer->c_flags |= C_POLL;
 #if NATA_DMA
-	if ((drvp->drive_flags & (ATA_DRIVE_DMA | ATA_DRIVE_UDMA)) &&
+	if ((drvp->drive_flags & (DRIVE_DMA | DRIVE_UDMA)) &&
 	    (ata_bio->flags & ATA_SINGLE) == 0)
 		xfer->c_flags |= C_DMA;
 #endif
@@ -187,10 +187,8 @@ wdc_ata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	wait_flags = (xfer->c_flags & C_POLL) ? AT_POLL : 0;
 #endif
 
-	ATADEBUG_PRINT(("wdc_ata_bio_start %s:%d:%d state %d drive_flags 0x%x "
-	    "c_flags 0x%x ch_flags 0x%x\n",
-	    device_xname(atac->atac_dev), chp->ch_channel, xfer->c_drive,
-	    drvp->state, drvp->drive_flags, xfer->c_flags, chp->ch_flags),
+	ATADEBUG_PRINT(("wdc_ata_bio_start %s:%d:%d\n",
+	    device_xname(atac->atac_dev), chp->ch_channel, xfer->c_drive),
 	    DEBUG_XFERS);
 
 	/* Do control operations specially. */
@@ -233,7 +231,7 @@ wdc_ata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		if (atac->atac_set_modes == NULL)
 			goto geometry;
 		/* Also don't try if the drive didn't report its mode */
-		if ((drvp->drive_flags & ATA_DRIVE_MODE) == 0)
+		if ((drvp->drive_flags & DRIVE_MODE) == 0)
 			goto geometry;
 		wdccommand(chp, drvp->drive, SET_FEATURES, 0, 0, 0,
 		    0x08 | drvp->PIO_mode, WDSF_SET_MODE);
@@ -244,12 +242,12 @@ wdc_ata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 			goto ctrlerror;
 #if NATA_DMA
 #if NATA_UDMA
-		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
+		if (drvp->drive_flags & DRIVE_UDMA) {
 			wdccommand(chp, drvp->drive, SET_FEATURES, 0, 0, 0,
 			    0x40 | drvp->UDMA_mode, WDSF_SET_MODE);
 		} else
 #endif
-		if (drvp->drive_flags & ATA_DRIVE_DMA) {
+		if (drvp->drive_flags & DRIVE_DMA) {
 			wdccommand(chp, drvp->drive, SET_FEATURES, 0, 0, 0,
 			    0x20 | drvp->DMA_mode, WDSF_SET_MODE);
 		} else {
@@ -782,7 +780,7 @@ wdc_ata_bio_kill_xfer(struct ata_channel *chp, struct ata_xfer *xfer,
 		panic("wdc_ata_bio_kill_xfer");
 	}
 	ata_bio->r_error = WDCE_ABRT;
-	ATADEBUG_PRINT(("wdc_ata_bio_kill_xfer: drv_done\n"), DEBUG_XFERS);
+	ATADEBUG_PRINT(("wdc_ata_done: drv_done\n"), DEBUG_XFERS);
 	(*chp->ch_drive[drive].drv_done)(chp->ch_drive[drive].drv_softc);
 }
 
@@ -806,9 +804,9 @@ wdc_ata_bio_done(struct ata_channel *chp, struct ata_xfer *xfer)
 	chp->ch_queue->active_xfer = NULL;
 	ata_free_xfer(chp, xfer);
 
-	if (chp->ch_drive[drive].drive_flags & ATA_DRIVE_WAITDRAIN) {
+	if (chp->ch_drive[drive].drive_flags & DRIVE_WAITDRAIN) {
 		ata_bio->error = ERR_NODEV;
-		chp->ch_drive[drive].drive_flags &= ~ATA_DRIVE_WAITDRAIN;
+		chp->ch_drive[drive].drive_flags &= ~DRIVE_WAITDRAIN;
 		wakeup(&chp->ch_queue->active_xfer);
 	}
 	ata_bio->flags |= ATA_ITSDONE;

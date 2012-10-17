@@ -1,4 +1,4 @@
-/*	$NetBSD: strftime.c,v 1.22 2012/03/20 16:39:08 matt Exp $	*/
+/*	$NetBSD: strftime.c,v 1.21 2010/12/16 18:38:07 christos Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
@@ -6,7 +6,7 @@
 static char	elsieid[] = "@(#)strftime.c	7.64";
 static char	elsieid[] = "@(#)strftime.c	8.3";
 #else
-__RCSID("$NetBSD: strftime.c,v 1.22 2012/03/20 16:39:08 matt Exp $");
+__RCSID("$NetBSD: strftime.c,v 1.21 2010/12/16 18:38:07 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -585,8 +585,11 @@ strftime(char * const s, const size_t maxsize,
 }
 
 static char *
-_conv(const int	n, const char * const format, char * const pt,
-    const char * const ptlim)
+_conv(n, format, pt, ptlim)
+const int		n;
+const char * const	format;
+char * const		pt;
+const char * const	ptlim;
 {
 	char	buf[INT_STRLEN_MAXIMUM(int) + 1];
 
@@ -595,7 +598,10 @@ _conv(const int	n, const char * const format, char * const pt,
 }
 
 static char *
-_add(const char *str, char *pt, const char * const ptlim)
+_add(str, pt, ptlim)
+const char *		str;
+char *			pt;
+const char * const	ptlim;
 {
 	while (pt < ptlim && (*pt = *str++) != '\0')
 		++pt;
@@ -611,8 +617,13 @@ _add(const char *str, char *pt, const char * const ptlim)
 */
 
 static char *
-_yconv(const int a, const int b, const int convert_top, const int convert_yy,
-    char *pt, const char * const ptlim)
+_yconv(a, b, convert_top, convert_yy, pt, ptlim)
+const int		a;
+const int		b;
+const int		convert_top;
+const int		convert_yy;
+char *			pt;
+const char * const	ptlim;
 {
 	register int	lead;
 	register int	trail;

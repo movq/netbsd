@@ -1,4 +1,4 @@
-/*  $NetBSD: subr.c,v 1.19 2012/07/21 05:49:42 manu Exp $ */
+/*  $NetBSD: subr.c,v 1.15.2.3 2012/08/12 13:13:20 martin Exp $ */
 
 /*-
  *  Copyright (c) 2010-2011 Emmanuel Dreyfus. All rights reserved.

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.31 2012/09/27 18:28:56 alnsn Exp $
+#	$NetBSD: Makefile,v 1.29 2010/08/22 18:56:22 rmind Exp $
 
 INCSDIR= /usr/include/net
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.36 2012/07/29 18:05:45 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.35.10.1 2012/08/08 15:51:14 martin Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -49,7 +49,7 @@
 #define __INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.36 2012/07/29 18:05:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.35.10.1 2012/08/08 15:51:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: dnsblog.c,v 1.1.1.3 2012/06/09 11:27:09 tron Exp $	*/
+/*	$NetBSD: dnsblog.c,v 1.1.1.2.6.1 2012/06/13 19:29:02 riz Exp $	*/
 
 /*++
 /* NAME

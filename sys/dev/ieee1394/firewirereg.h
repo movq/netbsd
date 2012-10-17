@@ -1,4 +1,4 @@
-/*	$NetBSD: firewirereg.h,v 1.18 2012/08/04 03:55:43 riastradh Exp $	*/
+/*	$NetBSD: firewirereg.h,v 1.16 2011/04/24 18:52:26 rmind Exp $	*/
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
  * Copyright (c) 1998-2002 Katsushi Kobayashi and Hidetoshi Shimokawa
@@ -283,7 +283,6 @@ int fw_xferwait(struct fw_xfer *);
 void fw_drain_txq(struct firewire_comm *);
 void fw_busreset(struct firewire_comm *, uint32_t);
 void fw_init(struct firewire_comm *);
-void fw_destroy(struct firewire_comm *);
 struct fw_bind *fw_bindlookup(struct firewire_comm *, uint16_t, uint32_t);
 int fw_bindadd(struct firewire_comm *, struct fw_bind *);
 int fw_bindremove(struct firewire_comm *, struct fw_bind *);
@@ -324,5 +323,6 @@ extern int firewire_phydma_enable;
 #include <sys/mallocvar.h>
 
 MALLOC_DECLARE(M_FW);
+MALLOC_DECLARE(M_FWXFER);
 
 #endif	/* _FIREWIREREG_H_ */

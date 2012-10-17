@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.238 2012/09/26 18:18:08 matt Exp $	*/
+/*	$NetBSD: pmap.c,v 1.228.2.1 2012/08/09 06:36:46 jdc Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -209,10 +209,9 @@
 #include <machine/pmap.h>
 #include <machine/pcb.h>
 #include <machine/param.h>
-#include <arm/cpuconf.h>
 #include <arm/arm32/katelib.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.238 2012/09/26 18:18:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.228.2.1 2012/08/09 06:36:46 jdc Exp $");
 
 #ifdef PMAP_DEBUG
 
@@ -1150,7 +1149,7 @@ pmap_alloc_l1(pmap_t pm)
 	 * Fix up the relevant bits in the pmap structure
 	 */
 	pm->pm_l1 = l1;
-	pm->pm_domain = domain + 1;
+	pm->pm_domain = domain;
 }
 
 /*
@@ -1173,8 +1172,8 @@ pmap_free_l1(pmap_t pm)
 	/*
 	 * Free up the domain number which was allocated to the pmap
 	 */
-	l1->l1_domain_free[pm->pm_domain - 1] = l1->l1_domain_first;
-	l1->l1_domain_first = pm->pm_domain - 1;
+	l1->l1_domain_free[pm->pm_domain] = l1->l1_domain_first;
+	l1->l1_domain_first = pm->pm_domain;
 	l1->l1_domain_use_count--;
 
 	/*
@@ -2995,12 +2994,12 @@ pmap_enter(pmap_t pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 		bool is_cached = pmap_is_cached(pm);
 
 		*ptep = npte;
-		PTE_SYNC(ptep);
 		if (is_cached) {
 			/*
 			 * We only need to frob the cache/tlb if this pmap
 			 * is current
 			 */
+			PTE_SYNC(ptep);
 			if (va != vector_page && l2pte_valid(npte)) {
 				/*
 				 * This mapping is likely to be accessed as
@@ -3362,8 +3361,8 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 		}
 	}
 
-	*ptep = L2_S_PROTO | pa | L2_S_PROT(PTE_KERNEL, prot)
-	    | ((flags & PMAP_NOCACHE) ? 0 : pte_l2_s_cache_mode);
+	*ptep = L2_S_PROTO | pa | L2_S_PROT(PTE_KERNEL, prot) |
+	    pte_l2_s_cache_mode;
 	PTE_SYNC(ptep);
 
 	if (pg) {
@@ -3516,12 +3515,7 @@ pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 		 */
 		KDASSERT(pm == pmap_kernel());
 		pmap_release_pmap_lock(pm);
-#if (ARM_MMU_V6 + ARM_MMU_V7) > 0
-		if (l1pte_supersection_p(l1pd)) {
-			pa = (l1pd & L1_SS_FRAME) | (va & L1_SS_OFFSET);
-		} else
-#endif
-			pa = (l1pd & L1_S_FRAME) | (va & L1_S_OFFSET);
+		pa = (l1pd & L1_S_FRAME) | (va & L1_S_OFFSET);
 	} else {
 		/*
 		 * Note that we can't rely on the validity of the L1
@@ -4002,17 +3996,6 @@ pmap_fault_fixup(pmap_t pm, vaddr_t va, vm_prot_t ftype, int user)
 	}
 #endif /* CPU_SA110 */
 
-	/*
-	 * If 'rv == 0' at this point, it generally indicates that there is a
-	 * stale TLB entry for the faulting address.  That might be due to a
-	 * wrong setting of pmap_needs_pte_sync.  So set it and retry.
-	 */
-	if (rv == 0 && pm->pm_l1->l1_domain_use_count == 1
-	    && pmap_needs_pte_sync == 0) {
-		pmap_needs_pte_sync = 1;
-		rv = 1;
-	}
-
 #ifdef DEBUG
 	/*
 	 * If 'rv == 0' at this point, it generally indicates that there is a
@@ -4217,7 +4200,8 @@ pmap_activate(struct lwp *l)
 		 * same user vmspace as before... Simply update
 		 * the TTB (no TLB flush required)
 		 */
-		cpu_setttb(npm->pm_l1->l1_physaddr, false);
+		__asm volatile("mcr p15, 0, %0, c2, c0, 0" ::
+		    "r"(npm->pm_l1->l1_physaddr));
 		cpu_cpwait();
 	} else {
 		/*
@@ -4992,7 +4976,7 @@ vector_page_setprot(int prot)
 
 	ptep = &l2b->l2b_kva[l2pte_index(vector_page)];
 
-	*ptep = (*ptep & ~L2_S_PROT_MASK) | L2_S_PROT(PTE_KERNEL, prot);
+	*ptep = (*ptep & ~L1_S_PROT_MASK) | L2_S_PROT(PTE_KERNEL, prot);
 	PTE_SYNC(ptep);
 	cpu_tlb_flushD_SE(vector_page);
 	cpu_cpwait();
@@ -5334,7 +5318,6 @@ pmap_set_pt_cache_mode(pd_entry_t *kl1, vaddr_t va)
 	pde = *pdep;
 
 	if (l1pte_section_p(pde)) {
-		__CTASSERT((L1_S_CACHE_MASK & L1_S_V6_SUPER) == 0);
 		if ((pde & L1_S_CACHE_MASK) != pte_l1_s_cache_mode_pt) {
 			*pdep = (pde & ~L1_S_CACHE_MASK) |
 			    pte_l1_s_cache_mode_pt;
@@ -5709,7 +5692,7 @@ vsize_t
 pmap_map_chunk(vaddr_t l1pt, vaddr_t va, paddr_t pa, vsize_t size,
     int prot, int cache)
 {
-	pd_entry_t *pdep = (pd_entry_t *) l1pt;
+	pd_entry_t *pde = (pd_entry_t *) l1pt;
 	pt_entry_t *pte, f1, f2s, f2l;
 	vsize_t resid;  
 	int i;
@@ -5748,37 +5731,15 @@ pmap_map_chunk(vaddr_t l1pt, vaddr_t va, paddr_t pa, vsize_t size,
 	size = resid;
 
 	while (resid > 0) {
-#if (ARM_MMU_V6 + ARM_MMU_V7) > 0
-		/* See if we can use a supersection mapping. */
-		if (L1_SS_PROTO && L1_SS_MAPPABLE_P(va, pa, resid)) {
-			/* Supersection are always domain 0 */
-			pd_entry_t pde = L1_SS_PROTO | pa |
-			    L1_S_PROT(PTE_KERNEL, prot) | f1;
-#ifdef VERBOSE_INIT_ARM
-			printf("sS");
-#endif
-			for (size_t s = va >> L1_S_SHIFT,
-			     e = s + L1_SS_SIZE / L1_S_SIZE;
-			     s < e;
-			     s++) {
-				pdep[s] = pde;
-				PTE_SYNC(&pdep[s]);
-			}
-			va += L1_SS_SIZE;
-			pa += L1_SS_SIZE;
-			resid -= L1_SS_SIZE;
-			continue;
-		}
-#endif
 		/* See if we can use a section mapping. */
 		if (L1_S_MAPPABLE_P(va, pa, resid)) {
 #ifdef VERBOSE_INIT_ARM
 			printf("S");
 #endif
-			pdep[va >> L1_S_SHIFT] = L1_S_PROTO | pa |
+			pde[va >> L1_S_SHIFT] = L1_S_PROTO | pa |
 			    L1_S_PROT(PTE_KERNEL, prot) | f1 |
 			    L1_S_DOM(PMAP_DOMAIN_KERNEL);
-			PTE_SYNC(&pdep[va >> L1_S_SHIFT]);
+			PTE_SYNC(&pde[va >> L1_S_SHIFT]);
 			va += L1_S_SIZE;
 			pa += L1_S_SIZE;
 			resid -= L1_S_SIZE;
@@ -5790,15 +5751,15 @@ pmap_map_chunk(vaddr_t l1pt, vaddr_t va, paddr_t pa, vsize_t size,
 		 * one is actually in the corresponding L1 slot
 		 * for the current VA.
 		 */
-		if ((pdep[va >> L1_S_SHIFT] & L1_TYPE_MASK) != L1_TYPE_C)
+		if ((pde[va >> L1_S_SHIFT] & L1_TYPE_MASK) != L1_TYPE_C)
 			panic("pmap_map_chunk: no L2 table for VA 0x%08lx", va);
 
 #ifndef ARM32_NEW_VM_LAYOUT
 		pte = (pt_entry_t *)
-		    kernel_pt_lookup(pdep[va >> L1_S_SHIFT] & L2_S_FRAME);
+		    kernel_pt_lookup(pde[va >> L1_S_SHIFT] & L2_S_FRAME);
 #else
 		pte = (pt_entry_t *) kernel_pt_lookup(
-		    pdep[L1_IDX(va)] & L1_C_ADDR_MASK);
+		    pde[L1_IDX(va)] & L1_C_ADDR_MASK);
 #endif
 		if (pte == NULL)
 			panic("pmap_map_chunk: can't find L2 table for VA"
@@ -5974,7 +5935,6 @@ pt_entry_t	pte_l2_l_prot_w;
 pt_entry_t	pte_l2_l_prot_ro;
 pt_entry_t	pte_l2_l_prot_mask;
 
-pt_entry_t	pte_l1_ss_proto;
 pt_entry_t	pte_l1_s_proto;
 pt_entry_t	pte_l1_c_proto;
 pt_entry_t	pte_l2_s_proto;
@@ -6002,24 +5962,22 @@ pmap_pte_init_generic(void)
 	/*
 	 * If we have a write-through cache, set B and C.  If
 	 * we have a write-back cache, then we assume setting
-	 * only C will make those pages write-through (except for those
-	 * Cortex CPUs which can read the L1 caches).
+	 * only C will make those pages write-through.
 	 */
-	if (cpufuncs.cf_dcache_wb_range == (void *) cpufunc_nullop
-#if ARM_MMU_V7 > 0
-	    || CPU_ID_CORTEX_P(curcpu()->ci_arm_cpuid)
-#endif
-#if ARM_MMU_V6 > 0
-	    || CPU_ID_ARM11_P(curcpu()->ci_arm_cpuid) /* arm116 errata 399234 */
-#endif
-	    || false) {
+	if (cpufuncs.cf_dcache_wb_range == (void *) cpufunc_nullop) {
 		pte_l1_s_cache_mode_pt = L1_S_B|L1_S_C;
 		pte_l2_l_cache_mode_pt = L2_B|L2_C;
 		pte_l2_s_cache_mode_pt = L2_B|L2_C;
 	} else {
-		pte_l1_s_cache_mode_pt = L1_S_C;	/* write through */
-		pte_l2_l_cache_mode_pt = L2_C;		/* write through */
-		pte_l2_s_cache_mode_pt = L2_C;		/* write through */
+#if ARM_MMU_V6 > 1
+		pte_l1_s_cache_mode_pt = L1_S_B|L1_S_C; /* arm116 errata 399234 */
+		pte_l2_l_cache_mode_pt = L2_B|L2_C; /* arm116 errata 399234 */
+		pte_l2_s_cache_mode_pt = L2_B|L2_C; /* arm116 errata 399234 */
+#else
+		pte_l1_s_cache_mode_pt = L1_S_C;
+		pte_l2_l_cache_mode_pt = L2_C;
+		pte_l2_s_cache_mode_pt = L2_C;
+#endif
 	}
 
 	pte_l1_s_prot_u = L1_S_PROT_U_generic;
@@ -6037,7 +5995,6 @@ pmap_pte_init_generic(void)
 	pte_l2_l_prot_ro = L2_L_PROT_RO_generic;
 	pte_l2_l_prot_mask = L2_L_PROT_MASK_generic;
 
-	pte_l1_ss_proto = L1_SS_PROTO_generic;
 	pte_l1_s_proto = L1_S_PROTO_generic;
 	pte_l1_c_proto = L1_C_PROTO_generic;
 	pte_l2_s_proto = L2_S_PROTO_generic;
@@ -6262,7 +6219,6 @@ pmap_pte_init_xscale(void)
 	pte_l2_l_prot_ro = L2_L_PROT_RO_xscale;
 	pte_l2_l_prot_mask = L2_L_PROT_MASK_xscale;
 
-	pte_l1_ss_proto = L1_SS_PROTO_xscale;
 	pte_l1_s_proto = L1_S_PROTO_xscale;
 	pte_l1_c_proto = L1_C_PROTO_xscale;
 	pte_l2_s_proto = L2_S_PROTO_xscale;
@@ -6447,7 +6403,6 @@ pmap_pte_init_arm11mpcore(void)
 	pte_l2_l_prot_ro = L2_L_PROT_RO_generic;
 	pte_l2_l_prot_mask = L2_L_PROT_MASK_generic;
 
-	pte_l1_ss_proto = L1_SS_PROTO_armv6;
 	pte_l1_s_proto = L1_S_PROTO_armv6;
 	pte_l1_c_proto = L1_C_PROTO_armv6;
 	pte_l2_s_proto = L2_S_PROTO_armv6c;
@@ -6457,7 +6412,6 @@ pmap_pte_init_arm11mpcore(void)
 	pte_l2_l_prot_ro = L2_L_PROT_RO_armv6n;
 	pte_l2_l_prot_mask = L2_L_PROT_MASK_armv6n;
 
-	pte_l1_ss_proto = L1_SS_PROTO_armv6;
 	pte_l1_s_proto = L1_S_PROTO_armv6;
 	pte_l1_c_proto = L1_C_PROTO_armv6;
 	pte_l2_s_proto = L2_S_PROTO_armv6n;
@@ -6486,22 +6440,6 @@ pmap_pte_init_armv7(void)
 	pte_l2_l_cache_mask = L2_L_CACHE_MASK_armv7;
 	pte_l2_s_cache_mask = L2_S_CACHE_MASK_armv7;
 
-	if (CPU_ID_CORTEX_A9_P(curcpu()->ci_arm_cpuid)) {
-		/*
-		 * write-back, no write-allocate, shareable for normal pages.
-		 */
-		pte_l1_s_cache_mode = L1_S_C | L1_S_B | L1_S_V6_S;
-		pte_l2_l_cache_mode = L2_C | L2_B | L2_XS_S;
-		pte_l2_s_cache_mode = L2_C | L2_B | L2_XS_S;
-
-		/*
-		 * write-back, no write-allocate, shareable for page tables.
-		 */
-		pte_l1_s_cache_mode_pt = L1_S_C | L1_S_B | L1_S_V6_S;
-		pte_l2_l_cache_mode_pt = L2_C | L2_B | L2_XS_S;
-		pte_l2_s_cache_mode_pt = L2_C | L2_B | L2_XS_S;
-	}
-
 	pte_l1_s_prot_u = L1_S_PROT_U_armv7;
 	pte_l1_s_prot_w = L1_S_PROT_W_armv7;
 	pte_l1_s_prot_ro = L1_S_PROT_RO_armv7;
@@ -6517,12 +6455,9 @@ pmap_pte_init_armv7(void)
 	pte_l2_l_prot_ro = L2_L_PROT_RO_armv7;
 	pte_l2_l_prot_mask = L2_L_PROT_MASK_armv7;
 
-	pte_l1_ss_proto = L1_SS_PROTO_armv7;
 	pte_l1_s_proto = L1_S_PROTO_armv7;
 	pte_l1_c_proto = L1_C_PROTO_armv7;
 	pte_l2_s_proto = L2_S_PROTO_armv7;
-
-	pmap_needs_pte_sync = 1;
 }
 #endif /* ARM_MMU_V7 */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: fdisk.c,v 1.142 2012/06/05 13:41:23 tsutsui Exp $ */
+/*	$NetBSD: fdisk.c,v 1.138.2.1 2012/06/12 19:11:50 riz Exp $ */
 
 /*
  * Mach Operating System
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: fdisk.c,v 1.142 2012/06/05 13:41:23 tsutsui Exp $");
+__RCSID("$NetBSD: fdisk.c,v 1.138.2.1 2012/06/12 19:11:50 riz Exp $");
 #endif /* not lint */
 
 #define MBRPTYPENAMES
@@ -150,7 +150,7 @@ static char *boot_path = NULL;			/* name of file we actually opened */
 #define BOOTSEL_OPTIONS	
 #define change_part(e, p, id, st, sz, bm) change__part(e, p, id, st, sz)
 #endif
-#define OPTIONS	BOOTSEL_OPTIONS "0123FSafiIluvA:b:c:E:r:s:w:z:"
+#define OPTIONS	BOOTSEL_OPTIONS "0123FSafiIluvA:b:c:E:r:s:w:"
 
 /*
  * Disk geometry and partition alignment.
@@ -240,8 +240,6 @@ static int F_flag = 1;
 static struct gpt_hdr gpt1, gpt2;	/* GUID partition tables */
 
 static struct mbr_sector bootcode[8192 / sizeof (struct mbr_sector)];
-static ssize_t secsize = 512;	/* sector size */
-static char *iobuf;		/* buffer for non 512 sector I/O */
 static int bootsize;		/* actual size of bootcode */
 static int boot_installed;	/* 1 if we've copied code into the mbr */
 
@@ -276,14 +274,14 @@ static void	change_active(int);
 static void	change_bios_geometry(void);
 static void	dos(int, unsigned char *, unsigned char *, unsigned char *);
 static int	open_disk(int);
-static ssize_t	read_disk(daddr_t, void *);
-static ssize_t	write_disk(daddr_t, void *);
+static int	read_disk(daddr_t, void *);
+static int	write_disk(daddr_t, void *);
 static int	get_params(void);
 static int	read_s0(daddr_t, struct mbr_sector *);
 static int	write_mbr(void);
 static int	read_gpt(daddr_t, struct gpt_hdr *);
 static int	delete_gpt(struct gpt_hdr *);
-static int	yesno(const char *, ...) __printflike(1, 2);
+static int	yesno(const char *, ...);
 static int64_t	decimal(const char *, int64_t, int, int64_t, int64_t);
 #define DEC_SEC		1		/* asking for a sector number */
 #define	DEC_RND		2		/* round to end of first track */
@@ -450,19 +448,6 @@ main(int argc, char *argv[])
 			break;
 		case 'T':
 			disk_type = optarg;
-			break;
-		case 'z':
-			secsize = atoi(optarg);
-			if (secsize <= 512)
-out:				 errx(EXIT_FAILURE, "Invalid sector size %zd",
-				    secsize);
-			for (ch = secsize; (ch & 1) == 0; ch >>= 1)
-				continue;
-			if (ch != 1)
-				goto out;
-			if ((iobuf = malloc(secsize)) == NULL)
-				err(EXIT_FAILURE, "Cannot allocate %zd buffer",
-				    secsize);
 			break;
 		default:
 			usage();
@@ -2478,62 +2463,26 @@ open_disk(int update)
 	return (0);
 }
 
-static ssize_t
+static int
 read_disk(daddr_t sector, void *buf)
 {
-	ssize_t nr;
 
 	if (*rfd == -1)
 		errx(1, "read_disk(); fd == -1");
+	if (lseek(*rfd, sector * (off_t)512, 0) == -1)
+		return (-1);
+	return (read(*rfd, buf, 512));
+}
 
-	off_t offs = sector * (off_t)512;
-	off_t mod = offs & (secsize - 1);
-	off_t rnd = offs & ~(secsize - 1);
-
-	if (lseek(*rfd, rnd, SEEK_SET) == (off_t)-1)
-		return -1;
-
-	if (secsize == 512)
-		return read(*rfd, buf, 512);
-
-	if ((nr = read(*rfd, iobuf, secsize)) != secsize)
-		return nr;
-
-	memcpy(buf, &iobuf[mod], 512);
-
-	return 512;
-}	
-
-static ssize_t
+static int
 write_disk(daddr_t sector, void *buf)
 {
-	ssize_t nr;
 
 	if (wfd == -1)
 		errx(1, "write_disk(); wfd == -1");
-
-	off_t offs = sector * (off_t)512;
-	off_t mod = offs & (secsize - 1);
-	off_t rnd = offs & ~(secsize - 1);
-
-	if (lseek(wfd, rnd, SEEK_SET) == (off_t)-1)
-		return -1;
-
-	if (secsize == 512)
-		return write(wfd, buf, 512);
-
-	if ((nr = read(wfd, iobuf, secsize)) != secsize)
-		return nr;
-
-	if (lseek(wfd, rnd, SEEK_SET) == (off_t)-1)
-		return -1;
-
-	memcpy(&iobuf[mod], buf, 512);
-
-	if ((nr = write(wfd, iobuf, secsize)) != secsize)
-		return nr;
-
-	return 512;
+	if (lseek(wfd, sector * (off_t)512, 0) == -1)
+		return (-1);
+	return (write(wfd, buf, 512));
 }
 
 static void

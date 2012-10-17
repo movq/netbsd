@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_disassemble.c,v 1.9 2012/08/13 01:18:32 rmind Exp $	*/
+/*	$NetBSD: npf_disassemble.c,v 1.3.2.7 2012/08/13 19:43:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  * FIXME: config generation should be redesigned..
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npf_disassemble.c,v 1.9 2012/08/13 01:18:32 rmind Exp $");
+__RCSID("$NetBSD: npf_disassemble.c,v 1.3.2.7 2012/08/13 19:43:44 riz Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

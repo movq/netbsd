@@ -1,4 +1,4 @@
-.\"	$NetBSD: make.1,v 1.208 2012/09/17 02:10:46 christos Exp $
+.\"	$NetBSD: make.1,v 1.200 2012/02/03 21:39:25 sjg Exp $
 .\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	from: @(#)make.1	8.4 (Berkeley) 3/19/94
 .\"
-.Dd September 16, 2012
+.Dd February 3, 2012
 .Dt MAKE 1
 .Os
 .Sh NAME
@@ -38,18 +38,40 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl BeikNnqrstWX
+.Bk -words
 .Op Fl C Ar directory
+.Ek
+.Bk -words
 .Op Fl D Ar variable
+.Ek
+.Bk -words
 .Op Fl d Ar flags
+.Ek
+.Bk -words
 .Op Fl f Ar makefile
+.Ek
+.Bk -words
 .Op Fl I Ar directory
+.Ek
+.Bk -words
 .Op Fl J Ar private
+.Ek
+.Bk -words
 .Op Fl j Ar max_jobs
+.Ek
+.Bk -words
 .Op Fl m Ar directory
+.Ek
+.Bk -words
 .Op Fl T Ar file
+.Ek
+.Bk -words
 .Op Fl V Ar variable
+.Ek
 .Op Ar variable=value
+.Bk -words
 .Op Ar target ...
+.Ek
 .Sh DESCRIPTION
 .Nm
 is a program designed to simplify the maintenance of other programs.
@@ -203,10 +225,6 @@ Print debugging information about makefile parsing.
 Print debugging information about suffix-transformation rules.
 .It Ar t
 Print debugging information about target list maintenance.
-.It Ar V
-Force the
-.Fl V
-option to print raw values of variables.
 .It Ar v
 Print debugging information about variable assignment.
 .It Ar x
@@ -679,10 +697,6 @@ and cannot be confused with the special target with the same name.
 Names the makefile (default
 .Ql Pa .depend )
 from which generated dependencies are read.
-.It Va .MAKE.EXPAND_VARIABLES
-A boolean that controls the default behavior of the
-.Fl V
-option.
 .It Va .MAKE.EXPORTED
 The list of variables exported by
 .Nm .
@@ -1431,11 +1445,6 @@ except for internal variables (those that start with
 This is not affected by the
 .Fl X
 flag, so should be used with caution.
-For compatibility with other
-.Nm
-programs
-.Ql export variable=value
-is also accepted.
 .Pp
 Appending a variable name to
 .Va .MAKE.EXPORTED
@@ -2042,13 +2051,6 @@ or
 To be compatible with Makefiles that do this, one can use
 .Fl B
 to disable this behavior.
-.Pp
-In compatibility mode, each command is run in a separate process.
-If the command contains any shell meta characters
-.Pq Ql #=|^(){};&<>*?[]:$`\e\en
-it will be passed to the shell, otherwise
-.Nm
-will attempt direct execution.
 .Sh SEE ALSO
 .Xr mkdep 1
 .Sh HISTORY

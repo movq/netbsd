@@ -1,4 +1,4 @@
-/* $NetBSD: t_atan.c,v 1.6 2012/03/11 06:36:05 jruoho Exp $ */
+/* $NetBSD: t_atan.c,v 1.1 2011/09/17 18:08:35 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -30,10 +30,7 @@
  */
 
 #include <atf-c.h>
-#include <atf-c/config.h>
 #include <math.h>
-#include <stdlib.h>
-#include <string.h>
 
 /*
  * atan(3)
@@ -64,11 +61,7 @@ ATF_TC_BODY(atan_inf_neg, tc)
 {
 #ifndef __vax__
 	const double x = -1.0L / 0.0L;
-	const double eps = 1.0e-40;
-
-	if (strcmp(atf_config_get("atf_arch"), "i386") == 0 &&
-	    system("cpuctl identify 0 | grep -q QEMU") != 0)
-		atf_tc_expect_fail("PR port-i386/46108");
+	const float eps = 1.0e-40;
 
 	if (fabs(atan(x) + M_PI_2) > eps)
 		atf_tc_fail_nonfatal("atan(-Inf) != -pi/2");
@@ -85,11 +78,7 @@ ATF_TC_BODY(atan_inf_pos, tc)
 {
 #ifndef __vax__
 	const double x = +1.0L / 0.0L;
-	const double eps = 1.0e-40;
-
-	if (strcmp(atf_config_get("atf_arch"), "i386") == 0 &&
-	    system("cpuctl identify 0 | grep -q QEMU") != 0)
-		atf_tc_expect_fail("PR port-i386/46108");
+	const float eps = 1.0e-40;
 
 	if (fabs(atan(x) - M_PI_2) > eps)
 		atf_tc_fail_nonfatal("atan(+Inf) != pi/2");
@@ -109,10 +98,6 @@ ATF_TC_BODY(atan_tan, tc)
 	const double eps = 1.0e-40;
 	double y;
 	size_t i;
-
-	if (strcmp(atf_config_get("atf_arch"), "i386") == 0 &&
-	    system("cpuctl identify 0 | grep -q QEMU") != 0)
-		atf_tc_expect_fail("PR port-i386/46108");
 
 	for (i = 0; i < __arraycount(x); i++) {
 

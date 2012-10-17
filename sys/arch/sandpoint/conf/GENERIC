@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.73 2012/04/29 15:59:32 phx Exp $
+# $NetBSD: GENERIC,v 1.70 2012/02/11 12:31:47 phx Exp $
 #
 # machine description file for GENERIC NAS
 # 
@@ -22,7 +22,7 @@ include 	"arch/sandpoint/conf/std.sandpoint"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.73 $"
+#ident 		"GENERIC-$Revision: 1.70 $"
 
 maxusers	32
 
@@ -37,6 +37,7 @@ options 	KTRACE
 #options 	SYSVMSG		# System V message queues
 #options 	SYSVSEM		# System V semaphores
 #options 	SYSVSHM		# System V shared memory
+#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #options 	MODULAR		# module(7) support
 #options 	USERCONF	# userconf(4) support
@@ -57,6 +58,7 @@ options 	DDB
 #options 	TRAP_PANICWAIT
 #options 	PMAPCHECK
 #options 	PMAPDEBUG
+#options 	SYMTAB_SPACE=300000
 options 	MSGBUFSIZE=65536
 
 #makeoptions	DEBUG="-g"
@@ -212,6 +214,7 @@ atabus* at ata?
 wd*		at atabus? drive ? flags 0x0000	# the drives themselves
 
 # PCI network interfaces
+fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
 ral*	at pci? dev ? function ?	# Ralink Technology RT25x0 802.11a/b/g
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 skc*	at pci? dev ? function ?	# Marvell Yukon Gigabit Ethernet
@@ -262,7 +265,6 @@ sd*	at scsibus? target ? lun ?	# SCSI disk drives
 cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 
 atapibus* at atapi?
-sd*	at atapibus? drive ? flags 0x0000	# ATAPI disk drives
 cd*	at atapibus? drive ? flags 0x0000	# ATAPI CD-ROM drives
 
 #

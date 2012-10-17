@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_lookup.c,v 1.2 2012/07/05 17:40:11 christos Exp $	*/
+/*	$NetBSD: dns_lookup.c,v 1.1.1.2.8.1 2012/08/12 19:25:23 martin Exp $	*/
 
 /*++
 /* NAME

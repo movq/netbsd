@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2012/05/29 19:31:52 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2011/12/19 14:07:40 joerg Exp $
 
 LIB=	clangDriver
 
@@ -9,10 +9,12 @@ LIB=	clangDriver
 SRCS+=	Action.cpp \
 	Arg.cpp \
 	ArgList.cpp \
+	CC1Options.cpp \
 	CC1AsOptions.cpp \
 	Compilation.cpp \
 	Driver.cpp \
 	DriverOptions.cpp \
+	HostInfo.cpp \
 	Job.cpp \
 	Option.cpp \
 	OptTable.cpp \

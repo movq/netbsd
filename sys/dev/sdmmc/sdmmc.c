@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmc.c,v 1.15 2012/08/04 04:06:00 kiyohara Exp $	*/
+/*	$NetBSD: sdmmc.c,v 1.12 2012/02/01 22:34:42 matt Exp $	*/
 /*	$OpenBSD: sdmmc.c,v 1.18 2009/01/09 10:58:38 jsg Exp $	*/
 
 /*
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdmmc.c,v 1.15 2012/08/04 04:06:00 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdmmc.c,v 1.12 2012/02/01 22:34:42 matt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sdmmc.h"
@@ -192,12 +192,6 @@ sdmmc_detach(device_t self, int flags)
 	error = config_detach_children(self, flags);
 	if (error)
 		return error;
-
-	if (ISSET(sc->sc_caps, SMC_CAPS_DMA)) {
-		bus_dmamap_unload(sc->sc_dmat, sc->sc_dmap);
-		bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmap);
-	}
-
 	return 0;
 }
 
@@ -444,7 +438,7 @@ sdmmc_print(void *aux, const char *pnp)
 	struct sdmmc_attach_args *sa = aux;
 	struct sdmmc_function *sf = sa->sf;
 	struct sdmmc_cis *cis = &sf->sc->sc_fn0->cis;
-	int i, x;
+	int i;
 
 	if (pnp) {
 		if (sf->number == 0)
@@ -455,22 +449,16 @@ sdmmc_print(void *aux, const char *pnp)
 		if (i != 0)
 			printf("\"");
 
-		if ((cis->manufacturer != SDMMC_VENDOR_INVALID &&
-		    cis->product != SDMMC_PRODUCT_INVALID) ||
-		    sa->interface != SD_IO_SFIC_NO_STANDARD) {
-			x = !!(cis->manufacturer != SDMMC_VENDOR_INVALID);
-			x += !!(cis->product != SDMMC_PRODUCT_INVALID);
-			x += !!(sa->interface != SD_IO_SFIC_NO_STANDARD);
+		if (cis->manufacturer != SDMMC_VENDOR_INVALID &&
+		    cis->product != SDMMC_PRODUCT_INVALID) {
 			printf("%s(", i ? " " : "");
 			if (cis->manufacturer != SDMMC_VENDOR_INVALID)
 				printf("manufacturer 0x%x%s",
-				    cis->manufacturer, (--x == 0) ?  "" : ", ");
+				    cis->manufacturer,
+				    cis->product == SDMMC_PRODUCT_INVALID ?
+				    "" : ", ");
 			if (cis->product != SDMMC_PRODUCT_INVALID)
-				printf("product 0x%x%s",
-				    cis->product, (--x == 0) ?  "" : ", ");
-			if (sa->interface != SD_IO_SFIC_NO_STANDARD)
-				printf("standard function interface code 0x%x",
-				    sf->interface);
+				printf("product 0x%x", cis->product);
 			printf(")");
 		}
 		printf("%sat %s", i ? " " : "", pnp);
@@ -522,7 +510,7 @@ sdmmc_enable(struct sdmmc_softc *sc)
 			goto out;
 	}
 
-	/* Initialize SD/MMC memory card(s). */
+		/* Initialize SD/MMC memory card(s). */
 	if (ISSET(sc->sc_caps, SMC_CAPS_SPI_MODE) ||
 	    ISSET(sc->sc_flags, SMF_MEM_MODE))
 		error = sdmmc_mem_enable(sc);

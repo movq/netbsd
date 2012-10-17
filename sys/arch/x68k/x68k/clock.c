@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.34 2012/05/22 04:03:03 isaki Exp $	*/
+/*	$NetBSD: clock.c,v 1.33.10.1 2012/06/05 15:35:41 jdc Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.34 2012/05/22 04:03:03 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.33.10.1 2012/06/05 15:35:41 jdc Exp $");
 
 #include "clock.h"
 

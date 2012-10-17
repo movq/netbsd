@@ -11,7 +11,7 @@
 
 /*
  * from: @(#)fdlibm.h 5.1 93/09/24
- * $NetBSD: math_private.h,v 1.17 2012/05/05 17:54:14 christos Exp $
+ * $NetBSD: math_private.h,v 1.16.8.1 2012/05/09 18:22:36 riz Exp $
  */
 
 #ifndef _MATH_PRIVATE_H_

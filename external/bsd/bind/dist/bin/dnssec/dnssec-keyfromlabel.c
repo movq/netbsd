@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-keyfromlabel.c,v 1.7 2012/06/05 00:38:55 christos Exp $	*/
+/*	$NetBSD: dnssec-keyfromlabel.c,v 1.6.4.1 2012/06/05 21:15:17 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2007-2011  Internet Systems Consortium, Inc. ("ISC")

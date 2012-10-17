@@ -1,4 +1,4 @@
-/*	$NetBSD: vndvar.h,v 1.32 2012/03/26 16:28:08 hannken Exp $	*/
+/*	$NetBSD: vndvar.h,v 1.31.8.1 2012/04/06 17:44:21 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.

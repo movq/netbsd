@@ -1,3 +1,5 @@
-# $NetBSD: Makefile.inc,v 1.2 2012/09/16 13:46:49 skrll Exp $
+# $NetBSD: Makefile.inc,v 1.1 2010/08/07 18:01:33 joerg Exp $
 
 CPPFLAGS+=	-DELFSIZE=32
+
+

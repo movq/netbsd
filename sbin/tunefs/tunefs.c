@@ -1,4 +1,4 @@
-/*	$NetBSD: tunefs.c,v 1.45 2012/04/07 04:52:21 christos Exp $	*/
+/*	$NetBSD: tunefs.c,v 1.44 2011/08/29 14:35:04 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)tunefs.c	8.3 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: tunefs.c,v 1.45 2012/04/07 04:52:21 christos Exp $");
+__RCSID("$NetBSD: tunefs.c,v 1.44 2011/08/29 14:35:04 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -549,22 +549,18 @@ bread(daddr_t blk, char *buffer, int cnt, const char *file)
 static int
 openpartition(const char *name, int flags, char *device, size_t devicelen)
 {
-	char		rawspec[MAXPATHLEN], xbuf[MAXPATHLEN], *p;
+	char		rawspec[MAXPATHLEN], *p;
 	struct fstab	*fs;
 	int		fd, oerrno;
 
 	fs = getfsfile(name);
 	if (fs) {
-		const char *fsspec;
-		fsspec = getfsspecname(xbuf, sizeof(xbuf), fs->fs_spec);
-		if (fsspec == NULL)
-			err(4, "%s", xbuf);
-		if ((p = strrchr(fsspec, '/')) != NULL) {
+		if ((p = strrchr(fs->fs_spec, '/')) != NULL) {
 			snprintf(rawspec, sizeof(rawspec), "%.*s/r%s",
-			    (int)(p - fsspec), fsspec, p + 1);
+			    (int)(p - fs->fs_spec), fs->fs_spec, p + 1);
 			name = rawspec;
 		} else
-			name = fsspec;
+			name = fs->fs_spec;
 	}
 	fd = opendisk(name, flags, device, devicelen, 0);
 	if (fd == -1 && errno == ENOENT) {

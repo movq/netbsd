@@ -1,7 +1,7 @@
 #
 # Distribution kernel (TOSHIBA TX3922 based model) kernel config file
 #
-#	$NetBSD: TX3922,v 1.93 2012/06/05 08:44:12 abs Exp $
+#	$NetBSD: TX3922,v 1.92.2.1 2012/06/12 17:47:56 riz Exp $
 #
 include		"arch/hpcmips/conf/std.hpcmips"
 

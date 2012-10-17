@@ -1,4 +1,4 @@
-/*	$NetBSD: iso.c,v 1.33 2012/03/20 20:34:58 matt Exp $	*/
+/*	$NetBSD: iso.c,v 1.32 2009/04/12 16:08:37 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)iso.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: iso.c,v 1.33 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: iso.c,v 1.32 2009/04/12 16:08:37 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -113,7 +113,9 @@ extern void inetprint __P((struct in_addr *, u_int16_t, const char *, int));
  *	Dump esis stats
  */
 void
-esis_stats(u_long off, const char *name)
+esis_stats(off, name)
+	u_long	off;
+	const char	*name;
 {
 	struct esis_stat esis_stat;
 
@@ -144,7 +146,9 @@ esis_stats(u_long off, const char *name)
  * Dump clnp statistics structure.
  */
 void
-clnp_stats(u_long off, const char *name)
+clnp_stats(off, name)
+	u_long off;
+	const char *name;
 {
 	struct clnp_stat clnp_stat;
 
@@ -182,7 +186,9 @@ clnp_stats(u_long off, const char *name)
  * Dump CLTP statistics structure.
  */
 void
-cltp_stats(u_long off, const char *name)
+cltp_stats(off, name)
+	u_long off;
+	const char *name;
 {
 	struct cltpstat cltpstat;
 
@@ -222,7 +228,9 @@ static	int first = 1;
  * -a (all) flag is specified.
  */
 void
-iso_protopr(u_long off, const char *name)
+iso_protopr(off, name)
+	u_long off;
+	const char *name;
 {
 	struct isopcb cb;
 	struct isopcb *prev, *next;
@@ -256,7 +264,9 @@ iso_protopr(u_long off, const char *name)
 }
 
 void
-iso_protopr1(u_long kern_addr, int istp)
+iso_protopr1(kern_addr, istp)
+	u_long kern_addr;
+	int istp;
 {
 	int width = 22;
 	if (first) {
@@ -309,7 +319,9 @@ iso_protopr1(u_long kern_addr, int istp)
 }
 
 void
-tp_protopr(u_long off, const char *name)
+tp_protopr(off, name)
+	u_long off;
+	const char *name;
 {
 	extern const char * const tp_sstring[];	/* from sys/netiso/tp_astring.c */
 	struct tp_ref *tpr, *tpr_base;
@@ -354,7 +366,8 @@ tp_protopr(u_long off, const char *name)
 }
 
 void
-tp_inproto(u_long pcb)
+tp_inproto(pcb)
+	u_long pcb;
 {
 	struct inpcb inpcb;
 
@@ -377,7 +390,8 @@ tp_inproto(u_long pcb)
 
 #ifdef notdef
 char *
-isonetname(struct iso_addr *iso)
+isonetname(iso)
+	struct iso_addr *iso;
 {
 	struct sockaddr_iso sa;
 	struct iso_hostent *ihe = 0;
@@ -408,7 +422,11 @@ isonetname(struct iso_addr *iso)
 }
 
 static void
-isonetprint(struct iso_addr *iso, char *sufx, u_short sufxlen, int islocal)
+isonetprint(iso, sufx, sufxlen, islocal)
+	struct iso_addr *iso;
+	char *sufx;
+	u_short	sufxlen;
+	int islocal;
 {
 	struct iso_hostent *iso_getserventrybytsel(), *ihe;
 	struct iso_hostent Ihe;
@@ -463,9 +481,11 @@ isonetprint(struct iso_addr *iso, char *sufx, u_short sufxlen, int islocal)
 
 #ifdef notdef
 static void
-x25_protopr(u_long off, char *name)
+x25_protopr(off, name)
+	u_long off;
+	char *name;
 {
-	static char * const xpcb_states[] = {
+	static char *xpcb_states[] = {
 		"CLOSED",
 		"LISTENING",
 		"CLOSING",
@@ -531,7 +551,9 @@ x25_protopr(u_long off, char *name)
 struct	tp_stat tp_stat;
 
 void
-tp_stats(u_long off, const char *name)
+tp_stats(off, name)
+	u_long off;
+	const char *name;
 {
 
 	if (off == 0) {
@@ -621,11 +643,13 @@ static struct tpstatpr	tpstatpr_A[] = {
 #undef o
 
 static void
-tprintstat(struct tp_stat *s, int indent)
+tprintstat(s, indent)
+	struct tp_stat *s;
+	int indent;
 {
 	int j, tpfirst, tpfirst2;
 
-	static const char * const rttname[]= {
+	static const char *rttname[]= {
 		"~LOCAL, PDN",
 		"~LOCAL,~PDN",
 		" LOCAL,~PDN",
@@ -807,7 +831,9 @@ for (j = 0, tpfirst=1; group[j].text; j++) \
 #endif
 
 static void
-isonetprint(struct sockaddr_iso *siso, int islocal)
+isonetprint(siso, islocal)
+	struct sockaddr_iso *siso;
+	int islocal;
 {
 
 	hexprint(siso->siso_nlen, siso->siso_addr.isoa_genaddr, "{}");
@@ -820,11 +846,13 @@ isonetprint(struct sockaddr_iso *siso, int islocal)
 	putchar(' ');
 }
 
-static const char hexlist[] = "0123456789abcdef";
-static char obuf[128];
+static char hexlist[] = "0123456789abcdef", obuf[128];
 
 static void
-hexprint(int n, const char *buf, const char *delim)
+hexprint(n, buf, delim)
+	int n;
+	const char *buf;
+	const char *delim;
 {
 	const u_char *in = (const u_char *)buf, *top = in + n;
 	char *out = obuf;

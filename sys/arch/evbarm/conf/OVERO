@@ -1,5 +1,5 @@
 #
-#	$NetBSD: OVERO,v 1.17 2012/09/11 19:43:10 msaitoh Exp $
+#	$NetBSD: OVERO,v 1.11 2011/12/18 05:49:26 dholland Exp $
 #
 #	OVERO -- Gumstix. Inc. Overo platforms kernel
 #
@@ -17,7 +17,7 @@ maxusers	32
 options 	CPU_CORTEXA8
 options 	OMAP_3530
 options 	PMAPCOUNTERS
-makeoptions	CPUFLAGS="-mcpu=cortex-a8"
+makeoptions	CPUFLAGS="-mcpu=arm1136jf-s"
 
 # Architecture options
 
@@ -46,8 +46,8 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
 #file-system	OVERLAY		# overlay file system
-#file-system	PROCFS		# /proc
 #file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+#file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcoda (below)
@@ -120,7 +120,12 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 #options 	SYSVSHM		# System V-like memory sharing
+#options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -154,7 +159,7 @@ options		DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=600000
+options 	SYMTAB_SPACE=350000
 
 config		netbsd		root on ? type ?
 
@@ -298,7 +303,7 @@ pseudo-device	wsmux			# mouse & keyboard multiplexor
 #pseudo-device	wsfont
 
 # data mover pseudo-devices
-#pseudo-device	swdmover		# software dmover(9) back-end
+#pseudo-device	swdmover		# softare dmover(9) back-end
 #pseudo-device	dmoverio		# /dev/dmover dmover(9) interface
 
 # userland interface to drivers, including autoconf and properties retrieval

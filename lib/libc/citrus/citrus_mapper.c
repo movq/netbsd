@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_mapper.c,v 1.10 2012/06/08 07:49:42 martin Exp $	*/
+/*	$NetBSD: citrus_mapper.c,v 1.9.2.1 2012/06/12 19:42:53 riz Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_mapper.c,v 1.10 2012/06/08 07:49:42 martin Exp $");
+__RCSID("$NetBSD: citrus_mapper.c,v 1.9.2.1 2012/06/12 19:42:53 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

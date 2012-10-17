@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.110 2012/05/19 08:29:32 tsutsui Exp $	*/
+/*	$NetBSD: locore.s,v 1.108 2011/12/22 15:33:30 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -504,6 +504,35 @@ ENTRY_NOPROFILE(spurintr)	/* level 0 */
 ENTRY_NOPROFILE(kbdtimer)
 	rte
 
+ENTRY_NOPROFILE(com0trap)
+#include "com.h"
+	INTERRUPT_SAVEREG
+#if NXCOM > 0
+	addql	#1,_C_LABEL(idepth)
+	movel	#0,%sp@-
+	jbsr	_C_LABEL(comintr)
+	addql	#4,%sp
+	subql	#1,_C_LABEL(idepth)
+#endif
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
+	addql	#1,_C_LABEL(intrcnt)+36
+	jra	rei
+
+ENTRY_NOPROFILE(com1trap)
+	INTERRUPT_SAVEREG
+#if NXCOM > 1
+	addql	#1,_C_LABEL(idepth)
+	movel	#1,%sp@-
+	jbsr	_C_LABEL(comintr)
+	addql	#4,%sp
+	subql	#1,_C_LABEL(idepth)
+#endif
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
+	addql	#1,_C_LABEL(intrcnt)+36
+	jra	rei
+
 ENTRY_NOPROFILE(intiotrap)
 	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
@@ -789,7 +818,13 @@ Lstart2:
 
 /*
  * Prepare to enable MMU.
- * Since the kernel is mapped logical == physical, we just turn it on.
+ * Since the kernel is not mapped logical == physical we must insure
+ * that when the MMU is turned on, all prefetched addresses (including
+ * the PC) are valid.  In order guarantee that, we use the last physical
+ * page (which is conveniently mapped == VA) and load it up with enough
+ * code to defeat the prefetch, then we execute the jump back to here.
+ *
+ * Is this all really necessary, or am I paranoid??
  */
 	RELOC(Sysseg_pa, %a0)		| system segment table addr
 	movl	%a0@,%d1		| read value (a PA)

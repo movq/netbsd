@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_subr.c,v 1.7 2012/08/22 09:20:13 ttoth Exp $	*/
+/*	$NetBSD: chfs_subr.c,v 1.2 2011/11/24 21:09:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -56,7 +56,6 @@
 #include <uvm/uvm.h>
 
 #include <miscfs/specfs/specdev.h>
-#include <miscfs/genfs/genfs.h>
 #include "chfs.h"
 //#include <fs/chfs/chfs_vnops.h>
 //#include </root/xipffs/netbsd.chfs/chfs.h>
@@ -150,7 +149,7 @@ chfs_dir_lookup(struct chfs_inode *ip, struct componentname *cnp)
 
 int
 chfs_filldir(struct uio* uio, ino_t ino, const char *name,
-    int namelen, enum chtype type)
+    int namelen, enum vtype type)
 {
 	struct dirent dent;
 	int error;
@@ -159,31 +158,31 @@ chfs_filldir(struct uio* uio, ino_t ino, const char *name,
 
 	dent.d_fileno = ino;
 	switch (type) {
-	case CHT_BLK:
+	case VBLK:
 		dent.d_type = DT_BLK;
 		break;
 
-	case CHT_CHR:
+	case VCHR:
 		dent.d_type = DT_CHR;
 		break;
 
-	case CHT_DIR:
+	case VDIR:
 		dent.d_type = DT_DIR;
 		break;
 
-	case CHT_FIFO:
+	case VFIFO:
 		dent.d_type = DT_FIFO;
 		break;
 
-	case CHT_LNK:
+	case VLNK:
 		dent.d_type = DT_LNK;
 		break;
 
-	case CHT_REG:
+	case VREG:
 		dent.d_type = DT_REG;
 		break;
 
-	case CHT_SOCK:
+	case VSOCK:
 		dent.d_type = DT_SOCK;
 		break;
 
@@ -216,23 +215,28 @@ chfs_chsize(struct vnode *vp, u_quad_t size, kauth_cred_t cred)
 {
 	struct chfs_mount *chmp;
 	struct chfs_inode *ip;
+	struct buf *bp;
+	int blknum, append;
+	int error = 0;
+	char *buf = NULL;
+	struct chfs_full_dnode *fd;
 
 	ip = VTOI(vp);
 	chmp = ip->chmp;
 
 	dbg("chfs_chsize\n");
 
-	switch (ip->ch_type) {
-	case CHT_DIR:
+	switch (vp->v_type) {
+	case VDIR:
 		return EISDIR;
-	case CHT_LNK:
-	case CHT_REG:
+	case VLNK:
+	case VREG:
 		if (vp->v_mount->mnt_flag & MNT_RDONLY)
 			return EROFS;
 		break;
-	case CHT_BLK:
-	case CHT_CHR:
-	case CHT_FIFO:
+	case VBLK:
+	case VCHR:
+	case VFIFO:
 		return 0;
 	default:
 		return EOPNOTSUPP; /* XXX why not ENODEV? */
@@ -241,25 +245,98 @@ chfs_chsize(struct vnode *vp, u_quad_t size, kauth_cred_t cred)
 	vflushbuf(vp, 0);
 
 	mutex_enter(&chmp->chm_lock_mountfields);
+	chfs_flush_pending_wbuf(chmp);
 
-	if (ip->size < size) {
-		uvm_vnp_setsize(vp, size);
+	/* handle truncate to zero as a special case */
+	if (size == 0) {
+		dbg("truncate to zero");
+		chfs_truncate_fragtree(ip->chmp,
+		    &ip->fragtree, size);
 		chfs_set_vnode_size(vp, size);
-		ip->iflag |= IN_CHANGE | IN_UPDATE;
 
 		mutex_exit(&chmp->chm_lock_mountfields);
+
 		return 0;
 	}
 
-	if (size != 0) {
-		ubc_zerorange(&vp->v_uobj, size, ip->size - size, UBC_UNMAP_FLAG(vp));
+
+	/* allocate zeros for the new data */
+	buf = kmem_zalloc(size, KM_SLEEP);
+	bp = getiobuf(vp, true);
+
+	if (ip->size != 0) {
+		/* read the whole data */
+		bp->b_blkno = 0;
+		bp->b_bufsize = bp->b_resid = bp->b_bcount = ip->size;
+		bp->b_data = kmem_alloc(ip->size, KM_SLEEP);
+
+		error = chfs_read_data(chmp, vp, bp);
+		if (error) {
+			mutex_exit(&chmp->chm_lock_mountfields);
+			putiobuf(bp);
+
+			return error;
+		}
+
+		/* create the new data */
+		dbg("create new data vap%llu ip%llu\n",
+			(unsigned long long)size, (unsigned long long)ip->size);
+		append = size - ip->size;
+		if (append > 0) {
+			memcpy(buf, bp->b_data, ip->size);
+		} else {
+			memcpy(buf, bp->b_data, size);
+			chfs_truncate_fragtree(ip->chmp,
+				&ip->fragtree, size);
+		}
+
+		kmem_free(bp->b_data, ip->size);
+
+		struct chfs_node_frag *lastfrag = frag_last(&ip->fragtree);
+		fd = lastfrag->node;
+		chfs_mark_node_obsolete(chmp, fd->nref);
+
+		blknum = lastfrag->ofs / PAGE_SIZE;
+		lastfrag->size = append > PAGE_SIZE ? PAGE_SIZE : size % PAGE_SIZE;
+	} else {
+		fd = chfs_alloc_full_dnode();
+		blknum = 0;
 	}
-	
-	chfs_truncate_fragtree(ip->chmp, &ip->fragtree, size);
-	uvm_vnp_setsize(vp, size);
+
 	chfs_set_vnode_size(vp, size);
-	ip->iflag |= IN_CHANGE | IN_UPDATE;
+
+	// write the new data
+	for (bp->b_blkno = blknum; bp->b_blkno * PAGE_SIZE < size; bp->b_blkno++) {
+		uint64_t writesize = MIN(size - bp->b_blkno * PAGE_SIZE, PAGE_SIZE);
+
+		bp->b_bufsize = bp->b_resid = bp->b_bcount = writesize;
+		bp->b_data = kmem_alloc(writesize, KM_SLEEP);
+
+		memcpy(bp->b_data, buf + (bp->b_blkno * PAGE_SIZE), writesize);
+
+		if (bp->b_blkno != blknum) {
+			fd = chfs_alloc_full_dnode();
+		}
+
+		error = chfs_write_flash_dnode(chmp, vp, bp, fd);
+		if (error) {
+			mutex_exit(&chmp->chm_lock_mountfields);
+			kmem_free(bp->b_data, writesize);
+			putiobuf(bp);
+
+			return error;
+		}
+		if (bp->b_blkno != blknum) {
+			chfs_add_full_dnode_to_inode(chmp, ip, fd);
+		}
+		kmem_free(bp->b_data, writesize);
+	}
+
 	mutex_exit(&chmp->chm_lock_mountfields);
+
+	kmem_free(buf, size);
+	putiobuf(bp);
+
 	return 0;
 }
 #if 0
@@ -319,8 +396,6 @@ chfs_chflags(struct vnode *vp, int flags, kauth_cred_t cred)
 	struct chfs_mount *chmp;
 	struct chfs_inode *ip;
 	int error = 0;
-	kauth_action_t action = KAUTH_VNODE_WRITE_FLAGS;
-	bool changing_sysflags = false;
 
 	ip = VTOI(vp);
 	chmp = ip->chmp;
@@ -328,29 +403,32 @@ chfs_chflags(struct vnode *vp, int flags, kauth_cred_t cred)
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
 		return EROFS;
 
-	if ((flags & SF_SNAPSHOT) != (ip->flags & SF_SNAPSHOT))
-		return EPERM;
-
-	/* Indicate we're changing system flags if we are. */
-	if ((ip->flags & SF_SETTABLE) != (flags & SF_SETTABLE) ||
-	    (flags & UF_SETTABLE) != flags) {
-		action |= KAUTH_VNODE_WRITE_SYSFLAGS;
-		changing_sysflags = true;
-	}
-
-	/* Indicate the node has system flags if it does. */
-	if (ip->flags & (SF_IMMUTABLE | SF_APPEND)) {
-		action |= KAUTH_VNODE_HAS_SYSFLAGS;
-	}
-
-	error = kauth_authorize_vnode(cred, action, vp, NULL,
-	    genfs_can_chflags(cred, CHTTOVT(ip->ch_type), ip->uid, changing_sysflags));
-	if (error)
+	if (kauth_cred_geteuid(cred) != ip->uid &&
+	    (error = kauth_authorize_generic(cred,
+		KAUTH_GENERIC_ISSUSER, NULL)))
 		return error;
 
-	if (changing_sysflags) {
+	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+		NULL) == 0) {
+		if ((ip->flags & (SF_IMMUTABLE | SF_APPEND)) &&
+		    kauth_authorize_system(curlwp->l_cred,
+			KAUTH_SYSTEM_CHSYSFLAGS, 0, NULL, NULL, NULL))
+			return EPERM;
+
+		if ((flags & SF_SNAPSHOT) !=
+		    (ip->flags & SF_SNAPSHOT))
+			return EPERM;
+
 		ip->flags = flags;
 	} else {
+		if ((ip->flags & (SF_IMMUTABLE | SF_APPEND)) ||
+		    (flags & UF_SETTABLE) != flags)
+			return EPERM;
+
+		if ((ip->flags & SF_SETTABLE) !=
+		    (flags & SF_SETTABLE))
+			return EPERM;
+
 		ip->flags &= SF_SETTABLE;
 		ip->flags |= (flags & UF_SETTABLE);
 	}

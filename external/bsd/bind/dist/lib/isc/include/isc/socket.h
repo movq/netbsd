@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.4 2012/06/05 00:42:40 christos Exp $	*/
+/*	$NetBSD: socket.h,v 1.3.4.1 2012/06/05 21:15:29 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

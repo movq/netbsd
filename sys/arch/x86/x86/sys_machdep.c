@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.25 2011/10/10 15:15:28 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.
@@ -30,14 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.25 2011/10/10 15:15:28 jakllsch Exp $");
 
 #include "opt_mtrr.h"
 #include "opt_perfctrs.h"
 #include "opt_user_ldt.h"
-#ifdef i386
 #include "opt_vm86.h"
-#endif
 #include "opt_xen.h"
 
 #include <sys/param.h>
@@ -70,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.26 2012/10/04 21:23:45 dsl Exp $")
 /* Need to be checked. */
 #undef	USER_LDT
 #undef	PERFCTRS
+#undef	VM86
 #undef	IOPERM
 #else
 #if defined(XEN)

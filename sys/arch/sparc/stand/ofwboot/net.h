@@ -1,4 +1,4 @@
-/* $NetBSD: net.h,v 1.3 2012/07/16 11:26:27 tsutsui Exp $ */
+/* $NetBSD: net.h,v 1.2.14.1 2012/07/21 00:04:56 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

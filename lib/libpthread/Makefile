@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.77 2012/08/04 15:13:09 matt Exp $
+#	$NetBSD: Makefile,v 1.73 2011/11/10 14:01:11 yamt Exp $
 #
 
-WARNS?=	5
+WARNS=	4
 
 .include <bsd.own.mk>
 
@@ -48,7 +48,6 @@ SRCS+=	pthread_cond.c
 SRCS+=	pthread_lock.c 
 SRCS+=	pthread_misc.c
 SRCS+=	pthread_mutex.c
-SRCS+=	pthread_once.c
 SRCS+=	pthread_rwlock.c
 SRCS+=	pthread_specific.c
 SRCS+=	pthread_spin.c
@@ -69,23 +68,21 @@ SRCS+=		pthread_compat.c
 .include "../../common/lib/libc/arch/${ARCHSUBDIR}/atomic/Makefile.inc"
 .endif
 
-ALIGN_FUNCTIONS=	${${ACTIVE_CC} == "gcc":? -falign-functions=32 :}
-
 # The TSD routines are used in the implementation of profiling, and so
 # can't be profiled themselves.
-COPTS.pthread_specific.c+=	-fomit-frame-pointer ${ALIGN_FUNCTIONS}
+COPTS.pthread_specific.c+=	-fomit-frame-pointer -falign-functions=32
 pthread_specific.po: pthread_specific.o
 	${_MKTARGET_CREATE}
 	cp pthread_specific.o pthread_specific.po
 
 # Internal spinlock routines are performance critical.  Don't profile them,
 # it's incompatibile with -fomit-frame-pointer.
-COPTS.pthread_lock.c+=	-fomit-frame-pointer ${ALIGN_FUNCTIONS}
+COPTS.pthread_lock.c+=	-fomit-frame-pointer -falign-functions=32
 pthread_lock.po: pthread_lock.o
 	${_MKTARGET_CREATE}
 	cp pthread_lock.o pthread_lock.po
 
-COPTS.pthread_mutex.c+=	-fomit-frame-pointer ${ALIGN_FUNCTIONS}
+COPTS.pthread_mutex.c+=	-fomit-frame-pointer -falign-functions=32
 pthread_mutex.po: pthread_mutex.o
 	${_MKTARGET_CREATE}
 	cp pthread_mutex.o pthread_mutex.po
@@ -217,4 +214,4 @@ MLINKS+=	pthread_testcancel.3 pthread_setcanceltype.3
 # pthread_setspecific() and pthread_getspecific(), since the constness
 # of the argument to setspecific() has to be discarded *somewhere*
 # before returning it from getspecific().
-CWARNFLAGS+= -Wno-cast-qual
+CFLAGS+= -Wno-cast-qual

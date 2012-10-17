@@ -1,4 +1,4 @@
-/*	$NetBSD: message.c,v 1.9 2012/06/05 00:41:34 christos Exp $	*/
+/*	$NetBSD: message.c,v 1.8.4.1 2012/06/05 21:15:00 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

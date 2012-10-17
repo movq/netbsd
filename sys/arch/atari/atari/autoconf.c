@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.63 2012/07/29 18:05:40 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.61.8.2 2012/08/08 15:51:03 martin Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.63 2012/07/29 18:05:40 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.61.8.2 2012/08/08 15:51:03 martin Exp $");
 
 #include "opt_md.h"
 

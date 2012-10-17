@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.52 2012/04/20 22:23:24 rmind Exp $	*/
+/*	$NetBSD: pmap.h,v 1.49.2.2 2012/05/09 03:22:52 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -450,6 +450,9 @@ xpmap_ptetomach(pt_entry_t *pte)
 
 paddr_t	vtomach(vaddr_t);
 #define vtomfn(va) (vtomach(va) >> PAGE_SHIFT)
+
+void	pmap_apte_flush(struct pmap *);
+void	pmap_unmap_apdp(void);
 #endif	/* XEN */
 
 /* pmap functions with machine addresses */

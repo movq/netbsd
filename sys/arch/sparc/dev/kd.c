@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.50 2012/07/30 17:29:55 christos Exp $	*/
+/*	$NetBSD: kd.c,v 1.49 2011/04/24 16:26:57 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.50 2012/07/30 17:29:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.49 2011/04/24 16:26:57 rmind Exp $");
 
 #include "opt_kgdb.h"
 #include "fb.h"
@@ -533,11 +533,8 @@ struct consdev consdev_prom = {
 /*
  * The console table pointer is statically initialized
  * to point to the PROM table, so that early calls to printf will work.
- * this has been moved to cpu_startup()
  */
-#if 0
 struct consdev *cn_tab = &consdev_prom;
-#endif
 
 static void
 prom_cnprobe(struct consdev *cn)

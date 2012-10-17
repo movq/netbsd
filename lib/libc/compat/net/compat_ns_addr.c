@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_ns_addr.c,v 1.2 2012/03/20 17:05:59 matt Exp $	*/
+/*	$NetBSD: compat_ns_addr.c,v 1.1 2006/08/26 16:07:01 matt Exp $	*/
 
 /*
  * Copyright (c) 1986, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)ns_addr.c	8.1 (Berkeley) 6/7/93";
 #else
-__RCSID("$NetBSD: compat_ns_addr.c,v 1.2 2012/03/20 17:05:59 matt Exp $");
+__RCSID("$NetBSD: compat_ns_addr.c,v 1.1 2006/08/26 16:07:01 matt Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,11 +49,12 @@ __RCSID("$NetBSD: compat_ns_addr.c,v 1.2 2012/03/20 17:05:59 matt Exp $");
 #include <stdio.h>
 #include <string.h>
 
-static void Field(char *, uint8_t *, int);
-static void cvtbase(long, int, int[], int, uint8_t [], int);
+static void Field __P((char *, u_int8_t *, int));
+static void cvtbase __P((long, int, int[], int, u_int8_t[], int));
 
 struct ns_addr 
-ns_addr(const char *name)
+ns_addr(name)
+	const char *name;
 {
 	char separator;
 	char *hostname, *socketname, *cp;
@@ -92,7 +93,7 @@ ns_addr(const char *name)
 	socketname = strchr(hostname, separator);
 	if (socketname) {
 		*socketname++ = 0;
-		Field(socketname, (uint8_t *)(void *)&addr.x_port, 2);
+		Field(socketname, (u_int8_t *)(void *)&addr.x_port, 2);
 	}
 
 	Field(hostname, addr.x_host.c_host, 6);
@@ -101,7 +102,10 @@ ns_addr(const char *name)
 }
 
 static void
-Field(char *buf, uint8_t *out, int len)
+Field(buf, out, len)
+	char *buf;
+	u_int8_t *out;
+	int len;
 {
 	register char *bp = buf;
 	int i, ibase, base16 = 0, base10 = 0, clen = 0;
@@ -214,15 +218,19 @@ Field(char *buf, uint8_t *out, int len)
 }
 
 static void
-cvtbase(long oldbase, int newbase, int input[], int inlen,
-	uint8_t result[], int reslen)
+cvtbase(oldbase,newbase,input,inlen,result,reslen)
+	long oldbase;
+	int newbase;
+	int input[];
+	int inlen;
+	unsigned char result[];
+	int reslen;
 {
 	int d, e;
 	long sum;
 
 	_DIAGASSERT(input != NULL);
 	_DIAGASSERT(result != NULL);
-	_DIAGASSERT(inlen > 0);
 
 	e = 1;
 	while (e > 0 && reslen > 0) {

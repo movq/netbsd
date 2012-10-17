@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_processor.c,v 1.12 2012/07/19 21:52:29 spz Exp $	*/
+/*	$NetBSD: npf_processor.c,v 1.9.2.3 2012/07/25 20:45:23 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2009-2010 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_processor.c,v 1.12 2012/07/19 21:52:29 spz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_processor.c,v 1.9.2.3 2012/07/25 20:45:23 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

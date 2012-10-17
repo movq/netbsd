@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urtwn.c,v 1.5 2012/06/14 04:14:36 riz Exp $	*/
+/*	$NetBSD: if_urtwn.c,v 1.5.2.3 2012/08/13 23:18:24 riz Exp $	*/
 /*	$OpenBSD: if_urtwn.c,v 1.20 2011/11/26 06:39:33 ckuethe Exp $	*/
 
 /*-
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_urtwn.c,v 1.5 2012/06/14 04:14:36 riz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_urtwn.c,v 1.5.2.3 2012/08/13 23:18:24 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>

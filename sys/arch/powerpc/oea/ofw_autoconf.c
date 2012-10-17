@@ -1,4 +1,4 @@
-/* $NetBSD: ofw_autoconf.c,v 1.17 2012/07/29 18:05:45 mlelstv Exp $ */
+/* $NetBSD: ofw_autoconf.c,v 1.15.8.1 2012/08/08 15:51:03 martin Exp $ */
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
  * Copyright (C) 1995, 1996 TooLs GmbH.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_autoconf.c,v 1.17 2012/07/29 18:05:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_autoconf.c,v 1.15.8.1 2012/08/08 15:51:03 martin Exp $");
 
 #ifdef ofppc
 #include "gtpci.h"
@@ -219,15 +219,6 @@ device_register(device_t dev, void *aux)
 		parent = dev;
 		return;
 	}
-
-	if (device_is_a(dev, "valkyriefb")) {
-		struct confargs *ca = aux;
-		prop_dictionary_t dict;
-
-		dict = device_properties(dev);
-		copy_disp_props(dev, ca->ca_node, dict);
-	}
-
 #if NGTPCI > 0
 	if (device_is_a(dev, "gtpci")) {
 		extern struct gtpci_prot gtpci0_prot, gtpci1_prot;

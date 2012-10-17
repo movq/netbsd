@@ -1,4 +1,4 @@
-/*	$NetBSD: fat.c,v 1.23 2012/08/07 19:30:41 jakllsch Exp $	*/
+/*	$NetBSD: fat.c,v 1.22 2009/04/11 07:14:50 lukem Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fat.c,v 1.23 2012/08/07 19:30:41 jakllsch Exp $");
+__RCSID("$NetBSD: fat.c,v 1.22 2009/04/11 07:14:50 lukem Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -596,9 +596,8 @@ checklost(int dosfs, struct bootblock *boot, struct fatEntry *fat)
 
 	if (boot->FSInfo) {
 		ret = 0;
-		if (boot->FSFree != 0xffffffffU &&
-		    boot->FSFree != boot->NumFree) {
-			pwarn("Free space in FSInfo block (%u) not correct (%u)\n",
+		if (boot->FSFree != boot->NumFree) {
+			pwarn("Free space in FSInfo block (%d) not correct (%d)\n",
 			      boot->FSFree, boot->NumFree);
 			if (ask(1, "fix")) {
 				boot->FSFree = boot->NumFree;

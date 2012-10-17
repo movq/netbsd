@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.43 2012/03/14 13:26:43 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.42.2.1 2012/03/24 16:55:31 bouyer Exp $
 #
 #	etc.sparc/Makefile.inc -- sparc-specific etc Makefile targets
 #

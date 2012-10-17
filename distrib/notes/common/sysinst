@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysinst,v 1.102 2012/08/17 19:55:14 riz Exp $
+.\"	$NetBSD: sysinst,v 1.101.6.1 2012/08/17 23:53:48 riz Exp $
 .\"
 .\" Copyright (c) 1999-2012 The NetBSD Foundation, Inc.
 .\" All rights reserved.

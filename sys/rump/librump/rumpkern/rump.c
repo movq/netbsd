@@ -1,4 +1,4 @@
-/*	$NetBSD: rump.c,v 1.246 2012/08/16 19:40:48 pgoyette Exp $	*/
+/*	$NetBSD: rump.c,v 1.240 2012/02/04 10:02:25 njoly Exp $	*/
 
 /*
  * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump.c,v 1.246 2012/08/16 19:40:48 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump.c,v 1.240 2012/02/04 10:02:25 njoly Exp $");
 
 #include <sys/systm.h>
 #define ELFSIZE ARCH_ELFSIZE
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: rump.c,v 1.246 2012/08/16 19:40:48 pgoyette Exp $");
 #include <sys/filedesc.h>
 #include <sys/iostat.h>
 #include <sys/kauth.h>
-#include <sys/kcpuset.h>
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/kprintf.h>
@@ -57,7 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: rump.c,v 1.246 2012/08/16 19:40:48 pgoyette Exp $");
 #include <sys/percpu.h>
 #include <sys/pipe.h>
 #include <sys/pool.h>
-#include <sys/pserialize.h>
 #include <sys/queue.h>
 #include <sys/reboot.h>
 #include <sys/resourcevar.h>
@@ -182,7 +180,7 @@ mksysctls(void)
 	sysctl_createv(NULL, 0, NULL, NULL,
 	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_STRING, "hostname",
 	    SYSCTL_DESCR("System hostname"), NULL, 0,
-	    hostname, MAXHOSTNAMELEN, CTL_KERN, KERN_HOSTNAME, CTL_EOL);
+	    &hostname, MAXHOSTNAMELEN, CTL_KERN, KERN_HOSTNAME, CTL_EOL);
 }
 
 /* there's no convenient kernel entry point for this, so just craft out own */
@@ -298,7 +296,6 @@ rump__init(int rump_version)
 	uvm_init();
 	evcnt_init();
 
-	kcpuset_sysinit();
 	once_init();
 	kernconfig_lock_init();
 	prop_kern_init();
@@ -312,7 +309,6 @@ rump__init(int rump_version)
 	callout_startup();
 
 	kprintf_init();
-	pserialize_init();
 	loginit();
 
 	kauth_init();
@@ -330,7 +326,6 @@ rump__init(int rump_version)
 
 	procinit();
 	proc0_init();
-	sysctl_init();
 	uid_init();
 	chgproccnt(0, 1);
 
@@ -378,6 +373,7 @@ rump__init(int rump_version)
 		aprint_verbose("cpu%d at thinair0: rump virtual cpu\n", i);
 	}
 
+	sysctl_init();
 	mksysctls();
 	kqueue_init();
 	iostat_init();

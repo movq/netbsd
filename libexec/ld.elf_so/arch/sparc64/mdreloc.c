@@ -1,4 +1,4 @@
-/*	$NetBSD: mdreloc.c,v 1.53 2012/07/22 09:21:03 martin Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.52.6.1 2012/08/08 06:24:51 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo Horvath.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.53 2012/07/22 09:21:03 martin Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.52.6.1 2012/08/08 06:24:51 jdc Exp $");
 #endif /* not lint */
 
 #include <errno.h>

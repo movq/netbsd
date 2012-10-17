@@ -1,4 +1,4 @@
-/*	$NetBSD: udp_usrreq.c,v 1.187 2012/06/22 14:54:35 christos Exp $	*/
+/*	$NetBSD: udp_usrreq.c,v 1.185 2012/01/09 22:26:44 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.187 2012/06/22 14:54:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.185 2012/01/09 22:26:44 liamjfoy Exp $");
 
 #include "opt_inet.h"
 #include "opt_compat_netbsd.h"
@@ -96,6 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.187 2012/06/22 14:54:35 christos Ex
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 #include <netinet/udp_private.h>
+#include <netinet/rfc6056.h>
 
 #ifdef INET6
 #include <netinet/ip6.h>
@@ -127,6 +128,13 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.187 2012/06/22 14:54:35 christos Ex
 #include <netipsec/ipsec6.h>
 #endif
 #endif	/* FAST_IPSEC */
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#include <netinet6/esp.h>
+#include <netkey/key.h>
+#endif /* KAME_IPSEC */
 
 #ifdef COMPAT_50
 #include <compat/sys/socket.h>
@@ -626,7 +634,7 @@ udp4_sendup(struct mbuf *m, int off /* offset of data portion */,
 		return;
 	}
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (so != NULL && ipsec4_in_reject_so(m, so)) {
 		IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -676,7 +684,7 @@ udp6_sendup(struct mbuf *m, int off /* offset of data portion */,
 		return;
 	in6p = sotoin6pcb(so);
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (so != NULL && ipsec6_in_reject_so(m, so)) {
 		IPSEC6_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -1079,6 +1087,15 @@ udp_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 			}
 			break;
 		
+		case UDP_RFC6056ALGO:
+			error = sockopt_getint(sopt, &optval);
+			if (error)
+				break;
+
+			error = rfc6056_algo_index_select(
+			    (struct inpcb_hdr *)inp, optval);
+			break;
+
 		default:
 			error = ENOPROTOOPT;
 			break;
@@ -1367,6 +1384,8 @@ sysctl_net_inet_udp_stats(SYSCTLFN_ARGS)
 static void
 sysctl_net_inet_udp_setup(struct sysctllog **clog)
 {
+	const struct sysctlnode *rfc6056_node;
+	
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "net", NULL,
@@ -1426,6 +1445,25 @@ sysctl_net_inet_udp_setup(struct sysctllog **clog)
 		       sysctl_net_inet_udp_stats, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_UDP, UDPCTL_STATS,
 		       CTL_EOL);
+	/* RFC6056 subtree */
+	sysctl_createv(clog, 0, NULL, &rfc6056_node,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "rfc6056",
+		       SYSCTL_DESCR("RFC 6056"),
+	    	       NULL, 0, NULL, 0,
+		       CTL_NET, PF_INET, IPPROTO_UDP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &rfc6056_node, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRING, "available",
+		       SYSCTL_DESCR("RFC 6056 available algorithms"),
+		       sysctl_rfc6056_available, 0, NULL, RFC6056_MAXLEN,
+		       CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &rfc6056_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_STRING, "selected",
+		       SYSCTL_DESCR("RFC 6056 selected algorithm"),
+		       sysctl_rfc6056_selected, 0, NULL, RFC6056_MAXLEN,
+		       CTL_CREATE, CTL_EOL);
 }
 #endif
 

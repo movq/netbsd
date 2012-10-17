@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.114 2012/08/23 21:21:15 joerg Exp $
+#	$NetBSD: Makefile,v 1.110 2011/10/07 09:15:21 mrg Exp $
 #
 # NOTE: when changing ld.so, ensure that ldd still compiles.
 #
@@ -43,7 +43,7 @@ LDFLAGS+=	${${ACTIVE_CC} == "clang":? -Wl,-Bsymbolic : -symbolic} \
 LDFLAGS+=	-Wl,-static
 LDFLAGS+=	-Wl,--warn-shared-textrel
 
-COPTS+=		-fvisibility=hidden
+CFLAGS+=	-fvisibility=hidden
 
 # Adds SRCS, CPPFLAGS, LDFLAGS, etc.  Must go first so MD startup source
 # is first.
@@ -63,7 +63,7 @@ CLIBOBJ!=	cd ${NETBSDSRCDIR}/lib/libc && ${PRINTOBJDIR}
 
 SRCS+=		rtld.c reloc.c symbol.c xmalloc.c xprintf.c debug.c \
 		map_object.c load.c search.c headers.c paths.c expand.c \
-		tls.c symver.c diagassert.c
+		tls.c symver.c
 
 .if ${USE_FORT} == "yes"
 .PATH.c: ${NETBSDSRCDIR}/lib/libc/misc
@@ -92,10 +92,10 @@ CPPFLAGS+=	-DCOMBRELOC
 #CPPFLAGS+=	-DRTLD_DEBUG
 #CPPFLAGS+=	-DRTLD_DEBUG_RELOC
 #DBG=		-g
-COPTS=		-O3 -fomit-frame-pointer
+DBG=		-O3 -fomit-frame-pointer
 
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-COPTS+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
+DBG+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
 .endif
 
 

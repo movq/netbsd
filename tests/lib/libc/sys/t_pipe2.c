@@ -1,4 +1,4 @@
-/* $NetBSD: t_pipe2.c,v 1.8 2012/05/16 13:54:28 jruoho Exp $ */
+/* $NetBSD: t_pipe2.c,v 1.3.2.1 2012/05/19 15:34:32 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_pipe2.c,v 1.8 2012/05/16 13:54:28 jruoho Exp $");
+__RCSID("$NetBSD: t_pipe2.c,v 1.3.2.1 2012/05/19 15:34:32 riz Exp $");
 
 #include <atf-c.h>
 #include <fcntl.h>
@@ -125,6 +125,9 @@ ATF_TC_BODY(pipe2_consume, tc)
 	err = setrlimit(RLIMIT_NOFILE, &rl);
 	ATF_REQUIRE(err == 0);
 
+	/*
+	 * atf_tc_skip("The test case causes a panic (PR kern/46457)");
+	 */
 	err = pipe2(filedes, O_CLOEXEC);
 	ATF_REQUIRE(err == -1);
 }

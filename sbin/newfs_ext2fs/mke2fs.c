@@ -1,4 +1,4 @@
-/*	$NetBSD: mke2fs.c,v 1.16 2012/03/24 08:22:24 joerg Exp $	*/
+/*	$NetBSD: mke2fs.c,v 1.14.8.1 2012/03/09 16:51:04 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2007 Izumi Tsutsui.  All rights reserved.
@@ -100,7 +100,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mke2fs.c,v 1.16 2012/03/24 08:22:24 joerg Exp $");
+__RCSID("$NetBSD: mke2fs.c,v 1.14.8.1 2012/03/09 16:51:04 sborrill Exp $");
 #endif
 #endif /* not lint */
 
@@ -626,7 +626,7 @@ mke2fs(const char *fsys, int fi, int fo)
 			continue;
 		}
 		/* Print superblock numbers */
-		len = printf("%s%*" PRIu64 ",", (col ? " " : ""), fld_width,
+		len = printf(" %*" PRIu64 "," + !col, fld_width,
 		    (uint64_t)cgbase(&sblock, cylno));
 		col += len;
 		if (col + len < max_cols)

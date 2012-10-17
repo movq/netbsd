@@ -1,4 +1,4 @@
-/* $NetBSD: nappi_nr.c,v 1.10 2012/07/30 23:35:05 matt Exp $ */
+/* $NetBSD: nappi_nr.c,v 1.9 2011/07/01 20:42:37 dyoung Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nappi_nr.c,v 1.10 2012/07/30 23:35:05 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nappi_nr.c,v 1.9 2011/07/01 20:42:37 dyoung Exp $");
 
 /*
  * LED support for NAPPI.
@@ -107,10 +107,8 @@ nappinr_callout(void *arg)
 {
 	static const int	ptn[] = { 1, 2, 4, 8, 4, 2 };
 	struct nappinr_softc*	sc = arg;
-	uint32_t v;
 
-	v = ptn[sc->sc_pos++ % 6];
-	v |= ptn[sc->sc_pos++ % 6] << 4;
-	bus_space_write_4(sc->sc_iot, sc->sc_ioh, 0, v);
+	bus_space_write_4(sc->sc_iot, sc->sc_ioh, 0,
+			  ptn[sc->sc_pos++ % 6] | ptn[sc->sc_pos++ % 6]<< 4);
 	callout_reset(&sc->sc_co, hz / 10, nappinr_callout, sc);
 }

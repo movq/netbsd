@@ -1,4 +1,4 @@
-/*	$NetBSD: ugenhc.c,v 1.11 2012/09/14 16:29:21 pooka Exp $	*/
+/*	$NetBSD: ugenhc.c,v 1.9 2010/03/22 12:05:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ugenhc.c,v 1.11 2012/09/14 16:29:21 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ugenhc.c,v 1.9 2010/03/22 12:05:45 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -312,7 +312,6 @@ rumpusb_root_ctrl_start(usbd_xfer_handle xfer)
 
 ret:
 	xfer->status = err;
-	/* XXX locking */
 	usb_transfer_complete(xfer);
 	return (USBD_IN_PROGRESS);
 }
@@ -602,7 +601,7 @@ rhscintr(void *arg)
 		 */
 
 		for (;;) {
-			fd = rumpuser_open(buf, RUMPUSER_OPEN_RDWR, &error);
+			fd = rumpuser_open(buf, O_RDWR, &error);
 			if (fd != -1)
 				break;
 			kpause("ugwait", false, hz/4, NULL);
@@ -627,7 +626,7 @@ rhscintr(void *arg)
 		 */
 
 		for (;;) {
-			fd = rumpuser_open(buf, RUMPUSER_OPEN_RDWR, &error);
+			fd = rumpuser_open(buf, O_RDWR, &error);
 			if (fd == -1)
 				break;
 
@@ -843,7 +842,6 @@ rumpusb_device_bulk_transfer(usbd_xfer_handle xfer)
 		    SIMPLEQ_FIRST(&xfer->pipe->queue));
 	} else {
 		/* biglocked */
-		/* XXX locking */
 		err = usb_insert_transfer(xfer);
 		if (err)
 			return err;
@@ -971,7 +969,6 @@ ugenhc_open(struct usbd_pipe *pipe)
 			}
 
 			makeugendevstr(sc->sc_devnum, endpt, buf);
-			/* XXX: theoretically should convert oflags */
 			fd = rumpuser_open(buf, oflags, &error);
 			if (fd == -1) {
 				return USBD_INVAL; /* XXX: no mapping */

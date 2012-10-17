@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_input.c,v 1.325 2012/06/22 15:09:36 christos Exp $	*/
+/*	$NetBSD: tcp_input.c,v 1.321 2012/01/11 14:39:08 drochner Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -148,7 +148,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.325 2012/06/22 15:09:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.321 2012/01/11 14:39:08 drochner Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -216,6 +216,11 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.325 2012/06/22 15:09:36 christos Exp
 #include <netinet/tcp_congctl.h>
 #include <netinet/tcp_debug.h>
 
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#include <netkey/key.h>
+#endif /*KAME_IPSEC*/
 #ifdef INET6
 #include "faith.h"
 #if defined(NFAITH) && NFAITH > 0
@@ -1448,7 +1453,7 @@ findpcb:
 			tcp_fields_to_host(th);
 			goto dropwithreset_ratelim;
 		}
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		if (inp && (inp->inp_socket->so_options & SO_ACCEPTCONN) == 0 &&
 		    ipsec4_in_reject(m, inp)) {
 			IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -1491,7 +1496,7 @@ findpcb:
 			tcp_fields_to_host(th);
 			goto dropwithreset_ratelim;
 		}
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		if (in6p
 		    && (in6p->in6p_socket->so_options & SO_ACCEPTCONN) == 0
 		    && ipsec6_in_reject(m, in6p)) {
@@ -1800,7 +1805,7 @@ findpcb:
 				}
 #endif
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 				switch (af) {
 #ifdef INET
 				case AF_INET:
@@ -4060,7 +4065,7 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst,
 	}
 #endif
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	/*
 	 * we make a copy of policy, instead of sharing the policy,
 	 * for better behavior in terms of SA lookup and dead SA removal.
@@ -4530,12 +4535,6 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	}
 	return (1);
 }
-
-/*
- * syn_cache_respond: (re)send SYN+ACK.
- *
- * returns 0 on success.  otherwise returns an errno, typically ENOBUFS.
- */
 
 int
 syn_cache_respond(struct syn_cache *sc, struct mbuf *m)

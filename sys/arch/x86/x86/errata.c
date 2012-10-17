@@ -1,4 +1,4 @@
-/*	$NetBSD: errata.c,v 1.20 2012/04/06 17:23:39 chs Exp $	*/
+/*	$NetBSD: errata.c,v 1.19.14.1 2012/04/09 18:02:25 riz Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.20 2012/04/06 17:23:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.19.14.1 2012/04/09 18:02:25 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>

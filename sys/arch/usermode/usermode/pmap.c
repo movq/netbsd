@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.c,v 1.105 2012/07/28 19:08:26 matt Exp $ */
+/* $NetBSD: pmap.c,v 1.102.2.1 2012/03/07 23:23:50 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 Reinoud Zandijk <reinoud@NetBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.105 2012/07/28 19:08:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.102.2.1 2012/03/07 23:23:50 riz Exp $");
 
 #include "opt_memsize.h"
 #include "opt_kmempages.h"
@@ -120,6 +120,7 @@ vaddr_t kmem_user_start, kmem_user_end;
 vaddr_t kmem_kvm_cur_start, kmem_kvm_cur_end;
 
 /* amount of physical memory */
+int	physmem; 
 int	num_pv_entries = 0;
 int	num_pmaps = 0;
 
@@ -202,9 +203,6 @@ pmap_bootstrap(void)
 	}
 	if (TRAPSTACKSIZE < 4*PAGE_SIZE) {
 		panic("TRAPSTACKSIZE is too small, please increase UPAGES");
-	}
-	if (sizeof(struct pmap_l2) > PAGE_SIZE) {
-		panic("struct pmap_l2 bigger than one page?\n");
 	}
 
 	/* protect user memory UVM area (---) */
@@ -1204,7 +1202,6 @@ pmap_zero_page(paddr_t pa)
 	if (pa & (PAGE_SIZE-1))
 		panic("%s: unaligned address passed : %p\n", __func__, (void *) pa);
 
-	/* XXX bug alart: can we allow the kernel to make a decision on this? */
 	blob = thunk_mmap(NULL, PAGE_SIZE,
 		THUNK_PROT_READ | THUNK_PROT_WRITE,
 		THUNK_MAP_FILE | THUNK_MAP_SHARED,
@@ -1230,7 +1227,6 @@ pmap_copy_page(paddr_t src_pa, paddr_t dst_pa)
 	thunk_printf_debug("pmap_copy_page: pa src %p, pa dst %p\n",
 		(void *) src_pa, (void *) dst_pa);
 
-	/* XXX bug alart: can we allow the kernel to make a decision on this? */
 	sblob = thunk_mmap(NULL, PAGE_SIZE,
 		THUNK_PROT_READ,
 		THUNK_MAP_FILE | THUNK_MAP_SHARED,
@@ -1238,7 +1234,6 @@ pmap_copy_page(paddr_t src_pa, paddr_t dst_pa)
 	if (!sblob)
 		panic("%s: couldn't get src mapping", __func__);
 
-	/* XXX bug alart: can we allow the kernel to make a decision on this? */
 	dblob = thunk_mmap(NULL, PAGE_SIZE,
 		THUNK_PROT_READ | THUNK_PROT_WRITE,
 		THUNK_MAP_FILE | THUNK_MAP_SHARED,

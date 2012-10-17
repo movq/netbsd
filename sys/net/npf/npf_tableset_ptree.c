@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_tableset_ptree.c,v 1.1 2012/07/15 00:23:01 rmind Exp $	*/
+/*	$NetBSD: npf_tableset_ptree.c,v 1.1.2.2 2012/07/16 22:13:27 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_tableset_ptree.c,v 1.1 2012/07/15 00:23:01 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_tableset_ptree.c,v 1.1.2.2 2012/07/16 22:13:27 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

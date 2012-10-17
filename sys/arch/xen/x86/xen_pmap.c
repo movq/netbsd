@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_pmap.c,v 1.22 2012/06/24 18:31:53 jym Exp $	*/
+/*	$NetBSD: xen_pmap.c,v 1.16.2.3 2012/07/02 21:01:48 jdc Exp $	*/
 
 /*
  * Copyright (c) 2007 Manuel Bouyer.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_pmap.c,v 1.22 2012/06/24 18:31:53 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_pmap.c,v 1.16.2.3 2012/07/02 21:01:48 jdc Exp $");
 
 #include "opt_user_ldt.h"
 #include "opt_lockdebug.h"
@@ -236,22 +236,26 @@ pmap_extract_ma(struct pmap *pmap, vaddr_t va, paddr_t *pap)
 }
 
 /*
- * Xen pmap's handlers for save/restore
+ * Flush all APDP entries found in pmaps
+ * Required during Xen save/restore operations, as Xen does not
+ * handle alternative recursive mappings properly
  */
 void
 pmap_xen_suspend(void)
 {
-	pmap_unmap_recursive_entries();
+	int s;
 
+	s = splvm();
 	xpq_flush_queue();
+	splx(s);
+
+	pmap_unmap_recursive_entries();
 }
 
 void
 pmap_xen_resume(void)
 {
 	pmap_map_recursive_entries();
-
-	xpq_flush_queue();
 }
 
 /*
@@ -285,13 +289,10 @@ pmap_map_recursive_entries(void)
 		    xpmap_ptom(pmap_pdirpa(pmap_kernel(), PDIR_SLOT_PTE + i)),
 		    xpmap_ptom(pmap_kernel()->pm_pdirpa[i]) | PG_V);
 	}
+
+	xpq_flush_queue();
 }
 
-/*
- * Unmap recursive entries found in pmaps. Required during Xen
- * save/restore operations, as Xen does not handle recursive mappings
- * properly.
- */
 void
 pmap_unmap_recursive_entries(void)
 {
@@ -316,20 +317,21 @@ pmap_unmap_recursive_entries(void)
 	mutex_exit(&pmaps_lock);
 
 	/* do it for pmap_kernel() too! */
-	for (i = 0; i < PDP_SIZE; i++) {
+	for (i = 0; i < PDP_SIZE; i++)
 		xpq_queue_pte_update(
 		    xpmap_ptom(pmap_pdirpa(pmap_kernel(), PDIR_SLOT_PTE + i)),
 		    0);
-	}
+
+	xpq_flush_queue();
+
 }
 
 #if defined(PAE) || defined(__x86_64__)
 
+extern struct cpu_info	* (*xpq_cpu)(void);
 static __inline void
 pmap_kpm_setpte(struct cpu_info *ci, struct pmap *pmap, int index)
 {
-	KASSERT(mutex_owned(pmap->pm_lock));
-	KASSERT(mutex_owned(&ci->ci_kpm_mtx));
 	if (pmap == pmap_kernel()) {
 		KASSERT(index >= PDIR_SLOT_KERN);
 	}
@@ -356,7 +358,6 @@ xen_kpm_sync(struct pmap *pmap, int index)
 	struct cpu_info *ci;
 
 	KASSERT(pmap != NULL);
-	KASSERT(kpreempt_disabled());
 
 	pmap_pte_flush();
 

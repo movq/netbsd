@@ -1,4 +1,4 @@
-/*	$NetBSD: fssconfig.c,v 1.9 2012/07/28 15:09:44 hannken Exp $	*/
+/*	$NetBSD: fssconfig.c,v 1.8.4.1 2012/07/30 08:05:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

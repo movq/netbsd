@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_send.c,v 1.7 2012/09/09 06:06:29 mhitch Exp $	*/
+/*	$NetBSD: iscsi_send.c,v 1.1.8.2 2012/07/03 20:48:40 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2004,2005,2006,2011 The NetBSD Foundation, Inc.
@@ -272,7 +272,7 @@ iscsi_send_thread(void *par)
 
 	sess = conn->session;
 	/* so cleanup thread knows there's someone left */
-	iscsi_num_send_threads++;
+	num_send_threads++;
 
 	do {
 		while (!conn->terminating) {
@@ -411,14 +411,14 @@ iscsi_send_thread(void *par)
 		sess->mru_connection = TAILQ_FIRST(&sess->conn_list);
 	}
 
-	TAILQ_INSERT_TAIL(&iscsi_cleanup_list, conn, connections);
+	TAILQ_INSERT_TAIL(&cleanup_list, conn, connections);
 	splx(s);
 
-	wakeup(&iscsi_cleanup_list);
+	wakeup(&cleanup_list);
 
 	conn->sendproc = NULL;
 	DEBC(conn, 5, ("Send thread exits\n"));
-	iscsi_num_send_threads--;
+	num_send_threads--;
 	kthread_exit(0);
 }
 
@@ -624,7 +624,7 @@ init_login_pdu(connection_t *conn, pdu_t *ppdu, bool next)
 					 NEXT_PHASE(c_phase);
 	}
 
-	memcpy(isid, &iscsi_InitiatorISID, 6);
+	memcpy(isid, &InitiatorISID, 6);
 	isid->TSIH = conn->session->TSIH;
 
 	pdu->p.login_req.CID = htons(conn->id);
@@ -1510,6 +1510,7 @@ send_run_xfer(session_t *session, struct scsipi_xfer *xs)
 	ccb->lun += 0x1000000000000LL;
 	ccb->cmd[1] += 0x10;
 #endif
+	ccb->disp = CCBDISP_SCSIPI;
 	send_command(ccb, CCBDISP_SCSIPI, waitok, FALSE);
 }
 

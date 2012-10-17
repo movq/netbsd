@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.309 2012/05/06 17:23:10 martin Exp $	*/
+/*	$NetBSD: cd.c,v 1.305.2.1 2012/04/23 16:28:30 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2003, 2004, 2005, 2008 The NetBSD Foundation,
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd.c,v 1.309 2012/05/06 17:23:10 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd.c,v 1.305.2.1 2012/04/23 16:28:30 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -382,10 +382,17 @@ cdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 			goto bad3;
 		}
 	} else {
+		int silent;
+
+		if (rawpart)
+			silent = XS_CTL_SILENT;
+		else
+			silent = 0;
+
 		/* Check that it is still responding and ok. */
 		error = scsipi_test_unit_ready(periph,
 		    XS_CTL_IGNORE_ILLEGAL_REQUEST | XS_CTL_IGNORE_MEDIA_CHANGE |
-		    XS_CTL_SILENT);
+		    silent);
 
 		/*
 		 * Start the pack spinning if necessary. Always allow the
@@ -394,12 +401,6 @@ cdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 		 */
 		if (error == EIO) {
 			int error2;
-			int silent;
-
-			if (rawpart)
-				silent = XS_CTL_SILENT;
-			else
-				silent = 0;
 
 			error2 = scsipi_start(periph, SSS_START, silent);
 			switch (error2) {
@@ -1570,24 +1571,7 @@ cdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		/* FALLTHROUGH */
 	case CDIOCEJECT: /* FALLTHROUGH */
 	case ODIOCEJECT:
-		error = scsipi_start(periph, SSS_STOP|SSS_LOEJ, 0);
-		if (error == 0) {
-			int i;
-
-			/*
-			 * We have just successfully ejected the medium,
-			 * all partitions cached are meaningless now.
-			 * Make sure cdclose() will do silent operations
-			 * now by marking all partitions unused.
-			 * Before any real access, a new (default-)disk-
-			 * label will be generated anyway.
-			 */
-			for (i = 0; i < cd->sc_dk.dk_label->d_npartitions;
-			    i++)
-				cd->sc_dk.dk_label->d_partitions[i].p_fstype =
-					FS_UNUSED;
-		}
-		return error;
+		return (scsipi_start(periph, SSS_STOP|SSS_LOEJ, 0));
 	case DIOCCACHESYNC:
 		/* SYNCHRONISE CACHES command */
 		return (cdcachesync(periph, 0));
@@ -1777,12 +1761,12 @@ cdgetdisklabel(struct cd_softc *cd)
 }
 
 /*
- * Reading a disc's total capacity is apparently a very difficult issue for the
+ * Reading a discs total capacity is aparently a very difficult issue for the
  * SCSI standardisation group. Every disc type seems to have its own
  * (re)invented size request method and modifiers. The failsafe way of
  * determining the total (max) capacity i.e. not the recorded capacity but the
  * total maximum capacity is to request the info on the last track and
- * calculate the total size.
+ * calucate the total size.
  *
  * For ROM drives, we go for the CD recorded capacity. For recordable devices
  * we count.
@@ -1799,7 +1783,7 @@ read_cd_capacity(struct scsipi_periph *periph, u_int *blksize, u_long *size)
 	uint32_t track_start, track_size;
 	int error, flags, msb, lsb, last_track;
 
-	/* if the device doesn't grok capacity, return the dummies */
+	/* if the device doesn't grog capacity, return the dummies */
 	if (periph->periph_quirks & PQUIRK_NOCAPACITY)
 		return 0;
 

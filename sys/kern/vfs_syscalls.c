@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls.c,v 1.457 2012/06/27 12:28:28 cheusov Exp $	*/
+/*	$NetBSD: vfs_syscalls.c,v 1.449.2.2 2012/05/19 15:01:35 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.457 2012/06/27 12:28:28 cheusov Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.449.2.2 2012/05/19 15:01:35 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_fileassoc.h"
@@ -1398,10 +1398,6 @@ sys_chroot(struct lwp *l, const struct sys_chroot_args *uap, register_t *retval)
 void
 change_root(struct cwdinfo *cwdi, struct vnode *vp, struct lwp *l)
 {
-	struct proc *p = l->l_proc;
-	kauth_cred_t ncred;
-
-	ncred = kauth_cred_alloc();
 
 	rw_enter(&cwdi->cwdi_lock, RW_WRITER);
 	if (cwdi->cwdi_rdir != NULL)
@@ -1423,15 +1419,6 @@ change_root(struct cwdinfo *cwdi, struct vnode *vp, struct lwp *l)
 		cwdi->cwdi_cdir = vp;
 	}
 	rw_exit(&cwdi->cwdi_lock);
-
-	/* Get a write lock on the process credential. */
-	proc_crmod_enter();
-
-	kauth_cred_clone(p->p_cred, ncred);
-	kauth_proc_chroot(ncred, p->p_cwdi);
-
-	/* Broadcast our credentials to the process and other LWPs. */
- 	proc_crmod_leave(ncred, p->p_cred, true);
 }
 
 /*
@@ -3058,11 +3045,22 @@ change_flags(struct vnode *vp, u_long flags, struct lwp *l)
 	int error;
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-
+	/*
+	 * Non-superusers cannot change the flags on devices, even if they
+	 * own them.
+	 */
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+		if ((error = VOP_GETATTR(vp, &vattr, l->l_cred)) != 0)
+			goto out;
+		if (vattr.va_type == VCHR || vattr.va_type == VBLK) {
+			error = EINVAL;
+			goto out;
+		}
+	}
 	vattr_null(&vattr);
 	vattr.va_flags = flags;
 	error = VOP_SETATTR(vp, &vattr, l->l_cred);
-
+out:
 	return (error);
 }
 
@@ -3363,16 +3361,9 @@ change_owner(struct vnode *vp, uid_t uid, gid_t gid, struct lwp *l,
 		 * implementation-defined; we leave the set-user-id and set-
 		 * group-id settings intact in that case.
 		 */
-		if (vattr.va_mode & S_ISUID) {
-			if (kauth_authorize_vnode(l->l_cred,
-			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0)
-				newmode &= ~S_ISUID;
-		}
-		if (vattr.va_mode & S_ISGID) {
-			if (kauth_authorize_vnode(l->l_cred,
-			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0)
-				newmode &= ~S_ISGID;
-		}
+		if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+				      NULL) != 0)
+			newmode &= ~(S_ISUID | S_ISGID);
 	} else {
 		/*
 		 * NetBSD semantics: when changing owner and/or group,
@@ -4235,17 +4226,16 @@ int
 dorevoke(struct vnode *vp, kauth_cred_t cred)
 {
 	struct vattr vattr;
-	int error, fs_decision;
+	int error;
 
 	vn_lock(vp, LK_SHARED | LK_RETRY);
 	error = VOP_GETATTR(vp, &vattr, cred);
 	VOP_UNLOCK(vp);
 	if (error != 0)
 		return error;
-	fs_decision = (kauth_cred_geteuid(cred) == vattr.va_uid) ? 0 : EPERM;
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_REVOKE, vp, NULL,
-	    fs_decision);
-	if (!error)
+	if (kauth_cred_geteuid(cred) == vattr.va_uid ||
+	    (error = kauth_authorize_generic(cred,
+	    KAUTH_GENERIC_ISSUSER, NULL)) == 0)
 		VOP_REVOKE(vp, REVOKEALL);
 	return (error);
 }

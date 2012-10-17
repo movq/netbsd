@@ -1,4 +1,4 @@
-# $NetBSD: t_modload.sh,v 1.13 2012/04/20 05:41:25 jruoho Exp $
+# $NetBSD: t_modload.sh,v 1.9 2011/03/24 21:52:51 jmmv Exp $
 #
 # Copyright (c) 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -36,16 +36,6 @@ plain_head() {
 	atf_set "require.user" "root"
 }
 plain_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	cat >experr <<EOF
 modload: No such file or directory
 EOF
@@ -109,16 +99,6 @@ iflag_head() {
 	atf_set "require.user" "root"
 }
 iflag_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	echo "Checking error conditions"
 
 	atf_check -s eq:1 -o empty -e save:stderr modload -i foo \
@@ -163,16 +143,6 @@ sflag_head() {
 	atf_set "require.user" "root"
 }
 sflag_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	echo "Checking error conditions"
 
 	atf_check -s eq:1 -o empty -e save:stderr modload -s foo \

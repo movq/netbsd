@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.435 2012/05/12 18:42:08 chs Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.432.2.2 2012/05/19 15:29:21 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2004, 2005, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.435 2012/05/12 18:42:08 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.432.2.2 2012/05/19 15:29:21 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -800,9 +800,7 @@ vaccess(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
 	printf("vaccess: deprecated interface used.\n");
 #endif /* DIAGNOSTIC */
 
-	return kauth_authorize_vnode(cred, kauth_access_action(acc_mode,
-	    type, file_mode), NULL /* This may panic. */, NULL,
-	    genfs_can_access(type, file_mode, uid, gid, acc_mode, cred));
+	return genfs_can_access(type, file_mode, uid, gid, acc_mode, cred);
 }
 
 /*

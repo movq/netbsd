@@ -1,4 +1,4 @@
-/*	$NetBSD: readpassphrase.c,v 1.3 2012/04/14 01:34:37 christos Exp $	*/
+/*	$NetBSD: readpassphrase.c,v 1.1 2009/06/07 22:38:47 christos Exp $	*/
 /*
  * Copyright (c) 2000 Todd C. Miller <Todd.Miller@courtesan.com>
  * All rights reserved.
@@ -49,22 +49,6 @@ readpassphrase(prompt, buf, bufsiz, flags)
 	size_t bufsiz;
 	int flags;
 {
-#ifdef GETPASS_ECHO
-	int gflags = GETPASS_ECHO_NL;
-
-	if (flags & RPP_ECHO_ON)
-		gflags |= GETPASS_ECHO;
-	if (flags & RPP_REQUIRE_TTY)
-		gflags |= GETPASS_NEED_TTY;
-	if (flags & RPP_FORCELOWER)
-		gflags |= GETPASS_FORCE_LOWER;
-	if (flags & RPP_FORCEUPPER)
-		gflags |= GETPASS_FORCE_UPPER;
-	if (flags & RPP_SEVENBIT)
-		gflags |= GETPASS_7BIT;
-
-	return getpassfd(prompt, buf, bufsiz, NULL, gflags, 0);
-#else
 	struct termios term, oterm;
 	char ch, *p, *end;
 	int input, output;
@@ -138,7 +122,6 @@ readpassphrase(prompt, buf, bufsiz, flags)
 	if (input != STDIN_FILENO)
 		(void)close(input);
 	return(buf);
-#endif
 }
 
 char *

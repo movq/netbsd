@@ -1,4 +1,4 @@
-/*	$NetBSD: t_fuzz.c,v 1.5 2012/04/21 01:03:46 manu Exp $	*/
+/*	$NetBSD: t_fuzz.c,v 1.4.8.1 2012/04/23 16:49:03 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

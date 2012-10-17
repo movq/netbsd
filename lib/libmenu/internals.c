@@ -1,4 +1,4 @@
-/*	$NetBSD: internals.c,v 1.15 2012/06/27 11:53:36 blymn Exp $	*/
+/*	$NetBSD: internals.c,v 1.13.42.1 2012/08/09 06:46:37 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: internals.c,v 1.15 2012/06/27 11:53:36 blymn Exp $");
+__RCSID("$NetBSD: internals.c,v 1.13.42.1 2012/08/09 06:46:37 jdc Exp $");
 
 #include <menu.h>
 #include <ctype.h>

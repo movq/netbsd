@@ -1,4 +1,4 @@
-/*	$NetBSD: k5login.c,v 1.33 2012/04/24 16:52:26 christos Exp $	*/
+/*	$NetBSD: k5login.c,v 1.27.46.1 2012/05/07 16:24:07 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -51,7 +51,7 @@
 #if 0
 static char sccsid[] = "@(#)klogin.c	5.11 (Berkeley) 7/12/92";
 #endif
-__RCSID("$NetBSD: k5login.c,v 1.33 2012/04/24 16:52:26 christos Exp $");
+__RCSID("$NetBSD: k5login.c,v 1.27.46.1 2012/05/07 16:24:07 riz Exp $");
 #endif /* not lint */
 
 #ifdef KERBEROS5

@@ -1,4 +1,4 @@
-/*	$NetBSD: plcomreg.h,v 1.4 2012/07/25 07:26:17 skrll Exp $	*/
+/*	$NetBSD: plcomreg.h,v 1.1.166.1 2012/08/09 06:36:42 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2001 ARM Ltd

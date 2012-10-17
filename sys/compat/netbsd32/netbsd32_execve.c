@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_execve.c,v 1.36 2012/05/02 23:33:11 rmind Exp $	*/
+/*	$NetBSD: netbsd32_execve.c,v 1.33.2.1 2012/04/12 17:05:38 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.36 2012/05/02 23:33:11 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.33.2.1 2012/04/12 17:05:38 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

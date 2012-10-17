@@ -1,5 +1,5 @@
-/*	$Id: mpcsa_machdep.c,v 1.7 2012/08/16 18:22:45 matt Exp $	*/
-/*	$NetBSD: mpcsa_machdep.c,v 1.7 2012/08/16 18:22:45 matt Exp $	*/
+/*	$Id: mpcsa_machdep.c,v 1.6 2011/07/01 20:44:20 dyoung Exp $	*/
+/*	$NetBSD: mpcsa_machdep.c,v 1.6 2011/07/01 20:44:20 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.7 2012/08/16 18:22:45 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.6 2011/07/01 20:44:20 dyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -156,6 +156,15 @@ __KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.7 2012/08/16 18:22:45 matt Exp $
 #include <arm/at91/at91dbgureg.h>
 #include <arm/at91/at91reg.h>
 #include <arm/at91/at91streg.h>
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependent as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0x00000000;
+
 
 /* boot configuration: */
 BootConfig bootconfig;		/* Boot config storage */

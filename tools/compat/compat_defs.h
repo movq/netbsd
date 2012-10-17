@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.86 2012/06/04 10:18:01 joerg Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.83.2.1 2012/06/23 22:54:57 riz Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -1194,8 +1194,8 @@ __GEN_ENDIAN_DEC(64, le)
 
 /* Has quad_t but these prototypes don't get pulled into scope. w/o we lose */
 #ifdef __NetBSD__
-quad_t   strtoq(const char *, char **, int);
-u_quad_t strtouq(const char *, char **, int);
+quad_t   strtoq __P((const char *, char **, int)); 
+u_quad_t strtouq __P((const char *, char **, int)); 
 #endif
 
 #endif	/* !__NETBSD_COMPAT_DEFS_H__ */

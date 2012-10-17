@@ -1,4 +1,4 @@
-/*	$NetBSD: private.h,v 1.3 2012/06/05 00:41:51 christos Exp $	*/
+/*	$NetBSD: private.h,v 1.2.6.1 2012/06/05 21:14:56 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2009, 2011  Internet Systems Consortium, Inc. ("ISC")

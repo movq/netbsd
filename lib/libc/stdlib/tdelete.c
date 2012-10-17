@@ -1,4 +1,4 @@
-/*	$NetBSD: tdelete.c,v 1.6 2012/06/25 22:32:45 abs Exp $	*/
+/*	$NetBSD: tdelete.c,v 1.5 2011/05/18 19:36:36 dsl Exp $	*/
 
 /*
  * Tree search generalized from Knuth (6.2.2) Algorithm T just like
@@ -13,7 +13,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: tdelete.c,v 1.6 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: tdelete.c,v 1.5 2011/05/18 19:36:36 dsl Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -22,10 +22,12 @@ __RCSID("$NetBSD: tdelete.c,v 1.6 2012/06/25 22:32:45 abs Exp $");
 #include <stdlib.h>
 
 
-/* find a node with key "vkey" in tree "vrootp" */
+/* delete node with given key */
 void *
-tdelete(const void *vkey, void **vrootp,
-    int (*compar)(const void *, const void *))
+tdelete(vkey, vrootp, compar)
+	const void *vkey;	/* key to be deleted */
+	void      **vrootp;	/* address of the root of tree */
+	int       (*compar)(const void *, const void *);
 {
 	node_t **rootp = (node_t **)vrootp;
 	node_t *p, *q, *r;

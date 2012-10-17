@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_sys.h,v 1.82 2012/08/11 01:10:11 manu Exp $	*/
+/*	$NetBSD: puffs_sys.h,v 1.78.8.2 2012/08/12 13:13:20 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.

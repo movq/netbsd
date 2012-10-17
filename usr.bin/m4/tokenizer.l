@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: tokenizer.l,v 1.6 2012/03/20 20:34:58 matt Exp $ */
+/* $NetBSD: tokenizer.l,v 1.5 2011/05/24 12:32:36 joerg Exp $ */
 /* $OpenBSD: tokenizer.l,v 1.6 2008/08/21 21:00:14 espie Exp $ */
 /*
  * Copyright (c) 2004 Marc Espie <espie@cvs.openbsd.org>
@@ -20,7 +20,7 @@
 #include "nbtool_config.h"
 #endif
 #include "parser.h"
-__RCSID("$NetBSD: tokenizer.l,v 1.6 2012/03/20 20:34:58 matt Exp $");
+__RCSID("$NetBSD: tokenizer.l,v 1.5 2011/05/24 12:32:36 joerg Exp $");
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
@@ -67,7 +67,7 @@ radix	0[rR][0-9]+:[0-9a-zA-Z]+
 %%
 
 int32_t
-number(void)
+number()
 {
 	long l;
 
@@ -81,7 +81,7 @@ number(void)
 }
 
 int32_t
-parse_radix(void)
+parse_radix()
 {
 	long base;
 	char *next;

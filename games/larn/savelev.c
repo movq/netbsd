@@ -1,9 +1,9 @@
-/*	$NetBSD: savelev.c,v 1.7 2012/06/19 05:30:44 dholland Exp $	*/
+/*	$NetBSD: savelev.c,v 1.6 2008/02/03 19:29:50 dholland Exp $	*/
 
 /* savelev.c		 Larn is copyrighted 1986 by Noah Morgan. */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: savelev.c,v 1.7 2012/06/19 05:30:44 dholland Exp $");
+__RCSID("$NetBSD: savelev.c,v 1.6 2008/02/03 19:29:50 dholland Exp $");
 #endif				/* not lint */
 #include "header.h"
 #include "extern.h"
@@ -12,7 +12,7 @@ __RCSID("$NetBSD: savelev.c,v 1.7 2012/06/19 05:30:44 dholland Exp $");
  *	routine to save the present level into storage
  */
 void
-savelevel(void)
+savelevel()
 {
 	struct cel *pcel;
 	u_char  *pitem, *pknow, *pmitem;
@@ -41,7 +41,7 @@ savelevel(void)
  *	routine to restore a level from storage
  */
 void
-getlevel(void)
+getlevel()
 {
 	struct cel *pcel;
 	u_char  *pitem, *pknow, *pmitem;

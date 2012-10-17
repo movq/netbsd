@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2012/08/09 14:37:06 joerg Exp $
+#	$NetBSD: Makefile,v 1.6 2011/10/11 13:53:59 joerg Exp $
 
 LIB=	LLVMCore
 
@@ -13,8 +13,7 @@ SRCS+=	AsmWriter.cpp \
 	ConstantFold.cpp \
 	Constants.cpp \
 	Core.cpp \
-	DebugInfo.cpp \
-	DIBuilder.cpp \
+	DebugInfoProbe.cpp \
 	DebugLoc.cpp \
 	Dominators.cpp \
 	Function.cpp \
@@ -36,7 +35,6 @@ SRCS+=	AsmWriter.cpp \
 	PassRegistry.cpp \
 	PrintModulePass.cpp \
 	Type.cpp \
-	TypeFinder.cpp \
 	Use.cpp \
 	User.cpp \
 	Value.cpp \

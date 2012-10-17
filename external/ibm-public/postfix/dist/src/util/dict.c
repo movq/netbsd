@@ -1,4 +1,4 @@
-/*	$NetBSD: dict.c,v 1.1.1.4 2012/02/17 08:36:21 tron Exp $	*/
+/*	$NetBSD: dict.c,v 1.1.1.3.6.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME

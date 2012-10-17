@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC.in,v 1.103 2012/08/17 20:11:38 abs Exp $
+# $NetBSD: GENERIC.in,v 1.96 2012/01/24 00:19:39 rkujawa Exp $
 #
 ##
 # GENERIC machine description file
@@ -52,7 +52,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.103 $"
+#ident 		"GENERIC-$Revision: 1.96 $"
 
 m4_ifdef(`INSTALL_CONFIGURATION', `m4_dnl
 makeoptions	COPTS="-Os"
@@ -212,6 +212,7 @@ m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 ')m4_dnl
 
 #
@@ -323,7 +324,6 @@ m4_ifdef(`AMIGA_CONFIGURATION', `m4_dnl
 #amidisplaycc0	at mainbus0		# wscons interface to custom chips
 #wsdisplay0	at amidisplaycc0 console ?
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	FONT_VT220L8x10
 #options	FONT_VT220ISO8x16
 ')m4_dnl
@@ -416,11 +416,6 @@ a2kbbc0 	at mainbus0		# A2000 battery backed clock
 m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 aucc*		at mainbus0		# Amiga CC audio
 audio*		at aucc?
-
-a1k2cp0         at mainbus0             # A1200 on-board clockport
-clockport*      at a1k2cp0
-
-#com*            at clockport?           # Individual Computers SilverSurfer
 ')m4_dnl
 ')m4_dnl
 
@@ -457,15 +452,10 @@ audio*		at toccata?
 
 # Ethernet cards:
 le*		at zbus0		# A2065, Ameristar, Ariadne
-ne*		at zbus0		# AriadneII
+ne*		at zbus0		# AriadneII, X-surf
 ed*		at zbus0		# Hydra, ASDG LanRover
 es*		at zbus0		# CEI A4066 EthernetPLUS
 qn*		at zbus0		# Quicknet
-
-xsurf*		at zbus0		# X-Surf
-ne*		at xsurfbus?		# NE2000 chip on X-Surf
-gencp*		at xsurfbus?		# clockports on X-Surf
-clockport*	at gencp?
 
 # Arcnet
 bah*		at zbus0		# C=/Ameristar A2060 / 560
@@ -567,7 +557,7 @@ m4_ifdef(`AMIGA_CONFIGURATION', `m4_dnl
 # PCI bus support
 options		PCIVERBOSE              # verbose PCI device autoconfig messages
 #options	PCI_CONFIG_DUMP
-options		PCI_NETBSD_CONFIGURE	# supported by mppb(4), p5pb(4), empb(4)
+options		PCI_NETBSD_CONFIGURE	# supported by mppb(4) and p5pb(4)
 
 p5pb0		at p5bus0		# Phase5 PCI bridge (CVPPC/BVPPC/G-REX)
 p5membar*	at zbus0		# Phase5 PCI bridge autoconfiguring BARs
@@ -578,10 +568,6 @@ pci*		at p5pb0
 mppb*           at zbus0		# Matay Prometheus Zorro-PCI bridge
 pci*            at mppb?
 
-empb0		at zbus0		# ELBOX Mediator PCI 1200
-emmem0		at zbus0		# ELBOX Mediator PCI memory space
-pci*		at empb0
-
 #cv3dpb*	at zbus0		# CyberVision 64/3D PCI bridge
 
 #genfb*		at pci?			# generic fb, CVPPC/BVPPC only
@@ -589,7 +575,6 @@ pci*		at empb0
 #radeonfb*	at pci?			# untested
 
 ne*             at pci?			# NE2000 Ethernet
-satalink* at pci? dev ? function ? flags 0x0002	# SiI SATALink 3112 
 
 # Bluetooth Controller and Device support
 # tested only with btuart on an A1200
@@ -608,16 +593,16 @@ bthub*  at btuart?
 bthidev* at bthub?
 
 # Bluetooth Mouse
-#btms*   at bthidev? reportid ?
-#wsmouse* at btms? mux 0
+btms*   at bthidev? reportid ?
+wsmouse* at btms? mux 0
 
 # Bluetooth Keyboard
 #btkbd* at bthidev? reportid ?
 #wskbd* at btkbd? console ? mux 1
 
 # Bluetooth Apple Magic Mouse
-#btmagic* at bthub?
-#wsmouse* at btmagic? mux 0
+btmagic* at bthub?
+wsmouse* at btmagic? mux 0
 
 # Bluetooth Audio support
 #btsco* at bthub?

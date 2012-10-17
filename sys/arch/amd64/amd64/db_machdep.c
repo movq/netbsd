@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.4 2012/10/03 17:43:22 riastradh Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.1.16.1 2012/02/23 18:36:06 riz Exp $	*/
 
 /* 
  * Mach Operating System
@@ -26,7 +26,7 @@
  * rights to redistribute these changes.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.4 2012/10/03 17:43:22 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.1.16.1 2012/02/23 18:36:06 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -134,20 +134,17 @@ db_nextframe(long **nextframe, long **retaddr, long **arg0, db_addr_t *ip,
 		tf = (struct trapframe *)argp;
 		switch (is_trap) {
 		case TRAP:
-			(*pr)("--- trap (number %"DDB_EXPR_FMT"u) ---\n",
-				db_get_value((long)&tf->tf_trapno, 8, false));
+			(*pr)("--- trap (number %d) ---\n", tf->tf_trapno);
 			break;
 		case SYSCALL:
-			(*pr)("--- syscall (number %"DDB_EXPR_FMT"u) ---\n",
-				db_get_value((long)&tf->tf_rax, 8, false));
+			(*pr)("--- syscall (number %ld) ---\n", tf->tf_rax);
 			break;
 		case INTERRUPT:
 			(*pr)("--- interrupt ---\n");
 			break;
 		}
-		*ip = (db_addr_t)db_get_value((long)&tf->tf_rip, 8, false);
-		fp = (struct x86_64_frame *)
-			db_get_value((long)&tf->tf_rbp, 8, false);
+		*ip = (db_addr_t)tf->tf_rip;
+		fp = (struct x86_64_frame *)tf->tf_rbp;
 		if (fp == NULL)
 			return 0;
 		*nextframe = (long *)&fp->f_frame;
@@ -213,7 +210,8 @@ db_frame_info(long *frame, db_addr_t callpc, const char **namep,
 		if (!strcmp(name, "trap")) {
 			*is_trap = TRAP;
 			narg = 0;
-		} else if (!strcmp(name, "syscall")) {
+		} else if (!strcmp(name, "syscall_plain") ||
+		           !strcmp(name, "syscall_fancy")) {
 			*is_trap = SYSCALL;
 			narg = 0;
 		} else if (name[0] == 'X') {

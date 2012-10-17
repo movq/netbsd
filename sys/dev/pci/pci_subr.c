@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_subr.c,v 1.93 2012/09/23 01:10:10 chs Exp $	*/
+/*	$NetBSD: pci_subr.c,v 1.90 2012/01/29 11:31:38 drochner Exp $	*/
 
 /*
  * Copyright (c) 1997 Zubin D. Dittia.  All rights reserved.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_subr.c,v 1.93 2012/09/23 01:10:10 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_subr.c,v 1.90 2012/01/29 11:31:38 drochner Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_pci.h"
@@ -71,7 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_subr.c,v 1.93 2012/09/23 01:10:10 chs Exp $");
  */
 struct pci_class {
 	const char	*name;
-	u_int		val;		/* as wide as pci_{,sub}class_t */
+	int		val;		/* as wide as pci_{,sub}class_t */
 	const struct pci_class *subclasses;
 };
 
@@ -118,7 +118,6 @@ static const struct pci_class pci_subclass_multimedia[] = {
 	{ "video",		PCI_SUBCLASS_MULTIMEDIA_VIDEO,	NULL,	},
 	{ "audio",		PCI_SUBCLASS_MULTIMEDIA_AUDIO,	NULL,	},
 	{ "telephony",		PCI_SUBCLASS_MULTIMEDIA_TELEPHONY, NULL,},
-	{ "HD audio",		PCI_SUBCLASS_MULTIMEDIA_HDAUDIO, NULL,	},
 	{ "miscellaneous",	PCI_SUBCLASS_MULTIMEDIA_MISC,	NULL,	},
 	{ NULL,			0,				NULL,	},
 };
@@ -811,7 +810,6 @@ static void
 pci_conf_print_pcie_cap(const pcireg_t *regs, int capoff)
 {
 	bool check_slot = false;
-	static const char * const linkspeeds[] = {"2.5", "5.0", "8.0"};
 
 	printf("\n  PCI Express Capabilities Register\n");
 	printf("    Capability version: %x\n",
@@ -852,12 +850,11 @@ pci_conf_print_pcie_cap(const pcireg_t *regs, int capoff)
 	printf("    Link Capabilities Register: 0x%08x\n",
 	    regs[o2i(capoff + 0x0c)]);
 	printf("      Maximum Link Speed: ");
-	if ((regs[o2i(capoff + 0x0c)] & 0x000f) < 1 ||
-	    (regs[o2i(capoff + 0x0c)] & 0x000f) > 3) {
+	if ((regs[o2i(capoff + 0x0c)] & 0x000f) != 1) {
 		printf("unknown %u value\n", 
 		    (regs[o2i(capoff + 0x0c)] & 0x000f));
 	} else {
-		printf("%sGb/s\n", linkspeeds[(regs[o2i(capoff + 0x0c)] & 0x000f) - 1]);
+		printf("2.5Gb/s\n");
 	}
 	printf("      Maximum Link Width: x%u lanes\n",
 	    (regs[o2i(capoff + 0x0c)] & 0x03f0) >> 4);
@@ -865,12 +862,11 @@ pci_conf_print_pcie_cap(const pcireg_t *regs, int capoff)
 	printf("    Link Status Register: 0x%04x\n",
 	    regs[o2i(capoff + 0x10)] >> 16);
 	printf("      Negotiated Link Speed: ");
-	if (((regs[o2i(capoff + 0x10)] >> 16) & 0x000f) < 1 ||
-	    ((regs[o2i(capoff + 0x10)] >> 16) & 0x000f) > 3) {
+	if (((regs[o2i(capoff + 0x10)] >> 16) & 0x000f) != 1) {
 		printf("unknown %u value\n", 
 		    (regs[o2i(capoff + 0x10)] >> 16) & 0x000f);
 	} else {
-		printf("%sGb/s\n", linkspeeds[((regs[o2i(capoff + 0x10)] >> 16) & 0x000f) - 1]);
+		printf("2.5Gb/s\n");
 	}
 	printf("      Negotiated Link Width: x%u lanes\n",
 	    (regs[o2i(capoff + 0x10)] >> 20) & 0x003f);

@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.63 2012/04/07 16:44:59 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.61 2012/01/07 18:41:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -73,10 +73,7 @@ int		getlabelsector(void);
 int		getlabelusesmbr(void);
 int		getmaxpartitions(void);
 int		getrawpartition(void);
-const char     *getdiskrawname(char *, size_t, const char *);
-const char     *getdiskcookedname(char *, size_t, const char *);
 const char     *getfstypename(int);
-const char     *getfsspecname(char *, size_t, const char *);
 #ifndef __LIBC12_SOURCE__
 void		login(const struct utmp *) __RENAME(__login50);
 void		loginx(const struct utmpx *) __RENAME(__loginx50);

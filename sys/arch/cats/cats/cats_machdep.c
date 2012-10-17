@@ -1,4 +1,4 @@
-/*	$NetBSD: cats_machdep.c,v 1.75 2012/09/22 00:33:38 matt Exp $	*/
+/*	$NetBSD: cats_machdep.c,v 1.72 2012/02/06 17:51:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.75 2012/09/22 00:33:38 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.72 2012/02/06 17:51:47 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_modular.h"
@@ -108,7 +108,14 @@ __KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.75 2012/09/22 00:33:38 matt Exp $
  * on where the ROM appears when you turn the MMU off.
  */
 
+u_int cpu_reset_address = DC21285_ROM_BASE;
+
 u_int dc21285_fclk = FCLK;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
 
 struct ebsaboot ebsabootinfo;
 BootConfig bootconfig;		/* Boot config storage */
@@ -123,7 +130,18 @@ vm_offset_t physical_end;
 u_int free_pages;
 vm_offset_t pagetables_start;
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t systempage;
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
+
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -710,7 +728,7 @@ initarm(void *arm_bootargs)
 	fcomcndetach();
 #endif
 	
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 	/*
@@ -853,8 +871,6 @@ initarm(void *arm_bootargs)
 	/* Boot strap pmap telling it where the kernel page table is */
 	printf("pmap ");
 	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
-
-	cpu_reset_address_paddr = DC21285_ROM_BASE;
 
 	/* Setup the IRQ system */
 	printf("irq ");

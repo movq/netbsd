@@ -1,4 +1,4 @@
-/*   $NetBSD: get_wch.c,v 1.10 2012/06/29 10:40:29 blymn Exp $ */
+/*   $NetBSD: get_wch.c,v 1.9.8.1 2012/08/09 06:46:37 jdc Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: get_wch.c,v 1.10 2012/06/29 10:40:29 blymn Exp $");
+__RCSID("$NetBSD: get_wch.c,v 1.9.8.1 2012/08/09 06:46:37 jdc Exp $");
 #endif						  /* not lint */
 
 #include <string.h>

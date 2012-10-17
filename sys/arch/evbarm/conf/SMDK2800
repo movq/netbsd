@@ -1,4 +1,4 @@
-#	$NetBSD: SMDK2800,v 1.48 2012/09/11 19:43:10 msaitoh Exp $
+#	$NetBSD: SMDK2800,v 1.46 2011/12/18 05:49:26 dholland Exp $
 #
 #	SMDK2800 -- Samsung's S3C2800 evaluation board.
 #
@@ -47,7 +47,6 @@ file-system	NFS		# Network file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
 file-system	PROCFS		# /proc
-#file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
@@ -106,6 +105,10 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 #options 	SYSVSHM		# System V-like memory sharing
 
 # Miscellaneous kernel options
@@ -219,7 +222,6 @@ ukphy*		at mii? phy ?			# generic unknown PHYs
 #pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	fss			# file system snapshot device
-#pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter

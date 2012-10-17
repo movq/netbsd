@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_fat.c,v 1.20 2012/04/09 11:10:06 hannken Exp $	*/
+/*	$NetBSD: msdosfs_fat.c,v 1.19.18.1 2012/04/16 15:37:12 riz Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_fat.c,v 1.20 2012/04/09 11:10:06 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_fat.c,v 1.19.18.1 2012/04/16 15:37:12 riz Exp $");
 
 /*
  * kernel include files.

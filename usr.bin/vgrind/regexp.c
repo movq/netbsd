@@ -1,4 +1,4 @@
-/*	$NetBSD: regexp.c,v 1.12 2012/03/20 20:34:59 matt Exp $	*/
+/*	$NetBSD: regexp.c,v 1.11 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)regexp.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: regexp.c,v 1.12 2012/03/20 20:34:59 matt Exp $");
+__RCSID("$NetBSD: regexp.c,v 1.11 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -67,7 +67,9 @@ boolean	 l_onecase;	/* true if upper and lower equivalent */
  */
 
 int
-STRNCMP(char *s1, char *s2, int len)
+STRNCMP(s1, s2, len)
+	char *s1,*s2;
+	int len;
 {
 	if (l_onecase) {
 	    do
@@ -147,7 +149,8 @@ static char *ccre;	/* pointer to current position in converted exp*/
 static char *ure;	/* pointer current position in unconverted exp */
 
 char *
-convexp(char *re)	/* unconverted irregular expression */
+convexp(re)
+    char *re;		/* unconverted irregular expression */
 {
     char *cre;		/* pointer to converted regular expression */
 
@@ -172,7 +175,7 @@ convexp(char *re)	/* unconverted irregular expression */
 }
 
 static void
-expconv(void)
+expconv()
 {
     char *cs;		/* pointer to current symbol in converted exp */
     char c;		/* character being processed */
@@ -344,10 +347,10 @@ expconv(void)
  */
 
 char *
-expmatch(
-    char *s,		/* string to check for a match in */
-    char *re,		/* a converted irregular expression */
-    char *mstring)	/* where to put whatever matches a \p */
+expmatch(s, re, mstring)
+    char *s;		/* string to check for a match in */
+    char *re;		/* a converted irregular expression */
+    char *mstring;	/* where to put whatever matches a \p */
 {
     char *cs;		/* the current symbol */
     char *ptr,*s1;	/* temporary pointer */

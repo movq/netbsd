@@ -1,4 +1,4 @@
-/* $NetBSD: sysmon_envsysvar.h,v 1.45 2012/09/06 12:59:00 macallan Exp $ */
+/* $NetBSD: sysmon_envsysvar.h,v 1.40 2011/06/19 03:09:43 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2007, 2008 Juan Romero Pardines.
@@ -40,16 +40,11 @@
 #include <dev/sysmon/sysmonvar.h>
 #include <prop/proplib.h>
 
-#ifdef _KERNEL_OPT
-#include "opt_envsys.h"
-#endif
-
 enum sme_descr_type {
 	SME_DESC_UNITS = 1,
 	SME_DESC_STATES,
 	SME_DESC_DRIVE_STATES,
-	SME_DESC_BATTERY_CAPACITY,
-	SME_DESC_INDICATOR
+	SME_DESC_BATTERY_CAPACITY
 };
 
 #ifdef ENVSYS_DEBUG
@@ -80,8 +75,7 @@ typedef struct sme_event {
 	envsys_data_t		*see_edata;	/* our sensor data */
 	sysmon_envsys_lim_t	see_lims;	/* limit values */
 	int			see_type;	/* type of the event */
-	int			see_evstate;	/* state of prev event */
-	int			see_evvalue;	/* value of prev event */
+	int			see_evsent;	/* event already sent */
 	int 			see_flags;	/* see above */
 #define SEE_EVENT_WORKING	0x0001 		/* This event is busy */
 } sme_event_t;
@@ -111,8 +105,7 @@ extern	prop_dictionary_t sme_propd;	/* the global sensor dictionary */
 /* 
  * linked list for the sysmon envsys devices.
  */
-LIST_HEAD(sysmon_envsys_lh, sysmon_envsys);
-extern	struct sysmon_envsys_lh sysmon_envsys_list;
+LIST_HEAD(, sysmon_envsys) sysmon_envsys_list;
 
 /* 
  * functions to handle sysmon envsys devices.
@@ -133,7 +126,6 @@ int	sme_event_register(prop_dictionary_t, envsys_data_t *,
 			   struct sysmon_envsys *, sysmon_envsys_lim_t *,
 			   uint32_t, int, int);
 int	sme_event_unregister(struct sysmon_envsys *, const char *, int);
-int	sme_event_unregister_sensor(struct sysmon_envsys *, envsys_data_t *);
 void	sme_event_unregister_all(struct sysmon_envsys *);
 void	sme_event_drvadd(void *);
 int	sme_events_init(struct sysmon_envsys *);

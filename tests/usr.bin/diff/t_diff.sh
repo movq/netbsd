@@ -1,4 +1,4 @@
-# $NetBSD: t_diff.sh,v 1.3 2012/03/13 05:40:00 jruoho Exp $
+# $NetBSD: t_diff.sh,v 1.2 2011/05/11 22:08:12 njoly Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -30,10 +30,12 @@
 
 atf_test_case mallocv
 mallocv_head() {
-	atf_set "descr" "Test diff(1) with MALLOC_OPTIONS=V (cf. PR bin/26453)"
+	atf_set "descr" "Test diff(1) with MALLOC_OPTIONS=V"
 }
 
 mallocv_body() {
+
+	atf_expect_fail "PR bin/26453"
 
 	atf_check -s ignore \
 		-e not-inline:"diff: memory exhausted\n" \

@@ -1,4 +1,4 @@
-/*	$NetBSD: pgfs_subs.c,v 1.5 2012/04/11 14:28:18 yamt Exp $	*/
+/*	$NetBSD: pgfs_subs.c,v 1.3 2011/10/13 14:40:06 yamt Exp $	*/
 
 /*-
  * Copyright (c)2010,2011 YAMAMOTO Takashi,
@@ -46,7 +46,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pgfs_subs.c,v 1.5 2012/04/11 14:28:18 yamt Exp $");
+__RCSID("$NetBSD: pgfs_subs.c,v 1.3 2011/10/13 14:40:06 yamt Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -335,14 +335,6 @@ my_lo_open(struct Xconn *xc, Oid loid, int32_t mode, int32_t *fdp)
 int
 my_lo_close(struct Xconn *xc, int32_t fd)
 {
-#if 1
-	/*
-	 * do nothing.
-	 *
-	 * LO handles are automatically closed at the end of transactions.
-	 * our transactions are small enough.
-	 */
-#else
 	static struct cmd *c;
 	int32_t ret;
 	int error;
@@ -357,7 +349,6 @@ my_lo_close(struct Xconn *xc, int32_t fd)
 		return error;
 	}
 	assert(ret == 0);
-#endif
 	return 0;
 }
 
@@ -794,31 +785,18 @@ mklinkfile_lo(struct Xconn *xc, fileid_t parent_fileid, const char *name,
 }
 
 int
-cleanupfile(struct Xconn *xc, fileid_t fileid)
+cleanupfile(struct Xconn *xc, fileid_t fileid, struct vattr *va)
 {
 	static struct cmd *c;
-	char *type;
-	unsigned int vtype;
-	int error;
 
-	CREATECMD(c, "DELETE FROM file WHERE fileid = $1 AND nlink = 0 "
-		"RETURNING type::text", INT8OID);
-	error = sendcmd(xc, c, fileid);
-	if (error != 0) {
-		return error;
-	}
-	error = simplefetch(xc, TEXTOID, &type);
-	if (error == ENOENT) {
-		return 0; /* probably nlink > 0 */
-	}
-	if (error != 0) {
-		return error;
-	}
-	vtype = tovtype(type);
-	free(type);
-	if (vtype == VREG || vtype == VLNK) {
+	/*
+	 * XXX what to do when the filesystem is shared?
+	 */
+
+	if (va->va_type == VREG || va->va_type == VLNK) {
 		static struct cmd *c_datafork;
 		int32_t ret;
+		int error;
 
 		CREATECMD(c_datafork,
 			"WITH loids AS (DELETE FROM datafork WHERE fileid = $1 "
@@ -836,7 +814,8 @@ cleanupfile(struct Xconn *xc, fileid_t fileid)
 			return EIO; /* lo_unlink failed */
 		}
 	}
-	return 0;
+	CREATECMD(c, "DELETE FROM file WHERE fileid = $1", INT8OID);
+	return simplecmd(xc, c, fileid);
 }
 
 /*

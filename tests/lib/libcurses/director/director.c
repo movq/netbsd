@@ -1,4 +1,4 @@
-/*	$NetBSD: director.c,v 1.10 2012/06/03 23:19:11 joerg Exp $	*/
+/*	$NetBSD: director.c,v 1.9.4.1 2012/06/23 22:54:55 riz Exp $	*/
 
 /*-
  * Copyright 2009 Brett Lymn <blymn@NetBSD.org>

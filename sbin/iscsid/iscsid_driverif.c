@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid_driverif.c,v 1.5 2012/05/27 20:05:04 christos Exp $	*/
+/*	$NetBSD: iscsid_driverif.c,v 1.3.2.1 2012/05/30 08:06:26 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2005,2006,2011 The NetBSD Foundation, Inc.

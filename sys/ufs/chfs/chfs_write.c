@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_write.c,v 1.4 2012/08/10 09:26:58 ttoth Exp $	*/
+/*	$NetBSD: chfs_write.c,v 1.2 2011/11/24 21:09:37 agc Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -139,9 +139,7 @@ retry:
 	    &chmp->chm_blocks[nref->nref_lnr], CHFS_PAD(size));
 	mutex_exit(&chmp->chm_lock_sizes);
 	
-	mutex_enter(&chmp->chm_lock_vnocache);
 	chfs_add_vnode_ref_to_vc(chmp, chvc, nref);
-	mutex_exit(&chmp->chm_lock_vnocache);
 	KASSERT(chmp->chm_blocks[nref->nref_lnr].used_size <= chmp->chm_ebh->eb_size);
 out:
 	chfs_free_flash_vnode(fvnode);
@@ -250,13 +248,10 @@ retry:
 	    &chmp->chm_blocks[nref->nref_lnr], CHFS_PAD(size));
 	mutex_exit(&chmp->chm_lock_sizes);
 	KASSERT(chmp->chm_blocks[nref->nref_lnr].used_size <= chmp->chm_ebh->eb_size);
-
 	fd->nref = nref;
 	if (prio != ALLOC_DELETION) {
-		mutex_enter(&chmp->chm_lock_vnocache);
 		chfs_add_node_to_list(chmp,
 			pdir->chvc, nref, &pdir->chvc->dirents);
-		mutex_exit(&chmp->chm_lock_vnocache);
 	}
 out:
 	chfs_free_flash_dirent(fdirent);
@@ -329,6 +324,7 @@ chfs_write_flash_dnode(struct chfs_mount *chmp, struct vnode *vp,
 	vec[1].iov_base = tmpbuf;
 	vec[1].iov_len = CHFS_PAD(size) - sizeof(*dnode);
 
+	fd->frags = 0;
 	fd->ofs = ofs;
 	fd->size = len;
 
@@ -386,16 +382,9 @@ retry:
 	    &chmp->chm_blocks[nref->nref_lnr], CHFS_PAD(size));
 	mutex_exit(&chmp->chm_lock_sizes);
 
-	mutex_enter(&chmp->chm_lock_vnocache);
-	if (fd->nref != NULL) {
-		chfs_remove_frags_of_node(chmp, &ip->fragtree, fd->nref);
-		chfs_remove_and_obsolete(chmp, ip->chvc, fd->nref, &ip->chvc->dnode);
-	}
-
 	KASSERT(chmp->chm_blocks[nref->nref_lnr].used_size <= chmp->chm_ebh->eb_size);
 	fd->nref = nref;
 	chfs_add_node_to_list(chmp, ip->chvc, nref, &ip->chvc->dnode);
-	mutex_exit(&chmp->chm_lock_vnocache);
 out:
 	chfs_free_flash_dnode(dnode);
 	if (CHFS_PAD(size) - sizeof(*dnode)) {
@@ -415,7 +404,7 @@ out:
  * This function writes the dirent of the new node to the media.
  */
 int
-chfs_do_link(struct chfs_inode *ip, struct chfs_inode *parent, const char *name, int namelen, enum chtype type)
+chfs_do_link(struct chfs_inode *ip, struct chfs_inode *parent, const char *name, int namelen, enum vtype type)
 {
 	int error = 0;
 	struct vnode *vp = ITOV(ip);
@@ -499,53 +488,54 @@ chfs_do_unlink(struct chfs_inode *ip,
 		if (fd->vno == ip->ino &&
 		    fd->nsize == namelen &&
 		    !memcmp(fd->name, name, fd->nsize)) {
-
-			chfs_kill_fragtree(chmp, &ip->fragtree);
-
-			if (fd->type == CHT_DIR && ip->chvc->nlink == 2)
+			if (fd->type == VDIR && ip->chvc->nlink == 2)
 				ip->chvc->nlink = 0;
 			else
 				ip->chvc->nlink--;
 
-			fd->type = CHT_BLANK;
+			fd->type = VNON;
 
 			TAILQ_REMOVE(&parent->dents, fd, fds);
 
-			mutex_enter(&chmp->chm_lock_vnocache);
+			/* remove nref from dirents list */
+			nref = parent->chvc->dirents;
+			if (nref == fd->nref) {
+				nref->nref_next = fd->nref->nref_next;
+			} else {
+				while (nref->nref_next && nref->nref_next != fd->nref)
+					nref = nref->nref_next;
+				if (nref->nref_next)
+					nref->nref_next = fd->nref->nref_next;
+			}
 
-			dbg("FD->NREF vno: %llu, lnr: %u, ofs: %u\n",
-			    fd->vno, fd->nref->nref_lnr, fd->nref->nref_offset);
-			chfs_remove_and_obsolete(chmp, parent->chvc, fd->nref,
-				&parent->chvc->dirents);
+			//dbg("FD->NREF vno: %llu, lnr: %u, ofs: %u\n",
+			//    fd->vno, fd->nref->nref_lnr, fd->nref->nref_offset);
+			chfs_mark_node_obsolete(chmp, fd->nref);
 
 			error = chfs_write_flash_dirent(chmp,
 			    parent, ip, fd, 0, ALLOC_DELETION);
 
-			dbg("FD->NREF vno: %llu, lnr: %u, ofs: %u\n",
-			    fd->vno, fd->nref->nref_lnr, fd->nref->nref_offset);
-			// set nref_next field
-			chfs_add_node_to_list(chmp, parent->chvc, fd->nref,
-				&parent->chvc->dirents);
-			// remove from the list
-			chfs_remove_and_obsolete(chmp, parent->chvc, fd->nref,
-				&parent->chvc->dirents);
+			//dbg("FD->NREF vno: %llu, lnr: %u, ofs: %u\n",
+			//    fd->vno, fd->nref->nref_lnr, fd->nref->nref_offset);
+			chfs_mark_node_obsolete(chmp, fd->nref);
 
-			// clean dnode list
-			while (ip->chvc->dnode != (struct chfs_node_ref *)ip->chvc) {
-				nref = ip->chvc->dnode;
-				chfs_remove_frags_of_node(chmp, &ip->fragtree, nref);
-				chfs_remove_and_obsolete(chmp, ip->chvc, nref, &ip->chvc->dnode);
+			nref = ip->chvc->dnode;
+			while (nref != (struct chfs_node_ref *)ip->chvc) {
+				//dbg("DATA NREF\n");
+				chfs_mark_node_obsolete(chmp, nref);
+				nref = nref->nref_next;
 			}
+			ip->chvc->dnode = (struct chfs_node_ref *)ip->chvc;
 
-			// clean v list
-			while (ip->chvc->v != (struct chfs_node_ref *)ip->chvc) {
-				nref = ip->chvc->v;
-				chfs_remove_and_obsolete(chmp, ip->chvc, nref, &ip->chvc->v);
+			nref = ip->chvc->v;
+			while (nref != (struct chfs_node_ref *)ip->chvc) {
+				//dbg("V NREF\n");
+				chfs_mark_node_obsolete(chmp, nref);
+				nref = nref->nref_next;
 			}
+			ip->chvc->v = ip->chvc->v->nref_next;
 
 			parent->chvc->nlink--;
-
-			mutex_exit(&chmp->chm_lock_vnocache);
 			//TODO: if error
 		}
 	}

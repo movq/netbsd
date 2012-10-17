@@ -1,4 +1,4 @@
-/*	$NetBSD: el.c,v 1.71 2012/09/11 11:58:53 christos Exp $	*/
+/*	$NetBSD: el.c,v 1.69 2011/11/18 20:22:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)el.c	8.2 (Berkeley) 1/3/94";
 #else
-__RCSID("$NetBSD: el.c,v 1.71 2012/09/11 11:58:53 christos Exp $");
+__RCSID("$NetBSD: el.c,v 1.69 2011/11/18 20:22:03 christos Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -219,7 +219,7 @@ FUN(el,set)(EditLine *el, int op, ...)
 		const Char *argv[20];
 		int i;
 
-		for (i = 1; i < (int)__arraycount(argv); i++)
+		for (i = 1; i < 20; i++)
 			if ((argv[i] = va_arg(ap, Char *)) == NULL)
 				break;
 
@@ -419,7 +419,7 @@ FUN(el,get)(EditLine *el, int op, ...)
 		char *argv[20];
 		int i;
 
- 		for (i = 1; i < (int)__arraycount(argv); i++)
+ 		for (i = 1; i < (int)(sizeof(argv) / sizeof(argv[0])); i++)
 			if ((argv[i] = va_arg(ap, char *)) == NULL)
 				break;
 
@@ -439,7 +439,7 @@ FUN(el,get)(EditLine *el, int op, ...)
 		break;
 
 	case EL_UNBUFFERED:
-		*va_arg(ap, int *) = (el->el_flags & UNBUFFERED) != 0;
+		*va_arg(ap, int *) = (!(el->el_flags & UNBUFFERED));
 		rv = 0;
 		break;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pnode.c,v 1.13 2012/08/16 09:25:43 manu Exp $	*/
+/*	$NetBSD: pnode.c,v 1.10.20.2 2012/09/13 20:20:16 riz Exp $	*/
 
 /*
  * Copyright (c) 2006 Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: pnode.c,v 1.13 2012/08/16 09:25:43 manu Exp $");
+__RCSID("$NetBSD: pnode.c,v 1.10.20.2 2012/09/13 20:20:16 riz Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: bpfdesc.h,v 1.35 2012/09/27 18:28:56 alnsn Exp $	*/
+/*	$NetBSD: bpfdesc.h,v 1.33 2011/08/30 14:22:22 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -100,7 +100,6 @@ struct bpf_d {
 #ifdef _LP64
 	int		bd_compat32;	/* 32-bit stream on LP64 system */
 #endif
-	void		*bd_dummy;	/* to be replaced shortly with bd_jitcode */
 };
 
 

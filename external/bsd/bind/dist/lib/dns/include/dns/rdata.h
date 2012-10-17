@@ -1,4 +1,4 @@
-/*	$NetBSD: rdata.h,v 1.5 2012/09/13 05:32:08 spz Exp $	*/
+/*	$NetBSD: rdata.h,v 1.3.4.2 2012/09/13 08:03:43 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011  Internet Systems Consortium, Inc. ("ISC")

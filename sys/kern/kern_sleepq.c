@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sleepq.c,v 1.47 2012/07/27 05:36:13 matt Exp $	*/
+/*	$NetBSD: kern_sleepq.c,v 1.45 2012/01/28 12:22:33 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -35,32 +35,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.47 2012/07/27 05:36:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sleepq.c,v 1.45 2012/01/28 12:22:33 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/cpu.h>
-#include <sys/intr.h>
 #include <sys/pool.h>
 #include <sys/proc.h> 
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/sched.h>
 #include <sys/systm.h>
 #include <sys/sleepq.h>
 #include <sys/ktrace.h>
 
-/*
- * for sleepq_abort:
- * During autoconfiguration or after a panic, a sleep will simply lower the
- * priority briefly to allow interrupts, then return.  The priority to be
- * used (IPL_SAFEPRI) is machine-dependent, thus this value is initialized and
- * maintained in the machine-dependent layers.  This priority will typically
- * be 0, or the lowest priority that is safe for use on the interrupt stack;
- * it can be made higher to block network software interrupts after panics.
- */
-#ifndef	IPL_SAFEPRI
-#define	IPL_SAFEPRI	0
-#endif
+#include "opt_sa.h"
 
 static int	sleepq_sigtoerror(lwp_t *, int);
 
@@ -155,6 +145,10 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
 	 */
 	spc_lock(ci);
 	lwp_setlock(l, spc->spc_mutex);
+#ifdef KERN_SA
+	if (l->l_proc->p_sa != NULL)
+		sa_awaken(l);
+#endif /* KERN_SA */
 	sched_setrunnable(l);
 	l->l_stat = LSRUN;
 	l->l_slptime = 0;
@@ -167,7 +161,7 @@ sleepq_remove(sleepq_t *sq, lwp_t *l)
  *
  *	Insert an LWP into the sleep queue, optionally sorting by priority.
  */
-static void
+void
 sleepq_insert(sleepq_t *sq, lwp_t *l, syncobj_t *sobj)
 {
 
@@ -256,10 +250,15 @@ sleepq_block(int timo, bool catch)
 		/* lwp_unsleep() will release the lock */
 		lwp_unsleep(l, true);
 	} else {
-		if (timo) {
+		if (timo)
 			callout_schedule(&l->l_timeout_ch, timo);
-		}
-		mi_switch(l);
+
+#ifdef KERN_SA
+		if (((l->l_flag & LW_SA) != 0) && (~l->l_pflag & LP_SA_NOBLOCK))
+			sa_switch(l);
+		else
+#endif
+			mi_switch(l);
 
 		/* The LWP and sleep queue are now unlocked. */
 		if (timo) {
@@ -410,10 +409,11 @@ sleepq_sigtoerror(lwp_t *l, int sig)
 int
 sleepq_abort(kmutex_t *mtx, int unlock)
 { 
+	extern int safepri;
 	int s;
 
 	s = splhigh();
-	splx(IPL_SAFEPRI);
+	splx(safepri);
 	splx(s);
 	if (mtx != NULL && unlock != 0)
 		mutex_exit(mtx);
