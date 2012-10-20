@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.32 2012/10/20 12:13:46 kiyohara Exp $	*/
+/*	$NetBSD: intr.h,v 1.33 2012/10/20 14:53:37 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -40,6 +40,8 @@
 #define ICU_LEN			32
 #define IRQ_SLAVE		2
 #define LEGAL_HWIRQ_P(x)	((u_int)(x) < ICU_LEN && (x) != IRQ_SLAVE)
+
+void setup_bebox_ipi(void);
 
 #endif /* !_LOCORE */
 
