@@ -1,4 +1,4 @@
-/*	$NetBSD: bigkey.c,v 1.1 2012/12/04 19:22:54 spz Exp $	*/
+/*	$NetBSD: bigkey.c,v 1.1.1.1 2012/12/04 19:22:54 spz Exp $	*/
 
 /*
  * Copyright (C) 2012  Internet Systems Consortium, Inc. ("ISC")
